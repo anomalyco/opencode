@@ -6,8 +6,36 @@ import { browseFiles, openFileLauncher, openReviewLauncher, reviewTabs } from ".
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { fileDiff, fileNode, openSession } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
+import { readFile } from "node:fs/promises"
 
 test.use({ viewport: { width: 1440, height: 900 } })
+
+test("review toggle shows its tooltip with the side panel open or closed", async ({ page }) => {
+  await openSession(page, {
+    name: "ReviewTooltip",
+    seed: { panes: { ses_reviewtooltip: { review: true } } },
+  })
+  const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
+  const tooltip = page.getByRole("tooltip", { name: /Toggle review/ })
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(page.locator("#review-panel")).toHaveAttribute("aria-hidden", "false")
+  await toggle.hover()
+  await expect(tooltip).toBeVisible()
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await page.locator("[data-session-title]").hover()
+  await expect(tooltip).toBeHidden()
+  await toggle.hover()
+  await expect(tooltip).toBeVisible()
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await page.locator("[data-session-title]").hover()
+  await expect(tooltip).toBeHidden()
+  await toggle.hover()
+  await expect(tooltip).toBeVisible()
+})
 
 for (const view of ["desktop", "mobile"] as const) {
   test(`offers Git initialization for a project without VCS (${view})`, async ({ page }) => {
@@ -121,6 +149,59 @@ test("a rejected Git init releases its session's button without showing an error
   await page.locator("[data-titlebar-tab-slot]", { hasText: "Initialize Alpha" }).click()
   await expectSessionTitle(page, "Initialize Alpha")
   await expect(init).toBeEnabled()
+})
+
+test("a created Git repository whose project refresh fails still refreshes the session without an error", async ({
+  page,
+}) => {
+  await openSession(page, {
+    name: "ReviewInitRefresh",
+    project: { vcs: undefined },
+    onVcsInit: () => undefined,
+    sessions: [{ id: "ses_init_refresh", title: "Initialize Refresh" }],
+    seed: {
+      panes: { ses_init_refresh: { review: true } },
+      storage: reviewTabs("C:/OpenCode/ReviewInitRefresh", "ses_init_refresh"),
+    },
+  })
+  const panel = page.locator("#review-panel")
+  const init = panel.getByRole("button", { name: "Create Git repository", exact: true })
+  await expect(init).toBeEnabled()
+
+  // The repository is created; the project list refresh after it fails.
+  await page.route(/\/api\/project(\?|$)/, (route) =>
+    route.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" }, json: {} }),
+  )
+  const created = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/vcs/init")
+  const project = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/project")
+  const session = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/session/ses_init_refresh")
+  await init.click()
+  expect((await created).status()).toBe(204)
+  expect((await project).status()).toBe(500)
+  expect((await session).status()).toBe(200)
+  await expect(panel.getByRole("button", { name: "Creating Git repository…", exact: true })).toHaveCount(0)
+  await expect(page.getByText("Request failed", { exact: true })).toHaveCount(0)
+})
+
+test("opens file picker launchers when randomUUID is unavailable on insecure HTTP origins", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(globalThis, "isSecureContext", { configurable: true, value: false })
+    Object.defineProperty(globalThis.crypto, "randomUUID", { configurable: true, value: undefined })
+  })
+
+  await openSession(page, {
+    name: "ReviewOpenFileInsecure",
+    seed: { panes: { ses_reviewopenfileinsecure: { review: true } } },
+  })
+
+  const panel = page.locator("#review-panel")
+  const tab = panel.getByRole("tab", { name: "Open file", exact: true })
+  await openFileLauncher(panel)
+  await expect(tab).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByRole("combobox", { name: "Filter files" })).toBeFocused()
+
+  await openFileLauncher(panel)
+  await expect(tab).toHaveCount(2)
 })
 
 test("open file tab browses, searches, and tracks missing files", async ({ page }) => {
@@ -316,7 +397,7 @@ for (const listed of [false, true]) {
 }
 
 test("context closes the side region only when its button opened it", async ({ page }) => {
-  // A /btw tab saved before extensions must not linger as a hidden tab that keeps the region open.
+  // A /btw tab saved before plugins must not linger as a hidden tab that keeps the region open.
   await openSession(page, {
     name: "ReviewContextOpener",
     seed: {
@@ -473,6 +554,7 @@ test("file tree expands Windows paths and scrolls long names in both directions"
     fileList: (path) => {
       if (path === "frontend\\" || path === "frontend") {
         return [
+          fileNode(directory, "frontend/nested", "directory"),
           { ...fileNode(directory, "frontend/app.ts"), path: "frontend\\app.ts" },
           { ...fileNode(directory, longPath), path: `frontend\\${longFilename}` },
           // Short rows below the long one, so it can scroll out of view.
@@ -483,6 +565,8 @@ test("file tree expands Windows paths and scrolls long names in both directions"
           }),
         ]
       }
+
+      if (path === "frontend/nested") return [fileNode(directory, "frontend/nested/child.ts")]
 
       if (path) return []
 
@@ -508,6 +592,36 @@ test("file tree expands Windows paths and scrolls long names in both directions"
   await expect(frontend).toHaveAttribute("aria-expanded", "false")
   await frontend.click()
   await expect(frontend).toHaveAttribute("aria-expanded", "true")
+
+  const nested = panel.locator('[data-type="item"][data-item-path="frontend/nested/"]')
+  await nested.click()
+  const child = panel.locator('[data-type="item"][data-item-path="frontend/nested/child.ts"]')
+  await expect(child).toBeVisible()
+  await expect(child.locator('[data-item-section="spacing-item"]')).toHaveCount(2)
+
+  // Every ancestor guide runs through its folder's chevron, not just the first indentation level.
+  const guideOffset = () =>
+    child.evaluate((element) => {
+      const root = element.getRootNode()
+
+      if (!(root instanceof ShadowRoot)) throw new Error("Expected the file tree's shadow root")
+
+      return Math.max(
+        ...Array.from(element.querySelectorAll<HTMLElement>('[data-item-section="spacing-item"]'), (guide) => {
+          const folder = Array.from(root.querySelectorAll<HTMLElement>('[data-type="item"]')).find(
+            (row) => row.dataset.itemPath === guide.dataset.ancestorPath,
+          )!
+
+          const icon = folder.querySelector('[data-item-section="icon"]')!.getBoundingClientRect()
+          const line = guide.getBoundingClientRect()
+          const center = getComputedStyle(guide).direction === "rtl" ? line.right - 0.5 : line.left + 0.5
+
+          return Math.abs(center - (icon.left + icon.width / 2))
+        }),
+      )
+    })
+
+  await expect.poll(guideOffset).toBeLessThanOrEqual(0.5)
 
   const viewport = sidebar.locator('[data-slot="session-review-v2-sidebar-viewport"]')
   const longRow = panel.locator(`[data-type="item"][data-item-path="${longPath}"]`)
@@ -552,6 +666,7 @@ test("file tree expands Windows paths and scrolls long names in both directions"
   await expect.poll(async () => (await scrollTree({})).left).toBeGreaterThan(0)
   await scrollTree({ left: 0, top: 0 })
   await viewport.evaluate((element) => element.setAttribute("dir", "rtl"))
+  await expect.poll(guideOffset).toBeLessThanOrEqual(0.5)
   await expect.poll(() => statusInset(status, "left")).toBeLessThanOrEqual(24)
   await frontend.focus()
   await page.keyboard.press("ArrowRight")
@@ -587,6 +702,64 @@ test("file tree expands Windows paths and scrolls long names in both directions"
   await panel.locator('[data-type="item"][data-item-path="frontend/app.ts"]').click()
   await expect(panel.getByRole("tab", { name: "app.ts" })).toHaveAttribute("aria-selected", "true")
   await expect(panel.getByText("contents:frontend/app.ts", { exact: true })).toBeVisible()
+})
+
+test("the file tree follows a folder the review closes and lists a recreated folder's files", async ({ page }) => {
+  const directory = "C:/OpenCode/TreeFollow"
+  const disk = { src: true }
+
+  const workspace = await openSession(page, {
+    name: "TreeFollow",
+    vcsDiff: [fileDiff("src/a.ts")],
+    fileList: (path) => {
+      if (!disk.src) return path ? [] : [fileNode(directory, "README.md")]
+
+      if (path === "src") return [fileNode(directory, "src/a.ts")]
+
+      return path ? [] : [fileNode(directory, "src", "directory"), fileNode(directory, "README.md")]
+    },
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { ses_treefollow: { review: true } },
+      storage: { "opencode.global.dat:review-panel-v2": { sidebarOpened: true } },
+    },
+  })
+
+  const panel = page.locator("#review-panel")
+  const tab = (name: string) => panel.getByRole("tab", { name, exact: true })
+  // Only the selected tab's tree is visible; the file browser stays mounted, hidden, behind the review.
+  const folder = panel.getByRole("treeitem", { name: "src" })
+  const file = panel.getByRole("treeitem", { name: "a.ts" })
+
+  await openReviewLauncher(panel)
+  await expect(file).toBeVisible()
+  await openFileLauncher(panel)
+  await expect(tab("Open file")).toHaveAttribute("aria-selected", "true")
+  await folder.click()
+  await expect(folder).toHaveAttribute("aria-expanded", "true")
+  await expect(file).toBeVisible()
+
+  // The review shares the workspace's folders: closing one there closes it in the file browser too.
+  await panel.locator("#session-side-panel-review-tab").click()
+  await expect(folder).toHaveAttribute("aria-expanded", "true")
+  await folder.click()
+  await expect(folder).toHaveAttribute("aria-expanded", "false")
+  await tab("Open file").click()
+  await expect(folder).toHaveAttribute("aria-expanded", "false")
+  await expect(file).toHaveCount(0)
+
+  // A deleted folder takes its files with it, so they show again once it is recreated and opened.
+  await folder.click()
+  await expect(file).toBeVisible()
+  disk.src = false
+  await workspace.push([filesystemEvent(directory, "src", "unlink")])
+  await expect(folder).toHaveCount(0)
+  disk.src = true
+  await workspace.push([filesystemEvent(directory, "src", "add")])
+  await expect(folder).toHaveAttribute("aria-expanded", "false")
+  await folder.click()
+  await expect(folder).toHaveAttribute("aria-expanded", "true")
+  await expect(file).toBeVisible()
 })
 
 test("rereads a file each time an artifact link opens it", async ({ page }) => {
@@ -656,7 +829,7 @@ test("rereads a file each time an artifact link opens it", async ({ page }) => {
   await expect(panel.getByText("second draft", { exact: true })).toHaveCount(0)
 
   // A restored file tab whose file was deleted shows its inline not-found state without a toast; clicking a broken link
-  // when no tab is open for it shows the toast.
+  // when no tab is open for it shows one toast.
   await page.route("**/api/fs/read/shopping.txt*", (route) =>
     route.fulfill({
       status: 404,
@@ -672,11 +845,420 @@ test("rereads a file each time an artifact link opens it", async ({ page }) => {
   await expect(panel.getByText("File not found: shopping.txt", { exact: true })).toBeVisible()
   await expect(page.getByText("Failed to load file", { exact: true })).toHaveCount(0)
 
+  // Behind another tab, the deleted file's tab is what its link selects: the click never does nothing.
+  await page.getByRole("button", { name: "Toggle session context" }).click()
+  await expect(missingTab).toHaveAttribute("aria-selected", "false")
+  await link.click()
+  await expect(missingTab).toHaveAttribute("aria-selected", "true")
+  await expect(page.getByText("Failed to load file", { exact: true })).toHaveCount(0)
+
   await missingTab.locator("..").getByRole("button", { name: "Close tab" }).click()
   await expect(missingTab).toHaveCount(0)
   await link.click()
   await expect(page.getByText("Failed to load file", { exact: true })).toBeVisible()
   await expect(missingTab).toHaveCount(0)
+})
+
+// A change reported while a file's read is in flight used to join that read, so the tab kept the bytes from before the
+// change until the next change.
+test("a file changed during its read shows the change", async ({ page }) => {
+  const reads: string[] = []
+  const arrived = Promise.withResolvers<void>()
+  const held = Promise.withResolvers<void>()
+
+  const messages = [
+    { id: "msg_prompt", type: "user", text: "Update the lists", time: { created: 1 } },
+    {
+      id: "msg_reply",
+      type: "assistant",
+      agent: "build",
+      model: { id: "test", providerID: "opencode" },
+      content: [{ type: "text", text: "Updated [notes.txt](notes.txt) and [shopping.txt](shopping.txt)." }],
+      time: { created: 2, completed: 3 },
+    },
+  ] satisfies SessionMessageInfo[]
+
+  const workspace = await openSession(page, {
+    name: "FileReadRace",
+    fileList: () => [],
+    fileContent: async (path) => {
+      reads.push(path)
+
+      if (path !== "shopping.txt") return `contents:${path}`
+
+      if (reads.filter((item) => item === path).length > 1) return "after change"
+      arrived.resolve()
+      await held.promise
+
+      return "before change"
+    },
+    pageMessages: () => ({ items: messages }),
+  })
+
+  const panel = page.locator("#review-panel")
+  await page.getByRole("link", { name: "notes.txt", exact: true }).click()
+  await expect(panel.getByText("contents:notes.txt", { exact: true })).toBeVisible()
+
+  await page.getByRole("link", { name: "shopping.txt", exact: true }).click()
+  await arrived.promise
+  // Events arrive in order, so the reread of notes.txt shows that the change to shopping.txt was handled before it.
+  await workspace.push([
+    filesystemEvent(workspace.directory, "shopping.txt", "change"),
+    filesystemEvent(workspace.directory, "notes.txt", "change"),
+  ])
+  await expect.poll(() => reads.filter((item) => item === "notes.txt").length).toBe(2)
+  held.resolve()
+
+  await expect(panel.getByRole("tab", { name: "shopping.txt" })).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByText("after change", { exact: true })).toBeVisible()
+  await expect(panel.getByText("before change", { exact: true })).toHaveCount(0)
+})
+
+test("artifact actions copy and download content, switch source, and follow the selected file's capabilities", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"])
+  const source = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80"><rect width="120" height="80"/></svg>'
+  const table = 'name,role\n"Jensen, Oliver",Researcher\nIsabella,Support'
+  const broken = '<svg xmlns="http://www.w3.org/2000/svg"><rect'
+
+  const notes = [
+    "---",
+    "description: Release checklist",
+    "mode: primary",
+    "model: opencode/test",
+    "temperature: 0.2",
+    "steps: 12",
+    "color: accent",
+    "hidden: false",
+    'title: "Release"',
+    "tools:",
+    "  write: false",
+    "---",
+    "",
+    "# Notes",
+    "",
+    "A document with a visible top edge.",
+    "",
+    "---",
+    "",
+    "Trailing section.",
+  ].join("\n")
+
+  const workspace = await openSession(page, {
+    name: "ArtifactActions",
+    fileList: () => [],
+    fileContent: (path) => {
+      if (path === "vector.svg") return { content: source }
+
+      if (path === "data.csv") return { content: table }
+
+      if (path === "notes.md") return { content: notes }
+
+      if (path === "broken.svg") return { content: broken }
+
+      return { type: "binary", content: "AAEC", encoding: "base64" }
+    },
+    pageMessages: () => ({
+      items: [
+        {
+          id: "msg_artifact_actions",
+          type: "assistant",
+          agent: "build",
+          model: { id: "test", providerID: "opencode" },
+          content: [
+            {
+              type: "text",
+              text: "---\ndescription: Chat heading\n---\n\n[Vector](vector.svg) [Table](data.csv) [Notes](notes.md) [Binary](sample.bin) [Broken](broken.svg)",
+            },
+          ],
+          time: { created: 1, completed: 2 },
+        },
+      ],
+    }),
+  })
+
+  await page.getByRole("link", { name: "Vector", exact: true }).click()
+  const panel = page.locator("#review-panel")
+  const toolbar = panel.locator('[data-slot="artifact-toolbar"]:visible')
+  const actions = toolbar.getByRole("button", { name: "File actions", exact: true })
+  const image = panel.getByRole("img", { name: "vector.svg", exact: true })
+  await expect(image).toHaveJSProperty("naturalWidth", 120)
+  await expect(toolbar.getByText("vector.svg", { exact: true })).toBeVisible()
+  await panel.getByRole("button", { name: "Toggle file tree", exact: true }).click()
+
+  // The source action stays visible at rest; only metadata needs hover or keyboard focus.
+  await page.mouse.move(0, 0)
+  const sourceAction = toolbar.getByRole("button", { name: "View source", exact: true })
+  await expect(sourceAction).toHaveCSS("opacity", "1")
+  await expect(toolbar.locator('[data-slot="artifact-metadata"]')).toHaveCSS("opacity", "0")
+  await actions.focus()
+  await expect(toolbar.locator('[data-slot="artifact-metadata"]')).toHaveCSS("opacity", "1")
+  await expect(toolbar.getByText("120 × 80", { exact: true })).toBeVisible()
+  const copy = toolbar.getByRole("button", { name: "Copy content", exact: true })
+  await copy.click()
+  await expect(page.getByText("Copied", { exact: true })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(source)
+  await page.getByRole("button", { name: "Dismiss", exact: true }).click()
+
+  await sourceAction.click()
+  await expect(image).toHaveCount(0)
+  await expect(panel.locator("diffs-container")).toContainText(source)
+  await actions.click()
+  await expect(page.getByRole("menuitem", { name: "View preview", exact: true })).toBeVisible()
+  await expect(page.getByRole("menuitem", { name: "Open in", exact: true })).toHaveCount(0)
+  await page.getByRole("menuitem", { name: "View preview", exact: true }).click()
+  await expect(image).toHaveJSProperty("naturalWidth", 120)
+
+  await page.getByRole("link", { name: "Table", exact: true }).click()
+  await expect(panel.getByRole("columnheader", { name: /^name(?:\s|$)/ })).toHaveCSS(
+    "background-color",
+    "rgb(242, 242, 242)",
+  )
+  const nameCell = panel.getByRole("cell", { name: /^Jensen, Oliver(?:\s|$)/ })
+  await expect(nameCell).toBeVisible()
+  await expect(toolbar.getByText("data.csv", { exact: true })).toBeVisible()
+  await nameCell.hover()
+  await nameCell.getByRole("button", { name: "Copy cell", exact: true }).click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("Jensen, Oliver")
+  await toolbar.hover()
+  await expect(nameCell.getByRole("button", { name: "Copy cell", exact: true })).toHaveCSS("opacity", "0")
+  await page.keyboard.press("Tab")
+
+  const nextCopy = panel
+    .getByRole("cell", { name: /^Researcher(?:\s|$)/ })
+    .getByRole("button", { name: "Copy cell", exact: true })
+
+  await expect(nextCopy).toBeFocused()
+  await expect(nextCopy).toHaveCSS("opacity", "1")
+
+  const copyHeader = panel
+    .getByRole("columnheader", { name: /^role(?:\s|$)/ })
+    .getByRole("button", { name: "Copy cell", exact: true })
+
+  await copyHeader.focus()
+  await copyHeader.press("Enter")
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("role")
+  await actions.click()
+  const downloaded = page.waitForEvent("download")
+  await page.getByRole("menuitem", { name: "Download", exact: true }).click()
+  const download = await downloaded
+  expect(download.suggestedFilename()).toBe("data.csv")
+  expect(await readFile((await download.path())!, "utf8")).toBe(table)
+
+  await expect(page.getByRole("heading", { name: "description: Chat heading", exact: true })).toBeVisible()
+  await page.getByRole("link", { name: "Notes", exact: true }).click()
+  await expect(panel.getByRole("heading", { name: "Notes", exact: true })).toBeVisible()
+  const paper = panel.locator('[data-slot="artifact-markdown-page"]')
+  await expect(paper.getByRole("heading")).toHaveText(["Notes"])
+  await expect(paper.locator("code.language-yaml")).toHaveCount(0)
+  await expect(paper.locator("hr")).toHaveCount(1)
+  const terms = paper.getByRole("term")
+  await expect(terms).toHaveText(["description", "mode", "model", "temperature", "steps", "color"])
+  await paper.getByRole("button", { name: "Show all 9 properties", exact: true }).click()
+  await expect(terms).toHaveText([
+    "description",
+    "mode",
+    "model",
+    "temperature",
+    "steps",
+    "color",
+    "hidden",
+    "title",
+    "tools",
+  ])
+  await expect(paper.getByRole("definition")).toHaveText([
+    "Release checklist",
+    "primary",
+    "opencode/test",
+    "0.2",
+    "12",
+    "accent",
+    "false",
+    "Release",
+    "write: false",
+  ])
+  await expect(paper).toHaveCSS("border-radius", "8px")
+  await expect(paper).toHaveAttribute("data-component", "document-surface")
+  expect(await paper.evaluate((element) => getComputedStyle(element, "::after").borderTopStyle)).toBe("solid")
+  const surface = (await paper.boundingBox())!
+  const bar = (await toolbar.boundingBox())!
+  expect(surface.y - bar.y - bar.height).toBe(1)
+  await expect(panel.getByRole("group", { name: "Preview controls", exact: true })).toHaveCount(0)
+  await copy.click()
+  // Chromium writes CRLF to the Windows clipboard.
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()).then((text) => text.replace(/\r\n/g, "\n")))
+    .toBe(notes)
+  await page.getByRole("button", { name: "Dismiss", exact: true }).click()
+  await sourceAction.click()
+  await expect(paper).toHaveCount(0)
+  await expect(panel.locator('diffs-container [data-line="1"]')).toHaveText("---")
+  await expect(panel.locator('diffs-container [data-line="2"]')).toContainText("description: Release checklist")
+
+  await page.getByRole("link", { name: "Binary", exact: true }).click()
+  await expect(panel.getByText(/Binary file/)).toBeVisible()
+  await expect(toolbar.getByText("sample.bin", { exact: true })).toBeVisible()
+  await expect(copy).toHaveCount(0)
+  await expect(toolbar.getByRole("button", { name: "View source", exact: true })).toHaveCount(0)
+  await actions.click()
+  await expect(page.getByRole("menuitem", { name: "Download", exact: true })).toHaveCount(0)
+  await page.getByRole("menuitem", { name: "Copy path", exact: true }).click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(`${workspace.directory}/sample.bin`)
+
+  // A text SVG that fails to decode shows the binary placeholder but can still show its source.
+  await page.getByRole("link", { name: "Broken", exact: true }).click()
+  await expect(toolbar.getByText("broken.svg", { exact: true })).toBeVisible()
+  await expect(panel.getByText("Couldn't load this file.", { exact: true })).toBeVisible()
+  await toolbar.getByRole("button", { name: "View source", exact: true }).click()
+  await expect(panel.locator("diffs-container")).toContainText(broken)
+})
+
+test("Markdown and DOCX sheets stay aligned when switching at wide and narrow preview widths", async ({ page }) => {
+  // Minimal DOCX containing one paragraph, "Document spacing", and a letter-sized page.
+  const docx =
+    "UEsDBBQAAAAIAI51W13mdcR+0gAAAIsBAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbH2QvVLDMAzHX8XnlasVGBh6SToAKzD0BXSOkvjw11luad++Sls6cIVR+n/8ZLebQ/BqT4Vdip1+NI3e9O32mImVKJE7Pdea1wBsZwrIJmWKooypBKwylgky2i+cCJ6a5hlsipViXdWlQ/ftK42481W9HWR9oRTyrNXLxbiwOo05e2exig77OPyirK4EI8mzh2eX+UEMGu4SFuVvwDX3Ic8ubiD1iaW+YxAXfKcywJDsLkjS/F9z5840js7SLb+05ZIsMbs4BW9uSkAXf+6H83f3J1BLAwQUAAAACACOdVtdXzOVUpUAAAAHAQAACwAAAF9yZWxzLy5yZWxzjc87DsIwDAbgq0Q+QJ0yMKCmXVi6Ii4QJW5T0TzkhNftycBAEQOjf//6LHfDw6/iRpyXGBS0jYSh70606lKD7JaURW2ErMCVkg6I2TjyOjcxUaibKbLXpY48Y9LmomfCnZR75E8DtqYYrQIebQvi/Ez0jx2naTF0jObqKZQfJ74aVdY8U1Fwj2zRvuOmsoB9h5sX+xdQSwMEFAAAAAgAjnVbXUye0X++AAAAMQEAABEAAAB3b3JkL2RvY3VtZW50LnhtbEVQ0Q6CMAz8FbIPsEjUGILw4quJiV8wxwQSti5dFfXr7TCEl9v1ru01q5q3G7OXpTigP6ntJldNXU1li+bprOdMbB/L6aR65lACRNNbp+MGg/XiPZCcZimpgwmpDYTGxjj4zo1Q5PkBnB68Sivv2H7SGxJQAq7PS0wM2shQBUlNSDPOvdEavs4Dobt9syldsy2KXa6E98L3R+Hwb7hoEpUxiL77t9DQ9byWd2RGt9ajfSwuzKFLHiw3w/of9Q9QSwECFAMUAAAACACOdVtd5nXEftIAAACLAQAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAI51W11fM5VSlQAAAAcBAAALAAAAAAAAAAAAAACAAQMBAABfcmVscy8ucmVsc1BLAQIUAxQAAAAIAI51W11MntF/vgAAADEBAAARAAAAAAAAAAAAAACAAcEBAAB3b3JkL2RvY3VtZW50LnhtbFBLBQYAAAAAAwADALkAAACuAgAAAAA="
+
+  await page.setViewportSize({ width: 1728, height: 900 })
+  await openSession(page, {
+    name: "DocumentAlignment",
+    fileList: () => [],
+    fileContent: (path) =>
+      path === "notes.md"
+        ? { type: "text", content: "# Document spacing\n\nA Markdown sheet beside an Office document." }
+        : {
+            type: "binary",
+            content: docx,
+            encoding: "base64",
+            mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          },
+    pageMessages: () => ({
+      items: [
+        {
+          id: "msg_document_alignment",
+          type: "assistant",
+          agent: "build",
+          model: { id: "test", providerID: "opencode" },
+          content: [{ type: "text", text: "[Markdown](notes.md) [Word](sample.docx) [Second Word](other.docx)" }],
+          time: { created: 1, completed: 2 },
+        },
+      ],
+    }),
+    seed: { storage: { "opencode.global.dat:review-panel-v2": { sidebarOpened: false } } },
+  })
+
+  const panel = page.locator("#review-panel")
+  const toolbar = panel.locator('[data-slot="artifact-toolbar"]:visible')
+  const markdown = panel.locator('[data-slot="artifact-markdown-page"]')
+  const word = panel.getByRole("group", { name: "Page 1", exact: true })
+
+  const edges = (sheet: Locator) =>
+    sheet.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      const scrollport = element.closest("[data-document-surface-scrollport]")!
+
+      return { left: rect.left, right: rect.right, inset: rect.left - scrollport.getBoundingClientRect().left }
+    })
+
+  await page.getByRole("link", { name: "Markdown", exact: true }).click()
+  await page.getByRole("link", { name: "Word", exact: true }).click()
+  await expect(toolbar.getByText("sample.docx", { exact: true })).toBeVisible()
+  // The real Office engine may need a cold WASM initialization before its text layer is ready.
+  await expect(word.getByText("Document spacing", { exact: true })).toBeVisible({ timeout: 30_000 })
+  await word.evaluate((element) => {
+    element.dataset.e2eProbe = "warm"
+  })
+  const canvas = await word.locator("canvas").elementHandle()
+  expect(canvas).not.toBeNull()
+  await expect.poll(() => canvas!.evaluate((element) => Number(element.getAttribute("width")))).toBeGreaterThan(0)
+  await page.getByRole("link", { name: "Second Word", exact: true }).click()
+  await expect(toolbar.getByText("other.docx", { exact: true })).toBeVisible()
+  await expect(word.getByText("Document spacing", { exact: true })).toBeVisible({ timeout: 30_000 })
+  await word.evaluate((element) => {
+    element.dataset.e2eProbe = "other-warm"
+  })
+
+  for (const size of [
+    { width: 1728, gutter: 20 },
+    { width: 1000, gutter: 12 },
+  ]) {
+    await page.setViewportSize({ width: size.width, height: 900 })
+    await panel.getByRole("tab", { name: "notes.md", exact: true }).click()
+    await expect(markdown.getByRole("heading", { name: "Document spacing", exact: true })).toBeVisible()
+    await toolbar.hover()
+    await expect.poll(async () => (await edges(markdown)).inset).toBeCloseTo(size.gutter, 1)
+    const reference = await edges(markdown)
+    const header = await toolbar.boundingBox()
+
+    await panel.getByRole("tab", { name: "sample.docx", exact: true }).click()
+    await expect(word).toHaveAttribute("data-e2e-probe", "warm")
+    await expect(word.getByText("Document spacing", { exact: true })).toBeVisible()
+    await expect
+      .poll(() => edges(word))
+      .toEqual({
+        left: expect.closeTo(reference.left, 1),
+        right: expect.closeTo(reference.right, 1),
+        inset: expect.closeTo(size.gutter, 1),
+      })
+    await expect.poll(() => toolbar.boundingBox()).toEqual(header)
+
+    await panel.getByRole("tab", { name: "notes.md", exact: true }).click()
+    await expect(markdown.getByRole("heading", { name: "Document spacing", exact: true })).toBeVisible()
+    await expect.poll(() => edges(markdown)).toEqual(reference)
+    await expect.poll(() => toolbar.boundingBox()).toEqual(header)
+    expect(await canvas!.evaluate((element) => element.isConnected && Number(element.getAttribute("width")) > 0)).toBe(
+      true,
+    )
+    await panel.getByRole("tab", { name: "other.docx", exact: true }).click()
+    await expect(word).toHaveAttribute("data-e2e-probe", "other-warm")
+    await panel.getByRole("tab", { name: "notes.md", exact: true }).click()
+  }
+
+  await panel
+    .getByRole("tab", { name: "sample.docx", exact: true })
+    .locator("..")
+    .getByRole("button", { name: "Close tab", exact: true })
+    .click()
+  await expect.poll(() => canvas!.evaluate((element) => element.isConnected)).toBe(false)
+})
+
+test("diagram preview controls zoom the rendered diagram and fit it back into its pane", async ({ page }) => {
+  await openSession(page, {
+    name: "DiagramZoom",
+    fileList: () => [],
+    fileContent: () => ({ content: "flowchart LR\n Start[Start] --> Review[Review] --> Finish[Finish]" }),
+    pageMessages: () => ({
+      items: [
+        {
+          id: "msg_diagram_zoom",
+          type: "assistant",
+          agent: "build",
+          model: { id: "test", providerID: "opencode" },
+          content: [{ type: "text", text: "[Diagram](flow.mmd)" }],
+          time: { created: 1, completed: 2 },
+        },
+      ],
+    }),
+  })
+  await page.getByRole("link", { name: "Diagram", exact: true }).click()
+  const panel = page.locator("#review-panel")
+  const diagram = panel.locator('[data-component="markdown-mermaid"] > svg')
+  const controls = panel.getByRole("group", { name: "Preview controls", exact: true })
+  const fit = controls.getByRole("button", { name: "Fit", exact: true })
+  await expect(panel.getByText("Finish", { exact: true })).toBeVisible()
+  await diagram.hover()
+  const initial = (await diagram.boundingBox())!
+
+  await expect(fit).toBeEnabled()
+  await controls.getByRole("button", { name: "Zoom in", exact: true }).click()
+  await expect.poll(async () => (await diagram.boundingBox())!.width).toBeCloseTo(initial.width * 1.25, 1)
+  await controls.getByRole("button", { name: "Zoom out", exact: true }).click()
+  await expect.poll(async () => (await diagram.boundingBox())!.width).toBeCloseTo(initial.width, 1)
+  await controls.getByRole("button", { name: "Zoom out", exact: true }).click()
+  await expect.poll(async () => (await diagram.boundingBox())!.width).toBeCloseTo(initial.width / 1.25, 1)
+  await fit.click()
+  await expect.poll(() => diagram.boundingBox()).toEqual(initial)
 })
 
 /** What the image case's frame probe records on the window. */
@@ -698,12 +1280,20 @@ test("image gestures anchor zoom, pan, and reset independently of the pane", asy
   await openSession(page, {
     name: "ImageGestures",
     fileList: () => [],
-    fileContent: (path) => ({
-      content:
-        path === "second.svg"
-          ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1600"><rect width="1600" height="1600" fill="#6699aa"/></svg>'
-          : '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1600"><rect width="1600" height="1600" fill="#6699aa"/></svg>',
-    }),
+    fileContent: (path) => {
+      if (path === "small.svg")
+        return {
+          content:
+            '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#6699aa"/></svg>',
+        }
+
+      return {
+        content:
+          path === "second.svg"
+            ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1600"><rect width="1600" height="1600" fill="#6699aa"/></svg>'
+            : '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1600"><rect width="1600" height="1600" fill="#6699aa"/></svg>',
+      }
+    },
     pageMessages: () => ({
       items: [
         {
@@ -711,7 +1301,7 @@ test("image gestures anchor zoom, pan, and reset independently of the pane", asy
           type: "assistant",
           agent: "build",
           model: { id: "test", providerID: "opencode" },
-          content: [{ type: "text", text: "[First](first.svg) [Second](second.svg)" }],
+          content: [{ type: "text", text: "[First](first.svg) [Second](second.svg) [Small](small.svg)" }],
           time: { created: 1, completed: 2 },
         },
       ],
@@ -723,11 +1313,15 @@ test("image gestures anchor zoom, pan, and reset independently of the pane", asy
   const stage = panel.locator('[data-slot="artifact-stage"]')
   const fit = panel.getByRole("button", { name: "Fit", exact: true })
   await expect(image).toBeVisible()
-  await expect(fit).toBeDisabled()
+  await expect(fit).toBeEnabled()
   // Wait for the side pane's opening motion before choosing a gesture anchor.
   await image.hover()
   const initial = (await image.boundingBox())!
   const pane = (await panel.boundingBox())!
+  await panel.getByRole("button", { name: "Zoom in", exact: true }).click()
+  await expect.poll(async () => (await image.boundingBox())!.width).toBeCloseTo(initial.width * 1.25, 1)
+  await panel.getByRole("button", { name: "Zoom out", exact: true }).click()
+  await expect.poll(() => image.boundingBox()).toEqual(initial)
   const anchor = { x: Math.round(initial.x + initial.width * 0.55), y: Math.round(initial.y + initial.height * 0.55) }
   await page.mouse.move(anchor.x, anchor.y)
   // A continuous pinch catches anchor drift while the image still fits one axis.
@@ -739,7 +1333,7 @@ test("image gestures anchor zoom, pan, and reset independently of the pane", asy
     gestureSourceType: "mouse",
   })
   await cdp.detach()
-  await expect(fit).toBeEnabled()
+  await expect(stage).toHaveAttribute("data-zoom", "actual")
   const zoomed = (await image.boundingBox())!
   expect(zoomed.width).toBeCloseTo(initial.width * 2, 1)
   expect((anchor.x - zoomed.x) / zoomed.width).toBeCloseTo((anchor.x - initial.x) / initial.width, 4)
@@ -753,7 +1347,7 @@ test("image gestures anchor zoom, pan, and reset independently of the pane", asy
   await page.mouse.down()
   await page.mouse.move(anchor.x + 60, anchor.y + 40, { steps: 5 })
   await page.mouse.up()
-  await expect(fit).toBeEnabled()
+  await expect(stage).toHaveAttribute("data-zoom", "actual")
   expect((await image.boundingBox())!.x).toBeCloseTo(scrolled.x + 60, 1)
   expect((await image.boundingBox())!.y).toBeCloseTo(scrolled.y + 40, 1)
   // Touch uses the same captured-pointer path and must not generate a click-to-fit.
@@ -765,13 +1359,35 @@ test("image gestures anchor zoom, pan, and reset independently of the pane", asy
   })
   await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
   await touch.detach()
-  await expect(fit).toBeEnabled()
+  await expect(stage).toHaveAttribute("data-zoom", "actual")
   expect((await image.boundingBox())!.x).toBeCloseTo(scrolled.x + 30, 1)
   expect((await image.boundingBox())!.y).toBeCloseTo(scrolled.y + 20, 1)
+  // A pan whose release the image never heard ends on the next move without the button, and pans nothing.
+  const touched = (await image.boundingBox())!
+  await page.mouse.down()
+  await expect(image).toHaveCSS("cursor", "grabbing")
+  await image.evaluate(
+    (element, point) =>
+      element.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          pointerId: 1,
+          pointerType: "mouse",
+          isPrimary: true,
+          buttons: 0,
+          clientX: point.x,
+          clientY: point.y,
+        }),
+      ),
+    { x: anchor.x - 100, y: anchor.y - 100 },
+  )
+  await expect(image).toHaveCSS("cursor", "grab")
+  expect(await image.boundingBox()).toEqual(touched)
+  await page.mouse.up()
   // Keyboard-accessible fit restores the exact original geometry.
   await fit.focus()
   await page.keyboard.press("Enter")
-  await expect(fit).toBeDisabled()
+  await expect(stage).toHaveAttribute("data-zoom", "fit")
   expect(await image.boundingBox()).toEqual(initial)
   expect(
     await stage.evaluate((element) =>
@@ -779,17 +1395,17 @@ test("image gestures anchor zoom, pan, and reset independently of the pane", asy
     ),
   ).toBe(true)
   await image.click()
-  await expect(fit).toBeEnabled()
+  await expect(stage).toHaveAttribute("data-zoom", "actual")
   await page.getByRole("link", { name: "Second", exact: true }).click()
   await expect(panel.getByRole("img", { name: "second.svg", exact: true })).toBeVisible()
-  await expect(fit).toBeDisabled()
+  await expect(stage).toHaveAttribute("data-zoom", "fit")
   await panel.getByRole("img", { name: "second.svg", exact: true }).hover()
   const second = (await panel.getByRole("img", { name: "second.svg", exact: true }).boundingBox())!
   expect(second.width).toBeGreaterThan(0)
   expect(second.height).toBeGreaterThan(0)
   await page.keyboard.down("Control")
   await page.mouse.wheel(0, -50)
-  await expect(fit).toBeEnabled()
+  await expect(stage).toHaveAttribute("data-zoom", "actual")
   await page.keyboard.up("Control")
   await fit.click()
   await page.setViewportSize({ width: 1200, height: 700 })
@@ -801,6 +1417,14 @@ test("image gestures anchor zoom, pan, and reset independently of the pane", asy
       return media.width <= frame.width - 47 && media.height <= frame.height - 47
     })
     .toBe(true)
+  await page.getByRole("link", { name: "Small", exact: true }).click()
+  const small = panel.getByRole("img", { name: "small.svg", exact: true })
+  await expect(small).toHaveJSProperty("naturalWidth", 32)
+  await small.click()
+  await expect.poll(async () => (await small.boundingBox())!.width).toBeCloseTo(32, 1)
+  await expect(panel.getByRole("button", { name: "Zoom out", exact: true })).toBeDisabled()
+  await fit.click()
+  await expect.poll(async () => (await small.boundingBox())!.width).toBeGreaterThan(128)
 })
 
 test("image files load into the review panel and keep it painted while loading", async ({ page }) => {
@@ -999,6 +1623,49 @@ test("video files stream into the viewer behind a loading state, open into the p
   expect(await page.evaluate(() => document.fullscreenElement)).toBeNull()
 })
 
+test("review file navigation focuses the arrow for the keyboard direction", async ({ page }) => {
+  await openSession(page, {
+    name: "ReviewArrowFocus",
+    vcsDiff: [fileDiff("src/alpha.ts"), fileDiff("src/beta.ts"), fileDiff("src/gamma.ts")],
+    seed: {
+      panes: { ses_reviewarrowfocus: { review: true } },
+      storage: {
+        ...reviewTabs("C:/OpenCode/ReviewArrowFocus", "ses_reviewarrowfocus"),
+        "opencode.global.dat:review-panel-v2": { sidebarOpened: false },
+      },
+    },
+  })
+
+  const panel = page.locator("#review-panel")
+  const file = panel.locator('[data-slot="session-review-v2-file-name"]')
+  const previous = panel.getByRole("button", { name: "Previous file", exact: true })
+  const next = panel.getByRole("button", { name: "Next file", exact: true })
+
+  await expect(file).toHaveText("alpha.ts")
+  await previous.click()
+  await expect(file).toHaveText("gamma.ts")
+  await page.keyboard.press("ArrowRight")
+  await expect(file).toHaveText("alpha.ts")
+  await expect(next).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(file).toHaveText("beta.ts")
+  await page.keyboard.press("ArrowLeft")
+  await expect(file).toHaveText("alpha.ts")
+  await expect(previous).toBeFocused()
+  await next.click()
+  await expect(file).toHaveText("beta.ts")
+  await expect(next).toBeFocused()
+
+  const home = page.getByRole("button", { name: "Home", exact: true })
+  await home.focus()
+  await page.keyboard.press("ArrowRight")
+  await expect(file).toHaveText("gamma.ts")
+  await expect(home).toBeFocused()
+  await page.keyboard.press("ArrowLeft")
+  await expect(file).toHaveText("beta.ts")
+  await expect(home).toBeFocused()
+})
+
 test("restores review state and the side-panel tab per session", async ({ page }) => {
   const sessions = [
     { id: "ses_review_state_a", title: "Alpha review state" },
@@ -1128,7 +1795,7 @@ test("shows and restores last turn changes from the session diff", async ({ page
   await expect(panel.locator('[data-slot="session-review-v2-file-name"]')).toHaveText("delta.ts")
 })
 
-test("keeps the review state a session stored before extensions", async ({ page }) => {
+test("keeps the review state a session stored before plugins", async ({ page }) => {
   const directory = "C:/OpenCode/ReviewLegacy"
   await openSession(page, {
     name: "ReviewLegacy",
@@ -1222,7 +1889,7 @@ test("desktop review waits for the session's stored mode before it loads changes
     .poll(() =>
       page.evaluate(() =>
         Object.entries(localStorage).some(
-          ([key, value]) => key.includes("extension.review.session") && value.includes('"branch"'),
+          ([key, value]) => key.includes("plugin.review.session") && value.includes('"branch"'),
         ),
       ),
     )
@@ -1230,7 +1897,7 @@ test("desktop review waits for the session's stored mode before it loads changes
 
   // The reopened window's review mounts before its session store has loaded.
   working.length = 0
-  await page.goto(desktop("extension.review.session"))
+  await page.goto(desktop("plugin.review.session"))
   await expectSessionTitle(page, title)
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
   await expect(page.locator("#review-panel").getByText("Loading changes…", { exact: true })).toBeVisible()
@@ -1239,6 +1906,139 @@ test("desktop review waits for the session's stored mode before it loads changes
   await expect(mode("Branch changes")).toBeVisible()
   await expect(file).toHaveText("beta.ts")
   expect(working).toEqual([])
+})
+
+// A failed request used to settle like an empty one, so the review claimed the working tree was clean.
+test("a failed diff request offers a retry instead of a clean working tree", async ({ page }) => {
+  await openSession(page, { name: "ReviewDiffFailure", vcsDiff: [fileDiff("src/alpha.ts")] })
+  const changes = { failing: true }
+  await page.route(/\/api\/vcs\/diff\?/, (route) => {
+    if (!changes.failing || new URL(route.request().url()).searchParams.get("untracked") !== "folders")
+      return route.fallback()
+
+    return route.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" }, json: {} })
+  })
+  const panel = page.locator("#review-panel")
+  const failure = panel.getByRole("alert")
+
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  await openReviewLauncher(panel)
+  await expect(failure.getByText("Couldn't load changes", { exact: true })).toBeVisible()
+  await expect(panel.locator('[data-slot="session-review-v2-empty-changes"]')).toHaveCount(0)
+  changes.failing = false
+  await failure.getByRole("button", { name: "Try again", exact: true }).click()
+  await expect(panel.locator('[data-slot="session-review-v2-file-name"]')).toHaveText("alpha.ts")
+  await expect(failure).toHaveCount(0)
+})
+
+// A large file's full patch that failed to load used to leave its preview blank, with no reason and no way to load it.
+test("a large file whose full diff fails to load says so, and loads on Try again", async ({ page }) => {
+  // The listing leaves the patch out, as the server does for a large file; the bounded request carries it.
+  await openSession(page, {
+    name: "ReviewDetailFailure",
+    vcsDiff: (input) => [fileDiff("big.ts", { loaded: input.context === "3" })],
+  })
+  const full = { failing: true }
+  await page.route(/\/api\/vcs\/diff\?.*context=3/, (route) => {
+    if (!full.failing) return route.fallback()
+
+    return route.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" }, json: {} })
+  })
+  const panel = page.locator("#review-panel")
+  const preview = panel.locator('[data-slot="session-review-v2-diff-scroll"]')
+  const failure = preview.getByRole("alert")
+
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  await openReviewLauncher(panel)
+  await expect(panel.locator('[data-slot="session-review-v2-file-name"]')).toHaveText("big.ts")
+  // The request runs three times, a second and then two apart, before the preview gives up.
+  await expect(failure.getByText("Couldn't load changes", { exact: true })).toBeVisible()
+  full.failing = false
+  await failure.getByRole("button", { name: "Try again", exact: true }).click()
+  await expect(preview.locator("diffs-container")).toContainText("export const value = 'after'")
+  await expect(failure).toHaveCount(0)
+})
+
+// A failed search used to read "No results found", as if the workspace had no such file.
+test("a failed file search offers a retry instead of no results", async ({ page }) => {
+  const directory = "C:/OpenCode/ReviewSearchFailure"
+  await openSession(page, {
+    name: "ReviewSearchFailure",
+    fileList: () => [fileNode(directory, "README.md")],
+    findFiles: (input) => (input.query === "nested" ? [fileNode(directory, "src/nested.ts")] : []),
+    seed: { panes: { ses_reviewsearchfailure: { review: true } } },
+  })
+  const search = { failing: true }
+  await page.route(/\/api\/fs\/find\?/, (route) => {
+    if (!search.failing) return route.fallback()
+
+    return route.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" }, json: {} })
+  })
+  const panel = page.locator("#review-panel")
+  const filter = panel.getByRole("combobox", { name: "Filter files" })
+  const failure = panel.getByRole("alert")
+
+  await openFileLauncher(panel)
+  await filter.fill("nested")
+  await expect(failure.getByText("Couldn't search files", { exact: true })).toBeVisible()
+  await expect(panel.getByText("No results found", { exact: true })).toHaveCount(0)
+  await page.screenshot({ path: test.info().outputPath("file-search-failed.png"), animations: "disabled" })
+  search.failing = false
+  await failure.getByRole("button", { name: "Try again", exact: true }).click()
+  await expect(panel.getByRole("option", { name: /nested\.ts/ })).toBeVisible()
+  await expect(failure).toHaveCount(0)
+})
+
+// An untracked folder whose listing failed used to look empty, and opening it again never asked the server again.
+test("an untracked folder that cannot load says so, and loads once it is opened again", async ({ page }) => {
+  const workspace = await openSession(page, {
+    name: "ReviewFolderFailure",
+    vcsDiff: (input) =>
+      input.directory.endsWith("/untracked")
+        ? [fileDiff("untracked/notes.ts", { status: "added" })]
+        : [fileDiff("src/alpha.ts"), fileDiff("untracked/", { status: "added" })],
+  })
+
+  const listing = { failing: true, failures: 0 }
+
+  await page.route(/\/api\/vcs\/diff\?/, (route) => {
+    const directory = new URL(route.request().url()).searchParams.get("location[directory]")
+
+    if (!listing.failing || directory !== `${workspace.directory}/untracked`) return route.fallback()
+    listing.failures += 1
+
+    return route.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" }, json: {} })
+  })
+  const panel = page.locator("#review-panel")
+  const folder = panel.getByRole("treeitem", { name: "untracked" })
+  const notes = panel.getByRole("treeitem", { name: "notes.ts" })
+
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  await openReviewLauncher(panel)
+  await expect(panel.getByRole("treeitem", { name: "alpha.ts" })).toBeVisible()
+  // Retries back off over 1, 2 and 4 seconds; the installed clock follows real time until a fast-forward skips it.
+  await page.clock.install()
+  await folder.click()
+  await expect(folder).toHaveAttribute("aria-expanded", "true")
+
+  for (const failures of [1, 2, 3]) {
+    await expect.poll(() => listing.failures).toBe(failures)
+    await page.clock.fastForward(1_000 * 2 ** (failures - 1))
+  }
+
+  await expect.poll(() => listing.failures).toBe(4)
+  await expect(folder).toContainText("Couldn't load changes")
+  await expect(notes).toHaveCount(0)
+
+  listing.failing = false
+  await folder.click()
+  await expect(folder).toHaveAttribute("aria-expanded", "false")
+  await expect(folder).not.toContainText("Couldn't load changes")
+  await folder.click()
+  await expect(folder).toHaveAttribute("aria-expanded", "true")
+  await expect(notes).toBeVisible()
+  await expect(folder).toContainText("1")
+  expect(listing.failures).toBe(4)
 })
 
 test("a chosen mode the session stops offering shows as Git, and comes back when it is offered again", async ({
@@ -1330,8 +2130,9 @@ test("Review from a new tab keeps the file browser and preview open", async ({ p
 
   await openFileLauncher(panel)
   await expect(tab("Open file")).toHaveAttribute("aria-selected", "true")
+  // The empty panel's own New tab stays beside the one the file browser replaced, so the added one is the last.
   await panel.getByRole("button", { name: "Add tab", exact: true }).click()
-  await expect(tab("New tab")).toHaveAttribute("aria-selected", "true")
+  await expect(tab("New tab").last()).toHaveAttribute("aria-selected", "true")
   await panel.getByRole("button", { name: /^Review/ }).click()
   await expect(tab("Review")).toHaveAttribute("aria-selected", "true")
   await expect(tab("Open file")).toHaveAttribute("aria-selected", "false")
@@ -1346,7 +2147,7 @@ test("Review from a new tab keeps the file browser and preview open", async ({ p
 
   // Choosing Review also leaves a single-click file preview open beside it.
   await panel.getByRole("button", { name: "Add tab", exact: true }).click()
-  await expect(tab("New tab")).toHaveAttribute("aria-selected", "true")
+  await expect(tab("New tab").last()).toHaveAttribute("aria-selected", "true")
   await panel.getByRole("button", { name: /^Review/ }).click()
   await expect(panel.locator("#session-side-panel-review-tab")).toHaveAttribute("aria-selected", "true")
   await expect(tab("README.md")).toHaveCount(1)

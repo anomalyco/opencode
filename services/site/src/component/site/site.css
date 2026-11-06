@@ -1,0 +1,4159 @@
+@property --console-band-bg {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: hsl(0, 0%, 10%);
+}
+
+/* The page behind the site (seen when you pull past the top or bottom) follows the site's
+   theme, not the system one. */
+html:has([data-site]) {
+  color-scheme: light dark;
+  background-color: light-dark(#fff, #0c0c0c);
+}
+
+html:has([data-site][data-theme="light"]) {
+  color-scheme: light;
+}
+
+html:has([data-site][data-theme="dark"]) {
+  color-scheme: dark;
+}
+
+[data-site] {
+  color-scheme: light dark;
+
+  /* The page's layout never grows wider than a 16-inch MacBook Pro window. Wider screens centre it:
+     the root stays full width (its background, the blue bars and anything that bleeds reach the
+     window's edges) and pads the layout in by --page-offset on each side. Fixed elements pinned to
+     a corner (the sidebar, the GitHub mark, the voice orb) add --page-offset to their inset, so they
+     keep to the layout's corners. Settings › Wide align "left" keeps the layout at the left edge
+     instead, with the corner elements at the window's corners. Width maths that used the viewport
+     uses --page-width instead. Both use vw, which counts a classic scrollbar, so the padding and the
+     fixed elements' insets agree with each other. */
+  --page-max: 1728px;
+  --page-width: min(100vw, var(--page-max));
+  --page-offset: max(0px, (100vw - var(--page-max)) / 2);
+  /* The room right of the layout: elements placed absolutely on the root (whose box spans the
+     window) inset by it, and by --page-offset on the left. */
+  --page-offset-end: var(--page-offset);
+  position: relative;
+  padding-inline: var(--page-offset) var(--page-offset-end);
+
+  &[data-wide-align="left"] {
+    --page-offset: 0px;
+    --page-offset-end: max(0px, 100vw - var(--page-max));
+  }
+
+  /* The blue bars (the announcement banner, the letters bar) span the window. */
+  > :is([data-component="announcement-banner"], [data-component="letters-bar"]) {
+    margin-inline: calc(-1 * var(--page-offset)) calc(-1 * var(--page-offset-end));
+  }
+
+  /* Dark matches the Console landing page (#0c0c0c). */
+  /* Light follows Settings › Light background (pure white unless set). */
+  --bg: light-dark(#fff, #0c0c0c);
+  --bg-weak: light-dark(hsl(0, 0%, 96%), hsl(0, 0%, 10%));
+  /* The product cards' media backdrop (products.css), which their covers and reels are graded to in
+     both themes. */
+  --card-media-bg: #161616;
+  /* The home Console band (routes/index.css), dark in both themes: the panel grey in light, and in
+     dark #121212, a muted step above the #0c0c0c page so it reads as a band, not a slab. A registered
+     colour, so light-dark() resolves in the page's scheme here and not in the band's own forced-dark
+     one. */
+  --console-band-bg: light-dark(hsl(0, 0%, 10%), #121212);
+  --bg-weaker: light-dark(hsl(0, 0%, 92%), hsl(0, 0%, 14%));
+  --bg-strong: light-dark(hsl(0, 0%, 8%), hsl(0, 0%, 95%));
+  --bg-strong-hover: light-dark(hsl(0, 0%, 20%), hsl(0, 0%, 82%));
+  --text-strong: light-dark(hsl(0, 0%, 8%), hsl(0, 0%, 95%));
+  --text: light-dark(hsl(0, 0%, 32%), hsl(0, 0%, 72%));
+  /* At least 4.5:1 on --bg-weaker too, so secondary text passes WCAG AA on raised surfaces. */
+  --text-weak: light-dark(hsl(0, 0%, 40%), hsl(0, 0%, 56%));
+  /* Muted labels that still carry meaning: the lightest grey with 4.5:1 on every light page
+     background (#fbfbfb to #ffffff) and on dark. --text-weaker and below are for decoration only. */
+  --text-muted: light-dark(hsl(0, 0%, 45%), hsl(0, 0%, 49%));
+  /* Quiet marks that still need to be seen, like the nav's [01] shortcuts: 3:1 on the light page
+     backgrounds and on dark (WCAG 1.4.11). */
+  --text-faint: light-dark(hsl(0, 0%, 55%), hsl(0, 0%, 38%));
+  /* The nav's markers: the sidebar's "[1]" shortcuts and the footer's "[ ]" boxes share it, so they
+     always match. */
+  --nav-marker: var(--text-faint);
+  --text-weaker: light-dark(hsl(0, 0%, 72%), hsl(0, 0%, 32%));
+  --text-weakest: light-dark(hsl(0, 0%, 83%), hsl(0, 0%, 23%));
+  --text-inverted: light-dark(hsl(0, 0%, 100%), #0c0c0c);
+  --border: light-dark(hsl(0, 0%, 88%), hsl(0, 0%, 18%));
+  --border-strong: light-dark(hsl(0, 0%, 78%), hsl(0, 0%, 28%));
+  /* The OpenCode Console accent blue; dark mode uses a lighter blue from Settings › Dark blue. */
+  --link-dark: #4f8bff;
+  --link: light-dark(#3b5cf6, var(--link-dark));
+  --status-ok: light-dark(hsl(142, 64%, 38%), hsl(142, 60%, 58%));
+  --status-degraded: light-dark(hsl(38, 92%, 48%), hsl(40, 90%, 58%));
+  --status-outage: light-dark(hsl(0, 72%, 50%), hsl(0, 80%, 64%));
+  --link-visited: light-dark(#6a4fd6, var(--link-dark));
+  --popover-bg: light-dark(hsl(0, 0%, 100%), hsl(0, 0%, 10%));
+  /* Secondary text in pop-ups: at least 5.5:1 on the pop-up background (WCAG AA is 4.5:1). */
+  --popover-text-weak: light-dark(hsl(0, 0%, 40%), hsl(0, 0%, 64%));
+  /* A 1px ring instead of a border, plus tight layered shadows. */
+  --popover-shadow:
+    0 0 0 1px light-dark(rgb(0 0 0 / 0.1), rgb(255 255 255 / 0.1)),
+    0 1px 1px light-dark(rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.3)),
+    0 2px 4px -1px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.35)),
+    0 6px 12px -4px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.45));
+  /* The brand greys: the logo ink at 20% / 70% on white (light) and 28% / 72% on #0b0b0b (dark). */
+  --logo-inner: light-dark(#d2d2d2, #4b4b4b);
+  --logo-open: light-dark(#626262, #aeaeae);
+  --logo-code: light-dark(#1f1f1f, #eeeeee);
+
+  /* "OC Arabic" and "OC Thai" cover only their scripts (style/script-fonts.css). --font-cjk is the
+     CJK system fonts for the page's language (locale-type.css); elsewhere it falls back to the
+     generic family that was here before. */
+  --font-sans:
+    "Inter", "OC Arabic", "OC Thai", var(--font-cjk, ui-sans-serif), ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* OpenTUI Mono for every visitor; the "OpenTUI Mono" system faces stand in for it while it loads,
+     at its size (mono-fonts.ts). The Arabic and Thai faces come ahead of the stand-ins, whose
+     Courier New has monospaced Arabic. --mono-choice is Settings › Mono font, a family and a comma
+     ahead of the stack (mono-fonts.ts). */
+  --font-mono:
+    var(--mono-choice,) "OpenTUI Mono", "OC Arabic", "OC Thai", "OpenTUI Mono Menlo", "OpenTUI Mono Consolas",
+    "OpenTUI Mono Courier", var(--font-cjk, ui-monospace), ui-monospace, monospace;
+  --sidebar-width: 14.75rem;
+  --gutter: 1rem;
+  --edge: 1.5rem;
+  /* The logo sits as far from the top as from the left edge. */
+  --top: var(--edge);
+  --logo-height: 1.75rem;
+  /* The nav starts 8px further below the logo than the logo sits below the top edge; the content
+     line (--content-top) follows it, so titles, the docs nav and the asides stay level with it. */
+  --logo-gap: calc(var(--top) + 8px);
+  --content-top: calc(var(--top) + var(--logo-height) + var(--logo-gap));
+  /* The small-screen header that replaces the sidebar, below the safe area. */
+  --topbar-height: 3.5rem;
+  /* The phone top bar's logo row height (its mark sits in a 4:5 box at the content edge), and the x
+     of that mark's centre from the content edge. Timelines (the changelog, /press) put their rail on
+     it on narrow screens, so they stay lined up if the logo changes size. */
+  --phone-logo-height: 30px;
+  --timeline-x: calc(var(--phone-logo-height) * 2 / 5);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  /* Setting: the sidebar is one column of a five-column grid, so with four carousel cards across
+     the whole page reads as five equal columns. */
+  @media (min-width: 60.0625rem) {
+    &[data-sidebar="column"] {
+      --sidebar-width: calc(var(--edge) + (var(--page-width) - 2 * var(--edge) - 4 * var(--gutter)) / 5);
+    }
+  }
+
+  /* The type scale: every font size on the site is one of these. Text steps once, at 960px (the
+     mobile type scale near the end of this file sets the phone values); only display titles and
+     page titles are fluid. Nothing is smaller than 12px, and on phones nothing that carries
+     meaning is smaller than 14px.
+     | token      | desktop | ≤960 | role                                                        |
+     | micro      | 12      | 12   | badges, tooltips, figure labels, dev panels                 |
+     | meta       | 13      | 14   | dates, versions, refs, tags, filters, code tabs, captions   |
+     | small      | 14      | 15   | buttons (16 on phones), captions, menus' secondary text     |
+     | ui         | 15      | 16   | mono UI: nav, footer, breadcrumbs, tabs, labels             |
+     | body       | 15      | 17   | marketing copy                                              |
+     | read       | 16      | 17   | long-form reading: docs, legal, changelog                   |
+     | title      | 17      | 18   | section, card and document headings                         |
+     | large      | 18      | 19   | accordion questions, the phone menu                         |
+     | lead       | 18      | 20   | the text under a page's hero title                          |
+     | entry      | 26      | 22   | changelog entry titles                                      |
+     | h1         | 28 → 32 fluid  | docs, legal and product page titles                         |
+     | display    | fitted, at most 64 (48 at ≤960) | hero titles and the stats numerals         |
+     | input      | 16 on touch    | text fields and selects (iOS zooms into smaller ones)       | */
+  --fs-micro: 12px;
+  --fs-meta: 13px;
+  --fs-small: 14px;
+  --fs-ui: 15px;
+  --fs-body: 15px;
+  --fs-read: 16px;
+  --fs-title: 17px;
+  --fs-large: 18px;
+  --fs-lead: 18px;
+  --fs-entry: 26px;
+  --fs-h1: clamp(28px, 25px + 0.5vw, 32px);
+  --fs-display-max: 64px;
+  --fs-input: 14px;
+  /* The longest line for reading text: about 70 characters of Inter (1ch, the width of "0", is
+     wider than an average letter, so 68ch would be about 90). */
+  --measure: 33em;
+  /* Mono text that used to be 16px: navigation, labels, headings, product names. */
+  --mono-size: var(--fs-ui);
+  /* Body copy. Phones raise it (see the mobile type scale near the end of this file). */
+  --body-size: var(--fs-body);
+  /* Section titles ("What is OpenCode?", "FAQ") and product names. The site serves OpenTUI Mono
+     in Regular and Bold only, so a hairline stroke adds the "medium" weight; drop it for a real medium face. */
+  --title-size: var(--fs-title);
+  --title-stroke: 0.2px currentColor;
+  /* Hero copy: the text under every page's hero title (the home subtitle, page intros, product
+     intros), one size site-wide; phones step it up below. The changelog's entry titles follow it
+     through --subtitle-size. */
+  --hero-copy-size: var(--fs-lead);
+  --hero-copy-leading: 1.4;
+  --subtitle-size: var(--hero-copy-size);
+  --subtitle-leading: var(--hero-copy-leading);
+  /* The "[" of the bracket lists has 0.154em of space before its ink. The left column starts that
+     much further left, so its visible edge sits on --edge like the right side. */
+  --bracket-bearing: calc(var(--mono-size) * 0.154);
+  /* The ink of the nav's "[01]", from the left edge of "[" to the right edge of "]": 2.092em in
+     OpenTUI Mono. The logo's box spans it. Settings › Nav numbers "1" narrows it to "[1]" (see the end). */
+  --bracket-ink: calc(var(--mono-size) * 2.092);
+
+  display: block;
+  min-height: 100vh;
+  /* Clip without creating a scroll container, so the carousel bleed and the 3D wordmark never add a sideways scrollbar. */
+  overflow-x: clip;
+  background: var(--bg);
+  color: var(--text-strong);
+  font-family: var(--font-sans);
+  font-size: var(--body-size);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+
+  a,
+  button,
+  summary,
+  select,
+  [role="tab"] {
+    touch-action: manipulation;
+  }
+
+  button,
+  [role="tab"] {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  &[data-theme="light"] {
+    color-scheme: light;
+  }
+
+  &[data-theme="dark"] {
+    color-scheme: dark;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  h1,
+  h2,
+  h3,
+  p,
+  ul,
+  dl,
+  dd,
+  pre,
+  fieldset {
+    margin: 0;
+    padding: 0;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-mono);
+  }
+
+  ul {
+    list-style: none;
+  }
+
+  fieldset {
+    border: 0;
+    min-width: 0;
+  }
+
+  :focus-visible {
+    outline: 1px solid var(--link);
+    outline-offset: 2px;
+  }
+
+  /* Focus moved here by the skip link or a page change, for screen readers; nothing to show. */
+  [data-component="content"]:focus,
+  h1[tabindex="-1"]:focus {
+    outline: none;
+  }
+
+  /* Read by screen readers, hidden on screen. */
+  [data-slot="sr-only"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    /* Hidden text still loads its face; regular keeps a hidden heading from fetching the bold file. */
+    font-weight: 400;
+  }
+
+  /* Hidden until it has keyboard focus, then shown over the top left corner. */
+  [data-component="skip-link"] {
+    position: fixed;
+    top: calc(0.5rem + env(safe-area-inset-top, 0px));
+    inset-inline-start: calc(var(--page-offset) + 0.5rem + env(safe-area-inset-left, 0px));
+    z-index: 100;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg);
+    color: var(--text-strong);
+    font-family: var(--font-mono);
+    font-size: var(--mono-size);
+    line-height: 20px;
+
+    &:not(:focus) {
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+
+  [data-slot="inner"] {
+    fill: var(--logo-inner);
+  }
+
+  [data-slot="open"] {
+    fill: var(--logo-open);
+  }
+
+  [data-slot="code"] {
+    fill: var(--logo-code);
+  }
+
+  /* Links in running text, the one style for the whole site: the text colour, underlined, the link
+     blue on hover, keyboard focus and press. Muted copy whose links keep its colour sets
+     --inline-link-color: currentColor. :where() keeps the specificity of a plain "[data-site] a",
+     so links styled differently inside these containers (changelog meta, "show more") win. */
+  :where(
+      [data-slot="lead"],
+      [data-section="getStarted"] :is([data-slot="caption"], [data-slot="sentence"] > p),
+      [data-page="home"] [data-component="hero"] > p,
+      [data-slot="faq-answer"],
+      [data-component="legal-document"],
+      [data-component="legal-header"] [data-slot="dates"],
+      [data-component="legal-summary"],
+      [data-component="legal-hub"],
+      [data-component="legal-summary"],
+      [data-component="legal-history"],
+      [data-component="legal-hub"],
+      [data-component="legal-header"] p,
+      [data-component="changelog-entry"],
+      [data-component="product-intro"] p,
+      [data-component="docs-article"],
+      [data-component="docs-version-notice"] p,
+      [data-component="oss-proof"] [data-slot="licence"],
+      [data-component="oss-fork"] [data-slot="points"] p
+    )
+    a {
+    color: var(--inline-link-color, var(--text-strong));
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.15em;
+    transition: color 150ms ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--link);
+      }
+    }
+
+    &:focus-visible,
+    &:active {
+      color: var(--link);
+    }
+  }
+
+  /* Sidebar: the primary nav stays fixed; the footer's secondary nav scrolls up beneath it. */
+
+  [data-component="sidebar"] {
+    position: fixed;
+    /* Below the home announcement banner while it is on screen (index.css). */
+    top: var(--banner-offset, 0px);
+    inset-inline-start: var(--page-offset);
+    z-index: 2;
+    width: var(--sidebar-width);
+    display: flex;
+    flex-direction: column;
+    gap: var(--logo-gap);
+    padding-block: var(--top) 0;
+    padding-inline: calc(var(--edge) - var(--bracket-bearing)) var(--gutter);
+  }
+
+  [data-slot="logo"] {
+    display: inline-flex;
+    gap: 0.75rem;
+    align-self: flex-start;
+
+    svg {
+      display: block;
+      flex-shrink: 0;
+      width: calc(var(--logo-height) * 234 / 42);
+      height: var(--logo-height);
+    }
+
+    /* The icon is 4:5 and spans the ink of the nav's "[01]" brackets, edge to edge. */
+    [data-slot="icon"] {
+      width: calc(var(--logo-height) * 4 / 5);
+      margin-inline-start: var(--bracket-bearing);
+    }
+  }
+
+  /* The icon is 4:5 and as wide as the brackets' ink. */
+  &[data-logo="icon"] {
+    --logo-height: calc(var(--bracket-ink) * 5 / 4);
+  }
+
+  /* Nav: shared */
+
+  [data-component="nav"] {
+    font-family: var(--font-mono);
+
+    a {
+      position: relative;
+      display: flex;
+      align-items: baseline;
+      gap: 0.625rem;
+      color: var(--text-weak);
+      transition: color 150ms ease;
+
+      &::before {
+        content: "";
+        position: absolute;
+        background: var(--text-strong);
+        transform: scaleY(0);
+        transform-origin: center;
+        transition: transform 180ms var(--ease-out);
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--text-strong);
+        }
+      }
+
+      &:active {
+        color: var(--text-strong);
+      }
+
+      &[aria-current="page"] {
+        color: var(--text-strong);
+
+        &::before {
+          transform: scaleY(1);
+        }
+      }
+    }
+
+    [data-slot="index"] {
+      display: none;
+    }
+
+    /* Links that leave this site reveal a small corner arrow on hover, 4px after the label and nudged up. */
+    [data-slot="external"] {
+      flex-shrink: 0;
+      align-self: center;
+      margin-inline-start: calc(4px - 0.625rem);
+      translate: calc(-3px * var(--x-dir, 1)) -2px;
+      opacity: 0;
+      transition:
+        opacity 150ms ease,
+        translate 200ms var(--ease-out);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      a:hover [data-slot="external"] {
+        opacity: 1;
+        translate: 0 -2px;
+      }
+    }
+
+    a:focus-visible [data-slot="external"] {
+      opacity: 1;
+      translate: 0 -2px;
+    }
+
+    @media (hover: none), (pointer: coarse) {
+      [data-slot="external"] {
+        opacity: 1;
+        translate: 0 -2px;
+      }
+    }
+  }
+
+  /* Nav option: numbered items in brackets, aligned with the logo, no marker line. */
+  [data-component="nav"][data-variant="index"] {
+    font-size: var(--mono-size);
+    line-height: 20px;
+
+    ul {
+      display: flex;
+      flex-direction: column;
+      gap: 1.3rem;
+    }
+
+    /* Half the list gap above and below, so the links meet without moving the text. */
+    a {
+      padding-block: 0.65rem;
+      margin-block: -0.65rem;
+
+      &:focus-visible {
+        color: var(--text-strong);
+      }
+    }
+
+    /* Trim to the cap height so the first item lines up exactly with the top of the hero text. */
+    a > span {
+      text-box: trim-both cap alphabetic;
+    }
+
+    a::before {
+      display: none;
+    }
+
+    [data-slot="index"] {
+      display: inline;
+      color: var(--nav-marker);
+      transition: color 150ms ease;
+    }
+
+    a[aria-current="page"] [data-slot="index"],
+    a:focus-visible [data-slot="index"] {
+      color: var(--text-strong);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      a:hover [data-slot="index"] {
+        color: var(--text-strong);
+      }
+    }
+
+    a:active [data-slot="index"] {
+      color: var(--text-strong);
+    }
+  }
+
+  /* Nav option: a light rail runs along the list; the active item gets a dark segment. */
+  [data-component="nav"][data-variant="rail"] {
+    font-size: var(--mono-size);
+
+    ul {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      border-inline-start: 1px solid var(--border);
+    }
+
+    a {
+      padding-block: 0.375rem;
+      padding-inline: 1rem 0;
+
+      &::before {
+        inset-inline-start: -1px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+      }
+    }
+  }
+
+  /* Content */
+
+  [data-component="content"] {
+    --visible: 4;
+    --gaps: 3;
+    min-width: 0;
+    margin-inline-start: var(--sidebar-width);
+    padding-block: var(--content-top) 0;
+    padding-inline: var(--gutter) var(--edge);
+    display: flex;
+    flex-direction: column;
+  }
+
+  [data-component="site-button"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    height: 2.25rem;
+    padding: 0 1rem;
+    border-radius: 0;
+    background: var(--bg-strong);
+    color: var(--text-inverted);
+    font-family: var(--font-sans);
+    font-size: var(--fs-small);
+    font-weight: 500;
+    white-space: nowrap;
+    /* Hover adds a 1px blue ring, 2px out from the button (keyboard focus draws the same ring). */
+    outline: 1px solid transparent;
+    outline-offset: 2px;
+    transition:
+      background-color 150ms ease,
+      outline-color 150ms ease,
+      transform 160ms var(--ease-out);
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--bg-strong-hover);
+        outline-color: var(--link);
+      }
+    }
+
+    /* Keyboard focus draws a 2px ring with 3:1 against both the page and the button; hover keeps its
+       1px ring. Dark mode's light button needs the link blue a little deeper. */
+    &:focus-visible {
+      outline: 2px solid light-dark(var(--link), color-mix(in srgb, var(--link) 85%, #000));
+      outline-offset: 2px;
+    }
+
+    &[data-variant="neutral"]:focus-visible {
+      outline-color: var(--link);
+    }
+
+    &:active {
+      transform: scale(0.985);
+    }
+
+    [data-slot="chevron"] {
+      transition: transform 200ms var(--ease-out);
+    }
+
+    [data-slot="platform-icon"] {
+      flex-shrink: 0;
+      margin-top: -0.125rem;
+    }
+
+    /* TestFlight's propeller sits 2px below the label's cap-height centre, so it reads as centred. */
+    [data-icon="testflight"] {
+      translate: 0 2.7px;
+    }
+
+    &[aria-expanded="true"] [data-slot="chevron"] {
+      scale: 1 -1;
+    }
+  }
+
+  /* A leading icon carries visual weight, so trim the left padding to keep the button optically
+     centered. The gap to the label matches the space left of the icon (the artwork sits about
+     1.3px inside its box), so both read as about 13px. */
+  [data-component="site-button"]:has(> [data-slot="platform-icon"]:first-child) {
+    padding-inline-start: 0.75rem;
+    gap: 0.75rem;
+  }
+
+  /* A trailing chevron sits midway between the label and the button's right edge: the gap and the
+     right padding are equal (the arrow's ink is inset the same 2.4px on both sides of its box). */
+  [data-component="site-button"]:has(> [data-slot="chevron"]:last-child) {
+    padding-inline-end: 0.75rem;
+    gap: 0.75rem;
+  }
+
+  /* Neutral counterpart to the dark button, for secondary actions. Hover only darkens the grey: no
+     blue ring or fill (Settings › Button hover is for primary buttons); keyboard focus keeps the ring. */
+  [data-component="site-button"][data-variant="neutral"] {
+    background: var(--bg-weaker);
+    color: var(--text-strong);
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--border);
+      }
+
+      &:hover:not(:focus-visible) {
+        outline-color: transparent;
+      }
+    }
+
+    &:active {
+      background: var(--border);
+    }
+
+    &:active:not(:focus-visible) {
+      outline-color: transparent;
+    }
+  }
+
+  /* Unavailable, for every variant (primary, neutral, split, menu, icon only): no fill, a hairline
+     outline and grey text at about 2.8:1, so it reads as switched off and never as the filled neutral
+     button. :disabled and aria-disabled="true" both apply it. Hover, press and an open menu change
+     nothing; the !important beats the variant, product and Button hover rules, which are more
+     specific. aria-disabled buttons stay focusable, so they keep the keyboard focus ring (WCAG 2.4.7),
+     and their click handlers must check aria-disabled themselves. */
+  [data-component="site-button"]:is(:disabled, [aria-disabled="true"]) {
+    --button-disabled-text: light-dark(hsl(0, 0%, 60%), hsl(0, 0%, 36%));
+    --button-disabled-line: light-dark(hsl(0, 0%, 84%), hsl(0, 0%, 22%));
+    background: transparent !important;
+    color: var(--button-disabled-text) !important;
+    box-shadow: inset 0 0 0 1px var(--button-disabled-line);
+    cursor: not-allowed;
+    transform: none !important;
+
+    &:not(:focus-visible) {
+      outline-color: transparent !important;
+    }
+
+    [data-slot="chevron"] {
+      scale: none;
+    }
+  }
+
+  /* Working (aria-busy="true"): the button keeps its look, and a short bar runs along its bottom edge
+     in the text colour. Clicks still reach it, so the handler ignores repeats while busy. */
+  [data-component="site-button"][aria-busy="true"] {
+    cursor: progress;
+    /* !important: the hover rules' background shorthand would clear the bar. */
+    background-image: linear-gradient(currentColor, currentColor) !important;
+    background-repeat: no-repeat !important;
+    background-size: 30% 2px !important;
+    background-position: -30% 100%;
+    animation: button-busy 1.1s var(--ease-out) infinite;
+
+    @media (prefers-reduced-motion: reduce) {
+      animation: none;
+      background-size: 100% 2px !important;
+      background-position: 0 100%;
+    }
+  }
+
+  /* Buttons that sit tight together (a split button's two halves, the store buttons, the product
+     header's equal-width actions) draw the focus ring inside their own edge, so it never crosses
+     into the neighbour: the 2px link-blue ring along the edge, then a 2px band of the page colour
+     between it and the fill. The ring only touches the page colour (5:1 light, 6.5:1 dark), so it
+     reads the same on black, white, grey, blue and outlined fills. */
+  :is([data-component="site-split"], [data-component="site-buttons"], [data-variant="split"])
+    [data-component="site-button"]:focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: -2px;
+    box-shadow: inset 0 0 0 4px var(--bg);
+  }
+
+  /* A disabled split reads as one segmented control: the halves share a single 1px line at the
+     join. The main half draws its outer three sides inside its box and the join as a shadow 1px
+     outside it, filling the split's 1px gap; the chevron draws only its outer three sides. Shadows
+     take no space, so the split keeps the enabled one's size and positions exactly. Physical sides
+     flip under :dir(rtl), where the chevron sits on the left. */
+  :is([data-component="site-split"], [data-variant="split"]) {
+    [data-component="site-button"]:not([data-slot="split-toggle"], [data-slot="chevron-button"]):is(
+        :disabled,
+        [aria-disabled="true"]
+      ) {
+      --join: 1px;
+      box-shadow:
+        inset 0 1px 0 var(--button-disabled-line),
+        inset 0 -1px 0 var(--button-disabled-line),
+        inset var(--join) 0 0 var(--button-disabled-line),
+        var(--join) 0 0 var(--button-disabled-line);
+
+      &:dir(rtl) {
+        --join: -1px;
+      }
+
+      /* Focused (aria-disabled stays focusable): the inside ring's band, and the join kept. */
+      &:focus-visible {
+        box-shadow:
+          inset 0 0 0 4px var(--bg),
+          var(--join) 0 0 var(--button-disabled-line);
+      }
+    }
+
+    :is([data-slot="split-toggle"], [data-slot="chevron-button"]):is(:disabled, [aria-disabled="true"]):not(
+        :focus-visible
+      ) {
+      box-shadow:
+        inset 0 1px 0 var(--button-disabled-line),
+        inset 0 -1px 0 var(--button-disabled-line),
+        inset -1px 0 0 var(--button-disabled-line);
+
+      &:dir(rtl) {
+        box-shadow:
+          inset 0 1px 0 var(--button-disabled-line),
+          inset 0 -1px 0 var(--button-disabled-line),
+          inset 1px 0 0 var(--button-disabled-line);
+      }
+    }
+  }
+
+  [data-component="site-menu"] {
+    position: relative;
+
+    [data-component="site-button"] {
+      margin: 0;
+    }
+
+    /* Opens upward because the carousel track clips anything below the cards (SiteMenu's
+       placement="below" opens it downward; align="end" from the trigger's end edge). */
+    [data-slot="menu"] {
+      position: absolute;
+      inset-inline-start: 0;
+      bottom: calc(100% + 0.5rem);
+      z-index: 5;
+      width: max-content;
+      min-width: 100%;
+      display: flex;
+      flex-direction: column;
+      background: var(--popover-bg);
+      box-shadow: var(--popover-shadow);
+      transform-origin: bottom var(--x-start, left);
+      animation: menu-in 160ms var(--ease-out);
+
+      [data-slot="install"],
+      [data-slot="store"],
+      [data-slot="item"] {
+        display: grid;
+        grid-template-columns: 2.75rem auto 3.5rem;
+        align-items: center;
+        gap: 0.25rem;
+        font-family: var(--font-mono);
+        font-size: var(--fs-micro);
+        text-align: start;
+      }
+
+      /* Commands in the site's one command size (the home install row, the Terminal install tabs
+         and the product pages' Download sections). */
+      [data-slot="install"] {
+        font-size: var(--fs-meta);
+      }
+    }
+
+    &[data-placement="below"] [data-slot="menu"] {
+      top: calc(100% + 0.375rem);
+      bottom: auto;
+      transform-origin: top var(--x-start, left);
+    }
+
+    &[data-align="end"] [data-slot="menu"] {
+      inset-inline: auto 0;
+      transform-origin: bottom var(--x-end, right);
+    }
+
+    &[data-placement="below"][data-align="end"] [data-slot="menu"] {
+      transform-origin: top var(--x-end, right);
+    }
+
+    /* SiteMenu's link rows: the label, then the external arrow for a link that opens a new tab. */
+    [data-slot="menu"] [data-slot="link"] {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: var(--font-mono);
+      font-size: var(--fs-micro);
+      color: var(--text-strong);
+      text-decoration: none;
+      white-space: nowrap;
+
+      [data-slot="external"] {
+        display: inline-block;
+        margin-inline-start: 0.375rem;
+        vertical-align: 0.2em;
+      }
+    }
+
+    [data-slot="menu"] [data-slot="store"] {
+      grid-template-columns: 14px auto auto;
+      column-gap: 0.625rem;
+      color: var(--text-strong);
+
+      [data-slot="platform-icon"] {
+        margin: 0;
+      }
+
+      [data-slot="status"] {
+        padding-inline-start: 1.5rem;
+      }
+    }
+
+    [data-slot="method"] {
+      color: var(--popover-text-weak);
+    }
+
+    [data-slot="command"] {
+      color: var(--text-strong);
+    }
+
+    [data-slot="status"] {
+      text-align: end;
+      color: var(--popover-text-weak);
+    }
+
+    [data-copied] [data-slot="status"] {
+      color: var(--text-strong);
+    }
+
+    /* Phones: menu rows at the body size, 44px tall; ProductAction's fitMenu keeps the menu 16px
+       from both screen edges. Commands stay on one line and end in an ellipsis. */
+    @media (max-width: 40rem) {
+      [data-slot="menu"] > :is([data-slot="install"], [data-slot="store"], [data-slot="item"], [data-slot="link"]) {
+        min-height: 2.75rem;
+        font-size: var(--body-size);
+      }
+
+      /* The method's column fits the longest (four letters) and the status "Copied", so every
+         command starts and ends in line whatever the row shows. */
+      [data-slot="menu"] [data-slot="install"] {
+        grid-template-columns: 4ch minmax(0, 1fr) 6ch;
+        column-gap: 0.75rem;
+      }
+
+      [data-slot="menu"] [data-slot="store"] {
+        grid-template-columns: 16px minmax(0, 1fr) auto;
+
+        [data-slot="platform-icon"] {
+          width: 16px;
+          height: 16px;
+        }
+      }
+
+      [data-slot="command"],
+      [data-slot="menu"] [data-slot="label"] {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+  }
+
+  /* Page header: the large OpenTUI Mono title and its Inter description. Every page starts with one. */
+  [data-component="hero"] {
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+
+    h1 {
+      /* Trimmed to OpenTUI Mono's cap height and baseline so the first line lines up exactly with the
+         top of the nav. The trim is computed from OpenTUI Mono's metrics (cap 0.69, ascent 0.965,
+         descent 0.22) rather than with text-box, which measures whichever font is showing: its
+         stand-in (scaled Menlo, cap 0.73) made the box 2px taller until the web font arrived, and
+         the subtitle below moved up when it did. The box is now the same with either font. */
+      margin-block: calc(0.3175em - 0.5lh) calc(0.3725em - 0.5lh);
+      max-width: 52rem;
+      font-size: clamp(2.25rem, 4.4vw, 4rem);
+      font-weight: 400;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      text-wrap: balance;
+    }
+
+    p {
+      max-width: 34rem;
+      font-size: var(--hero-copy-size);
+      line-height: var(--hero-copy-leading);
+      color: var(--text-weak);
+      text-wrap: pretty;
+    }
+  }
+
+  /* Content blocks */
+
+  [data-component="block"] {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    --block-space: 4.5rem;
+    column-gap: var(--gutter);
+    margin-top: var(--block-space);
+    padding-top: var(--block-space);
+    border-top: 1px solid var(--border);
+
+    /* Trim the first line so the gap below the divider matches the gap above it. */
+    [data-slot="label"],
+    [data-slot="lead"] {
+      text-box: trim-start cap alphabetic;
+    }
+
+    [data-slot="label"] {
+      font-size: var(--title-size);
+      font-weight: 400;
+      line-height: 1.3;
+      -webkit-text-stroke: var(--title-stroke);
+      color: var(--text-strong);
+      padding-inline-end: 1rem;
+    }
+
+    [data-slot="body"] {
+      grid-column: 2 / -1;
+      display: flex;
+      flex-direction: column;
+      gap: 2.5rem;
+      max-width: 52rem;
+    }
+
+    /* Same size as the hero description. */
+    [data-slot="lead"] {
+      font-size: var(--fs-lead);
+      line-height: 1.4;
+      color: var(--text);
+      text-wrap: pretty;
+
+      strong {
+        font-weight: inherit;
+        color: var(--text-strong);
+      }
+    }
+
+    /* Neutral counterpart to the dark product buttons. */
+    [data-slot="more"] {
+      align-self: flex-start;
+      display: inline-flex;
+      align-items: center;
+      height: 2.25rem;
+      padding: 0 1rem;
+      background: var(--bg-weaker);
+      color: var(--text-strong);
+      font-size: var(--fs-small);
+      font-weight: 500;
+      transition:
+        background-color 150ms ease,
+        transform 160ms var(--ease-out);
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          background: var(--border);
+        }
+      }
+
+      &:focus-visible {
+        outline-width: 2px;
+      }
+
+      &:active {
+        transform: scale(0.985);
+      }
+    }
+  }
+
+  /* One row height for the accordion rows and the bars that sit with them on phones (the sticky
+     Contents bar and its open list, the docs section menu): a single-line question, 10px above and
+     below its 1.55 line of large text. */
+  --row-height: calc(1.25rem + 1.55 * var(--fs-large));
+
+  [data-component="faq"] {
+    [data-slot="faq-question"] {
+      --padding-top: 0.625rem;
+      position: relative;
+      min-height: var(--row-height);
+      width: 100%;
+      display: flex;
+      align-items: center;
+      /* The plus sits at the right end of the row, clear of the question. */
+      padding-block: var(--padding-top) 0.625rem;
+      padding-inline: 0 1.875rem;
+      text-align: start;
+      font-size: var(--fs-large);
+
+      /* Draw the icon with two bars so the vertical one can collapse into a minus. */
+      svg {
+        display: none;
+      }
+
+      &::before,
+      &::after {
+        content: "";
+        position: absolute;
+        inset-inline-end: 0;
+        top: calc(var(--padding-top) + 0.5lh - 0.5px);
+        width: 12px;
+        height: 1px;
+        background: var(--text-weak);
+        transition: background-color 150ms ease;
+      }
+
+      /* Phones: the plus centred under the menu button in the top bar, whose 44px box sits 12px in
+         from the screen edge (its centre 34px in), so every plus shares the menu icon's column. */
+      @media (max-width: 40rem) {
+        &::before,
+        &::after {
+          inset-inline-end: calc(34px - var(--edge) - 6px);
+        }
+      }
+
+      /* The vertical bar shrinks into the center, leaving the minus. */
+      &::after {
+        rotate: 90deg;
+        transition:
+          scale 200ms var(--ease-out),
+          background-color 150ms ease;
+      }
+
+      &[data-expanded]::after {
+        scale: 0 1;
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover::before,
+        &:hover::after {
+          background: var(--text-strong);
+        }
+      }
+
+      &:active::before,
+      &:active::after {
+        background: var(--text-strong);
+      }
+    }
+
+    /* Start the first question level with the section label. */
+    li:first-child [data-slot="faq-question"] {
+      --padding-top: 0px;
+      min-height: 0;
+    }
+
+    /* Padding sits on the inner wrapper so the height animation can close to zero. */
+    [data-slot="faq-answer"] {
+      overflow: hidden;
+      color: var(--text);
+      max-width: 44rem;
+      animation: faq-close 180ms var(--ease-out);
+
+      &[data-expanded] {
+        animation: faq-open 220ms var(--ease-out);
+      }
+    }
+
+    /* The space under an open answer matches the space above it (from the question to the answer's
+       first line), measured text to text; phones set their own below. */
+    [data-slot="faq-answer-inner"] {
+      padding-block: 0 0.875rem;
+      padding-inline: 0 1.875rem;
+    }
+  }
+
+  /* Site footer */
+
+  [data-component="site-footer"] {
+    display: grid;
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+    min-height: 72vh;
+    margin-top: 4rem;
+
+    [data-slot="secondary"] {
+      align-self: end;
+      display: flex;
+      flex-direction: column;
+      gap: 2.25rem;
+      padding-block: 0 var(--edge);
+      padding-inline: calc(var(--edge) - var(--bracket-bearing)) var(--gutter);
+    }
+
+    /* Without the footer list beside it (footer columns), the baseline of the wordmark (the bottom
+       of the "O") sits where the theme switcher's bottom would: the page edge, one copyright line
+       and the column gap. The baseline is 6/42 of the wordmark's height above the bottom of the SVG,
+       and the SVG is 234 by 42, so that is 6/234 of its width. The "p" descender runs into the space
+       below. Beside the footer list, it shares the list's last baseline instead (see "Settings ›
+       Footer › list"). */
+    --copyright-line: calc(var(--mono-size) * 1.5);
+    --switcher-bottom: calc(var(--edge) + var(--copyright-line) + 2.25rem);
+
+    [data-slot="main"] {
+      align-self: end;
+      container-type: inline-size;
+      /* Ends at the content edge, like the hero, the cards and the Console panel. */
+      padding-block: 0;
+      padding-inline: var(--gutter) var(--edge);
+
+      [data-component="wordmark"] {
+        margin-bottom: calc(var(--switcher-bottom) - 100cqw * 6 / 234);
+      }
+    }
+
+    /* Boxes and plain text have no bracket bearing, so they step back in to the --edge line. */
+    [data-slot="footer-controls"],
+    [data-slot="copyright"] {
+      margin-inline-start: var(--bracket-bearing);
+    }
+
+    [data-slot="footer-controls"] {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    /* The year is the lightest grey that still reads as text (4.5:1); the mark keeps the link
+       colour. */
+    [data-slot="copyright"] {
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      line-height: var(--copyright-line);
+      color: var(--text-muted);
+
+      a {
+        color: var(--text-weak);
+        transition: color 150ms ease;
+
+        @media (hover: hover) and (pointer: fine) {
+          &:hover {
+            color: var(--text-strong);
+          }
+        }
+
+        &:active {
+          color: var(--text-strong);
+        }
+      }
+    }
+
+    [data-component="language-picker"] [data-slot="trigger"] {
+      padding: 0;
+      height: auto;
+      font: inherit;
+      color: var(--text-weak);
+      background: none;
+      border: 0;
+      transition: color 150ms ease;
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--text-strong);
+        }
+      }
+
+      &:active,
+      &[aria-expanded="true"] {
+        color: var(--text-strong);
+      }
+    }
+  }
+
+  [data-component="secondary-nav"] {
+    font-family: var(--font-mono);
+    font-size: var(--mono-size);
+    line-height: 1.2;
+
+    ul {
+      display: flex;
+      flex-direction: column;
+      gap: 0.875rem;
+    }
+
+    li,
+    a {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+    }
+
+    /* The whole row is the link, so the pointer and the hover state cover it edge to edge. */
+    li > a,
+    li > [data-component="language-picker"] {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* Half the list gap above and below, so the rows meet without moving the text. */
+    li > a,
+    li > [data-component="language-picker"] [data-slot="trigger"] {
+      padding-block: 0.4375rem;
+      margin-block: -0.4375rem;
+    }
+
+    li > [data-component="language-picker"] {
+      [data-component="dropdown"],
+      [data-slot="trigger"] {
+        width: 100%;
+        justify-content: flex-start;
+      }
+
+      /* Flex lets the trigger's negative margins cancel its padding, so the dropdown keeps its offset. */
+      [data-component="dropdown"] {
+        display: flex;
+      }
+
+      [data-slot="trigger"] span {
+        flex: 0 0 auto;
+      }
+    }
+
+    a,
+    [data-component="language-picker"] [data-slot="trigger"] {
+      color: var(--text-weak);
+      transition: color 150ms ease;
+    }
+
+    /* The current page shows its dash and dark text without hover. */
+    a[aria-current="page"] {
+      color: var(--text-strong);
+
+      [data-slot="box"] {
+        color: var(--text-strong);
+      }
+
+      [data-slot="fill"]::before {
+        opacity: 1;
+      }
+    }
+
+    /* "[ ]" before each item, in the sidebar shortcuts' colour; hovering draws a dash between the
+       brackets. */
+    [data-slot="box"] {
+      display: inline-flex;
+      align-items: center;
+      color: var(--nav-marker);
+      transition: color 150ms ease;
+    }
+
+    /* Two character cells wide so "[  ]" matches the width of "[01]" in the main nav. */
+    [data-slot="fill"] {
+      width: 2ch;
+      height: 1lh;
+      display: grid;
+      place-items: center;
+      /* The bracket glyphs sit slightly below the line box's center. */
+      translate: 0 0.05em;
+    }
+
+    [data-slot="fill"]::before {
+      content: "";
+      width: 0.75em;
+      height: 0.09em;
+      background: var(--text-strong);
+      opacity: 0;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      li:hover {
+        a,
+        [data-slot="trigger"] {
+          color: var(--text-strong);
+        }
+
+        [data-slot="box"] {
+          color: var(--text-strong);
+        }
+
+        [data-slot="fill"]::before {
+          opacity: 1;
+        }
+      }
+    }
+
+    li:has(:focus-visible),
+    li:has(:active),
+    li:has([aria-expanded="true"]) {
+      a,
+      [data-slot="trigger"] {
+        color: var(--text-strong);
+      }
+
+      [data-slot="box"] {
+        color: var(--text-strong);
+      }
+
+      [data-slot="fill"]::before {
+        opacity: 1;
+      }
+    }
+  }
+
+  /* The label (Design mode can swap in longer wording) stays on one line beside the bars. */
+  [data-component="status"] [data-design-copy] {
+    white-space: nowrap;
+  }
+
+  /* Same footprint as "[  ]": five uptime bars, like a status page. */
+  [data-component="status"] [data-slot="bars"] {
+    box-sizing: border-box;
+    width: 4ch;
+    /* Inset to the ink of OpenTUI Mono's "[" and "]" glyphs, not their full character cells. */
+    padding: 0 0.154em;
+    /* The same ink box as the "[" and "]" glyphs beside the other links: as wide and as tall,
+       and level with them. */
+    height: 0.86em;
+    display: flex;
+    justify-content: center;
+    gap: 2px;
+    translate: 0 0.03em;
+
+    /* Each bar is 1px narrower than an even share of the box, and the five sit centred in it, as
+       if inside the brackets. */
+    span {
+      flex: 0 0 calc((100% - 4 * 2px) / 5 - 1px);
+      background: var(--status-ok);
+
+      &[data-state="degraded"] {
+        background: var(--status-degraded);
+      }
+
+      &[data-state="outage"] {
+        background: var(--status-outage);
+      }
+
+      &[data-state="unknown"] {
+        background: var(--text-weakest);
+      }
+    }
+  }
+
+  [data-component="theme-toggle"] {
+    display: inline-flex;
+    border: 1px solid var(--border);
+
+    /* The theme buttons, and in "cycle" the "View as agent" link beside them. */
+    :is(button, a) {
+      width: 2rem;
+      height: 1.75rem;
+      display: grid;
+      place-items: center;
+      color: var(--text-weak);
+      transition:
+        color 150ms ease,
+        background-color 150ms ease;
+
+      /* The border takes 1px of the button's width; the matching padding keeps the 14px icon
+         centred on whole pixels instead of x.5. */
+      & + :is(button, a) {
+        border-inline-start: 1px solid var(--border);
+        padding-inline-end: 1px;
+      }
+
+      &:is([aria-pressed="true"], [data-active]) {
+        color: var(--text-strong);
+        background: var(--bg-weak);
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--text-strong);
+        }
+      }
+
+      &:active {
+        color: var(--text-strong);
+      }
+    }
+
+    /* "cycle": one theme button that cross-fades between its icons, and "View as agent". */
+    &[data-variant="cycle"] {
+      [data-slot="icon"] {
+        grid-area: 1 / 1;
+        display: grid;
+        opacity: 0;
+
+        &[data-current] {
+          opacity: 1;
+        }
+
+        @media (prefers-reduced-motion: no-preference) {
+          transition: opacity 150ms ease;
+        }
+      }
+    }
+  }
+
+  [data-slot="frame"] {
+    display: contents;
+  }
+
+  /* Docs: both sidebars stick to the window while you read, and the left navigation scrolls on
+     its own when it's taller than the window. At the end of the page they scroll away with the
+     article, so the footer comes in below them instead of sliding over them. */
+  &[data-layout="docs"] {
+    /* The page sits on the home page's four-column grid: the article takes the first three
+       columns and the aside the fourth, out to the same right edge. */
+    --aside-width: calc((var(--page-width) - var(--sidebar-width) - 4 * var(--gutter) - var(--edge)) / 4 + var(--edge));
+
+    /* Sticky elements stop at the edge of their parent, so the sidebars and the article share a
+       frame that ends where the footer starts. */
+    [data-slot="frame"] {
+      display: grid;
+      grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--aside-width);
+      align-items: start;
+    }
+
+    [data-component="sidebar"] {
+      grid-area: 1 / 1;
+      position: sticky;
+      height: 100dvh;
+
+      /* Only a page's own nav (the docs nav) scrolls here; the site nav on other pages in this layout
+         (legal) is short. The inset under it is the sidebar's, outside the scroll box, so padding
+         alone never makes it scrollable. It holds the wheel only while it has something to scroll
+         (data-scrolls, set by Site): a scroll box that can't scroll but contains the wheel
+         swallows it, so the page wouldn't scroll and macOS would rubber-band the nav instead. */
+      &[data-section-nav] {
+        @media (min-width: 60.0625rem) {
+          padding-bottom: var(--edge);
+        }
+
+        > :last-child {
+          flex: 1;
+          min-height: 0;
+          overflow-y: auto;
+          scrollbar-width: none;
+
+          &[data-scrolls] {
+            overscroll-behavior: contain;
+          }
+        }
+      }
+    }
+
+    /* The aside's content scrolls in a box that starts on the content line, below the logo row, like
+       the docs nav, so nothing in it can scroll up into the logo row. The box steps out 4px and pads
+       back in, so focus rings at its edges aren't clipped. */
+    [data-component="aside"] {
+      grid-area: 1 / 3;
+      position: sticky;
+      top: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      padding-block: var(--content-top) var(--edge);
+      padding-inline: 0 var(--edge);
+
+      > * {
+        flex: 1;
+        min-height: 0;
+        margin: -4px;
+        padding: 4px;
+        overflow-y: auto;
+        scrollbar-width: none;
+      }
+    }
+
+    /* Legal and the docs: the right rail (the docs' search and Contents) stays pinned until the end of
+       the text reaches the end of the list, not the end of a full-height box. The aside is as tall as
+       its content, up to the window, where the list scrolls inside it (OnThisPage keeps the current
+       section in view), so a short rail holds on while the text runs on and leaves before the footer. */
+    &:is([data-page="legal-document"], [data-page="docs"])[data-layout] [data-component="aside"] {
+      height: auto;
+      max-height: 100dvh;
+    }
+
+    /* 72px before the aside: the 32px gap after the left sidebar plus 40px. */
+    [data-component="content"] {
+      grid-area: 1 / 2;
+      margin: 0;
+      padding-inline-end: calc(2 * var(--gutter) + 40px);
+    }
+  }
+
+  /* Pop-ups: the product menus and the language picker share one look. */
+
+  [data-component="site-menu"] [data-slot="menu"],
+  [data-component="language-picker"] [data-slot="dropdown"] {
+    color: var(--text-strong);
+  }
+
+  &[data-popover="light"] {
+    [data-component="site-menu"] [data-slot="menu"],
+    [data-component="language-picker"] [data-slot="dropdown"] {
+      color-scheme: light;
+    }
+  }
+
+  &[data-popover="dark"] {
+    [data-component="site-menu"] [data-slot="menu"],
+    [data-component="language-picker"] [data-slot="dropdown"] {
+      color-scheme: dark;
+    }
+  }
+
+  /* Settings › Menu color: one definition for every menu's states (site menus, logo menus, the
+     language picker, the docs lockup and version menus, search results; public/nav-demo/switcher.css
+     repeats it). Grey, the default: the active item has a mid-grey bar on the left and no fill;
+     hover and keyboard focus add a light grey tint and a lighter grey bar in the same place (a
+     hovered active item keeps its own bar). Both kept light so the highlight stays close to the
+     menu; the active bar stays clearly darker than the hover bar (light 40% vs 66%, dark 62% vs
+     34%), and text on the tint keeps well over 4.5:1. "blue" swaps the tints and the hover bar for
+     the link blue. Unregistered, so light-dark() resolves in each pop-up's own scheme. */
+  --menu-hover: light-dark(hsl(0, 0%, 94.5%), hsl(0, 0%, 13.5%));
+  --menu-press: light-dark(hsl(0, 0%, 91%), hsl(0, 0%, 17%));
+  --menu-open: var(--menu-hover);
+  --menu-hint: light-dark(hsl(0, 0%, 66%), hsl(0, 0%, 34%));
+  --menu-bar: light-dark(hsl(0, 0%, 40%), hsl(0, 0%, 62%));
+
+  &[data-menu-color="blue"] {
+    /* Dark pop-ups need a stronger mix for the wash to read as blue rather than navy. */
+    --menu-hover: light-dark(
+      color-mix(in srgb, var(--link) 7%, transparent),
+      color-mix(in srgb, var(--link) 13%, transparent)
+    );
+    --menu-press: light-dark(
+      color-mix(in srgb, var(--link) 11%, transparent),
+      color-mix(in srgb, var(--link) 18%, transparent)
+    );
+    --menu-open: var(--menu-hover);
+    --menu-hint: var(--link);
+  }
+
+  /* In blue, a hovered current row (or one whose submenu is open) is treated like any other: its
+     active bar turns the hover bar's blue. */
+  &[data-menu-color="blue"][data-menu-active="bar"]
+    :is(
+      [data-component="language-picker"] [data-slot="item"][data-selected="true"],
+      [data-component="docs-lockup"] [role="menuitem"][aria-current="page"]
+    ):is(
+      :hover:not(:is([data-slot="menu"], [data-slot="dropdown"]):has(:focus-visible:not(:hover)) *),
+      [data-open]:not(
+          [data-slot="menu"]:has(:is([role="menuitem"]:hover, :focus-visible):not([data-slot="parent"] *)) *
+        )
+        > *
+    )::before {
+    background: var(--menu-hint);
+  }
+
+  /* Every menu's rows span it edge to edge, with a square tint on hover. */
+  :is(
+    [data-component="site-menu"] [data-slot="menu"],
+    [data-component="language-picker"] [data-slot="dropdown"],
+    [data-component="logo-menu"],
+    [data-component="docs-lockup"] [data-slot="menu"]
+  ) {
+    padding: 0;
+  }
+
+  :is(
+    [data-component="site-menu"] [data-slot="menu"] > *,
+    [data-component="language-picker"] [data-slot="item"],
+    [data-component="logo-menu"] a,
+    [data-component="docs-lockup"] [role="menuitem"]
+  ) {
+    padding: 0.5rem 0.875rem;
+    border-radius: 0;
+    position: relative;
+    /* Instant, also over the shared dropdown's own fade (dropdown.css). */
+    transition: none;
+
+    /* Hover hints at the active bar: a softer bar on the left edge, over the menu's border. */
+    &::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      inset-inline-start: -1px;
+      width: 2px;
+      background: var(--menu-hint);
+      opacity: 0;
+    }
+
+    /* One highlighted row at a time: no fades, so the row being left never lingers beside the next,
+       and a resting pointer gives way to a row the keyboard moved focus to (site.tsx moves focus
+       to the row under a moving pointer). */
+    @media (hover: hover) and (pointer: fine) {
+      &:hover:not(:is([data-slot="menu"], [data-slot="dropdown"]):has(:focus-visible:not(:hover)) *) {
+        background: var(--menu-hover);
+
+        &::before {
+          opacity: 1;
+        }
+      }
+    }
+
+    &:active {
+      background: var(--menu-press);
+    }
+
+    &:focus-visible {
+      outline-offset: -2px;
+    }
+  }
+
+  /* Grey: keyboard focus looks like hover (the tint and the mid-grey bar) instead of a blue ring. */
+  &:not([data-menu-color="blue"])
+    :is(
+      [data-component="site-menu"] [data-slot="menu"] > *,
+      [data-component="language-picker"] [data-slot="item"],
+      [data-component="logo-menu"] a,
+      [data-component="docs-lockup"] [role="menuitem"]
+    ):focus-visible {
+    outline: none;
+    background: var(--menu-hover);
+
+    &::before {
+      opacity: 1;
+    }
+  }
+
+  [data-component="language-picker"] {
+    /* The chevron shows only on hover, keyboard focus or while the menu is open (always on touch).
+       It flips instantly when the menu opens. It takes the label's colour, so it follows its
+       hover, pressed and open states (dropdown.css's own grey is brighter than the label in dark). */
+    [data-slot="chevron"] {
+      color: inherit;
+      opacity: 0;
+      transition: opacity 150ms ease;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      [data-slot="trigger"]:hover [data-slot="chevron"] {
+        opacity: 1;
+      }
+    }
+
+    [data-slot="trigger"]:focus-visible [data-slot="chevron"],
+    [aria-expanded="true"] [data-slot="chevron"] {
+      opacity: 1;
+    }
+
+    @media (hover: none), (pointer: coarse) {
+      [data-slot="chevron"] {
+        opacity: 1;
+      }
+    }
+
+    [aria-expanded="true"] [data-slot="chevron"] {
+      scale: 1 -1;
+    }
+
+    /* The list scrolls, which clips anything outside its padding box, so the 1px border is drawn
+       inside it instead of outside (the rest of --popover-shadow is unchanged). The box grows 1px
+       on each side to keep the same outer edge, and the rows stay off the border, so the bars can
+       overlap it at left: -1px as in the other menus. */
+    [data-slot="dropdown"] {
+      min-width: 10rem;
+      margin-inline: -1px;
+      padding-block: 1px;
+      translate: 0 1px;
+      border: 0;
+      border-radius: 0;
+      background: var(--popover-bg);
+      box-shadow:
+        inset 0 0 0 1px light-dark(rgb(0 0 0 / 0.1), rgb(255 255 255 / 0.1)),
+        0 1px 1px light-dark(rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.3)),
+        0 2px 4px -1px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.35)),
+        0 6px 12px -4px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.45));
+      animation: menu-in 160ms var(--ease-out);
+    }
+
+    /* Hover also strengthens the text; the current language shows in the strong text color. */
+    [data-slot="item"] {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      /* Off the inset border, without overflowing the list sideways. */
+      width: calc(100% - 2px);
+      min-height: 2rem;
+      margin-inline: 1px;
+      /* Each name in its own script: Inter, then the system's fonts for scripts Inter lacks. */
+      font-family: var(--font-sans);
+      font-size: var(--fs-meta);
+      color: var(--popover-text-weak);
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover:not(:is([data-slot="menu"], [data-slot="dropdown"]):has(:focus-visible:not(:hover)) *) {
+          color: var(--text-strong);
+        }
+      }
+
+      &[data-selected="true"] {
+        color: var(--text-strong);
+      }
+
+      &[data-selected="true"]:not(:hover, :active) {
+        background: transparent;
+      }
+
+      /* Clears the shared dropdown's own hover (dropdown.css), so a hover that gives way to keyboard
+         focus leaves no tint; the site's hover comes from the shared menu rows above. */
+      @media (hover: hover) and (pointer: fine) {
+        &:hover:not(:active) {
+          background: transparent;
+        }
+      }
+    }
+  }
+
+  /* Positioned inside the header that holds the logo, so it moves with it. */
+  [data-component="logo-menu"] {
+    position: absolute;
+    z-index: 40;
+    min-width: 11rem;
+    display: flex;
+    flex-direction: column;
+    background: var(--popover-bg);
+    box-shadow: var(--popover-shadow);
+    color: var(--text-strong);
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    transform-origin: top var(--x-start, left);
+    animation: settings-in 140ms var(--ease-out);
+
+    a {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+
+      svg {
+        flex-shrink: 0;
+        width: 14px;
+        height: 14px;
+      }
+
+      /* The real logo icon is 4:5; keep it the same height as the drawn icons. */
+      [data-slot="icon"] {
+        width: 11.2px;
+        margin-inline: 1.4px;
+      }
+    }
+  }
+
+  /* Logo menu, cards option: four square previews spring down from the logo. The panel drops in
+     first and each card follows 45ms later, landing from a small tilt with a slight overshoot.
+     A right-click menu is opened now and then, so it can afford a little delight. */
+  [data-component="asset-menu"] {
+    /* A damped spring (about 8% overshoot), sampled for linear(). */
+    --spring: linear(
+      0,
+      0.029,
+      0.105,
+      0.21,
+      0.331,
+      0.456,
+      0.577,
+      0.689,
+      0.788,
+      0.872,
+      0.94,
+      0.993,
+      1.032,
+      1.059,
+      1.075,
+      1.082,
+      1.083,
+      1.079,
+      1.072,
+      1.062,
+      1.052,
+      1.042,
+      1.032,
+      1.023,
+      1.015,
+      1.008,
+      1.003,
+      0.999,
+      0.996,
+      0.995,
+      1
+    );
+    position: absolute;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: repeat(2, 7.5rem);
+    gap: 0.375rem;
+    padding: 0.375rem;
+    background: var(--popover-bg);
+    box-shadow: var(--popover-shadow);
+    color: var(--text-strong);
+    font-family: var(--font-mono);
+    transform-origin: top var(--x-start, left);
+    animation:
+      asset-menu-in 550ms var(--spring) both,
+      asset-fade-in 160ms ease-out both;
+
+    a {
+      --tilt: -4deg;
+      display: flex;
+      flex-direction: column;
+      gap: 0.125rem;
+      padding: 0.375rem 0.375rem 0.5rem;
+      outline-offset: -2px;
+      transition: background-color 150ms ease;
+      animation:
+        asset-card-in 550ms var(--spring) both,
+        asset-fade-in 180ms ease-out both;
+      animation-delay: calc(60ms + var(--i) * 45ms);
+
+      &:nth-child(2) {
+        --tilt: 3deg;
+      }
+
+      &:nth-child(3) {
+        --tilt: -2deg;
+      }
+
+      &:nth-child(4) {
+        --tilt: 4deg;
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          background: color-mix(in srgb, var(--text-strong) 6%, transparent);
+
+          [data-slot="thumb"] {
+            transform: translateY(-2px) rotate(calc(var(--tilt) * -0.25)) scale(1.03);
+          }
+        }
+      }
+
+      &:active [data-slot="thumb"] {
+        transform: scale(0.97);
+        transition-duration: 100ms;
+      }
+    }
+
+    [data-slot="thumb"] {
+      display: grid;
+      place-items: center;
+      aspect-ratio: 1;
+      margin-bottom: 0.375rem;
+      /* A tint of the text colour, so the preview reads on the light and the dark pop-up. */
+      background: color-mix(in srgb, var(--text-strong) 6%, transparent);
+      color: var(--text-strong);
+      transition: transform 380ms var(--spring);
+
+      svg {
+        display: block;
+      }
+    }
+
+    [data-kind="logo"] [data-slot="icon"] {
+      width: 30%;
+      height: auto;
+    }
+
+    [data-kind="wordmark"] svg {
+      width: 76%;
+      height: auto;
+    }
+
+    /* A tiny guidelines page: the logo, three lines of text and a row of swatches. */
+    [data-slot="page"] {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      width: 56%;
+      aspect-ratio: 4 / 5;
+      padding: 10%;
+      background: var(--popover-bg);
+      box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+
+      [data-slot="icon"] {
+        width: 22%;
+        height: auto;
+        margin-bottom: 3px;
+      }
+
+      i {
+        display: block;
+        height: 2px;
+        background: var(--text-weaker);
+
+        &[data-short] {
+          width: 60%;
+        }
+      }
+
+      b {
+        display: flex;
+        gap: 3px;
+        margin-top: auto;
+
+        i {
+          flex: 1;
+          height: auto;
+          aspect-ratio: 1;
+          background: var(--text-strong);
+
+          & + i {
+            background: var(--text-weak);
+          }
+
+          & + i + i {
+            background: var(--border-strong);
+          }
+        }
+      }
+    }
+
+    /* A zip archive: a zipper down the middle and a label. */
+    [data-slot="archive"] {
+      position: relative;
+      display: grid;
+      place-items: end center;
+      width: 50%;
+      aspect-ratio: 4 / 5;
+      padding-bottom: 12%;
+      background: var(--text-strong);
+      color: var(--bg);
+      font-size: 0.625rem;
+      letter-spacing: 0.08em;
+
+      i {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        width: 4px;
+        height: 52%;
+        translate: -50% 0;
+        background: repeating-linear-gradient(to bottom, var(--bg) 0 2px, transparent 2px 4px);
+        opacity: 0.6;
+      }
+    }
+
+    [data-slot="name"] {
+      font-size: var(--fs-micro);
+      line-height: 1.3;
+    }
+
+    [data-slot="meta"] {
+      font-size: var(--fs-micro);
+      line-height: 1.3;
+      color: var(--text-weak);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      &,
+      a {
+        animation: asset-fade-in 150ms ease-out both;
+      }
+
+      [data-slot="thumb"] {
+        transition: none;
+      }
+    }
+  }
+
+  &[data-popover="light"] [data-component="asset-menu"] {
+    color-scheme: light;
+  }
+
+  &[data-popover="dark"] [data-component="asset-menu"] {
+    color-scheme: dark;
+  }
+
+  &[data-popover="light"] [data-component="logo-menu"] {
+    color-scheme: light;
+  }
+
+  &[data-popover="dark"] [data-component="logo-menu"] {
+    color-scheme: dark;
+  }
+
+  /* Footer wordmark: outlined letters with a light hatch, like a technical drawing. */
+
+  [data-component="wordmark"] {
+    position: relative;
+    /* Outline and hatch use the same muted border color as the theme switcher. */
+    --wm-line: var(--border);
+    --wm-hatch: var(--border);
+    --wm-node: var(--text-weaker);
+
+    svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      overflow: visible;
+    }
+
+    /* Each letter sits in its slot (--slot, from marks.tsx) by a translate from its own place
+       (--home); a letter picked up from the keyboard is lifted by --lift. A dragged letter's inline
+       transform wins over this while it is held. */
+    [data-slot="letter"] {
+      transform: translate(calc((var(--slot, 0) - var(--home, 0)) * 30px), var(--lift, 0px));
+    }
+
+    /* Phones: two lines, "open" over "code", each as wide as the one line was. The SVG takes the
+       stacked shape (4 letters, 114 units, by two 42-unit lines 42 apart, so descenders end level
+       with the next line's ascenders) and the stage scales the
+       drawing up to fill it; slots fill the top line first. Pure CSS, so the server's markup is
+       already stacked. */
+    @media (max-width: 40rem) {
+      svg {
+        aspect-ratio: 114 / 84;
+      }
+
+      [data-slot="stage"] {
+        transform: scale(calc(234 / 114));
+      }
+
+      [data-slot="letter"] {
+        transform: translate(
+          calc((mod(var(--slot, 0), 4) - var(--home, 0)) * 30px),
+          calc(round(down, var(--slot, 0) / 4, 1) * 42px + var(--lift, 0px))
+        );
+      }
+    }
+
+    path,
+    line {
+      vector-effect: non-scaling-stroke;
+      stroke-width: 1px;
+    }
+
+    line {
+      stroke: var(--wm-hatch);
+    }
+
+    [data-slot="fill"] {
+      fill: var(--wm-pattern);
+    }
+
+    [data-slot="outline"] {
+      fill: none;
+      stroke: var(--wm-line);
+      stroke-linejoin: miter;
+    }
+
+    /* Corner node points: small squares on the page colour with the outline's stroke. */
+    [data-slot="node"] {
+      fill: var(--bg);
+      stroke: var(--wm-node);
+      vector-effect: non-scaling-stroke;
+      stroke-width: 1px;
+    }
+
+    /* Settings › Wordmark play: the letters can be dragged into a new order. Pointing at the mark,
+       focusing a letter from the keyboard or moving one turns that letter link blue (see below). */
+    [data-slot="face"][data-play] {
+      /* Hover colours (and dragging) only once the entrance has finished, so its steps stay crisp. */
+      &[data-ready] {
+        line,
+        [data-slot="outline"],
+        [data-slot="node"] {
+          transition: stroke 150ms ease;
+        }
+
+        [data-slot="letter"] {
+          cursor: grab;
+        }
+      }
+
+      /* Only the letter under the pointer (the one a drag picks up), the focused letter and the
+         letter in hand turn link blue, with a lighter blue hatch. The hatch is a pattern drawn
+         once for the whole mark, so the letter switches to a second, blue pattern. */
+      &[data-ready] [data-slot="letter"]:focus-visible,
+      [data-lifted] {
+        --wm-line: var(--link);
+        --wm-node: var(--link);
+
+        [data-slot="fill"] {
+          fill: var(--wm-pattern-active);
+        }
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        &[data-ready]:not([data-moving]) [data-slot="letter"]:hover {
+          --wm-line: var(--link);
+          --wm-node: var(--link);
+
+          [data-slot="fill"] {
+            fill: var(--wm-pattern-active);
+          }
+        }
+      }
+
+      [data-slot="active"] {
+        stroke: color-mix(in srgb, var(--link) 45%, transparent);
+      }
+
+      /* Out of the "opencode" order, the whole mark is blue (a lighter hatch) until it is put back. */
+      &[data-ready][data-reordered] {
+        --wm-line: var(--link);
+        --wm-node: var(--link);
+        --wm-hatch: color-mix(in srgb, var(--link) 30%, transparent);
+        --wm-dim: 0.45;
+      }
+
+      /* The letter under the pointer, in focus or in hand stands out: the others dim (a little in
+         grey, more once the mark is blue). */
+      &[data-ready]:has([data-slot="letter"]:focus-visible) [data-slot="letter"]:not(:focus-visible),
+      &:has([data-lifted]) [data-slot="letter"]:not([data-lifted]) {
+        opacity: var(--wm-dim, 0.6);
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        &[data-ready]:not(:has([data-lifted])):has([data-slot="letter"]:hover) [data-slot="letter"]:not(:hover) {
+          opacity: var(--wm-dim, 0.6);
+        }
+      }
+
+      /* Horizontal moves drag a letter; vertical ones still scroll the page on touch. */
+      [data-slot="letter"] {
+        touch-action: pan-y;
+        user-select: none;
+        outline: none;
+        transition:
+          transform 180ms var(--ease-out),
+          opacity 150ms ease;
+      }
+
+      /* The letter in hand is lifted 2px and follows the pointer without easing. */
+      [data-dragged] {
+        cursor: grabbing;
+        transition: opacity 150ms ease;
+        will-change: transform;
+      }
+
+      [data-slot="focus"] {
+        fill: none;
+        stroke: var(--link);
+        stroke-width: 1px;
+        vector-effect: non-scaling-stroke;
+        stroke-dasharray: 2 2;
+        visibility: hidden;
+        /* Hidden, it is still the letter's hit area, so the counters and gaps grab it too. */
+        pointer-events: all;
+      }
+
+      [data-slot="letter"]:focus-visible [data-slot="focus"] {
+        visibility: visible;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        [data-slot="letter"] {
+          transition: none;
+        }
+      }
+    }
+
+    /* The entrance (Settings › Wordmark animation): unseen until it starts, then letter by letter
+       (--i is the letter's slot) its outline draws round from the top left corner while its hatch
+       wipes in from there on the same curve, and each node fades in as the outline passes it (--at,
+       its share of the letter's time). Only stroke-dashoffset, clip-path, opacity and scale animate. */
+    [data-slot="face"][data-state="waiting"] {
+      visibility: hidden;
+    }
+
+    [data-slot="face"][data-state="entering"] {
+      --wm-curve: cubic-bezier(0.65, 0, 0.35, 1);
+
+      [data-slot="letter"] {
+        --wm-delay: calc(var(--i) * var(--wm-stagger));
+      }
+
+      [data-slot="fill"] {
+        animation: wordmark-wipe var(--wm-letter) var(--wm-curve) var(--wm-delay) both;
+      }
+
+      [data-slot="node"] {
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: wordmark-node 150ms var(--ease-out) calc(var(--wm-delay) + var(--at) * var(--wm-letter)) both;
+      }
+    }
+
+    /* Drawing the outline: dashed copies of its contours (pathLength 1) in place of the outline. */
+    [data-slot="face"][data-entrance="draw"] [data-slot="outline"] {
+      visibility: hidden;
+    }
+
+    [data-slot="trace"] {
+      fill: none;
+      stroke: var(--wm-line);
+      stroke-width: var(--wm-hairline);
+      stroke-linejoin: miter;
+      vector-effect: none;
+      stroke-dasharray: 1 1;
+      animation: wordmark-trace var(--wm-letter) var(--wm-curve) var(--wm-delay) both;
+    }
+  }
+
+  /* Before the page's code runs, a wordmark with an entrance already waits unseen, so the drawn
+     mark never shows and then hides when it arms. It shows after 4s if the code never runs. */
+  @media (prefers-reduced-motion: no-preference) {
+    &[data-js] [data-component="wordmark"][data-entrance] [data-slot="face"]:not([data-mounted]) {
+      visibility: hidden;
+      animation: wordmark-fallback 0s 4s forwards;
+    }
+  }
+
+  @media (max-width: 80rem) {
+    [data-component="content"] {
+      --visible: 2.5;
+      --gaps: 2;
+    }
+  }
+
+  /* Small-screen header and menu. Hidden on wide screens, where the sidebar holds the nav. The menu
+     button and its sheet are in phone-menu.css. */
+
+  [data-component="topbar"],
+  [data-slot="section-toggle"] {
+    display: none;
+  }
+
+  /* The shared dropdown animates every property; the site only fades colors. */
+  [data-component="dropdown"] [data-slot="trigger"] {
+    transition: color 150ms ease;
+  }
+
+  /* Below 961px the sidebar no longer fits beside a useful content column. */
+  @media (max-width: 60rem) {
+    /* The content line sits one page inset (1.5rem) below the top bar's 30px logo, which is
+       centred in the bar: the hero title starts right under the bar. */
+    --content-top: calc(var(--topbar-height) / 2 + 15px + 1.5rem);
+    --block-space: 3rem;
+
+    /* Tablets (641–960px): 3.75rem more, about 72px of air from the bar's bottom to the title. */
+    @media (min-width: 40.0625rem) {
+      --content-top: calc(var(--topbar-height) / 2 + 15px + 5.25rem);
+    }
+
+    /* Phones: 2rem more, so about 44px of air from the bar's bottom to the title's cap height. */
+    @media (max-width: 40rem) {
+      --content-top: calc(var(--topbar-height) / 2 + 15px + 3.5rem);
+    }
+
+    /* Landscape phones: the page edge moves in past the notch, so the copy clears it while
+       full-bleed tracks still scroll under it. The top bar and menu sheet add the insets themselves. */
+    [data-component="content"],
+    [data-component="site-footer"],
+    [data-component="sidebar"][data-section-nav] {
+      --edge: calc(1.5rem + max(env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)));
+    }
+
+    [data-component="topbar"] {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: calc(var(--topbar-height) + env(safe-area-inset-top, 0px));
+      padding: env(safe-area-inset-top, 0px) calc(var(--edge) + env(safe-area-inset-right, 0px)) 0
+        calc(var(--edge) + env(safe-area-inset-left, 0px));
+      background: var(--bg);
+      /* While the announcement banner is open it fills the notch area itself, so the bar's top
+         padding slides up under it (the banner paints above) instead of leaving a gap below it. Once
+         the banner scrolls away the bar sticks at the top and the padding covers the notch again.
+         --banner-height animates, so the bar follows the banner as it opens and closes. */
+      margin-top: calc(-1 * min(env(safe-area-inset-top, 0px), var(--banner-height, 0px)));
+
+      /* A hairline under the header once the page scrolls beneath it. */
+      &::after {
+        content: "";
+        position: absolute;
+        inset: auto 0 0;
+        height: 1px;
+        background: var(--border);
+        opacity: 0;
+      }
+
+      /* 24×30: the nearest 4:5 size in whole pixels to 28px tall, centred in the 56px bar. */
+      [data-slot="logo"] {
+        --logo-height: var(--phone-logo-height);
+        align-self: center;
+
+        [data-slot="icon"] {
+          margin-inline-start: 0;
+        }
+      }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      @supports (animation-timeline: scroll()) {
+        [data-component="topbar"]::after {
+          animation: topbar-edge linear both;
+          animation-timeline: scroll(root);
+          animation-range: 0 1.5rem;
+        }
+      }
+    }
+
+    /* While the menu is open the bar and the menu are one surface: no hairline between them. It
+       goes with the toggle's state, so it is cut, never faded. */
+    [data-component="topbar"]:has([data-component="menu-toggle"][aria-expanded="true"])::after {
+      display: none;
+    }
+
+    [data-component="sidebar"] {
+      display: none;
+    }
+
+    /* A page's own navigation (the docs) folds into a button above the article. */
+    [data-component="sidebar"][data-section-nav] {
+      position: static;
+      display: block;
+      width: auto;
+      height: auto;
+      padding: 0 var(--edge);
+
+      > [data-slot="logo"] {
+        display: none;
+      }
+    }
+
+    /* The docs section menu: like the Contents row, no lines (it doesn't pin), and a 16px chevron on
+       the menu button's column that points to the inline end closed and down open. */
+    [data-component="section-nav"] {
+      [data-slot="section-toggle"] {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        min-height: var(--row-height);
+        font-family: var(--font-mono);
+        font-size: var(--mono-size);
+        color: var(--text-strong);
+
+        [data-slot="chevron"] {
+          width: 16px;
+          height: 16px;
+          margin-inline-end: calc(34px - var(--edge) - 8px);
+          rotate: -90deg;
+          transition: rotate 180ms var(--ease-out);
+
+          html[dir="rtl"] & {
+            rotate: 90deg;
+          }
+
+          @media (prefers-reduced-motion: reduce) {
+            transition: none;
+          }
+        }
+
+        &[aria-expanded="true"] [data-slot="chevron"],
+        html[dir="rtl"] &[aria-expanded="true"] [data-slot="chevron"] {
+          rotate: 0deg;
+        }
+      }
+
+      [data-slot="section-body"] {
+        display: none;
+        padding: 1rem 0 1.5rem;
+      }
+
+      &[data-open] [data-slot="section-body"] {
+        display: block;
+        animation: section-in 200ms var(--ease-out);
+      }
+    }
+
+    &[data-layout="docs"] {
+      [data-slot="frame"] {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      [data-component="sidebar"] {
+        position: static;
+        height: auto;
+
+        > :last-child {
+          overflow: visible;
+          padding-bottom: 0;
+        }
+      }
+
+      [data-component="aside"] {
+        display: none;
+      }
+
+      [data-component="content"] {
+        margin: 0;
+        padding-inline-end: var(--edge);
+      }
+    }
+
+    [data-component="content"] {
+      margin-inline-start: 0;
+      padding: calc(var(--content-top) - var(--topbar-height)) var(--edge) 0;
+    }
+
+    /* Tablets: two and a half cards, like the carousel's default (Settings › Carousel). */
+    [data-component="content"] {
+      --visible: 2.5;
+      --gaps: 2;
+    }
+
+    /* Stacked, the title sits as close to its copy as a feature title to its description; on phones
+       2px further (David, 6 Nov). */
+    [data-component="block"] {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+
+      @media (max-width: 40rem) {
+        gap: 0.625rem;
+      }
+    }
+
+    [data-component="hero"] {
+      gap: 1.75rem;
+
+      h1 {
+        overflow-wrap: break-word;
+      }
+
+      p {
+        font-size: var(--fs-body);
+      }
+    }
+
+    /* Links first, then the theme switcher and copyright on one row, then the wordmark. */
+    [data-component="site-footer"] {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      margin-top: 5rem;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+
+      [data-slot="secondary"] {
+        align-self: stretch;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 1.5rem 1rem;
+        padding-block: 0;
+        padding-inline: calc(var(--edge) - var(--bracket-bearing)) var(--edge);
+      }
+
+      [data-component="secondary-nav"] {
+        grid-column: 1 / -1;
+      }
+
+      [data-slot="copyright"] {
+        justify-self: end;
+      }
+
+      [data-slot="main"] {
+        align-self: stretch;
+        padding: 2.5rem var(--edge) var(--edge);
+
+        [data-component="wordmark"] {
+          margin-bottom: 0;
+        }
+      }
+    }
+
+    /* 44px rows: the whole row is the link. */
+    [data-component="secondary-nav"] {
+      ul {
+        gap: 0;
+      }
+
+      li > a,
+      li > [data-component="language-picker"] [data-slot="trigger"] {
+        min-height: 2.75rem;
+        padding-block: 0;
+        margin-block: 0;
+      }
+    }
+
+    [data-component="theme-toggle"] button,
+    [data-component="theme-toggle"] a {
+      width: 2.75rem;
+      height: 2.75rem;
+    }
+
+    /* 36px buttons keep their look; an invisible band above and below makes the target 44px. */
+    [data-component="site-button"],
+    [data-component="block"] [data-slot="more"] {
+      position: relative;
+
+      &::after {
+        content: "";
+        position: absolute;
+        inset: -0.25rem 0;
+      }
+    }
+
+    /* 24×30 mark, 44×44 target: the side padding reaches into the bar's edge padding. */
+    [data-component="topbar"] [data-slot="logo"] {
+      padding: 7px 10px;
+      margin-inline: -10px;
+    }
+
+    [data-slot="copyright"] a {
+      display: inline-block;
+      padding-block: 0.8125rem;
+      margin-block: -0.8125rem;
+    }
+  }
+
+  @media (max-width: 40rem) {
+    [data-component="content"] {
+      --visible: 1.1;
+      --gaps: 1;
+    }
+
+    /* Long single words (German compounds) still fit a 320px screen; hyphens are a last resort. */
+    [data-component="hero"] h1 {
+      font-size: min(2.25rem, 8.6vw);
+      hyphens: auto;
+    }
+
+    [data-component="features"],
+    [data-component="stats"] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0ms !important;
+      animation-duration: 0ms !important;
+      transition-delay: 0ms !important;
+      animation-delay: 0ms !important;
+    }
+  }
+}
+
+@keyframes button-busy {
+  to {
+    background-position: 130% 100%;
+  }
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--menu-shift, 4px)) scale(0.98);
+  }
+}
+
+@keyframes faq-open {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: var(--kb-collapsible-content-height);
+    opacity: 1;
+  }
+}
+
+@keyframes faq-close {
+  from {
+    height: var(--kb-collapsible-content-height);
+    opacity: 1;
+  }
+  to {
+    height: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes settings-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@keyframes topbar-edge {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes section-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.25rem);
+  }
+}
+
+/* Section spacer options for the home and product pages. "space" drops the divider and adds 40px to the gap it leaves. */
+[data-site][data-spacer] {
+  &[data-spacer="space"] [data-component="block"] {
+    margin-top: calc(var(--block-space) * 2 + 40px);
+    padding-top: 0;
+    border-top: 0;
+
+    @media (max-width: 60rem) {
+      margin-top: calc(var(--block-space) * 2);
+    }
+  }
+
+  &[data-spacer="dashed"] [data-component="block"] {
+    border-top-style: dashed;
+    border-top-color: var(--border-strong);
+  }
+
+  /* A narrow diagonal hatch, the same texture as the footer wordmark. */
+  &[data-spacer="hatch"] [data-component="block"] {
+    border-top: 8px solid;
+    border-image: repeating-linear-gradient(-45deg, var(--border-strong) 0 1px, transparent 1px 4px) 1;
+  }
+
+  /* Dot gradient: the line's colour and weight, but across the label column it breaks into dashes
+     that grow as their gaps shrink, joining the solid line. The gradient itself comes from the
+     Settings (spacerGradientRule in settings.ts, rendered by site.tsx); its stops are rounded to
+     whole pixels from the section's left edge. The label column is a card (home and the logo row)
+     or a quarter of the content (product pages); stacked on phones it is a third of the width.
+     Browsers without round() keep the plain line. */
+  &[data-spacer="dot gradient"]
+    :is([data-component="block"], [data-component="logo-wall"]:not([data-layout="section"])) {
+    --spacer-label: var(--card, calc((100% - 3 * var(--gutter)) / 4));
+
+    @media (max-width: 60rem) {
+      --spacer-label: calc(100% / 3);
+    }
+
+    @supports (width: round(1%, 1px)) {
+      border-top-color: transparent;
+      background-origin: border-box;
+      background-repeat: no-repeat;
+      background-size: 100% 1px;
+    }
+  }
+
+  /* Dither gradient: a band of whole-pixel dots that thins out one way. The band is a transparent
+     top border as tall as the band, so the section's own spacing follows below it; the dots are a
+     pseudo-element in that border, masked by the pattern ditherGradientRule (settings.ts) builds
+     from the Settings. A second pseudo-element is the optional line on the dense edge. */
+  &[data-spacer="dither gradient"]
+    :is([data-component="block"], [data-component="logo-wall"]:not([data-layout="section"])) {
+    /* A horizontal fade's length unit, as for the dot gradient. */
+    --spacer-label: var(--card, calc((100% - 3 * var(--gutter)) / 4));
+    position: relative;
+    border-top: var(--dither-height, 24px) solid transparent;
+    border-image: none;
+
+    @media (max-width: 60rem) {
+      --spacer-label: calc(100% / 3);
+    }
+
+    &::before,
+    &::after {
+      content: "";
+      position: absolute;
+      pointer-events: none;
+      background: var(--dither-color, color-mix(in srgb, var(--text-strong) 35%, transparent));
+    }
+
+    &::before {
+      top: calc(-1 * var(--dither-height, 24px));
+      inset-inline-start: 0;
+      inset-inline-end: 0;
+      height: var(--dither-height, 24px);
+      mask-image: var(--dither-mask, linear-gradient(transparent, transparent));
+      mask-size: var(--dither-mask-size, auto);
+      mask-repeat: var(--dither-mask-repeat, repeat-x);
+      mask-position: var(--dither-mask-position, 0 0);
+    }
+
+    &::after {
+      display: var(--dither-line, none);
+      top: calc(var(--dither-line-top, 0px) - var(--dither-height, 24px));
+      inset-inline-start: var(--dither-line-left, 0);
+      width: var(--dither-line-width, 100%);
+      height: var(--dither-line-height, 1px);
+    }
+  }
+}
+
+/* Text selection, from the Selection setting: the link blue with white text, the same blue and
+   white as a hovered button in both themes; or the link blue at the chosen opacity with the text
+   keeping its own colour. */
+[data-site] ::selection {
+  background: var(--link);
+  color: #fff;
+}
+
+[data-site][data-selection="muted"] ::selection {
+  background: color-mix(in srgb, var(--link) var(--selection-alpha), transparent);
+  color: inherit;
+}
+
+/* Tablets beside the sidebar (961 to 1248px): a section's content column beside its title runs
+   433 to 590px wide, too narrow, so the title goes above the content as on phones and the content
+   takes the whole column (the lead keeps a readable measure), and the home feature grid runs three
+   across. `html` and the doubled attributes outrank
+   the pages' own two-column rules. The Console panel keeps its own layout. */
+@media (min-width: 60.0625rem) and (max-width: 78rem) {
+  html [data-site] [data-component="block"]:not([data-console]) {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+
+    > [data-slot="body"][data-slot] {
+      max-width: none;
+    }
+
+    [data-slot="lead"][data-slot] {
+      max-width: 44rem;
+    }
+  }
+
+  html [data-site] [data-component="features"][data-component] {
+    max-width: none;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Tablets (641 to 1248px): the logo row's label goes above its logos, which take the whole row
+   (LogoWall shows eight in portrait, six above 960px). */
+@media (min-width: 40.0625rem) and (max-width: 78rem) {
+  html [data-site] [data-component="logo-wall"]:is([data-layout="card"], [data-layout="half"]) [data-slot="row"] {
+    width: 100%;
+    flex-wrap: wrap;
+    row-gap: 1.25rem;
+    height: auto;
+
+    > [data-slot="label"] {
+      flex-basis: 100%;
+      margin-inline-end: 0;
+      padding-inline-end: 0;
+    }
+
+    > [data-slot="logos"] {
+      flex-basis: 100%;
+      height: var(--logo-row);
+    }
+  }
+}
+
+/* Mobile type scale (960px and below). Phones are read at arm's length and in motion, so body
+   copy steps up to the platform norm (iOS body is 17pt, Android 16sp), mono UI to 16px, leads to
+   20px, and nothing that carries meaning goes below 14px. Controls get 44px rows. `html` adds one
+   level of specificity so these win over page stylesheets loaded later. */
+@media (max-width: 60rem) {
+  html [data-site] {
+    --fs-meta: 14px;
+    --fs-small: 15px;
+    --fs-ui: 16px;
+    --fs-body: 17px;
+    --fs-read: 17px;
+    --fs-title: 18px;
+    --fs-large: 19px;
+    --fs-lead: 20px;
+    --fs-entry: 22px;
+    --fs-display-max: 48px;
+    --fs-input: 16px;
+    line-height: 1.55;
+    -webkit-text-size-adjust: 100%;
+
+    [data-component="hero"] p,
+    [data-component="product-intro"] p,
+    [data-component="block"] [data-slot="lead"] {
+      font-size: var(--hero-copy-size);
+      line-height: var(--hero-copy-leading);
+    }
+
+    /* Phones: a section's lead is body copy (17px), so the page's first lines (the hero and
+       product intros, above) stay the one larger size. */
+    @media (max-width: 40rem) {
+      [data-component="block"] [data-slot="lead"] {
+        font-size: var(--body-size);
+        line-height: 1.55;
+      }
+    }
+
+    [data-slot="faq-question"] {
+      font-size: var(--fs-large);
+    }
+
+    /* The larger phone question needs more room under the answer to match the space above it. */
+    [data-component="faq"] [data-slot="faq-answer-inner"] {
+      padding-bottom: 1.1875rem;
+    }
+
+    [data-component="product-card"] p,
+    [data-component="features"] a > span {
+      font-size: var(--fs-ui);
+      line-height: 1.45;
+    }
+
+    [data-component="features"] strong {
+      font-size: var(--fs-body);
+    }
+
+    [data-component="site-button"],
+    [data-slot="more"] {
+      height: 2.75rem;
+      font-size: var(--fs-ui);
+    }
+
+    /* Dates, tab labels and small code: 13px on desktop, 14px here. */
+    time,
+    [data-component="code-tabs"],
+    [data-component="code-block"] {
+      font-size: var(--fs-meta);
+    }
+
+    /* The open source stats stay three across, sized like the mobile hero title so they fit. */
+    [data-component="stats"] {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.75rem;
+
+      /* Numbers share a top line even when a label wraps to two lines. */
+      div {
+        justify-content: flex-end;
+      }
+
+      dd {
+        font-size: min(2.25rem, 8.6vw);
+      }
+
+      dt {
+        font-size: var(--fs-meta);
+        line-height: 1.3;
+      }
+    }
+  }
+}
+
+/* Touch screens (phones, and iPads at any width): text fields are at least 16px, or iOS zooms the
+   page into them. */
+@media (pointer: coarse) {
+  html [data-site] {
+    --fs-input: 16px;
+  }
+
+  [data-site] :is(input, select, textarea) {
+    font-size: max(var(--fs-input), 1em);
+  }
+}
+
+/* The current page or section in any navigation (main, docs, docs tabs, "On this page", legal,
+   footer) gets the same faux medium weight as the titles. */
+[data-site] a[aria-current] {
+  -webkit-text-stroke: var(--title-stroke);
+}
+
+/* Every breadcrumb (product, extension and legal pages, the Markdown view): separators in the
+   lightest grey, ancestors as muted links that go to ink on hover, and the current page, the last
+   item, in ink. Each page sets its own position and type. */
+[data-site] nav[aria-label="Breadcrumb"] {
+  color: var(--text-weaker);
+
+  a {
+    color: var(--text-weak);
+    transition: color 150ms ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+      }
+    }
+
+    &:active {
+      color: var(--text-strong);
+    }
+  }
+
+  [aria-current="page"] {
+    color: var(--text-strong);
+  }
+}
+
+/* Page changes: the new page's content rises 6px and fades in. Short and ease-out, so navigation
+   still feels instant; opacity and transform only. Reduced motion turns it off (the global
+   reduced-motion rule sets durations to 0). */
+/* Animate the children, not the content box: a transform on the box would make it the containing
+   block for absolutely positioned children (the product breadcrumb, the docs tabs) and shift them. */
+[data-site] [data-component="content"][data-enter] > * {
+  animation: page-in 220ms var(--ease-out) both;
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+
+/* A still's <picture> (Still in media.tsx) only picks the file: its <img> lays out as if it were
+   the picture's parent's own child. */
+[data-site] picture[data-still] {
+  display: contents;
+}
+
+/* Media fades in over its placeholder tone when it arrives: the card still and the hero poster as
+   soon as their image loads, then the video over them (their first frame) once it can play. */
+[data-site] [data-component="product-card"] [data-slot="still"]:not([data-loaded]),
+[data-site] [data-component="product-hero"] :is(video, img[data-poster]):not([data-loaded]) {
+  opacity: 0;
+}
+
+/* The still swaps opacity instantly for hover playback, so its arrival fades with an animation. A
+   poster already decoded when it first paints (data-instant) just shows: it is on screen from the
+   first frame, over its own average colour. */
+[data-site] [data-component="product-card"] [data-slot="still"][data-loaded]:not([data-instant]),
+[data-site] [data-component="product-hero"] img[data-poster][data-loaded]:not([data-instant]) {
+  animation: media-in 300ms ease;
+}
+
+@keyframes media-in {
+  from {
+    opacity: 0;
+  }
+}
+
+[data-site] [data-component="product-hero"] video {
+  transition: opacity 300ms ease;
+}
+
+/* Every page's last section is followed by the footer after the site's section gap above phones
+   (4.5rem, the gap between the home page's sections at every width from 641px up), and the footer
+   is as tall as its content, so it doesn't open a taller gap above its links on a tall window. The
+   home page's footer keeps its gap as padding (the Console panel's dots run up to it). */
+@media (min-width: 40.0625rem) {
+  [data-site] [data-component="site-footer"] {
+    min-height: 0;
+    margin-top: 4.5rem;
+  }
+}
+
+[data-page="home"][data-site] [data-component="site-footer"] {
+  min-height: 0;
+  margin-top: 0;
+  padding-top: 4.5rem;
+}
+
+/* Phones: the last section is followed by the footer after the gap between the home page's
+   sections on phones (6rem), on every page. */
+@media (max-width: 40rem) {
+  [data-site] [data-component="site-footer"] {
+    margin-top: 6rem;
+  }
+
+  [data-page="home"][data-site] [data-component="site-footer"] {
+    margin-top: 0;
+    padding-top: 6rem;
+  }
+}
+
+/* Phones and tablets: the copyright goes under the theme switch, on the left, as on desktop: the
+   row gap (1.5rem) plus 0.75rem makes desktop's 2.25rem between them. */
+@media (max-width: 60rem) {
+  [data-site] [data-component="site-footer"] [data-slot="copyright"] {
+    grid-column: 1 / -1;
+    justify-self: start;
+    margin-top: 0.75rem;
+  }
+}
+
+/* The Anomaly signature in the copyright line: about the height of the text, sitting on its
+   baseline like a signature. */
+[data-site] [data-slot="copyright"] {
+  a:has([data-slot="anomaly"]) {
+    display: inline-flex;
+    vertical-align: -0.3em;
+  }
+
+  [data-slot="anomaly"] {
+    display: block;
+    height: 1.4em;
+    width: auto;
+  }
+}
+
+/* Settings › Footer wordmark: off hides the large wordmark; the footer keeps its links. */
+[data-site] [data-component="wordmark"][data-hidden] {
+  display: none;
+}
+
+@keyframes wordmark-trace {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* The hatch wipes in diagonally from the letter's top left corner: a triangle that grows until its
+   long side has passed the far corner. */
+@keyframes wordmark-wipe {
+  from {
+    clip-path: polygon(0% 0%, 0% 0%, 0% 0%) fill-box;
+  }
+  to {
+    clip-path: polygon(0% 0%, 200% 0%, 0% 200%) fill-box;
+  }
+}
+
+@keyframes wordmark-node {
+  from {
+    opacity: 0;
+    scale: 0.4;
+  }
+}
+
+@keyframes wordmark-fallback {
+  to {
+    visibility: visible;
+  }
+}
+
+@keyframes asset-menu-in {
+  from {
+    transform: translateY(-8px) scale(0.94);
+  }
+}
+
+@keyframes asset-card-in {
+  from {
+    transform: translateY(-14px) rotate(var(--tilt)) scale(0.9);
+  }
+}
+
+@keyframes asset-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Page titles on every page (the home hero, Download, Press, Brand, Changelog, Legal) are 48px,
+   or smaller where 48px would not fit a 15-character line on the card grid (phones, narrow
+   windows). Settings › Hero size scales them from there. The fitted width is worked out from the
+   page width, so pages with an aside (legal) match the home page. Selectors repeat to outrank
+   page-specific hero rules. */
+[data-site] {
+  --hero-content: calc(var(--page-width) - var(--sidebar-width) - var(--gutter) - var(--edge));
+  --hero-card: calc((var(--hero-content) - var(--gaps, 3) * var(--gutter)) / var(--visible, 4));
+  --hero-title: calc((var(--hero-card) * 2 + var(--gutter)) / (15 * 0.57) * 0.98);
+
+  @media (max-width: 60rem) {
+    --hero-content: calc(var(--page-width) - 2 * var(--edge));
+    --hero-title: calc(var(--hero-content) / (15 * 0.57) * 0.98);
+  }
+}
+
+/* The home hero title sizes itself from these values in routes/index.css. */
+[data-site][data-site][data-site]:not([data-page="home"], [data-page="products"])
+  :is([data-component="hero"], [data-component="legal-header"])
+  h1 {
+  max-width: none;
+  font-size: calc(min(48px, var(--hero-title)) * var(--hero-scale, 1));
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  hyphens: auto;
+}
+
+/* Settings › Link blue: alternatives to the Console blue for links and selection (light, dark);
+   "classic" is the old browser blue. Every option keeps at least 4.5:1 text contrast. */
+[data-site] {
+  &[data-blue="classic"] {
+    --link: light-dark(#0000ee, #9e9eff);
+  }
+
+  &[data-blue="open"] {
+    --link: light-dark(#2563eb, #7aa7ff);
+  }
+
+  &[data-blue="azure"] {
+    --link: light-dark(#0068e6, #52a8ff);
+  }
+
+  &[data-blue="sky"] {
+    --link: light-dark(#0a64f0, #6cb2ff);
+  }
+
+  &[data-blue="ocean"] {
+    --link: light-dark(#0b74c9, #6fc0ff);
+  }
+
+  &[data-blue="cobalt"] {
+    --link: light-dark(#1d4ed8, #93b4ff);
+  }
+
+  &[data-blue="periwinkle"] {
+    --link: light-dark(#4f46e5, #a5a0ff);
+  }
+}
+
+/* Settings › Dark blue: the Console blue's dark-mode partner. Lighter tints of the Console hue
+   (229°) read as lavender on near-black, so the options move towards true blue. All keep at least
+   6:1 text contrast on #0c0c0c. */
+[data-site] {
+  &[data-dark-blue="8ea2ff"] {
+    --link-dark: #8ea2ff;
+  }
+
+  &[data-dark-blue="7c9dff"] {
+    --link-dark: #7c9dff;
+  }
+
+  &[data-dark-blue="5c8dff"] {
+    --link-dark: #5c8dff;
+  }
+
+  &[data-dark-blue="6b8fff"] {
+    --link-dark: #6b8fff;
+  }
+
+  &[data-dark-blue="6aa0ff"] {
+    --link-dark: #6aa0ff;
+  }
+
+  &[data-dark-blue="5e9cff"] {
+    --link-dark: #5e9cff;
+  }
+}
+
+/* Settings › Nav groups: Anomaly's products sit under a muted label after the open source links. */
+[data-site] {
+  [data-component="nav"] li[data-slot="group"],
+  [data-component="site-menu-sheet"] li[data-slot="group"] {
+    margin-top: 1rem;
+    padding-inline-start: var(--bracket-bearing);
+    font-family: var(--font-mono);
+    font-size: var(--mono-size);
+    color: var(--text-muted);
+  }
+}
+
+/* Settings › Footer › columns: Next.js-style link columns on the card grid, above the wordmark. */
+[data-site] [data-component="footer-columns"] {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2.5rem var(--gutter);
+  margin-bottom: 5rem;
+  font-family: var(--font-mono);
+  font-size: var(--mono-size);
+  line-height: 1.2;
+
+  h2 {
+    margin-bottom: 1.25rem;
+    font: inherit;
+    color: var(--text-muted);
+  }
+
+  ul {
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+  }
+
+  a {
+    color: var(--text-weak);
+    transition: color 150ms ease;
+
+    &[aria-current="page"] {
+      color: var(--text-strong);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+      }
+    }
+
+    &:active {
+      color: var(--text-strong);
+    }
+  }
+
+  @media (max-width: 80rem) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  @media (max-width: 40rem) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-bottom: 3rem;
+
+    a {
+      display: flex;
+      align-items: center;
+      min-height: 2.75rem;
+    }
+
+    ul {
+      gap: 0;
+    }
+  }
+}
+
+/* Settings › Footer › list, beside the sidebar: the wordmark's baseline (the bottom of the "O", 6/42
+   of its height above the "p" descender, so 6/234 of its width) shares the baseline of the list's
+   last link. The list and the wordmark share the first row and align on their last baselines; the
+   wordmark has no text, so its baseline is its bottom edge, which the negative margin lifts to the
+   letters' bottom. The theme switcher and copyright follow in the rows below, and the descender runs
+   into that space. */
+@media (min-width: 60.0625rem) {
+  [data-site] [data-component="site-footer"][data-layout="list"] {
+    grid-template-rows: 1fr;
+    grid-auto-rows: auto;
+    row-gap: 2.25rem;
+    padding-bottom: var(--edge);
+
+    [data-slot="secondary"] {
+      display: contents;
+    }
+
+    [data-component="secondary-nav"] {
+      grid-column: 1;
+      grid-row: 1;
+      align-self: last baseline;
+      padding-block: 0;
+      padding-inline: calc(var(--edge) - var(--bracket-bearing)) var(--gutter);
+    }
+
+    /* The status row's baseline is its text's, not the bottom of the uptime bars before it. The
+       label fills the row's height, so it does not move. */
+    [data-component="status"] [data-slot="status-label"] {
+      align-self: last baseline;
+    }
+
+    [data-slot="footer-controls"],
+    [data-slot="copyright"] {
+      grid-column: 1;
+      margin-inline-start: var(--edge);
+    }
+
+    [data-slot="main"] {
+      grid-column: 2;
+      grid-row: 1;
+      align-self: last baseline;
+
+      [data-component="wordmark"] {
+        margin-bottom: calc(-100cqw * 6 / 234);
+      }
+    }
+
+    /* With the theme switch, the wordmark spans its row too and sits at the bottom, so the foot of
+       the "p" descender (the SVG's bottom edge) lines up with the bottom of the switch. */
+    &:has([data-slot="footer-controls"]) [data-slot="main"] {
+      grid-row: 1 / span 2;
+      align-self: end;
+
+      [data-component="wordmark"] {
+        margin-bottom: 0;
+      }
+    }
+  }
+}
+
+/* "Like letters?": a full-width blue bar at the very end of the page (after the footer, in the flow),
+   which grows open and pushes the page up while the wordmark's letters are out of order. */
+[data-site] {
+  --letters-bar-height: 3.25rem;
+  /* The blue bars' shared look (site-banner.css): the link blue, the same as the blue buttons and
+     the announcement banner (dark mode keeps the deeper light-mode blue, so white keeps 4.5:1). */
+  --bar-blue: light-dark(var(--link), #3b5cf6);
+}
+
+/* While the open bar fills the bottom of the screen, a fixed strip of its blue covers the home
+   indicator's area under it, touching the screen's bottom edge, which iOS Safari tints its bottom
+   toolbar from (the page behind the site takes the blue too: site.tsx). It is as tall as the inset,
+   and a pixel, over the bar's own blue, so it never covers anything else. */
+[data-site][data-letters-end]::after {
+  content: "";
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 1;
+  height: calc(env(safe-area-inset-bottom, 0px) + 1px);
+  background: var(--bar-blue);
+  pointer-events: none;
+}
+
+@media (max-width: 40rem) {
+  /* Up to 40rem the whole sentence doesn't fit on one line, so the bar says just "Like letters?"
+     (still the link to /font, with the full sentence as its name), at the body size. */
+  [data-site] [data-component="letters-bar"] [data-slot="slide"] a {
+    font-size: var(--fs-ui);
+
+    [data-slot="body"] {
+      display: none;
+    }
+  }
+}
+
+[data-site] [data-component="letters-bar"] {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 300ms var(--ease-out);
+
+  [data-slot="clip"] {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* The link slides up into the bar as it opens, and back down as it closes. */
+  [data-slot="slide"] {
+    position: relative;
+    opacity: 0;
+    translate: 0 100%;
+    transition:
+      translate 300ms var(--ease-out),
+      opacity 200ms ease;
+  }
+
+  a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    height: calc(var(--letters-bar-height) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    /* The blue bars' shared look (--bar-blue above, site-banner.css): a highlight and a 92% body. */
+    background: var(--bar-blue);
+    font-family: var(--font-sans);
+    font-size: var(--fs-ui);
+    font-weight: 500;
+    text-decoration: none;
+    transition: background-color 150ms ease;
+  }
+
+  &[data-shown] {
+    grid-template-rows: 1fr;
+
+    [data-slot="slide"] {
+      opacity: 1;
+      translate: 0;
+    }
+  }
+
+  /* Reduced motion: the bar opens at once and its content fades in. */
+  @media (prefers-reduced-motion: reduce) {
+    & {
+      transition: none;
+    }
+
+    /* Important, past the page-wide reduced-motion rule that zeroes every transition on small
+       screens: a fade is the reduced form of this motion, not none. */
+    [data-slot="slide"] {
+      translate: 0;
+      transition: opacity 200ms ease;
+      transition-duration: 200ms !important;
+    }
+  }
+}
+
+/* Settings › Footer › columns: the sidebar column stays empty. Under the link columns, a bar across
+   the content: the copyright on the left, the status, language and theme on the right. */
+[data-site] [data-component="site-footer"][data-layout="columns"] {
+  [data-slot="main"] {
+    grid-column: 2;
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+  }
+
+  [data-component="footer-columns"] {
+    margin-bottom: 4rem;
+  }
+
+  [data-slot="bar"] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem 2rem;
+    margin-bottom: auto;
+    padding-bottom: 5rem;
+    font-family: var(--font-mono);
+    font-size: var(--mono-size);
+    line-height: 1.2;
+  }
+
+  [data-slot="copyright"] {
+    margin-inline-start: 0;
+  }
+
+  [data-slot="bar-controls"] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem 1.75rem;
+  }
+
+  [data-component="status"] {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    color: var(--text-weak);
+    transition: color 150ms ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+      }
+    }
+
+    &:active {
+      color: var(--text-strong);
+    }
+  }
+
+  @media (max-width: 60rem) {
+    [data-component="footer-columns"] {
+      margin-bottom: 2.5rem;
+    }
+
+    [data-slot="bar"] {
+      padding-bottom: 3rem;
+    }
+  }
+}
+
+/* The sidebar nav steps aside while the footer list is in its space (wide screens only). */
+@media (min-width: 60.0625rem) {
+  [data-site] [data-component="sidebar"] [data-component="nav"] {
+    transition:
+      opacity 200ms ease,
+      translate 240ms var(--ease-out);
+
+    &[data-away] {
+      opacity: 0;
+      translate: 0 -0.5rem;
+      pointer-events: none;
+    }
+  }
+}
+
+/* Settings › Logo size: a whole-pixel 4:5 mark (real width and height, not a scale, so its edges
+   land on pixels). Its box keeps the width of the nav's "[01]" brackets and the mark is centred in
+   it, rounded to whole pixels. Beside the sidebar the logo row then shrinks to the mark: the mark
+   sits as far from the top as from the left, and the nav, the breadcrumb row and the content line
+   (--top, --logo-height, --content-top) follow it. The phone bar keeps its 56px and centres the
+   mark. Shared with the product nav demos (public/nav-demo/switcher.css). */
+[data-site][data-logo="icon"] {
+  &[data-logo-size="28×35"] {
+    --logo-mark-w: 28px;
+    --logo-mark-h: 35px;
+  }
+
+  &[data-logo-size="24×30"] {
+    --logo-mark-w: 24px;
+    --logo-mark-h: 30px;
+  }
+
+  &[data-logo-size="20×25"] {
+    --logo-mark-w: 20px;
+    --logo-mark-h: 25px;
+  }
+
+  &[data-logo-size="16×20"] {
+    --logo-mark-w: 16px;
+    --logo-mark-h: 20px;
+  }
+
+  @media (min-width: 60.0625rem) {
+    &[data-logo-size] {
+      --logo-box: var(--bracket-ink);
+      --logo-inset: round(calc((var(--logo-box) - var(--logo-mark-w)) / 2), 1px);
+      --top: calc(var(--edge) + var(--logo-inset));
+      --logo-height: var(--logo-mark-h);
+      /* The gap under the logo row stays as it was, so everything below moves up with the row. */
+      --logo-gap: calc(var(--edge) + 8px);
+    }
+  }
+
+  /* Bare pages (the font page) have no top bar on small screens, but their logo row stands in for
+     it: the bar's 30px logo box, centred in its 56px. So the logo, and the GitHub mark and the
+     controls level with it, sit exactly where the bar puts them on every other page, and the logo
+     doesn't move between pages. */
+  @media (max-width: 60rem) {
+    &[data-bare] {
+      --top: calc((var(--topbar-height) - var(--phone-logo-height)) / 2);
+      --logo-height: var(--phone-logo-height);
+    }
+  }
+
+  /* --logo-box is only set beside the sidebar; the phone bar's box follows its own --logo-height. */
+  &[data-logo-size] [data-slot="logo"] [data-slot="icon"] {
+    --box: var(--logo-box, calc(var(--logo-height) * 4 / 5));
+    position: relative;
+    inset-inline-start: round(calc((var(--box) - var(--logo-mark-w)) / 2), 1px);
+    top: round(calc((var(--logo-height) - var(--logo-mark-h)) / 2), 1px);
+    width: var(--logo-mark-w);
+    height: var(--logo-mark-h);
+    /* The phone bar's box is narrower than 28 × 35, and svgs are capped at 100% of it. */
+    max-width: none;
+    margin-inline-end: calc(var(--box) - var(--logo-mark-w));
+    margin-bottom: calc(var(--logo-height) - var(--logo-mark-h));
+  }
+
+  /* The sidebar logo (and the bare pages' logo in its place) starts at --edge less the bracket
+     bearing, and layout rounds both down to 1/64px, which leaves the box 1/64px short of the edge.
+     Rounding the bearing up here puts the mark back on a whole pixel. */
+  &[data-logo-size]
+    :is([data-component="sidebar"], [data-component="bare-chrome"])
+    [data-slot="logo"]
+    [data-slot="icon"] {
+    margin-inline-start: round(up, var(--bracket-bearing), 1px / 64);
+  }
+}
+
+/* Settings › Menu active: how the language picker and the docs lockup mark the current item (the
+   product switcher in public/nav-demo/switcher.css follows the same setting). Default: a check at
+   the row's end. The bracket and square markers sit before the label; the docs lockup's menu moves
+   left by the marker's width so its labels still start at the trigger's text. */
+[data-site] {
+  :is([data-component="language-picker"] [data-slot="item"], [data-component="docs-lockup"] [role="menuitem"]) {
+    [data-slot="check"] {
+      flex-shrink: 0;
+      display: block;
+    }
+  }
+
+  /* Every option but "text" sets all rows in the strong colour, like the product switcher. */
+  &[data-menu-active] [data-component="language-picker"] [data-slot="item"] {
+    color: var(--text-strong);
+  }
+
+  &[data-menu-active] :is([data-component="language-picker"], [data-component="docs-lockup"]) [data-slot="check"] {
+    display: none;
+  }
+
+  /* "[ ]" before each label and "[—]" before the current one, drawn like the sidebar's brackets:
+     regular weight, two character cells of letter-spacing between the brackets (4ch in all), a
+     0.7em gap and the dash 0.75em wide, centred. 46.5px at 15px. */
+  &[data-menu-active="brackets"]
+    :is([data-component="language-picker"] [data-slot="item"], [data-component="docs-lockup"] [role="menuitem"])
+    [data-slot="label"]::before {
+    content: "[]";
+    letter-spacing: 2ch;
+    margin-inline-end: calc(0.7em - 2ch);
+    font-weight: 400;
+    color: var(--text-weakest);
+  }
+
+  &[data-menu-active="brackets"]
+    :is(
+      [data-component="language-picker"] [data-slot="item"][data-selected="true"],
+      [data-component="docs-lockup"] [role="menuitem"][aria-current="page"]
+    )
+    [data-slot="label"]::before {
+    color: var(--text-strong);
+    background: linear-gradient(currentColor, currentColor) no-repeat calc(2ch - 0.375em) calc(50% + 0.05em) / 0.75em
+      0.09em;
+  }
+
+  /* A small filled square before the current label; the others keep the space. */
+  &[data-menu-active="square"]
+    :is([data-component="language-picker"] [data-slot="item"], [data-component="docs-lockup"] [role="menuitem"])
+    [data-slot="label"]::before {
+    content: "";
+    display: inline-block;
+    width: 0.4em;
+    height: 0.4em;
+    margin-inline-end: 0.5333em;
+    vertical-align: 0.15em;
+  }
+
+  &[data-menu-active="square"]
+    :is(
+      [data-component="language-picker"] [data-slot="item"][data-selected="true"],
+      [data-component="docs-lockup"] [role="menuitem"][aria-current="page"]
+    )
+    [data-slot="label"]::before {
+    background: currentColor;
+  }
+
+  /* The shift never takes the menu past 12px from the page's left edge: before the shift the menu
+     starts at --edge + the logo's box - 2px (the trigger's 6px padding less the row's 14px padding,
+     after the 12px gap), so a narrow logo box limits it and the labels sit a little right of the
+     trigger's text. */
+  &[data-menu-active="brackets"] [data-component="docs-lockup"] [data-slot="menu"] {
+    margin-inline-start: max(-46.5px, 14px - var(--edge) - var(--lockup-logo));
+  }
+
+  &[data-menu-active="square"] [data-component="docs-lockup"] [data-slot="menu"] {
+    margin-inline-start: max(-14px, 14px - var(--edge) - var(--lockup-logo));
+  }
+
+  /* The hover tint at half strength, kept on the current row (hover still shows at full). */
+  &[data-menu-active="tint"]
+    :is(
+      [data-component="language-picker"] [data-slot="item"][data-selected="true"],
+      [data-component="docs-lockup"] [role="menuitem"][aria-current="page"]
+    ) {
+    background: color-mix(in srgb, var(--text-strong) 4%, transparent);
+  }
+
+  /* Colour only: the others in the weak pop-up text, strong on hover. */
+  &[data-menu-active="text"]
+    :is([data-component="language-picker"] [data-slot="item"], [data-component="docs-lockup"] [role="menuitem"]) {
+    color: var(--popover-text-weak);
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+      }
+    }
+
+    &:active {
+      color: var(--text-strong);
+    }
+  }
+
+  &[data-menu-active="text"]
+    :is(
+      [data-component="language-picker"] [data-slot="item"][data-selected="true"],
+      [data-component="docs-lockup"] [role="menuitem"][aria-current="page"]
+    ) {
+    color: var(--text-strong);
+  }
+
+  /* A 2px bar on the menu's left edge, overlapping its 1px border, the full height of the row. */
+  &[data-menu-active="bar"]
+    :is(
+      [data-component="language-picker"] [data-slot="item"][data-selected="true"],
+      [data-component="docs-lockup"] [role="menuitem"][aria-current="page"]
+    ) {
+    position: relative;
+
+    &::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      inset-inline-start: -1px;
+      width: 2px;
+      background: var(--menu-bar);
+      opacity: 1;
+    }
+  }
+}
+
+/* Phones: the docs lockup's sheet stays full width, so its rows indent less instead. */
+@media (max-width: 60rem) {
+  /* The rows indent 44px, less than the 46.5px marker: the marker hangs into the sheet's padding. */
+  [data-site][data-menu-active="brackets"] [data-component="docs-lockup"] [data-slot="menu"] {
+    margin-inline-start: 0;
+
+    [role="menuitem"] {
+      padding-inline-start: 0;
+    }
+
+    [data-slot="label"] {
+      margin-inline-start: calc(var(--lockup-text) - 12px - 46.5px);
+    }
+  }
+
+  [data-site][data-menu-active="square"] [data-component="docs-lockup"] [data-slot="menu"] {
+    margin-inline-start: 0;
+
+    [role="menuitem"] {
+      padding-inline-start: calc(var(--lockup-text) - 12px - 14px);
+    }
+  }
+}
+
+/* Settings › Light background: the off-white options. Pure white is the default. The page behind
+   the site follows, so pulling past the top or bottom shows the same colour. */
+[data-site][data-light-bg="fbfbfb"] {
+  --bg: light-dark(#fbfbfb, #0c0c0c);
+}
+
+html:has([data-site][data-light-bg="fbfbfb"]) {
+  background-color: light-dark(#fbfbfb, #0c0c0c);
+}
+
+[data-site][data-light-bg="fcfcfc"] {
+  --bg: light-dark(#fcfcfc, #0c0c0c);
+}
+
+html:has([data-site][data-light-bg="fcfcfc"]) {
+  background-color: light-dark(#fcfcfc, #0c0c0c);
+}
+
+[data-site][data-light-bg="fdfdfd"] {
+  --bg: light-dark(#fdfdfd, #0c0c0c);
+}
+
+html:has([data-site][data-light-bg="fdfdfd"]) {
+  background-color: light-dark(#fdfdfd, #0c0c0c);
+}
+
+[data-site][data-light-bg="fefefe"] {
+  --bg: light-dark(#fefefe, #0c0c0c);
+}
+
+html:has([data-site][data-light-bg="fefefe"]) {
+  background-color: light-dark(#fefefe, #0c0c0c);
+}
+
+/* Footer links that leave the site (Community) get the nav's corner arrow, revealed on hover. */
+[data-site] [data-component="footer-columns"] a:has([data-slot="external"]) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+[data-site] :is([data-component="secondary-nav"], [data-component="footer-columns"], [data-component="status"]) {
+  [data-slot="external"] {
+    flex-shrink: 0;
+    margin-inline-start: calc(4px - 0.625rem);
+    translate: calc(-3px * var(--x-dir, 1)) -2px;
+    opacity: 0;
+    transition:
+      opacity 150ms ease,
+      translate 200ms var(--ease-out);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    a:hover [data-slot="external"] {
+      opacity: 1;
+      translate: 0 -2px;
+    }
+  }
+
+  a:focus-visible [data-slot="external"] {
+    opacity: 1;
+    translate: 0 -2px;
+  }
+
+  /* The status link opens status.opencode.ai in a new tab: the same arrow after its label. */
+  &[data-component="status"]:focus-visible [data-slot="external"] {
+    opacity: 1;
+    translate: 0 -2px;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &[data-component="status"]:hover [data-slot="external"] {
+      opacity: 1;
+      translate: 0 -2px;
+    }
+  }
+
+  @media (hover: none), (pointer: coarse) {
+    [data-slot="external"] {
+      opacity: 1;
+      translate: 0 -2px;
+    }
+  }
+}
+
+/* Set before first paint on parts a saved setting will re-render on mount; the space stays. */
+[data-site] [data-settling] {
+  visibility: hidden;
+}
+
+/* Settings › Nav numbers "1" (the default; the root's data-nav-numbers="1"): plain "[1]" numbers.
+   The leading zero renders but hides, so the setting applies before hydration. The brackets' ink
+   narrows to 3 cells less the two bearings (1.492em), and the logo's box with it: the mark sits
+   centred over "[1]" and as far from the top as from the left (the Logo size rules above follow
+   --bracket-ink). The footer and docs nav mark the current page with the mono hyphen, "[-]", and
+   the status bars shrink to the same 3-cell box. "01" keeps everything as it was. `html` outranks
+   the footer and docs page rules. */
+html [data-site][data-nav-numbers="1"] {
+  --bracket-ink: calc(var(--mono-size) * 1.492);
+
+  [data-slot="pad"] {
+    display: none;
+  }
+
+  [data-slot="box"] [data-slot="fill"] {
+    width: 1ch;
+    translate: none;
+  }
+
+  [data-slot="box"] [data-slot="fill"]::before {
+    content: "-";
+    width: auto;
+    height: auto;
+    background: none;
+    color: var(--text-strong);
+  }
+
+  /* The status bars' box is 3 cells wide here (Settings › Status bars sets the bars). */
+  [data-component="status"] [data-slot="bars"] {
+    width: 3ch;
+  }
+}
+
+/* The logo link is wider than the mark (it reserves the bracket bearing), so a ring on the link sits
+   off-centre. Keyboard focus draws an even ring around the mark itself instead. */
+[data-site] [data-slot="logo"]:focus-visible {
+  outline: none;
+
+  [data-slot="icon"] {
+    outline: 1px solid var(--link);
+    outline-offset: 3px;
+  }
+}
+
+/* Settings › Status bars: 3 to 6 bars, the most recent last (all six render; the older ones hide),
+   on whole pixels. The box starts at the brackets' ink, which is the whole-pixel --edge (the list
+   starts a bracket bearing before it), and is the ink span rounded to whole pixels: "[1]" 22px at
+   15px and 24px at 16px, "[01]" 31px and 33px. Each bar is the widest whole width that fits with
+   1px gaps; a leftover pixel pair splits as equal outer margins, and an odd one goes on the right.
+   Box width stays 3 or 4 cells so the label lines up with the other links. */
+html [data-site] [data-component="status"] [data-slot="bars"] {
+  /* Layout rounds the list's start (--edge less the bearing) down to 1/64px; rounding the bearing
+     up lands the bars back on the whole-pixel edge, as the sidebar logo does. */
+  padding-block: 0;
+  padding-inline: round(up, var(--bracket-bearing), 1px / 64) 0;
+  gap: 1px;
+  justify-content: flex-start;
+
+  span {
+    flex: 0 0 var(--status-bar-w);
+  }
+}
+
+html [data-site][data-status-bars="3"] [data-component="status"] [data-slot="bars"] span {
+  &:nth-last-child(n + 4) {
+    display: none;
+  }
+
+  &:nth-last-child(3) {
+    margin-inline-start: var(--status-bar-m);
+  }
+}
+
+html [data-site][data-status-bars="4"] [data-component="status"] [data-slot="bars"] span {
+  &:nth-last-child(n + 5) {
+    display: none;
+  }
+
+  &:nth-last-child(4) {
+    margin-inline-start: var(--status-bar-m);
+  }
+}
+
+html [data-site][data-status-bars="5"] [data-component="status"] [data-slot="bars"] span {
+  &:nth-last-child(n + 6) {
+    display: none;
+  }
+
+  &:nth-last-child(5) {
+    margin-inline-start: var(--status-bar-m);
+  }
+}
+
+html [data-site][data-status-bars="6"] [data-component="status"] [data-slot="bars"] span {
+  &:nth-last-child(n + 7) {
+    display: none;
+  }
+
+  &:nth-last-child(6) {
+    margin-inline-start: var(--status-bar-m);
+  }
+}
+
+html [data-site][data-status-bars="3"] {
+  --status-bar-w: 9px;
+  --status-bar-m: 1px;
+}
+
+html [data-site][data-status-bars="4"] {
+  --status-bar-w: 7px;
+  --status-bar-m: 0px;
+}
+
+html [data-site][data-status-bars="5"] {
+  --status-bar-w: 5px;
+  --status-bar-m: 1px;
+}
+
+html [data-site][data-status-bars="6"] {
+  --status-bar-w: 4px;
+  --status-bar-m: 1px;
+}
+
+html [data-site][data-nav-numbers="1"][data-status-bars="3"] {
+  --status-bar-w: 6px;
+  --status-bar-m: 1px;
+}
+
+html [data-site][data-nav-numbers="1"][data-status-bars="4"] {
+  --status-bar-w: 4px;
+  --status-bar-m: 1px;
+}
+
+html [data-site][data-nav-numbers="1"][data-status-bars="5"] {
+  --status-bar-w: 3px;
+  --status-bar-m: 1px;
+}
+
+html [data-site][data-nav-numbers="1"][data-status-bars="6"] {
+  --status-bar-w: 2px;
+  --status-bar-m: 2px;
+}
+
+@media (max-width: 60rem) {
+  html [data-site][data-status-bars="3"] {
+    --status-bar-w: 10px;
+    --status-bar-m: 0px;
+  }
+
+  html [data-site][data-status-bars="4"] {
+    --status-bar-w: 7px;
+    --status-bar-m: 1px;
+  }
+
+  html [data-site][data-status-bars="5"] {
+    --status-bar-w: 5px;
+    --status-bar-m: 2px;
+  }
+
+  html [data-site][data-status-bars="6"] {
+    --status-bar-w: 4px;
+    --status-bar-m: 2px;
+  }
+
+  html [data-site][data-nav-numbers="1"][data-status-bars="3"] {
+    --status-bar-w: 7px;
+    --status-bar-m: 0px;
+  }
+
+  html [data-site][data-nav-numbers="1"][data-status-bars="4"] {
+    --status-bar-w: 5px;
+    --status-bar-m: 0px;
+  }
+
+  html [data-site][data-nav-numbers="1"][data-status-bars="5"] {
+    --status-bar-w: 4px;
+    --status-bar-m: 0px;
+  }
+
+  html [data-site][data-nav-numbers="1"][data-status-bars="6"] {
+    --status-bar-w: 3px;
+    --status-bar-m: 0px;
+  }
+}
+
+/* Settings › Menu align "edge": the menu's left edge lines up with the trigger's box, the left edge
+   of its hover background (its 6px padding before the text; the labels then sit the row's 14px
+   padding in from the edge), whatever Menu active's marker. The phone sheet stays full width. */
+[data-site][data-menu-align="edge"] [data-component="docs-lockup"] [data-slot="menu"] {
+  margin-inline-start: calc(14px - 6px);
+}
+
+@media (max-width: 60rem) {
+  [data-site][data-menu-align="edge"] [data-component="docs-lockup"] [data-slot="menu"] {
+    margin-inline-start: 0;
+  }
+}
+
+/* Settings › Button hover: "blue" fills the button with the link blue and drops the ring; "blue +
+   ring" keeps the ring too. The default ("ring") is the base button rule. */
+@media (hover: hover) and (pointer: fine) {
+  [data-site]:is([data-button-hover="blue"], [data-button-hover="blue-ring"])
+    [data-component="site-button"]:not([data-variant="neutral"]):hover {
+    background: var(--link);
+    color: #fff;
+  }
+
+  [data-site][data-button-hover="blue"] [data-component="site-button"]:hover {
+    outline-color: transparent;
+  }
+}
+
+/* A button whose menu is open keeps its hover look for as long as the menu shows (Install,
+   Download for mobile, and any other button with a pop-up). */
+[data-site] [data-component="site-button"][aria-expanded="true"]:not([data-variant="neutral"]) {
+  background: var(--bg-strong-hover);
+  outline-color: var(--link);
+}
+
+/* With Button hover "blue", an open menu's button fills blue, a split button's chevron too, so the
+   half that opened the menu stays lit while the pointer is away. */
+[data-site]:is([data-button-hover="blue"], [data-button-hover="blue-ring"])
+  [data-component="site-button"][aria-expanded="true"]:not([data-variant="neutral"]) {
+  background: var(--link);
+  color: #fff;
+}
+
+[data-site][data-button-hover="blue"] [data-component="site-button"][aria-expanded="true"]:not(:focus-visible) {
+  outline-color: transparent;
+}
+
+[data-site] [data-component="site-button"][data-variant="neutral"][aria-expanded="true"] {
+  background: var(--border);
+}
+
+/* Settings › Product button "grey" (default): only the product actions in lists (the /product
+   page's list Install buttons and its download rows, and the product pages' Download sections) use
+   the neutral button, hover darkening the grey with no blue fill or ring. Focus keeps its ring. The
+   product cards (the /product grid, like the home carousel) and the product and extension pages'
+   hero action keep the primary button. */
+[data-site]:not([data-product-button="black"])
+  :is(
+    [data-component="product-list"] li,
+    [data-page="products"] [data-component="download-list"] li,
+    [data-slot="product-download"] [data-component="download-list"] li
+  )
+  [data-component="site-button"]:not([data-variant]) {
+  background: var(--bg-weaker);
+  color: var(--text-strong);
+
+  &:focus-visible {
+    outline-color: var(--link);
+  }
+
+  &[aria-expanded="true"] {
+    background: var(--border);
+    color: var(--text-strong);
+    outline-color: transparent;
+  }
+
+  /* A split button's chevron fills blue while its menu is open, as on the dark cards. */
+  [data-site]:is([data-button-hover="blue"], [data-button-hover="blue-ring"])
+    &[data-slot="split-toggle"][aria-expanded="true"] {
+    background: var(--link);
+    color: #fff;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      background: var(--border);
+      color: var(--text-strong);
+    }
+
+    &:hover:not(:focus-visible) {
+      outline-color: transparent;
+    }
+  }
+
+  &:active {
+    background: var(--border);
+    color: var(--text-strong);
+  }
+
+  &:active:not(:focus-visible) {
+    outline-color: transparent;
+  }
+}
+
+/* Inline code inside running text, everywhere on the site: mono, a step smaller, on a light grey
+   chip. Code blocks (pre) and components with their own code styling opt out. */
+[data-site] :where(p, li, td, dd, figcaption, blockquote) :where(code):not(pre code) {
+  padding: 0.1em 0.3em;
+  background: var(--bg-weaker);
+  font-family: var(--font-mono);
+  font-size: calc(0.875em + 1px);
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+
+/* Settings › NEW badges: the product cards' "NEW" badge (home carousel and /product) shows only when
+   chosen. An attribute, so the pre-paint script applies a saved choice before first paint. */
+[data-site]:not([data-product-badges="show"]) [data-component="product-card"] [data-slot="badge"] {
+  display: none;
+}
+
+/* No one-word last lines: paragraphs wrap "pretty" and headings "balance" across the site. Zero
+   specificity, so any component that sets its own text-wrap keeps it. */
+:where([data-site]) :where(p, li, dd) {
+  text-wrap: pretty;
+}
+
+:where([data-site]) :where(h1, h2, h3, h4) {
+  text-wrap: balance;
+}
+
+/* Install commands that copy when clicked (copyOnClick in lib/clipboard.ts): the download rows, the
+   Terminal page's install tabs, the home Get started window and the docs' install tabs. A pointer,
+   and on hover their Copy button takes its own hover look, since clicking either does the same; only
+   the button says "Copied". */
+[data-copy-command] {
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-slot="copy-row"]:has([data-copy-command]:hover) [data-component="site-button"][data-variant="neutral"] {
+    background: var(--border);
+  }
+
+  :is([data-component="install-tabs"] [data-slot="code"], [data-slot="window"]):has([data-copy-command]:hover)
+    [data-slot="copy"] {
+    color: var(--text-strong);
+  }
+
+  [data-page="docs"] [data-component="code-tabs"] [data-slot="code"]:has([data-copy-command]:hover) [data-slot="copy"] {
+    color: var(--code-text);
+  }
+}
+
+/* Section and card headings never end on one orphan word ("Use free / models"; balance splits a
+   three-word title 2 + 1). One element's specificity, so it replaces the base balance (app.css h1–h6
+   and the :where rule above) while every heading that sets its own text-wrap in a component (the
+   changelog, legal and feature titles) keeps it. h1 page titles and fit-to-width display text are
+   untouched. Approved by David (5 Nov). */
+:where([data-site]) :is(h2, h3) {
+  text-wrap: pretty;
+}

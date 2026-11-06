@@ -47,7 +47,7 @@ export const Info = Persistence.struct({
 
 export const Infos = Schema.Record(Schema.String, Schema.mutableKey(Info))
 
-// The side region keeps the name it was stored under before extensions.
+// The side region keeps the name it was stored under before plugins.
 export const Regions = Schema.Record(
   Schema.String,
   Schema.mutableKey(

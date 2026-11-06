@@ -1,0 +1,478 @@
+/* The page around an arcade 404 scene (chrome.tsx). site.css is not loaded on this route, so the
+   site's variables the shared search and tooltips need are set here, in their dark values, and the
+   logo and nav repeat the sidebar's measurements (site.css: [data-component="sidebar"], the logo,
+   the "index" nav and Nav numbers "1"). */
+
+[data-component="arcade-chrome"] {
+  /* The site's own tokens (site.css), always resolved to their dark values: the overlay sits on a
+     photograph of a dark room whatever the site theme is. */
+  color-scheme: dark;
+  --bg: light-dark(hsl(0, 0%, 98.5%), #0c0c0c);
+  --bg-weak: light-dark(hsl(0, 0%, 96%), hsl(0, 0%, 10%));
+  --text-strong: light-dark(hsl(0, 0%, 8%), hsl(0, 0%, 95%));
+  --text: light-dark(hsl(0, 0%, 32%), hsl(0, 0%, 72%));
+  --text-weak: light-dark(hsl(0, 0%, 40%), hsl(0, 0%, 56%));
+  --text-weaker: light-dark(hsl(0, 0%, 72%), hsl(0, 0%, 32%));
+  --text-muted: light-dark(hsl(0, 0%, 45%), hsl(0, 0%, 49%));
+  --fs-large: 18px;
+  --border: light-dark(hsl(0, 0%, 88%), hsl(0, 0%, 18%));
+  --link-dark: #4f8bff;
+  --link: light-dark(#3b5cf6, var(--link-dark));
+  --popover-bg: light-dark(hsl(0, 0%, 100%), hsl(0, 0%, 10%));
+  --popover-text-weak: light-dark(hsl(0, 0%, 40%), hsl(0, 0%, 64%));
+  --popover-shadow: 0 0 0 1px rgb(255 255 255 / 0.1), 0 8px 24px -8px rgb(0 0 0 / 0.6);
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono:
+    "OpenTUI Mono", "OC Arabic", "OC Thai", "OpenTUI Mono Menlo", "OpenTUI Mono Consolas", "OpenTUI Mono Courier",
+    ui-monospace, monospace;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  /* The site's menu grey (site.css › Settings › Menu color). */
+  --menu-hover: light-dark(hsl(0, 0%, 94.5%), hsl(0, 0%, 13.5%));
+  --menu-press: light-dark(hsl(0, 0%, 91%), hsl(0, 0%, 17%));
+  --menu-hint: light-dark(hsl(0, 0%, 66%), hsl(0, 0%, 34%));
+  --menu-bar: light-dark(hsl(0, 0%, 40%), hsl(0, 0%, 62%));
+  --logo-inner: light-dark(#d2d2d2, #4b4b4b);
+  --logo-code: light-dark(#1f1f1f, #eeeeee);
+  --edge: 1.5rem;
+  --gutter: 1rem;
+  --sidebar-width: 14.75rem;
+  --topbar-height: 3.5rem;
+  --page-offset: 0px;
+  /* The ⌘K hint (search.css), left of the Settings button. */
+  --search-hint-right: calc(4.75rem + env(safe-area-inset-right, 0px));
+  --mono-size: 15px;
+  --bracket-bearing: calc(var(--mono-size) * 0.154);
+  /* Nav numbers "1": the ink of "[1]", which the logo's box spans. */
+  --bracket-ink: calc(var(--mono-size) * 1.492);
+  /* Settings › Logo size 20×25 (the default): the mark is 20×25, centred in the 4:5 box that spans
+     "[1]"'s ink as on the site (site.css › --logo-inset), so it sits at (25, 25) on every page; the
+     nav follows 8px further below it than the row sits below the top. */
+  --logo-inset: round(calc((var(--bracket-ink) - 20px) / 2), 1px);
+  --top: calc(var(--edge) + var(--logo-inset));
+  --logo-height: 25px;
+  --logo-gap: calc(var(--edge) + 8px);
+  /* Where the logo mark and the nav's ink start: the sound switch sits this far from the left and
+     from the bottom. On small screens the mark is centred 2px into its 24px box. */
+  --arcade-inset: var(--edge);
+
+  font-family: var(--font-mono);
+
+  @media (max-width: 60rem) {
+    --arcade-inset: calc(var(--edge) + 2px);
+    /* The site's mobile type scale (site.css), for the menu sheet. */
+    --fs-large: 19px;
+  }
+
+  [data-slot="title"] {
+    position: absolute;
+    top: 0;
+    inset-inline-start: 0;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* A soft darkening under the nav only (no edge), so it stays readable over the brightest parts of
+     the room. It sits outside the blended nav, since a "screen" layer can only lighten. */
+  [data-slot="shade"] {
+    position: fixed;
+    top: 0;
+    inset-inline-start: 0;
+    z-index: 10;
+    width: 24rem;
+    height: 28rem;
+    pointer-events: none;
+    /* Centred on the nav list; dense where the letters are, fading out well before its edge. */
+    background: radial-gradient(
+      closest-side at 20% 38%,
+      rgb(0 0 0 / 0.74),
+      rgb(0 0 0 / 0.55) 50%,
+      rgb(0 0 0 / 0.18) 80%,
+      transparent
+    );
+    /* Settings › 404 arcade › Nav shade. */
+    opacity: var(--arcade-shade, 1);
+  }
+
+  &:dir(rtl) [data-slot="shade"] {
+    background: radial-gradient(
+      closest-side at 80% 38%,
+      rgb(0 0 0 / 0.74),
+      rgb(0 0 0 / 0.55) 50%,
+      rgb(0 0 0 / 0.18) 80%,
+      transparent
+    );
+  }
+
+  /* The logo and nav add light to the photograph ("screen"), like lettering lit by the room. With
+     keyboard focus inside, they draw normally so the focus ring is never blended. */
+  [data-slot="sidebar"] {
+    position: fixed;
+    top: 0;
+    inset-inline-start: 0;
+    z-index: 11;
+    display: flex;
+    flex-direction: column;
+    gap: var(--logo-gap);
+    padding-block: var(--top) 0;
+    padding-inline: calc(var(--edge) - var(--bracket-bearing)) var(--gutter);
+    mix-blend-mode: screen;
+
+    &:has(:focus-visible) {
+      mix-blend-mode: normal;
+    }
+  }
+
+  /* Settings › 404 arcade › Nav blend. */
+  &[data-blend="plus-lighter"] [data-slot="sidebar"]:not(:has(:focus-visible)) {
+    mix-blend-mode: plus-lighter;
+  }
+
+  &[data-blend="normal"] [data-slot="sidebar"] {
+    mix-blend-mode: normal;
+  }
+
+  [data-slot="logo"] {
+    display: inline-flex;
+    align-self: flex-start;
+
+    svg {
+      display: block;
+      width: 20px;
+      height: 25px;
+      margin-inline-start: calc(round(up, var(--bracket-bearing), 1px / 64) + var(--logo-inset));
+    }
+
+    path[data-slot="inner"] {
+      fill: var(--logo-inner);
+    }
+
+    path[data-slot="code"] {
+      fill: var(--logo-code);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+      outline-offset: 4px;
+    }
+  }
+
+  [data-slot="sidebar"] nav {
+    font-size: var(--mono-size);
+    line-height: 20px;
+
+    ul {
+      display: flex;
+      flex-direction: column;
+      gap: 1.3rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    a {
+      display: flex;
+      align-items: baseline;
+      gap: 0.625rem;
+      padding-block: 0.65rem;
+      margin-block: -0.65rem;
+      color: var(--text-weak);
+      text-decoration: none;
+      transition: color 150ms ease;
+
+      > span {
+        text-box: trim-both cap alphabetic;
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--text-strong);
+
+          [data-slot="index"] {
+            color: var(--text-strong);
+          }
+        }
+      }
+
+      &:active {
+        color: var(--text-strong);
+
+        [data-slot="index"] {
+          color: var(--text-strong);
+        }
+      }
+
+      &:focus-visible {
+        color: var(--text-strong);
+        outline: 2px solid var(--link);
+        outline-offset: 4px;
+
+        [data-slot="index"] {
+          color: var(--text-strong);
+        }
+      }
+    }
+
+    /* A step brighter than the site's index grey, to keep 4.5 : 1 on the photograph. */
+    [data-slot="index"] {
+      color: hsl(0, 0%, 54%);
+      transition: color 150ms ease;
+    }
+  }
+
+  /* Small screens: like the site's top bar, the 20×25 mark centred in a 24×30 box in the 56px bar
+     (at 26, 16), without the nav. */
+  @media (max-width: 60rem) {
+    [data-slot="sidebar"] {
+      padding-block: calc(13px + env(safe-area-inset-top, 0px)) 0;
+      padding-inline: calc(var(--edge) + env(safe-area-inset-left, 0px)) 0;
+    }
+
+    [data-slot="shade"] {
+      width: 9rem;
+      height: 6rem;
+    }
+
+    [data-slot="logo"] svg {
+      margin: 3px 2px 2px;
+    }
+
+    [data-slot="sidebar"] nav {
+      display: none;
+    }
+
+    /* Over the phone bar, which takes the page colour while its menu is open. */
+    [data-slot="sidebar"] {
+      z-index: 13;
+    }
+  }
+}
+
+/* Small screens: the site's top-bar GitHub mark and menu button (github-link.css, phone-menu.css) in
+   the 56px bar the logo is centred in, at the site's sizes and spacing, over the scene. The menu
+   sheet covers the scene below the bar, and the bar takes the page colour with it (at once on open,
+   with the sheet's 120ms fade on close), as on the site. `html` and the doubled scope outrank
+   site.css's own [data-site] rules once the Settings panel loads it. */
+html [data-component="arcade-chrome"] [data-site][data-slot="phone-bar"] {
+  display: none;
+}
+
+@media (max-width: 60rem) {
+  html [data-component="arcade-chrome"] [data-site][data-slot="phone-bar"] {
+    position: fixed;
+    top: 0;
+    inset-inline: 0;
+    z-index: 12;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    height: calc(var(--topbar-height) + env(safe-area-inset-top, 0px));
+    min-height: 0;
+    padding: env(safe-area-inset-top, 0px) calc(var(--edge) + env(safe-area-inset-right, 0px)) 0
+      calc(var(--edge) + env(safe-area-inset-left, 0px));
+    background: none;
+    pointer-events: none;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: var(--bg);
+      opacity: 0;
+      transition: opacity 120ms var(--ease-out);
+    }
+
+    &:has([data-component="menu-toggle"][aria-expanded="true"])::before {
+      opacity: 1;
+      transition: none;
+    }
+
+    > :is([data-component="github-link"], [data-component="menu-toggle"]),
+    [data-component="site-menu-sheet"][data-open] {
+      pointer-events: auto;
+    }
+
+    [data-component="github-link"] {
+      margin-inline-end: 0.5rem;
+
+      &:focus-visible {
+        outline: 2px solid var(--link);
+        outline-offset: -2px;
+      }
+    }
+
+    [data-component="menu-toggle"] {
+      padding: 0;
+      font: inherit;
+      color: inherit;
+      background: none;
+      border: 0;
+      cursor: pointer;
+
+      &:focus-visible {
+        outline: 2px solid var(--link);
+        outline-offset: -2px;
+      }
+    }
+
+    a {
+      text-decoration: none;
+    }
+
+    ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    /* The site's touch targets (tap-targets.css): a 44px GitHub link, and the same press. */
+    @media (pointer: coarse) {
+      --github-size: 2.75rem;
+
+      > :is([data-component="github-link"], [data-component="menu-toggle"]) {
+        transition: transform 160ms var(--ease-out);
+
+        &:active {
+          transform: scale(0.94);
+        }
+      }
+    }
+  }
+}
+
+/* The site's own tools (search, tooltips, Settings) sit in a [data-site] scope of their own. Once
+   the Settings panel brings site.css, its page-root rules for [data-site] must not turn this scope
+   into a full-height block, hence the extra specificity. */
+html [data-component="arcade-chrome"] [data-site][data-slot="site-tools"] {
+  /* Fixed elements always make a stacking context, so the scope itself sits above the scene. */
+  position: fixed;
+  z-index: 20;
+  top: 0;
+  inset-inline-start: 0;
+  width: 0;
+  height: 0;
+  min-height: 0;
+  overflow: visible;
+  background: none;
+
+  /* The Settings button in the bottom-right corner, as far from the edges as the sound switch. */
+  [data-slot="settings-button"] {
+    position: fixed;
+    inset-inline-end: calc(var(--arcade-inset, 1.5rem) + env(safe-area-inset-right, 0px));
+    bottom: calc(var(--arcade-inset, 1.5rem) + env(safe-area-inset-bottom, 0px));
+    z-index: 12;
+    width: 2rem;
+    height: 1.75rem;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    color: hsl(0, 0%, 56%);
+    border: 1px solid hsl(0, 0%, 18%);
+    background: rgb(12 12 12 / 0.6);
+    cursor: pointer;
+    transition:
+      color 150ms ease,
+      border-color 150ms ease;
+
+    &[aria-expanded="true"] {
+      color: hsl(0, 0%, 95%);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: hsl(0, 0%, 95%);
+        border-color: hsl(0, 0%, 28%);
+      }
+    }
+
+    &:active {
+      color: hsl(0, 0%, 95%);
+      border-color: hsl(0, 0%, 28%);
+    }
+
+    &:focus-visible {
+      outline: 2px solid #4f8bff;
+      outline-offset: 2px;
+    }
+  }
+
+  [data-slot="setting-reset"] {
+    margin-top: 0.5rem;
+    width: 100%;
+    height: 1.75rem;
+    font: inherit;
+    font-size: 12px;
+    color: var(--text-strong);
+    background: none;
+    border: 1px solid var(--border);
+    cursor: pointer;
+  }
+}
+
+/* Large screens (4K, ultrawide): the scene stops growing at the room shot's real size (2752 × 1548)
+   and at 2.1 : 1, centred, and where it stops it fades into the page colour on the left, right and
+   bottom instead of showing a hard edge or upscaling. Shared by both versions: the image version's
+   stage and the three.js version's root, which each measure themselves, so the camera framing
+   follows. Normal screens are untouched: the caps only bite past those sizes. */
+[data-component="arcade-404"] {
+  --arcade-frame-width: min(100vw, 2752px, 210svh);
+  --arcade-frame-height: min(100svh, 1548px);
+  --arcade-fade-x: 0%;
+  --arcade-fade-y: 0%;
+
+  @media (min-width: 2753px) or (min-aspect-ratio: 21 / 10) {
+    --arcade-fade-x: 12%;
+  }
+
+  @media (min-height: 1549px) {
+    --arcade-fade-y: 12%;
+  }
+}
+
+[data-component="arcade-404"]:not([data-variant]) {
+  display: grid;
+  place-items: center;
+
+  > [data-slot="stage"] {
+    width: var(--arcade-frame-width);
+    height: var(--arcade-frame-height);
+  }
+}
+
+html [data-component="arcade-404"][data-variant="3d"] {
+  inset: 0;
+  margin: auto;
+  /* It shares the image version's root rules, whose page-height minimum would undo the cap. */
+  min-height: 0;
+  width: var(--arcade-frame-width);
+  height: var(--arcade-frame-height);
+}
+
+/* The fades, above the scene and below the corner controls (which stay on the viewport corners). */
+:is(
+  [data-component="arcade-404"]:not([data-variant]) > [data-slot="stage"],
+  [data-component="arcade-404"][data-variant="3d"]
+)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+  background:
+    linear-gradient(to right, var(--tone-backdrop), transparent var(--arcade-fade-x)),
+    linear-gradient(to left, var(--tone-backdrop), transparent var(--arcade-fade-x)),
+    linear-gradient(to top, var(--tone-backdrop), transparent var(--arcade-fade-y)),
+    linear-gradient(to bottom, var(--tone-backdrop), transparent calc(var(--arcade-fade-y) / 3));
+  opacity: 0;
+}
+
+@media (min-width: 2753px) or (min-aspect-ratio: 21 / 10) or (min-height: 1549px) {
+  :is(
+    [data-component="arcade-404"]:not([data-variant]) > [data-slot="stage"],
+    [data-component="arcade-404"][data-variant="3d"]
+  )::after {
+    opacity: 1;
+  }
+}

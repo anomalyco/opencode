@@ -1,0 +1,61 @@
+dist
+.wrangler
+.output
+.cloudflare
+.vercel
+.netlify
+app.config.timestamp_*.js
+
+# Environment
+.env*
+.dev.vars*
+
+# dependencies
+/node_modules
+
+# IDEs and editors
+/.idea
+.project
+.classpath
+*.launch
+.settings/
+
+# Temp
+gitignore
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Built by textjs/ (script/build.ts)
+/public/textjs
+
+# Written by script/build-stamp.ts (bun run build / dev)
+/src/lib/build-stamp.json
+
+# Written by `bun run generate` (packages/protocol/openapi.json, packages/schema/script/config-schema.ts and
+# packages/cli/script/schema.ts)
+/public/openapi.json
+/public/config.json
+/public/v2/openapi.json
+/public/v2/cli.json
+
+# Written by script/github-snapshot.ts (bun run build)
+/src/lib/github-snapshot.json
+
+# Written by script/og.ts (bun run build / dev)
+/public/og
+/src/lib/og-images.json
+
+# Heavy media lives in the files bucket behind /files, not in git (MEDIA.md, src/lib/media.ts,
+# script/upload-media.ts).
+/public/**/*.mp4
+/public/**/*.webm
+/public/**/*.mov
+/public/**/*.mp3
+/public/**/*.wav
+/public/**/*.ogg
+/public/**/*.m4a
+/public/**/*.zip
+/public/**/*.glb
+/public/**/*.gltf

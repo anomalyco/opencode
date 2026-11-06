@@ -5,7 +5,8 @@ import os from "node:os"
 import path from "node:path"
 
 const catalog = process.env.OPENCODE_MODELS_SNAPSHOT
-const binary = process.argv[2]
+// Resolved before spawning: the binary runs from a temporary directory.
+const binary = process.argv[2] && path.resolve(process.argv[2])
 if (!catalog || !binary) throw new Error("Usage: OPENCODE_MODELS_SNAPSHOT=<catalog> catalog-smoke.ts <binary>")
 
 const providers: Record<string, { env?: string[] }> = await Bun.file(catalog).json()

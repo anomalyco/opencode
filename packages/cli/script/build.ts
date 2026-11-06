@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
+import { createHash } from "node:crypto"
 import { mkdir, rm } from "fs/promises"
 import path from "path"
 import { Script } from "@opencode/script"
@@ -29,7 +30,7 @@ await rm(outdir, { recursive: true, force: true })
 
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
-const requestedTarget = process.argv.find((arg) => arg.startsWith("--target="))?.slice("--target=".length)
+const requestedTarget = process.env.OPENCODE_TARGET
 const skipInstall = process.argv.includes("--skip-install")
 const skipWebUi = process.argv.includes("--skip-web-ui")
 const solidPlugin = createSolidTransformPlugin()
@@ -59,7 +60,7 @@ const allTargets: {
 
 const targets =
   requestedTarget !== undefined
-    ? allTargets.filter((item) => targetName(item) === requestedTarget)
+    ? allTargets.filter((item) => targetName(item) === `${binary}-${requestedTarget}`)
     : singleFlag
       ? allTargets.filter((item) => {
           if (item.os !== process.platform || item.arch !== process.arch) return false
@@ -71,9 +72,9 @@ if (!targets.length) throw new Error(`Unknown build target: ${requestedTarget}`)
 
 // Bun 1.4.4 skips native packages for the other libc by default, but the musl targets need them.
 if (!skipInstall)
-  await $`bun install --os="*" --cpu="*" --libc="*" @opentui/core@${pkg.dependencies["@opentui/core"]} @opencode-ai/pty@${pkg.dependencies["@opencode-ai/pty"]}`
+  await $`bun install --os="*" --cpu="*" --libc="*" @opentui/core@${pkg.dependencies["@opentui/core"]} @opencode/pty@${pkg.dependencies["@opencode/pty"]}`
 const appArchive = path.join(dir, ".cache", "bun-app-archive.bin")
-await Bun.write(appArchive, await buildAppArchive(Script.channel, { skipBuild: skipWebUi }))
+await Bun.write(appArchive, await buildAppArchive(Script.channel, Script.version, { skipBuild: skipWebUi }))
 const appAssetsPlugin: BunPlugin = {
   name: "opencode-app-assets",
   setup(build) {
@@ -110,6 +111,18 @@ const pluginRuntimePlugin: BunPlugin = {
     build.onLoad({ filter: /[/\\]internal[/\\]httpApi(?:Scalar|Swagger)\.js$/ }, () => ({
       contents:
         'export const css = ""; export const javascript = \'document.body.textContent = "Scalar/Swagger UI assets are not bundled in OpenCode"\'',
+      loader: "js",
+    }))
+  },
+}
+// Bun drops `export * from "ws"` in this sideEffects-free module, leaving NodeWS.WebSocketServer undefined and
+// failing every WebSocket upgrade in the compiled binary. Bun's built-in ws has no PerMessageDeflate.
+const wsReexportPlugin: BunPlugin = {
+  name: "ws-named-reexports",
+  setup(build) {
+    build.onLoad({ filter: /platform-node-shared[/\\]dist[/\\]NodeWS\.js$/ }, () => ({
+      contents:
+        'export { createWebSocketStream, extension, Receiver, Sender, subprotocol, WebSocket, WebSocketServer } from "ws"',
       loader: "js",
     }))
   },
@@ -166,6 +179,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
       parcelWatcherPlugin,
       opencodePtyPlugin,
       pluginRuntimePlugin,
+      wsReexportPlugin,
       simulationGraphPlugin,
       modelsSnapshot,
     ],
@@ -252,16 +266,31 @@ async function compileExecutable(item: (typeof allTargets)[number]) {
   const assets = await compileReleaseAssets(release)
   const url = assets.get(`${name}.zip`)
   if (!url) throw new Error(`Bun release ${release} does not include ${name}.zip`)
+  const sumsUrl = assets.get("SHASUMS256.txt")
+  if (!sumsUrl) throw new Error(`Bun release ${release} does not include SHASUMS256.txt`)
   const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN
-  const response = await fetch(url, {
-    headers: { Accept: "application/octet-stream", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-  })
+  const headers = { Accept: "application/octet-stream", ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+  const [response, sums] = await Promise.all([fetch(url, { headers }), fetch(sumsUrl, { headers })])
   if (!response.ok) throw new Error(`Failed to download ${name} from Bun release ${release}: ${response.status}`)
+  if (!sums.ok) throw new Error(`Failed to download Bun release ${release} checksums: ${sums.status}`)
+  const expected = (await sums.text())
+    .split("\n")
+    .find((line) => line.trimEnd().endsWith(`  ${name}.zip`))
+    ?.split(/\s+/)[0]
+  if (!expected) throw new Error(`Missing checksum for ${name}.zip in Bun release ${release}`)
   // Stream to disk instead of `Bun.write(archive, response)`: passing the Response object
   // hangs forever if it gets GC'd mid-download (https://github.com/oven-sh/bun/issues/40278).
+  const hash = createHash("sha256")
   const sink = Bun.file(archive).writer()
-  for await (const chunk of response.body!) await sink.write(chunk)
+  for await (const chunk of response.body!) {
+    hash.update(chunk)
+    await sink.write(chunk)
+  }
   await sink.end()
+  if (hash.digest("hex") !== expected) {
+    await rm(archive)
+    throw new Error(`Checksum mismatch for ${name}.zip in Bun release ${release}`)
+  }
   await $`unzip -oq ${archive} -d ${cache}`
   await rm(archive)
   return executable

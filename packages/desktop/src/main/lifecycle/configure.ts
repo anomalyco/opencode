@@ -4,7 +4,7 @@ import { enableCompileCache } from "node:module"
 import { homedir, tmpdir } from "node:os"
 import path from "node:path"
 import { app } from "electron"
-import { debugBuild, memoryLogInterval } from "@opencode/gui-extensions/debug/options"
+import { debugBuild, memoryLogInterval } from "@opencode/gui-plugins/debug/options"
 import { APP_ID, APP_NAME, CHANNEL } from "../constants"
 import { remoteDebuggingPort } from "../diagnostics/options"
 

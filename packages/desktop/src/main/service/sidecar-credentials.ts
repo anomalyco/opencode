@@ -9,12 +9,22 @@ export type Data = ServerReadyData & { password: string | null }
 // and every reconnect publish the current endpoint.
 let current: Data | undefined
 
+const listeners = new Set<() => void>()
+
 export function set(data: Data) {
   current = data
+  listeners.forEach((listener) => listener())
 }
 
 export function get() {
   return current
+}
+
+/** Runs `listener` after each `set`: the first connection and every reconnect. Returns a function that stops it. */
+export function onChange(listener: () => void) {
+  listeners.add(listener)
+
+  return () => void listeners.delete(listener)
 }
 
 /** What the renderer learns about the sidecar: its origin, never its credential. */

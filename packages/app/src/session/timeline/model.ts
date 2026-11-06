@@ -1,48 +1,177 @@
-import { createMemo, createResource, type Accessor } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import type { SessionMessageInfo } from "@opencode/client/promise"
-import { useData } from "@/runtime/server/current"
-import { getSessionMessageHandoff } from "@/session/handoff"
+import { useServer } from "@/runtime/server/current"
 import type { SessionModel } from "../model"
+import {
+  createTimelineSyncState,
+  DISPOSED_TIMELINE_SYNC_EVENT,
+  isTimelineReady,
+  isTimelineSyncing,
+  LEADING_TURN_LOAD_TIMEOUT_MS,
+  LEADING_TURN_PAGE_DELAY_MS,
+  leadingTurnNeedsParent,
+  resolveLeadingAssistant,
+  sameTarget,
+  TIMELINE_SYNC_TIMEOUT_MS,
+  timelineSyncError,
+  transitionTimelineSync,
+  type TimelineSyncEffect,
+  type TimelineSyncEvent,
+  type TimelineSyncTarget,
+} from "./sync-machine"
 
-const leadingTurnPageDelay = 200
+// The leading turn first seen in each transcript, kept across route remounts.
+const leadingAssistants = new WeakMap<SessionMessageInfo[], string>()
 
-const leadingTurnPageLimit = 3
+export function createTimelineModel(input: { session: Pick<SessionModel, "identity" | "history"> }) {
+  const server = useServer()
+  const data = server.ctx.data
+  const [syncState, setSyncState] = createSignal(createTimelineSyncState())
+  let syncTimer: ReturnType<typeof setTimeout> | undefined
+  let pauseTimer: ReturnType<typeof setTimeout> | undefined
+  let pageLoad: { controller: AbortController; timer: ReturnType<typeof setTimeout> } | undefined
 
-export function createTimelineModel(input: { session: Pick<SessionModel, "identity" | "history" | "ownership"> }) {
-  const data = useData()
+  const target = createMemo(
+    (): TimelineSyncTarget | undefined => {
+      const sessionID = input.session.identity.sessionID()
 
-  const [resource] = createResource(
-    () => input.session.identity.sessionID(),
-    async (id) => {
-      if (!id) return
-      const owner = input.session.ownership.capture()
-      await Promise.all([data.session.message.sync(id), data.session.pending.sync(id)])
-      await enrichLeadingTurn({
-        current: owner.current,
-        messages: () => data.session.message.list(id),
-        more: () => data.session.message.more(id),
-        loading: () => data.session.message.loading(id),
-        loadMore: () => data.session.message.loadMore(id),
-        pause: () => new Promise((resolve) => setTimeout(resolve, leadingTurnPageDelay)),
-        maxPages: leadingTurnPageLimit,
-      }).catch(() => undefined)
-
-      return id
+      return sessionID ? { sessionKey: input.session.identity.sessionKey(), sessionID } : undefined
     },
+    undefined,
+    { equals: sameTarget },
   )
 
-  const ready = createMemo(() => {
-    const id = input.session.identity.sessionID()
+  const dispatch = (event: TimelineSyncEvent) =>
+    untrack(() => {
+      const current = syncState()
+      const next = transitionTimelineSync(current, event)
 
-    if (!id || (!resource.loading && resource.latest === id)) return true
+      if (next.state !== current) setSyncState(next.state)
+      next.effects.forEach(run)
+    })
 
-    // Enrich the partial leading group without withholding the already loaded tail. Undelivered inbox rows
-    // load with the inbox, not the transcript, so alone they are no tail; a first prompt shows through its handoff.
-    return (
-      data.session.message.list(id).some((message) => !data.session.input.has(id, message.id)) ||
-      !!getSessionMessageHandoff(input.session.identity.sessionKey())
+  const run = (effect: TimelineSyncEffect) => {
+    if (effect.type === "sync.start") {
+      clearTimeout(syncTimer)
+      const id = effect.target.sessionID
+      const attempt = effect.attempt
+      const timer = setTimeout(() => dispatch({ type: "sync.timed-out", attempt }), TIMELINE_SYNC_TIMEOUT_MS)
+
+      const settle = (event: TimelineSyncEvent) => {
+        clearTimeout(timer)
+
+        if (syncTimer === timer) syncTimer = undefined
+        dispatch(event)
+      }
+
+      syncTimer = timer
+      Promise.all([data.session.message.sync(id), data.session.pending.sync(id)]).then(
+        () => {
+          const messages = data.session.message.list(id)
+          const assistantID = resolveLeadingAssistant(leadingAssistants, messages)
+
+          settle({
+            type: "sync.succeeded",
+            attempt,
+            assistantID,
+            needsParent: !!assistantID && leadingTurnNeedsParent(messages, assistantID),
+            more: data.session.message.more(id),
+          })
+        },
+        // The error boundary rethrows it, so a rejection without a value still needs one.
+        (error) =>
+          settle({ type: "sync.failed", attempt, error: error instanceof Object ? error : new Error(String(error)) }),
+      )
+
+      return
+    }
+
+    if (effect.type === "sync.cancel") {
+      clearTimeout(syncTimer)
+      syncTimer = undefined
+
+      return
+    }
+
+    if (effect.type === "pause.start") {
+      clearTimeout(pauseTimer)
+      pauseTimer = setTimeout(() => {
+        pauseTimer = undefined
+        dispatch({
+          type: "enrich.paused",
+          attempt: effect.attempt,
+          needsParent: leadingTurnNeedsParent(data.session.message.list(effect.sessionID), effect.assistantID),
+          more: data.session.message.more(effect.sessionID),
+          loading: data.session.message.loading(effect.sessionID),
+        })
+      }, LEADING_TURN_PAGE_DELAY_MS)
+
+      return
+    }
+
+    if (effect.type === "pause.cancel") {
+      clearTimeout(pauseTimer)
+      pauseTimer = undefined
+
+      return
+    }
+
+    abortPage()
+
+    if (effect.type === "page.abort") return
+
+    const load = {
+      controller: new AbortController(),
+      timer: setTimeout(() => {
+        load.controller.abort()
+        settle(false)
+      }, LEADING_TURN_LOAD_TIMEOUT_MS),
+    }
+
+    // Settles once: the timeout aborts the request, whose rejection then finds the load already gone.
+    const settle = (succeeded: boolean) => {
+      if (pageLoad !== load) return
+      clearTimeout(load.timer)
+      pageLoad = undefined
+      dispatch({
+        type: "enrich.page-settled",
+        attempt: effect.attempt,
+        succeeded,
+        needsParent: leadingTurnNeedsParent(data.session.message.list(effect.sessionID), effect.assistantID),
+        more: data.session.message.more(effect.sessionID),
+      })
+    }
+
+    pageLoad = load
+    data.session.message.loadMore(effect.sessionID, { signal: load.controller.signal }).then(
+      () => settle(true),
+      () => settle(false),
     )
-  })
+  }
+
+  const abortPage = () => {
+    if (!pageLoad) return
+    clearTimeout(pageLoad.timer)
+    pageLoad.controller.abort()
+    pageLoad = undefined
+  }
+
+  createEffect(() => dispatch({ type: "target.changed", target: target() }))
+  onCleanup(() => dispatch(DISPOSED_TIMELINE_SYNC_EVENT))
+
+  // Enrich the partial leading group without withholding the already loaded tail. Undelivered inbox rows
+  // load with the inbox, not the transcript, so alone they are no tail; a first prompt shows through its handoff.
+  const ready = createMemo(() =>
+    isTimelineReady(syncState(), target(), () => {
+      const id = target()?.sessionID
+
+      return (
+        !!id &&
+        (data.session.message.list(id).some((message) => !data.session.input.has(id, message.id)) ||
+          !!server.ctx.handoff.get(id))
+      )
+    }),
+  )
 
   const more = () => {
     const id = input.session.identity.sessionID()
@@ -50,95 +179,23 @@ export function createTimelineModel(input: { session: Pick<SessionModel, "identi
     return id ? data.session.message.more(id) : false
   }
 
-  const loading = () => {
-    const id = input.session.identity.sessionID()
-
-    return id ? data.session.message.loading(id) : false
-  }
-
-  const loadOlder = async (options?: { before?: () => void; after?: (done: boolean) => void }) => {
-    return loadOlderTimeline({
-      sessionID: input.session.identity.sessionID,
-      more,
-      loading,
-      loadMore: (id) => data.session.message.loadMore(id),
-      before: options?.before,
-      after: options?.after,
-    })
-  }
-
   return {
-    history: { loadOlder, loading, more },
+    history: {
+      loadMore: (id: string, signal: AbortSignal) => data.session.message.loadMore(id, { signal }),
+      more,
+    },
     lastUserMessage: input.session.history.lastUserMessage,
     messages: input.session.history.messages,
     ready,
-    resource,
+    // Never suspends or throws: `loading` covers only the newest page, and `error` belongs to the current session.
+    resource: {
+      get loading() {
+        return isTimelineSyncing(syncState(), target())
+      },
+      get error() {
+        return timelineSyncError(syncState(), target())
+      },
+    },
     visibleUserMessages: input.session.history.visibleUserMessages,
   }
-}
-
-export async function enrichLeadingTurn(input: {
-  current: Accessor<boolean>
-  messages: Accessor<SessionMessageInfo[]>
-  more: Accessor<boolean>
-  loading: Accessor<boolean>
-  loadMore: () => Promise<void>
-  pause: () => Promise<void>
-  maxPages: number
-}) {
-  const assistant = input.messages().find((message) => message.type === "assistant")?.id
-
-  if (!assistant) return
-
-  const load = async (pages: number): Promise<void> => {
-    if (
-      !input.current() ||
-      pages >= input.maxPages ||
-      !leadingTurnNeedsParent(input.messages(), assistant) ||
-      !input.more()
-    )
-      return
-    await input.pause()
-
-    if (!input.current() || !leadingTurnNeedsParent(input.messages(), assistant) || !input.more()) return
-
-    if (input.loading()) return load(pages)
-    await input.loadMore()
-
-    return load(pages + 1)
-  }
-
-  return load(0)
-}
-
-function leadingTurnNeedsParent(messages: SessionMessageInfo[], id: string) {
-  // Older pages can start mid-turn too; only complete the turn that was visible on entry.
-  const assistant = messages.findIndex((message) => message.id === id)
-
-  if (assistant === -1) return false
-  const boundary = messages.findIndex((message) => message.type === "user" || message.type === "shell")
-
-  return boundary === -1 || assistant < boundary
-}
-
-export async function loadOlderTimeline(input: {
-  sessionID: Accessor<string | undefined>
-  more: Accessor<boolean>
-  loading: Accessor<boolean>
-  loadMore: (sessionID: string) => Promise<void>
-  before?: () => void
-  after?: (done: boolean) => void
-}) {
-  const id = input.sessionID()
-
-  if (!id || !input.more() || input.loading()) return
-
-  input.before?.()
-  await input.loadMore(id).catch((error) => {
-    if (input.sessionID() === id) input.after?.(true)
-    throw error
-  })
-
-  if (input.sessionID() !== id) return
-  input.after?.(true)
 }

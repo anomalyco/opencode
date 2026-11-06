@@ -1,19 +1,20 @@
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
 import { authTokenFromCredentials } from "./api"
+import {
+  createServerHealthState,
+  selectServerHealthRecord,
+  transitionServerHealth,
+  type ServerHealth,
+  type ServerHealthEvent,
+  type ServerHealthInput,
+  type ServerProbe,
+  type ServerProbeResult,
+} from "./health-machine"
+import { endpointCredentials } from "./machine"
 import { ClientError, isUnauthorizedError, OpenCode } from "@opencode/client"
-import { Accessor, createEffect, createSignal, onCleanup } from "solid-js"
+import { Accessor, batch, createComputed, createSignal, onCleanup, untrack } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-
-export type ServerHealth = {
-  healthy: boolean
-  version?: string
-  /** The server machine's name, when the server reports one. */
-  hostname?: string
-  incompatible?: boolean
-  checking?: boolean
-  unauthorized?: boolean
-}
 
 interface CheckServerHealthOptions {
   timeoutMs?: number
@@ -30,24 +31,20 @@ const defaultRetryDelayMs = 100
 
 const cacheMs = 750
 
+// `at` is when the probe started, then when it answered: a probe that hangs is shared only briefly.
 const healthCache = new Map<
   string,
-  { at: number; done: boolean; fetch: typeof globalThis.fetch; promise: Promise<ServerHealth> }
+  { at: number; fetch: typeof globalThis.fetch; promise: Promise<ServerProbeResult> }
 >()
 
-function cacheKey(server: ServerConnection.HttpBase) {
-  return `${server.url}\n${server.password ?? ""}`
-}
+/** A signal that aborts after a timeout, and how to stop its timer early when one runs. */
+type Timeout = { readonly signal: AbortSignal; readonly clear?: () => void }
 
-function timeoutSignal(timeoutMs: number) {
-  const timeout = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout
-
-  if (timeout) {
+function timeoutSignal(timeoutMs: number): Timeout {
+  // Some runtimes lack `AbortSignal.timeout` or throw from it; a timer stands in.
+  if ("timeout" in AbortSignal) {
     try {
-      return {
-        signal: timeout.call(AbortSignal, timeoutMs),
-        clear: undefined as (() => void) | undefined,
-      }
+      return { signal: AbortSignal.timeout(timeoutMs) }
     } catch {}
   }
 
@@ -79,6 +76,8 @@ function wait(ms: number, signal?: AbortSignal) {
   })
 }
 
+// SAFETY: a rejection's reason is unknown by contract; this is the boundary that classifies it, by `instanceof` only.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- see SAFETY above
 function retryable(error: unknown, signal?: AbortSignal) {
   if (signal?.aborted) return false
 
@@ -93,11 +92,13 @@ function retryable(error: unknown, signal?: AbortSignal) {
   return /network|fetch|econnreset|econnrefused|enotfound|timedout/i.test(error.message)
 }
 
+const unreachable = { type: "unreachable" } as const
+
 export async function checkServerHealth(
   server: ServerConnection.HttpBase,
   fetch: typeof globalThis.fetch,
   opts?: CheckServerHealthOptions,
-): Promise<ServerHealth> {
+): Promise<ServerProbeResult> {
   const timeout = opts?.signal ? undefined : timeoutSignal(opts?.timeoutMs ?? defaultTimeoutMs)
   const signal = opts?.signal ?? timeout?.signal
   const retryCount = opts?.retryCount ?? defaultRetryCount
@@ -109,15 +110,15 @@ export async function checkServerHealth(
       }
     : undefined
 
-  const next = (count: number, error: unknown) => {
-    if (count >= retryCount || !retryable(error, signal)) return Promise.resolve({ healthy: false } as const)
+  const next = (count: number, retry: boolean): Promise<ServerProbeResult> => {
+    if (count >= retryCount || !retry) return Promise.resolve(unreachable)
 
     return wait(retryDelayMs * (count + 1), signal)
       .then(() => attempt(count + 1))
-      .catch(() => ({ healthy: false }))
+      .catch(() => unreachable)
   }
 
-  const attempt = async (count: number): Promise<ServerHealth> => {
+  const attempt = async (count: number): Promise<ServerProbeResult> => {
     const current = await OpenCode.make({
       baseUrl: server.url,
       fetch,
@@ -125,158 +126,111 @@ export async function checkServerHealth(
     })
       .server.info({ signal })
       .then((status) => ({
-        data: { healthy: true as const, version: status.version, hostname: status.hostname },
+        data: { type: "healthy" as const, version: status.version, hostname: status.hostname },
       }))
       .catch((error) => ({ error }))
 
     if ("data" in current) return current.data
 
-    if (signal?.aborted) return { healthy: false }
+    if (signal?.aborted) return unreachable
 
-    if (isUnauthorizedError(current.error)) return { healthy: false, unauthorized: true }
+    if (isUnauthorizedError(current.error)) return { type: "unauthorized" }
 
-    return next(count, current.error)
+    return next(count, retryable(current.error, signal))
   }
 
   return attempt(0).finally(() => timeout?.clear?.())
 }
-
-const pollMs = 10_000
 
 export function useCheckServerHealth() {
   const platform = usePlatform()
   const fetcher = platform.fetch ?? globalThis.fetch
 
   return (http: ServerConnection.HttpBase) => {
-    const key = cacheKey(http)
+    const key = endpointCredentials(http)
     const hit = healthCache.get(key)
     const now = Date.now()
 
-    if (hit && hit.fetch === fetcher && (!hit.done || now - hit.at < cacheMs)) return hit.promise
+    if (hit && hit.fetch === fetcher && now - hit.at < cacheMs) return hit.promise
 
     const promise = checkServerHealth(http, fetcher).finally(() => {
-      const next = healthCache.get(key)
-
-      if (!next || next.promise !== promise) return
-      next.done = true
-      next.at = Date.now()
+      if (healthCache.get(key)?.promise === promise) healthCache.set(key, { at: Date.now(), fetch: fetcher, promise })
     })
 
-    healthCache.set(key, { at: now, done: false, fetch: fetcher, promise })
+    healthCache.set(key, { at: now, fetch: fetcher, promise })
 
     return promise
   }
 }
 
-export const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, enabled: Accessor<boolean>) => {
-  return createServerHealth(servers, enabled, useCheckServerHealth())
+export const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, onProbe?: (probe: ServerProbe) => void) => {
+  return createServerHealth(servers, useCheckServerHealth(), onProbe)
 }
 
 export function createServerHealth(
   servers: Accessor<ServerConnection.Any[]>,
-  enabled: Accessor<boolean>,
-  check: (http: ServerConnection.HttpBase) => Promise<ServerHealth>,
+  check: (http: ServerConnection.HttpBase) => Promise<ServerProbeResult>,
+  onProbe?: (probe: ServerProbe) => void,
 ) {
-  const [status, setStatus] = createStore({} as Record<ServerConnection.Key, ServerHealth | undefined>)
-  const [attempt, setAttempt] = createSignal(0)
-  const endpoints = new Map<ServerConnection.Key, string>()
-  // Callers of `retry` wait for the probe round it starts.
-  const waiting: (() => void)[] = []
+  const [machine, setMachine] = createSignal(createServerHealthState())
+  const [status, setStatus] = createStore<Record<ServerConnection.Key, ServerHealth | undefined>>({})
+  let timer: ReturnType<typeof setInterval> | undefined
 
-  createEffect(() => {
-    attempt()
+  const dispatch = (event: ServerHealthEvent) =>
+    batch(() => {
+      const prev = untrack(machine)
+      const result = transitionServerHealth(prev, event)
 
-    if (!enabled()) {
-      endpoints.clear()
-      setStatus(reconcile({}))
-      waiting.splice(0).forEach((resolve) => resolve())
+      // The selector builds new objects, which the store adopts and later updates in place.
+      if (result.state.entries !== prev.entries) setStatus(reconcile(selectServerHealthRecord(result.state)))
+      setMachine(result.state)
 
-      return
-    }
+      result.effects.forEach((effect) => {
+        if (effect.type === "probe") {
+          const settled = (answer: ServerProbeResult) =>
+            dispatch({ type: "probe.settled", key: effect.key, attempt: effect.attempt, result: answer })
 
-    // Snapshot transport fields synchronously so a newly established SSH tunnel
-    // invalidates both the old result and any probe still using the old endpoint.
-    const list = servers().map((conn) => ({
-      key: ServerConnection.key(conn),
-      managed: conn.type === "extension" && conn.managed,
-      http: conn.http,
-      stage: conn.type === "extension" ? conn.state : undefined,
-    }))
+          void Promise.try(() => check(effect.http)).then(settled, () => settled(unreachable))
 
-    for (const conn of list) {
-      if (conn.stage && conn.stage !== "ready") {
-        endpoints.delete(conn.key)
-        setStatus(
-          conn.key,
-          reconcile(
-            conn.stage === "failed"
-              ? { healthy: false }
-              : conn.stage === "incompatible"
-                ? { healthy: false, incompatible: true }
-                : undefined,
-          ),
-        )
-        continue
-      }
+          return
+        }
 
-      const endpoint = cacheKey(conn.http)
+        if (effect.type === "notify.probe") return onProbe?.(effect.probe)
 
-      if (conn.managed && endpoints.get(conn.key) !== endpoint) {
-        setStatus(conn.key, reconcile({ healthy: false, checking: true }))
-      }
+        if (effect.type === "waiters.resolve") return effect.resolvers.forEach((resolve) => resolve())
 
-      endpoints.set(conn.key, endpoint)
-    }
-
-    for (const key of endpoints.keys()) {
-      if (!list.some((conn) => conn.key === key)) endpoints.delete(key)
-    }
-
-    let dead = false
-
-    const refresh = async () => {
-      const results: Record<string, ServerHealth | undefined> = {}
-      await Promise.all(
-        list.map(async (conn) => {
-          if (conn.stage && conn.stage !== "ready") {
-            results[conn.key] =
-              conn.stage === "failed"
-                ? { healthy: false }
-                : conn.stage === "incompatible"
-                  ? { healthy: false, incompatible: true }
-                  : undefined
-
-            return
-          }
-
-          const result = await check(conn.http)
-          results[conn.key] = result
-
-          if (!dead) setStatus(conn.key, reconcile(result))
-        }),
-      )
-
-      if (dead) return
-      setStatus(reconcile(results))
-    }
-
-    void refresh().finally(() => {
-      if (!dead) waiting.splice(0).forEach((resolve) => resolve())
+        clearInterval(timer)
+        timer =
+          effect.type === "timer.start"
+            ? setInterval(() => dispatch({ type: "poll.due" }), effect.intervalMs)
+            : undefined
+      })
     })
-    const id = setInterval(() => void refresh(), pollMs)
-    onCleanup(() => {
-      dead = true
-      clearInterval(id)
-    })
+
+  // Runs during updates, so a server's health is known on the render that lists it. Reading the endpoint here tracks a
+  // saved password and a plugin server's stage and endpoint.
+  createComputed(() => {
+    const list = servers().map(healthInput)
+
+    untrack(() => dispatch({ type: "servers.synced", servers: list }))
   })
+
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   return {
     status,
-    /** Probes every server now instead of at the next poll; resolves when that round finishes. */
-    retry: () =>
-      new Promise<void>((resolve) => {
-        waiting.push(resolve)
-        setAttempt((value) => value + 1)
-      }),
+    /** Probes every server now instead of at the next poll; resolves when each has answered or left the list. */
+    retry: () => new Promise<void>((resolve) => dispatch({ type: "retry.requested", resolve })),
   }
+}
+
+function healthInput(conn: ServerConnection.Any): ServerHealthInput {
+  const key = ServerConnection.key(conn)
+
+  if (conn.type !== "plugin")
+    return { type: "endpoint", key, http: { url: conn.http.url, password: conn.http.password }, managed: false }
+
+  if (conn.status.type === "ready") return { type: "endpoint", key, http: conn.status.http, managed: conn.managed }
+
+  return { type: "staged", key, stage: conn.status.type }
 }

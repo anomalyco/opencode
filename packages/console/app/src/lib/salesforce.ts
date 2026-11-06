@@ -44,7 +44,10 @@ export interface SalesforceLeadInput {
   company?: string
   email: string
   phone?: string
+  country?: string
   inferenceSpend?: string
+  inRegionRouting?: boolean
+  dpa?: boolean
   message: string
 }
 
@@ -58,8 +61,11 @@ export async function createLead(
     Email: input.email,
     Phone: input.phone ?? null,
     Title: input.role,
+    Country: input.country,
     Description: input.message,
     Current_Monthly_Inference_Spend__c: input.inferenceSpend,
+    In_Region_Routing__c: input.inRegionRouting ?? false,
+    DPA_Required__c: input.dpa ?? false,
     LeadSource: "enterprise website form",
   }
   if (submit) return submit(payload)

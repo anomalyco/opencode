@@ -1,18 +1,34 @@
-import { createEffect, createSignal, on, onCleanup, type Accessor } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { frameLoop, prefersReducedMotion, Spring, type DurationOptions } from "@opencode/ui/motion"
 import { motionTimeScale } from "@opencode/ui/motion-tuning"
+import {
+  INITIAL_SIDEBAR_PEEK_STATE,
+  PEEK_BLUR_EVENT,
+  PEEK_DISABLED_EVENT,
+  PEEK_DISPOSED_EVENT,
+  PEEK_DOCK_CLOSED_EVENT,
+  PEEK_DOCK_OPENED_EVENT,
+  PEEK_ESCAPE_EVENT,
+  PEEK_FOCUS_LEFT_EVENT,
+  PEEK_INTERRUPT_EVENT,
+  PEEK_TOGGLE_LEAVE_EVENT,
+  samplePointerEvent,
+  selectNeedsCorridorSample,
+  selectNeedsEdgeSample,
+  selectPeekHandedOff,
+  selectPeekShown,
+  sidebarPeekEffects,
+  toggleEnterEvent,
+  transitionSidebarPeek,
+  type SidebarPeekEffect,
+  type SidebarPeekEvent,
+  type SidebarPeekTrigger,
+} from "./sidebar-peek-machine"
 import "./sidebar-peek.css"
 
 // The peek's own spring, quicker than the docked sidebar's.
 const spring: DurationOptions = { duration: 0.18, bounce: 0 }
-
-// How long the pointer rests before the sidebar peeks, in ms. Both sit well under the ~100ms where a response still
-// reads as immediate, and above how long a pointer spends crossing: through the ~24px edge zone in a frame or two,
-// over the 28px toggle in ~30–60ms on the way to the breadcrumb or the traffic lights. The toggle waits longer because
-// the header row is crossed far more often than the bare window edge, and a peek that starts just before a click docks
-// smoothly.
-const dwell = { edge: 40, toggle: 80 }
 
 /** Whether any session in the vertical sidebar draws its unread dot, published by the sidebar's tab strip. */
 export const [sidebarUnread, setSidebarUnread] = createSignal(false)
@@ -34,15 +50,11 @@ const edgeZone = 16
 
 const header = 56
 
-// How far past the sidebar and toggle the pointer may stray, and for how long, before the peek closes.
+// How far past the sidebar and toggle the pointer may stray before the peek starts to close.
 const margin = 15
-
-const grace = 100
 
 // Reduced motion fades the peek in place, in about the time it would take to slide.
 const fade = { duration: 0.15, bounce: 0 }
-
-type Point = { x: number; y: number }
 
 type Box = { left: number; right: number; top: number; bottom: number }
 
@@ -56,6 +68,8 @@ type Box = { left: number; right: number; top: number; bottom: number }
  * from the toggle into the sidebar never closes it. Closing reads the pointer's last known position on every move,
  * scroll and wheel, and on a slow interval, rather than trusting enter and leave events on elements, against boxes read
  * once per layout change rather than on every move.
+ *
+ * The lifecycle lives in `sidebar-peek-machine.ts`; this drives its timers, the spring and the DOM.
  */
 export function createSidebarPeek(input: {
   /** Whether a peek may start: the sidebar is fully closed. */
@@ -68,21 +82,29 @@ export function createSidebarPeek(input: {
   paint: (shown: number | undefined) => void
   /** Runs `run` once the docked sidebar's flight lands. */
   whenDocked: (run: () => void) => void
+  /** Whether the vertical sidebar exists at all; turning it off ends any peek at once. */
+  enabled?: Accessor<boolean>
 }) {
-  const [shown, setShown] = createSignal(false)
+  const [peekState, setPeekState] = createSignal(INITIAL_SIDEBAR_PEEK_STATE)
+  const shown = createMemo(() => selectPeekShown(peekState()))
+  const handedOff = createMemo(() => selectPeekHandedOff(peekState()))
+  const enabled = input.enabled ?? (() => true)
   // Percent shown, so the spring's rest threshold stays well under a pixel.
   const motion = new Spring(0)
   let stop: (() => void) | undefined
   let toggle: HTMLElement | undefined
-  let opening: { from: "edge" | "toggle"; timer: ReturnType<typeof setTimeout> } | undefined
-  let closing: ReturnType<typeof setTimeout> | undefined
-  let watch: ReturnType<typeof setInterval> | undefined
-  // The pointer's last position in the window, or undefined once it has left the window.
-  let pointer: Point | undefined
+  let dwellTimer: ReturnType<typeof setTimeout> | undefined
+  let graceTimer: ReturnType<typeof setTimeout> | undefined
+  let leaveTimer: ReturnType<typeof setTimeout> | undefined
+  let handoffTimer: ReturnType<typeof setTimeout> | undefined
+  let watchTimer: ReturnType<typeof setInterval> | undefined
+  // The pointer's last position in the window, kept as scalars so a move allocates nothing; `hasPointer` turns false
+  // once it has left the window.
+  let hasPointer = false
+  let pointerX = 0
+  let pointerY = 0
   let pressed = false
   let keyboard = false
-  // Whether the sidebar last docked from a peek, which already shows it.
-  let handedOff = false
   let viewport = window.innerWidth
   // Where the edge zone starts, and the box spanning the toggle and the sidebar, until the layout next changes.
   let edgeTop: number | undefined
@@ -90,20 +112,35 @@ export function createSidebarPeek(input: {
 
   const paint = () => input.paint(Math.min(1, Math.max(0, motion.value / 100)))
 
+  const dispatch = (event: SidebarPeekEvent) => {
+    const previous = untrack(peekState)
+    const next = transitionSidebarPeek(previous, event)
+
+    if (next === previous) return
+
+    // Painted out of view before the peek's box lays out, so its first frame doesn't show the sidebar in place.
+    if (!selectPeekShown(previous) && selectPeekShown(next)) paint()
+    // Before the effects, so focus they move out of the sidebar finds the peek already leaving.
+    setPeekState(next)
+    sidebarPeekEffects(previous, next).forEach(run)
+  }
+
   const step = (dt: number) => {
     motion.step(dt)
     paint()
 
     if (!motion.resting) return true
     stop = undefined
+    const current = untrack(peekState)
 
-    if (motion.target === 0) end()
+    if (motion.target === 0 && current.status === "leaving")
+      dispatch({ type: "leave.settled", attempt: current.attempt })
 
     return false
   }
 
   // Retargeting keeps the current position and velocity, so a peek that turns around mid-flight stays smooth.
-  const run = (target: number) => {
+  const fly = (target: number) => {
     const tuning = prefersReducedMotion() ? fade : { ...spring, duration: spring.duration * motionTimeScale() }
     motion.omega = (2 * Math.PI) / tuning.duration
     motion.zeta = 1 - tuning.bounce
@@ -111,77 +148,109 @@ export function createSidebarPeek(input: {
     stop ??= frameLoop.add(step)
   }
 
-  const cancelOpen = () => {
-    clearTimeout(opening?.timer)
-    opening = undefined
-  }
+  const run = (effect: SidebarPeekEffect) => {
+    switch (effect.type) {
+      case "dwell.start":
+        clearTimeout(dwellTimer)
+        dwellTimer = setTimeout(() => {
+          dwellTimer = undefined
+          dispatch({ type: "dwell.elapsed", attempt: effect.attempt, ready: ready(effect.from) })
+        }, effect.delayMs)
 
-  const cancelClose = () => {
-    clearTimeout(closing)
-    closing = undefined
-  }
+        return
+      case "dwell.clear":
+        clearTimeout(dwellTimer)
+        dwellTimer = undefined
 
-  const show = () => {
-    cancelOpen()
-    cancelClose()
+        return
+      case "grace.start":
+        clearTimeout(graceTimer)
+        graceTimer = setTimeout(() => {
+          graceTimer = undefined
+          dispatch({ type: "grace.elapsed", attempt: effect.attempt, keepOpen: keptOpen() })
+        }, effect.delayMs)
 
-    if (!input.panel()) return
+        return
+      case "grace.clear":
+        clearTimeout(graceTimer)
+        graceTimer = undefined
 
-    // Painted out of view before the peek's box lays out, so its first frame doesn't show the sidebar in place.
-    if (!shown()) {
-      paint()
-      setShown(true)
+        return
+      case "watch.start":
+        watchTimer ??= setInterval(() => sample(), effect.intervalMs)
+
+        return
+      case "watch.stop":
+        clearInterval(watchTimer)
+        watchTimer = undefined
+
+        return
+      case "focus.evict": {
+        const active = document.activeElement
+
+        if (!input.aside()?.contains(active)) return
+
+        if (effect.restoreToggle && toggle?.isConnected) return toggle.focus({ preventScroll: true })
+
+        if (!effect.restoreToggle && active instanceof HTMLElement) active.blur()
+
+        return
+      }
+
+      case "spring.open":
+        return fly(100)
+      case "spring.close":
+        fly(0)
+        clearTimeout(leaveTimer)
+        leaveTimer = setTimeout(
+          () => {
+            leaveTimer = undefined
+            dispatch({ type: "leave.settled", attempt: effect.attempt })
+          },
+          effect.timeoutMs * Math.max(1, motionTimeScale()),
+        )
+
+        return
+      case "leave.clear":
+        clearTimeout(leaveTimer)
+        leaveTimer = undefined
+
+        return
+      case "handoff.await":
+        clearTimeout(handoffTimer)
+        handoffTimer = setTimeout(
+          () => {
+            handoffTimer = undefined
+            dispatch({ type: "dock.settled", attempt: effect.attempt })
+          },
+          effect.timeoutMs * Math.max(1, motionTimeScale()),
+        )
+        // After the docked sidebar's own effect has started its flight, which effects don't order.
+        queueMicrotask(() => input.whenDocked(() => dispatch({ type: "dock.settled", attempt: effect.attempt })))
+
+        return
+      case "handoff.clear":
+        clearTimeout(handoffTimer)
+        handoffTimer = undefined
+
+        return
+      case "peek.reset":
+        stop?.()
+        stop = undefined
+        motion.snap(0)
+        toggle = undefined
+        corridor = undefined
+        input.paint(undefined)
     }
-
-    watch ??= setInterval(check, 150)
-    run(100)
   }
 
-  const end = () => {
-    cancelOpen()
-    cancelClose()
-    clearInterval(watch)
-    watch = undefined
-    stop?.()
-    stop = undefined
-    motion.snap(0)
-    toggle = undefined
-    corridor = undefined
-
-    if (!shown()) return
-    setShown(false)
-    input.paint(undefined)
-  }
-
-  const hide = (focus?: boolean) => {
-    cancelClose()
-
-    if (!shown() || input.open()) return
-    clearInterval(watch)
-    watch = undefined
-    const aside = input.aside()
-
-    if (aside?.contains(document.activeElement)) {
-      if (focus && toggle?.isConnected) toggle.focus({ preventScroll: true })
-
-      if (!focus && document.activeElement instanceof HTMLElement) document.activeElement.blur()
-    }
-
-    run(0)
-  }
-
-  // Both dwells share one path: a press, a drag, a dialog or a resize clears whichever peek is pending.
-  const start = (from: "edge" | "toggle", still: () => boolean) => {
-    cancelOpen()
-    opening = {
-      from,
-      timer: setTimeout(() => {
-        opening = undefined
-
-        if (input.available() && !interrupted() && still()) show()
-      }, dwell[from]),
-    }
-  }
+  // Whether the pointer still means to peek once its dwell ends.
+  const ready = (from: SidebarPeekTrigger) =>
+    enabled() &&
+    input.available() &&
+    !!input.panel() &&
+    !interrupted() &&
+    (from === "edge" ? hasPointer && !held() && atEdge() : !!toggle?.isConnected && toggle.matches(":hover"))
 
   const interrupted = () => pressed || !!document.querySelector(busy)
 
@@ -200,15 +269,17 @@ export function createSidebarPeek(input: {
     return pressed || typing || menu || !!document.querySelector('[data-dragging="true"]')
   }
 
-  const inside = (point: Point) => {
+  const keptOpen = () => (hasPointer && inside()) || held()
+
+  const inside = () => {
     const box = (corridor ??= measureCorridor())
 
     return (
       !!box &&
-      point.x >= box.left - margin &&
-      point.x <= box.right + margin &&
-      point.y >= box.top - margin &&
-      point.y <= box.bottom + margin
+      pointerX >= box.left - margin &&
+      pointerX <= box.right + margin &&
+      pointerY >= box.top - margin &&
+      pointerY <= box.bottom + margin
     )
   }
 
@@ -229,16 +300,27 @@ export function createSidebarPeek(input: {
     }
   }
 
-  const atEdge = (point: Point) => {
+  const atEdge = () => {
     const rtl = document.documentElement.dir === "rtl"
 
     const edge = gutter + edgeZone
 
-    if (rtl ? point.x < viewport - edge : point.x > edge) return false
+    if (rtl ? pointerX < viewport - edge : pointerX > edge) return false
     edgeTop ??= (input.aside()?.getBoundingClientRect().top ?? Infinity) + header
 
-    return point.y >= edgeTop
+    return pointerY >= edgeTop
   }
+
+  // At the window's start edge, within the shell's own layout rather than a dialog or popover portaled over it.
+  const nearEdge = (target: EventTarget | null) =>
+    !pressed &&
+    hasPointer &&
+    atEdge() &&
+    enabled() &&
+    input.available() &&
+    !!input.panel() &&
+    target instanceof Node &&
+    !!input.aside()?.parentElement?.contains(target)
 
   const relayout = () => {
     viewport = window.innerWidth
@@ -246,126 +328,116 @@ export function createSidebarPeek(input: {
     corridor = undefined
   }
 
-  function check() {
-    if (!shown() || input.open() || !watch) return
+  // Only a move or a wheel aims at the edge, so a sample without a target, from a scroll, a window exit or the watch,
+  // only rereads the corridor.
+  function sample(target?: EventTarget | null) {
+    const current = untrack(peekState)
 
-    if ((pointer && inside(pointer)) || held()) return cancelClose()
-    closing ??= setTimeout(() => {
-      closing = undefined
-
-      if (!(pointer && inside(pointer)) && !held()) hide()
-    }, grace)
-  }
-
-  // Starts the edge's dwell while the pointer rests at the window's start edge, and cancels it once the pointer leaves.
-  const approach = (event: PointerEvent | WheelEvent) => {
-    if (shown() && motion.target === 100) return
-    const target = event.target
-
-    const near =
-      !pressed &&
-      !!pointer &&
-      input.available() &&
-      atEdge(pointer) &&
-      // Within the shell's own layout, not a dialog or popover portaled over it.
-      target instanceof Node &&
-      !!input.aside()?.parentElement?.contains(target)
-
-    if (!near) {
-      if (opening?.from === "edge") cancelOpen()
+    if (selectNeedsEdgeSample(current)) {
+      if (target !== undefined) dispatch(samplePointerEvent(nearEdge(target), false))
 
       return
     }
 
-    // Back at the edge while it slides out: it turns around at once.
-    if (shown()) return show()
-
-    if (opening) return
-    start("edge", () => !!pointer && !held() && atEdge(pointer))
+    if (selectNeedsCorridorSample(current)) dispatch(samplePointerEvent(false, keptOpen()))
   }
 
   const track = (event: PointerEvent | WheelEvent) => {
     if (event instanceof PointerEvent && event.pointerType === "touch") return
-
-    if (event instanceof PointerEvent) pressed = event.buttons !== 0
-    pointer = { x: event.clientX, y: event.clientY }
-    approach(event)
-    check()
+    pressed = event.buttons !== 0
+    hasPointer = true
+    pointerX = event.clientX
+    pointerY = event.clientY
+    sample(event.target)
   }
 
+  // Leaving the window, or into an iframe or native view: no pointerup may follow, so the button counts as released.
+  const exit = () => {
+    hasPointer = false
+    pressed = false
+    sample()
+  }
+
+  const release = () => {
+    pressed = false
+  }
+
+  makeEventListener(
+    document,
+    "pointerover",
+    (event) => {
+      if (event.pointerType === "touch" || !(event.target instanceof Element)) return
+      pressed = event.buttons !== 0
+      const button = event.target.closest<HTMLElement>(toggles)
+
+      if (!button || input.aside()?.contains(button)) return
+
+      if (toggle !== button) corridor = undefined
+      toggle = button
+      dispatch(toggleEnterEvent(enabled() && input.available() && !!input.panel() && !pressed))
+    },
+    { passive: true },
+  )
+  makeEventListener(
+    document,
+    "pointerout",
+    (event) => {
+      // Leaving the window, or into an iframe or native view, reports no related target.
+      if (!event.relatedTarget) exit()
+
+      if (!(event.target instanceof Element)) return
+      const button = event.target.closest(toggles)
+
+      if (button && !(event.relatedTarget instanceof Node && button.contains(event.relatedTarget)))
+        dispatch(PEEK_TOGGLE_LEAVE_EVENT)
+    },
+    { passive: true },
+  )
+  makeEventListener(document, "pointermove", track, { passive: true, capture: true })
+  makeEventListener(document, "wheel", track, { passive: true, capture: true })
+  makeEventListener(document, "scroll", () => sample(), { passive: true, capture: true })
+  makeEventListener(
+    document,
+    "pointerdown",
+    (event) => {
+      keyboard = false
+      pressed = event.pointerType !== "touch"
+      dispatch(PEEK_INTERRUPT_EVENT)
+    },
+    { passive: true, capture: true },
+  )
+  makeEventListener(window, "pointerup", release, { passive: true, capture: true })
+  makeEventListener(window, "pointercancel", release, { passive: true, capture: true })
+  makeEventListener(document.documentElement, "pointerleave", exit)
+  // Resizing the window from its start edge is no reason to peek.
+  makeEventListener(window, "resize", () => {
+    relayout()
+    dispatch(PEEK_INTERRUPT_EVENT)
+  })
+  // A native drag or a context menu swallows the pointerup.
+  makeEventListener(
+    document,
+    "dragstart",
+    () => {
+      release()
+      dispatch(PEEK_INTERRUPT_EVENT)
+    },
+    { passive: true, capture: true },
+  )
+  makeEventListener(document, "dragend", release, { passive: true, capture: true })
+  makeEventListener(document, "contextmenu", release, { passive: true, capture: true })
+  makeEventListener(document, "keydown", (event) => {
+    keyboard = true
+
+    if (event.key !== "Escape" || event.defaultPrevented || held()) return
+    dispatch(PEEK_ESCAPE_EVENT)
+  })
+  makeEventListener(window, "blur", () => {
+    release()
+    dispatch(PEEK_BLUR_EVENT)
+  })
+
   createEffect(() => {
-    makeEventListener(
-      document,
-      "pointerover",
-      (event) => {
-        if (event.pointerType === "touch" || !(event.target instanceof Element)) return
-        const button = event.target.closest<HTMLElement>(toggles)
-
-        if (!button || input.aside()?.contains(button)) return
-
-        if (toggle !== button) corridor = undefined
-        toggle = button
-
-        if (shown()) return show()
-
-        if (!input.available() || opening?.from === "toggle") return
-        start("toggle", () => !!toggle?.matches(":hover"))
-      },
-      { passive: true },
-    )
-    makeEventListener(
-      document,
-      "pointerout",
-      (event) => {
-        // Leaving the window, or into an iframe or native view, reports no related target.
-        if (!event.relatedTarget) {
-          pointer = undefined
-          check()
-        }
-
-        if (opening?.from !== "toggle" || !(event.target instanceof Element)) return
-        const button = event.target.closest(toggles)
-
-        if (button && !(event.relatedTarget instanceof Node && button.contains(event.relatedTarget))) cancelOpen()
-      },
-      { passive: true },
-    )
-    makeEventListener(document, "pointermove", track, { passive: true, capture: true })
-    makeEventListener(document, "wheel", track, { passive: true, capture: true })
-    makeEventListener(document, "scroll", () => check(), { passive: true, capture: true })
-    makeEventListener(
-      document,
-      "pointerdown",
-      (event) => {
-        keyboard = false
-        pressed = event.pointerType !== "touch"
-        cancelOpen()
-      },
-      { passive: true, capture: true },
-    )
-    makeEventListener(window, "pointerup", () => (pressed = false), { passive: true, capture: true })
-    makeEventListener(window, "pointercancel", () => (pressed = false), { passive: true, capture: true })
-    makeEventListener(document.documentElement, "pointerleave", () => {
-      pointer = undefined
-      check()
-    })
-    // Resizing the window from its start edge is no reason to peek.
-    makeEventListener(window, "resize", () => {
-      relayout()
-      cancelOpen()
-    })
-    makeEventListener(document, "dragstart", cancelOpen, { passive: true, capture: true })
-    makeEventListener(document, "keydown", (event) => {
-      keyboard = true
-
-      if (event.key !== "Escape" || !shown() || input.open() || event.defaultPrevented || held()) return
-      hide(true)
-    })
-    makeEventListener(window, "blur", () => {
-      pressed = false
-      hide()
-    })
-
     const aside = input.aside()
 
     if (!aside) return
@@ -378,53 +450,33 @@ export function createSidebarPeek(input: {
     const leave = (event: FocusEvent) => {
       const next = event.relatedTarget
 
-      if (!keyboard || !shown() || input.open() || !(next instanceof Element)) return
+      if (!keyboard || !(next instanceof Element)) return
 
       if (aside.contains(next) || toggle?.contains(next) || next.closest(menus)) return
-      hide()
+      dispatch(PEEK_FOCUS_LEFT_EVENT)
     }
 
     aside.addEventListener("focusout", leave)
     onCleanup(() => aside.removeEventListener("focusout", leave))
   })
 
+  createEffect(
+    on(enabled, (value) => {
+      if (!value) dispatch(PEEK_DISABLED_EVENT)
+    }),
+  )
+
   // Docking keeps the peeked sidebar where it is, sliding the rest of the way in if it hadn't arrived, while the layout
   // makes room; the docked sidebar takes over once it lands. Closing again before then slides the peek back out.
   createEffect(
-    on(
-      input.open,
-      (open) => {
-        if (!open) {
-          handedOff = false
-
-          return hide()
-        }
-
-        handedOff = shown()
-
-        if (!handedOff) return end()
-        cancelOpen()
-        cancelClose()
-        clearInterval(watch)
-        watch = undefined
-        run(100)
-        // After the docked sidebar's own effect has started its flight, which effects don't order.
-        queueMicrotask(() => {
-          if (!input.open() || !shown()) return
-          input.whenDocked(() => {
-            if (input.open()) end()
-          })
-        })
-      },
-      { defer: true },
-    ),
+    on(input.open, (open) => dispatch(open ? PEEK_DOCK_OPENED_EVENT : PEEK_DOCK_CLOSED_EVENT), { defer: true }),
   )
 
-  onCleanup(end)
+  onCleanup(() => dispatch(PEEK_DISPOSED_EVENT))
 
   return {
     shown,
-    /** Whether the sidebar last docked from a peek, which already shows it. */
-    handedOff: () => handedOff,
+    /** Whether the sidebar is docking from a peek, which already shows it. */
+    handedOff,
   }
 }

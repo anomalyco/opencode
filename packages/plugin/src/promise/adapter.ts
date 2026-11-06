@@ -344,6 +344,34 @@ export function fromPromise(plugin: Plugin) {
             terminal: {
               read: adaptApiMethod(ExperimentalEndpoints["persistentPty.read"], host.experimental.terminal.read),
             },
+            generate: {
+              text: adaptApiMethod(GenerateEndpoints["generate.text"], host.experimental.generate.text),
+              image: adaptApiMethod(GenerateEndpoints["generate.image"], host.experimental.generate.image),
+              decisions: adaptApiMethod(GenerateEndpoints["generate.decisions"], host.experimental.generate.decisions),
+            },
+            artifact: {
+              reload: () => run(host.experimental.artifact.reload()),
+              transform: (callback) =>
+                register(
+                  host.experimental.artifact.transform((editor) => {
+                    callback({
+                      add: (definition) =>
+                        editor.add({
+                          id: definition.id,
+                          name: definition.name,
+                          capabilities: definition.capabilities,
+                          prompt: definition.prompt,
+                          create: (input) => attempt((signal) => definition.create(input, { signal })),
+                          read: (id) => attempt((signal) => definition.read(id, { signal })),
+                          update: (id, input) => attempt((signal) => definition.update(id, input, { signal })),
+                          delete: (id) => attempt((signal) => definition.delete(id, { signal })),
+                        }),
+                      remove: editor.remove,
+                      default: editor.default,
+                    })
+                  }),
+                ),
+            },
           },
           generate: {
             text: adaptApiMethod(GenerateEndpoints["generate.text"], host.generate.text),

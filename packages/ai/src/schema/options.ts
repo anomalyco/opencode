@@ -52,11 +52,11 @@ export const mergeProviderOptions = (
 export const HttpTimeout = Schema.Union([Schema.Number.check(Schema.isGreaterThan(0)), Schema.Literal(false)])
 export type HttpTimeout = Schema.Schema.Type<typeof HttpTimeout>
 
-/** Applied to `headerTimeout` when a request leaves it unset. */
+/** Applied to `timeout.headers` when a request leaves it unset. */
 export const DEFAULT_HTTP_TIMEOUT_MS = 300_000
 
 /**
- * Applied to `chunkTimeout` when a request leaves it unset. Some providers, such as DeepSeek, have specifically asked
+ * Applied to `timeout.chunk` when a request leaves it unset. Some providers, such as DeepSeek, have specifically asked
  * clients to allow at least 15 minutes, because their models can stream nothing for minutes while they reason.
  */
 export const DEFAULT_CHUNK_TIMEOUT_MS = 900_000
@@ -65,72 +65,74 @@ export const DEFAULT_CHUNK_TIMEOUT_MS = 900_000
 export const RequestEncoding = Schema.Literals(["zstd", "gzip", "none"])
 export type RequestEncoding = Schema.Schema.Type<typeof RequestEncoding>
 
-export class HttpOptions extends Schema.Class<HttpOptions>("AI.HttpOptions")({
-  body: Schema.optional(JsonSchema),
-  headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  query: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  /** Time allowed for the whole request, from send until the response completes. Unbounded when unset. */
-  timeout: Schema.optional(HttpTimeout),
-  /** Time allowed for response headers to arrive. */
-  headerTimeout: Schema.optional(HttpTimeout),
-  /** Time allowed between streamed response chunks once headers have arrived. */
-  chunkTimeout: Schema.optional(HttpTimeout),
+/** Rare wire-level overrides. */
+export interface HttpOptions {
+  readonly query?: Record<string, string>
+  /** Deep-merged over the provider-native JSON body. */
+  readonly body?: Record<string, unknown>
   /** Compression for JSON request bodies. Only set it for endpoints known to decode it. */
-  encoding: Schema.optional(RequestEncoding),
-}) {}
+  readonly encoding?: RequestEncoding
+}
 
-export namespace HttpOptions {
-  export type Input = HttpOptions | ConstructorParameters<typeof HttpOptions>[0]
+/** Per-phase time limits in milliseconds. */
+export interface TimeoutConfig {
+  /** The whole request, from send until the response completes. Unbounded when unset. */
+  readonly total?: HttpTimeout
+  /** Until response headers arrive. */
+  readonly headers?: HttpTimeout
+  /** Between streamed response chunks once headers have arrived. */
+  readonly chunk?: HttpTimeout
+}
 
-  /** Normalize HTTP option input into the canonical `HttpOptions` class; `undefined` stays `undefined`. */
-  export function make(input: Input): HttpOptions
-  export function make(input: Input | undefined): HttpOptions | undefined
-  export function make(input: Input | undefined) {
-    if (input === undefined || input instanceof HttpOptions) return input
-    return new HttpOptions(input)
+/** Milliseconds for the whole request, `false` to disable it, or per-phase limits. */
+export type RequestTimeout = HttpTimeout | TimeoutConfig
+
+/** Transport settings shared by requests, models and routes. */
+export interface TransportOptions {
+  /** Merged over the provider's headers; these win. */
+  readonly headers?: Record<string, string>
+  /** Applied to text requests; media requests do not apply it yet. */
+  readonly timeout?: RequestTimeout
+  readonly http?: HttpOptions
+}
+
+/** The fields every request shares, whatever its modality. */
+export interface BaseRequest<Model, Options = ProviderOptions> extends TransportOptions {
+  readonly model: Model
+  readonly providerOptions?: Options
+  /** Sends this call through `fetch` instead of the client's HTTP executor. */
+  readonly fetch?: typeof globalThis.fetch
+}
+
+export const timeoutConfig = (timeout: RequestTimeout | undefined): TimeoutConfig =>
+  typeof timeout === "object" ? timeout : { total: timeout }
+
+const last = <A>(values: ReadonlyArray<A | undefined>) => values.findLast((value) => value !== undefined)
+
+const someDefined = <A extends object>(value: A) =>
+  Object.values(value).some((item) => item !== undefined) ? value : undefined
+
+/** Merge transport settings; later items win, headers, query and body merge by key. */
+export const mergeTransport = (...items: ReadonlyArray<TransportOptions | undefined>): TransportOptions => {
+  const timeouts = items.map((item) => timeoutConfig(item?.timeout))
+  const http = items.map((item) => item?.http)
+  return {
+    headers: mergeStringRecords(...items.map((item) => item?.headers)),
+    timeout: someDefined({
+      total: last(timeouts.map((item) => item.total)),
+      headers: last(timeouts.map((item) => item.headers)),
+      chunk: last(timeouts.map((item) => item.chunk)),
+    }),
+    http: someDefined({
+      query: mergeStringRecords(...http.map((item) => item?.query)),
+      body: mergeJsonRecords(...http.map((item) => item?.body)),
+      encoding: last(http.map((item) => item?.encoding)),
+    }),
   }
 }
 
-export const mergeHttpOptions = (...items: ReadonlyArray<HttpOptions | undefined>): HttpOptions | undefined => {
-  const body = mergeJsonRecords(...items.map((item) => item?.body))
-  const headers = mergeStringRecords(...items.map((item) => item?.headers))
-  const query = mergeStringRecords(...items.map((item) => item?.query))
-  const timeout = items.findLast((item) => item?.timeout !== undefined)?.timeout
-  const headerTimeout = items.findLast((item) => item?.headerTimeout !== undefined)?.headerTimeout
-  const chunkTimeout = items.findLast((item) => item?.chunkTimeout !== undefined)?.chunkTimeout
-  const encoding = items.findLast((item) => item?.encoding !== undefined)?.encoding
-  if (
-    !body &&
-    !headers &&
-    !query &&
-    timeout === undefined &&
-    headerTimeout === undefined &&
-    chunkTimeout === undefined &&
-    encoding === undefined
-  )
-    return undefined
-  return new HttpOptions({ body, headers, query, timeout, headerTimeout, chunkTimeout, encoding })
-}
-
-export class GenerationOptions extends Schema.Class<GenerationOptions>("LLM.GenerationOptions")({
-  maxTokens: Schema.optional(Schema.Number),
-  temperature: Schema.optional(Schema.Number),
-  topP: Schema.optional(Schema.Number),
-  topK: Schema.optional(Schema.Number),
-  frequencyPenalty: Schema.optional(Schema.Number),
-  presencePenalty: Schema.optional(Schema.Number),
-  seed: Schema.optional(Schema.Number),
-  stop: Schema.optional(Schema.Array(Schema.String)),
-}) {}
-
-export namespace GenerationOptions {
-  export type Input = GenerationOptions | ConstructorParameters<typeof GenerationOptions>[0]
-
-  /** Normalize generation option input into the canonical `GenerationOptions` class. */
-  export const make = (input: Input = {}) => (input instanceof GenerationOptions ? input : new GenerationOptions(input))
-}
-
-export type GenerationOptionsFields = {
+/** Portable sampling knobs, set at the top level of text requests, model defaults and route defaults. */
+export interface GenerationOptionsFields {
   readonly maxTokens?: number
   readonly temperature?: number
   readonly topP?: number
@@ -141,51 +143,39 @@ export type GenerationOptionsFields = {
   readonly stop?: ReadonlyArray<string>
 }
 
-export type GenerationOptionsInput = GenerationOptions | GenerationOptionsFields
+/** The keys of `GenerationOptionsFields`, for splitting a flat record into portable knobs and provider options. */
+export const GENERATION_KEYS: ReadonlySet<string> = new Set([
+  "maxTokens",
+  "temperature",
+  "topP",
+  "topK",
+  "frequencyPenalty",
+  "presencePenalty",
+  "seed",
+  "stop",
+] satisfies ReadonlyArray<keyof GenerationOptionsFields>)
 
-const latestGeneration = <Key extends keyof GenerationOptionsFields>(
-  items: ReadonlyArray<GenerationOptionsInput | undefined>,
-  key: Key,
-) => items.findLast((item) => item?.[key] !== undefined)?.[key]
+/** Pick the generation knobs out of each item; later items win per knob. */
+export const mergeGeneration = (...items: ReadonlyArray<GenerationOptionsFields | undefined>) =>
+  Object.fromEntries(
+    [...GENERATION_KEYS].map((key) => [key, last(items.map((item) => item?.[key as keyof GenerationOptionsFields]))]),
+  ) as GenerationOptionsFields
 
-export const mergeGenerationOptions = (...items: ReadonlyArray<GenerationOptionsInput | undefined>) => {
-  const result = new GenerationOptions({
-    maxTokens: latestGeneration(items, "maxTokens"),
-    temperature: latestGeneration(items, "temperature"),
-    topP: latestGeneration(items, "topP"),
-    topK: latestGeneration(items, "topK"),
-    frequencyPenalty: latestGeneration(items, "frequencyPenalty"),
-    presencePenalty: latestGeneration(items, "presencePenalty"),
-    seed: latestGeneration(items, "seed"),
-    stop: latestGeneration(items, "stop"),
-  })
-  return Object.values(result).some((value) => value !== undefined) ? result : undefined
+/** Request options a model applies under each request: the same keys as a request, and the request wins. */
+export interface RequestOptions extends TransportOptions, GenerationOptionsFields {
+  readonly providerOptions?: ProviderOptions
 }
 
-export class LanguageModelDefaults extends Schema.Class<LanguageModelDefaults>("LLM.LanguageModelDefaults")({
-  generation: Schema.optional(GenerationOptions),
-  providerOptions: Schema.optional(ProviderOptions),
-  http: Schema.optional(HttpOptions),
-}) {}
-
-export namespace LanguageModelDefaults {
-  export type Input =
-    | LanguageModelDefaults
-    | {
-        readonly generation?: GenerationOptions.Input
-        readonly providerOptions?: ProviderOptions
-        readonly http?: HttpOptions.Input
-      }
-
-  /** Normalize selected-model request defaults without applying precedence. */
-  export const make = (input: Input) => {
-    if (input instanceof LanguageModelDefaults) return input
-    return new LanguageModelDefaults({
-      generation: input.generation === undefined ? undefined : GenerationOptions.make(input.generation),
-      providerOptions: input.providerOptions,
-      http: HttpOptions.make(input.http),
-    })
-  }
+/** Merge model options; later items win per key. Empty results are `undefined`. */
+export const mergeRequestOptions = (
+  ...items: ReadonlyArray<RequestOptions | undefined>
+): RequestOptions | undefined => {
+  const merged = Object.entries({
+    ...mergeTransport(...items),
+    ...mergeGeneration(...items),
+    providerOptions: mergeProviderOptions(...items.map((item) => item?.providerOptions)),
+  }).filter(([, value]) => value !== undefined)
+  return merged.length === 0 ? undefined : (Object.fromEntries(merged) as RequestOptions)
 }
 
 /** Provider-defined string enum: known values for autocomplete, any string accepted. */
@@ -220,22 +210,12 @@ export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompat
   maxTokensField: Schema.optional(LanguageModelMaxTokensFieldCompatibility),
   requireFinishReason: Schema.optional(Schema.Boolean),
   requireAssistantAfterTool: Schema.optional(Schema.Boolean),
-  supportsStore: Schema.optional(Schema.Boolean),
-  /** Request usage in the stream with `stream_options.include_usage`. Defaults to true. */
-  streamUsage: Schema.optional(Schema.Boolean),
-  supportsStrictMode: Schema.optional(Schema.Boolean),
-  // Accepts `prompt_cache_key` in the request body. Chat omits the key unless
-  // this is true; other protocols omit it only when this is false.
-  // Session-affinity headers still flow regardless.
-  supportsPromptCacheKey: Schema.optional(Schema.Boolean),
   /** Prompt-cache marker syntax the endpoint accepts. Overrides the route default; both send `cache_control`, and `alibaba` skips tool definitions. */
   cacheFormat: Schema.optional(LanguageModelCacheFormatCompatibility),
   zaiToolStream: Schema.optional(Schema.Boolean),
   requireSignature: Schema.optional(Schema.Boolean),
   /** Supports Anthropic's thinking-prefix mismatch controls. Overrides model-ID detection. */
   supportsThinkingBlockBinding: Schema.optional(Schema.Boolean),
-  /** Supports per-message effort updates. Overrides model-ID detection. */
-  supportsEffortUpdates: Schema.optional(Schema.Boolean),
 }) {}
 
 export namespace LanguageModelCompatibility {
@@ -246,6 +226,64 @@ export namespace LanguageModelCompatibility {
     input instanceof LanguageModelCompatibility ? input : new LanguageModelCompatibility(input)
 }
 
+/**
+ * What the model accepts on its API: models.dev v2 `capabilities` in camelCase, with the API's own overrides merged in.
+ * Unset fields keep the protocol default, which may still guess from the provider, base URL or model ID.
+ */
+export interface Capabilities {
+  readonly tools?: {
+    readonly supported?: boolean
+    /** Accepts `strict` on function tools. OpenAI Chat detects it from the provider when unset. */
+    readonly strict?: boolean
+    readonly choice?: ReadonlyArray<"auto" | "none" | "required" | "tool">
+    readonly search?: boolean
+    /** Input formats accepted by custom (free-form) tools. */
+    readonly freeform?: ReadonlyArray<"text" | "lark" | "regex">
+    /** Accepts a changed tool list mid-conversation. */
+    readonly updates?: boolean
+  }
+  readonly reasoning?: {
+    readonly supported?: boolean
+    readonly default?:
+      | { readonly type: "toggle"; readonly value: boolean }
+      | { readonly type: "effort"; readonly value: ReasoningEffort }
+      | { readonly type: "budget"; readonly value: number }
+    readonly toggle?: boolean
+    readonly effort?: ReadonlyArray<ReasoningEffort>
+    readonly budget?: { readonly min?: number; readonly max?: number }
+    /** Accepts per-message effort updates. Detected from the model ID when unset. */
+    readonly updates?: boolean
+  }
+  readonly cache?:
+    | false
+    | {
+        readonly implicit?: true | { readonly ttl?: ReadonlyArray<CacheTTL>; readonly minTokens?: number }
+        readonly explicit?:
+          | true
+          | {
+              readonly ttl?: ReadonlyArray<CacheTTL>
+              readonly maxBreakpoints?: number
+              readonly targets?: ReadonlyArray<"tools" | "system" | "messages">
+              readonly minTokens?: number
+            }
+      }
+  readonly structuredOutput?: boolean
+  readonly temperature?: boolean
+  readonly topP?: boolean
+  readonly topK?: boolean
+  /** Accepts mid-conversation system messages. Anthropic Messages detects it from the model ID when unset. */
+  readonly systemUpdates?: boolean
+  /** Accepts `store`. OpenAI Chat detects it from the provider when unset. */
+  readonly store?: boolean
+  /** Accepts `stream_options.include_usage`. OpenAI Chat defaults to true. */
+  readonly streamUsage?: boolean
+  // Accepts `prompt_cache_key` in the request body. Chat omits the key unless
+  // this is true; other protocols omit it only when this is false.
+  // Session-affinity headers still flow regardless.
+  readonly promptCacheKey?: boolean
+  readonly serviceTier?: ReadonlyArray<OpenString<"flex" | "priority" | "fast" | "ultrafast" | "standby">>
+}
+
 export class LanguageModel<
   Options extends ProviderOptions = ProviderOptions,
   Compact extends CompactionOperations | undefined = CompactionOperations | undefined,
@@ -254,14 +292,16 @@ export class LanguageModel<
   readonly id: ModelID
   readonly provider: ProviderID
   readonly route: AnyRoute<Compact>
-  readonly defaults?: LanguageModelDefaults
+  readonly options?: RequestOptions
+  readonly capabilities?: Capabilities
   readonly compatibility?: LanguageModelCompatibility
 
   constructor(input: LanguageModel.ConstructorInput<Compact>) {
     this.id = input.id
     this.provider = input.provider
     this.route = input.route
-    this.defaults = input.defaults
+    this.options = input.options
+    this.capabilities = input.capabilities
     this.compatibility = input.compatibility
   }
 
@@ -273,7 +313,9 @@ export class LanguageModel<
       id: ModelID.make(input.id),
       provider: ProviderID.make(input.provider),
       route: input.route,
-      defaults: input.defaults === undefined ? undefined : LanguageModelDefaults.make(input.defaults),
+      // The route's options are a preset under the model's own.
+      options: mergeRequestOptions(input.route.options, input.options),
+      capabilities: input.capabilities,
       compatibility:
         input.compatibility === undefined ? undefined : LanguageModelCompatibility.make(input.compatibility),
     })
@@ -286,7 +328,8 @@ export class LanguageModel<
       id: model.id,
       provider: model.provider,
       route: model.route,
-      defaults: model.defaults,
+      options: model.options,
+      capabilities: model.capabilities,
       compatibility: model.compatibility,
     }
   }
@@ -318,17 +361,17 @@ export namespace LanguageModel {
     readonly id: ModelID
     readonly provider: ProviderID
     readonly route: AnyRoute<Compact>
-    readonly defaults?: LanguageModelDefaults
+    readonly options?: RequestOptions
+    readonly capabilities?: Capabilities
     readonly compatibility?: LanguageModelCompatibility
   }
 
   export type Input<Compact extends CompactionOperations | undefined = CompactionOperations | undefined> = Omit<
     ConstructorInput<Compact>,
-    "id" | "provider" | "defaults" | "compatibility"
+    "id" | "provider" | "compatibility"
   > & {
     readonly id: string | ModelID
     readonly provider: string | ProviderID
-    readonly defaults?: LanguageModelDefaults.Input
     readonly compatibility?: LanguageModelCompatibility.Input
   }
 }

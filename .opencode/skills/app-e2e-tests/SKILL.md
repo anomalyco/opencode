@@ -1,6 +1,6 @@
 ---
 name: app-e2e-tests
-description: Use when writing, changing, reviewing, or debugging Playwright e2e tests in packages/app/e2e (regression keepers and user stories). Covers the mocked opencode server harness and the Bun static server, per-test isolation, page-load and route cost, the suite-wide service-worker block, races with first mount, hover, measurement, clock, dialogs and shortcuts, projects, shards and worker scheduling, rehearsing Windows timing locally, and diagnosing a CI flake from its artifacts. Not for component tests (stories mounted on packages/stories) or e2e/performance benchmarks.
+description: Use when writing, changing, reviewing, or debugging Playwright e2e tests in packages/app/e2e (regression keepers and user stories). Covers the mocked opencode server harness and the Bun static server, per-test isolation, page-load and route cost, the suite-wide service-worker block, races with first mount, hover, measurement, clock, dialogs and shortcuts, projects, shards and worker scheduling, rehearsing Windows timing locally, and diagnosing a CI flake from its artifacts. Not for component tests (stories mounted on packages/stories) or the strobe benchmarks in packages/app/perf.
 ---
 
 # App e2e tests
@@ -12,7 +12,7 @@ All paths below are relative to `packages/app` unless they start with `packages/
 ## What a test runs against
 
 - **No opencode backend.** Each shard leg runs `bun --cwd packages/app test:e2e:built --shard=<n>/2` (`check-test.yml:287-292`). It builds once and starts one Bun static server, `e2e/utils/serve.ts`, on `127.0.0.1:${PLAYWRIGHT_PORT ?? 3000}`. All 5 workers share it (`playwright.config.ts:23-27`).
-  - `serve.ts` keeps vite preview's SPA fallback rules. Do not move built e2e back to vite preview. On case-insensitive file systems it synchronously reads the whole `dist/_assets` directory (about 3,100 files) for every asset request, so every worker's page loads wait in line. The `e2e/performance` configs still use it to keep their baselines comparable.
+  - `serve.ts` keeps vite preview's SPA fallback rules. Do not move built e2e back to vite preview. On case-insensitive file systems it synchronously reads the whole `dist/_assets` directory (about 3,100 files) for every asset request, so every worker's page loads wait in line.
 - **The API is an in-memory mock per page,** running in the test worker. `mockOpenCodeServer` (`e2e/utils/mock-server.ts:202`):
   - answers `page.route("**/api/**")` with an Effect HttpApi handler;
   - fakes `/api/event` SSE with an init-script `fetch` override;
@@ -54,7 +54,7 @@ All paths below are relative to `packages/app` unless they start with `packages/
 - **Real-time waits cost their full length on every run and retry** (`settings-wsl.spec.ts:268-276` waits out a 10 s health check). Prefer `page.clock`:
   - install it before the `goto` or `reload` whose timers you need (`timeline-stream.spec.ts:1700`);
   - keep fast-forwards under the client's 45 s event-stream idle timeout (`packages/client/src/solid/connection.ts:35`).
-- **Leave benchmark pacing out of regression tests.** The `sendAll` delays and `messageDelay` exist for benchmarks (`timeline.ts:306`, `mock-server.ts:82`). Hold message pages with `beforeMessagesResponse` instead.
+- **Leave pacing out of regression tests.** The `sendAll` delays (`timeline.ts:326`) pace workloads; tests wait for the resulting UI state. Hold message pages with `beforeMessagesResponse` instead.
 
 ## Wait for state, not time: races CI found
 
@@ -77,7 +77,7 @@ Most of these rarely reproduce on an idle local machine.
 - **Use the harness's signals.** `holdRoute(...).arrived` resolves when the request reaches the route, and `transport.send` resolves after delivery. `setupTimeline(...).waitForPart` resolves once a part renders (`timeline.ts:328`).
 - **Decide which side is wrong.** Three of eight investigated e2e flakes were product bugs, each since fixed in the product:
   - a stale scroll offset restored when a scroll settles (`src/session/timeline/observe-element-offset.ts`);
-  - a video double-click that also entered native fullscreen (`packages/gui-extensions/src/file/artifact-view.tsx:617`);
+  - a video double-click that also entered native fullscreen (`packages/gui-plugins/src/file/artifact-view.tsx:612`);
   - shortcuts dropped while a dialog closed.
 
   If a user could hit the interleaving, fix the product and keep the assertion.
@@ -105,7 +105,7 @@ Most of these rarely reproduce on an idle local machine.
 Run from `packages/app`:
 
 - [ ] Run in built mode, as CI does: `bun run test:e2e:built -- e2e/regression/<file>.spec.ts`. Dev mode serves unbundled modules, with the API on another origin (`playwright.config.ts:19-21`).
-- [ ] Use a free port when another worktree or agent may hold 3000: `PLAYWRIGHT_PORT=4310 bun run test:e2e:built -- ...`. Built runs never reuse a server, and `serve.ts` fails on a busy port. Stay below 49152 on Windows: it reserves ports from there up and hands them out for outgoing connections (`services/www/src/docs/content/cli/web.mdx:43`, `packages/client/test/fixture/service-fixture.ts:108-109`).
+- [ ] Use a free port when another worktree or agent may hold 3000: `PLAYWRIGHT_PORT=4310 bun run test:e2e:built -- ...`. Built runs never reuse a server, and `serve.ts` fails on a busy port. Stay below 49152 on Windows: it reserves ports from there up and hands them out for outgoing connections (`services/site/src/docs/content/cli/web.mdx:43`, `packages/client/test/fixture/service-fixture.ts:108-109`).
 - [ ] To repeat without rebuilding:
   - build once with `VITE_OPENCODE_TEST_FIXTURES=1 bun run build`;
   - keep `bun e2e/utils/serve.ts --host 127.0.0.1 --port 4310` running;
@@ -118,7 +118,7 @@ Run from `packages/app`:
 - [ ] Check the cost on a noisy machine. Other agents add load, and local A/Bs at a load average of 20-35 were inconclusive.
   - Compare the medians of interleaved before/after runs at `--workers=5`, or the step durations in the report (`bun run test:e2e:report`).
   - Count every `goto` and `reload` you added.
-- [ ] `bun run typecheck:e2e` reports 4 existing errors: `timeline-stream.spec.ts:1822`, `:1825`, and two `e2e/performance` probes. Add none. If you changed `playwright.config.ts`, update `test-browser/playwright-config.test.ts`.
+- [ ] `bun run typecheck:e2e` reports 2 existing errors: `timeline-stream.spec.ts:1822` and `:1825`. Add none. If you changed `playwright.config.ts`, update `test-browser/playwright-config.test.ts`.
 
 ## When CI flakes
 

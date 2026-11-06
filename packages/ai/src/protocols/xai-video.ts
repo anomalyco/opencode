@@ -5,7 +5,7 @@ import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords } from "../schema/index.js"
-import { VideoModel, VideoResponse, type VideoRequestFor } from "../video.js"
+import { VideoModel, VideoResponse, type VideoRequest } from "../video.js"
 import { ProviderShared, optionalNull } from "./shared.js"
 
 const route = MediaProtocol.identity({ id: "xai-video", name: "xAI Video", provider: "xai" })
@@ -28,7 +28,7 @@ export type XAIVideoOptions = {
   readonly reference_audios?: ReadonlyArray<{ readonly voice_id: string }>
 } & Record<string, unknown>
 
-export type Request = VideoRequestFor<XAIVideoOptions>
+export type Request = VideoRequest<VideoModel<XAIVideoOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Token and response schemas
@@ -132,7 +132,7 @@ const decodeStatus = Effect.fn("XAIVideo.decodeStatus")(function* (
   context: MediaProtocol.PollContext<Token>,
 ) {
   const output = yield* decodeVideoStatus(response)
-  const status = yield* MediaProtocol.status(STATUS, output.value.status, output)
+  const status = MediaProtocol.status(STATUS, output.value.status)
   return { id: context.token.requestID, status, progress: fraction(output.value.progress) }
 })
 
@@ -142,7 +142,7 @@ const decodeResult = Effect.fn("XAIVideo.decodeResult")(function* (
 ) {
   const output = yield* decodeVideoStatus(response)
   const decoded = output.value
-  const status = yield* MediaProtocol.status(STATUS, decoded.status, output)
+  const status = MediaProtocol.status(STATUS, decoded.status)
   if (status === "running") return yield* output.pending(context.token.requestID)
   if (status === "failed") {
     const code = decoded.error?.code ?? undefined
@@ -155,13 +155,10 @@ const decodeResult = Effect.fn("XAIVideo.decodeResult")(function* (
   }
   if (status !== "completed")
     return yield* output.ended("expired", `${route.name} request ${context.token.requestID} expired`)
-  // `respect_moderation: false` marks a filtered result; a URL may still be present, so report it as a notice.
-  const notices =
-    decoded.video?.respect_moderation === false
-      ? [{ type: "moderated" as const, message: `${route.name} flagged the generated video for moderation` }]
-      : undefined
+  // `respect_moderation: false` marks a filtered result; a URL may still be present, so only a missing one fails.
+  const moderated = decoded.video?.respect_moderation === false
   const url = decoded.video?.url ?? undefined
-  if (url === undefined && notices !== undefined)
+  if (url === undefined && moderated)
     return yield* output.contentPolicy(`${route.name} withheld the video for moderation`)
   if (url === undefined) return yield* output.invalid(`${route.name} completed without a video URL`)
   const duration = decoded.video?.duration ?? undefined
@@ -172,8 +169,13 @@ const decodeResult = Effect.fn("XAIVideo.decodeResult")(function* (
         info: duration === undefined ? undefined : { durationSeconds: duration },
       }),
     ],
-    notices,
-    providerMetadata: { xai: { requestId: context.token.requestID, model: decoded.model ?? undefined } },
+    providerMetadata: {
+      xai: {
+        requestId: context.token.requestID,
+        model: decoded.model ?? undefined,
+        respectModeration: decoded.video?.respect_moderation ?? undefined,
+      },
+    },
   })
 })
 

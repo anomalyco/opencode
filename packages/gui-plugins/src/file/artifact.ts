@@ -1,0 +1,225 @@
+import { base64ToBytes } from "@opencode/util/base64"
+import type { FileContent } from "@opencode/plugin/gui"
+
+/** Approximate on-disk size of loaded content. */
+export function contentBytes(content: FileContent) {
+  if (content.size !== undefined) return content.size
+
+  if (content.bytes !== undefined) return content.bytes.byteLength
+
+  if (content.encoding === "base64") {
+    const padding = content.content.endsWith("==") ? 2 : content.content.endsWith("=") ? 1 : 0
+
+    return Math.floor((content.content.length * 3) / 4) - padding
+  }
+
+  return new TextEncoder().encode(content.content).length
+}
+
+/**
+ * Parse RFC 4180 style delimited text. Quoted fields may contain the delimiter, newlines, and
+ * doubled quotes. Rows beyond `limit` are counted but not returned.
+ */
+export function parseDelimited(text: string, delimiter: string, limit = 1000) {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ""
+  let quoted = false
+  let total = 0
+
+  const endRow = () => {
+    row.push(field)
+    field = ""
+    const blank = row.length === 1 && row[0] === ""
+
+    if (!blank) {
+      total++
+
+      if (rows.length < limit) rows.push(row)
+    }
+
+    row = []
+  }
+
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index]!
+
+    if (quoted) {
+      if (char !== '"') {
+        field += char
+        continue
+      }
+
+      if (text[index + 1] === '"') {
+        field += '"'
+        index++
+        continue
+      }
+
+      quoted = false
+      continue
+    }
+
+    if (char === '"' && field === "") {
+      quoted = true
+      continue
+    }
+
+    if (char === delimiter) {
+      row.push(field)
+      field = ""
+      continue
+    }
+
+    if (char === "\r") continue
+
+    if (char === "\n") {
+      endRow()
+      continue
+    }
+
+    field += char
+  }
+
+  if (field !== "" || row.length > 0) endRow()
+  const columns = rows.reduce((max, current) => Math.max(max, current.length), 0)
+
+  return { rows, total, columns }
+}
+
+/** The raw bytes of loaded content. */
+export function bytesFromContent(content: FileContent) {
+  // A copy, as a viewer may move the returned buffer to a worker.
+  if (content.bytes !== undefined) return content.bytes.slice()
+
+  if (content.encoding !== "base64") return new TextEncoder().encode(content.content)
+
+  return base64ToBytes(content.content)
+}
+
+/** Build a blob URL from loaded content. Callers revoke it when the viewer unmounts. */
+export function blobUrlFromContent(content: FileContent) {
+  const type = content.mimeType ?? "application/octet-stream"
+  const bytes = content.bytes
+
+  if (bytes !== undefined) {
+    const view =
+      bytes.buffer instanceof ArrayBuffer
+        ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+        : bytes.slice()
+
+    return URL.createObjectURL(new Blob([view], { type }))
+  }
+
+  if (content.encoding !== "base64") return URL.createObjectURL(new Blob([content.content], { type }))
+
+  return URL.createObjectURL(new Blob([bytesFromContent(content)], { type }))
+}
+
+/**
+ * Resolve a relative link against a directory. A relative base yields a workspace-relative path and
+ * an absolute base an absolute one; undefined when the link climbs past the base's root.
+ */
+export function resolveArtifactPath(base: string, href: string) {
+  const target = href.replaceAll("\\", "/")
+
+  if (target.startsWith("/")) return undefined
+  const dir = base.replaceAll("\\", "/")
+  const segments = [...dir.split("/").filter(Boolean)]
+
+  for (const segment of target.split("/")) {
+    if (!segment || segment === ".") continue
+
+    if (segment !== "..") {
+      segments.push(segment)
+      continue
+    }
+
+    if (segments.length === 0) return undefined
+    segments.pop()
+  }
+
+  return `${dir.startsWith("/") ? "/" : ""}${segments.join("/")}`
+}
+
+const frontmatter = /^\uFEFF?---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)??---[ \t]*(?:\r?\n|$)/
+
+/**
+ * Split a leading YAML frontmatter block from Markdown so preview does not render its closing `---`
+ * as a setext heading. Top-level `key: value` entries come back as properties; frontmatter this
+ * reader cannot split stays in the body as a fenced `yaml` code block. Empty frontmatter is dropped.
+ */
+export function splitFrontmatter(text: string) {
+  const match = frontmatter.exec(text)
+
+  if (!match) return { body: text }
+  const body = text.slice(match[0].length)
+  const yaml = (match[1] ?? "").replace(/\r\n?/g, "\n")
+
+  if (!yaml.trim()) return { body }
+  const properties = readProperties(yaml)
+
+  if (properties) return { properties, body }
+  const longest = Array.from(yaml.matchAll(/`+/g)).reduce((max, run) => Math.max(max, run[0].length), 0)
+  const fence = "`".repeat(Math.max(3, longest + 1))
+  const block = `${fence}yaml\n${yaml}\n${fence}`
+
+  return { body: body.trim() ? `${block}\n\n${body}` : block }
+}
+
+/** One top-level frontmatter entry. `code` marks a nested map or list, shown as its YAML source. */
+export type FrontmatterProperty = { key: string; value: string; code: boolean }
+
+function readProperties(yaml: string) {
+  const lines = yaml.split("\n").filter((line) => !line.startsWith("#"))
+  // A top-level key starts at column 0; a column-0 "- " item belongs to the key above it.
+  const starts = lines.flatMap((line, index) => (/^[^\s-]|^-[^\s]/.test(line) ? [index] : []))
+
+  if (starts.length === 0 || lines.slice(0, starts[0]).some((line) => line.trim())) return
+  const properties = starts.map((start, index) => readProperty(lines[start], lines.slice(start + 1, starts[index + 1])))
+
+  if (!properties.every((property) => property !== undefined)) return
+
+  return properties
+}
+
+// A `#` at the start or after whitespace begins a YAML comment in a plain scalar.
+const comment = /(?:^|\s)#/
+
+function readProperty(head: string, rest: string[]): FrontmatterProperty | undefined {
+  const match = /^([^\s:][^:]*?):(?:[ \t]+(.*))?$/.exec(head)
+
+  if (!match) return
+  const key = match[1]
+  const value = (match[2] ?? "").trim()
+  const block = rest.slice(0, rest.findLastIndex((line) => line.trim()) + 1)
+
+  // Only quoted values that close on this line without escapes are read; others fall back to the YAML block.
+  if (/^["']/.test(value)) {
+    const quoted = /^"([^"\\]*)"$|^'([^']*)'$/.exec(value)
+
+    if (!quoted || block.length > 0) return
+
+    return { key, value: quoted[1] ?? quoted[2], code: false }
+  }
+
+  if (comment.test(value)) return
+
+  if (block.length === 0) return { key, value, code: false }
+  const indent = Math.min(...block.flatMap((line) => (line.trim() ? [line.length - line.trimStart().length] : [])))
+  const lines = block.map((line) => line.slice(indent))
+
+  if (/^\|[+-]?\d?$/.test(value)) return { key, value: lines.join("\n"), code: false }
+
+  // Folded (`>`) and plain multi-line scalars read as one line.
+  if (value) {
+    const folded = /^>[+-]?\d?$/.test(value)
+
+    if (!folded && lines.some((line) => comment.test(line))) return
+    const words = [folded ? "" : value, ...lines.map((line) => line.trim())]
+
+    return { key, value: words.filter(Boolean).join(" "), code: false }
+  }
+
+  return { key, value: lines.join("\n"), code: true }
+}

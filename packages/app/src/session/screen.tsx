@@ -15,23 +15,24 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
-import type { BackgroundTask, MountedSession, SessionScreen } from "@opencode/gui-extensions/sdk"
+import type { BackgroundTask, MountedSession, SessionScreen } from "@opencode/plugin/gui"
 import { MessageTimeline } from "@/session/timeline/message-timeline"
 import { ComposerDropzone } from "@/composer/dropzone"
 import { useSettings } from "@/settings/model"
 import type { SessionModel } from "@/session/model"
 import { SESSION_PANEL_WIDTH_MIN } from "@/session/session-panel-width"
+import { useLayout } from "@/shell/state/layout"
 import { SessionPanelFrame } from "@/session/session-frame"
-import { ExtensionLinks } from "@/runtime/extension/render"
-import { createPanelSidebar, createRegion, MobilePanel } from "@/runtime/extension/panels"
-import { createMobileViews, MobileViewTabs } from "@/runtime/extension/mobile"
-import { useExtensionAttachment } from "@/runtime/extension/host-apis"
-import { createMountedSession } from "@/runtime/extension/mounted-session"
+import { PluginLinks } from "@/runtime/plugin/render"
+import { createPanelSidebar, createRegion, MobilePanel } from "@/runtime/plugin/panels"
+import { createMobileViews, MobileViewTabs } from "@/runtime/plugin/mobile"
+import { usePluginAttachment } from "@/runtime/plugin/host-apis"
+import { createMountedSession } from "@/runtime/plugin/mounted-session"
 import { useUsageExceededDialogs } from "./usage-exceeded-dialogs"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionScreenLayout } from "./screen-layout"
-import { PaneTabs, SideRegion } from "@/runtime/extension/side-region"
-import { createPaneDrag } from "@/runtime/extension/pane-drag"
+import { PaneTabs, SideRegion } from "@/runtime/plugin/side-region"
+import { createPaneDrag } from "@/runtime/plugin/pane-drag"
 import { useLanguage } from "@/runtime/i18n/language"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Icon } from "@opencode/ui/icon"
@@ -40,6 +41,7 @@ import { createSessionTimelineInteraction } from "./timeline/interaction"
 import { createTimelineSearchController } from "./timeline/search-controller"
 import { TimelineSearchBar } from "./timeline/search-bar"
 import { createTimelineQuote, TimelineQuote } from "./timeline/quote"
+import { createTimelineQuoteHighlight } from "./timeline/quote-highlight"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
 import { SessionIdentityHeader, SessionLocation } from "./session-identity-header"
 import { SessionHeaderDrag, windowDragEnabled } from "./header/drag-area"
@@ -47,14 +49,14 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { useServer } from "@/runtime/server/current"
 import { reviewGlyphFill, SessionReviewToggle } from "./header/session-header-actions"
 import { createTimelineCache } from "./timeline/cache"
-import { createPanelMotion, holdLandingWidth, panelOpacity } from "@/shell/panel-motion"
+import { createPanelMotion, holdLandingWidth, panelOpacity, setPanelResizing } from "@/shell/panel-motion"
 
 export function SessionScreenView(props: { session: SessionModel }) {
-  // The timeline cache captures its owner when created, so link handling must be provided above it.
+  // Link handling for the rest of the screen; each cached timeline provides its own for its session.
   const mounted = createMountedSession(props.session)
 
   return (
-    <ExtensionLinks session={mounted.view()}>
+    <PluginLinks session={mounted.view()}>
       <SessionScreenContent
         session={props.session}
         screen={mounted.screen}
@@ -62,7 +64,7 @@ export function SessionScreenView(props: { session: SessionModel }) {
         bindBackground={mounted.bindBackground}
         bindPrompt={mounted.bindPrompt}
       />
-    </ExtensionLinks>
+    </PluginLinks>
   )
 }
 
@@ -72,11 +74,11 @@ function SessionScreenContent(props: {
   view: Accessor<MountedSession>
   screen: SessionScreen
   bindBackground: (tasks: () => readonly BackgroundTask[]) => void
-  bindPrompt: (prompt: { quotable: () => boolean; focus: () => void }) => void
+  bindPrompt: (prompt: { quotable: () => boolean; focus: () => void; focused: () => boolean }) => void
 }) {
   const session = props.session
   const language = useLanguage()
-  const attachment = useExtensionAttachment()
+  const attachment = usePluginAttachment()
   const settings = useSettings()
   const server = useServer()
   const isDesktop = session.isDesktop
@@ -108,6 +110,7 @@ function SessionScreenContent(props: {
   const bottomOpen = createMemo(() => bottomTabs() && session.layout.view().bottom.opened())
 
   const drag = createPaneDrag({
+    identity: session.layout.tabKey,
     shown: (pane) => (pane === "bottom" ? bottomOpen() : region.pane(pane).keys().length > 0),
     drop: (key, target) =>
       batch(() => {
@@ -117,26 +120,32 @@ function SessionScreenContent(props: {
       }),
   })
 
-  const screen = createSessionScreenLayout(session, { wide: region.wide })
+  const screen = createSessionScreenLayout(session, {
+    wide: region.wide,
+    panel: region.pane("side").selected,
+    widths: useLayout().panelWidth,
+  })
 
-  const timeline = createSessionTimelineInteraction(session)
+  const mobileView = attachment.mobile.current
+
+  const conversationVisible = createMemo(() => isDesktop() || mobileView() === "session")
+
+  const timeline = createSessionTimelineInteraction(session, conversationVisible)
 
   const timelineSearch = createTimelineSearchController({
     sessionID: session.identity.sessionID,
     scrollRef: timeline.scroller,
     revealMessage: timeline.actions.revealMessage,
-    pauseAutoScroll: timeline.view.unpin,
+    pauseAutoScroll: () => timeline.follow.dispatch({ type: "detach" }),
   })
 
   const messagesReady = timeline.ready
 
   const [store, setStore] = createStore<{
     timelineScrollbarHidden: boolean
-    sideMounted: boolean
     mobileCached: string[]
   }>({
     timelineScrollbarHidden: false,
-    sideMounted: false,
     mobileCached: [],
   })
 
@@ -160,20 +169,23 @@ function SessionScreenContent(props: {
   // direction mounts its contents mid-flight, and a reopen reuses their style and layout.
   let sideContent: HTMLDivElement | undefined
   let sideGlyph: SVGPathElement | undefined
-  let sideClosed = 0
   // While the left sidebar moves the side panel's edge, its contents keep the width they land at, and centred content,
-  // like a Markdown preview, keeps its place rather than jumping by half the change.
-  holdLandingWidth(() => sideContent, "blocks")
+  // like a Markdown preview, keeps its place rather than jumping by half the change. The side region's content box is
+  // the one element whose own width reads the hold.
+  holdLandingWidth(
+    () => sideContent,
+    "blocks",
+    () => sideContent?.querySelector<HTMLElement>('[data-slot="session-review-content"]'),
+  )
   // The toggle's pane fills from the panel's edge as far as the panel is open.
-  const paintSideGlyph = () => sideGlyph?.setAttribute("transform", reviewGlyphFill(1 - sideClosed))
+  const paintSideGlyph = (closed: number) => sideGlyph?.setAttribute("transform", reviewGlyphFill(1 - closed))
 
   const sideMotion = createPanelMotion({
     open: sideVisible,
     identity: session.layout.tabKey,
     // The chat's real width moves the side panel's edge, whose contents keep their open width pinned to it.
     paint: (closed) => {
-      sideClosed = closed
-      paintSideGlyph()
+      paintSideGlyph(closed)
 
       // Dims the contents as they leave and fades them in as they arrive.
       if (sideContent) sideContent.style.opacity = panelOpacity(closed)
@@ -202,19 +214,11 @@ function SessionScreenContent(props: {
     setStore("timelineScrollbarHidden", false)
   }
 
-  createEffect(() => {
-    if (screen.side.open()) setStore("sideMounted", true)
-  })
-
-  const mobileView = attachment.mobile.current
-
   const mobileEntry = createMemo(() => {
     const key = mobileView()
 
     return key === "session" ? undefined : mobile.find(key)
   })
-
-  const conversationVisible = createMemo(() => isDesktop() || mobileView() === "session")
 
   // Narrow-screen views that ask to stay mounted once shown, e.g. a terminal that keeps its shell's screen.
   createEffect(() => {
@@ -235,7 +239,7 @@ function SessionScreenContent(props: {
   })
 
   props.bindBackground(composer.requests.background.tasks)
-  props.bindPrompt({ quotable: composer.quote.available, focus: composer.quote.focus })
+  props.bindPrompt({ quotable: composer.quote.available, focus: composer.quote.focus, focused: composer.focused })
   useUsageExceededDialogs({
     selection: () => composer.active()?.composer.model.selection,
     onDone: () => composer.active()?.composer.restoreFocus(),
@@ -246,6 +250,12 @@ function SessionScreenContent(props: {
     sessionKey: session.identity.sessionKey,
     enabled: () => conversationVisible() && composer.quote.available(),
     add: composer.quote.add,
+  })
+
+  createTimelineQuoteHighlight({
+    root: timeline.scroller,
+    source: composer.quote.source,
+    enabled: () => conversationVisible() && composer.quote.available(),
   })
 
   const sessionErrorFallback = (cause: unknown, reset: () => void) => {
@@ -268,47 +278,53 @@ function SessionScreenContent(props: {
     (source, active) => {
       // A cached timeline keeps its own session's latest object while another session is routed.
       const own = createMemo<MountedSession>((previous) => {
+        if (!active()) return previous
         const view = props.view()
 
         return view.id === source.identity.sessionID() ? view : previous
       }, untrack(props.view))
 
+      const actions = composer.actions.timeline({
+        sessionID: source.identity.sessionID,
+        isChild: () => !!source.data.parentID(),
+      })
+
       return (
-        <MessageTimeline
-          active={active()}
-          hideHeader={!isDesktop()}
-          registerHeaderGap={registerHeaderGap}
-          session={source}
-          view={own()}
-          screen={props.screen}
-          background={composer.requests.background}
-          actions={composer.actions.timeline}
-          scroll={timeline.scroll}
-          onResumeScroll={timeline.actions.resume}
-          setScrollRef={timeline.view.setScrollRef}
-          onScheduleScrollState={timeline.view.scheduleScrollState}
-          onPin={timeline.view.pin}
-          onUnpin={timeline.view.unpin}
-          onUserScroll={timeline.view.markUserScroll}
-          onHistoryScroll={timeline.view.onHistoryScroll}
-          onSelectionInteraction={timeline.view.selectionInteraction}
-          pinned={timeline.view.pinned()}
-          centered={screen.centered()}
-          reserveReviewToggle={!sideVisible()}
-          setContentRef={timeline.view.setContentRef}
-          bottomInset={timeline.inset()}
-          setVisibleRef={timeline.view.setVisibleRef}
-          anchor={timeline.view.anchor}
-          setRevealMessage={timeline.view.setRevealMessage}
-          setRevealPart={timeline.view.setRevealPart}
-          reveal={timeline.view.reveal}
-          setScrollToEnd={timeline.view.setScrollToEnd}
-          search={
-            <Show when={active()}>
-              <TimelineSearchBar controller={timelineSearch} />
-            </Show>
-          }
-        />
+        <PluginLinks session={own()} active={active()}>
+          <MessageTimeline
+            active={active()}
+            hideHeader={!isDesktop()}
+            registerHeaderGap={registerHeaderGap}
+            session={source}
+            view={own()}
+            screen={props.screen}
+            background={composer.requests.background}
+            actions={actions}
+            scroll={timeline.scroll}
+            onResumeScroll={timeline.actions.resume}
+            setScrollRef={timeline.view.setScrollRef}
+            onScheduleScrollState={timeline.view.scheduleScrollState}
+            follow={timeline.follow}
+            onUserScroll={timeline.view.markUserScroll}
+            onHistoryScroll={timeline.view.onHistoryScroll}
+            centered={screen.centered()}
+            reserveReviewToggle={!sideVisible()}
+            onContentResize={timeline.view.contentResized}
+            bottomInset={timeline.inset()}
+            setVisibleRef={timeline.view.setVisibleRef}
+            anchor={timeline.view.anchor}
+            setRevealMessage={timeline.view.setRevealMessage}
+            setRevealPart={timeline.view.setRevealPart}
+            reveal={timeline.view.reveal}
+            setScrollToEnd={timeline.view.setScrollToEnd}
+            setPage={timeline.view.setPage}
+            search={
+              <Show when={active()}>
+                <TimelineSearchBar controller={timelineSearch} />
+              </Show>
+            }
+          />
+        </PluginLinks>
       )
     },
     () => conversationVisible() && messagesReady(),
@@ -381,7 +397,7 @@ function SessionScreenContent(props: {
                   view={props.view()}
                   sidebar={sidebar}
                   visible={mobileView() === entry.key}
-                  open={() => region.openFor(entry.extension)}
+                  open={() => region.openFor(entry.plugin)}
                 />
               </div>
             )}
@@ -399,7 +415,7 @@ function SessionScreenContent(props: {
                 view={props.view()}
                 sidebar={sidebar}
                 visible
-                open={() => region.openFor(entry().extension)}
+                open={() => region.openFor(entry().plugin)}
               />
             )}
           </Match>
@@ -420,6 +436,8 @@ function SessionScreenContent(props: {
           {(model) => (
             <ActiveSessionComposerRegion
               session={session}
+              view={props.view}
+              screen={props.screen}
               model={model}
               suggestionBoundary={timeline.visible}
               onReveal={timeline.actions.revealPart}
@@ -438,7 +456,7 @@ function SessionScreenContent(props: {
           {/* Keep the control outside panel animations. */}
           <Show when={isDesktop() && messagesReady() && session.identity.params.id}>
             <div
-              class="absolute end-3 top-0 z-30 h-12 flex items-center"
+              class="absolute end-[var(--session-header-inset-end,12px)] top-0 z-30 h-12 flex items-center"
               data-slot="session-review-toggle"
               onPointerDown={hideTimelineScrollbar}
               onClick={hideTimelineScrollbar}
@@ -447,7 +465,7 @@ function SessionScreenContent(props: {
                 onToggle={region.toggle}
                 glyph={(fill) => {
                   sideGlyph = fill
-                  paintSideGlyph()
+                  paintSideGlyph(sideMotion.closed())
                 }}
               />
             </div>
@@ -471,24 +489,25 @@ function SessionScreenContent(props: {
               <SessionHeaderDrag pane={chat} gap={headerGap()} />
             </Show>
 
-            <Show when={screen.panel.resizable()}>
-              <div onPointerDown={() => screen.size.start()}>
-                <ResizeHandle
-                  class="-end-1"
-                  direction="horizontal"
-                  size={screen.panel.resizedWidth()}
-                  min={SESSION_PANEL_WIDTH_MIN}
-                  max={screen.panel.max()}
-                  onResize={(width) => {
-                    screen.size.touch()
-                    session.layout.view().session.resize(width)
-                  }}
-                />
-              </div>
-            </Show>
+            {/* Hidden rather than unmounted: removing it makes the transcript frame the last child, and structural
+                selectors in the transcript then restyle every element in it as the side panel starts to close. */}
+            <div classList={{ hidden: !screen.panel.resizable() }} onPointerDown={(event) => screen.size.start(event)}>
+              <ResizeHandle
+                class="-end-1"
+                direction="horizontal"
+                size={screen.panel.resizedWidth()}
+                min={SESSION_PANEL_WIDTH_MIN}
+                max={screen.panel.max()}
+                onResize={(width) => {
+                  screen.size.touch()
+                  screen.panel.resize(width)
+                }}
+                onDraggingChange={setPanelResizing}
+              />
+            </div>
           </div>
 
-          <Show when={sideMotion.present() || store.sideMounted}>
+          <Show when={sideMotion.mounted()}>
             <div
               ref={sidePresence}
               data-slot="session-side-panel-presence"
@@ -503,22 +522,20 @@ function SessionScreenContent(props: {
                 ref={sideContent}
                 data-slot="session-side-panel-content"
                 class="absolute inset-y-0 start-0 size-full [contain:layout_style] will-change-[opacity]"
-                style={{ "--session-side-content-width": screen.side.contentWidth() }}
               >
                 <div data-slot="session-side-region" class="absolute inset-0 min-h-0 overflow-visible">
-                  <Show when={store.sideMounted}>
-                    <div data-slot="session-side-region-presence" class="absolute inset-0">
-                      <SideRegion
-                        screen={props.screen}
-                        view={props.view()}
-                        region={region}
-                        sidebar={sidebar}
-                        present={sideMotion.present()}
-                        size={screen.size}
-                        drag={drag}
-                      />
-                    </div>
-                  </Show>
+                  <div data-slot="session-side-region-presence" class="absolute inset-0">
+                    <SideRegion
+                      screen={props.screen}
+                      view={props.view()}
+                      region={region}
+                      sidebar={sidebar}
+                      present={sideMotion.present()}
+                      size={screen.size}
+                      contentWidth={screen.side.contentWidth}
+                      drag={drag}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -533,7 +550,7 @@ function SessionScreenContent(props: {
             classList={{ hidden: !bottomOpen() }}
             style={{ height: `${session.layout.view().bottom.height()}px` }}
           >
-            <div onPointerDown={() => screen.size.start()}>
+            <div onPointerDown={(event) => screen.size.start(event)}>
               <ResizeHandle
                 class="-top-1"
                 direction="vertical"
@@ -545,6 +562,7 @@ function SessionScreenContent(props: {
                   screen.size.touch()
                   session.layout.view().bottom.resize(height)
                 }}
+                onDraggingChange={setPanelResizing}
               />
             </div>
             <section

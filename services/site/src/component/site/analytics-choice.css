@@ -1,0 +1,11 @@
+/* The status line keeps the document's reading width. */
+[data-slot="analytics-choice"] p {
+  max-inline-size: var(--measure);
+}
+
+/* The control is about this browser, so a printed or saved copy leaves it out. */
+@media print {
+  [data-slot="analytics-choice"] {
+    display: none;
+  }
+}

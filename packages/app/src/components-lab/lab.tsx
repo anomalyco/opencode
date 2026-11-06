@@ -28,9 +28,10 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { CommentsProvider } from "@/composer/comments"
 import { ComposerPersistenceProvider } from "@/composer/persistence"
 import { ModelsProvider } from "@/providers/models/models"
-import { Contribution } from "@/runtime/extension/render"
+import { Contribution } from "@/runtime/plugin/render"
 import { ServerProvider, useServer } from "@/runtime/server/current"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { isServerHealthy } from "@/runtime/server/health-machine"
 import { useGlobal } from "@/runtime/server/runtime"
 import { SessionRouteFrame } from "@/session/session-frame"
 import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
@@ -46,6 +47,17 @@ import {
   type StoryArgs,
   type StoryModule,
 } from "./catalog"
+import {
+  createLabStageState,
+  INITIAL_LAB_BROWSE_STATE,
+  labStageIndex,
+  selectShouldToggleFolder,
+  transitionLabBrowse,
+  transitionLabStage,
+  type LabBrowseEvent,
+  type LabStageEffect,
+  type LabStageEvent,
+} from "./machine"
 import { applyMotionPatch, motionFields, motionScopes, motionValues, sameMotion, storyMotion } from "./motion"
 
 // How long Play holds each state at full speed. Slow motion doubles it while the motion itself runs 4× longer, so
@@ -58,12 +70,14 @@ const themeIcon = `<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="
 
 const gridIcon = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/></svg>`
 
+// Standalone stories mount fixture runtimes that must not access the live app's storage.
 // Vite needs the patterns as literals in each call.
 const modules = import.meta.glob<StoryModule>([
   "../**/*.stories.tsx",
   "../../../ui/src/**/*.stories.tsx",
   "../../../session-ui/src/**/*.stories.tsx",
-  "../../../gui-extensions/src/**/*.stories.tsx",
+  "../../../gui-plugins/src/**/*.stories.tsx",
+  "!../**/*.standalone.stories.tsx",
 ])
 
 // Each file's text, for the order its states were written in.
@@ -72,7 +86,8 @@ const sources = import.meta.glob<string>(
     "../**/*.stories.tsx",
     "../../../ui/src/**/*.stories.tsx",
     "../../../session-ui/src/**/*.stories.tsx",
-    "../../../gui-extensions/src/**/*.stories.tsx",
+    "../../../gui-plugins/src/**/*.stories.tsx",
+    "!../**/*.standalone.stories.tsx",
   ],
   { query: "?raw", import: "default" },
 )
@@ -113,18 +128,20 @@ export default function ComponentsLab() {
   let palette: CommandPalette | undefined
   let toggle: ((id: string) => void) | undefined
   let focusTree: ((id?: string) => void) | undefined
-  // While browsing the tree by keys, a story that focuses something as it mounts (a dialog, a field) would take the
-  // keys away. A press or Tab anywhere ends browsing; a few returns at most, so a story that traps focus still wins.
-  let browsing = 0
-  // The key behind the latest selection; none for a press.
-  let key: string | undefined
+  let browse = INITIAL_LAB_BROWSE_STATE
+
+  const dispatchBrowse = (event: LabBrowseEvent) => {
+    const next = transitionLabBrowse(browse, event)
+    browse = next.state
+    next.effects.forEach(() => focusTree?.(params.story))
+  }
 
   const entries = () => catalog()?.entries ?? []
   const grid = () => params.view === "grid"
   const selected = createMemo(() => (grid() ? undefined : entries().find((entry) => entry.file === params.story)))
 
   const open = (file: string) => {
-    browsing = stories.contains(document.activeElement) ? 3 : 0
+    dispatchBrowse({ type: "story.opened", fromTree: stories.contains(document.activeElement) })
     setParams({ story: file, view: undefined })
   }
 
@@ -218,7 +235,7 @@ export default function ComponentsLab() {
         onSelect={(_, primary) => {
           if (!primary?.startsWith("folder:")) return primary && open(primary)
 
-          if (key === undefined || key === " ") toggle?.(primary)
+          if (selectShouldToggleFolder(browse)) toggle?.(primary)
         }}
         onActivate={(id) => (id.startsWith("folder:") ? toggle?.(id) : open(id))}
       />
@@ -230,7 +247,7 @@ export default function ComponentsLab() {
       when={!grid()}
       fallback={
         <Grid
-          entries={entries().filter((entry) => entry.title.startsWith("UI/"))}
+          entries={entries().filter((entry) => entry.title.startsWith("UI/") || isDialogEntry(entry))}
           scheme={untrack(scheme)}
           onOpen={open}
         />
@@ -250,20 +267,23 @@ export default function ComponentsLab() {
     </Show>
   ))
 
-  makeEventListener(window, "pointerdown", () => ((browsing = 0), (key = undefined)), { capture: true })
+  const inTree = (event: Event) => event.target instanceof Node && stories.contains(event.target)
+
+  makeEventListener(window, "pointerdown", (event) => dispatchBrowse({ type: "pointer.down", inTree: inTree(event) }), {
+    capture: true,
+  })
+  // Bubbling, so the tree's own pointerup (which completes a press on a selected row) selects first.
+  makeEventListener(window, "pointerup", () => dispatchBrowse({ type: "pointer.ended" }))
+  makeEventListener(window, "pointercancel", () => dispatchBrowse({ type: "pointer.ended" }))
   makeEventListener(
     window,
     "keydown",
-    (event) => {
-      key = event.key
-
-      if (event.key === "Tab") browsing = 0
-    },
+    (event) => dispatchBrowse({ type: "key.down", key: event.key, inTree: inTree(event) }),
     { capture: true },
   )
-  makeEventListener(stage, "focusin", () => {
-    if (browsing-- > 0) focusTree?.(params.story)
-  })
+  makeEventListener(window, "keyup", () => dispatchBrowse({ type: "key.ended" }))
+  makeEventListener(window, "blur", () => dispatchBrowse({ type: "window.blurred" }))
+  makeEventListener(stage, "focusin", () => dispatchBrowse({ type: "stage.focused" }))
 
   let element!: HTMLDivElement
 
@@ -319,33 +339,59 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
   const fields = labFields(entry)
   const names = entry.states.map((state) => state.name)
   const [args, setArgs] = createStore<StoryArgs>(stateArgs(entry, 0))
-  const [index, setIndex] = createSignal(0)
+  const [stageState, setStageState] = createSignal(createLabStageState(names))
+  const index = createMemo(() => labStageIndex(stageState()))
   const [canvas, setCanvas] = createSignal<HTMLDivElement>()
   const component = entry.component
   const fallback = component && ((values: StoryArgs) => <Dynamic component={component} {...values} />)
   // Switching to a state that shares the current render function keeps the mounted instance, so its transitions play.
   const render = () => entry.states[index()]?.render ?? entry.render ?? fallback
   let timer: ReturnType<typeof setTimeout> | undefined
-  // The state Play is moving to. Any other change is a hand's, and a hand's change stops Play.
-  let advancing: number | undefined
 
   // A state is a variant: its chip, a digit, `[` and `]` and Play all apply it, so the panel shows where it is.
   const preset = (next: number): void => store.preset(next === 0 ? "default" : (names[next] ?? "default"))
 
-  const step = (by: number) => preset((index() + by + names.length) % names.length)
+  // One batch, so a state with its own render function never renders with the previous state's args.
+  const dispatch = (event: LabStageEvent) =>
+    batch(() => {
+      const next = transitionLabStage(untrack(stageState), event)
+      setStageState(next.state)
+      next.effects.forEach(perform)
+    })
 
-  const pause = () => clearTimeout(timer)
+  const perform = (effect: LabStageEffect) => {
+    if (effect.type === "timer.schedule") {
+      clearTimeout(timer)
+      timer = setTimeout(
+        () => dispatch({ type: "tick", attempt: effect.attempt }),
+        (hold * (motionGlobals.slow.value ? 2 : 1)) / motionGlobals.speed.value,
+      )
 
-  const play = () => {
-    clearTimeout(timer)
-    timer = setTimeout(
-      () => {
-        advancing = (index() + 1) % names.length
-        preset(advancing)
-        play()
-      },
-      (hold * (motionGlobals.slow.value ? 2 : 1)) / motionGlobals.speed.value,
-    )
+      return
+    }
+
+    if (effect.type === "timer.clear") return clearTimeout(timer)
+
+    if (effect.type === "state.apply") {
+      setArgs(reconcile(stateArgs(entry, effect.index)))
+
+      if (effect.preset === "now") preset(effect.index)
+
+      // Undo or a reset moved the state: bring the other knobs to the state's args too.
+      if (effect.preset === "later")
+        queueMicrotask(() => {
+          if (untrack(stageState).status !== "disposed") preset(effect.index)
+        })
+
+      return
+    }
+
+    // Coalesced: a story registers its replay buttons one by one.
+    if (effect.type === "motion.queue") return queueMicrotask(() => dispatch({ type: "motion.flushed" }))
+    const next = storyMotion(entry.motion)
+
+    if (!sameMotion(next, motion)) return setShown(next)
+    store.sync(motionValues(motion))
   }
 
   const [first, ...rest] = names
@@ -361,15 +407,15 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
                 id: "previous",
                 label: language.t("lab.previous"),
                 icon: "M200 48 80 128l120 80ZM48 48h16v160H48Z",
-                run: () => step(-1),
+                run: () => dispatch({ type: "step", delta: -1 }),
               },
-              { id: "play", label: language.t("lab.play"), icon: "play", run: play },
-              { id: "pause", label: language.t("lab.pause"), icon: "pause", run: () => clearTimeout(timer) },
+              { id: "play", label: language.t("lab.play"), icon: "play", run: () => dispatch({ type: "play" }) },
+              { id: "pause", label: language.t("lab.pause"), icon: "pause", run: () => dispatch({ type: "pause" }) },
               {
                 id: "next",
                 label: language.t("lab.next"),
                 icon: "M56 48l120 80-120 80ZM192 48h16v160h-16Z",
-                run: () => step(1),
+                run: () => dispatch({ type: "step", delta: 1 }),
               },
             ],
             { labels: false },
@@ -403,23 +449,12 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
           applyMotionPatch(motion, patch)
 
           if (!("state" in patch)) {
-            if (meta.source !== "preset") pause()
+            if (meta.source !== "preset") dispatch({ type: "pause" })
 
             return setArgs(Object.fromEntries(Object.entries(patch).filter(([key]) => key in fields)))
           }
 
-          // One batch, so a state with its own render function never renders with the previous state's args.
-          const next = Math.max(0, names.indexOf(String(values.state)))
-
-          if (next !== advancing) pause()
-          advancing = undefined
-          batch(() => {
-            setArgs(reconcile(stateArgs(entry, next)))
-            setIndex(next)
-          })
-
-          // Undo or a reset moved the state: bring the other knobs to the state's args too.
-          if (meta.source !== "preset") queueMicrotask(() => preset(next))
+          dispatch({ type: "panel.state", name: String(values.state), fromPreset: meta.source === "preset" })
         },
       },
     )
@@ -442,27 +477,16 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
       }),
     )
 
-    // A rebuild stays on the state it was showing.
-    if (rest.length > 0) untrack(() => preset(index()))
+    // A rebuild stays on the state it was showing, and its fresh knobs show that state's args.
+    if (rest.length > 0)
+      untrack(() => {
+        setArgs(reconcile(stateArgs(entry, index())))
+        preset(index())
+      })
   })
 
-  // Coalesced: a story registers its replay buttons one by one.
-  let queued = false
-  onCleanup(
-    motionTuning.subscribe(() => {
-      if (queued) return
-      queued = true
-      queueMicrotask(() => {
-        queued = false
-        const next = storyMotion(entry.motion)
-
-        if (!sameMotion(next, motion)) return setShown(next)
-        store.sync(motionValues(motion))
-      })
-    }),
-  )
-
-  onCleanup(() => clearTimeout(timer))
+  onCleanup(motionTuning.subscribe(() => dispatch({ type: "motion.changed" })))
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   makeEventListener(window, "keydown", (event) => {
     const digit = Number(event.key)
@@ -471,7 +495,7 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
 
     if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || typing(event.target)) return
     event.preventDefault()
-    preset(digit - 1)
+    dispatch({ type: "select", index: digit - 1 })
   })
 
   return (
@@ -481,10 +505,10 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
       ref={setCanvas}
       class="flex size-full overflow-auto bg-v2-background-bg-base [contain:layout]"
       classList={{ "items-center justify-center p-8": !entry.fullscreen, "flex-col": entry.fullscreen }}
-      onPointerDown={pause}
+      onPointerDown={() => dispatch({ type: "pause" })}
     >
       <Workspace>
-        <Extension file={entry.file}>
+        <Plugin file={entry.file}>
           <DialogProvider container={canvas()}>
             <Show when={render()} keyed fallback={language.t("lab.empty")}>
               {(fn) => (
@@ -505,7 +529,7 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
               )}
             </Show>
           </DialogProvider>
-        </Extension>
+        </Plugin>
       </Workspace>
     </div>
   )
@@ -523,7 +547,7 @@ function Workspace(props: { children: JSX.Element }) {
   const healthy = createMemo((picked?: ServerConnection.Any) =>
     picked && servers.list.some((conn) => ServerConnection.key(conn) === ServerConnection.key(picked))
       ? picked
-      : servers.list.find((conn) => global.servers.health[ServerConnection.key(conn)]?.healthy),
+      : servers.list.find((conn) => isServerHealthy(global.servers.health[ServerConnection.key(conn)])),
   )
 
   return (
@@ -567,11 +591,11 @@ function Project(props: { children: JSX.Element }) {
   )
 }
 
-// A story of an extension renders as its contributions do: inside that extension's context from the app's host.
-function Extension(props: { file: string; children: JSX.Element }) {
-  const id = props.file.match(/gui-extensions\/src\/([^/]+)\//)?.[1]
+// A story of a plugin renders as its contributions do: inside that plugin's context from the app's host.
+function Plugin(props: { file: string; children: JSX.Element }) {
+  const id = props.file.match(/gui-plugins\/src\/([^/]+)\//)?.[1]
 
-  return id ? <Contribution extension={id}>{() => props.children}</Contribution> : props.children
+  return id ? <Contribution plugin={id}>{() => props.children}</Contribution> : props.children
 }
 
 /** The tree under `path`: a folder for each further title segment and a row for each story, by name. */
@@ -613,21 +637,25 @@ function Grid(props: { entries: LabEntry[]; scheme: "dark" | "light"; onOpen: (f
     const board = canvas(element, {
       theme: props.scheme,
       label: language.t("lab.grid"),
-      // Neighbours share the library's folder: actions, forms, overlays and so on.
+      // Neighbours share the library's folder: actions, forms, overlays, then app dialogs.
       items: props.entries
         .toSorted((a, b) => folderOf(a).localeCompare(folderOf(b)))
-        .map((entry) => ({
-          id: entry.file,
-          title: entry.title.split("/").at(-1),
-          w: 320,
-          h: 240,
-          render: (card: HTMLElement) =>
-            createRoot((dispose) => {
-              insert(card, () => <Tile entry={entry} />)
+        .map((entry) => {
+          const size = tileSize(entry)
 
-              return dispose
-            }, owner ?? undefined),
-        })),
+          return {
+            id: entry.file,
+            title: entry.title.split("/").at(-1),
+            w: size.w,
+            h: size.h,
+            render: (card: HTMLElement) =>
+              createRoot((dispose) => {
+                insert(card, () => <Tile entry={entry} />)
+
+                return dispose
+              }, owner ?? undefined),
+          }
+        }),
     })
 
     // The canvas captures the pointer to pan, so a card never sees its click: a press that ends where it began opens
@@ -667,21 +695,27 @@ function Tile(props: { entry: LabEntry }) {
     <div
       ref={setCanvas}
       data-lab-story={props.entry.file}
-      class="relative flex size-full cursor-pointer items-center justify-center overflow-hidden bg-v2-background-bg-base p-4 [contain:layout]"
+      class="relative flex size-full cursor-pointer overflow-hidden bg-v2-background-bg-base [contain:layout]"
+      classList={{
+        "items-center justify-center p-4": !props.entry.fullscreen,
+        "flex-col": props.entry.fullscreen,
+      }}
     >
       {/* The provider waits for the card, so a story that opens a dialog at once opens it inside. */}
       <Show when={canvas()}>
         {(container) => (
           <div class="pointer-events-none contents">
-            <DialogProvider container={container()}>
-              <ErrorBoundary
-                fallback={(error) => <pre class="font-mono text-[11px] text-v2-state-fg-danger">{String(error)}</pre>}
-              >
-                {render
-                  ? untrack(() => render(stateArgs(props.entry, 0)))
-                  : component && <Dynamic component={component} {...stateArgs(props.entry, 0)} />}
-              </ErrorBoundary>
-            </DialogProvider>
+            <Plugin file={props.entry.file}>
+              <DialogProvider container={container()}>
+                <ErrorBoundary
+                  fallback={(error) => <pre class="font-mono text-[11px] text-v2-state-fg-danger">{String(error)}</pre>}
+                >
+                  {render
+                    ? untrack(() => render(stateArgs(props.entry, 0)))
+                    : component && <Dynamic component={component} {...stateArgs(props.entry, 0)} />}
+                </ErrorBoundary>
+              </DialogProvider>
+            </Plugin>
           </div>
         )}
       </Show>
@@ -689,8 +723,26 @@ function Tile(props: { entry: LabEntry }) {
   )
 }
 
+function isDialogEntry(entry: LabEntry) {
+  return (
+    entry.title.startsWith("App/Dialogs/") ||
+    entry.file.endsWith("/beta-dialog.stories.tsx") ||
+    entry.file.endsWith("/overlays/dialog/dialog.stories.tsx")
+  )
+}
+
+function tileSize(entry: LabEntry) {
+  if (entry.fullscreen) return { w: 1120, h: 720 }
+
+  if (isDialogEntry(entry)) return { w: 720, h: 820 }
+
+  return { w: 320, h: 240 }
+}
+
 function folderOf(entry: LabEntry) {
-  return entry.file.match(/ui\/src\/([^/]+)\//)?.[1] ?? ""
+  if (isDialogEntry(entry)) return `1:dialogs:${entry.title}`
+
+  return `0:${entry.file.match(/ui\/src\/([^/]+)\//)?.[1] ?? ""}`
 }
 
 function typing(target: EventTarget | null) {

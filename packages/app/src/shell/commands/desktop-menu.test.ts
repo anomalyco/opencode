@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import terminal, { terminalToggleCommand } from "@opencode/gui-extensions/terminal"
+import { terminalToggleCommand } from "@opencode/gui-plugins/terminal"
 import { settingsOpenCommand } from "@/settings/command"
 import { sidebarToggleCommand } from "@/shell/shell"
 import { previousSessionCommand, nextSessionCommand } from "@/shell/titlebar/tab-strip"
@@ -17,8 +17,8 @@ test("every desktop menu command is one its owner registers", () => {
     goForwardCommand.id,
     previousSessionCommand.id,
     nextSessionCommand.id,
-    // The host publishes extension commands as `${extension}.${id}`.
-    `${terminal.id}.${terminalToggleCommand.id}`,
+    // The host publishes plugin commands as `${plugin}.${id}`; the built-in list names the terminal `terminal`.
+    `terminal.${terminalToggleCommand.id}`,
   ])
 
   const commands = DESKTOP_MENU.flatMap((menu) => menu.items ?? []).flatMap((entry) =>
@@ -37,10 +37,12 @@ test.each([
   // A pinch leaves the factor between levels, or outside them.
   { factor: 1.3, direction: "in", level: 1.5 },
   { factor: 1.3, direction: "out", level: 1.25 },
-  { factor: 0.5, direction: "out", level: 1 },
+  { factor: 0.3, direction: "out", level: 0.5 },
   { factor: 3, direction: "in", level: 2 },
   { factor: 2, direction: "in", level: 2 },
-  { factor: 1, direction: "out", level: 1 },
+  { factor: 1, direction: "out", level: 0.9 },
+  { factor: 0.5, direction: "out", level: 0.5 },
+  { factor: 0.5, direction: "in", level: 0.67 },
 ] as const)("zooming $direction from $factor lands on $level", ({ factor, direction, level }) => {
   expect(nextDesktopZoomLevel(factor, direction)).toBe(level)
 })

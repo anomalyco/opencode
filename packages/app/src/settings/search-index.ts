@@ -1,11 +1,11 @@
-import type { SettingsPage } from "@opencode/gui-extensions/sdk"
+import type { SettingsPage } from "@opencode/plugin/gui"
 import type { useLanguage } from "@/runtime/i18n/language"
 import type { LocalProject } from "@/shell/state/layout"
 import { displayName } from "@opencode/ui/project-avatar"
 import { clientSettings, projectSettings, serverSettings } from "./search-catalog"
 import { pageIcons, pageLabels } from "./pages"
 import type { SettingsSearchResult } from "./search-results"
-import type { SettingsExtensionTab, SettingsHostView, SettingsServerTab, SettingsView } from "./surface"
+import type { SettingsPluginTab, SettingsHostView, SettingsServerTab, SettingsView } from "./surface"
 
 export type SettingsSearchServer = {
   key: string
@@ -14,8 +14,8 @@ export type SettingsSearchServer = {
   projects: readonly LocalProject[]
 }
 
-/** An extension setting that applies to this platform. */
-export type SettingsSearchExtension = { extension: string; value: SettingsPage }
+/** A plugin setting that applies to this platform. */
+export type SettingsSearchPlugin = { plugin: string; value: SettingsPage }
 
 export function settingsSearchIndex(input: {
   servers: readonly SettingsSearchServer[]
@@ -25,7 +25,7 @@ export function settingsSearchIndex(input: {
   browser: boolean
   mobile: boolean
   translate: ReturnType<typeof useLanguage>["t"]
-  extensions?: readonly SettingsSearchExtension[]
+  plugins?: readonly SettingsSearchPlugin[]
 }) {
   const items: SettingsSearchResult[] = []
   const multiple = input.servers.length > 1
@@ -66,11 +66,11 @@ export function settingsSearchIndex(input: {
     })
   }
 
-  const extensions = input.extensions ?? []
+  const plugins = input.plugins ?? []
 
-  // Extension entries are keyed by extension and entry id; their copy is already translated.
-  const addExtension = (
-    item: SettingsSearchExtension,
+  // Plugin entries are keyed by plugin and entry id; their copy is already translated.
+  const addPlugin = (
+    item: SettingsSearchPlugin,
     entry: NonNullable<SettingsPage["entries"]>[number],
     view: SettingsView,
     page: string,
@@ -78,7 +78,7 @@ export function settingsSearchIndex(input: {
     server?: string,
   ) =>
     items.push({
-      id: JSON.stringify([server, undefined, view.tab, view.target, undefined, `${item.extension}:${entry.id}`]),
+      id: JSON.stringify([server, undefined, view.tab, view.target, undefined, `${item.plugin}:${entry.id}`]),
       title: entry.title,
       description: entry.description ?? "",
       keywords: entry.keywords ?? "",
@@ -99,7 +99,7 @@ export function settingsSearchIndex(input: {
     if (entry.available === "mobile" && !input.mobile) return
     add(entry, { type: "root", tab: entry.tab, target: entry.target }, "")
   })
-  extensions.forEach((item) => {
+  plugins.forEach((item) => {
     const setting = item.value
 
     if (setting.page === "servers") return
@@ -108,7 +108,7 @@ export function settingsSearchIndex(input: {
       const section = setting.section ? input.translate("settings.general.section.general") : setting.title
 
       return setting.entries?.forEach((entry) =>
-        addExtension(
+        addPlugin(
           item,
           entry,
           { type: "root", tab: "general", target: entry.id },
@@ -118,13 +118,13 @@ export function settingsSearchIndex(input: {
       )
     }
 
-    // SAFETY: a SettingsPage without a host page is an extension tab under its id, as `createSettingsPages().tabs` lists.
-    const tab = setting.id as SettingsExtensionTab
+    // SAFETY: a SettingsPage without a host page is a plugin tab under its id, as `createSettingsPages().tabs` lists.
+    const tab = setting.id as SettingsPluginTab
     const page = setting.entries?.find((entry) => entry.id === setting.id)
-    addExtension(item, { ...page, id: setting.id, title: setting.title }, { type: "root", tab }, setting.title, "")
+    addPlugin(item, { ...page, id: setting.id, title: setting.title }, { type: "root", tab }, setting.title, "")
     setting.entries?.forEach((entry) => {
       if (entry.id === setting.id) return
-      addExtension(item, entry, { type: "root", tab, target: entry.id }, setting.title, "")
+      addPlugin(item, entry, { type: "root", tab, target: entry.id }, setting.title, "")
     })
   })
   input.servers.forEach((server) => {
@@ -147,10 +147,10 @@ export function settingsSearchIndex(input: {
     if (!server.connected || server.key !== input.selected) return
     serverSettings.forEach((entry) => add(entry, view(entry.tab, entry.target, entry.subtab), server.name, server.key))
     // Sections on the servers page render with each server's connection.
-    extensions.forEach((item) => {
+    plugins.forEach((item) => {
       if (item.value.page !== "servers") return
       item.value.entries?.forEach((entry) =>
-        addExtension(item, entry, view("servers", entry.id), item.value.title, server.name, server.key),
+        addPlugin(item, entry, view("servers", entry.id), item.value.title, server.name, server.key),
       )
     })
     server.projects.forEach((project) => {

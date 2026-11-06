@@ -1,11 +1,11 @@
 export * as ConfigCommandPlugin from "./command.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
-import { Info, type Entry } from "@opencode/schema/config"
+import type { Entry } from "@opencode/schema/config"
 import { ConfigCommand } from "@opencode/schema/config/command"
 import { AppProcess } from "@opencode/util/process"
 import path from "path"
-import { Effect, Option, PubSub, Schema, Stream } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { ChildProcess } from "effect/process"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
@@ -15,6 +15,7 @@ import { SubagentJob } from "../../session/subagent-job.js"
 import { ShellSelect } from "../../shell/select.js"
 import { FSUtil } from "@opencode/util/fs-util"
 import { ConfigMarkdown } from "../markdown.js"
+import { ConfigEntryObserver } from "./entry-observer.js"
 
 const decodeCommand = Schema.decodeUnknownOption(ConfigCommand.Info)
 
@@ -38,33 +39,13 @@ export const Plugin = define({
     const load = Effect.fn("ConfigCommandPlugin.load")(function* () {
       return yield* Effect.forEach(yield* config.entries(), loadEntry).pipe(Effect.map((documents) => documents.flat()))
     })
-    const loaded = { documents: [] as { commands: Info["commands"] }[] }
-    const reload = load().pipe(
-      Effect.tap((documents) => Effect.sync(() => (loaded.documents = documents))),
-      Effect.andThen(ctx.command.reload()),
-    )
-    // One trigger feed serializes reloads and shares one debounce window;
-    // subscribing before the initial scan means updates racing the scan still
-    // trigger a rebuild. Each source is subscribed eagerly on its own fiber
-    // (Stream.merge and Stream.debounce both open upstream a fiber hop later)
-    // so no update slips through while the debounce starts its pull.
-    const changes = yield* PubSub.sliding<void>(1)
-    const notify = () => PubSub.publish(changes, undefined)
-    yield* config.changes().pipe(
-      Stream.filterEffect((update) => Effect.map(config.entries(), (entries) => isCommandSource(entries, update.path))),
-      Stream.runForEach(notify),
-      Effect.forkScoped({ startImmediately: true }),
-    )
-    yield* ctx.event
-      .subscribe({ types: ["config.updated"] })
-      .pipe(Stream.runForEach(notify), Effect.forkScoped({ startImmediately: true }))
-    const updates = yield* PubSub.subscribe(changes)
-    yield* Stream.fromSubscription(updates).pipe(
-      Stream.debounce("100 millis"),
-      Stream.runForEach(() => reload),
-      Effect.forkScoped({ startImmediately: true }),
-    )
-    loaded.documents = yield* load()
+    const loaded = yield* ConfigEntryObserver.observeSources({
+      config,
+      event: ctx.event,
+      directories: sourceDirectories,
+      load,
+      reload: ctx.command.reload(),
+    })
     yield* ctx.command.transform((editor) => {
       for (const document of loaded.documents) {
         for (const [name, command] of Object.entries(document.commands ?? {})) {
@@ -137,16 +118,6 @@ export const Plugin = define({
 // Keep in sync with the loadDirectory scan pattern and the name-strip regex in decode.
 const sourceDirectories = ["command", "commands"] as const
 
-// Matches anything at or under <root>/{command,commands}. No file-suffix check:
-// directory-level events such as renames carry no per-file paths.
-function isCommandSource(entries: Entry[], file: string) {
-  return entries.some(
-    (entry) =>
-      entry.type === "directory" &&
-      sourceDirectories.some((name) => FSUtil.contains(path.join(entry.path, name), file)),
-  )
-}
-
 function loadDirectory(fs: FSUtil.Interface, directory: string) {
   return Effect.gen(function* () {
     const files = yield* fs
@@ -193,14 +164,14 @@ function evaluateTemplate(
     const args = parseArguments(input)
     const placeholders = template.match(placeholderRegex) ?? []
     const last = Math.max(0, ...placeholders.map((item) => Number(item.slice(1))))
-    const expanded = template.replaceAll(placeholderRegex, (_, index) => {
+    const withArguments = template.replaceAll(argumentRegex, (match, index) => {
+      if (match === "$ARGUMENTS") return input
       const position = Number(index)
       const argIndex = position - 1
       if (argIndex >= args.length) return ""
       if (position === last) return args.slice(argIndex).join(" ")
       return args[argIndex]
     })
-    const withArguments = expanded.replaceAll("$ARGUMENTS", () => input)
     const text =
       placeholders.length === 0 && !template.includes("$ARGUMENTS") && input.trim()
         ? `${withArguments}\n\n${input}`.trim()
@@ -239,6 +210,7 @@ function parseArguments(input: string) {
 }
 
 const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
-const placeholderRegex = /\$(\d+)/g
+const placeholderRegex = /\$([1-9]\d*)/g
+const argumentRegex = /\$(?:ARGUMENTS|([1-9]\d*))/g
 const quoteTrimRegex = /^["']|["']$/g
 const shellRegex = /!`([^`]+)`/g

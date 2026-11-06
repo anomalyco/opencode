@@ -1,0 +1,3247 @@
+{
+  "_note": "Placeholder sounds built from Kenney CC0 samples, BigSoundBank CC0 floppy recordings, the OpenCode 2.0 startup recipes and synthesis while ElevenLabs credits were unavailable. Each sound's top-level files are option 1 (the default); sounds with alternatives list them all, option 1 first, in variants. Swap for the ElevenLabs versions later (flow cbE44lmYNqiwvWHn6I85). Prefer .webm (Opus); .mp3 is the fallback. For a gapless ambience loop, decode with Web Audio (AudioBufferSourceNode.loop = true) rather than <audio loop>.",
+  "sounds": {
+    "ambience": {
+      "files": {
+        "webm": "/arcade404/audio/ambience.webm",
+        "mp3": "/arcade404/audio/ambience.mp3"
+      },
+      "duration": 28.0,
+      "loop": true,
+      "channels": 2,
+      "volume": 0.5,
+      "loudness_lufs": -28.0,
+      "source": "Synthesised (room tone, mains hum, fluorescent buzz, wind, distant bleeps) + creaks from Kenney RPG Audio",
+      "licence": "Synthesised: original work; creaks: Kenney (kenney.nl), CC0 1.0",
+      "placeholder": true
+    },
+    "coin-pickup": {
+      "files": {
+        "webm": "/arcade404/audio/coin-pickup.webm",
+        "mp3": "/arcade404/audio/coin-pickup.mp3"
+      },
+      "duration": 1.204,
+      "loop": false,
+      "channels": 1,
+      "volume": 0.7,
+      "loudness_lufs": -18.0,
+      "source": "Kenney RPG Audio (handleCoins2), Casino Audio (chips-collide-3), Impact Sounds (footstep_concrete_002), Interface Sounds (scratch_004) + synthesised scrape and coin ring",
+      "licence": "Kenney (kenney.nl), CC0 1.0",
+      "placeholder": true,
+      "variants": [
+        {
+          "id": "coin-pickup",
+          "label": "Scrape + coin jingle",
+          "files": {
+            "webm": "/arcade404/audio/coin-pickup.webm",
+            "mp3": "/arcade404/audio/coin-pickup.mp3"
+          },
+          "duration": 1.204,
+          "loudness_lufs": -18.0,
+          "source": "Kenney RPG Audio (handleCoins2), Casino Audio (chips-collide-3), Impact Sounds (footstep_concrete_002), Interface Sounds (scratch_004) + synthesised scrape and coin ring",
+          "licence": "Kenney (kenney.nl), CC0 1.0"
+        },
+        {
+          "id": "coin-pickup-lift",
+          "label": "Single token scraped and lifted",
+          "files": {
+            "webm": "/arcade404/audio/coin-pickup-lift.webm",
+            "mp3": "/arcade404/audio/coin-pickup-lift.mp3"
+          },
+          "duration": 0.93,
+          "loudness_lufs": -18.0,
+          "source": "Synthesised gritty scrape, coin-edge resonance and beating coin ring + Kenney Impact Sounds (footstep_concrete_001, impactMetal_light_002)",
+          "licence": "Kenney (kenney.nl), CC0 1.0"
+        },
+        {
+          "id": "coin-pickup-flick",
+          "label": "Fingernail flick + ring",
+          "files": {
+            "webm": "/arcade404/audio/coin-pickup-flick.webm",
+            "mp3": "/arcade404/audio/coin-pickup-flick.mp3"
+          },
+          "duration": 1.008,
+          "loudness_lufs": -18.0,
+          "source": "Kenney UI Audio (click4), Casino Audio (chips-collide-4) + synthesised spinning coin ring",
+          "licence": "Kenney (kenney.nl), CC0 1.0"
+        },
+        {
+          "id": "coin-pickup-slide",
+          "label": "Slide across dusty floor, then clink",
+          "files": {
+            "webm": "/arcade404/audio/coin-pickup-slide.webm",
+            "mp3": "/arcade404/audio/coin-pickup-slide.mp3"
+          },
+          "duration": 1.274,
+          "loudness_lufs": -18.5,
+          "source": "Synthesised decelerating dusty slide + Kenney Impact Sounds (footstep_concrete_003/004, impactMetal_light_002), Casino Audio (chips-collide-2)",
+          "licence": "Kenney (kenney.nl), CC0 1.0"
+        },
+        {
+          "id": "coin-pickup-brass",
+          "label": "Heavy brass token",
+          "files": {
+            "webm": "/arcade404/audio/coin-pickup-brass.webm",
+            "mp3": "/arcade404/audio/coin-pickup-brass.mp3"
+          },
+          "duration": 1.22,
+          "loudness_lufs": -18.0,
+          "source": "Kenney Impact Sounds (footstep_concrete_000, impactMetal_light_003), RPG Audio (handleCoins2) + synthesised low brass ring and scrape",
+          "licence": "Kenney (kenney.nl), CC0 1.0"
+        }
+      ]
+    },
+    "coin-insert": {
+      "files": {
+        "webm": "/arcade404/audio/coin-insert.webm",
+        "mp3": "/arcade404/audio/coin-insert.mp3"
+      },
+      "duration": 1.327,
+      "loop": false,
+      "channels": 1,
+      "volume": 0.8,
+      "loudness_lufs": -19.7,
+      "source": "Kenney Impact Sounds (impactMetal_light_003, impactTin_medium, impactMetal_medium_001), Casino Audio (chips-collide-1), RPG Audio (handleCoins, metalLatch), Sci-fi Sounds (impactMetal_004) + synthesised coin ring and thump",
+      "licence": "Kenney (kenney.nl), CC0 1.0",
+      "placeholder": true,
+      "variants": [
+        {
+          "id": "coin-insert",
+          "label": "Placeholder (Kenney CC0 + synthesis)",
+          "files": {
+            "webm": "/arcade404/audio/coin-insert.webm",
+            "mp3": "/arcade404/audio/coin-insert.mp3"
+          },
+          "duration": 1.327,
+          "loudness_lufs": -19.7,
+          "source": "Kenney Impact Sounds (impactMetal_light_003, impactTin_medium, impactMetal_medium_001), Casino Audio (chips-collide-1), RPG Audio (handleCoins, metalLatch), Sci-fi Sounds (impactMetal_004) + synthesised coin ring and thump",
+          "licence": "Kenney (kenney.nl), CC0 1.0"
+        },
+        {
+          "id": "ocsfx-staplebops-01",
+          "label": "OpenCode SFX \u2014 Staplebops 01 (mechanism)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-staplebops-01.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-staplebops-01.mp3"
+          },
+          "duration": 0.215,
+          "loudness_lufs": -27.2,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Staplebops 01.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Staplebops"
+        },
+        {
+          "id": "ocsfx-staplebops-02",
+          "label": "OpenCode SFX \u2014 Staplebops 02 (mechanism)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-staplebops-02.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-staplebops-02.mp3"
+          },
+          "duration": 0.196,
+          "loudness_lufs": -26.1,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Staplebops 02.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Staplebops"
+        },
+        {
+          "id": "ocsfx-staplebops-03",
+          "label": "OpenCode SFX \u2014 Staplebops 03 (mechanism)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-staplebops-03.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-staplebops-03.mp3"
+          },
+          "duration": 0.302,
+          "loudness_lufs": -21.3,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Staplebops 03.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Staplebops"
+        },
+        {
+          "id": "ocsfx-staplebops-04",
+          "label": "OpenCode SFX \u2014 Staplebops 04 (mechanism)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-staplebops-04.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-staplebops-04.mp3"
+          },
+          "duration": 0.222,
+          "loudness_lufs": -24.2,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Staplebops 04.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Staplebops"
+        },
+        {
+          "id": "ocsfx-staplebops-05",
+          "label": "OpenCode SFX \u2014 Staplebops 05 (mechanism)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-staplebops-05.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-staplebops-05.mp3"
+          },
+          "duration": 0.171,
+          "loudness_lufs": -24.6,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Staplebops 05.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Staplebops"
+        },
+        {
+          "id": "ocsfx-staplebops-06",
+          "label": "OpenCode SFX \u2014 Staplebops 06 (mechanism)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-staplebops-06.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-staplebops-06.mp3"
+          },
+          "duration": 0.196,
+          "loudness_lufs": -23.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Staplebops 06.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Staplebops"
+        },
+        {
+          "id": "ocsfx-staplebops-07",
+          "label": "OpenCode SFX \u2014 Staplebops 07 (mechanism)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-staplebops-07.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-staplebops-07.mp3"
+          },
+          "duration": 0.197,
+          "loudness_lufs": -21.5,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Staplebops 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Staplebops"
+        },
+        {
+          "id": "ocsfx-staplers-01",
+          "label": "OpenCode SFX \u2014 Staplers 01 (mechanism)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-staplers-01.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-staplers-01.mp3"
+          },
+          "duration": 0.249,
+          "loudness_lufs": -25.3,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Staplers 01.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Staplers"
+        },
+        {
+          "id": "ocsfx-staplers-02",
+          "label": "OpenCode SFX \u2014 Staplers 02 (mechanism)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-staplers-02.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-staplers-02.mp3"
+          },
+          "duration": 0.123,
+          "loudness_lufs": -31.6,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Staplers 02.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Staplers"
+        },
+        {
+          "id": "ocsfx-staplers-03",
+          "label": "OpenCode SFX \u2014 Staplers 03 (mechanism)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-staplers-03.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-staplers-03.mp3"
+          },
+          "duration": 0.153,
+          "loudness_lufs": -29.8,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Staplers 03.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Staplers"
+        },
+        {
+          "id": "ocsfx-staplers-04",
+          "label": "OpenCode SFX \u2014 Staplers 04 (mechanism)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-staplers-04.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-staplers-04.mp3"
+          },
+          "duration": 0.402,
+          "loudness_lufs": -32.5,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Staplers 04.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Staplers"
+        },
+        {
+          "id": "ocsfx-staplers-05",
+          "label": "OpenCode SFX \u2014 Staplers 05 (mechanism)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-staplers-05.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-staplers-05.mp3"
+          },
+          "duration": 0.221,
+          "loudness_lufs": -30.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Staplers 05.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Staplers"
+        },
+        {
+          "id": "ocsfx-staplers-06",
+          "label": "OpenCode SFX \u2014 Staplers 06 (mechanism)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-staplers-06.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-staplers-06.mp3"
+          },
+          "duration": 0.344,
+          "loudness_lufs": -30.3,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Staplers 06.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Staplers"
+        },
+        {
+          "id": "ocsfx-staplers-07",
+          "label": "OpenCode SFX \u2014 Staplers 07 (mechanism)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-staplers-07.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-staplers-07.mp3"
+          },
+          "duration": 0.222,
+          "loudness_lufs": -31.8,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Staplers 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Staplers"
+        },
+        {
+          "id": "ocsfx-staplers-08",
+          "label": "OpenCode SFX \u2014 Staplers 08 (mechanism)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-staplers-08.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-staplers-08.mp3"
+          },
+          "duration": 0.227,
+          "loudness_lufs": -28.8,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Staplers 08.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Staplers"
+        },
+        {
+          "id": "ocsfx-staplers-09",
+          "label": "OpenCode SFX \u2014 Staplers 09 (mechanism)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-staplers-09.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-staplers-09.mp3"
+          },
+          "duration": 0.134,
+          "loudness_lufs": -27.5,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Staplers 09.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Staplers"
+        },
+        {
+          "id": "ocsfx-staplers-10",
+          "label": "OpenCode SFX \u2014 Staplers 10 (mechanism)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-staplers-10.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-staplers-10.mp3"
+          },
+          "duration": 0.156,
+          "loudness_lufs": -26.7,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Staplers 10.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Staplers"
+        },
+        {
+          "id": "ocsfx-yup-01",
+          "label": "OpenCode SFX \u2014 Yup 01 (accepted / credit)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-yup-01.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-yup-01.mp3"
+          },
+          "duration": 0.161,
+          "loudness_lufs": -21.5,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Yup 01.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Yup"
+        },
+        {
+          "id": "ocsfx-yup-02",
+          "label": "OpenCode SFX \u2014 Yup 02 (accepted / credit)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-yup-02.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-yup-02.mp3"
+          },
+          "duration": 0.222,
+          "loudness_lufs": -19.9,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Yup 02.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Yup"
+        },
+        {
+          "id": "ocsfx-yup-03",
+          "label": "OpenCode SFX \u2014 Yup 03 (accepted / credit)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-yup-03.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-yup-03.mp3"
+          },
+          "duration": 0.492,
+          "loudness_lufs": -19.7,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Yup 03.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Yup"
+        },
+        {
+          "id": "ocsfx-yup-04",
+          "label": "OpenCode SFX \u2014 Yup 04 (accepted / credit)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-yup-04.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-yup-04.mp3"
+          },
+          "duration": 0.527,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Yup 04.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Yup"
+        },
+        {
+          "id": "ocsfx-yup-05",
+          "label": "OpenCode SFX \u2014 Yup 05 (accepted / credit)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-yup-05.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-yup-05.mp3"
+          },
+          "duration": 0.336,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Yup 05.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Yup"
+        },
+        {
+          "id": "ocsfx-yup-06",
+          "label": "OpenCode SFX \u2014 Yup 06 (accepted / credit)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-yup-06.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-yup-06.mp3"
+          },
+          "duration": 0.149,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Yup 06.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Yup"
+        }
+      ]
+    },
+    "coin-reject": {
+      "files": {
+        "webm": "/arcade404/audio/coin-reject.webm",
+        "mp3": "/arcade404/audio/coin-reject.mp3"
+      },
+      "duration": 1.495,
+      "loop": false,
+      "channels": 1,
+      "volume": 0.8,
+      "loudness_lufs": -18.4,
+      "source": "Kenney Impact Sounds (impactPlate_light_003, impactMetal_light_002, impactTin_medium), RPG Audio (metalLatch) + synthesised coin ring",
+      "licence": "Kenney (kenney.nl), CC0 1.0",
+      "placeholder": true,
+      "variants": [
+        {
+          "id": "coin-reject",
+          "label": "Placeholder (Kenney CC0 + synthesis)",
+          "files": {
+            "webm": "/arcade404/audio/coin-reject.webm",
+            "mp3": "/arcade404/audio/coin-reject.mp3"
+          },
+          "duration": 1.495,
+          "loudness_lufs": -18.4,
+          "source": "Kenney Impact Sounds (impactPlate_light_003, impactMetal_light_002, impactTin_medium), RPG Audio (metalLatch) + synthesised coin ring",
+          "licence": "Kenney (kenney.nl), CC0 1.0"
+        },
+        {
+          "id": "ocsfx-alert-01",
+          "label": "OpenCode SFX \u2014 Alert 01",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-alert-01.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-alert-01.mp3"
+          },
+          "duration": 0.424,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Alert 01.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Alert"
+        },
+        {
+          "id": "ocsfx-alert-02",
+          "label": "OpenCode SFX \u2014 Alert 02",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-alert-02.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-alert-02.mp3"
+          },
+          "duration": 0.29,
+          "loudness_lufs": -20.9,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Alert 02.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Alert"
+        },
+        {
+          "id": "ocsfx-alert-03",
+          "label": "OpenCode SFX \u2014 Alert 03",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-alert-03.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-alert-03.mp3"
+          },
+          "duration": 0.061,
+          "loudness_lufs": -18.1,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Alert 03.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Alert"
+        },
+        {
+          "id": "ocsfx-alert-04",
+          "label": "OpenCode SFX \u2014 Alert 04",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-alert-04.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-alert-04.mp3"
+          },
+          "duration": 0.36,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Alert 04.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Alert"
+        },
+        {
+          "id": "ocsfx-alert-05",
+          "label": "OpenCode SFX \u2014 Alert 05",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-alert-05.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-alert-05.mp3"
+          },
+          "duration": 0.352,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Alert 05.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Alert"
+        },
+        {
+          "id": "ocsfx-alert-06",
+          "label": "OpenCode SFX \u2014 Alert 06",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-alert-06.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-alert-06.mp3"
+          },
+          "duration": 0.612,
+          "loudness_lufs": -21.7,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Alert 06.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Alert"
+        },
+        {
+          "id": "ocsfx-alert-07",
+          "label": "OpenCode SFX \u2014 Alert 07",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-alert-07.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-alert-07.mp3"
+          },
+          "duration": 0.353,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Alert 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Alert"
+        },
+        {
+          "id": "ocsfx-alert-08",
+          "label": "OpenCode SFX \u2014 Alert 08",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-alert-08.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-alert-08.mp3"
+          },
+          "duration": 0.353,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Alert 08.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Alert"
+        },
+        {
+          "id": "ocsfx-alert-09",
+          "label": "OpenCode SFX \u2014 Alert 09",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-alert-09.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-alert-09.mp3"
+          },
+          "duration": 0.24,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Alert 09.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Alert"
+        },
+        {
+          "id": "ocsfx-alert-10",
+          "label": "OpenCode SFX \u2014 Alert 10",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-alert-10.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-alert-10.mp3"
+          },
+          "duration": 0.369,
+          "loudness_lufs": -25.3,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Alert 10.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Alert"
+        },
+        {
+          "id": "ocsfx-nope-01",
+          "label": "OpenCode SFX \u2014 Nope 01",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-nope-01.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-nope-01.mp3"
+          },
+          "duration": 0.047,
+          "loudness_lufs": -24.8,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Nope 01.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Nope"
+        },
+        {
+          "id": "ocsfx-nope-02",
+          "label": "OpenCode SFX \u2014 Nope 02",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-nope-02.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-nope-02.mp3"
+          },
+          "duration": 0.171,
+          "loudness_lufs": -20.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Nope 02.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Nope"
+        },
+        {
+          "id": "ocsfx-nope-03",
+          "label": "OpenCode SFX \u2014 Nope 03",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-nope-03.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-nope-03.mp3"
+          },
+          "duration": 0.222,
+          "loudness_lufs": -23.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Nope 03.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Nope"
+        },
+        {
+          "id": "ocsfx-nope-04",
+          "label": "OpenCode SFX \u2014 Nope 04",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-nope-04.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-nope-04.mp3"
+          },
+          "duration": 0.29,
+          "loudness_lufs": -21.5,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Nope 04.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Nope"
+        },
+        {
+          "id": "ocsfx-nope-05",
+          "label": "OpenCode SFX \u2014 Nope 05",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-nope-05.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-nope-05.mp3"
+          },
+          "duration": 0.169,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Nope 05.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Nope"
+        },
+        {
+          "id": "ocsfx-nope-06",
+          "label": "OpenCode SFX \u2014 Nope 06",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-nope-06.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-nope-06.mp3"
+          },
+          "duration": 0.153,
+          "loudness_lufs": -20.3,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Nope 06.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Nope"
+        },
+        {
+          "id": "ocsfx-nope-07",
+          "label": "OpenCode SFX \u2014 Nope 07",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-nope-07.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-nope-07.mp3"
+          },
+          "duration": 0.099,
+          "loudness_lufs": -25.9,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Nope 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Nope"
+        },
+        {
+          "id": "ocsfx-nope-08",
+          "label": "OpenCode SFX \u2014 Nope 08",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-nope-08.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-nope-08.mp3"
+          },
+          "duration": 0.262,
+          "loudness_lufs": -18.7,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Nope 08.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Nope"
+        },
+        {
+          "id": "ocsfx-nope-09",
+          "label": "OpenCode SFX \u2014 Nope 09",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-nope-09.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-nope-09.mp3"
+          },
+          "duration": 0.167,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Nope 09.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Nope"
+        },
+        {
+          "id": "ocsfx-nope-10",
+          "label": "OpenCode SFX \u2014 Nope 10",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-nope-10.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-nope-10.mp3"
+          },
+          "duration": 0.128,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Nope 10.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Nope"
+        },
+        {
+          "id": "ocsfx-nope-11",
+          "label": "OpenCode SFX \u2014 Nope 11",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-nope-11.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-nope-11.mp3"
+          },
+          "duration": 0.352,
+          "loudness_lufs": -33.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Nope 11.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Nope"
+        },
+        {
+          "id": "ocsfx-nope-12",
+          "label": "OpenCode SFX \u2014 Nope 12",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-nope-12.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-nope-12.mp3"
+          },
+          "duration": 0.389,
+          "loudness_lufs": -21.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Nope 12.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Nope"
+        }
+      ]
+    },
+    "power-up": {
+      "files": {
+        "webm": "/arcade404/audio/power-up.webm",
+        "mp3": "/arcade404/audio/power-up.mp3"
+      },
+      "duration": 3.57,
+      "loop": false,
+      "channels": 1,
+      "volume": 0.7,
+      "loudness_lufs": -18.6,
+      "source": "Kenney RPG Audio (metalClick), UI Audio (click3), Sci-fi Sounds (spaceEngineLow_000) + synthesised CRT thump, degauss, 15.7 kHz whine, fan and hum",
+      "licence": "Kenney (kenney.nl), CC0 1.0",
+      "placeholder": true
+    },
+    "glitch": {
+      "files": {
+        "webm": "/arcade404/audio/glitch.webm",
+        "mp3": "/arcade404/audio/glitch.mp3"
+      },
+      "duration": 0.977,
+      "loop": false,
+      "channels": 1,
+      "volume": 0.6,
+      "loudness_lufs": -18.0,
+      "source": "Kenney Interface Sounds (glitch_001-004) + synthesised static, crackle and CRT switch-off",
+      "licence": "Kenney (kenney.nl), CC0 1.0",
+      "placeholder": true
+    },
+    "boot": {
+      "files": {
+        "webm": "/arcade404/audio/boot.webm",
+        "mp3": "/arcade404/audio/boot.mp3"
+      },
+      "duration": 4.98,
+      "loop": false,
+      "channels": 1,
+      "volume": 0.5,
+      "loudness_lufs": -18.0,
+      "source": "Kenney UI Audio (click2/4/5, mouseclick1), Sci-fi Sounds (computerNoise_001) + synthesised beeps and disk-seek chirps",
+      "licence": "Kenney (kenney.nl), CC0 1.0",
+      "placeholder": true,
+      "variants": [
+        {
+          "id": "boot",
+          "label": "Terminal beeps + typing",
+          "files": {
+            "webm": "/arcade404/audio/boot.webm",
+            "mp3": "/arcade404/audio/boot.mp3"
+          },
+          "duration": 4.98,
+          "loudness_lufs": -18.0,
+          "source": "Kenney UI Audio (click2/4/5, mouseclick1), Sci-fi Sounds (computerNoise_001) + synthesised beeps and disk-seek chirps",
+          "licence": "Kenney (kenney.nl), CC0 1.0"
+        },
+        {
+          "id": "boot-post",
+          "label": "1980s PC POST: beep, fan, floppy seek",
+          "files": {
+            "webm": "/arcade404/audio/boot-post.webm",
+            "mp3": "/arcade404/audio/boot-post.mp3"
+          },
+          "duration": 5.27,
+          "loudness_lufs": -18.0,
+          "source": "Floppy head seeks: BigSoundBank 1396 (3.5-inch floppy reading, 4.58-7.98 s, the region the OpenCode article uses); power switch: Kenney RPG Audio (metalClick); synthesised fan, hum, drive spin-up and PC-speaker beep",
+          "licence": "BigSoundBank, Joseph Sardin, CC0 1.0 (bigsoundbank.com/licenses.html); Kenney (kenney.nl), CC0 1.0; rest Synthesised: original work"
+        },
+        {
+          "id": "boot-arcade",
+          "label": "Arcade board: relay, degauss, whine, ready blips",
+          "files": {
+            "webm": "/arcade404/audio/boot-arcade.webm",
+            "mp3": "/arcade404/audio/boot-arcade.mp3"
+          },
+          "duration": 4.565,
+          "loudness_lufs": -18.3,
+          "source": "Kenney RPG Audio (metalClick), UI Audio (click3) + synthesised CRT thump, degauss, 15.7 kHz whine, self-test ticks and chiptune ready blips",
+          "licence": "Kenney (kenney.nl), CC0 1.0; rest Synthesised: original work"
+        },
+        {
+          "id": "boot-minimal",
+          "label": "Minimal modern: soft hum + clean ticks",
+          "files": {
+            "webm": "/arcade404/audio/boot-minimal.webm",
+            "mp3": "/arcade404/audio/boot-minimal.mp3"
+          },
+          "duration": 3.823,
+          "loudness_lufs": -18.0,
+          "source": "Kenney Interface Sounds (tick_001/002/004) + synthesised hum and soft chime",
+          "licence": "Kenney (kenney.nl), CC0 1.0; rest Synthesised: original work"
+        },
+        {
+          "id": "boot-floppy",
+          "label": "Floppy insert + read",
+          "files": {
+            "webm": "/arcade404/audio/boot-floppy.webm",
+            "mp3": "/arcade404/audio/boot-floppy.mp3"
+          },
+          "duration": 4.37,
+          "loudness_lufs": -20.1,
+          "source": "BigSoundBank 1395 (3.5-inch floppy input) + 1396 (reading, head seeks 4.58-7.98 s), from the OpenCode 2.0 article's hardware-samples",
+          "licence": "BigSoundBank, Joseph Sardin, CC0 1.0 (bigsoundbank.com/licenses.html)"
+        },
+        {
+          "id": "boot-opencode-catch",
+          "label": "Boot sequence (OpenCode) - catch (default style)",
+          "files": {
+            "webm": "/arcade404/audio/boot-opencode-catch.webm",
+            "mp3": "/arcade404/audio/boot-opencode-catch.mp3"
+          },
+          "duration": 2.941,
+          "loudness_lufs": -21.9,
+          "source": "Rendered offline in Chromium: rocker clack at 0 s, then the 'catch' boot score cues - charge 0.12 s, charge x0.6 0.22 s, relay x0.9 1.30 s (lamps), relay 2.65 s (room), relay x0.28 2.85 s (caught)",
+          "licence": "OpenCode 2.0 article startup recipes (notes/src/articles/opencode-2-0/openPlanStartupSound.ts, rockerClack from openPlanBootIntro.ts; your own work), synthesised by the @kitlangton/sfx engine (MIT, \u00a9 2026 Daniel Belyi)"
+        },
+        {
+          "id": "boot-opencode-warmup",
+          "label": "Boot sequence (OpenCode) - warm-up (prototype style)",
+          "files": {
+            "webm": "/arcade404/audio/boot-opencode-warmup.webm",
+            "mp3": "/arcade404/audio/boot-opencode-warmup.mp3"
+          },
+          "duration": 4.726,
+          "loudness_lufs": -20.7,
+          "source": "Rendered offline in Chromium: rocker clack at 0 s, then the 'warmup' boot score cues - warming 0.12 s, relay x0.9 3.08 s (lamps), relay 4.43 s (room), relay x0.28 4.63 s (caught)",
+          "licence": "OpenCode 2.0 article startup recipes (notes/src/articles/opencode-2-0/openPlanStartupSound.ts, rockerClack from openPlanBootIntro.ts; your own work), synthesised by the @kitlangton/sfx engine (MIT, \u00a9 2026 Daniel Belyi)"
+        },
+        {
+          "id": "ocsfx-open-code-startup",
+          "label": "Boot sequence (OpenCode SFX) \u2014 OPEN CODE Startup",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup.mp3"
+          },
+          "duration": 3.143,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/OPEN CODE Startup.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "OPEN CODE Startup"
+        },
+        {
+          "id": "ocsfx-open-code-folk-clean",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Open Code Folk Clean",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-open-code-folk-clean.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-open-code-folk-clean.mp3"
+          },
+          "duration": 4.131,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Open Code Folk Clean.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Open Code Folk Clean"
+        },
+        {
+          "id": "ocsfx-open-code-folk-crushed",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Open Code Folk Crushed",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-open-code-folk-crushed.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-open-code-folk-crushed.mp3"
+          },
+          "duration": 3.872,
+          "loudness_lufs": -19.4,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Open Code Folk Crushed.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Open Code Folk Crushed"
+        },
+        {
+          "id": "ocsfx-open-code-gospel-clean",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Open Code Gospel Clean",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-open-code-gospel-clean.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-open-code-gospel-clean.mp3"
+          },
+          "duration": 4.041,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Open Code Gospel Clean.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Open Code Gospel Clean"
+        },
+        {
+          "id": "ocsfx-open-code-gospel-crushed",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Open Code Gospel Crushed",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-open-code-gospel-crushed.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-open-code-gospel-crushed.mp3"
+          },
+          "duration": 3.94,
+          "loudness_lufs": -18.3,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Open Code Gospel Crushed.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Open Code Gospel Crushed"
+        },
+        {
+          "id": "ocsfx-startup-voices-01",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Voices 01",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-01.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-01.mp3"
+          },
+          "duration": 1.736,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Voices 01.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Voices"
+        },
+        {
+          "id": "ocsfx-startup-voices-02",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Voices 02",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-02.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-02.mp3"
+          },
+          "duration": 2.624,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Voices 02.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Voices"
+        },
+        {
+          "id": "ocsfx-startup-voices-03",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Voices 03",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-03.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-03.mp3"
+          },
+          "duration": 2.571,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Voices 03.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Voices"
+        },
+        {
+          "id": "ocsfx-startup-voices-04",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Voices 04",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-04.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-04.mp3"
+          },
+          "duration": 2.08,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Voices 04.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Voices"
+        },
+        {
+          "id": "ocsfx-startup-voices-05",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Voices 05",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-05.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-05.mp3"
+          },
+          "duration": 2.064,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Voices 05.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Voices"
+        },
+        {
+          "id": "ocsfx-startup-voices-06",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Voices 06",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-06.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-06.mp3"
+          },
+          "duration": 2.544,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Voices 06.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Voices"
+        },
+        {
+          "id": "ocsfx-startup-voices-07",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Voices 07",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-07.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-07.mp3"
+          },
+          "duration": 1.751,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Voices 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Voices"
+        },
+        {
+          "id": "ocsfx-startup-voices-08",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Voices 08",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-08.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-08.mp3"
+          },
+          "duration": 1.999,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Voices 08.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Voices"
+        },
+        {
+          "id": "ocsfx-startup-voices-09",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Voices 09",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-09.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-09.mp3"
+          },
+          "duration": 1.957,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Voices 09.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Voices"
+        },
+        {
+          "id": "ocsfx-startup-voices-10",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Voices 10",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-10.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-10.mp3"
+          },
+          "duration": 1.469,
+          "loudness_lufs": -18.5,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Voices 10.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Voices"
+        },
+        {
+          "id": "ocsfx-startup-voices-11",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Voices 11",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-11.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-voices-11.mp3"
+          },
+          "duration": 1.775,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Voices 11.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Voices"
+        },
+        {
+          "id": "ocsfx-startup-crush-voices-01",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Crush Voices 01",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-01.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-01.mp3"
+          },
+          "duration": 1.736,
+          "loudness_lufs": -19.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Crush Voices 01.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Crush Voices"
+        },
+        {
+          "id": "ocsfx-startup-crush-voices-02",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Crush Voices 02",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-02.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-02.mp3"
+          },
+          "duration": 2.635,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Crush Voices 02.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Crush Voices"
+        },
+        {
+          "id": "ocsfx-startup-crush-voices-03",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Crush Voices 03",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-03.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-03.mp3"
+          },
+          "duration": 2.583,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Crush Voices 03.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Crush Voices"
+        },
+        {
+          "id": "ocsfx-startup-crush-voices-04",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Crush Voices 04",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-04.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-04.mp3"
+          },
+          "duration": 2.085,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Crush Voices 04.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Crush Voices"
+        },
+        {
+          "id": "ocsfx-startup-crush-voices-05",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Crush Voices 05",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-05.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-05.mp3"
+          },
+          "duration": 2.064,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Crush Voices 05.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Crush Voices"
+        },
+        {
+          "id": "ocsfx-startup-crush-voices-06",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Crush Voices 06",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-06.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-06.mp3"
+          },
+          "duration": 2.545,
+          "loudness_lufs": -18.5,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Crush Voices 06.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Crush Voices"
+        },
+        {
+          "id": "ocsfx-startup-crush-voices-07",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Crush Voices 07",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-07.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-07.mp3"
+          },
+          "duration": 1.751,
+          "loudness_lufs": -19.6,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Crush Voices 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Crush Voices"
+        },
+        {
+          "id": "ocsfx-startup-crush-voices-08",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Crush Voices 08",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-08.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-08.mp3"
+          },
+          "duration": 1.999,
+          "loudness_lufs": -18.8,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Crush Voices 08.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Crush Voices"
+        },
+        {
+          "id": "ocsfx-startup-crush-voices-09",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Crush Voices 09",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-09.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-09.mp3"
+          },
+          "duration": 1.961,
+          "loudness_lufs": -21.8,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Crush Voices 09.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Crush Voices"
+        },
+        {
+          "id": "ocsfx-startup-crush-voices-10",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Crush Voices 10",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-10.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-10.mp3"
+          },
+          "duration": 1.47,
+          "loudness_lufs": -20.5,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Crush Voices 10.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Crush Voices"
+        },
+        {
+          "id": "ocsfx-startup-crush-voices-11",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup Crush Voices 11",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-11.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-crush-voices-11.mp3"
+          },
+          "duration": 1.776,
+          "loudness_lufs": -21.3,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Startup Crush Voices 11.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup Crush Voices"
+        },
+        {
+          "id": "ocsfx-open-code-open-code-open-code-open-code-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/OPEN CODE OPEN CODE OPEN CODE OPEN CODE",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-open-code-open-code-open-code-open-code-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-open-code-open-code-open-code-open-code-draft.mp3"
+          },
+          "duration": 14.947,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/OPEN CODE OPEN CODE OPEN CODE OPEN CODE.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-open-code-startup-666-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/OPEN CODE Startup 666",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup-666-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup-666-draft.mp3"
+          },
+          "duration": 4.793,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/OPEN CODE Startup 666.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-open-code-startup-a-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/OPEN CODE Startup A",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup-a-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup-a-draft.mp3"
+          },
+          "duration": 3.324,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/OPEN CODE Startup A.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-open-code-startup-b-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/OPEN CODE Startup B",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup-b-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup-b-draft.mp3"
+          },
+          "duration": 3.159,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/OPEN CODE Startup B.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-open-code-startup-c-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/OPEN CODE Startup C",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup-c-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup-c-draft.mp3"
+          },
+          "duration": 2.951,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/OPEN CODE Startup C.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-open-code-startup-d-pitched-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/OPEN CODE Startup D (pitched)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup-d-pitched-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup-d-pitched-draft.mp3"
+          },
+          "duration": 3.019,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/OPEN CODE Startup D (pitched).wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-open-code-startup-e-pitched-pitched-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/OPEN CODE Startup E (pitched pitched)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup-e-pitched-pitched-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup-e-pitched-pitched-draft.mp3"
+          },
+          "duration": 2.951,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/OPEN CODE Startup E (pitched pitched).wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-open-code-startup-f-drawn-out-arpeggio-ending-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/OPEN CODE Startup F (drawn out arpeggio ending)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup-f-drawn-out-arpeggio-ending-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup-f-drawn-out-arpeggio-ending-draft.mp3"
+          },
+          "duration": 4.532,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/OPEN CODE Startup F (drawn out arpeggio ending).wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-open-code-startup-g-spaced-out-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/OPEN CODE Startup G (spaced out)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup-g-spaced-out-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup-g-spaced-out-draft.mp3"
+          },
+          "duration": 4.018,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/OPEN CODE Startup G (spaced out).wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-open-code-startup-h-stutter-glitch-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/OPEN CODE Startup H (stutter glitch)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup-h-stutter-glitch-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-open-code-startup-h-stutter-glitch-draft.mp3"
+          },
+          "duration": 4.428,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/OPEN CODE Startup H (stutter glitch).wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-open-code-spaced-out-solo-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/OPEN CODE spaced out solo",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-open-code-spaced-out-solo-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-open-code-spaced-out-solo-draft.mp3"
+          },
+          "duration": 2.514,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/OPEN CODE spaced out solo.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-open-code-solo-vox-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/Open Code (solo vox)",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-open-code-solo-vox-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-open-code-solo-vox-draft.mp3"
+          },
+          "duration": 1.683,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/Open Code (solo vox).wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-startup-stabs-07-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/Startup Stabs 07",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-07-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-07-draft.mp3"
+          },
+          "duration": 2.684,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/Startup Stabs 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-startup-stabs-08-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/Startup Stabs 08",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-08-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-08-draft.mp3"
+          },
+          "duration": 2.588,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/Startup Stabs 08.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-startup-stabs-08b-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/Startup Stabs 08b",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-08b-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-08b-draft.mp3"
+          },
+          "duration": 1.504,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/Startup Stabs 08b.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-startup-stabs-08c-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/Startup Stabs 08c",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-08c-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-08c-draft.mp3"
+          },
+          "duration": 2.418,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/Startup Stabs 08c.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-startup-stabs-08d-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/Startup Stabs 08d",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-08d-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-08d-draft.mp3"
+          },
+          "duration": 2.646,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/Startup Stabs 08d.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-startup-stabs-08e-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/Startup Stabs 08e",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-08e-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-08e-draft.mp3"
+          },
+          "duration": 2.658,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/Startup Stabs 08e.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-startup-stabs-08f-compressed-with-a-little-kicky-end-sub-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/Startup Stabs 08f compressed with a little kicky end sub",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-08f-compressed-with-a-little-kicky-end-sub-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-08f-compressed-with-a-little-kicky-end-sub-draft.mp3"
+          },
+          "duration": 2.799,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/Startup Stabs 08f compressed with a little kicky end sub.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-startup-stabs-09b-open-code-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/Startup Stabs 09b OPEN CODE",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-09b-open-code-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-09b-open-code-draft.mp3"
+          },
+          "duration": 2.927,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/Startup Stabs 09b OPEN CODE.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-startup-stabs-09c-open-code-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/Startup Stabs 09c OPEN CODE",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-09c-open-code-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-09c-open-code-draft.mp3"
+          },
+          "duration": 2.967,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/Startup Stabs 09c OPEN CODE.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-startup-stabs-09d-open-code-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/Startup Stabs 09d OPEN CODE",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-09d-open-code-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-startup-stabs-09d-open-code-draft.mp3"
+          },
+          "duration": 2.69,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/Startup Stabs 09d OPEN CODE.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-low-monotone-open-code-solo-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/low monotone open code solo",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-low-monotone-open-code-solo-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-low-monotone-open-code-solo-draft.mp3"
+          },
+          "duration": 2.639,
+          "loudness_lufs": -18.2,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/low monotone open code solo.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-open-code-vox-tryout-4-sets-draft",
+          "label": "Boot sequence (OpenCode SFX) \u2014 x Startup Drafts/open code vox tryout 4 sets",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-open-code-vox-tryout-4-sets-draft.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-open-code-vox-tryout-4-sets-draft.mp3"
+          },
+          "duration": 10.205,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/x Startup Drafts/open code vox tryout 4 sets.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup drafts"
+        },
+        {
+          "id": "ocsfx-melody-01",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup 01",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-01.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-01.mp3"
+          },
+          "duration": 0.712,
+          "loudness_lufs": -19.6,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (2)/Startup 01.wav); identical audio: OpenCode SFX (3)/Melody 01.wav",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup"
+        },
+        {
+          "id": "ocsfx-melody-02",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup 02",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-02.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-02.mp3"
+          },
+          "duration": 0.711,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (2)/Startup 02.wav); identical audio: OpenCode SFX (3)/Melody 02.wav",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup"
+        },
+        {
+          "id": "ocsfx-melody-03",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup 03",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-03.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-03.mp3"
+          },
+          "duration": 1.044,
+          "loudness_lufs": -18.3,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (2)/Startup 03.wav); identical audio: OpenCode SFX (3)/Melody 03.wav",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup"
+        },
+        {
+          "id": "ocsfx-melody-04",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup 04",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-04.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-04.mp3"
+          },
+          "duration": 3.328,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (2)/Startup 04.wav); identical audio: OpenCode SFX (3)/Melody 04.wav",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup"
+        },
+        {
+          "id": "ocsfx-melody-05",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup 05",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-05.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-05.mp3"
+          },
+          "duration": 2.793,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (2)/Startup 05.wav); identical audio: OpenCode SFX (3)/Melody 05.wav",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup"
+        },
+        {
+          "id": "ocsfx-melody-06",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup 06",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-06.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-06.mp3"
+          },
+          "duration": 4.331,
+          "loudness_lufs": -18.3,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (2)/Startup 06.wav); identical audio: OpenCode SFX (3)/Melody 06.wav",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup"
+        },
+        {
+          "id": "ocsfx-melody-07",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup 07",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-07.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-07.mp3"
+          },
+          "duration": 3.149,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (2)/Startup 07.wav); identical audio: OpenCode SFX (3)/Melody 07.wav",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup"
+        },
+        {
+          "id": "ocsfx-melody-08",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup 08",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-08.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-08.mp3"
+          },
+          "duration": 4.175,
+          "loudness_lufs": -18.3,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (2)/Startup 08.wav); identical audio: OpenCode SFX (3)/Melody 08.wav",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup"
+        },
+        {
+          "id": "ocsfx-melody-09",
+          "label": "Boot sequence (OpenCode SFX) \u2014 Startup 09",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-09.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-09.mp3"
+          },
+          "duration": 2.902,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (2)/Startup 09.wav); identical audio: OpenCode SFX (3)/Melody 09.wav",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Startup"
+        }
+      ]
+    },
+    "start": {
+      "files": {
+        "webm": "/arcade404/audio/start.webm",
+        "mp3": "/arcade404/audio/start.mp3"
+      },
+      "duration": 2.366,
+      "loop": false,
+      "channels": 1,
+      "volume": 0.6,
+      "loudness_lufs": -18.0,
+      "source": "Synthesised 8-bit pulse/triangle arpeggio",
+      "licence": "Synthesised: original work, no third-party material",
+      "placeholder": true,
+      "variants": [
+        {
+          "id": "start",
+          "label": "Placeholder (Kenney CC0 + synthesis)",
+          "files": {
+            "webm": "/arcade404/audio/start.webm",
+            "mp3": "/arcade404/audio/start.mp3"
+          },
+          "duration": 2.366,
+          "loudness_lufs": -18.0,
+          "source": "Synthesised 8-bit pulse/triangle arpeggio",
+          "licence": "Synthesised: original work, no third-party material"
+        },
+        {
+          "id": "ocsfx-lil-beat-01",
+          "label": "OpenCode SFX \u2014 Lil Beat 01",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-lil-beat-01.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-lil-beat-01.mp3"
+          },
+          "duration": 0.799,
+          "loudness_lufs": -24.2,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Lil Beat 01.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Lil Beat"
+        },
+        {
+          "id": "ocsfx-lil-beat-02",
+          "label": "OpenCode SFX \u2014 Lil Beat 02",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-lil-beat-02.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-lil-beat-02.mp3"
+          },
+          "duration": 0.754,
+          "loudness_lufs": -24.5,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Lil Beat 02.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Lil Beat"
+        },
+        {
+          "id": "ocsfx-lil-beat-03",
+          "label": "OpenCode SFX \u2014 Lil Beat 03",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-lil-beat-03.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-lil-beat-03.mp3"
+          },
+          "duration": 0.84,
+          "loudness_lufs": -23.3,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Lil Beat 03.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Lil Beat"
+        },
+        {
+          "id": "ocsfx-lil-beat-04",
+          "label": "OpenCode SFX \u2014 Lil Beat 04",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-lil-beat-04.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-lil-beat-04.mp3"
+          },
+          "duration": 0.879,
+          "loudness_lufs": -24.3,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Lil Beat 04.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Lil Beat"
+        },
+        {
+          "id": "ocsfx-lil-beat-05",
+          "label": "OpenCode SFX \u2014 Lil Beat 05",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-lil-beat-05.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-lil-beat-05.mp3"
+          },
+          "duration": 0.754,
+          "loudness_lufs": -23.4,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Lil Beat 05.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Lil Beat"
+        },
+        {
+          "id": "ocsfx-melody-01",
+          "label": "OpenCode SFX \u2014 Melody 01",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-01.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-01.mp3"
+          },
+          "duration": 0.712,
+          "loudness_lufs": -19.6,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Melody 01.wav); identical audio: OpenCode SFX (2)/Startup 01.wav",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Melody"
+        },
+        {
+          "id": "ocsfx-melody-02",
+          "label": "OpenCode SFX \u2014 Melody 02",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-02.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-02.mp3"
+          },
+          "duration": 0.711,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Melody 02.wav); identical audio: OpenCode SFX (2)/Startup 02.wav",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Melody"
+        },
+        {
+          "id": "ocsfx-melody-03",
+          "label": "OpenCode SFX \u2014 Melody 03",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-03.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-03.mp3"
+          },
+          "duration": 1.044,
+          "loudness_lufs": -18.3,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Melody 03.wav); identical audio: OpenCode SFX (2)/Startup 03.wav",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Melody"
+        },
+        {
+          "id": "ocsfx-melody-04",
+          "label": "OpenCode SFX \u2014 Melody 04",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-04.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-04.mp3"
+          },
+          "duration": 3.328,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Melody 04.wav); identical audio: OpenCode SFX (2)/Startup 04.wav",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Melody"
+        },
+        {
+          "id": "ocsfx-melody-05",
+          "label": "OpenCode SFX \u2014 Melody 05",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-05.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-05.mp3"
+          },
+          "duration": 2.793,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Melody 05.wav); identical audio: OpenCode SFX (2)/Startup 05.wav",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Melody"
+        },
+        {
+          "id": "ocsfx-melody-06",
+          "label": "OpenCode SFX \u2014 Melody 06",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-06.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-06.mp3"
+          },
+          "duration": 4.331,
+          "loudness_lufs": -18.3,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Melody 06.wav); identical audio: OpenCode SFX (2)/Startup 06.wav",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Melody"
+        },
+        {
+          "id": "ocsfx-melody-07",
+          "label": "OpenCode SFX \u2014 Melody 07",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-07.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-07.mp3"
+          },
+          "duration": 3.149,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Melody 07.wav); identical audio: OpenCode SFX (2)/Startup 07.wav",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Melody"
+        },
+        {
+          "id": "ocsfx-melody-08",
+          "label": "OpenCode SFX \u2014 Melody 08",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-08.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-08.mp3"
+          },
+          "duration": 4.175,
+          "loudness_lufs": -18.3,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Melody 08.wav); identical audio: OpenCode SFX (2)/Startup 08.wav",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Melody"
+        },
+        {
+          "id": "ocsfx-melody-09",
+          "label": "OpenCode SFX \u2014 Melody 09",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-09.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-09.mp3"
+          },
+          "duration": 2.902,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Melody 09.wav); identical audio: OpenCode SFX (2)/Startup 09.wav",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Melody"
+        },
+        {
+          "id": "ocsfx-melody-10",
+          "label": "OpenCode SFX \u2014 Melody 10",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-10.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-10.mp3"
+          },
+          "duration": 3.468,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Melody 10.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Melody"
+        },
+        {
+          "id": "ocsfx-melody-11",
+          "label": "OpenCode SFX \u2014 Melody 11",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-11.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-11.mp3"
+          },
+          "duration": 3.432,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Melody 11.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Melody"
+        },
+        {
+          "id": "ocsfx-melody-12",
+          "label": "OpenCode SFX \u2014 Melody 12",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-12.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-12.mp3"
+          },
+          "duration": 2.702,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Melody 12.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Melody"
+        },
+        {
+          "id": "ocsfx-melody-13",
+          "label": "OpenCode SFX \u2014 Melody 13",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-13.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-13.mp3"
+          },
+          "duration": 4.971,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Melody 13.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Melody"
+        },
+        {
+          "id": "ocsfx-melody-14",
+          "label": "OpenCode SFX \u2014 Melody 14",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-14.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-14.mp3"
+          },
+          "duration": 3.971,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Melody 14.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Melody"
+        },
+        {
+          "id": "ocsfx-melody-14b",
+          "label": "OpenCode SFX \u2014 Melody 14b",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-14b.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-14b.mp3"
+          },
+          "duration": 3.172,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Melody 14b.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Melody"
+        },
+        {
+          "id": "ocsfx-melody-15",
+          "label": "OpenCode SFX \u2014 Melody 15",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-melody-15.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-melody-15.mp3"
+          },
+          "duration": 3.94,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Melody 15.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Melody"
+        }
+      ]
+    },
+    "menu-move": {
+      "files": {
+        "webm": "/arcade404/audio/menu-move.webm",
+        "mp3": "/arcade404/audio/menu-move.mp3"
+      },
+      "duration": 0.068,
+      "loop": false,
+      "channels": 1,
+      "volume": 0.35,
+      "loudness_lufs": -19.3,
+      "source": "Synthesised 8-bit pulse blip",
+      "licence": "Synthesised: original work, no third-party material",
+      "placeholder": true,
+      "variants": [
+        {
+          "id": "menu-move",
+          "label": "Placeholder (Kenney CC0 + synthesis)",
+          "files": {
+            "webm": "/arcade404/audio/menu-move.webm",
+            "mp3": "/arcade404/audio/menu-move.mp3"
+          },
+          "duration": 0.068,
+          "loudness_lufs": -19.3,
+          "source": "Synthesised 8-bit pulse blip",
+          "licence": "Synthesised: original work, no third-party material"
+        },
+        {
+          "id": "ocsfx-bip-bop-01",
+          "label": "OpenCode SFX \u2014 Bip Bop 01",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-01.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-01.mp3"
+          },
+          "duration": 0.289,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 01.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-bip-bop-02",
+          "label": "OpenCode SFX \u2014 Bip Bop 02",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-02.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-02.mp3"
+          },
+          "duration": 0.267,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 02.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-bip-bop-03",
+          "label": "OpenCode SFX \u2014 Bip Bop 03",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-03.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-03.mp3"
+          },
+          "duration": 0.302,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 03.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-bip-bop-04",
+          "label": "OpenCode SFX \u2014 Bip Bop 04",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-04.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-04.mp3"
+          },
+          "duration": 0.403,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 04.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-bip-bop-05",
+          "label": "OpenCode SFX \u2014 Bip Bop 05",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-05.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-05.mp3"
+          },
+          "duration": 0.198,
+          "loudness_lufs": -24.5,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 05.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-bip-bop-06",
+          "label": "OpenCode SFX \u2014 Bip Bop 06",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-06.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-06.mp3"
+          },
+          "duration": 0.402,
+          "loudness_lufs": -20.2,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 06.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-bip-bop-07",
+          "label": "OpenCode SFX \u2014 Bip Bop 07",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-07.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-07.mp3"
+          },
+          "duration": 0.338,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-bip-bop-08",
+          "label": "OpenCode SFX \u2014 Bip Bop 08",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-08.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-08.mp3"
+          },
+          "duration": 0.409,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 08.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-bip-bop-09",
+          "label": "OpenCode SFX \u2014 Bip Bop 09",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-09.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-09.mp3"
+          },
+          "duration": 1.158,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 09.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-bip-bop-10",
+          "label": "OpenCode SFX \u2014 Bip Bop 10",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-10.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-10.mp3"
+          },
+          "duration": 0.159,
+          "loudness_lufs": -18.1,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 10.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-click-satisfying-01",
+          "label": "OpenCode SFX \u2014 Click Satisfying 01 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-01.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-01.mp3"
+          },
+          "duration": 0.183,
+          "loudness_lufs": -35.7,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 01.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-02",
+          "label": "OpenCode SFX \u2014 Click Satisfying 02 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-02.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-02.mp3"
+          },
+          "duration": 0.171,
+          "loudness_lufs": -32.9,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 02.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-03",
+          "label": "OpenCode SFX \u2014 Click Satisfying 03 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-03.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-03.mp3"
+          },
+          "duration": 0.141,
+          "loudness_lufs": -32.4,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 03.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-a",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm A",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-a.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-a.mp3"
+          },
+          "duration": 0.232,
+          "loudness_lufs": -30.9,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm A.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm A"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-b",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm B",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-b.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-b.mp3"
+          },
+          "duration": 0.256,
+          "loudness_lufs": -33.6,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm B.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm B"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-c",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm C",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-c.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-c.mp3"
+          },
+          "duration": 0.262,
+          "loudness_lufs": -26.5,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm C.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm C"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-d",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm D",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-d.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-d.mp3"
+          },
+          "duration": 0.187,
+          "loudness_lufs": -33.6,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm D.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm D"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-e",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm E",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-e.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-e.mp3"
+          },
+          "duration": 0.216,
+          "loudness_lufs": -33.6,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm E.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm E"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-f",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm F",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-f.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-f.mp3"
+          },
+          "duration": 0.532,
+          "loudness_lufs": -32.2,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm F.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm F"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-g",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm G",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-g.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-g.mp3"
+          },
+          "duration": 0.363,
+          "loudness_lufs": -32.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm G.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm G"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-h",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm H",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-h.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-h.mp3"
+          },
+          "duration": 0.202,
+          "loudness_lufs": -30.4,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm H.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm H"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-i",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm I",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-i.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-i.mp3"
+          },
+          "duration": 0.273,
+          "loudness_lufs": -32.5,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm I.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm I"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-j",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm J",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-j.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-j.mp3"
+          },
+          "duration": 0.281,
+          "loudness_lufs": -29.2,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm J.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm J"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04.mp3"
+          },
+          "duration": 0.222,
+          "loudness_lufs": -34.5,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-05",
+          "label": "OpenCode SFX \u2014 Click Satisfying 05 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-05.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-05.mp3"
+          },
+          "duration": 0.135,
+          "loudness_lufs": -30.9,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 05.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-06",
+          "label": "OpenCode SFX \u2014 Click Satisfying 06 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-06.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-06.mp3"
+          },
+          "duration": 0.222,
+          "loudness_lufs": -31.3,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 06.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-07",
+          "label": "OpenCode SFX \u2014 Click Satisfying 07 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-07.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-07.mp3"
+          },
+          "duration": 0.222,
+          "loudness_lufs": -29.5,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-mix-03-05",
+          "label": "OpenCode SFX \u2014 Click Satisfying Mix 03 + 05 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-03-05.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-03-05.mp3"
+          },
+          "duration": 0.2,
+          "loudness_lufs": -31.6,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying Mix 03 + 05.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying Mix 03 +"
+        },
+        {
+          "id": "ocsfx-click-satisfying-mix-04-07",
+          "label": "OpenCode SFX \u2014 Click Satisfying Mix 04 + 07 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-04-07.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-04-07.mp3"
+          },
+          "duration": 0.418,
+          "loudness_lufs": -28.2,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying Mix 04 + 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying Mix 04 +"
+        },
+        {
+          "id": "ocsfx-click-satisfying-mix-05-07",
+          "label": "OpenCode SFX \u2014 Click Satisfying Mix 05 + 07 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-05-07.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-05-07.mp3"
+          },
+          "duration": 0.264,
+          "loudness_lufs": -28.6,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying Mix 05 + 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying Mix 05 +"
+        },
+        {
+          "id": "ocsfx-click-satisfying-01-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying 01 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-01-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-01-sfx2.mp3"
+          },
+          "duration": 0.004,
+          "loudness_lufs": -32.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying 01.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-02-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying 02 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-02-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-02-sfx2.mp3"
+          },
+          "duration": 0.012,
+          "loudness_lufs": -33.3,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying 02.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-03-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying 03 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-03-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-03-sfx2.mp3"
+          },
+          "duration": 0.006,
+          "loudness_lufs": -30.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying 03.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-sfx2.mp3"
+          },
+          "duration": 0.06,
+          "loudness_lufs": -34.8,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying 04.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-05-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying 05 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-05-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-05-sfx2.mp3"
+          },
+          "duration": 0.217,
+          "loudness_lufs": -30.9,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying 05.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-06-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying 06 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-06-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-06-sfx2.mp3"
+          },
+          "duration": 0.027,
+          "loudness_lufs": -30.9,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying 06.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-07-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying 07 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-07-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-07-sfx2.mp3"
+          },
+          "duration": 0.03,
+          "loudness_lufs": -29.7,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-mix-03-05-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying Mix 03 + 05 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-03-05-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-03-05-sfx2.mp3"
+          },
+          "duration": 0.202,
+          "loudness_lufs": -31.6,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying Mix 03 + 05.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying Mix 03 +"
+        },
+        {
+          "id": "ocsfx-click-satisfying-mix-04-07-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying Mix 04 + 07 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-04-07-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-04-07-sfx2.mp3"
+          },
+          "duration": 0.069,
+          "loudness_lufs": -28.4,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying Mix 04 + 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying Mix 04 +"
+        },
+        {
+          "id": "ocsfx-click-satisfying-mix-05-07-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying Mix 05 + 07 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-05-07-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-05-07-sfx2.mp3"
+          },
+          "duration": 0.345,
+          "loudness_lufs": -28.6,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying Mix 05 + 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying Mix 05 +"
+        }
+      ]
+    },
+    "menu-select": {
+      "files": {
+        "webm": "/arcade404/audio/menu-select.webm",
+        "mp3": "/arcade404/audio/menu-select.mp3"
+      },
+      "duration": 0.185,
+      "loop": false,
+      "channels": 1,
+      "volume": 0.4,
+      "loudness_lufs": -18.0,
+      "source": "Synthesised 8-bit two-tone pulse blip",
+      "licence": "Synthesised: original work, no third-party material",
+      "placeholder": true,
+      "variants": [
+        {
+          "id": "menu-select",
+          "label": "Placeholder (Kenney CC0 + synthesis)",
+          "files": {
+            "webm": "/arcade404/audio/menu-select.webm",
+            "mp3": "/arcade404/audio/menu-select.mp3"
+          },
+          "duration": 0.185,
+          "loudness_lufs": -18.0,
+          "source": "Synthesised 8-bit two-tone pulse blip",
+          "licence": "Synthesised: original work, no third-party material"
+        },
+        {
+          "id": "ocsfx-bip-bop-01",
+          "label": "OpenCode SFX \u2014 Bip Bop 01",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-01.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-01.mp3"
+          },
+          "duration": 0.289,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 01.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-bip-bop-02",
+          "label": "OpenCode SFX \u2014 Bip Bop 02",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-02.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-02.mp3"
+          },
+          "duration": 0.267,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 02.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-bip-bop-03",
+          "label": "OpenCode SFX \u2014 Bip Bop 03",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-03.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-03.mp3"
+          },
+          "duration": 0.302,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 03.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-bip-bop-04",
+          "label": "OpenCode SFX \u2014 Bip Bop 04",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-04.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-04.mp3"
+          },
+          "duration": 0.403,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 04.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-bip-bop-05",
+          "label": "OpenCode SFX \u2014 Bip Bop 05",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-05.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-05.mp3"
+          },
+          "duration": 0.198,
+          "loudness_lufs": -24.5,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 05.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-bip-bop-06",
+          "label": "OpenCode SFX \u2014 Bip Bop 06",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-06.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-06.mp3"
+          },
+          "duration": 0.402,
+          "loudness_lufs": -20.2,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 06.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-bip-bop-07",
+          "label": "OpenCode SFX \u2014 Bip Bop 07",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-07.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-07.mp3"
+          },
+          "duration": 0.338,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-bip-bop-08",
+          "label": "OpenCode SFX \u2014 Bip Bop 08",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-08.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-08.mp3"
+          },
+          "duration": 0.409,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 08.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-bip-bop-09",
+          "label": "OpenCode SFX \u2014 Bip Bop 09",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-09.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-09.mp3"
+          },
+          "duration": 1.158,
+          "loudness_lufs": -18.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 09.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-bip-bop-10",
+          "label": "OpenCode SFX \u2014 Bip Bop 10",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-10.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-bip-bop-10.mp3"
+          },
+          "duration": 0.159,
+          "loudness_lufs": -18.1,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Bip Bop 10.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Bip Bop"
+        },
+        {
+          "id": "ocsfx-click-satisfying-01",
+          "label": "OpenCode SFX \u2014 Click Satisfying 01 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-01.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-01.mp3"
+          },
+          "duration": 0.183,
+          "loudness_lufs": -35.7,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 01.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-02",
+          "label": "OpenCode SFX \u2014 Click Satisfying 02 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-02.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-02.mp3"
+          },
+          "duration": 0.171,
+          "loudness_lufs": -32.9,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 02.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-03",
+          "label": "OpenCode SFX \u2014 Click Satisfying 03 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-03.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-03.mp3"
+          },
+          "duration": 0.141,
+          "loudness_lufs": -32.4,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 03.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-a",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm A",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-a.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-a.mp3"
+          },
+          "duration": 0.232,
+          "loudness_lufs": -30.9,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm A.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm A"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-b",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm B",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-b.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-b.mp3"
+          },
+          "duration": 0.256,
+          "loudness_lufs": -33.6,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm B.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm B"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-c",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm C",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-c.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-c.mp3"
+          },
+          "duration": 0.262,
+          "loudness_lufs": -26.5,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm C.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm C"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-d",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm D",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-d.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-d.mp3"
+          },
+          "duration": 0.187,
+          "loudness_lufs": -33.6,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm D.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm D"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-e",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm E",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-e.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-e.mp3"
+          },
+          "duration": 0.216,
+          "loudness_lufs": -33.6,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm E.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm E"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-f",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm F",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-f.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-f.mp3"
+          },
+          "duration": 0.532,
+          "loudness_lufs": -32.2,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm F.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm F"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-g",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm G",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-g.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-g.mp3"
+          },
+          "duration": 0.363,
+          "loudness_lufs": -32.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm G.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm G"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-h",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm H",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-h.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-h.mp3"
+          },
+          "duration": 0.202,
+          "loudness_lufs": -30.4,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm H.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm H"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-i",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm I",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-i.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-i.mp3"
+          },
+          "duration": 0.273,
+          "loudness_lufs": -32.5,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm I.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm I"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-rhythm-j",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 Rhythm J",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-j.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-rhythm-j.mp3"
+          },
+          "duration": 0.281,
+          "loudness_lufs": -29.2,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04 Rhythm J.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying 04 Rhythm J"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04.mp3"
+          },
+          "duration": 0.222,
+          "loudness_lufs": -34.5,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 04.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-05",
+          "label": "OpenCode SFX \u2014 Click Satisfying 05 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-05.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-05.mp3"
+          },
+          "duration": 0.135,
+          "loudness_lufs": -30.9,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 05.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-06",
+          "label": "OpenCode SFX \u2014 Click Satisfying 06 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-06.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-06.mp3"
+          },
+          "duration": 0.222,
+          "loudness_lufs": -31.3,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 06.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-07",
+          "label": "OpenCode SFX \u2014 Click Satisfying 07 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-07.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-07.mp3"
+          },
+          "duration": 0.222,
+          "loudness_lufs": -29.5,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-mix-03-05",
+          "label": "OpenCode SFX \u2014 Click Satisfying Mix 03 + 05 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-03-05.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-03-05.mp3"
+          },
+          "duration": 0.2,
+          "loudness_lufs": -31.6,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying Mix 03 + 05.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying Mix 03 +"
+        },
+        {
+          "id": "ocsfx-click-satisfying-mix-04-07",
+          "label": "OpenCode SFX \u2014 Click Satisfying Mix 04 + 07 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-04-07.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-04-07.mp3"
+          },
+          "duration": 0.418,
+          "loudness_lufs": -28.2,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying Mix 04 + 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying Mix 04 +"
+        },
+        {
+          "id": "ocsfx-click-satisfying-mix-05-07",
+          "label": "OpenCode SFX \u2014 Click Satisfying Mix 05 + 07 [OpenCode SFX (3) version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-05-07.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-05-07.mp3"
+          },
+          "duration": 0.264,
+          "loudness_lufs": -28.6,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX (3)/Click Satisfying Mix 05 + 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying Mix 05 +"
+        },
+        {
+          "id": "ocsfx-click-satisfying-01-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying 01 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-01-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-01-sfx2.mp3"
+          },
+          "duration": 0.004,
+          "loudness_lufs": -32.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying 01.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-02-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying 02 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-02-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-02-sfx2.mp3"
+          },
+          "duration": 0.012,
+          "loudness_lufs": -33.3,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying 02.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-03-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying 03 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-03-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-03-sfx2.mp3"
+          },
+          "duration": 0.006,
+          "loudness_lufs": -30.0,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying 03.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-04-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying 04 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-04-sfx2.mp3"
+          },
+          "duration": 0.06,
+          "loudness_lufs": -34.8,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying 04.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-05-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying 05 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-05-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-05-sfx2.mp3"
+          },
+          "duration": 0.217,
+          "loudness_lufs": -30.9,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying 05.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-06-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying 06 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-06-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-06-sfx2.mp3"
+          },
+          "duration": 0.027,
+          "loudness_lufs": -30.9,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying 06.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-07-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying 07 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-07-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-07-sfx2.mp3"
+          },
+          "duration": 0.03,
+          "loudness_lufs": -29.7,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying"
+        },
+        {
+          "id": "ocsfx-click-satisfying-mix-03-05-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying Mix 03 + 05 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-03-05-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-03-05-sfx2.mp3"
+          },
+          "duration": 0.202,
+          "loudness_lufs": -31.6,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying Mix 03 + 05.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying Mix 03 +"
+        },
+        {
+          "id": "ocsfx-click-satisfying-mix-04-07-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying Mix 04 + 07 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-04-07-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-04-07-sfx2.mp3"
+          },
+          "duration": 0.069,
+          "loudness_lufs": -28.4,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying Mix 04 + 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying Mix 04 +"
+        },
+        {
+          "id": "ocsfx-click-satisfying-mix-05-07-sfx2",
+          "label": "OpenCode SFX \u2014 Click Satisfying Mix 05 + 07 [OpenCode SFX 2 version]",
+          "files": {
+            "webm": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-05-07-sfx2.webm",
+            "mp3": "/arcade404/audio/opencode-sfx/ocsfx-click-satisfying-mix-05-07-sfx2.mp3"
+          },
+          "duration": 0.345,
+          "loudness_lufs": -28.6,
+          "source": "OpenCode SFX library (~/Downloads/OpenCode SFX 2/Click Satisfying Mix 05 + 07.wav)",
+          "licence": "Your own OpenCode SFX library (unreleased)",
+          "library": "OpenCode SFX",
+          "family": "Click Satisfying Mix 05 +"
+        }
+      ]
+    }
+  }
+}

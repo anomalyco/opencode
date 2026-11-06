@@ -11,78 +11,81 @@ bun dev
 
 ## Build
 
-Run the `build` script to build the app's JS assets, then `package` to
-bundle the assets as an application. The resulting app will be in `dist/`.
+`bun run build` prepares `resources/` (icons, metainfo and the bundled CLI) and builds the app into `out/`.
+`bun run pack` then packages it, unsigned, into `dist/desktop/` at the repository root: a `.app` tarball on macOS,
+the unpacked app on Windows, and AppImage/deb/rpm on Linux. The release workflow signs and notarizes afterwards.
 
 ```bash
-bun run build && bun run package
+bun run build && bun run pack
 ```
 
-Production builds require a prebuilt V2 CLI distribution. The release workflow supplies the artifact from the same run:
+Both read the same environment as every other release package:
 
-```bash
-OPENCODE_CHANNEL=prod OPENCODE_CLI_DIST=/absolute/path/to/packages/cli/dist bun run build
-OPENCODE_CHANNEL=prod bun run package
-```
+| Variable           | Meaning                                                                                                         |
+| ------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `OPENCODE_CHANNEL` | `dev` (default), `beta`, or `latest`/`prod`. Picks the app identity, icons and bundled CLI.                     |
+| `OPENCODE_VERSION` | Version stamped into the app and its packages.                                                                  |
+| `OPENCODE_TARGET`  | `darwin-arm64`, `darwin-x64`, `windows-arm64`, `windows-x64`, `linux-x64`, `linux-arm64`. Defaults to the host. |
 
-Set `OPENCODE_CLI_TARGET` when packaging for a different architecture. The CLI is placed outside `app.asar` in the
-application's resources directory, and packaging fails if it is missing.
-
-CLI preparation uses these channel rules:
-
-| Channel                                | Without `OPENCODE_CLI_DIST`    | With `OPENCODE_CLI_DIST`                      |
-| -------------------------------------- | ------------------------------ | --------------------------------------------- |
-| `dev`, `local`, unset, or unrecognized | Download the dev CLI           | Download the dev CLI; ignore the distribution |
-| `beta`                                 | Download the beta CLI          | Copy the supplied CLI; fail if it is missing  |
-| `prod`, `latest`                       | Fail before changing resources | Copy the supplied CLI; fail if it is missing  |
+The CLI is placed outside `app.asar` in the application's resources directory, and packaging fails if it is missing.
+`bun run build` uses `packages/cli/dist` when that holds the target's CLI. Otherwise `dev` (and `local`, unset or unrecognized)
+downloads the published dev CLI, `beta` downloads the beta CLI, and `prod`/`latest` fail.
 
 `bun dev` is separate from packaging: it uses local renderer/server mode, the dev app identity, and the CLI source by
-default. `bun dev --download-server <version>` instead downloads that CLI version for local development. Neither path
-requires `OPENCODE_CLI_DIST` or runs the production prebuild.
+default. `bun dev --download-server <version>` instead downloads that CLI version for local development.
 
 ## Beta channel
 
 Every push to the `beta` branch publishes OpenCode Beta (`ai.opencode.desktop.beta`) as version `0.0.0-beta-<run>` to
 the `beta` update channel. Beta publishes only the desktop app and `beta.opencode.ai`; the CLI and SDK packages ship
-from `dev`. Install it from `https://opencode.ai/download/beta/<platform>`, for example `darwin-aarch64-dmg` or
-`windows-x64-nsis`. Installed builds update in place on every platform.
+from `dev`. Install it from `https://opencode.ai/update/api/beta/desktop/opencode/<asset>`, for example
+`opencode-desktop-mac-arm64.dmg` or `opencode-desktop-win-x64.exe`. Installed builds update in place on every platform.
 
 Each beta build compiles in its commit and the `feat`, `fix` and `perf` commits among its newest 200
-(`scripts/beta-notes.ts`, embedded by `electron.vite.config.ts`; run `bun scripts/beta-notes.ts` to preview them). After an
+(`script/beta-notes.ts`, embedded by `electron.vite.config.ts`; run `bun script/beta-notes.ts` to preview them). After an
 update, the beta app lists the ones after the commit of the build the user saw last in a "What's new in beta" dialog,
 unless release notes are turned off in Settings.
 
 ## Startup benchmark
 
-`bun run bench:startup` measures a **packaged** build from process spawn to the restored tab being ready and the
-renderer going idle, so dev-server and bundling costs are not part of the numbers.
+`perf/startup.bench.ts` times a launch with [strobe](https://github.com/Hona/strobe), from process spawn to what a
+person waits for, in pairs of launches of two builds with an interval per case. Every launch runs in a private home
+(its own `%APPDATA%`, XDG folders, database, config and service registration, the developer's `OPENCODE_*`, `OTEL_*`
+and `SENTRY_*` environment removed), so it never touches the developer's app, profile or live service.
+
+| Case                            | Launch                                                                              | Ends on      |
+| ------------------------------- | ----------------------------------------------------------------------------------- | ------------ |
+| launch to Home                  | Profile kept from earlier launches; the service already runs, from the bundled CLI. | Home         |
+| launch to a restored tab        | Profile kept; the first launch's onboarding draft is restored.                      | The composer |
+| launch to Home, service stopped | Profile kept; the desktop spawns its service.                                       | Home         |
+| first launch                    | No profile or GPU shader caches: right after an install, onboarding opens a draft.  | The composer |
+| dev start to Home               | `bun dev:desktop` with Vite's caches and `out` deleted.                             | Home         |
 
 ```bash
-OPENCODE_CHANNEL=dev bun run build && bunx electron-builder --win --dir --config electron-builder.config.ts
-bun run bench:startup -- --runs 5                                  # warm service (started once, reused by every launch)
-bun run bench:startup -- --runs 5 --compare dist/other/OpenCode\ Dev.exe   # A/B: alternate launches of two builds
-bun run bench:startup -- --service cold                            # each launch spawns the service
-bun run bench:startup -- --fresh                                   # first launch after an install (profile wiped each time)
-bun run bench:startup -- --profile-main --profile-renderer --trace # CPU profiles and a Chromium startup trace
-bun run bench:startup -- --seed "%APPDATA%\ai.opencode.desktop.dev"   # restore tabs and drafts from an existing profile
+# A returning user's launches of two packaged builds (pack each with OPENCODE_CHANNEL=beta or prod), or two installed
+# channels.
+strobe bench perf/startup.bench.ts --target desktop --base exe:<old>/OpenCode.exe --head exe:<new>/OpenCode.exe
+strobe bench perf/startup.bench.ts --target desktop --base app:opencode --head app:opencode-beta
+
+# The first launch after an install.
+strobe bench perf/startup.bench.ts --target install --base app:opencode --head app:opencode-beta
+
+# The dev loop's cold start, dev against this checkout.
+strobe bench perf/startup.bench.ts --target dev --base origin/dev --head .
 ```
 
-The app runs in an isolated home (`%TEMP%\opencode-bench-startup`): its own `%APPDATA%`, XDG directories, OpenCode
-database, config and service registration, with the developer's `OPENCODE_*` and `OTEL_*` environment stripped
-(an inherited OTLP endpoint alone adds a network round trip to every CLI exit). It never attaches to or restarts the
-developer's live service, and only ever kills the process tree it spawned. `--service cold` stops the service before
-each launch so the desktop has to spawn it; the isolated config directory gives that service a private port. One
-`--warmup` launch per build is discarded by default because the first launch of a new binary pays the antivirus scan.
-`--compare` alternates two builds so machine drift affects both equally; they must bundle the same CLI or the desktop
-restarts the service on the version mismatch.
+strobe runs on Windows, macOS and Linux. Windows measures the most; on macOS a packaged launch needs a build whose bundle
+id this account has never run (`packages/app/perf/README.md` lists what each OS gives).
 
-Milestones (ms since spawn) come from the main log, the renderer's performance timeline and DOM readiness polled over
-CDP. Node's bootstrap timing is read from the main process after each run over `--inspect` (nothing attaches until the
-run is over): `processCreated` → `nodeStart` is Electron's native init, `nodeStart` → `nodeBootstrapped` is Node
-itself, and `nodeBootstrapped` → `appStarting` is Electron's JavaScript init plus our main bundle up to its first
-log line. Renderer idle is the start of the first 500 ms window with under 10 % main-thread task time that stays quiet
-for `--settle-ms`; `rendererTaskMs` is the renderer's total main-thread task time until then. Raw samples are
-written to `dist/bench-startup`.
+Besides `launch.ready`, each launch reports its milestones as `launch.<name>` in ms since spawn: the main process's own
+marks from its log (`entry`, `electron`, `window`, `served`, `bundle`, `logging`, `storage`, `init`, `layers`,
+`visible`, `service.starting`, `service.ready`; `src/main/lifecycle/marks.ts`), or each step of the dev command's
+output. `launch.painted` and `launch.settled` are when the window's pixels first and last changed, `cpu.work` is the CPU
+every process used until ready, and `launch.node.*` is Node's bootstrap timing in builds that accept `--inspect`. The
+first launch of each build is discarded, because a new binary pays the antivirus scan. The packaged
+returning-user cases keep the GPU shader caches their build compiled in earlier launches, as a person's machine has
+them; `first launch` starts each launch without them. `--why always` adds a profiled
+launch per build: the main process and the renderer, both from their first statement.
 
 A packaged beta or prod build registers itself as the `opencode://` handler when it starts, even from the bench; the
 installed app takes the registration back on its next launch. Those channels run with `HTTPS_PROXY` pointed at a

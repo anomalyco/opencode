@@ -75,7 +75,7 @@ The `deploy` GitHub Actions workflow uses SST to deploy the web app to `beta.ope
 `beta` branch in `anomalyco/opencode`. The `dev` and `production` stages do not deploy the web app.
 
 `beta` is the team's dogfooding branch: `dev` merged in by hand, plus commits pushed directly to it. Do not rebase or
-force-push it. Each push also runs the `publish` workflow, which ships the same commit as the OpenCode Beta desktop app
+force-push it. Each push also runs the `release` workflow, which ships the same commit as the OpenCode Beta desktop app
 (see `packages/desktop/README.md`).
 
 The beta SST stage deploys only the web app, using the `WebApp` StaticSiteV2 definition in `infra/webapp.ts`. It sets

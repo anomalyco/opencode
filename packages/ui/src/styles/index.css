@@ -9,6 +9,7 @@
 
 @import "../data-display/accordion/accordion.css" layer(components);
 @import "../components/animated-number.css" layer(components);
+@import "../components/rolling-number.css" layer(components);
 @import "../components/app-icon.css" layer(components);
 @import "../components/card.css" layer(components);
 @import "../forms/checkbox/checkbox.css" layer(components);

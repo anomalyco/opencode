@@ -8,6 +8,7 @@ import {
 import { OpenCodeTheme } from "@opencode/ui/context/highlight-theme"
 import { ComponentProps } from "solid-js"
 import { lineCommentStyles } from "../components/line-comment-styles"
+import quoteHighlightStyles from "../components/quote-highlight.css?inline"
 
 // Pierre resolves themes on the main thread and hands them to its workers, so register before any viewer renders.
 registerCustomTheme(OpenCodeTheme.name, () => Promise.resolve(OpenCodeTheme), "zed")
@@ -68,12 +69,51 @@ const unsafeCSS = `
   /* Use explicit alpha instead of color-mix(..., transparent) to avoid Safari's non-premultiplied interpolation bugs. */
   --diffs-bg-selection: var(--diffs-bg-selection-override, rgb(from var(--diffs-selection-base) r g b / 0.2));
   --diffs-bg-selection-number: var(--diffs-bg-selection-number-override, var(--diffs-bg-selection));
-  --diffs-bg-selection-text: rgb(from var(--diffs-selection-base) r g b / 0.2);
 }
 
-[data-diff] ::selection,
-[data-file] ::selection {
-  background-color: var(--diffs-bg-selection-text);
+/* Each diff token is an element, so highlight rules match one ancestor where Blink inherits them; see quote-highlight.css. */
+@supports selector(:host-context(*)) {
+  [data-diff]::selection,
+  [data-file]::selection {
+    background-color: var(--timeline-quote-background);
+  }
+
+  :host::highlight(opencode-find) {
+    background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
+  }
+
+  [data-diff]::highlight(timeline-quote-source),
+  [data-file]::highlight(timeline-quote-source),
+  [data-diff]::highlight(timeline-quote-source-active),
+  [data-file]::highlight(timeline-quote-source-active) {
+    background-color: var(--timeline-quote-background);
+  }
+
+  :host::highlight(opencode-find-current) {
+    background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
+  }
+}
+
+@supports not selector(:host-context(*)) {
+  [data-diff] ::selection,
+  [data-file] ::selection {
+    background-color: var(--timeline-quote-background);
+  }
+
+  ::highlight(opencode-find) {
+    background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
+  }
+
+  [data-diff] ::highlight(timeline-quote-source),
+  [data-file] ::highlight(timeline-quote-source),
+  [data-diff] ::highlight(timeline-quote-source-active),
+  [data-file] ::highlight(timeline-quote-source-active) {
+    background-color: var(--timeline-quote-background);
+  }
+
+  ::highlight(opencode-find-current) {
+    background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
+  }
 }
 
 [data-indicators='bars'] [data-column-number][data-line-type='change-addition']::before,
@@ -135,14 +175,6 @@ const unsafeCSS = `
 [data-content-buffer] {
   background-image: none;
   background-color: var(--diffs-bg-context-gutter);
-}
-
-::highlight(opencode-find) {
-  background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
-}
-
-::highlight(opencode-find-current) {
-  background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
 }
 
 [data-diff] [data-line][data-comment-selected]:not([data-selected-line]) {
@@ -263,6 +295,7 @@ const unsafeCSS = `
 }
 
 ${lineCommentStyles}
+${quoteHighlightStyles}
 
 `
 
