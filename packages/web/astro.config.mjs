@@ -238,12 +238,12 @@ export default defineConfig({
             "zh-TW": "使用",
           },
           items: [
-            { label: "Go", link: "https://opencode.ai/v2/docs/console/go/" },
+            { label: "Go", link: "https://opencode.ai/docs/console/go/" },
             "tui",
             "cli",
             "web",
             "ide",
-            { label: "Console", link: "https://opencode.ai/v2/docs/console/" },
+            { label: "Console", link: "https://opencode.ai/docs/console/" },
             "github",
             "gitlab",
           ],
@@ -340,8 +340,8 @@ function configSchema() {
     hooks: {
       "astro:build:done": async () => {
         execFileSync("bun", ["../schema/script/config-schema.ts", "./dist/client/config.json"], { stdio: "inherit" })
-        // The V1 TUI schema is frozen in services/meta since packages/opencode lives on the v1 branch.
-        copyFileSync("../../services/meta/public/tui.json", "./dist/client/tui.json")
+        // The V1 TUI schema is frozen in services/site since packages/opencode lives on the v1 branch.
+        copyFileSync("../../services/site/public/tui.json", "./dist/client/tui.json")
       },
     },
   }

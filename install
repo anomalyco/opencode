@@ -487,6 +487,6 @@ fi
 echo -e "cd <project>  ${MUTED}# Open directory${NC}"
 echo -e "opencode      ${MUTED}# Run command${NC}"
 echo -e ""
-echo -e "${MUTED}For more information visit ${NC}https://opencode.ai/v2/docs"
+echo -e "${MUTED}For more information visit ${NC}https://opencode.ai/docs"
 echo -e ""
 echo -e ""

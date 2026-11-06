@@ -280,6 +280,7 @@ export function createNewSessionComposerAdapter(props: {
     directory,
     handoff: server.ctx.handoff.forSession(id),
     api: serverSDK.api.session,
+    file: serverSDK.api.file,
     data,
     current: () => data.session.get(id),
     admitted: (messageID) => data.session.input.has(id, messageID) || !!data.session.message.get(id, messageID),

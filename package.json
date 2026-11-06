@@ -13,9 +13,8 @@
     "dev:vite:live": "sh -c 'OPENCODE_TUI_CHANNEL=dev OPENCODE_PASSWORD=\"$(opencode service get password)\" exec bun run dev:vite \"$@\" --server \"$(opencode service status)\"' --",
     "dev:desktop": "bun --cwd packages/desktop dev",
     "dev:web": "bun --cwd packages/app dev",
-    "dev:console": "ulimit -n 10240 2>/dev/null; bun run --cwd packages/console/app dev",
     "dev:stats": "bun sst shell --stage=production -- bun run --cwd packages/stats/app dev",
-    "dev:www": "bun run --cwd services/www dev",
+    "dev:site": "bun run --cwd services/site dev",
     "lint": "oxlint && ast-grep scan -c script/ast-grep/gui-plugins/sgconfig.yml && bun script/sdk-docs.ts",
     "lint:changed": "bun script/lint-changed.ts",
     "lint:effect-patterns": "ast-grep scan -c script/ast-grep/sgconfig.yml packages/util/src packages/core/src packages/server/src packages/protocol/src packages/cli/src",
@@ -40,7 +39,6 @@
       "packages/*",
       "packages/plugins/*",
       "services/*",
-      "packages/console/*",
       "packages/stats/*"
     ],
     "catalog": {
@@ -51,7 +49,7 @@
       "@effect/sql-sqlite-node": "4.1.0",
       "@npmcli/arborist": "9.4.0",
       "@types/bun": "1.4.3",
-      "@hona/strobe": "0.9.0",
+      "@hona/strobe": "0.14.0",
       "@types/cross-spawn": "6.0.6",
       "@octokit/rest": "22.0.0",
       "@opentui/core": "0.8.1",

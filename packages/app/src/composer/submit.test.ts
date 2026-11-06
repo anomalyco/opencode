@@ -152,6 +152,7 @@ function session(input: {
         },
       },
     },
+    file: { list: async () => ({ data: [{ path: "src/api.ts" }] }) },
     data: {
       location: { command: { list: () => [] } },
       session: {
@@ -296,11 +297,11 @@ describe("Composer submission", () => {
         },
       )
 
-      expect(await submission.submitQuote("quote:c=selected", "Compare @src/api.ts")).toBe(true)
+      expect(await submission.submitQuote("quote:c=selected", "Compare @src/api.ts with @here")).toBe(true)
       expect(calls[0]).toBe("keep-preview")
       expect(requests).toHaveLength(1)
       expect(requests[0]?.text).toBe(
-        "The user quoted the following from earlier in the conversation:\n> Selected passage\n\nThe user made the following comment regarding this quote: Compare @src/api.ts",
+        "The user quoted the following from earlier in the conversation:\n> Selected passage\n\nThe user made the following comment regarding this quote: Compare @src/api.ts with @here",
       )
       expect(requests[0]).toMatchObject({
         delivery,
@@ -309,7 +310,7 @@ describe("Composer submission", () => {
         skills: [],
         metadata: {
           displayText: "",
-          comments: [{ type: "quote", text: "Selected passage", comment: "Compare @src/api.ts" }],
+          comments: [{ type: "quote", text: "Selected passage", comment: "Compare @src/api.ts with @here" }],
           attachments: [],
         },
       })

@@ -2552,6 +2552,7 @@ export type ConfigEntry =
           schedules?: boolean
           artifacts?: boolean
           part_rows?: boolean
+          codemode_vm?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
           location_idle_timeout?: string | false
