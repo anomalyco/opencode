@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { DateTime, Schema } from "effect"
+import { Schema } from "effect"
 import { Agent } from "../src/agent.js"
 import { AgentTunnel } from "../src/agent-tunnel.js"
 import { DurableEventManifest } from "../src/durable-event-manifest.js"
@@ -29,7 +29,7 @@ describe("agent tunnel", () => {
         to: { sessionID: SessionID.make("ses_recipient"), agent: Agent.ID.make("plan") },
         kind: "message",
         body: "handoff",
-        time: { created: DateTime.makeUnsafe(2) },
+        time: { created: 2 },
         sequence: 0,
       }),
     ).toEqual({

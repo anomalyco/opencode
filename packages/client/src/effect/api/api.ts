@@ -830,6 +830,28 @@ export type ExperimentalSessionLogOutput =
           readonly id: Event.ID
           readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.tunnel.sent"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly message: {
+              readonly id: SessionMessage.ID
+              readonly from: { readonly sessionID: Session.ID; readonly agent?: Agent.ID | undefined }
+              readonly to: { readonly sessionID: Session.ID; readonly agent?: Agent.ID | undefined }
+              readonly kind: "message" | "report"
+              readonly body: string
+              readonly time: { readonly created: number }
+              readonly sequence: number
+            }
+          }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.execution.started"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?:
@@ -2073,6 +2095,7 @@ export type EventSubscribeInput = {
         | "session.inbox.enqueued"
         | "session.inbox.cancelled"
         | "session.inbox.delivery.changed"
+        | "session.tunnel.sent"
         | "session.execution.started"
         | "session.execution.succeeded"
         | "session.execution.failed"

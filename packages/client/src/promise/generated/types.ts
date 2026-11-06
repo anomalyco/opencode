@@ -168,6 +168,8 @@ export type InstructionHash = string
 
 export type SessionInboxSyntheticPayload1 = { text: string; description?: string; metadata?: { [x: string]: any } }
 
+export type AgentTunnelKind = "message" | "report"
+
 export type SessionMessageNative1 = { [x: string]: any }
 
 export type ToolFileContent1 = { type: "file"; uri: string; mime: string; name?: string | undefined }
@@ -675,6 +677,16 @@ export type InstructionEntrySnapshot = Array<{ key: InstructionEntryKey; value: 
 export type EventLogSynced = { type: "log.synced"; aggregateID: string; seq?: EventSeq }
 
 export type LocationRef = { directory: AbsolutePath; workspaceID?: WorkspaceID }
+
+export type AgentTunnelMessage = {
+  id: SessionMessageID
+  from: { sessionID: SessionID; agent?: AgentID }
+  to: { sessionID: SessionID; agent?: AgentID }
+  kind: AgentTunnelKind
+  body: string
+  time: { created: number }
+  sequence: number
+}
 
 export type SessionMessageAssistantText1 = { type: "text"; text: string; native?: SessionMessageNative1 }
 
@@ -2102,6 +2114,16 @@ export type McpResourcesChanged = {
   data: { server: string }
 }
 
+export type SessionTunnelSent = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.tunnel.sent"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID; message: AgentTunnelMessage }
+}
+
 export type SessionToolSuccess = {
   id: EventID
   created: number
@@ -2551,6 +2573,7 @@ export type ConfigEntry =
           media_blob?: boolean
           schedules?: boolean
           artifacts?: boolean
+          agent_tunnel?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
@@ -2809,6 +2832,7 @@ export type SessionEventDurable =
   | SessionInboxEnqueued
   | SessionInboxCancelled
   | SessionInboxDeliveryChanged
+  | SessionTunnelSent
   | SessionExecutionStarted
   | SessionExecutionSucceeded
   | SessionExecutionFailed
@@ -2867,6 +2891,7 @@ export type V2Event =
   | SessionInboxEnqueued
   | SessionInboxCancelled
   | SessionInboxDeliveryChanged
+  | SessionTunnelSent
   | SessionExecutionStarted
   | SessionExecutionSucceeded
   | SessionExecutionFailed
@@ -4359,6 +4384,7 @@ export type EventSubscribeInput = {
         | "session.inbox.enqueued"
         | "session.inbox.cancelled"
         | "session.inbox.delivery.changed"
+        | "session.tunnel.sent"
         | "session.execution.started"
         | "session.execution.succeeded"
         | "session.execution.failed"
