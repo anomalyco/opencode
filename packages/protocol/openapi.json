@@ -16676,6 +16676,9 @@
               "part_rows": {
                 "type": "boolean"
               },
+              "codemode_vm": {
+                "type": "boolean"
+              },
               "image_generate": {
                 "anyOf": [
                   {
