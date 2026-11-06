@@ -11,6 +11,7 @@ import { useData } from "../context/data"
 import { modelPreferenceKey } from "../model-preference"
 import { useLocation } from "../context/location"
 import { useNewDesigns } from "../config"
+import { useToast } from "../ui/toast"
 import { DialogFreeModels } from "./dialog-model-free"
 import { FavoriteMarker, ModelDetail, isFreeModel, prioritizeFavorites, sortModelOptions } from "./model-options"
 import { DialogUsage, useUsageLimits } from "./usage"
@@ -19,11 +20,13 @@ import { formatDollars, usageLevel } from "../util/usage-limits"
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
   const dialog = useDialog()
+  const toast = useToast()
   const newDesigns = useNewDesigns()
   const connected = useConnected()
 
   function select(providerID: string, modelID: string) {
     local.model.set({ providerID, modelID }, { recent: true })
+    void local.model.commit().catch(toast.error)
     const list = local.model.variant.list()
     const cur = local.model.variant.current()
     if (cur && list.includes(cur)) {

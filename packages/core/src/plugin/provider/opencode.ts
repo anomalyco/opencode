@@ -28,6 +28,7 @@ import { SharedCache } from "../../shared-cache.js"
 import { Skill } from "../../skill.js"
 import { SkillDiscovery } from "../../skill/discovery.js"
 import { WebSearch } from "../../websearch.js"
+import { aliasRequest, aliasResponse } from "./opencode-free.js"
 import { ProviderRefresh } from "./refresh.js"
 
 const clientID = "opencode-cli"
@@ -455,6 +456,29 @@ export const OpencodePlugin = define<
         })
       }
     })
+    // Free models run through the `opencode` provider; alias their `execute` tool to `read` on the wire.
+    const aliases = new WeakSet<Request>()
+    yield* ctx.session.hook(
+      "http.request",
+      (event) =>
+        Effect.gen(function* () {
+          if (!event.model.id.endsWith("-free")) return
+          const request = yield* Effect.promise(() => aliasRequest(event.request))
+          if (!request) return
+          aliases.add(request)
+          event.request = request
+        }),
+      { providerID: Provider.ID.opencode },
+    )
+    yield* ctx.session.hook(
+      "http.response",
+      (event) =>
+        Effect.gen(function* () {
+          if (!aliases.has(event.request)) return
+          event.response = yield* Effect.promise(() => aliasResponse(event.response))
+        }),
+      { providerID: Provider.ID.opencode },
+    )
     // The Console's config selects its provider only when the workspace enabled hosted search and the member's policy
     // allows it; otherwise its searches fail, so the provider is offered only then. The selection still merges as
     // config, where the user's own choice wins.
