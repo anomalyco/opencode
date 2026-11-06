@@ -37,7 +37,7 @@ export default defineApp({
     { path: "/api/session/ses_b/message", json: { data: [assistant("msg_2", "Done."), user("msg_1", "Why?")], cursor: {} } },
   ],
   steps: [
-    { checkpoint: "open", until: "Why?", deviation: ["V01-plain-transcript"] },
+    { checkpoint: "open", until: "Why?", deviation: [{ file: "V01-plain-transcript", cells: 70 }] },
     { keys: ["ctrl+x", "n"] },
     { event: { type: "session.text.delta", data: { /* … */ } } },
     { type: "hello" },
@@ -68,10 +68,13 @@ export default defineApp({
     `{ x, y, width, height }` or a `line` regex, which blanks every match on every row. Masks are for
     nondeterministic text (the random prompt placeholder, durations, relative times). Plan 7.5: a mask over
     a whole widget needs a deviation file.
-  - `deviation`: a list of names of `parity/deviations/<name>.md`, one per row that differs. The
-    checkpoint may then differ: the Rust runner prints a one-line summary and passes (`PARITY_VERBOSE=1`
-    prints the full report). A difference without a deviation fails, and so does a missing file. A
-    checkpoint that now matches prints a note to remove its deviations.
+  - `deviation`: a list of `{ file, cells, styleOnly? }`, one per row that differs: the file
+    `parity/deviations/<file>.md` and the number of cells it allows to differ. With `styleOnly`, those cells
+    must keep their symbols; only colors or attributes may differ. The entries add up, and the checkpoint
+    passes when it differs in no more cells than they allow: the Rust runner prints a one-line summary
+    (`PARITY_VERBOSE=1` prints the full report). A difference beyond them fails, and so does a missing file.
+    A checkpoint that now matches prints a note to remove its deviations. The Rust runner masks the recorded
+    cells again too, so a mask edited into a recording covers both sides.
 - **`requests: { deviation }`** at the top level does the same for P-REQ, with one name.
 
 Scenario data uses fixed IDs and times, so no ID or time normalizer is needed in cells. Helpers in
