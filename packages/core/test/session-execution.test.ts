@@ -152,6 +152,72 @@ describe("SessionExecution lifecycle", () => {
       expect(yield* goals.enqueue(leader, new Set())).toBe(false)
     }),
   )
+  it.effect("watch notifies and wakes its receiver on completion, failure and user interruption", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const watches = yield* SessionWatch.Service
+      const inbox = yield* SessionInbox.Service
+      const receiver = Session.ID.make("ses_watch_receiver")
+      const member = Session.ID.make("ses_watch_member")
+      yield* seedSessions(database, [receiver, member])
+      const input = { members: [member], text: "{member} stopped", enabled: true }
+      yield* watches.save(receiver, input)
+      expect(yield* inbox.list(receiver)).toEqual([])
+      expect(yield* watches.get(receiver)).toMatchObject(input)
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      let mode = "complete"
+      let wakes = 0
+      const memberStarted = yield* Deferred.make<void>()
+      const memberRelease = yield* Deferred.make<void>()
+      const context = yield* buildExecution(scope, ({ sessionID }) => {
+        if (sessionID === receiver)
+          return Effect.sync(() => {
+            wakes++
+          })
+        if (mode === "failure") return Effect.die("Member failed")
+        if (mode === "interrupt")
+          return Effect.gen(function* () {
+            yield* Deferred.succeed(memberStarted, undefined)
+            yield* Deferred.await(memberRelease)
+          })
+        return Effect.void
+      })
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* execution.resume(member)
+      yield* execution.awaitIdle(receiver)
+      mode = "failure"
+      yield* execution.resume(member).pipe(Effect.exit)
+      yield* execution.awaitIdle(receiver)
+      mode = "interrupt"
+      const fiber = yield* execution.resume(member).pipe(Effect.forkScoped)
+      yield* Deferred.await(memberStarted)
+      yield* execution.interrupt(member)
+      yield* Fiber.join(fiber).pipe(Effect.exit)
+      yield* execution.awaitIdle(receiver)
+      const pending = yield* inbox.list(receiver)
+      expect(wakes).toBe(3)
+      expect(pending).toHaveLength(3)
+      expect(pending[0]).toMatchObject({
+        delivery: "steer",
+        type: "user",
+        payload: { metadata: { stoppedMemberID: member } },
+      })
+      expect(pending[0]?.payload).toMatchObject({ text: expect.stringContaining(" stopped") })
+      yield* watches.save(receiver, { ...input, enabled: false })
+      mode = "complete"
+      yield* execution.resume(member)
+      expect(yield* inbox.list(receiver)).toHaveLength(3)
+      yield* watches.save(receiver, { ...input, text: "Changed: {member}" })
+      yield* execution.resume(member)
+      yield* execution.awaitIdle(receiver)
+      expect((yield* inbox.list(receiver))[3]?.payload).toMatchObject({ text: expect.stringContaining("Changed:") })
+      yield* watches.remove(receiver)
+      yield* execution.resume(member)
+      expect(yield* watches.get(receiver)).toBeNull()
+      expect(yield* inbox.list(receiver)).toHaveLength(4)
+    }),
+  )
   test("classifies success and typed failure terminals", () => {
     expect(SessionExecution.terminal(Exit.succeed(undefined))).toEqual({ type: "succeeded" })
     expect(
