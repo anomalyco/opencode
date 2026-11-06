@@ -63,6 +63,7 @@ export function CopyButton(props: { text: string; slot?: "code-copy" | "copy" })
         type="button"
         data-slot={props.slot ?? "code-copy"}
         data-state={state()}
+        data-funnel-copy="snippet"
         aria-label={i18n.t("site.code.copy")}
         onClick={copy}
       >

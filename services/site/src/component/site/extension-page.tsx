@@ -8,8 +8,8 @@ import { ogImage } from "~/lib/og"
 import { breadcrumbData, JsonLd, softwareData } from "~/component/structured-data"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
-import { useContent } from "~/i18n/content"
-import { extensionMarkdown } from "~/lib/product-markdown"
+import { useArea } from "~/i18n/content"
+import { extensionsSource } from "~/i18n/content/areas/extensions"
 import { ExtensionDownload } from "./download-sections"
 import { extensionPages, type ExtensionSlug } from "./extension-data"
 import { NewTab } from "./icons"
@@ -26,17 +26,17 @@ import { inlineKey } from "~/lib/direction"
 export function ExtensionPage(props: { slug: ExtensionSlug }) {
   const language = useLanguage()
   const i18n = useI18n()
-  const content = useContent()
+  const extensionCopy = useArea("extensions", extensionsSource)
   const navigate = useNavigate()
   const data = () => extensionPages.find((item) => item.slug === props.slug)!
-  const extension = () => content().extensions[props.slug]
+  const extension = () => extensionCopy()[props.slug]
   const path = () => `/extensions/${props.slug}`
   const neighbour = (step: number) => {
     const index = extensionPages.findIndex((item) => item.slug === props.slug)
     const slug = extensionPages[(index + step + extensionPages.length) % extensionPages.length].slug
-    return { slug, name: content().extensions[slug].name }
+    return { slug, name: extensionCopy()[slug].name }
   }
-  const markdown = useMarkdown(path(), extensionMarkdown(props.slug))
+  const markdown = useMarkdown(path(), (_, pages) => pages.extensionMarkdown(props.slug)())
   const command = () => data().install.command
 
   onMount(() => {
@@ -111,7 +111,7 @@ export function ExtensionPage(props: { slug: ExtensionSlug }) {
         {/* Plain black until there is real footage of the extension. */}
         <div data-component="product-hero" data-product={props.slug} data-empty />
 
-        <section data-component="product-intro">
+        <section data-component="product-intro" data-section="intro">
           <div data-slot="copy">
             <h1>{extension().name}</h1>
             <p>{extension().intro}</p>
@@ -125,7 +125,11 @@ export function ExtensionPage(props: { slug: ExtensionSlug }) {
         </section>
       </div>
 
-      <ul data-component="product-features" data-columns={siteSettings.productFeatureColumns.charAt(0)}>
+      <ul
+        data-component="product-features"
+        data-section="features"
+        data-columns={siteSettings.productFeatureColumns.charAt(0)}
+      >
         <For each={extension().features}>
           {(feature) => (
             <li>

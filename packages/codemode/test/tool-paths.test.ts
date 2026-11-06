@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import { CodeMode, Namespace, Tool } from "../src/index.js"
+import { CodeMode, Namespace, Tool } from "./lib/index.js"
 
 const echo = (description: string, result: string) =>
   Tool.make({

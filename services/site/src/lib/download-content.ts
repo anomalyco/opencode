@@ -10,7 +10,7 @@ import {
 import type { Translate } from "~/i18n"
 import { v1DocsUrl } from "~/lib/docs"
 import { desktopBuilds, desktopInstall, getDownloadHref } from "~/lib/download"
-import { homeContent } from "~/lib/home-content"
+import { homeFaq } from "~/lib/faq-content"
 import { sdkInstalls } from "~/lib/install-commands"
 import { blocks, codeFence, link, richToMarkdown, type MarkdownContext } from "~/lib/markdown"
 
@@ -67,7 +67,7 @@ export function downloadContent(t: Translate, route: (path: string) => string) {
       ],
     },
     actions: { download: t("download.action.download"), install: t("download.action.install") },
-    faq: homeContent(t, route).faq,
+    faq: homeFaq(t, route),
   }
 }
 

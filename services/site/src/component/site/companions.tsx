@@ -1,4 +1,5 @@
-import { useContent } from "~/i18n/content"
+import { useArea } from "~/i18n/content"
+import { appsSource } from "~/i18n/content/areas/apps"
 import { useI18n } from "~/context/i18n"
 import "./companions.css"
 import { For } from "solid-js"
@@ -25,10 +26,11 @@ export const companions: Record<PageSlug, (typeof anomalyApps)[number][]> = {
  */
 export function Companions(props: { product: PageSlug }) {
   const i18n = useI18n()
-  const content = useContent()
+  const appCopy = useArea("apps", appsSource)
   return (
     <section
       data-component="companions"
+      data-section="companions"
       data-design="companionStyle"
       data-style={siteSettings.companionStyle}
       aria-label={i18n.t("site.companions")}
@@ -43,7 +45,7 @@ export function Companions(props: { product: PageSlug }) {
                   {app.name}
                   <NewTab />
                 </a>
-                <span data-slot="body">{content().apps[app.id].category}</span>
+                <span data-slot="body">{appCopy()[app.id].category}</span>
               </span>
               <span data-slot="action">
                 {/* The same link as the name, so screen readers and the tab order skip it. */}

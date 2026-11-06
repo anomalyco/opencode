@@ -6,7 +6,7 @@ import { docsInstalls } from "~/lib/docs-content"
 /**
  * Every docs code block type at once, in Vercel square (the chosen code style), whatever the
  * kitchen sink's switchers say: docs-variants.css styles [data-slot="code-gallery"] as option 6.
- * Content is from the docs (services/www/src/docs/content), with models reading Claude Opus 5.5.
+ * Content is from the docs (src/docs/content), with models reading Claude Opus 5.5.
  */
 export function DocsCodeGallery(props: { reference?: boolean }) {
   return (

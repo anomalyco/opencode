@@ -19,7 +19,7 @@ import { changelogQuery } from "~/lib/changelog-notes"
 import { desktopBuilds, desktopInstall, getDownloadHref } from "~/lib/download"
 import { config } from "~/config"
 import { fourthClips } from "~/component/site/videos"
-import { dict } from "~/i18n/en"
+import { english } from "~/i18n/english"
 import { blocks, codeFence, link, type MarkdownContext } from "~/lib/markdown"
 
 /** A product page as Markdown: the intro, how to get it, its features and its latest releases. */
@@ -51,7 +51,7 @@ export function productMarkdown(slug: PageSlug) {
 }
 
 /** The /product hero subtitle; Design mode offers alternatives ("products.hero.body"). */
-export const productsSubtitle = dict["product.hero.subtitle"]
+export const productsSubtitle = english["product.hero.subtitle"]
 
 /** The /product page as Markdown: every product with a page, then Anomaly's other products. */
 export function productsMarkdown(context: MarkdownContext) {

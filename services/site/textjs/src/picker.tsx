@@ -1,11 +1,17 @@
+import { initYoga } from "@textjs/core"
 import { Box, renderToConsole, Select, Text, useInput, type SelectOption } from "@textjs/react"
 
 // opencode.install.pick(): the install commands and desktop builds as a Text.js list in the
 // DevTools console. The site passes the options, so this bundle holds no site data.
 
+// Text.js 1.6 fetches Yoga's WebAssembly instead of carrying it inline; script/build.ts hashes the
+// file and defines its name. See src/lite.tsx.
+declare const __TEXTJS_YOGA__: string
+
 type Input = { options: SelectOption<string>[]; selected?: string; dark: boolean }
 
-export function pick(input: Input) {
+export async function pick(input: Input) {
+  await initYoga({ wasm: new URL(__TEXTJS_YOGA__, import.meta.url) })
   return new Promise<string | undefined>((resolve) => {
     const done = (value?: string) => {
       root.then((app) => app.unmount())

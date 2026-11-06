@@ -95,7 +95,7 @@ function Command(props: { command: string }) {
   let timer: ReturnType<typeof setTimeout> | undefined
   onCleanup(() => clearTimeout(timer))
   return (
-    <div data-slot="command">
+    <div data-slot="command" data-funnel-copy="pair">
       <code>{props.command}</code>
       <button
         type="button"
