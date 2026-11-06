@@ -1198,6 +1198,8 @@ describe("ReadTool", () => {
         await fs.writeFile(path.join(root, ".opencode-version"), "1")
         await fs.writeFile(path.join(tmp.path, "secret.md"), "secret")
         await fs.symlink(path.join(tmp.path, "secret.md"), path.join(root, "escape.md"))
+        await fs.writeFile(path.join(root, ".env"), "TOKEN=secret")
+        await fs.symlink(path.join(root, ".env"), path.join(root, "notes.md"))
       })
       yield* skills.transform((editor) =>
         editor.add(
@@ -1230,7 +1232,7 @@ describe("ReadTool", () => {
         content: [
           {
             type: "text",
-            text: `Read directory ${root}, entries 1-4\nreferences${path.sep}\nescape.md\nlogo.png\nSKILL.md`,
+            text: `Read directory ${root}, entries 1-6\nreferences${path.sep}\n.env\nescape.md\nlogo.png\nnotes.md\nSKILL.md`,
           },
         ],
       })
@@ -1242,8 +1244,12 @@ describe("ReadTool", () => {
         { sessionID, action: "read", resources: [guide.replaceAll("\\", "/")], save: ["*"] },
       ])
 
-      // The version marker and a link out of the skill get no skill exemption.
-      for (const file of [path.join(root, ".opencode-version"), path.join(root, "escape.md")]) {
+      // The version marker, under any casing, and a link out of the skill get no skill exemption.
+      for (const file of [
+        path.join(root, ".opencode-version"),
+        path.join(root, ".OPENCODE-VERSION"),
+        path.join(root, "escape.md"),
+      ]) {
         assertions.length = 0
         yield* read(file)
         expect(assertions[0]).toMatchObject({ action: "external_directory" })
@@ -1259,6 +1265,56 @@ describe("ReadTool", () => {
         status: "error",
         error: { type: "permission.rejected", message: "Permission denied: read" },
       })
+
+      // Read rules see the file actually opened: a link inside the skill, or another casing of the name on a
+      // case-insensitive disk, can't reach `.env` past a rule that denies it.
+      const real = yield* Effect.promise(() => fs.realpath(root))
+      deniedResource = path.join(real, ".env").replaceAll("\\", "/")
+      const insensitive = yield* Effect.promise(() =>
+        fs.stat(path.join(root, ".ENV")).then(
+          () => true,
+          () => false,
+        ),
+      )
+      for (const file of [path.join(root, "notes.md"), ...(insensitive ? [path.join(root, ".ENV")] : [])])
+        expect(yield* read(file)).toEqual({
+          status: "error",
+          error: { type: "permission.rejected", message: "Permission denied: read" },
+        })
+    }),
+  )
+
+  it.effect("keeps the skill exemption for a missing file in a skill whose directory is a link", () =>
+    Effect.gen(function* () {
+      const skills = yield* Skill.Service
+      const registry = yield* Tool.Service
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
+      const linked = path.join(tmp.path, "skills", "lint")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(path.join(tmp.path, "dotfiles", "lint"), { recursive: true })
+        await fs.mkdir(path.dirname(linked), { recursive: true })
+        await fs.writeFile(path.join(tmp.path, "dotfiles", "lint", "SKILL.md"), "# Lint")
+        await fs.symlink(path.join(tmp.path, "dotfiles", "lint"), linked)
+      })
+      yield* skills.transform((editor) =>
+        editor.add(
+          Skill.Info.make({
+            id: Skill.ID.make("lint"),
+            name: Skill.Name.make("Lint"),
+            path: AbsolutePath.make(path.join(linked, "SKILL.md")),
+            content: "# Lint",
+          }),
+        ),
+      )
+      const missing = path.join(linked, "missing.md")
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-missing", name: "read", input: { path: missing } },
+        }),
+      ).toEqual({ status: "error", error: { type: "tool.execution", message: `File not found: ${missing}` } })
+      expect(assertions.map((item) => item.action)).toEqual(["skill", "read"])
     }),
   )
 })

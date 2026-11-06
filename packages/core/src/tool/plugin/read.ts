@@ -100,9 +100,13 @@ export const Plugin = {
                   save: [skillFile.skill.id],
                   ...Permission.invocation(context),
                 })
+                // Read rules apply to the file opened as well as the path asked for, so a link inside the skill
+                // can't reach `.env` past a rule that denies it.
                 yield* permission.assert({
                   action: "read",
-                  resources: [skillFile.absolute.replaceAll("\\", "/")],
+                  resources: Array.from(
+                    new Set([skillFile.absolute, skillFile.target].map((item) => item.replaceAll("\\", "/"))),
+                  ),
                   save: ["*"],
                   ...Permission.invocation(context),
                 })
@@ -220,12 +224,23 @@ export const Plugin = {
           FSUtil.contains(dirname(item.path), absolute),
       )
       if (!skill) return
-      // Resolve links so a symlink inside the skill can't reach a file outside it.
-      const target = AbsolutePath.make(yield* fs.resolve(absolute))
-      if (!FSUtil.contains(yield* fs.resolve(dirname(skill.path)), target)) return
-      if (basename(target) === SkillDiscovery.versionFile) return
+      // Compare real on-disk paths, with their real casing, so a link or a differently cased name inside the skill
+      // can't reach a file outside it or the version marker.
+      const target = AbsolutePath.make(yield* realPath(absolute))
+      if (!FSUtil.contains(yield* realPath(dirname(skill.path)), target)) return
+      if (isVersionFile(target)) return
       return { skill, absolute, target }
     })
+    // A missing file has no real path, so resolve its nearest existing ancestor and keep the rest as written.
+    const realPath = (file: string): Effect.Effect<string> =>
+      fs.realPath(file).pipe(
+        Effect.catch(() => {
+          const parent = dirname(file)
+          return parent === file
+            ? Effect.succeed(file)
+            : realPath(parent).pipe(Effect.map((real) => join(real, basename(file))))
+        }),
+      )
     const host = Environment.makeFiles(
       // Reading never spawns a process, so these host files need no spawner.
       Environment.makeLocalDriver(ChildProcessSpawner.make(() => Effect.die("host skill files never spawn"))),
@@ -233,9 +248,7 @@ export const Plugin = {
     const skillFiles: Environment.Files = {
       ...host,
       list: (directory) =>
-        host
-          .list(directory)
-          .pipe(Effect.map((entries) => entries.filter((entry) => entry.name !== SkillDiscovery.versionFile))),
+        host.list(directory).pipe(Effect.map((entries) => entries.filter((entry) => !isVersionFile(entry.name)))),
     }
 
     const alternatePath = Effect.fn("ReadTool.alternatePath")(function* (absolute: string) {
@@ -306,6 +319,11 @@ export const Plugin = {
       return yield* new ToolFailure({ message })
     })
   }),
+}
+
+// Case-insensitive file systems open the marker under any casing.
+function isVersionFile(file: string) {
+  return basename(file).toLowerCase() === SkillDiscovery.versionFile
 }
 
 function parseSkillUri(value: string) {
