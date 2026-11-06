@@ -4,28 +4,21 @@ import "./signup.css"
 import { action, useAction } from "@solidjs/router"
 import { Resource } from "#resource"
 import { createEffect, createSignal, createUniqueId, Match, on, onCleanup, Show, Switch, untrack } from "solid-js"
-import { z } from "zod"
+import { getRequestEvent } from "solid-js/web"
+import { subscribe, type SignupStatus } from "~/lib/opensend"
 import { designCopy } from "./design-copy"
 import { siteSettings } from "./settings"
 
 /**
- * The home page's email sign-up. It adds the address to the same EmailOctopus list as the live
- * site's form (component/email-signup.tsx), from a server action, so the API key never reaches the
- * browser. Settings › Sign-up style picks one of three forms; all are real forms with an email
- * field, and without JavaScript they still post to the action.
+ * The home page's email sign-up. It adds the address to the OpenSend newsletter list
+ * (lib/opensend.ts) from a server action, so the API key never reaches the browser. Settings ›
+ * Sign-up style picks one of three forms; all are real forms with an email field, and without
+ * JavaScript they still post to the action.
  */
 
-const listId = "8b9bb82c-9d5f-11f0-975f-0df6fd1e4945"
-
-// The fields of EmailOctopus's contact that tell a new address from one already on the list.
-const contact = z.object({
-  status: z.enum(["pending", "subscribed", "unsubscribed"]),
-  created_at: z.string(),
-})
-
 type Result = {
-  status: "subscribed" | "confirm" | "already" | "invalid" | "error"
-  // Set only in development without the EmailOctopus key: nothing was sent.
+  status: SignupStatus
+  // Set only in development without the OpenSend key: nothing was sent.
   dev?: boolean
 }
 
@@ -35,28 +28,16 @@ const signup = action(async (form: FormData): Promise<Result> => {
   if (!validEmail(email)) return { status: "invalid" }
   const key = apiKey()
   if (!key) return import.meta.env.DEV ? { status: "subscribed", dev: true } : { status: "error" }
-  const response = await fetch(`https://api.emailoctopus.com/lists/${listId}/contacts`, {
-    method: "PUT",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ email_address: email }),
-  }).catch(() => undefined)
-  if (!response?.ok) {
-    console.error("EmailOctopus sign-up failed:", response?.status, await response?.text().catch(() => ""))
-    return { status: "error" }
-  }
-  const saved = contact.safeParse(await response.json().catch(() => undefined))
-  if (!saved.success) return { status: "subscribed" }
-  // The call creates or updates, so a contact made more than a minute ago was already there.
-  const existing = Date.now() - Date.parse(saved.data.created_at) > 60_000
-  if (saved.data.status === "pending") return { status: "confirm" }
-  if (saved.data.status === "unsubscribed") return { status: "error" }
-  return { status: existing ? "already" : "subscribed" }
+  // Server actions only see a same-origin referer (lib/server-action.ts): the page with the form.
+  const request = getRequestEvent()!.request
+  const page = new URL(request.headers.get("referer") ?? request.url)
+  return { status: await subscribe({ key, email, page: page.origin + page.pathname, at: new Date() }) }
 }, "site-signup")
 
 // Outside development the Resource is always linked; in plain `vite dev` it throws.
 function apiKey() {
   try {
-    return Resource.EMAILOCTOPUS_API_KEY.value
+    return Resource.OPENSEND_API_KEY.value
   } catch {
     return undefined
   }
@@ -71,7 +52,6 @@ const messages = {
   invalid: "home.signup.invalid",
   error: "home.signup.error",
   subscribed: "home.signup.subscribed",
-  confirm: "home.signup.confirm",
   already: "home.signup.already",
 } as const satisfies Record<string, Key>
 
@@ -85,7 +65,7 @@ const sentenceErrors = {
 type State =
   | { status: "idle" | "pending" }
   | { status: "empty" | "invalid" | "error"; email: string }
-  | { status: "subscribed" | "confirm" | "already"; email: string; dev?: boolean }
+  | { status: "subscribed" | "already"; email: string; dev?: boolean }
 
 const reduced = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches
 
@@ -98,7 +78,7 @@ function createSignup() {
   const id = createUniqueId()
   let input: HTMLInputElement | undefined
 
-  const done = () => ["subscribed", "confirm", "already"].includes(state().status)
+  const done = () => ["subscribed", "already"].includes(state().status)
   const problem = () => {
     const current = state()
     return current.status === "empty" || current.status === "invalid" || current.status === "error"
@@ -248,9 +228,7 @@ function InputForm(props: { signup: Signup }) {
           <span data-slot="sr-only">
             {i18n.t(s.state().status === "already" ? messages.already : messages.subscribed)}{" "}
           </span>
-          {s.state().status === "confirm"
-            ? i18n.t("home.signup.checkInbox", { email: s.email() })
-            : i18n.t("home.signup.tellFirst", { email: s.email() })}
+          {i18n.t("home.signup.tellFirst", { email: s.email() })}
         </Show>
       </p>
       <DevNote signup={s} />
@@ -269,7 +247,7 @@ function SentenceForm(props: { signup: Signup }) {
   const verb = () => {
     const status = s.state().status
     if (status === "already") return i18n.t("home.signup.alreadyAt")
-    if (status === "subscribed" || status === "confirm") return i18n.t("home.signup.onListAt")
+    if (status === "subscribed") return i18n.t("home.signup.onListAt")
     return ""
   }
   const ready = () => !s.done() && validEmail(s.value().trim())
@@ -391,9 +369,6 @@ function SentenceForm(props: { signup: Signup }) {
             </button>
           }
         >
-          <Show when={s.state().status === "confirm"}>
-            <span data-slot="note">{i18n.t("home.signup.confirmNote")}</span>
-          </Show>
           <button type="button" data-slot="again" onClick={s.reset}>
             {i18n.t("home.signup.again")}
           </button>
@@ -485,12 +460,7 @@ function TerminalForm(props: { signup: Signup }) {
                   <span data-slot="dim" aria-hidden="true">
                     └
                   </span>
-                  <span>
-                    {i18n.t(s.state().status === "already" ? messages.already : messages.subscribed)}
-                    <Show when={s.state().status === "confirm"}>
-                      <span data-slot="dim"> {i18n.t("home.signup.confirmNote")}</span>
-                    </Show>
-                  </span>
+                  <span>{i18n.t(s.state().status === "already" ? messages.already : messages.subscribed)}</span>
                 </div>
               </Match>
             </Switch>
@@ -527,7 +497,7 @@ function TerminalForm(props: { signup: Signup }) {
 function DevNote(props: { signup: Signup }) {
   return (
     <Show when={props.signup.dev()}>
-      <p data-slot="dev">Development: not sent. EMAILOCTOPUS_API_KEY isn't linked; run with `sst shell`.</p>
+      <p data-slot="dev">Development: not sent. OPENSEND_API_KEY isn't set.</p>
     </Show>
   )
 }

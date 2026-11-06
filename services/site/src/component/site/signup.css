@@ -198,7 +198,6 @@
     cursor: text;
 
     &[data-state="subscribed"],
-    &[data-state="confirm"],
     &[data-state="already"] {
       cursor: auto;
     }
@@ -237,7 +236,7 @@
     vertical-align: bottom;
 
     /* No underline: the grey placeholder and the caret say it's editable. Keyboard focus adds a ring. */
-    [data-slot="sentence"]:not([data-state="subscribed"], [data-state="confirm"], [data-state="already"]) &[data-ring] {
+    [data-slot="sentence"]:not([data-state="subscribed"], [data-state="already"]) &[data-ring] {
       outline: 2px solid var(--link);
       outline-offset: 0.12em;
     }
@@ -277,7 +276,6 @@
 
   /* Once sent, the address is plain text in the sentence. */
   [data-state="subscribed"],
-  [data-state="confirm"],
   [data-state="already"] {
     input {
       cursor: text;
@@ -299,10 +297,6 @@
     margin-top: 1.5rem;
     font-size: var(--fs-body);
     color: var(--text);
-  }
-
-  [data-slot="note"] {
-    animation: signup-in 320ms var(--ease-out);
   }
 
   /* The button holds its place while hidden, so the page doesn't move when it shows. */
@@ -359,8 +353,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    [data-slot="error"],
-    [data-slot="note"] {
+    [data-slot="error"] {
       animation: none;
     }
 
