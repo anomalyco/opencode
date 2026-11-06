@@ -6,7 +6,7 @@
 // GitHub snapshot. Pages may import their modules for the queries, whose "use server" bodies the
 // browser build drops along with everything only those bodies read.
 // Last, it fails when a page's initial JavaScript (the entry and every chunk the page's route imports
-// statically, which the server modulepreloads) passes the budget below, gzipped. Code a page needs
+// statically, which the server modulepreloads) passes its budget below, gzipped. Code a page needs
 // only later belongs behind a dynamic import.
 // Run after `vite build`, optionally with the output directory: `bun script/check-client-bundle.ts .output`.
 import path from "node:path"
@@ -61,9 +61,30 @@ console.log(
   `check-client-bundle: ${files.length} client files, no Settings, Design mode, device preview or server-only code`,
 )
 
-// In kB, gzipped. The heaviest pages, the legal documents (which carry their text), were 195 kB when
-// this was set; every other page was under 185 kB.
-const budget = 210
+// Each page's budget in kB, gzipped: what it was when last measured, plus a kB of room. Lower a
+// budget when a page gets lighter; a page without one fails until it has one.
+const budgets: Record<string, number> = {
+  "[...404].tsx": 144,
+  "brand/index.tsx": 153,
+  "changelog/[tag].tsx": 167,
+  "changelog/index.tsx": 166,
+  "desktop.tsx": 178,
+  "devices.tsx": 83,
+  "extensions/browse.tsx": 155,
+  "font/index.tsx": 174,
+  "ide.tsx": 178,
+  "index.tsx": 183,
+  "legal/index.tsx": 193,
+  "legal/privacy-policy/index.tsx": 193,
+  "legal/terms-of-service/index.tsx": 193,
+  "mini.tsx": 178,
+  "mobile.tsx": 178,
+  "press/index.tsx": 155,
+  "product/index.tsx": 168,
+  "sdk.tsx": 178,
+  "terminal.tsx": 178,
+  "video-editor/index.tsx": 81,
+}
 type Chunk = { file: string; imports?: string[] }
 const manifest: Record<string, Chunk> = await Bun.file(path.join(root, ".vite/manifest.json")).json()
 const sizes = new Map<string, number>()
@@ -90,15 +111,18 @@ const pages = await Promise.all(
       return { route: key.slice("src/routes/".length).split("?")[0], kB: Math.round(bytes / 100) / 10 }
     }),
 )
-const over = pages.filter((page) => page.kB > budget)
+const over = pages.filter((page) => !(page.kB <= budgets[page.route]))
 if (over.length) {
   console.error(
-    `check-client-bundle: initial JavaScript over the ${budget} kB (gzipped) budget:\n  ` +
-      over.map((page) => `${page.route}: ${page.kB} kB`).join("\n  "),
+    "check-client-bundle: initial JavaScript (gzipped) over its page's budget:\n  " +
+      over.map((page) => `${page.route}: ${page.kB} kB, budget ${budgets[page.route] ?? "none"}`).join("\n  "),
   )
   process.exit(1)
 }
-const heaviest = pages.toSorted((a, b) => b.kB - a.kB)[0]
 console.log(
-  `check-client-bundle: every page's initial JavaScript is within ${budget} kB gzipped (heaviest ${heaviest.route}, ${heaviest.kB} kB)`,
+  "check-client-bundle: initial JavaScript within budget (kB gzipped): " +
+    pages
+      .toSorted((a, b) => b.kB - a.kB)
+      .map((page) => `${page.route} ${page.kB}`)
+      .join(", "),
 )
