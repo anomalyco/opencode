@@ -5,8 +5,9 @@
 //! remembers what it already showed, so a message that arrives both live and in a later list prints once. The
 //! network side ([`connect`], [`messages`]) runs on tokio and posts what it reads to the UI thread.
 //!
-//! Tools, shells, subagents, permissions, and forms reach this module but are drawn by M.3 and M.4: tool parts go
-//! through [`crate::tools::commits`], and requests through [`crate::footers`].
+//! Tools, shells, permissions, and forms reach this module but are drawn by M.3 and M.4: tool parts go through
+//! [`crate::tools::commits`], and requests through [`crate::footers`]. Events of other sessions and this session's
+//! tool events also go to the subagent tracker ([`crate::subagents`]) through [`Output::subagents`].
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -31,6 +32,8 @@ use serde_json::Value;
 
 use crate::scrollback::{Commit, EntryKind, Phase, Source, ToolState};
 
+/// The owner of the forms that belong to no session (`sessionID: "global"`).
+pub const GLOBAL: &str = "global";
 /// `--replay-limit`'s default: the newest messages a replay lists.
 pub const DEFAULT_REPLAY_LIMIT: u32 = 200;
 /// `LOCAL_REPLAY_ROW_LIMIT`: rows printed only locally (errors, prompts in flight) that a resize replays.
@@ -163,8 +166,12 @@ pub struct Output {
     pub patch: Option<Patch>,
     /// `session.renamed`.
     pub title: Option<String>,
-    /// Events for the footer views of M.3 (permissions, forms, subagents, the queue).
+    /// Events for the footer views of M.3 (permissions, forms, the queue), and the forms of no session
+    /// (`sessionID: "global"`).
     pub footer: Vec<V2Event>,
+    /// Events for the subagent tracker: other sessions' events, and this session's tool events, which name the
+    /// child sessions its subagent calls start.
+    pub subagents: Vec<V2Event>,
 }
 
 impl Output {
@@ -188,6 +195,7 @@ impl Output {
             self.title = other.title;
         }
         self.footer.extend(other.footer);
+        self.subagents.extend(other.subagents);
     }
 }
 
@@ -724,17 +732,28 @@ impl Transcript {
         Output::commits(commits)
     }
 
-    /// `apply`: one live event of this session. Events of other sessions are ignored here (subagents are M.3's).
+    /// `apply`: one live event. A form of no session goes to the footer; events of other sessions go to the
+    /// subagent tracker, and so do this session's tool events.
     pub fn event(&mut self, event: &V2Event) -> Output {
         if let Some(buffered) = &mut self.buffered {
             buffered.push(event.clone());
             return Output::default();
         }
-        if session_of(event) != Some(self.session_id.as_str()) {
+        let Some(session) = session_of(event) else {
             return Output::default();
+        };
+        let form = matches!(event, V2Event::FormCreated(_) | V2Event::FormReplied(_) | V2Event::FormCancelled(_));
+        if session == GLOBAL && form {
+            return Output { footer: vec![event.clone()], ..Output::default() };
         }
-        let output = self.apply(event);
+        if session != self.session_id.as_str() {
+            return Output { subagents: vec![event.clone()], ..Output::default() };
+        }
+        let mut output = self.apply(event);
         self.remember_all(&output.commits);
+        if tool_message(event).is_some() {
+            output.subagents.push(event.clone());
+        }
         output
     }
 
@@ -1115,7 +1134,7 @@ impl Transcript {
 }
 
 /// The session an event belongs to, for the events the transcript reads (`form.created` names it in its form).
-fn session_of(event: &V2Event) -> Option<&str> {
+pub(crate) fn session_of(event: &V2Event) -> Option<&str> {
     Some(match event {
         V2Event::SessionRenamed(event) => event.data.session_id.as_str(),
         V2Event::SessionInboxEnqueued(event) => event.data.session_id.as_str(),
@@ -1156,7 +1175,7 @@ fn session_of(event: &V2Event) -> Option<&str> {
 }
 
 /// The assistant message of a `session.tool.*` event.
-fn tool_message(event: &V2Event) -> Option<&str> {
+pub(crate) fn tool_message(event: &V2Event) -> Option<&str> {
     Some(match event {
         V2Event::SessionToolInputStarted(event) => event.data.assistant_message_id.as_str(),
         V2Event::SessionToolInputDelta(event) => event.data.assistant_message_id.as_str(),
@@ -1187,12 +1206,12 @@ fn reasoning_commit(fragment: &Fragment, text: impl Into<String>) -> Commit {
 }
 
 /// `errorMessage`: the message, else a fallback (the structured error has no `_tag`).
-fn error_message(error: &SessionStructuredError) -> String {
+pub(crate) fn error_message(error: &SessionStructuredError) -> String {
     if error.message.is_empty() { "Session execution failed".to_owned() } else { error.message.clone() }
 }
 
 /// `userImageCommits`: a prompt's images, without repeats of one named inline image (`deduplicateVisibleImages`).
-fn user_image_commits(message: &str, files: &[PromptFileAttachment]) -> Vec<Commit> {
+pub(crate) fn user_image_commits(message: &str, files: &[PromptFileAttachment]) -> Vec<Commit> {
     let mut seen: Vec<(String, &str)> = Vec::new();
     files
         .iter()
@@ -1297,7 +1316,8 @@ pub enum Incoming {
     /// The stream (re)connected and the messages were listed.
     Hydrated {
         messages: Vec<SessionMessageInfo>,
-        active: bool,
+        /// The sessions running now (`session.active`).
+        active: Vec<String>,
     },
     Event(Box<V2Event>),
     /// The stream dropped; it reconnects.
@@ -1327,16 +1347,19 @@ fn decode_message(value: &Value) -> SessionMessageInfo {
     })
 }
 
-/// Whether the session is running (`session.active`).
-pub async fn active(client: &Client, session: &str) -> bool {
-    let Ok(call) = Client::session_active_call() else { return false };
-    client.json::<Value>(call).await.is_ok_and(|active| active["data"].get(session).is_some())
+/// The sessions running now (`session.active`); none when the read fails.
+pub async fn active(client: &Client) -> Vec<String> {
+    client.session_active().await.map(|active| active.into_keys().collect()).unwrap_or_default()
 }
 
-/// Lists the messages and whether the session runs, as a hydration does.
-pub async fn hydration(client: &Client, session: &str, limit: u32) -> Result<(Vec<SessionMessageInfo>, bool), String> {
+/// Lists the messages and the running sessions, as a hydration does.
+pub async fn hydration(
+    client: &Client,
+    session: &str,
+    limit: u32,
+) -> Result<(Vec<SessionMessageInfo>, Vec<String>), String> {
     let messages = messages(client, session, limit).await?;
-    Ok((messages, active(client, session).await))
+    Ok((messages, active(client).await))
 }
 
 /// `connect`: subscribes, hydrates after `server.connected`, then forwards events, reconnecting after 250 ms
@@ -1492,6 +1515,24 @@ mod tests {
             message(json!({ "id": "msg_a2", "type": "assistant", "content": [],
                 "error": { "type": "provider", "message": "Boom" } })),
         ]
+    }
+
+    #[test]
+    fn events_route_to_the_transcript_the_subagents_and_the_footer() {
+        let mut transcript = Transcript::new("ses_1", true, true, true, None);
+        transcript.hydrate(&[], false);
+        let child = transcript.event(&event("session.execution.started", json!({ "sessionID": "ses_child" })));
+        assert_eq!((child.commits.len(), child.subagents.len(), child.patch), (0, 1, None));
+        let call = event(
+            "session.tool.input.started",
+            json!({ "assistantMessageID": "msg_a", "id": "call_1",
+            "name": "subagent" }),
+        );
+        assert_eq!(transcript.event(&call).subagents, std::slice::from_ref(&call));
+        assert!(transcript.event(&delta("msg_a", "hi")).subagents.is_empty());
+        let form = event("form.cancelled", json!({ "sessionID": "global", "id": "frm_1" }));
+        let global = transcript.event(&form);
+        assert_eq!((global.footer, global.subagents.len()), (vec![form], 0));
     }
 
     #[test]

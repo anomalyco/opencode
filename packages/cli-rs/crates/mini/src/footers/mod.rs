@@ -6,22 +6,29 @@
 //! model panels, and `session.queued_prompts` opens the pending prompts, where Enter toggles steer and queue,
 //! `queued_prompt.delete` cancels a prompt, and `queued_prompt.undo` takes it back into the draft.
 //!
-//! Subagent tabs, their panel, and their inspector wait for the subagent stream (`stream-v2.subagent.ts`).
+//! Child sessions (`crate::subagents`) add their permissions and forms after the session's own, and global forms
+//! come last. `session.child.first` opens the subagent panel, which leads to the inspector of one child;
+//! `session.background` backgrounds the running subagents, and `composer.subagent.interrupt` interrupts the
+//! inspected one.
 
 pub mod form;
 pub mod menu;
 pub mod panel;
 pub mod permission;
 mod scroll;
+pub mod subagent;
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
+use std::time::Duration;
 
 use opencode_api::client::Client;
 use opencode_api::generated::{
-    FormID, FormInfo, PermissionListInput, PermissionReplyInput, PermissionRequest, SessionFormCancelInput,
-    SessionFormListInput, SessionFormReplyInput, SessionID, SessionMessageGetInput, V2Event,
+    FormID, FormInfo, FormListInput, LocationQueryInput, PermissionAskedData, PermissionListInput,
+    PermissionReplyInput, PermissionRequest, SessionBackgroundInput, SessionFormCancelInput, SessionFormListInput,
+    SessionFormReplyInput, SessionGetInput, SessionID, SessionInboxListInput, SessionInfo, SessionInterruptInput,
+    SessionListInput, SessionListInputOrder, SessionMessageGetInput, SessionMessageInfo, V2Event,
 };
 use opencode_local::cli_config::Visibility;
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
@@ -34,7 +41,9 @@ use self::menu::{Item, Tone};
 use self::panel::{Entry, Outcome, Panel, Spec};
 use crate::prompt::status::mono_shortcut;
 use crate::prompt::{Delivery, Prompt};
+use crate::replay::GLOBAL;
 use crate::settings::{Change, Key, MiniSettings};
+use crate::subagents::{Discovery, FAMILY_LIMIT, Fetch, Status, Tab, Tracker};
 use crate::theme::RunTheme;
 use crate::variants::{ModelSelection, Provider};
 
@@ -108,6 +117,10 @@ enum Route {
     Variant,
     Settings,
     Queued,
+    /// The subagent panel (`subagent-menu`).
+    Subagents,
+    /// The inspector of the selected child (`subagent`).
+    Inspector,
 }
 
 impl Route {
@@ -120,6 +133,8 @@ impl Route {
             Self::Variant => "variant",
             Self::Settings => "settings",
             Self::Queued => "queued-menu",
+            Self::Subagents => "subagent-menu",
+            Self::Inspector => "subagent",
         }
     }
 }
@@ -145,6 +160,8 @@ enum Pick {
     Model(ModelSelection),
     Variant(Option<String>),
     Setting(Key),
+    Subagents,
+    Subagent(String),
 }
 
 /// The session the requests belong to.
@@ -161,6 +178,16 @@ struct State {
     shown: Option<Shown>,
     permissions: Vec<permission::Request>,
     forms: Vec<FormInfo>,
+    /// The children's requests, from the tracker, and the forms of no session at the session's location.
+    child_permissions: Vec<permission::Request>,
+    child_forms: Vec<FormInfo>,
+    global_forms: Vec<FormInfo>,
+    tabs: Vec<Tab>,
+    /// The inspected child.
+    selected: Option<String>,
+    /// The subagent panel lists the running children, else the others (`active`).
+    running_only: bool,
+    inspector: Option<subagent::Inspector>,
     permission: Option<permission::State>,
     /// Answers in progress per form while a permission covers it (`formStates`).
     form_states: HashMap<String, form::State>,
@@ -188,6 +215,7 @@ struct Inner {
     mono: bool,
     home: Option<std::path::PathBuf>,
     target: RefCell<Option<Target>>,
+    tracker: RefCell<Option<Tracker>>,
     hooks: RefCell<Rc<Hooks>>,
     state: RefCell<State>,
     widgets: RefCell<Widgets>,
@@ -220,6 +248,7 @@ impl Footers {
             mono,
             home: std::env::home_dir(),
             target: RefCell::default(),
+            tracker: RefCell::default(),
             hooks: RefCell::default(),
             state: RefCell::new(State {
                 terminal: opentui::term::size().unwrap_or((app.size().0, 24)),
@@ -269,7 +298,10 @@ impl Footers {
         let desired = match (&state.shown, state.route) {
             (Some(Shown::Permission(_)), _) => BASE + PERMISSION_ROWS,
             (Some(Shown::Form(_)), _) => BASE + FORM_ROWS,
-            (_, Some(Route::Queued)) => 1 + state.panel.as_ref().map_or(0, |panel| panel.rows(rows)) as u16,
+            (_, Some(Route::Queued | Route::Subagents)) => {
+                1 + state.panel.as_ref().map_or(0, |panel| panel.rows(rows)) as u16
+            }
+            (_, Some(Route::Inspector)) => BASE + subagent::INSPECTOR_ROWS,
             (_, Some(Route::Command | Route::Agent | Route::Model | Route::Variant | Route::Settings)) => {
                 let layout = panel::layout(rows, panel::LIST_ROWS);
                 1 + (layout.frame + layout.limit) as u16
@@ -279,18 +311,37 @@ impl Footers {
         Some(desired.min(rows).max(1))
     }
 
-    /// Opens a session: forgets the last one's requests and lists its pending ones (`hydrate`).
-    pub fn open(&self, client: &Client, session: &str, directory: &str) {
+    /// Opens a session: forgets the last one's requests and children, and lists its pending requests and the
+    /// forms of no session at its location (`hydrate`). `thinking` shows the children's reasoning.
+    pub fn open(&self, client: &Client, session: &str, directory: &str, thinking: bool) {
         *self.0.target.borrow_mut() =
             Some(Target { client: client.clone(), session: session.to_owned(), directory: directory.to_owned() });
+        *self.0.tracker.borrow_mut() = Some(Tracker::new(session, thinking, Some(directory.to_owned())));
         {
             let mut state = self.0.state.borrow_mut();
             state.permissions.clear();
             state.forms.clear();
+            state.child_permissions.clear();
+            state.child_forms.clear();
+            state.global_forms.clear();
+            state.tabs.clear();
             state.form_states.clear();
             state.settled.clear();
         }
+        if matches!(self.0.state.borrow().route, Some(Route::Subagents | Route::Inspector)) {
+            self.0.close_route();
+        }
         self.0.sync();
+        let weak = Rc::downgrade(&self.0);
+        let input = FormListInput { location: Some(LocationQueryInput { directory: Some(directory.to_owned()) }) };
+        let globals = client.clone();
+        self.0.app.spawn(async move { globals.form_list(&input).await }, move |_, result| {
+            let Some(inner) = weak.upgrade() else { return };
+            let forms = result.map(|list| list.data).unwrap_or_default();
+            inner.state.borrow_mut().global_forms =
+                forms.into_iter().filter(|form| form.session_id == GLOBAL).collect();
+            inner.sync();
+        });
         let weak = Rc::downgrade(&self.0);
         let (client, id) = (client.clone(), session.to_owned());
         self.0.app.spawn(
@@ -318,22 +369,15 @@ impl Footers {
         );
     }
 
-    /// A permission or form event of the session.
+    /// A permission or form event of the session, or a form event of no session.
     pub fn event(&self, event: &V2Event) {
         let inner = &self.0;
+        if self.global_event(event) {
+            return;
+        }
         match event {
-            V2Event::PermissionAsked(asked) => {
-                let data = asked.data.clone();
-                let request = PermissionRequest {
-                    id: data.id,
-                    session_id: data.session_id,
-                    action: data.action,
-                    resources: data.resources,
-                    save: data.save,
-                    metadata: data.metadata,
-                    source: data.source,
-                    message: data.message,
-                };
+            V2Event::PermissionAsked(event) => {
+                let request = asked(&event.data);
                 if inner.state.borrow().permissions.iter().any(|item| item.info.id == request.id) {
                     return;
                 }
@@ -384,6 +428,86 @@ impl Footers {
         self.0.state.borrow_mut().forms.retain(|item| &item.id != id);
         self.0.sync();
     }
+
+    /// A form of no session at the session's location (`sameLocation`).
+    fn global_event(&self, event: &V2Event) -> bool {
+        let directory = self.0.target.borrow().as_ref().map(|target| target.directory.clone());
+        let here = |location: &Option<opencode_api::generated::LocationRef>| {
+            location.as_ref().is_some_and(|location| Some(&location.directory.0) == directory.as_ref())
+        };
+        let mut state = self.0.state.borrow_mut();
+        match event {
+            V2Event::FormCreated(created) if created.data.form.session_id == GLOBAL => {
+                let form = &created.data.form;
+                if !here(&created.location) || state.global_forms.iter().any(|item| item.id == form.id) {
+                    return true;
+                }
+                state.global_forms.push(form.clone());
+            }
+            V2Event::FormReplied(replied) if replied.data.session_id == GLOBAL => {
+                if !here(&replied.location) {
+                    return true;
+                }
+                state.global_forms.retain(|item| item.id != replied.data.id);
+            }
+            V2Event::FormCancelled(cancelled) if cancelled.data.session_id == GLOBAL => {
+                if !here(&cancelled.location) {
+                    return true;
+                }
+                state.global_forms.retain(|item| item.id != cancelled.data.id);
+            }
+            _ => return false,
+        }
+        drop(state);
+        self.0.sync();
+        true
+    }
+
+    /// An event for the subagent tracker: another session's event, or a tool event of this one.
+    pub fn subagent_event(&self, event: &V2Event) {
+        let fetches = {
+            let mut tracker = self.0.tracker.borrow_mut();
+            let Some(tracker) = tracker.as_mut() else { return };
+            if crate::replay::session_of(event) == Some(tracker.parent()) {
+                tracker.main(event)
+            } else {
+                tracker.foreign(event)
+            }
+        };
+        self.0.run(fetches);
+        self.0.subagents_changed();
+    }
+
+    /// The session's messages were listed (again, with `reconnect`): the children follow.
+    pub fn subagent_hydrate(&self, messages: &[SessionMessageInfo], active: &[String], reconnect: bool) {
+        let fetches = {
+            let mut tracker = self.0.tracker.borrow_mut();
+            let Some(tracker) = tracker.as_mut() else { return };
+            tracker.hydrate(messages, active, reconnect)
+        };
+        self.0.run(fetches);
+        self.0.subagents_changed();
+    }
+
+    /// The running children, and whether one of them runs in the foreground, blocking the session.
+    pub fn running_subagents(&self) -> (usize, bool) {
+        self.0.running()
+    }
+}
+
+/// A `permission.asked` event's request.
+pub(crate) fn asked(data: &PermissionAskedData) -> PermissionRequest {
+    let data = data.clone();
+    PermissionRequest {
+        id: data.id,
+        session_id: data.session_id,
+        action: data.action,
+        resources: data.resources,
+        save: data.save,
+        metadata: data.metadata,
+        source: data.source,
+        message: data.message,
+    }
 }
 
 /// `resolvePermissionSources`: the request with its tool call's input and metadata, read from its message.
@@ -419,6 +543,298 @@ async fn source(client: &Client, session: &str, info: PermissionRequest) -> perm
 }
 
 impl Inner {
+    /// Runs the tracker's reads; each result goes back to it.
+    fn run(self: &Rc<Self>, fetches: Vec<Fetch>) {
+        let Some(target) = self.target.borrow().clone() else { return };
+        for fetch in fetches {
+            let weak = Rc::downgrade(self);
+            let client = target.client.clone();
+            match fetch {
+                Fetch::Family => {
+                    let parent = target.session.clone();
+                    self.app.spawn(async move { family(&client, &parent).await }, move |_, sessions| {
+                        if let Some(inner) = weak.upgrade() {
+                            inner.tracked(|tracker: &mut Tracker| tracker.family(sessions));
+                        }
+                    });
+                }
+                Fetch::Discover { session, family } => {
+                    let id = session.clone();
+                    self.app.spawn(async move { lineage(&client, &id, &family).await }, move |_, discovery| {
+                        if let Some(inner) = weak.upgrade() {
+                            inner.tracked(|tracker: &mut Tracker| tracker.discovered(&session, discovery));
+                        }
+                    });
+                }
+                Fetch::Child(session) => {
+                    let id = session.clone();
+                    self.app.spawn(
+                        async move {
+                            let input = SessionInboxListInput { session_id: SessionID(id.clone()) };
+                            let (messages, inbox) = futures_util::future::join(
+                                crate::replay::messages(&client, &id, crate::subagents::CHILD_MESSAGE_LIMIT),
+                                client.session_inbox_list(&input),
+                            )
+                            .await;
+                            Ok::<_, String>((messages?, inbox.map_err(|error| error.to_string())?))
+                        },
+                        move |_, result| {
+                            if let Some(inner) = weak.upgrade() {
+                                inner.tracked(|tracker: &mut Tracker| tracker.child_loaded(&session, result));
+                            }
+                        },
+                    );
+                }
+                Fetch::Blockers { session, epoch, delay } => {
+                    if !delay.is_zero() {
+                        self.app.set_timeout(delay, move |_| {
+                            let Some(inner) = weak.upgrade() else { return };
+                            let due = inner.tracker.borrow_mut().as_mut().is_some_and(|t| t.retry_due(&session, epoch));
+                            if due {
+                                inner.run(vec![Fetch::Blockers {
+                                    session: session.clone(),
+                                    epoch,
+                                    delay: Duration::ZERO,
+                                }]);
+                            }
+                        });
+                        continue;
+                    }
+                    let id = session.clone();
+                    self.app.spawn(
+                        async move {
+                            let (permissions, forms) = futures_util::future::join(
+                                client.permission_list(&PermissionListInput { session_id: SessionID(id.clone()) }),
+                                client.session_form_list(&SessionFormListInput { session_id: id.clone() }),
+                            )
+                            .await;
+                            let permissions = match permissions {
+                                Ok(list) => {
+                                    let mut requests = Vec::new();
+                                    for request in list {
+                                        requests.push(source(&client, &id, request).await);
+                                    }
+                                    Ok(requests)
+                                }
+                                Err(error) => Err(error.to_string()),
+                            };
+                            (permissions, forms.map_err(|error| error.to_string()))
+                        },
+                        move |_, (permissions, forms)| {
+                            if let Some(inner) = weak.upgrade() {
+                                inner.tracked(|tracker: &mut Tracker| {
+                                    tracker.blockers_loaded(&session, epoch, permissions, forms)
+                                });
+                            }
+                        },
+                    );
+                }
+            }
+        }
+    }
+
+    /// Hands a read's result to the tracker, then runs what it reads next.
+    fn tracked(self: &Rc<Self>, apply: impl FnOnce(&mut Tracker) -> Vec<Fetch>) {
+        let fetches = {
+            let mut tracker = self.tracker.borrow_mut();
+            let Some(tracker) = tracker.as_mut() else { return };
+            apply(tracker)
+        };
+        self.run(fetches);
+        self.subagents_changed();
+    }
+
+    /// The tracker may have changed: the requests, the tabs, and the open subagent views follow.
+    fn subagents_changed(self: &Rc<Self>) {
+        let (changed, detail) = {
+            let mut tracker = self.tracker.borrow_mut();
+            let Some(tracker) = tracker.as_mut() else { return };
+            let changed = tracker.take_changed();
+            let detail = tracker.take_detail();
+            if changed {
+                let mut state = self.state.borrow_mut();
+                state.child_permissions = tracker.permissions();
+                state.child_forms = tracker.forms();
+                state.tabs = tracker.tabs();
+            }
+            (changed, detail)
+        };
+        if !changed && !detail {
+            return;
+        }
+        if changed {
+            self.sync();
+        }
+        let (route, selected, empty) = {
+            let state = self.state.borrow();
+            let selected = state.selected.as_ref().is_some_and(|id| state.tabs.iter().any(|tab| tab.session_id == *id));
+            (state.route, selected, state.tabs.is_empty())
+        };
+        match route {
+            Some(Route::Inspector) if !selected => return self.close_route(),
+            Some(Route::Subagents) if empty => return self.close_route(),
+            Some(Route::Inspector | Route::Subagents | Route::Command) if self.shows_route() => self.paint(),
+            _ => {}
+        }
+        if changed {
+            self.layout();
+        }
+    }
+
+    /// Whether the open route shows, rather than a request over it.
+    fn shows_route(&self) -> bool {
+        matches!(self.state.borrow().shown, None | Some(Shown::Prompt))
+    }
+
+    /// `openSubagentMenu`.
+    fn open_subagents(self: &Rc<Self>) {
+        if self.state.borrow().tabs.is_empty() {
+            return;
+        }
+        self.state.borrow_mut().running_only = true;
+        self.open_route(Route::Subagents);
+    }
+
+    /// `openTab`: the inspector of `session`.
+    fn open_tab(self: &Rc<Self>, session: &str) {
+        let inspector = subagent::Inspector::new(&self.app);
+        {
+            let mut state = self.state.borrow_mut();
+            state.route = Some(Route::Inspector);
+            state.panel = None;
+            state.selected = Some(session.to_owned());
+            state.inspector = Some(inspector);
+        }
+        let fetches = self.tracker.borrow_mut().as_mut().map(|tracker| tracker.select(Some(session)));
+        self.run(fetches.unwrap_or_default());
+        self.show();
+        self.subagents_changed();
+    }
+
+    /// `cycleTab`: the next tab's inspector.
+    fn cycle_tab(self: &Rc<Self>) {
+        let next = {
+            let state = self.state.borrow();
+            let current = state.tabs.iter().position(|tab| Some(&tab.session_id) == state.selected.as_ref());
+            let index = current.map_or(0, |index| (index + 1) % state.tabs.len().max(1));
+            state.tabs.get(index).map(|tab| tab.session_id.clone())
+        };
+        if let Some(next) = next {
+            self.open_tab(&next);
+        }
+    }
+
+    /// Forgets the inspected child (`onSubagentSelect(undefined)`).
+    fn unselect(self: &Rc<Self>) {
+        let selected = {
+            let mut state = self.state.borrow_mut();
+            state.inspector = None;
+            state.selected.take()
+        };
+        if selected.is_some() {
+            let fetches = self.tracker.borrow_mut().as_mut().map(|tracker| tracker.select(None));
+            self.run(fetches.unwrap_or_default());
+        }
+    }
+
+    fn selected_tab(&self) -> Option<Tab> {
+        let state = self.state.borrow();
+        state.tabs.iter().find(|tab| Some(&tab.session_id) == state.selected.as_ref()).cloned()
+    }
+
+    /// The inspector's keys (`useKeyboard` in `RunFooterSubagentBody`).
+    fn inspector_key(self: &Rc<Self>, name: &str) -> bool {
+        if !self.shows_route() {
+            return false;
+        }
+        match name {
+            "escape" => self.close_route(),
+            "tab" => self.cycle_tab(),
+            "up" | "k" | "down" | "j" | "pageup" | "pagedown" => {
+                if let Some(inspector) = self.state.borrow().inspector.as_ref() {
+                    inspector.scroll(matches!(name, "down" | "j" | "pagedown"), name.starts_with("page"));
+                }
+                self.app.request_redraw();
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    /// Tab in the subagent panel shows the inactive children, or the running ones again.
+    fn subagents_key(self: &Rc<Self>, _: &str) -> bool {
+        {
+            let mut state = self.state.borrow_mut();
+            state.running_only = !state.running_only;
+        }
+        self.paint();
+        self.layout();
+        true
+    }
+
+    /// `onSubagentInterrupt`.
+    fn interrupt_subagent(self: &Rc<Self>) {
+        let (Some(tab), Some(target)) = (self.selected_tab(), self.target.borrow().clone()) else { return };
+        if tab.status != Status::Running {
+            return;
+        }
+        let input = SessionInterruptInput { session_id: SessionID(tab.session_id), resume: None };
+        self.app.spawn(async move { target.client.session_interrupt(&input).await }, |_, result| {
+            if let Err(error) = result {
+                log::warn!("mini subagent interrupt failed: {error}");
+            }
+        });
+    }
+
+    /// `onBackground`: the session's running subagents go to the background.
+    fn background(self: &Rc<Self>) {
+        let Some(target) = self.target.borrow().clone() else { return };
+        let input = SessionBackgroundInput { session_id: SessionID(target.session.clone()) };
+        self.app.spawn(async move { target.client.session_background(&input).await }, |_, result| {
+            if let Err(error) = result {
+                log::warn!("mini background failed: {error}");
+            }
+        });
+    }
+
+    fn paint_inspector(&self, width: u16, rows: u16) {
+        let run = self.theme.borrow().clone();
+        let keymap = self.prompt.keymap().clone();
+        let interrupt = keymap
+            .shortcut("composer.subagent.interrupt")
+            .filter(|key| !key.is_empty())
+            .map(|key| mono_shortcut(&key, self.mono));
+        let shell_output = self
+            .hooks()
+            .settings
+            .as_ref()
+            .is_none_or(|settings| settings().shell_output == opencode_local::cli_config::Visibility::Show);
+        let tracker = self.tracker.borrow();
+        let mut state = self.state.borrow_mut();
+        let state = &mut *state;
+        let Some(inspector) = state.inspector.as_mut() else { return };
+        let selected = state.selected.clone().unwrap_or_default();
+        let commits = tracker.as_ref().and_then(|tracker| tracker.detail(&selected));
+        let index = state.tabs.iter().position(|tab| tab.session_id == selected).map_or(0, |index| index + 1);
+        self.body.clear();
+        self.body.add(inspector.root());
+        inspector.paint(
+            &self.app,
+            &subagent::Body {
+                tab: state.tabs.iter().find(|tab| tab.session_id == selected),
+                index,
+                total: state.tabs.len(),
+                commits: commits.as_deref(),
+                interrupt,
+                shell_output,
+                theme: &run,
+                mono: self.mono,
+                width: width.saturating_sub(1),
+                height: rows.saturating_sub(1),
+            },
+        );
+    }
+
     fn hooks(&self) -> Rc<Hooks> {
         self.hooks.borrow().clone()
     }
@@ -450,6 +866,9 @@ impl Inner {
         match &self.state.borrow().shown {
             Some(Shown::Permission(_)) => (BASE + PERMISSION_ROWS).min(terminal.1),
             Some(Shown::Form(_)) => (BASE + FORM_ROWS).min(terminal.1),
+            _ if self.state.borrow().route == Some(Route::Inspector) => {
+                (BASE + subagent::INSPECTOR_ROWS).min(terminal.1)
+            }
             _ => terminal.1,
         }
     }
@@ -461,8 +880,12 @@ impl Inner {
             let next = state
                 .permissions
                 .first()
+                .or_else(|| state.child_permissions.first())
                 .map(|request| Shown::Permission(request.info.id.0.clone()))
-                .or_else(|| state.forms.first().map(|form| Shown::Form(form.id.0.clone())))
+                .or_else(|| {
+                    let form = state.forms.first().or_else(|| state.child_forms.first());
+                    form.or_else(|| state.global_forms.first()).map(|form| Shown::Form(form.id.0.clone()))
+                })
                 .unwrap_or(Shown::Prompt);
             let changed = state.shown.as_ref() != Some(&next);
             if changed {
@@ -473,7 +896,8 @@ impl Inner {
                     state.form_states.clear();
                     state.settled.clear();
                 }
-                if next != Shown::Prompt {
+                // A request closes a panel; the inspector comes back once the requests are answered.
+                if next != Shown::Prompt && state.route != Some(Route::Inspector) {
                     state.route = None;
                     state.panel = None;
                 }
@@ -523,13 +947,15 @@ impl Inner {
         let run = self.theme.borrow().clone();
         let theme = run.footer.clone();
         let mut widgets = Widgets::default();
+        // The form body pads the shared view; the other views do not.
+        for edge in [Edge::Left, Edge::Right, Edge::Top, Edge::Bottom] {
+            self.body.padding_edge(edge, 0);
+        }
         let shown = self.state.borrow().shown.clone();
         match shown {
             Some(Shown::Permission(id)) => {
                 let state = self.state.borrow();
-                let (Some(request), Some(current)) =
-                    (state.permissions.iter().find(|request| request.info.id.0 == id), state.permission.as_ref())
-                else {
+                let (Some(request), Some(current)) = (find_permission(&state, &id), state.permission.as_ref()) else {
                     return;
                 };
                 let directory = self.target.borrow().as_ref().map(|target| target.directory.clone());
@@ -557,7 +983,7 @@ impl Inner {
             }
             Some(Shown::Form(id)) => {
                 let mut state = self.state.borrow_mut();
-                let Some(info) = state.forms.iter().find(|form| form.id.0 == id).cloned() else {
+                let Some(info) = find_form(&state, &id).cloned() else {
                     return;
                 };
                 let current = state.form_states.entry(id.clone()).or_insert_with(|| form::State::new(&info)).clone();
@@ -578,8 +1004,11 @@ impl Inner {
                 widgets.field = painted.field;
             }
             _ => {
-                if self.state.borrow().route.is_some() {
-                    self.paint_panel(width, rows, &theme);
+                let route = self.state.borrow().route;
+                match route {
+                    Some(Route::Inspector) => self.paint_inspector(width, rows),
+                    Some(_) => self.paint_panel(width, rows, &theme),
+                    None => {}
                 }
             }
         }
@@ -609,11 +1038,8 @@ impl Inner {
                 }
             }
             Some(Shown::Form(id)) => {
-                let field = state
-                    .forms
-                    .iter()
-                    .find(|form| form.id.0 == id)
-                    .and_then(|form| form.fields.get(state.form_states.get(&id)?.field).cloned());
+                let field =
+                    find_form(&state, &id).and_then(|form| form.fields.get(state.form_states.get(&id)?.field).cloned());
                 if let Some(current) = state.form_states.get_mut(&id) {
                     current.set_draft(field.as_ref(), text);
                 }
@@ -679,6 +1105,17 @@ impl Inner {
                 background: false,
                 close_on_first_up: false,
             },
+            Route::Inspector => return,
+            Route::Subagents => Spec {
+                title: "Select subagent",
+                count: true,
+                empty: "No subagents found",
+                rows: panel::SUBAGENT_LIST_ROWS,
+                fixed: false,
+                grouped: false,
+                background: true,
+                close_on_first_up: true,
+            },
             Route::Queued => Spec {
                 title: "Pending prompts",
                 count: true,
@@ -701,6 +1138,7 @@ impl Inner {
             inner.paint();
             inner.layout();
         });
+        self.unselect();
         self.body.clear();
         self.body.add(panel.root());
         {
@@ -725,6 +1163,7 @@ impl Inner {
             state.route = None;
             state.panel = None;
         }
+        self.unselect();
         self.body.clear();
         self.show();
     }
@@ -737,8 +1176,18 @@ impl Inner {
         let shortcut =
             |id: &str| keymap.shortcut(id).filter(|key| !key.is_empty()).map(|key| mono_shortcut(&key, self.mono));
         let queued = self.prompt.queued();
+        let tabs = self.state.borrow().tabs.clone();
         let entries: Vec<Entry<Pick>> = match route {
+            Route::Inspector => return,
+            Route::Subagents => {
+                let (running_only, selected) = {
+                    let state = self.state.borrow();
+                    (state.running_only, state.selected.clone())
+                };
+                subagent_entries(&tabs, running_only, selected.as_deref())
+            }
             Route::Command => command_entries(
+                &tabs,
                 queued.iter().map(|item| item.prompt.text.as_str()).collect(),
                 keymap.shortcut_all("variant.cycle").map(|key| mono_shortcut(&key, self.mono)),
                 shortcut("app.clear"),
@@ -817,6 +1266,7 @@ impl Inner {
         let delete = shortcut("queued_prompt.delete");
         let undo = shortcut("queued_prompt.undo");
         let rows = self.terminal().1;
+        let running_only = self.state.borrow().running_only;
         let mut state = self.state.borrow_mut();
         let Some(panel) = state.panel.as_mut() else {
             return;
@@ -827,6 +1277,10 @@ impl Inner {
         }
         if route == Route::Settings {
             panel.hint = Some("left/right change".to_owned());
+        }
+        if route == Route::Subagents {
+            let shown = if running_only { "inactive" } else { "active" };
+            panel.hint = Some(format!("tab show {shown}"));
         }
         panel.set_entries(entries, rows);
         if opening {
@@ -935,6 +1389,8 @@ impl Inner {
                 }
             }
             Pick::Settings => self.open_route(Route::Settings),
+            Pick::Subagents => self.open_subagents(),
+            Pick::Subagent(id) => self.open_tab(&id),
             Pick::Exit => {
                 if let Some(exit) = &hooks.exit {
                     exit();
@@ -1062,7 +1518,7 @@ impl Inner {
         let Some(Shown::Permission(id)) = &state.shown else {
             return None;
         };
-        state.permissions.iter().find(|request| request.info.id.0 == *id).cloned()
+        find_permission(&state, id).cloned()
     }
 
     /// The permission body's keys (`useKeyboard`).
@@ -1175,7 +1631,7 @@ impl Inner {
         let Some(Shown::Form(id)) = &state.shown else {
             return None;
         };
-        let info = state.forms.iter().find(|form| form.id.0 == *id)?.clone();
+        let info = find_form(&state, id)?.clone();
         let current = state.form_states.get(id).cloned().unwrap_or_else(|| form::State::new(&info));
         Some((info, current))
     }
@@ -1354,7 +1810,8 @@ impl Inner {
         let input = SessionFormReplyInput { session_id: info.session_id.clone(), form_id: info.id.clone(), answer };
         let id = info.id.0.clone();
         let weak = Rc::downgrade(self);
-        self.app.spawn(async move { target.client.session_form_reply(&input).await }, move |_, result| {
+        let client = form_client(&target, info);
+        self.app.spawn(async move { client.session_form_reply(&input).await }, move |_, result| {
             if let Some(inner) = weak.upgrade() {
                 inner.form_settled(&id, result);
             }
@@ -1376,7 +1833,8 @@ impl Inner {
             SessionFormCancelInput { session_id: info.session_id.clone(), form_id: info.id.clone(), message: None };
         let id = info.id.0.clone();
         let weak = Rc::downgrade(self);
-        self.app.spawn(async move { target.client.session_form_cancel(&input).await }, move |_, result| {
+        let client = form_client(&target, info);
+        self.app.spawn(async move { client.session_form_cancel(&input).await }, move |_, result| {
             if let Some(inner) = weak.upgrade() {
                 inner.form_settled(&id, result);
             }
@@ -1404,14 +1862,51 @@ impl Inner {
                 return self.paint();
             }
         }
-        {
+        let owner = {
             let mut state = self.state.borrow_mut();
+            let owner = find_form(&state, id).map(|form| form.session_id.clone());
             state.settled.insert(id.to_owned());
             state.form_states.remove(id);
             state.forms.retain(|form| form.id.0 != id);
+            state.child_forms.retain(|form| form.id.0 != id);
+            state.global_forms.retain(|form| form.id.0 != id);
+            owner
+        };
+        if let (Some(owner), Some(tracker)) = (owner, self.tracker.borrow_mut().as_mut()) {
+            tracker.settle_form(&owner, id);
+            tracker.take_changed();
         }
         self.sync();
     }
+}
+
+/// A permission of the session, else of a child (`pickBlockerView`'s order).
+fn find_permission<'a>(state: &'a State, id: &str) -> Option<&'a permission::Request> {
+    state.permissions.iter().chain(&state.child_permissions).find(|request| request.info.id.0 == id)
+}
+
+/// A form of the session, else of a child, else of no session.
+fn find_form<'a>(state: &'a State, id: &str) -> Option<&'a FormInfo> {
+    state.forms.iter().chain(&state.child_forms).chain(&state.global_forms).find(|form| form.id.0 == id)
+}
+
+/// A form of no session names its location in a header (`formRequestOptions`).
+fn form_client(target: &Target, form: &FormInfo) -> Client {
+    if form.session_id != GLOBAL {
+        return target.client.clone();
+    }
+    // `encodeURIComponent`.
+    let directory: String = target
+        .directory
+        .bytes()
+        .map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')' => {
+                char::from(byte).to_string()
+            }
+            _ => format!("%{byte:02X}"),
+        })
+        .collect();
+    target.client.with_header("x-opencode-directory", directory)
 }
 
 /// `openUrl`.
@@ -1432,9 +1927,9 @@ fn open_url(url: &str) -> bool {
         .is_ok()
 }
 
-/// `RunCommandMenuBody`'s entries, without the subagent and variant-list rows, which need the subagent stream and
-/// M.4's variants.
+/// `RunCommandMenuBody`'s entries.
 fn command_entries(
+    tabs: &[Tab],
     queued: Vec<&str>,
     variant_cycle: Option<String>,
     clear: Option<String>,
@@ -1448,11 +1943,22 @@ fn command_entries(
     let mut entries = vec![
         entry("Session", "Open editor", Some("/editor".into()), "editor compose draft external editor", Pick::Editor),
         entry("Session", "Show status", None, "status activity model context usage footer", Pick::Status),
+    ];
+    if !tabs.is_empty() {
+        let running = tabs.iter().filter(|tab| tab.status == Status::Running).count();
+        let footer = if running > 0 { format!("{running} active") } else { format!("{} recent", tabs.len()) };
+        let keywords: Vec<String> = tabs
+            .iter()
+            .map(|tab| format!("{} {} {}", tab.label, tab.description, tab.title.as_deref().unwrap_or_default()))
+            .collect();
+        entries.push(entry("Session", "View subagents", Some(footer), &keywords.join(" "), Pick::Subagents));
+    }
+    entries.extend([
         entry("Session", "Compact session", Some("/compact".into()), "compact session context", Pick::Slash("compact")),
         entry("Session", "New session", Some("/new".into()), "new session clear", Pick::Slash("new")),
         entry("Agent", "Switch agent", None, "", Pick::Agents),
         entry("Agent", "Switch model", None, "", Pick::Models),
-    ];
+    ]);
     if !queued.is_empty() {
         entries.push(entry(
             "Agent",
@@ -1479,6 +1985,98 @@ fn command_entries(
         entry("System", "Exit", Some("/exit".into()), "/exit exit", Pick::Exit),
     ]);
     entries
+}
+
+/// `RunSubagentSelectBody`'s entries: the running children, or with `running_only` false the others.
+fn subagent_entries(tabs: &[Tab], running_only: bool, selected: Option<&str>) -> Vec<Entry<Pick>> {
+    tabs.iter()
+        .filter(|tab| (tab.status == Status::Running) == running_only)
+        .map(|tab| {
+            let title = [tab.description.as_str(), tab.title.as_deref().unwrap_or_default(), tab.label.as_str()]
+                .into_iter()
+                .find(|text| !text.is_empty())
+                .unwrap_or_default()
+                .to_owned();
+            let (footer, tone) = match tab.status {
+                Status::Running => ("running", Some(Tone::Running)),
+                Status::Error => ("error", Some(Tone::Error)),
+                Status::Completed => ("done", Some(Tone::Success)),
+                Status::Cancelled => ("cancelled", None),
+            };
+            let status = footer;
+            Entry {
+                keywords: format!(
+                    "{} {} {} {status}",
+                    tab.label,
+                    tab.description,
+                    tab.title.as_deref().unwrap_or_default()
+                ),
+                item: Item {
+                    description: (title != tab.label).then(|| tab.label.clone()),
+                    display: title,
+                    category: Some(String::new()),
+                    footer: Some(footer.to_owned()),
+                    tone,
+                    current: selected == Some(tab.session_id.as_str()),
+                },
+                action: Pick::Subagent(tab.session_id.clone()),
+            }
+        })
+        .collect()
+}
+
+/// The family index (`session.list` by parent, breadth first): the sessions under `parent`, up to
+/// [`FAMILY_LIMIT`]. A list that fails counts as empty.
+async fn family(client: &Client, parent: &str) -> Vec<SessionInfo> {
+    let mut found: Vec<SessionInfo> = Vec::new();
+    let mut queue = std::collections::VecDeque::from([parent.to_owned()]);
+    let mut visited = HashSet::from([parent.to_owned()]);
+    while let Some(owner) = queue.pop_front() {
+        if found.len() >= FAMILY_LIMIT {
+            break;
+        }
+        let input = SessionListInput {
+            parent_id: Some(Some(SessionID(owner))),
+            limit: Some((FAMILY_LIMIT - found.len()) as i64),
+            order: Some(SessionListInputOrder::Desc),
+            ..SessionListInput::default()
+        };
+        let sessions = client.session_list(&input).await.map(|list| list.data).unwrap_or_default();
+        for session in sessions {
+            if found.len() >= FAMILY_LIMIT || !visited.insert(session.id.0.clone()) {
+                continue;
+            }
+            queue.push_back(session.id.0.clone());
+            found.push(session);
+        }
+    }
+    found
+}
+
+/// `runDiscovery`: walks up from `session` until a session whose parent is in `family`.
+async fn lineage(client: &Client, session: &str, family: &HashSet<String>) -> Discovery {
+    let get = |id: String| async move { client.session_get(&SessionGetInput { session_id: SessionID(id) }).await };
+    let Ok(mut current) = get(session.to_owned()).await else {
+        return Discovery::Failed;
+    };
+    let mut lineage: Vec<SessionInfo> = Vec::new();
+    let mut visited = HashSet::new();
+    while lineage.len() < FAMILY_LIMIT && visited.insert(current.id.0.clone()) {
+        let parent = current.parent_id.clone();
+        lineage.push(current);
+        let Some(parent) = parent else { break };
+        if family.contains(&parent.0) {
+            return Discovery::Family(lineage);
+        }
+        if visited.contains(&parent.0) {
+            break;
+        }
+        current = match get(parent.0).await {
+            Ok(next) => next,
+            Err(_) => return Discovery::Failed,
+        };
+    }
+    Discovery::Unrelated
 }
 
 /// `RunModelSelectBody`'s entries: every model but the deprecated, opencode first, then by provider and model name.
@@ -1665,6 +2263,34 @@ fn install_layers(inner: &Rc<Inner>) {
                 .group("Prompt"),
         ])
         .enabled(when(|inner| composer(inner) && !inner.prompt.queued().is_empty())),
+        KeymapLayer::new(vec![
+            TuiCommand::new("session.background", run(Inner::background))
+                .title("Background subagents")
+                .group("Session"),
+        ])
+        .enabled(when(|inner| composer(inner) && inner.running().1))
+        .priority(1),
+        KeymapLayer::new(vec![
+            TuiCommand::new("session.child.first", run(Inner::open_subagents)).title("View subagents").group("Session"),
+        ])
+        .enabled(when(|inner| composer(inner) && !inner.state.borrow().tabs.is_empty())),
+        KeymapLayer::new(vec![
+            TuiCommand::new("composer.subagent.interrupt", run(Inner::interrupt_subagent))
+                .title("Interrupt subagent")
+                .group("Session"),
+        ])
+        .enabled(when(|inner| {
+            route(inner) == Some(Route::Inspector)
+                && inner.shows_route()
+                && inner.selected_tab().is_some_and(|tab| tab.status == Status::Running)
+        }))
+        .priority(1),
+        KeymapLayer::new(keys(&["escape", "tab", "up", "k", "down", "j", "pageup", "pagedown"], Inner::inspector_key))
+            .enabled(when(|inner| route(inner) == Some(Route::Inspector) && inner.shows_route()))
+            .priority(2),
+        KeymapLayer::new(keys(&["tab"], Inner::subagents_key))
+            .enabled(when(|inner| route(inner) == Some(Route::Subagents)))
+            .priority(3),
         KeymapLayer::new(keys(
             &[
                 "escape", "ctrl+c", "up", "down", "ctrl+p", "ctrl+n", "pageup", "pagedown", "home", "end", "return",
@@ -1672,7 +2298,7 @@ fn install_layers(inner: &Rc<Inner>) {
             ],
             Inner::panel_key,
         ))
-        .enabled(when(|inner| route(inner).is_some()))
+        .enabled(when(|inner| route(inner).is_some_and(|route| route != Route::Inspector)))
         .priority(2),
         KeymapLayer::new(keys(&["left", "right"], Inner::setting_key))
             .enabled(when(|inner| route(inner) == Some(Route::Settings)))
@@ -1739,6 +2365,13 @@ fn install_layers(inner: &Rc<Inner>) {
 }
 
 impl Inner {
+    /// The running children, and whether one runs in the foreground (`foregroundSubagents`).
+    fn running(&self) -> (usize, bool) {
+        let state = self.state.borrow();
+        let running: Vec<&Tab> = state.tabs.iter().filter(|tab| tab.status == Status::Running).collect();
+        (running.len(), running.iter().any(|tab| !tab.background))
+    }
+
     fn cycle_variant_rc(self: &Rc<Self>) {
         self.cycle_variant();
     }
