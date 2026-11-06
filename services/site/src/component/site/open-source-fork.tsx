@@ -33,8 +33,9 @@ const commands = transcript
  * Settings › Open source variant "fork": a "fork it" block under the open source proof. A short
  * terminal transcript of forking and running OpenCode types in, line by line, the first time it
  * scrolls into view (the shared entrance, reveal.ts, in its "type" style; static with reduced
- * motion), beside three things a fork lets you do. It always renders; the section's
- * data-oss-variant (set before first paint from Settings) shows it.
+ * motion), beside three things a fork lets you do. In development it always renders and the
+ * section's data-oss-variant (set before first paint from Settings) shows it; production renders it
+ * only when "fork" is the default (index.tsx, script/fold-settings.ts).
  */
 export function OpenSourceFork() {
   const i18n = useI18n()
