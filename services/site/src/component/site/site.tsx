@@ -37,7 +37,9 @@ import { brandAssets } from "~/lib/brand-content"
 import { status, type ServiceStatus } from "~/lib/status"
 import { useViewportCover } from "~/lib/viewport"
 import { LiveMeta } from "~/component/head-meta"
-import { Chevron, ChevronRight, ExternalArrow, GitHubMark, NewTab, ThemeIcon, themes } from "./icons"
+import { Chevron, ChevronRight, ExternalArrow, NewTab, ThemeIcon, themes } from "./icons"
+import { GitHubLink } from "./github-link"
+import { MenuSheet, MenuToggle } from "./phone-menu"
 import { siteLinks } from "./links"
 import {
   navEditing,
@@ -932,18 +934,8 @@ export function Site(props: {
 
   // The repo, as a GitHub mark: fixed in the top-right corner beside the sidebar (and at every
   // width on bare pages), in the top bar on small screens.
-  const githubLink = (owner: "corner" | "topbar") => (
-    <a
-      href={links().github.href}
-      target="_blank"
-      rel="noopener"
-      data-component="github-link"
-      data-owner={owner}
-      aria-label={i18n.t("site.githubLabel")}
-    >
-      <GitHubMark />
-    </a>
-  )
+  const githubLink = (owner: "corner" | "topbar") => <GitHubLink owner={owner} />
+
   const logoLink = (owner: "sidebar" | "topbar") => (
     <A
       href={language.route("/")}
@@ -1209,37 +1201,19 @@ export function Site(props: {
         <header data-component="topbar">
           {logoLink("topbar")}
           {githubLink("topbar")}
-          <button
-            ref={menuToggle}
-            type="button"
-            data-component="menu-toggle"
-            aria-expanded={menu() ? "true" : "false"}
-            aria-controls="site-menu"
-            aria-label={menu() ? i18n.t("site.closeMenu") : i18n.t("nav.openMenu")}
-            onClick={() => {
+          <MenuToggle
+            ref={(element) => (menuToggle = element)}
+            open={menu()}
+            onToggle={() => {
               setLogoMenu(undefined)
               setMenu(!menu())
             }}
-          >
-            <span data-slot="line" />
-            <span data-slot="line" />
-          </button>
+          />
           {logoMenuView("topbar")}
         </header>
-        <div data-component="site-menu-sheet" id="site-menu" data-open={menu() ? "" : undefined}>
-          <div data-slot="backdrop" onClick={() => setMenu(false)} />
-          <nav
-            data-slot="panel"
-            aria-label={i18n.t("site.landmark.primary")}
-            onClick={(event) => {
-              if ((event.target as Element).closest("a")) setMenu(false)
-            }}
-          >
-            <ul ref={sortableNav} data-sortable={designMode() ? "" : undefined}>
-              <For each={navAll()}>{(item, index) => navItem(item, index)}</For>
-            </ul>
-          </nav>
-        </div>
+        <MenuSheet open={menu()} onClose={() => setMenu(false)} listRef={sortableNav} sortable={designMode()}>
+          <For each={navAll()}>{(item, index) => navItem(item, index)}</For>
+        </MenuSheet>
       </Show>
       <LanguageSheet />
 

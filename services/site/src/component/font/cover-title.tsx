@@ -13,7 +13,8 @@ const HEIGHT = 7 + TOP + BOTTOM
 
 // Phase budgets in milliseconds; each phase's moves share its budget in proportion to length.
 const PHASES = { metrics: 420, grids: 620, outlines: 820, fill: 760, shade: 380 }
-const SETTLE = 220
+// After the last move the plot settles: the pen, readout and counter fade out and the guides dim.
+const SETTLE = 360
 // The shade: the ink at the page's paper shade opacity.
 const SHADE_ALPHA = 0.22
 
@@ -170,7 +171,9 @@ export function CoverTitle() {
     let md = 16
     let dpr = 1
     let palette: Palette = { ink: "#141414", blue: "#3b5cf6", faint: "#bbb" }
-    let started: number | undefined
+    let elapsed = reduced ? END : 0
+    let last: number | undefined
+    let played = false
     let frame = 0
 
     const layout = () => {
@@ -226,14 +229,14 @@ export function CoverTitle() {
       for (const [col, row] of buildOrder(WORD[letter] as Letter)) context.fillRect(X(letter * 5 + col), Y(row), md, md)
     }
 
-    const ticks = (letter: number) => {
+    const ticks = (letter: number, label: boolean) => {
       const y = Y(7) + Math.round(md * 0.55)
       context.fillRect(X(letter * 5), y, X(letter * 5 + 4) - X(letter * 5), 1)
       for (let col = 0; col <= 4; col++) {
         const x = Math.min(X(letter * 5 + col), X(letter * 5 + 4) - 1)
         context.fillRect(x, y - Math.round(md * 0.18), 1, Math.round(md * 0.36) + 1)
       }
-      context.fillText("4 × 120u", X(letter * 5), y + Math.round(md * 0.25) + 10 * dpr)
+      if (label) context.fillText("4 × 120u", X(letter * 5), y + Math.round(md * 0.25) + 10 * dpr)
     }
 
     const registration = () => {
@@ -255,13 +258,17 @@ export function CoverTitle() {
     }
 
     const draw = (t: number) => {
-      const done = t >= END
+      // 0 while plotting, easing to 1 over the settle (an ease-out quint), so nothing snaps at the end.
+      const settle = 1 - (1 - Math.min(1, Math.max(0, (t - program.end) / SETTLE))) ** 5
+      const fade = (to: number) => 1 + (to - 1) * settle
       context.clearRect(0, 0, canvas.width, canvas.height)
       context.font = `${10 * dpr}px "OpenTUI Mono", "OpenTUI Mono Menlo", ui-monospace, monospace`
       context.textBaseline = "alphabetic"
+      // On a narrow canvas the module label is wider than a letter, so only the first letter carries it.
+      const everyLabel = context.measureText("4 × 120u").width + 4 * dpr <= 5 * md
 
       // Registration marks: always there, faint once the plot is done.
-      context.globalAlpha = done ? 0.5 : 1
+      context.globalAlpha = fade(0.5)
       context.fillStyle = palette.blue
       registration()
       context.globalAlpha = 1
@@ -282,18 +289,18 @@ export function CoverTitle() {
         ]
         if (move.kind === "metric" || move.kind === "grid" || move.kind === "outline") {
           context.fillStyle = move.kind === "outline" ? palette.blue : palette.faint
-          context.globalAlpha = done && move.kind !== "outline" ? 0.55 : 1
-          // Outlines vanish under the ink once a letter is filled; the grid and metrics stay faint.
-          if (!(done && move.kind === "outline")) hairline(move.from, move.to, progress)
+          // Outlines fade under the ink once the plot is done; the grid and metrics stay faint.
+          context.globalAlpha = fade(move.kind === "outline" ? 0 : 0.55)
+          hairline(move.from, move.to, progress)
           context.globalAlpha = 1
           segments += progress === 1 ? 1 : 0
           travelled += length(move) * progress
           pen = { at, down: true }
         }
         if (move.kind === "travel") {
-          if (!done && move.phase === phase) {
+          if (move.phase === phase && settle < 1) {
             context.fillStyle = palette.blue
-            context.globalAlpha = 0.45
+            context.globalAlpha = 0.45 * fade(0)
             hairline(move.from, move.to, progress, true)
             context.globalAlpha = 1
           }
@@ -308,8 +315,8 @@ export function CoverTitle() {
           if (progress === 1) {
             filled.add(move.letter)
             context.fillStyle = palette.blue
-            context.globalAlpha = done ? 0.6 : 1
-            ticks(move.letter)
+            context.globalAlpha = fade(0.6)
+            ticks(move.letter, everyLabel || move.letter === 0)
             context.globalAlpha = 1
           } else if (shown > 0) {
             const [col, row] = order[shown - 1]
@@ -334,7 +341,8 @@ export function CoverTitle() {
       context.fillStyle = palette.ink
       for (const letter of filled) fillLetter(letter)
 
-      if (done || !pen) return
+      if (settle === 1 || !pen) return
+      context.globalAlpha = fade(0)
       // The pen: a filled square when down, an open one when up; its position in font units beside it.
       const px = X(pen.at[0])
       const py = Y(pen.at[1])
@@ -361,32 +369,50 @@ export function CoverTitle() {
         canvas.height - Math.round(md * 0.35),
       )
       context.textAlign = "left"
+      context.globalAlpha = 1
     }
 
+    // The plot's own clock: it advances only while frames run, so pausing off screen resumes in place.
     const tick = (now: number) => {
-      started ??= now
-      const t = now - started
-      draw(t)
-      frame = t < END ? requestAnimationFrame(tick) : 0
+      // A long gap (a background tab) resumes where it left off instead of skipping ahead.
+      elapsed += last === undefined ? 0 : Math.min(now - last, 100)
+      last = now
+      draw(elapsed)
+      frame = elapsed < END ? requestAnimationFrame(tick) : 0
+    }
+    const resume = () => {
+      if (reduced || frame || elapsed >= END) return
+      last = undefined
+      frame = requestAnimationFrame(tick)
     }
     const play = () => {
       if (reduced) return
       cancelAnimationFrame(frame)
-      started = undefined
-      frame = requestAnimationFrame(tick)
+      frame = 0
+      played = true
+      elapsed = 0
+      resume()
     }
 
     layout()
-    draw(reduced ? END : 0)
+    draw(elapsed)
+    // The readout and labels are canvas text: start once the mono font is in, so they don't swap faces mid-plot.
+    const fontReady = document.fonts.load(`${10 * dpr}px "OpenTUI Mono"`).catch(() => undefined)
 
+    // Starts once most of the title is in view, and pauses whenever it leaves the screen.
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (!entry.isIntersecting) return
-        observer.disconnect()
-        if (reduced) return draw(END)
-        play()
+        if (!entry.isIntersecting) {
+          cancelAnimationFrame(frame)
+          frame = 0
+          return
+        }
+        if (played) return resume()
+        if (entry.intersectionRatio < 0.6) return
+        played = true
+        void fontReady.then(play)
       },
-      { threshold: 0.6 },
+      { threshold: [0, 0.6] },
     )
     observer.observe(root)
     root.addEventListener("click", play)
@@ -396,13 +422,13 @@ export function CoverTitle() {
       if (root.clientWidth === width) return
       width = root.clientWidth
       layout()
-      if (!frame) draw(END)
+      if (!frame) draw(elapsed)
     })
     resize.observe(root)
 
     const repaint = () => {
       layout()
-      if (!frame) draw(END)
+      if (!frame) draw(elapsed)
     }
     const site = root.closest("[data-site]")
     const themeObserver = new MutationObserver(repaint)

@@ -1024,14 +1024,14 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
   )
 
   // A store's button: "Download for iPhone", the device name hidden like the OS in inline cards. The
-  // iPhone beta opens TestFlight in a new tab, with the TestFlight badge after the label.
+  // iPhone beta opens TestFlight in a new tab, but the button shows the Apple logo.
   const storeButton = (item: (typeof stores)[number]) => (
     <a
       href={item.href}
       data-component="site-button"
       {...betaLink(item, i18n.t("site.newTab", { label: i18n.t("site.action.forOsBeta", { os: item.device }) }))}
     >
-      <PlatformIcon platform={item.beta ? "TestFlight" : item.platform} />
+      <PlatformIcon platform={item.platform} />
       <span>
         <Marked text={i18n.t("site.action.forOs", { os: item.device })} slots={{ os: "for-os" }} />
       </span>
