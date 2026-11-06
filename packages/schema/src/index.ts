@@ -1,4 +1,5 @@
 export { Agent } from "./agent.js"
+export { AgentTunnel } from "./agent-tunnel.js"
 export { Artifact } from "./artifact.js"
 export { Command } from "./command.js"
 export { Config } from "./config.js"

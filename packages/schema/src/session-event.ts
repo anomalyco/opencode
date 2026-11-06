@@ -1,6 +1,7 @@
 export * as SessionEvent from "./session-event.js"
 
 import { Schema } from "effect"
+import { AgentTunnel } from "./agent-tunnel.js"
 import { optional } from "./schema.js"
 import { Event } from "./event.js"
 import { FinishReason } from "./llm.js"
@@ -240,6 +241,21 @@ export const InboxDeliveryChanged = Event.durable({
   schema: { ...InboxRef, delivery: SessionInbox.Delivery },
 })
 export type InboxDeliveryChanged = typeof InboxDeliveryChanged.Type
+
+/**
+ * The irreducible cross-session fact of one tunnel message: a send from a family member addressed to
+ * this (recipient) aggregate. The sender's transcript already records the tool call, and delivery is
+ * recorded by the inbox events above, so there is no `session.tunnel.delivered`.
+ */
+export const TunnelSent = Event.durable({
+  type: "session.tunnel.sent",
+  ...options,
+  schema: {
+    ...Base,
+    message: AgentTunnel.Message,
+  },
+})
+export type TunnelSent = typeof TunnelSent.Type
 
 export namespace Execution {
   export const Started = Event.durable({ type: "session.execution.started", ...options, schema: Base })
@@ -669,6 +685,7 @@ export const Definitions = Event.inventory(
   InboxEnqueued,
   InboxCancelled,
   InboxDeliveryChanged,
+  TunnelSent,
   Execution.Started,
   Execution.Succeeded,
   Execution.Failed,
