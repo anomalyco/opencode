@@ -69,6 +69,10 @@ fn handle(tui: &Tui, event: &V2Event) {
     // Pins and the worktrees dialog see every event, tabs or not (E.11b).
     crate::features::quick_switch::event(tui, event);
     crate::dialogs::worktrees::event(event);
+    // Every connection, also one the connection status coalesced (`context/location.tsx`).
+    if let V2Event::ServerConnected(_) = event {
+        crate::features::location::reconnected(tui);
+    }
     if let V2Event::SessionDeleted(event) = event {
         tui.local.forget(&event.data.session_id);
     }
