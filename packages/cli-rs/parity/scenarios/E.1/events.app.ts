@@ -63,8 +63,8 @@ export default defineApp({
     {
       checkpoint: "command",
       until: "Help",
-      masks: [{ line: "Ask anything….*", reason: "the prompt placeholder is picked at random" }],
-      deviation: ["T17-home-prompt"],
+      // Beside the dialog, the placeholder shows its first word.
+      masks: [{ ...prompt[0], width: 3 }],
     },
   ],
 })

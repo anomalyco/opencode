@@ -26,8 +26,15 @@ export default defineSim({
     {
       checkpoint: "home",
       until: "Simulated Model",
-      masks: [{ line: "Ask anything….*", reason: "the placeholder is random" }],
-      deviation: ["T17-home-prompt"],
+      masks: [
+        {
+          x: 16,
+          y: 16,
+          width: 84,
+          height: 1,
+          reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)",
+        },
+      ],
     },
     { type: "Say hello" },
     { until: "Say hello" },
