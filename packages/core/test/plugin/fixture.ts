@@ -16,6 +16,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Form } from "@opencode/core/form"
 import { Generate } from "@opencode/core/generate"
+import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Integration } from "@opencode/core/integration"
 import { Job } from "@opencode/core/job"
 import { KV } from "@opencode/core/kv"
@@ -85,7 +86,7 @@ const permissionLayer = Layer.succeed(
   }),
 )
 
-export const makePluginTestLayer = (permission = permissionLayer, generate = generateLayer) =>
+export const makePluginTestLayer = (permission = permissionLayer, generate = generateLayer, mcp = emptyMcpLayer) =>
   AppNodeBuilder.build(
     LayerNode.group([
       AppProcess.node,
@@ -110,6 +111,7 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
       Provider.node,
       Model.node,
       Command.node,
+      InstructionDiscovery.node,
       Integration.node,
       Job.node,
       KV.node,
@@ -136,7 +138,7 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
       Location.node.replace(tempLocationLayer),
       Npm.node.replace(npmLayer),
       Config.node.replace(configLayer),
-      Mcp.node.replace(emptyMcpLayer),
+      Mcp.node.replace(mcp),
       Generate.node.replace(generate),
       Permission.node.replace(permission),
       offlineModels,

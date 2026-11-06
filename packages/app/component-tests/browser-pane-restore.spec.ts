@@ -549,6 +549,27 @@ story("keeps blank browser tabs when adding tabs and selecting another panel", a
   await expect(root.getByTestId("browser-closes")).toHaveText("[]")
 })
 
+story("a new tab request that opened no blank tab leaves a later blank page's address alone", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  const composer = root.getByRole("textbox", { name: "Composer", exact: true })
+  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await root.getByRole("button", { name: "First inventory", exact: true }).click()
+  await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+
+  // Main answers this request without a new blank tab.
+  await address.press(`${mac ? "Meta" : "Control"}+t`)
+  await expect(root.getByTestId("browser-opens")).toHaveText("1")
+
+  // The page the agent blanks later must not take focus from the composer; a dispatched click leaves focus in place.
+  await composer.focus()
+  await root.getByRole("button", { name: "Blank page", exact: true }).dispatchEvent("click")
+  await expect(root.getByRole("tab", { name: "New tab", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(composer).toBeFocused()
+})
+
 story("reopens a closed browser tab with ⌘⇧T after the side panel and a session tab elsewhere", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))

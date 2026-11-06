@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LLMEvent, LLMRequest, Media, Message, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, Media, Message, ToolDefinition } from "../../src/effect.js"
 import { Alibaba } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -34,7 +34,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
                     ? { enableThinking: enabled, ...(enabled ? { thinkingBudget: 1024 } : {}) }
                     : { enableThinking: enabled },
               prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
-              generation: { maxTokens: 4096 },
+              maxTokens: 4096,
             })
             const compiled = yield* compileRequest(request)
             expect(api === "messages" ? compiled.body.thinking.type : compiled.body.enable_thinking).toBe(
@@ -68,7 +68,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
                   { type: "media", media: Media.bytes(bytes, "image/png") },
                 ]),
               ],
-              generation: { maxTokens: 4096 },
+              maxTokens: 4096,
             }),
           )
           expect(response.text.toLowerCase()).toContain("jiggling restroom prison")
@@ -98,7 +98,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
                 }),
               ],
               toolChoice: { type: "tool", name: "get_weather" },
-              generation: { maxTokens: 4096 },
+              maxTokens: 4096,
             }),
           )
           expect(response.toolCalls).toMatchObject([{ name: "get_weather", input: { city: "Paris" } }])
@@ -120,7 +120,7 @@ record("chat").effect.with(
           model: alibaba.chat("qwen3.8-max"),
           prompt: 'Return a JSON object with one key "city" set to the capital city of France.',
           providerOptions: { reasoningEffort: "none", responseFormat: { type: "json_object" } },
-          generation: { maxTokens: 1024 },
+          maxTokens: 1024,
         }),
       )
       expect(JSON.parse(response.text)).toEqual({ city: "Paris" })
@@ -152,7 +152,7 @@ record("messages").effect.with(
               },
             },
           },
-          generation: { maxTokens: 1024 },
+          maxTokens: 1024,
         }),
       )
       expect(JSON.parse(response.text)).toEqual({ city: "Paris" })
@@ -172,7 +172,7 @@ responses.effect.with(
           model: alibaba.responses("qwen3.8-max"),
           prompt: "Remember the password word apricot. Reply OK.",
           providerOptions: { store: true, reasoningEffort: "none" },
-          generation: { maxTokens: 1024 },
+          maxTokens: 1024,
         }),
       )
       const id = first.events.find(LLMEvent.is.finish)?.providerMetadata?.alibaba?.responseId
@@ -183,7 +183,7 @@ responses.effect.with(
           model: alibaba.responses("qwen3.8-max"),
           prompt: "What word did I ask you to remember? Reply with only the word.",
           providerOptions: { previousResponseId: id, store: true, reasoningEffort: "none" },
-          generation: { maxTokens: 1024 },
+          maxTokens: 1024,
         }),
       )
       expect(second.text.toLowerCase()).toContain("apricot")
@@ -203,7 +203,7 @@ responses.effect.with(
           "Use web search to find Alibaba Cloud Model Studio's official documentation, then use web_extractor to read the page. Give a brief summary with the source URL.",
         tools: [Alibaba.webSearch(), Alibaba.webExtractor()],
         providerOptions: { reasoningEffort: "low", store: false },
-        generation: { maxTokens: 4096 },
+        maxTokens: 4096,
       })
       const response = yield* LLMClient.generate(request)
       expect(response.toolCalls).toEqual(
@@ -214,11 +214,10 @@ responses.effect.with(
       )
       expect(response.text.toLowerCase()).toContain("alibaba")
       expect(response.events.some(LLMEvent.is.toolResult)).toBe(true)
-      const replay = yield* compileRequest(
-        LLMRequest.update(request, {
-          messages: [...request.messages, response.message, Message.user("Summarize in one sentence.")],
-        }),
-      )
+      const replay = yield* compileRequest({
+        ...request,
+        messages: [...request.messages, response.message, Message.user("Summarize in one sentence.")],
+      })
       expect(replay.body.input).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ type: "web_search_call" }),
@@ -241,7 +240,7 @@ responses.effect.with(
             "Use the code interpreter to compute the SHA-256 hash of the UTF-8 string hello (no newline). Reply with only the hash.",
           tools: [Alibaba.codeInterpreter()],
           providerOptions: { reasoningEffort: "low" },
-          generation: { maxTokens: 4096 },
+          maxTokens: 4096,
         }),
       )
       expect(response.toolCalls).toEqual(

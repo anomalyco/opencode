@@ -40,17 +40,17 @@ export const SettingsProjectGeneral: Component<{
           <div class="flex min-w-0 items-center gap-3">
             <ProjectIcon
               project={props.project}
-              fallback={model.store.name || model.defaultName()}
+              fallback={model.view().name || model.defaultName()}
               icon={{
-                color: model.store.color,
+                color: model.view().color,
                 url: props.project.icon?.url,
-                override: model.store.iconOverride,
+                override: model.view().iconOverride,
               }}
               class="!size-8 shrink-0 [&_[data-slot=project-avatar-surface]]:!rounded-[6px] [&_[data-slot=project-avatar-surface]]:!text-[16px]"
             />
             <div class="flex min-w-0 flex-col gap-1">
               <h2 class="settings-tab-title truncate">
-                <bdi dir="auto">{model.store.name || displayName(props.project)}</bdi>
+                <bdi dir="auto">{model.view().name || displayName(props.project)}</bdi>
               </h2>
               <Show when={servers().length > 1}>
                 <button type="button" class="project-settings-server-link" onClick={() => props.onOpenServer()}>
@@ -63,7 +63,7 @@ export const SettingsProjectGeneral: Component<{
         </div>
       </div>
 
-      <div class="settings-tab-body project-settings-general" aria-busy={model.store.saving > 0}>
+      <div class="settings-tab-body project-settings-general" aria-busy={model.view().busy}>
         <ProjectFolderMissing />
         <SettingsList>
           <SettingsRow
@@ -75,12 +75,14 @@ export const SettingsProjectGeneral: Component<{
                 data-action="settings-project-name"
                 type="text"
                 appearance="base"
-                value={model.store.name}
-                placeholder={model.folderName()}
+                value={model.view().name}
+                placeholder={model.view().folderName}
                 aria-label={language.t("project.settings.name.title")}
-                onInput={(event) => model.setStore("name", event.currentTarget.value)}
+                invalid={model.view().failed.name}
+                onInput={(event) => model.editName(event.currentTarget.value)}
                 onBlur={model.saveName}
               />
+              <SaveFailed when={model.view().failed.name} onRetry={() => model.retry("name")} />
             </div>
           </SettingsRow>
 
@@ -88,33 +90,35 @@ export const SettingsProjectGeneral: Component<{
             title={language.t("dialog.project.edit.icon")}
             description={language.t("project.settings.icon.description")}
           >
-            <button
-              data-action="settings-project-icon"
-              type="button"
-              aria-label={language.t("dialog.project.edit.icon.alt")}
-              class="project-settings-icon"
-              classList={{ "project-settings-icon--active": model.store.dragOver }}
-              onMouseEnter={() => model.setStore("iconHover", true)}
-              onMouseLeave={() => model.setStore("iconHover", false)}
-              onDrop={(event) => model.drop(event)}
-              onDragOver={(event) => model.dragOver(event)}
-              onDragLeave={() => model.dragLeave()}
-              onClick={() => model.iconClick()}
-            >
-              <ProjectIcon
-                project={props.project}
-                fallback={model.store.name || model.defaultName()}
-                icon={{
-                  color: model.store.color,
-                  url: props.project.icon?.url,
-                  override: model.store.iconOverride,
-                }}
-                class="!size-8 [&_[data-slot=project-avatar-surface]]:!rounded-[6px] [&_[data-slot=project-avatar-surface]]:!text-[16px]"
-              />
-              <span classList={{ "project-settings-icon-overlay": true, visible: model.store.iconHover }}>
-                <Icon name={model.store.iconOverride ? "close" : "share"} />
-              </span>
-            </button>
+            <div class="project-settings-icon-field">
+              <button
+                data-action="settings-project-icon"
+                type="button"
+                aria-label={language.t("dialog.project.edit.icon.alt")}
+                aria-invalid={model.view().failed.icon || undefined}
+                class="project-settings-icon"
+                classList={{ "project-settings-icon--active": model.view().dragOver }}
+                onDrop={(event) => model.drop(event)}
+                onDragOver={(event) => model.dragOver(event)}
+                onDragLeave={(event) => model.dragLeave(event)}
+                onClick={() => model.iconClick()}
+              >
+                <ProjectIcon
+                  project={props.project}
+                  fallback={model.view().name || model.defaultName()}
+                  icon={{
+                    color: model.view().color,
+                    url: props.project.icon?.url,
+                    override: model.view().iconOverride,
+                  }}
+                  class="!size-8 [&_[data-slot=project-avatar-surface]]:!rounded-[6px] [&_[data-slot=project-avatar-surface]]:!text-[16px]"
+                />
+                <span class="project-settings-icon-overlay">
+                  <Icon name={model.view().iconOverride ? "close" : "share"} />
+                </span>
+              </button>
+              <SaveFailed when={model.view().failed.icon} onRetry={() => model.retry("icon")} />
+            </div>
             <input
               ref={(element) => model.setIconInput(element)}
               type="file"
@@ -124,7 +128,7 @@ export const SettingsProjectGeneral: Component<{
             />
           </SettingsRow>
 
-          <Show when={!model.store.iconOverride}>
+          <Show when={!model.view().iconOverride}>
             <SettingsRow
               title={language.t("dialog.project.edit.color")}
               description={language.t("project.settings.color.description")}
@@ -132,7 +136,7 @@ export const SettingsProjectGeneral: Component<{
               <div class="project-settings-colors" data-action="settings-project-color">
                 <For each={PROJECT_AVATAR_VARIANTS}>
                   {(color) => {
-                    const selected = () => getProjectAvatarVariant(model.store.color) === color
+                    const selected = () => getProjectAvatarVariant(model.view().color) === color
 
                     return (
                       <button
@@ -173,13 +177,15 @@ export const SettingsProjectGeneral: Component<{
             <Textarea
               class="!w-full [&_[data-slot=textarea-v2-textarea]]:font-mono"
               rows={5}
-              value={model.store.startup}
+              value={model.view().startup}
               placeholder={language.t("dialog.project.edit.worktree.startup.placeholder")}
               aria-label={language.t("dialog.project.edit.worktree.startup")}
               spellcheck={false}
-              onInput={(event) => model.setStore("startup", event.currentTarget.value)}
+              invalid={model.view().failed.startup}
+              onInput={(event) => model.editStartup(event.currentTarget.value)}
               onBlur={model.saveStartup}
             />
+            <SaveFailed when={model.view().failed.startup} onRetry={() => model.retry("startup")} />
             <div class="project-settings-startup-hint flex flex-col">
               <span>{inlineVariables(language.t("project.settings.worktree.startup.hint.base"))}</span>
               <span>{inlineVariables(language.t("project.settings.worktree.startup.hint.new"))}</span>
@@ -233,6 +239,22 @@ const AutoAcceptPermissionsSetting: Component<{ project: LocalProject; server: S
           />
         </SettingsRow>
       )}
+    </Show>
+  )
+}
+
+// A failed autosave keeps the edited value on screen, so the field says it is not saved and offers to send it again.
+function SaveFailed(props: { when: boolean; onRetry: () => void }) {
+  const language = useLanguage()
+
+  return (
+    <Show when={props.when}>
+      <div class="project-settings-save-failed" role="alert">
+        <span>{language.t("common.requestFailed")}</span>
+        <button type="button" class="project-settings-save-retry" onClick={() => props.onRetry()}>
+          {language.t("common.retry")}
+        </button>
+      </div>
     </Show>
   )
 }

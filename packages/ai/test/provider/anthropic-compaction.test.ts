@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { ai, LLMRequest, Message } from "../../src/effect.js"
+import { ai, Message } from "../../src/effect.js"
 import { LLMClient } from "../../src/route/client.js"
 import { Anthropic, GoogleVertexMessages } from "../../src/providers/index.js"
 import { testEffect } from "../lib/effect.js"
@@ -116,7 +116,7 @@ for (const model of [
           const request = ai.request({
             model,
             prompt: "hello",
-            http: { headers: { "anthropic-beta": "existing-beta" } },
+            headers: { "anthropic-beta": "existing-beta" },
             providerOptions: {
               contextManagement: {
                 edits: [
@@ -139,12 +139,11 @@ for (const model of [
           expect(first.usage?.contextTokens).toBe(1000)
           const codec = Schema.fromJsonString(Message)
           const message = Schema.decodeSync(codec)(Schema.encodeSync(codec)(first.message))
-          yield* LLMClient.generate(
-            LLMRequest.update(request, {
-              providerOptions: {},
-              messages: [...request.messages, message, Message.user("continue")],
-            }),
-          )
+          yield* LLMClient.generate({
+            ...request,
+            providerOptions: {},
+            messages: [...request.messages, message, Message.user("continue")],
+          })
         }),
     )
   }

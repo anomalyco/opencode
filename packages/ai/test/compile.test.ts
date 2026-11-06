@@ -1,14 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Ref, Schema } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
-import {
-  ai,
-  LLMRequest,
-  Message,
-  ToolCallPart,
-  ToolDefinition,
-  ToolNamespace,
-} from "../src/effect.js"
+import { ai, Message, ToolCallPart, ToolDefinition, ToolNamespace } from "../src/effect.js"
 import { AnthropicMessages, OpenAIChat, OpenAIResponses } from "../src/protocols.js"
 import { Auth, LLMClient } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
@@ -52,13 +45,18 @@ describe("request option precedence", () => {
       const route = OpenAIChat.route.with({
         endpoint: { baseURL: "https://api.openai.test/v1/" },
         auth: Auth.bearer("test"),
-        generation: { maxTokens: 10, temperature: 1, stop: ["route"] },
+        maxTokens: 10,
+        temperature: 1,
+        stop: ["route"],
         providerOptions: { store: false, reasoningEffort: "low" },
       })
       const model = route.model({
         id: "gpt-4o-mini",
-        defaults: {
-          generation: { maxTokens: 20, temperature: 0.5, frequencyPenalty: 0.25, stop: ["model"] },
+        options: {
+          maxTokens: 20,
+          temperature: 0.5,
+          frequencyPenalty: 0.25,
+          stop: ["model"],
           providerOptions: { reasoningEffort: "medium" },
         },
       })
@@ -66,7 +64,9 @@ describe("request option precedence", () => {
         ai.request({
           model,
           prompt: "Say hello.",
-          generation: { maxTokens: 30, topP: 0.9, stop: ["request"] },
+          maxTokens: 30,
+          topP: 0.9,
+          stop: ["request"],
           providerOptions: { store: true },
         }),
       )
@@ -91,15 +91,14 @@ describe("request option precedence", () => {
         model: OpenAIChat.route.model({ id: "gpt-4o-mini" }),
         prompt: "Use a tool.",
       })
-      const prepared = yield* compileRequest(
-        LLMRequest.update(request, {
-          tools: [
-            ToolDefinition.make({ name: "lookup", description: "old", inputSchema: { type: "object" } }),
-            ToolDefinition.make({ name: "search", description: "search", inputSchema: { type: "object" } }),
-            ToolDefinition.make({ name: "lookup", description: "new", inputSchema: { type: "object" } }),
-          ],
-        }),
-      )
+      const prepared = yield* compileRequest({
+        ...request,
+        tools: [
+          ToolDefinition.make({ name: "lookup", description: "old", inputSchema: { type: "object" } }),
+          ToolDefinition.make({ name: "search", description: "search", inputSchema: { type: "object" } }),
+          ToolDefinition.make({ name: "lookup", description: "new", inputSchema: { type: "object" } }),
+        ],
+      })
 
       expect(prepared.body.tools).toEqual([
         {
@@ -119,6 +118,7 @@ describe("request option precedence", () => {
       const prepared = yield* compileRequest(
         ai.request({
           model: OpenAIResponses.route.model({ id: "gpt-5.4" }),
+          prompt: "Hello",
           tools: [
             ToolDefinition.make({ name: "crm", description: "Top-level CRM tool", inputSchema: {} }),
             ToolNamespace.make({
@@ -195,28 +195,25 @@ describe("request option precedence", () => {
           .with({
             endpoint: { baseURL: "https://api.openai.test/v1/" },
             auth: Auth.bearer("fresh-key"),
+            headers: { "x-route": "route", "x-shared": "route" },
             http: {
               body: { metadata: { route: true, shared: "route" }, value: "route" },
-              headers: { "x-route": "route", "x-shared": "route" },
               query: { route: "1", shared: "route" },
             },
           })
           .model({
             id: "gpt-4o-mini",
-            defaults: {
+            options: {
+              headers: { "x-model": "model", "x-shared": "model" },
               http: {
                 body: { metadata: { model: true, shared: "model" }, value: "model" },
-                headers: { "x-model": "model", "x-shared": "model" },
                 query: { model: "1", shared: "model" },
               },
             },
           }),
         prompt: "Say hello.",
-        http: {
-          body: { metadata: { request: true }, value: null },
-          headers: { "x-request": "request" },
-          query: { request: "1" },
-        },
+        headers: { "x-request": "request" },
+        http: { body: { metadata: { request: true }, value: null }, query: { request: "1" } },
       }),
     ).pipe(
       Effect.provide(
@@ -457,7 +454,7 @@ describe("request option precedence", () => {
       const model = route.model({ id: "claude-sonnet-4-5" })
       const withoutMaxTokens = yield* compileRequest(ai.request({ model, prompt: "Say hello.", cache: "none" }))
       const withMaxTokens = yield* compileRequest(
-        ai.request({ model, prompt: "Say hello.", cache: "none", generation: { maxTokens: 8_000 } }),
+        ai.request({ model, prompt: "Say hello.", cache: "none", maxTokens: 8_000 }),
       )
 
       expect(withoutMaxTokens.body.max_tokens).toBe(32_000)

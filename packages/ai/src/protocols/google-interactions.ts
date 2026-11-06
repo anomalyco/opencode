@@ -1,4 +1,4 @@
-import { Effect, Schema, SchemaGetter } from "effect"
+import { Effect, Option, Schema, SchemaGetter } from "effect"
 import { Route } from "../route/client.js"
 import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
@@ -204,7 +204,7 @@ const Event = Schema.Union([
     status: Schema.String,
   }),
   Schema.Struct({ event_type: Schema.Literal("interaction.completed"), interaction: Interaction }),
-  Schema.Struct({ event_type: Schema.Literal("error"), error: lenient(ErrorDetail) }),
+  Schema.Struct({ event_type: Schema.Literal("error"), error: Schema.optionalKey(Schema.Unknown) }),
   UnknownEvent,
 ])
 type Event = typeof Event.Type
@@ -338,11 +338,7 @@ const fromRequest = Effect.fn("GoogleInteractions.fromRequest")(function* (reque
   const flattened = ProviderShared.flattenToolRequest(request)
   if (flattened.tools.some((tool) => tool.native !== undefined))
     return yield* ProviderShared.invalidRequest("Google Interactions hosted tools are not supported")
-  if (
-    request.generation?.topK !== undefined ||
-    request.generation?.frequencyPenalty !== undefined ||
-    request.generation?.presencePenalty !== undefined
-  )
+  if (request.topK !== undefined || request.frequencyPenalty !== undefined || request.presencePenalty !== undefined)
     return yield* ProviderShared.invalidRequest(
       "Google Interactions does not support topK, frequencyPenalty, or presencePenalty",
     )
@@ -373,11 +369,11 @@ const fromRequest = Effect.fn("GoogleInteractions.fromRequest")(function* (reque
         }))
       : undefined,
     generation_config: {
-      max_output_tokens: request.generation?.maxTokens,
-      temperature: request.generation?.temperature,
-      top_p: request.generation?.topP,
-      seed: request.generation?.seed,
-      stop_sequences: request.generation?.stop,
+      max_output_tokens: request.maxTokens,
+      temperature: request.temperature,
+      top_p: request.topP,
+      seed: request.seed,
+      stop_sequences: request.stop,
       thinking_level: options.thinkingLevel,
       thinking_summaries: options.thinkingSummaries,
       tool_choice: choice,
@@ -412,11 +408,7 @@ const mapUsage = (usage: RawUsage | undefined, key: string) => {
   })
 }
 
-const onStart = Effect.fnUntraced(function* (
-  state: ParserState,
-  index: number,
-  step: OutputStep,
-) {
+const onStart = Effect.fnUntraced(function* (state: ParserState, index: number, step: OutputStep) {
   const events: LLMEvent[] = []
   let lifecycle = Lifecycle.stepStart(state.lifecycle, events)
   let tools = state.tools
@@ -450,11 +442,7 @@ const onStart = Effect.fnUntraced(function* (
   return [{ ...state, lifecycle, tools, steps: { ...state.steps, [index]: step } }, events] satisfies StepResult
 })
 
-const onDelta = Effect.fnUntraced(function* (
-  state: ParserState,
-  index: number,
-  delta: typeof Delta.Type,
-) {
+const onDelta = Effect.fnUntraced(function* (state: ParserState, index: number, delta: typeof Delta.Type) {
   const step = state.steps[index]
   if (!step)
     return yield* ProviderShared.eventError(ADAPTER, "Interactions delta without step.start", encodeJson(delta))
@@ -550,11 +538,12 @@ const step = Effect.fnUntraced(function* (state: ParserState, event: Event) {
       return [state, []] satisfies StepResult
     case "error": {
       const rawBody = encodeJson(event)
+      const detail = Option.getOrUndefined(Schema.decodeUnknownOption(ErrorDetail)(event.error))
       return yield* new AIError({
         reason: failureReason(
           state.route,
-          event.error?.code ?? event.error?.error_type,
-          event.error?.message?.trim() || providerErrorMessage(rawBody) || "Google Interactions stream error",
+          detail?.code ?? detail?.error_type,
+          detail?.message?.trim() || providerErrorMessage(rawBody) || "Google Interactions stream error",
           event.error,
           rawBody,
         ),

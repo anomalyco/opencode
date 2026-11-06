@@ -5,7 +5,7 @@ import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords, type OpenString } from "../schema/index.js"
-import { VideoModel, VideoResponse, type VideoRequestFor } from "../video.js"
+import { VideoModel, VideoResponse, type VideoRequest } from "../video.js"
 import { ProviderShared, optionalArray, optionalNull } from "./shared.js"
 
 const route = MediaProtocol.identity({ id: "runway-video", name: "Runway", provider: "runway" })
@@ -33,7 +33,7 @@ export type RunwayVideoOptions = {
   readonly outputFormat?: OpenString<"mp4" | "prores" | "png_sequence">
 } & Record<string, unknown>
 
-export type Request = VideoRequestFor<RunwayVideoOptions>
+export type Request = VideoRequest<VideoModel<RunwayVideoOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Token and response schemas

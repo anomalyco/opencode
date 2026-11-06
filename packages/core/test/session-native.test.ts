@@ -72,11 +72,12 @@ test("reads pre-2.0.15 checkpoint media without rewriting the stored payload", a
       media: { source: { type: "base64", data: "AQID", mediaType: "image/png" } },
       filename: "attachment.png",
       cache: { type: "ephemeral" },
-      metadata: { attachment: "original" },
       providerMetadata: { openai: { detail: "high" } },
     },
     { type: "media", media: { source: { type: "base64", data: "BAUG", mediaType: "image/jpeg" } } },
   ])
+  // The stored `metadata` key is no longer part of `MediaPart`, so decoding drops it.
+  expect(decoded[0]?.content[1]).not.toHaveProperty("metadata")
   expect(decoded[1]?.content).toMatchObject(legacyMedia[1]?.content ?? [])
   expect(JSON.stringify(legacyMedia)).toBe(before)
 })
@@ -206,15 +207,12 @@ test("a native window round-trips tools, opaque checkpoints and binary media thr
   const optionalMetadata = stored([
     Message.make({
       role: "user",
-      content: [
-        { type: "text", text: "attachment", metadata: { attachment: { name: undefined, source: { type: "inline" } } } },
-      ],
+      content: [{ type: "text", text: "attachment" }],
       providerMetadata: { openai: { itemId: undefined, type: "message", status: undefined, phase: undefined } },
     }),
   ])
   expect(decode({ native: optionalMetadata })[0]).toMatchObject({
     providerMetadata: { openai: { type: "message" } },
-    content: [{ metadata: { attachment: { source: { type: "inline" } } } }],
   })
   expect(() =>
     decode({

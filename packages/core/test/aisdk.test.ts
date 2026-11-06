@@ -2,6 +2,7 @@ import { APICallError } from "@ai-sdk/provider"
 import type { LanguageModelV3, LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { AISDK } from "@opencode/core/aisdk"
+import { ModelRetry } from "@opencode/core/model-retry"
 import { SessionRunnerRetry } from "@opencode/core/session/runner/retry"
 import { toSessionError } from "@opencode/core/session/to-session-error"
 import { Model } from "@opencode/core/model"
@@ -26,6 +27,8 @@ import { compileRequest } from "@opencode/ai/testing"
 import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AISDK.locationLayer)
@@ -566,11 +569,19 @@ it.effect("normalizes file data across AI SDK prompt parts", () =>
           Message.user([
             { type: "media", media: Media.bytes(bytes, "image/png"), filename: "bytes.png" },
             { type: "media", media: Media.base64("AAAA", "image/png"), filename: "base64.png" },
-            { type: "media", media: Media.fromDataUrl("data:image/png;charset=utf-8;base64,AQID"), filename: "inline.png" },
+            {
+              type: "media",
+              media: Media.fromDataUrl("data:image/png;charset=utf-8;base64,AQID"),
+              filename: "inline.png",
+            },
             { type: "media", media: Media.url("https://example.com/image.png", { mediaType: "image/png" }) },
             { type: "media", media: Media.base64("s3://bucket/image.png", "image/png") },
           ]),
-          Message.assistant({ type: "media", media: Media.url("http://example.com/document.pdf", { mediaType: "application/pdf" }), filename: "document.pdf" }),
+          Message.assistant({
+            type: "media",
+            media: Media.url("http://example.com/document.pdf", { mediaType: "application/pdf" }),
+            filename: "document.pdf",
+          }),
           Message.tool({
             id: "call_1",
             name: "screenshot",
@@ -713,6 +724,38 @@ const compatibleModel = Effect.fn(function* (customFetch: typeof fetch) {
   )
 })
 
+// Not `it`, whose AISDK layer is already built with the harness's fetch and would be reused here.
+testEffect(Layer.empty).effect("sends AI SDK requests through the embedder's fetch when the provider names none", () =>
+  Effect.gen(function* () {
+    const sent: string[] = []
+    const embedder = async (input: Request | string | URL) => {
+      sent.push(input instanceof Request ? input.url : String(input))
+      return new Response(chatChunk("embedded"), { headers: { "content-type": "text/event-stream" } })
+    }
+    const response = yield* Effect.gen(function* () {
+      const aisdk = yield* AISDK.Service
+      yield* aisdk.hook.sdk((event) => {
+        event.sdk = createOpenAICompatible({
+          ...event.options,
+          name: String(event.options.name),
+          baseURL: String(event.options.baseURL),
+        })
+      })
+      const resolved = yield* aisdk.model(
+        model("@ai-sdk/openai-compatible", { apiKey: "test", baseURL: "https://example.test/v1" }),
+      )
+      return yield* LLMClient.generate(ai.request({ model: resolved, prompt: "Hello" })).pipe(Effect.provide(client))
+    }).pipe(
+      Effect.provide(
+        AppNodeBuilder.build(AISDK.node, [LayerNodePlatform.httpFetch.replace(LayerNodePlatform.fetchLayer(embedder))]),
+      ),
+    )
+
+    expect(sent).toEqual(["https://example.test/v1/chat/completions"])
+    expect(response.text).toBe("embedded")
+  }),
+)
+
 it.effect("routes AI SDK requests and responses through HTTP hook middleware", () =>
   Effect.gen(function* () {
     const sent: Array<{ url: string; headers: Headers; body: string }> = []
@@ -753,12 +796,7 @@ it.effect("routes AI SDK requests and responses through HTTP hook middleware", (
     expect(sent[0]?.headers.get("x-hook")).toBe("applied")
     expect(sent[0]?.headers.get("authorization")).toBe("Bearer test")
     expect(JSON.parse(sent[0]?.body ?? "")).toMatchObject({ model: "api-model" })
-    expect(seen).toEqual([
-      "POST https://example.test/v1/chat/completions",
-      sent[0]?.body,
-      sent[0]?.body,
-      "status 200",
-    ])
+    expect(seen).toEqual(["POST https://example.test/v1/chat/completions", sent[0]?.body, sent[0]?.body, "status 200"])
     expect(response.events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["rewritten"])
   }),
 )
@@ -1158,6 +1196,21 @@ it.effect("classifies native fetch failures as request transport errors", () =>
     expect(error.message).toBe("connect ECONNREFUSED 127.0.0.1:443")
     expect(error.reason.cause).toBe(cause)
     expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
+  }),
+)
+
+it.effect("keeps the code of a host name that didn't resolve", () =>
+  Effect.gen(function* () {
+    const dns = Object.assign(new Error("getaddrinfo ENOTFOUND api.example.com"), { code: "ENOTFOUND" })
+    const raw = yield* streamFailure(dns)
+    expect(raw.reason).toMatchObject({ _tag: "Transport", operation: "request", code: "ENOTFOUND" })
+    expect(ModelRetry.isUnreachable(raw)).toBeTrue()
+
+    const wrapped = yield* streamFailure(
+      apiCallError({ message: "Cannot connect to API: getaddrinfo ENOTFOUND", isRetryable: true, cause: dns }),
+    )
+    expect(wrapped.reason).toMatchObject({ _tag: "Transport", operation: "request", code: "ENOTFOUND" })
+    expect(ModelRetry.isUnreachable(wrapped)).toBeTrue()
   }),
 )
 

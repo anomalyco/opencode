@@ -1,0 +1,136 @@
+/* The dropdown is a popover in the top layer, anchored to its trigger (language-picker.tsx). It
+   opens on the side with more room (above in a footer, below near the top of the page) and shrinks
+   to fit there, so it never leaves the screen. It starts at the trigger's start edge, or its end
+   edge with align="right", and flips sideways when that side has no room. */
+[data-component="language-picker"] [data-slot="dropdown"][popover] {
+  position: fixed;
+  inset: auto;
+  margin-block: 0.5rem;
+  position-area: block-start span-inline-end;
+  position-try-fallbacks:
+    flip-block,
+    flip-inline,
+    flip-block flip-inline;
+  position-try-order: most-height;
+  max-height: min(26rem, calc(100% - 1rem));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  &[data-align="right"] {
+    position-area: block-start span-inline-start;
+  }
+}
+
+/* The popover's own padding, under every page's dropdown styles. */
+:where([data-component="language-picker"] [data-slot="dropdown"][popover]) {
+  padding: 0;
+}
+
+/* Rows are links; at least 32px tall for a pointer. */
+[data-component="language-picker"] a[data-slot="item"] {
+  display: flex;
+  align-items: center;
+  min-height: 2rem;
+  text-decoration: none;
+}
+
+/* Names in scripts the mono fonts lack use Inter's stack, which falls back to the system's fonts
+   for them, instead of a mono fallback. Only explicit lang attributes: the page's own language is
+   inherited by everything. */
+[data-component="language-picker"]
+  [data-slot="trigger"]
+  span:is([lang|="ar"], [lang="th"], [lang|="zh"], [lang="ja"], [lang="ko"]) {
+  font-family: var(--font-sans);
+}
+
+[data-component="language-picker"] {
+  width: auto;
+}
+
+[data-component="footer"] [data-component="language-picker"] {
+  width: 100%;
+}
+
+[data-component="footer"] [data-component="language-picker"] [data-component="dropdown"] {
+  width: 100%;
+}
+
+/* Standard site footer (grid of cells) */
+[data-component="footer"] [data-slot="cell"] [data-component="language-picker"] {
+  height: 100%;
+}
+
+[data-component="footer"] [data-slot="cell"] [data-component="language-picker"] [data-slot="trigger"] {
+  width: 100%;
+  padding: 2rem 0;
+  border-radius: 0;
+  justify-content: center;
+  gap: var(--space-2);
+  color: inherit;
+  font: inherit;
+}
+
+[data-component="footer"] [data-slot="cell"] [data-component="language-picker"] [data-slot="trigger"] span {
+  flex: 0 0 auto;
+  text-align: center;
+  font-weight: inherit;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-component="footer"] [data-slot="cell"] [data-component="language-picker"] [data-slot="trigger"]:hover {
+    background: var(--color-background-weak);
+    text-decoration: underline;
+    text-underline-offset: var(--space-1);
+    text-decoration-thickness: 1px;
+  }
+}
+
+[data-component="legal"] {
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+}
+
+[data-component="legal"] [data-component="language-picker"] {
+  width: auto;
+}
+
+[data-component="legal"] [data-component="language-picker"] [data-slot="trigger"] {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--color-text-weak);
+  white-space: nowrap;
+}
+
+[data-component="legal"] [data-component="language-picker"] [data-slot="trigger"] span {
+  font-weight: inherit;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-component="legal"] [data-component="language-picker"] [data-slot="trigger"]:hover {
+    background: transparent;
+    color: var(--color-text);
+    text-decoration: underline;
+    text-underline-offset: var(--space-1);
+    text-decoration-thickness: 1px;
+  }
+}
+
+/* The check is the new site's (site.css › Settings › Menu active); other pages keep their own
+   selected style. */
+[data-component="language-picker"] [data-slot="check"] {
+  display: none;
+}
+
+/* While the menu is open its trigger keeps the hover look, with or without the pointer. */
+[data-component="footer"]
+  [data-slot="cell"]
+  [data-component="language-picker"]
+  [data-slot="trigger"][aria-expanded="true"] {
+  background: var(--color-background-weak);
+}
+
+[data-component="legal"] [data-component="language-picker"] [data-slot="trigger"][aria-expanded="true"] {
+  color: var(--color-text);
+}

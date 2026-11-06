@@ -90,8 +90,9 @@ const readPdf = ToolDefinition.make({
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
 })
 const readPdfRuntime = tool({
+  name: "read_pdf",
   description: readPdf.description,
-  parameters: Schema.Struct({ path: Schema.String }),
+  input: Schema.Struct({ path: Schema.String }),
   success: Schema.String,
   execute: () => Effect.succeed("PDF read successfully"),
   toModelOutput: () => [
@@ -128,7 +129,8 @@ describe("PDF recorded", () => {
               id: `recorded_pdf_${target.id}_user_input`,
               model: target.model,
               cache: "none",
-              generation: { maxTokens: target.maxTokens, temperature: 0 },
+              maxTokens: target.maxTokens,
+              temperature: 0,
               messages: [
                 Message.user([
                   { type: "media", media: Media.base64(PDF, "application/pdf"), filename: target.filename },
@@ -161,9 +163,10 @@ describe("PDF recorded", () => {
                   "Call read_pdf exactly once with path verification.pdf, then reply only with the verification code from its PDF.",
                 prompt: "Use read_pdf with path verification.pdf and return the verification code.",
                 cache: "none",
-                generation: { maxTokens: target.maxTokens, temperature: 0 },
+                maxTokens: target.maxTokens,
+                temperature: 0,
               }),
-              tools: { read_pdf: readPdfRuntime },
+              tools: [readPdfRuntime],
             }).pipe(Stream.runCollect),
           )
           expect(events.at(-1)).toMatchObject({ type: "finish", reason: { normalized: "stop" } })
@@ -178,7 +181,8 @@ describe("PDF recorded", () => {
               model: target.model,
               system: "Read the PDF returned by the tool and follow the user's response format exactly.",
               cache: "none",
-              generation: { maxTokens: target.maxTokens, temperature: 0 },
+              maxTokens: target.maxTokens,
+              temperature: 0,
               messages: [
                 Message.user(prompt),
                 Message.assistant([{ type: "tool-call", id: "call_pdf_1", name: readPdf.name, input: {} }]),

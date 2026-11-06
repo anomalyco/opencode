@@ -1,20 +1,18 @@
 import { expect } from "bun:test"
-import { Effect, Schema } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import {
   ai,
-  type ContentPart,
+  type AssistantMessage,
   type FinishReason,
   type LanguageModel,
   type LLM,
   LLMEvent,
-  LLMRequest,
+  type LLMRequest,
   LLMResponse,
   Media,
   Message,
-  toDefinitions,
   ToolChoice,
   ToolDefinition,
-  ToolRuntime,
 } from "../src/effect.js"
 import { LLMClient } from "../src/route.js"
 import { tool } from "../src/tool.js"
@@ -45,8 +43,9 @@ export const weatherTool = ToolDefinition.make({
 })
 
 export const weatherRuntimeTool = tool({
+  name: weatherToolName,
   description: weatherTool.description,
-  parameters: Schema.Struct({ city: Schema.String }),
+  input: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
   execute: ({ city }) =>
     Effect.succeed(
@@ -67,10 +66,8 @@ export const weatherToolLoopRequest = (input: {
     system: input.system ?? "Use the get_weather tool, then answer in one short sentence.",
     prompt: "What is the weather in Paris?",
     cache: "none",
-    generation:
-      input.temperature === false
-        ? { maxTokens: input.maxTokens ?? 80 }
-        : { maxTokens: input.maxTokens ?? 80, temperature: input.temperature ?? 0 },
+    maxTokens: input.maxTokens ?? 80,
+    temperature: input.temperature === false ? undefined : (input.temperature ?? 0),
   })
 
 export const goldenWeatherToolLoopRequest = (input: {
@@ -91,39 +88,7 @@ const restroomImage = () =>
   )
 
 export const runWeatherToolLoop = (request: LLMRequest) =>
-  Effect.gen(function* () {
-    const tools = { [weatherToolName]: weatherRuntimeTool }
-    let next = LLMRequest.update(request, { tools: toDefinitions(tools) })
-    const events: LLMEvent[] = []
-
-    for (let step = 0; step < 10; step++) {
-      const response = yield* LLMClient.generate(next)
-      events.push(...response.events.filter((event) => event.type !== "finish"))
-      const calls = response.events.filter(LLMEvent.is.toolCall).filter((call) => !call.providerExecuted)
-      if (calls.length === 0) {
-        const finish = response.events.find(LLMEvent.is.finish)
-        if (finish) events.push(finish)
-        return events
-      }
-
-      const dispatched = yield* Effect.forEach(calls, (call) =>
-        ToolRuntime.dispatch(tools, call).pipe(Effect.map((result) => [call, result] as const)),
-      )
-      events.push(...dispatched.flatMap(([, result]) => result.events))
-      next = LLMRequest.update(next, {
-        messages: [
-          ...next.messages,
-          Message.assistant(assistantContent(response.events)),
-          ...dispatched.map(([call, result]) => Message.tool({ id: call.id, name: call.name, result: result.result })),
-        ],
-      })
-    }
-
-    throw new Error("Weather tool loop exceeded 10 steps")
-  })
-
-const assistantContent = (events: ReadonlyArray<LLMEvent>) =>
-  events.reduce(LLMResponse.reduce, LLMResponse.empty()).message.content
+  ai.loop({ ...request, tools: [weatherRuntimeTool] }).pipe(Stream.runCollect)
 
 export const expectFinish = (events: ReadonlyArray<LLMEvent>, reason: FinishReason) =>
   expect(events.at(-1)).toMatchObject({ type: "finish", reason: { normalized: reason } })
@@ -187,7 +152,7 @@ const encryptedReasoningOptions = {
 
 type AssistantTextExpectation = string | RegExp
 
-type UserStep = { readonly type: "user"; readonly content: Message.ContentInput }
+type UserStep = { readonly type: "user"; readonly content: Message.UserContentInput }
 type AssistantStep = {
   readonly type: "assistant"
   readonly text?: AssistantTextExpectation
@@ -197,14 +162,14 @@ type AssistantStep = {
   readonly system?: string
   readonly maxTokens?: number
   readonly finish?: FinishReason
-  readonly tools?: LLM.RequestInput["tools"]
-  readonly toolChoice?: LLM.RequestInput["toolChoice"]
+  readonly tools?: LLM.LLMRequestInput["tools"]
+  readonly toolChoice?: LLM.LLMRequestInput["toolChoice"]
   readonly providerOptions?: LLMRequest["providerOptions"]
   readonly assert?: (response: LLMResponse) => void
 }
 type ConversationStep = UserStep | AssistantStep
 
-const user = (content: Message.ContentInput): ConversationStep => ({ type: "user", content })
+const user = (content: Message.UserContentInput): ConversationStep => ({ type: "user", content })
 
 const assistant = {
   expectText: (
@@ -246,7 +211,7 @@ const assertAssistantToolCall = (response: LLMResponse, expected: NonNullable<As
 // encrypted reasoning + text, text, or tool call. Keep mixed interleavings in
 // focused protocol tests where event order can be asserted directly.
 const assistantMessageFromResponse = (response: LLMResponse, step: AssistantStep) => {
-  const content: ContentPart[] = []
+  const content: Array<AssistantMessage["content"][number]> = []
   if (step.reasoning === "openai-encrypted") {
     const reasoning = response.events.find(
       (event): event is Extract<LLMEvent, { readonly type: "reasoning-end" }> =>
@@ -283,7 +248,7 @@ const runGeneratedConversation = (context: GoldenScenarioContext, steps: Readonl
           tools: step.tools,
           toolChoice: step.toolChoice,
           providerOptions: step.providerOptions,
-          generation: generation(context, step.maxTokens ?? context.maxTokens ?? 80),
+          ...generation(context, step.maxTokens ?? context.maxTokens ?? 80),
         }),
       )
       if (step.text !== undefined) assertAssistantText(response.text, step.text)
@@ -350,7 +315,7 @@ const runImageToolResultScenario = (context: GoldenScenarioContext) =>
         model: context.model,
         system: "Read images carefully. Reply only with the visible text, lowercase, no punctuation.",
         cache: "none",
-        generation: generation(context, context.maxTokens ?? 40),
+        ...generation(context, context.maxTokens ?? 40),
         messages: [
           Message.user("Use the read_screenshot tool, then reply with the words shown."),
           Message.assistant([{ type: "tool-call", id: "call_screenshot_1", name: screenshotToolName, input: {} }]),

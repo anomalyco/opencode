@@ -17,6 +17,16 @@ const responsesModel = Azure.configure({
   apiKey: process.env.AZURE_OPENAI_API_KEY ?? "fixture",
 }).responses("gpt-5.6-luna")
 
+const messagesModel = Azure.configure({
+  resourceName,
+  apiKey: process.env.AZURE_OPENAI_API_KEY ?? "fixture",
+}).messages("claude-haiku-4-5")
+
+const foundryChatModel = Azure.configure({
+  baseURL: `https://${resourceName}.services.ai.azure.com/models`,
+  apiKey: process.env.AZURE_OPENAI_API_KEY ?? "fixture",
+}).chat("Kimi-K2.5")
+
 const lookupWeather = ToolDefinition.make({
   name: "lookup_weather",
   description: "Look up the current weather for a city",
@@ -37,6 +47,42 @@ describe("Azure OpenAI recorded", () => {
       )
 
       expect(response.text.toLowerCase()).toContain("hello")
+    }),
+  )
+
+  recorded.effect("chat streams text from a Foundry models URL", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        ai.request({ model: foundryChatModel, prompt: "Reply with exactly one word: hello" }),
+      )
+
+      expect(response.text.toLowerCase()).toContain("hello")
+    }),
+  )
+
+  recorded.effect("messages streams text", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        ai.request({ model: messagesModel, prompt: "Reply with exactly one word: hola" }),
+      )
+
+      expect(response.text.toLowerCase()).toContain("hola")
+    }),
+  )
+
+  recorded.effect("messages calls a tool", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        ai.request({
+          model: messagesModel,
+          prompt: "What is the weather in Paris? Use the lookup_weather tool.",
+          tools: [lookupWeather],
+        }),
+      )
+
+      const call = response.toolCalls.find((part) => part.name === "lookup_weather")
+      expect(call).toBeDefined()
+      expect(call?.input).toMatchObject({ city: "Paris" })
     }),
   )
 

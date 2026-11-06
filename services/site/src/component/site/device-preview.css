@@ -1,0 +1,393 @@
+/* Device preview: a development tool, like Settings and Design mode (device-preview.tsx). */
+
+[data-site] [data-component="device-preview"] {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.25;
+  color: var(--text-strong);
+  background: light-dark(hsl(0, 0%, 90%), hsl(0, 0%, 6%));
+  animation: device-preview-in 160ms var(--ease-out);
+
+  [data-slot="toolbar"] {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 12px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+
+  [data-slot="row"] {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  button,
+  a {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 8px;
+    font: inherit;
+    color: var(--text);
+    text-decoration: none;
+    white-space: nowrap;
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    cursor: pointer;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+        background: var(--bg-weak);
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+      outline-offset: -2px;
+    }
+
+    &[aria-pressed="true"] {
+      color: var(--text-strong);
+      background: var(--bg-weaker);
+    }
+  }
+
+  [data-slot="close"],
+  [data-slot="row"] > button:not([data-slot="rotate"], [data-slot="freeze"]),
+  [data-slot="row"] > a:not([data-slot="review"]) {
+    width: 28px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  [data-slot="path"] {
+    min-width: 0;
+    max-width: 40ch;
+    overflow: hidden;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-weak);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  [data-slot="freeze"][aria-pressed="true"] {
+    color: var(--link);
+  }
+
+  /* "Frozen · 3 updates waiting" with Refresh now. */
+  [data-slot="frozen"] {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 4px;
+    height: 28px;
+    padding: 0 2px 0 10px;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--link);
+    white-space: nowrap;
+    background: color-mix(in srgb, var(--link) 10%, transparent);
+    border-radius: 14px;
+
+    button {
+      height: 24px;
+      padding: 0 8px;
+      color: var(--link);
+      border-radius: 12px;
+    }
+  }
+
+  [data-slot="review"] {
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+
+  [data-slot="spacer"] {
+    flex: 1;
+  }
+
+  [data-slot="readout"] {
+    margin-right: 6px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-weak);
+    white-space: nowrap;
+
+    b {
+      margin-right: 8px;
+      font-family: var(--font-sans);
+      font-weight: 500;
+      color: var(--text-strong);
+    }
+  }
+
+  [data-slot="system"] {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-weak);
+
+    select {
+      height: 28px;
+      padding: 0 6px;
+      font: inherit;
+      color: var(--text-strong);
+      background: var(--bg-weak);
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+
+      &:focus-visible {
+        outline: 2px solid var(--link);
+        outline-offset: -2px;
+      }
+    }
+  }
+
+  [data-slot="segmented"],
+  [data-slot="presets"] {
+    display: flex;
+    flex-shrink: 0;
+    gap: 2px;
+    padding: 2px;
+    background: var(--bg-weak);
+    border-radius: 8px;
+
+    button {
+      height: 24px;
+    }
+
+    button[aria-pressed="true"] {
+      background: var(--bg);
+      box-shadow: 0 0 0 1px var(--border);
+    }
+  }
+
+  [data-slot="presets"] {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  [data-slot="stage"] {
+    position: relative;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  [data-slot="stage"][data-zoom="fit"] {
+    overflow: hidden;
+  }
+
+  [data-slot="single"],
+  [data-slot="trio"] {
+    display: flex;
+    justify-content: safe center;
+    align-items: flex-start;
+    min-width: max-content;
+    min-height: 100%;
+    padding: calc(40px + 22px) 40px 40px;
+  }
+
+  [data-slot="trio"] {
+    gap: 40px;
+    padding-top: 40px;
+
+    figure {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 0;
+    }
+
+    figcaption {
+      height: 14px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-weak);
+    }
+  }
+
+  [data-slot="device"] {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  [data-slot="clip"] {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    background: #fff;
+    border-radius: 4px;
+    box-shadow:
+      0 0 0 1px light-dark(hsl(0, 0%, 78%), hsl(0, 0%, 24%)),
+      0 12px 40px light-dark(hsl(0, 0%, 0%, 0.12), hsl(0, 0%, 0%, 0.5));
+  }
+
+  [data-kind="phone"] [data-slot="clip"],
+  [data-kind="tablet"] [data-slot="clip"] {
+    border-radius: calc(var(--s) * 40px + 4px);
+    box-shadow:
+      0 0 0 8px hsl(0, 0%, 9%),
+      0 0 0 9px light-dark(hsl(0, 0%, 70%), hsl(0, 0%, 28%)),
+      0 16px 48px light-dark(hsl(0, 0%, 0%, 0.18), hsl(0, 0%, 0%, 0.6));
+  }
+
+  [data-kind="tablet"] [data-slot="clip"] {
+    border-radius: calc(var(--s) * 24px + 4px);
+  }
+
+  [data-slot="screen"] {
+    transform-origin: 0 0;
+  }
+
+  iframe {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+
+  &[data-dragging] {
+    cursor: grabbing;
+
+    iframe {
+      pointer-events: none;
+    }
+  }
+
+  /* The site's breakpoints, at the scale of the frame, from its left edge. */
+  [data-slot="ruler"] {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 10px);
+    height: 18px;
+    overflow: hidden;
+    pointer-events: none;
+    background:
+      repeating-linear-gradient(
+          to right,
+          light-dark(hsl(0, 0%, 70%), hsl(0, 0%, 30%)) 0 1px,
+          transparent 1px var(--step)
+        )
+        bottom / 100% 4px no-repeat,
+      linear-gradient(light-dark(hsl(0, 0%, 70%), hsl(0, 0%, 30%)), transparent) bottom / 100% 1px no-repeat;
+  }
+
+  [data-kind="phone"] [data-slot="ruler"],
+  [data-kind="tablet"] [data-slot="ruler"] {
+    bottom: calc(100% + 16px);
+  }
+
+  [data-slot="tick"] {
+    position: absolute;
+    bottom: 0;
+    height: 100%;
+    padding-left: 3px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    line-height: 10px;
+    color: var(--text-faint);
+    border-left: 1px solid currentColor;
+
+    &[data-passed] {
+      color: var(--link);
+    }
+  }
+
+  [data-slot="handle"] {
+    position: absolute;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+    outline: none;
+
+    &::after {
+      content: "";
+      border-radius: 3px;
+      background: light-dark(hsl(0, 0%, 60%), hsl(0, 0%, 40%));
+      transition: background 120ms;
+    }
+
+    &:focus-visible::after,
+    [data-dragging] &::after {
+      background: var(--link);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover::after {
+        background: var(--link);
+      }
+    }
+
+    &[data-axis="x"] {
+      top: 0;
+      bottom: 0;
+      right: -24px;
+      width: 16px;
+      cursor: ew-resize;
+
+      &::after {
+        width: 4px;
+        height: 40px;
+      }
+    }
+
+    &[data-axis="y"] {
+      left: 0;
+      right: 0;
+      bottom: -24px;
+      height: 16px;
+      cursor: ns-resize;
+
+      &::after {
+        width: 40px;
+        height: 4px;
+      }
+    }
+
+    &[data-axis="xy"] {
+      right: -24px;
+      bottom: -24px;
+      width: 16px;
+      height: 16px;
+      cursor: nwse-resize;
+
+      &::after {
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+      }
+    }
+  }
+}
+
+@keyframes device-preview-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-site] [data-component="device-preview"] {
+    animation: none;
+  }
+}

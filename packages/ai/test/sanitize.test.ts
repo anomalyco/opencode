@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { ai, LLMRequest, Message, ToolCallPart, ToolDefinition } from "../src/effect.js"
+import { Schema } from "effect"
+import { ai, type LLMRequest, Message, ToolCallPart, ToolDefinition } from "../src/effect.js"
 import { OpenAIChat } from "../src/protocols.js"
 import { Auth } from "../src/route.js"
 import { sanitizeSurrogates } from "../src/utils/sanitize.js"
@@ -14,8 +15,9 @@ const tool = new ToolDefinition({
   inputSchema: { type: "object", properties: { query: { type: "string" } } },
 })
 
+// Mirrors request preparation: sanitize everything but the model, then normalize the copies back into classes.
 const sanitizeRequest = (request: LLMRequest) =>
-  LLMRequest.update(request, sanitizeSurrogates({ ...LLMRequest.input(request), model: undefined }))
+  ai.request({ ...request, ...sanitizeSurrogates({ ...request, model: undefined }), model: request.model })
 
 describe("sanitizeSurrogates", () => {
   test("replaces lone surrogates in nested message text, tool input, and tool output", () => {
@@ -34,7 +36,7 @@ describe("sanitizeSurrogates", () => {
       }),
     )
 
-    expect(sanitized.messages.every((message) => message instanceof Message)).toBe(true)
+    expect(sanitized.messages.every((message) => Schema.is(Message)(message))).toBe(true)
     expect(sanitized.tools[0]).toBe(tool)
     expect(sanitized.system).toEqual([{ type: "text", text: "system \uFFFD" }])
     expect(sanitized.messages).toEqual([
@@ -51,29 +53,28 @@ describe("sanitizeSurrogates", () => {
       system: "system",
       tools: [tool],
       messages: [...messages, Message.user("bad \uD800")],
-      generation: { maxTokens: 10 },
-      metadata: { nested: { list: ["a", "b"] } },
+      maxTokens: 10,
+      providerOptions: { nested: { list: ["a", "b"] } },
     })
     const sanitized = sanitizeRequest(request)
 
-    expect(sanitized).toBeInstanceOf(LLMRequest)
     expect(sanitized.messages.slice(0, 2)).toEqual(request.messages.slice(0, 2))
     expect(sanitized.messages[0]).toBe(request.messages[0])
     expect(sanitized.messages[1]).toBe(request.messages[1])
     expect(sanitized.messages[2]).not.toBe(request.messages[2])
     expect(sanitized.messages[2]).toEqual(Message.user("bad \uFFFD"))
     expect(sanitized.tools[0]).toBe(request.tools[0])
-    expect(sanitized.generation).toBe(request.generation)
+    expect(sanitized.maxTokens).toBe(10)
 
-    const input = LLMRequest.input(request)
+    const input = request
     const output = sanitizeSurrogates(input)
     expect(output.system).toBe(input.system)
     expect(output.tools).toBe(input.tools)
-    expect(output.metadata).toBe(input.metadata)
+    expect(output.providerOptions).toBe(input.providerOptions)
     expect(output.messages).not.toBe(input.messages)
 
     const clean = ai.request({ model, system: "system", tools: [tool], messages })
     expect(sanitizeRequest(clean)).toEqual(clean)
-    expect(sanitizeSurrogates(LLMRequest.input(clean)).messages).toBe(clean.messages)
+    expect(sanitizeSurrogates(clean).messages).toBe(clean.messages)
   })
 })

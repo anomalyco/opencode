@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "لم تُكوّن ملحقات",
   skills: "المهارات",
   "skills.empty": "لم تُكوّن مهارات",
-  lsp: "LSP",
-  "lsp.empty": "لم تُكوّن خوادم LSP",
   failed: "فشل",
   retry: "إعادة المحاولة",
   connecting: "جارٍ الاتصال…",

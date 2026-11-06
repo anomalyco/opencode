@@ -95,6 +95,8 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     ),
   )
 
+  // Built without the startup span: route handlers and background fibers capture this context, and would
+  // otherwise nest every request and session turn for the life of the process under one trace.
   const boot = Effect.gen(function* () {
     const context = yield* Layer.buildWithScope(
       createRoutes(
@@ -124,6 +126,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
       updated: (version: string) => bus.publish(InstallationEvent.Updated, { version }).pipe(Effect.asVoid),
     }
   }).pipe(
+    withoutParentSpan,
     Effect.catchCause((cause) => {
       if (!lifecycle || Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause)
       return status.fail.pipe(

@@ -54,7 +54,7 @@ it.effect("Moonshot preserves default reasoning across model IDs on custom endpo
     })
     for (const id of ["kimi-k2.6", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k3", "future-model"]) {
       const model = moonshot.chat(id)
-      const request = ai.request({ model, prompt: "Hello", generation: { maxTokens: 100 } })
+      const request = ai.request({ model, prompt: "Hello", maxTokens: 100 })
       const compiled = yield* compileRequest(request)
       expect(compiled.body).toMatchObject({ model: id, max_tokens: 100, stream: true })
       expect(compiled.body.max_completion_tokens).toBeUndefined()
@@ -104,20 +104,24 @@ it.effect("Moonshot lowers API-specific reasoning options without adding unrelat
     const moonshot = Moonshot.configure({ apiKey: "fixture" })
     for (const thinking of [{ type: "disabled" }, { type: "enabled", keep: "all" }, { type: "enabled", keep: null }]) {
       const result = yield* compileRequest(
-        ai.request({ model: moonshot.chat("kimi-k2.6"), providerOptions: { thinking } }),
+        ai.request({ model: moonshot.chat("kimi-k2.6"), prompt: "Hello", providerOptions: { thinking } }),
       )
       expect(result.body.thinking).toEqual(thinking)
       expect(result.body.reasoning_effort).toBeUndefined()
     }
     for (const effort of ["low", "high", "max", "future-effort"]) {
       const chat = yield* compileRequest(
-        ai.request({ model: moonshot.chat("kimi-k3"), providerOptions: { reasoningEffort: effort } }),
+        ai.request({ model: moonshot.chat("kimi-k3"), prompt: "Hello", providerOptions: { reasoningEffort: effort } }),
       )
       const messages = yield* compileRequest(
-        ai.request({ model: moonshot.messages("kimi-k3"), providerOptions: { effort } }),
+        ai.request({ model: moonshot.messages("kimi-k3"), prompt: "Hello", providerOptions: { effort } }),
       )
       const responses = yield* compileRequest(
-        ai.request({ model: moonshot.responses("kimi-k3"), providerOptions: { reasoningEffort: effort } }),
+        ai.request({
+          model: moonshot.responses("kimi-k3"),
+          prompt: "Hello",
+          providerOptions: { reasoningEffort: effort },
+        }),
       )
       expect(chat.body.reasoning_effort).toBe(effort)
       expect(messages.body.output_config).toEqual({ effort })
@@ -135,7 +139,7 @@ it.effect("Moonshot validates native Chat thinking options", () =>
       .chat("kimi-k2.6")
       .route.with({ providerOptions: { thinking: { type: "enabled", keep: 42 } } })
       .model({ id: "kimi-k2.6" })
-    const failure = yield* compileRequest(ai.request({ model: invalid })).pipe(Effect.flip)
+    const failure = yield* compileRequest(ai.request({ model: invalid, prompt: "Hello" })).pipe(Effect.flip)
     expect(failure.reason._tag).toBe("InvalidRequest")
     expect(failure.message).toContain("keep")
   }),
