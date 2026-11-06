@@ -48,6 +48,20 @@ dev.opencode.ai, `opencode-site-production` on opencode.ai), its bindings and it
 pushes to `dev` and `production` (`.github/workflows/deploy-site.yml`). Production takes no routes until
 `productionOwnsRoot` is switched on.
 
+### Email sign-up
+
+The home page's sign-up adds addresses to the OpenSend newsletter list (`src/lib/opensend.ts`) with
+the `OPENSEND_API_KEY` secret, a live OpenSend API key with manage permission. `cloudflare.config.ts`
+declares it, so a deploy fails until it's set on the Worker:
+
+```bash
+read -s OPENSEND_API_KEY
+bunx cf workers secrets update OPENSEND_API_KEY --worker opencode-site-dev --text "$OPENSEND_API_KEY"
+```
+
+In `bun run dev`, export `OPENSEND_API_KEY` to send real sign-ups; without it the form answers as if
+it worked and says nothing was sent.
+
 The V2 docs at `/v2` are part of this app (`src/docs/`, see `src/docs/AGENTS.md`). `script/build.ts` prerenders
 them into the Worker's assets after `vite build`.
 

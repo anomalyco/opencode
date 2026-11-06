@@ -40,10 +40,12 @@ const modules = Object.fromEntries(
     }),
   ),
 )
-// The site binds its assets and text values only; another kind of binding needs emulating here first.
+// The site binds its assets, text values and secrets only; another kind of binding needs emulating
+// here first. A secret gets a placeholder: its calls go nowhere (see below).
 const env = Object.fromEntries(
   Object.entries(config.env ?? {}).map(([name, binding]) => {
     if (binding.type === "text") return [name, { type: "text" as const, value: binding.value }]
+    if (binding.type === "secret") return [name, { type: "text" as const, value: "check-worker-start" }]
     if (binding.type === "assets") return [name, { type: "assets" as const }]
     throw new Error(`check-worker-start: the ${binding.type} binding ${name} is not emulated`)
   }),
