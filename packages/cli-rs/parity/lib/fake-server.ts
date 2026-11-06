@@ -26,6 +26,9 @@ export type Route = {
   thenDelay?: number
 }
 
+// A `then` event that closes the open `events` streams instead, so the clients reconnect.
+export const DROP = Symbol("drop")
+
 export type Logged = {
   method: string
   path: string
@@ -66,9 +69,14 @@ export async function startFakeServer(options: Options = {}) {
         if (route.delay) await Bun.sleep(route.delay)
         const response = respond(route, streams, entry, requests)
         if (route.then) {
-          const frames = route.then(entry, requests).map((event) => encode(event))
+          const events = route.then(entry, requests)
           setTimeout(
-            () => streams.forEach((controller) => frames.forEach((frame) => controller.enqueue(frame))),
+            () =>
+              events.forEach((event) => {
+                if (event !== DROP) return streams.forEach((controller) => controller.enqueue(encode(event)))
+                streams.forEach((controller) => controller.close())
+                streams.clear()
+              }),
             route.thenDelay ?? 0,
           )
         }
