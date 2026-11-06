@@ -15,7 +15,7 @@ import { sdkInstalls } from "~/lib/install-commands"
 // OpenCode Lite also starts on its own once a visitor shows they want the console: DevTools docks,
 // they press a DevTools shortcut on the page, or it already started in this tab. Text.js's
 // onConsoleIntent watches for that; its ~2 kB chunk is all a desktop visitor downloads until then,
-// and touch screens skip it.
+// and touch screens skip it. Quitting Lite turns this off for the browser until opencode.try().
 
 const brand = {
   light: { open: "#626262", code: "#1f1f1f", inner: "#d2d2d2", text: "#333333", dim: "#737373", link: "#3b5cf6" },
@@ -36,6 +36,7 @@ const buildIds: Record<string, string> = {
   "linux-x64-deb": "deb",
   "linux-x64-rpm": "rpm",
 }
+const liteQuitKey = "opencode-lite-quit"
 const docsTopics = [...docsPages, ...docsConfigure, ...docsProducts.filter((item) => item.label !== "V1")]
 
 export function install() {
@@ -100,14 +101,23 @@ export function install() {
     return command(forThisComputer[0])
   }
 
-  // One OpenCode Lite at a time. Quitting it brings the greeting back, with opencode.try() to restart it.
+  // One OpenCode Lite at a time. Quitting it brings the greeting back, and stops it from starting on
+  // its own in this browser (people who debug the site open DevTools all day) until opencode.try().
   let lite: Promise<{ stop: () => void }> | undefined
   const startLite = () => {
     lite ??= textjs<{ start: (options: { onExit: () => void }) => Promise<{ stop: () => void }> }>("lite").then((app) =>
       app.start({
         onExit: () => {
           lite = undefined
+          localStorage.setItem(liteQuitKey, "1")
+          void import("@textjs/core/experimental").then((textjs) =>
+            sessionStorage.removeItem(textjs.CONSOLE_INTENT_KEY),
+          )
           greet(colors, say)
+          say([
+            "OpenCode Lite won't start on its own in this browser again. Type opencode.try() to bring it back.",
+            dim,
+          ])
         },
       }),
     )
@@ -243,6 +253,7 @@ export function install() {
     },
     manifest,
     async try() {
+      localStorage.removeItem(liteQuitKey)
       if (lite) return say(["OpenCode Lite is already running. Click an empty part of the page, then type.", dim])
       say(["Click an empty part of the page, then type: keys reach the console app through the page.", dim])
       if (["ios", "android"].includes(detectPlatform() ?? ""))
@@ -265,16 +276,21 @@ export function install() {
   // The greeting waits in the console for whoever opens DevTools later, and OpenCode Lite's first
   // frame replaces it then. When DevTools is already docked (or Lite already ran in this tab), Lite
   // starts at once and the greeting is skipped. If Lite can't load, the greeting shows instead.
+  // After a visitor quits Lite, only the greeting shows.
   const greetOnce = () => {
     if (sessionStorage.getItem("opencode-console-greeted")) return
     sessionStorage.setItem("opencode-console-greeted", "1")
     greet(colors, say)
   }
-  if (matchMedia("(hover: none) and (pointer: coarse)").matches) return greetOnce()
+  if (matchMedia("(hover: none) and (pointer: coarse)").matches || localStorage.getItem(liteQuitKey)) return greetOnce()
   import("@textjs/core/experimental").then((textjs) => {
-    // Settings › Other › Console API removes window.opencode when it's turned off.
+    // Settings › Other › Console API removes window.opencode when it's turned off, and Lite may have
+    // been started by hand and quit since this page loaded.
     const intent = textjs.onConsoleIntent(
-      () => (window as { opencode?: unknown }).opencode === api && void startLite().catch(greetOnce),
+      () =>
+        (window as { opencode?: unknown }).opencode === api &&
+        !localStorage.getItem(liteQuitKey) &&
+        void startLite().catch(greetOnce),
       { engageSelector: false },
     )
     if (!intent.triggered) greetOnce()
