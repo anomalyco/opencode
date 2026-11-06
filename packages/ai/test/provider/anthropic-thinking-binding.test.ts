@@ -74,7 +74,7 @@ it.effect("preserves explicit thinking settings and combines required beta heade
 
 it.effect("requests summarized display on explicit adaptive thinking without a display", () =>
   Effect.gen(function* () {
-    const request = LLM.request({
+    const request = ai.request({
       model: AnthropicMessages.route.model({ id: "claude-sonnet-5-5" }),
       prompt: "Hello",
       providerOptions: { thinking: { type: "adaptive" }, effort: "high" },

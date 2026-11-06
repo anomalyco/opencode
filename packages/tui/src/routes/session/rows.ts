@@ -294,7 +294,7 @@ export function createSessionRows(
     data.on("session.reasoning.ended", (event) => {
       if (event.data.sessionID !== sessionID() || !event.data.text.trim()) return
       // The signature arrives with the end event, after the deltas grouped the part as thinking.
-      if (progressUpdate(event.data.state)) return rebuild()
+      if (progressUpdate(event.data.native)) return rebuild()
       appendPart(
         { messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` },
         { type: "reasoning", time: { completed: event.created } },
@@ -409,7 +409,7 @@ export function reduceSessionRows(
     message.content.forEach((part) => {
       const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
       if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return
-      const shape = part.type === "reasoning" && progressUpdate(part.state) ? { type: "text" as const } : part
+      const shape = part.type === "reasoning" && progressUpdate(part.native) ? { type: "text" as const } : part
       rows.push({
         entry: { type: "part", ref: { messageID: message.id, partID } },
         part: shape,

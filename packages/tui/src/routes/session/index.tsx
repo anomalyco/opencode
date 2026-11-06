@@ -1998,7 +1998,7 @@ function SessionPartView(props: {
           <Match
             when={
               item().type === "text" ||
-              (item().type === "reasoning" && progressUpdate((item() as SessionMessageAssistantReasoning).state))
+              (item().type === "reasoning" && progressUpdate((item() as SessionMessageAssistantReasoning).native))
             }
           >
             <TextPart
