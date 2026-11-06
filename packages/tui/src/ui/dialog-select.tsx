@@ -265,7 +265,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const dimensions = useTerminalDimensions()
   const limit = createMemo(() => {
     const available = Math.floor(dimensions().height / 2) - 6
-    return props.heightScale === undefined ? available : Math.floor(available * props.heightScale)
+    return Math.max(1, props.heightScale === undefined ? available : Math.floor(available * props.heightScale))
   })
   // Under new designs an overflowing list gives its last row to a "…" indicator.
   const overflows = createMemo(() => newDesigns() && rows() > limit())

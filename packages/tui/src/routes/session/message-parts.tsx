@@ -182,6 +182,7 @@ export function TextPart(props: {
   return (
     <Show when={props.part.text.trim()}>
       <box paddingLeft={3} flexShrink={0}>
+        <text fg={theme.text.muted}>{Locale.datetime(props.message.time.created)}</text>
         {/* Configure custom nodes before parsing; apply content before streaming so completion keeps the final tokens. */}
         <markdown
           syntaxStyle={syntax()}
