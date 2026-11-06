@@ -6,7 +6,7 @@ import "./github-link.css"
 import "./tap-targets.css"
 import "./asset-buttons.css"
 import { Link, Meta } from "@solidjs/meta"
-import { A, createAsync, useLocation, useNavigate } from "@solidjs/router"
+import { A, createAsync, useLocation, useNavigate, usePreloadRoute } from "@solidjs/router"
 import {
   createEffect,
   createMemo,
@@ -66,6 +66,7 @@ import { bannerThemeColorScript, bannerTopColor, bannerVisible, SiteBanner } fro
 import { bannerDismissScript } from "./site-banner-script"
 import { Tooltips } from "./tooltip"
 import { SiteSearch } from "./search"
+import { preloadVisibleLinks } from "./preload-visible"
 import { adoptVoice, dropVoice } from "./voice/host"
 // The fan's styles load with the page; its code on first use (loadLogoFan).
 import "./logo-fan.css"
@@ -233,6 +234,7 @@ export function Site(props: {
   const enter = !isServer && navigated && !document.documentElement.hasAttribute("data-card-grow")
   const routed = !isServer && navigated
   onMount(() => (navigated = true))
+  const preloadRoute = usePreloadRoute()
   // The page runs under the notch and home indicator; edge elements pad by the safe-area insets.
   useViewportCover()
   // Read the saved theme before the first client render so hydration doesn't flip it back to
@@ -640,8 +642,8 @@ export function Site(props: {
     // The app's router only handles links marked with a `link` attribute (explicitLinks), so the
     // older console pages and proxied paths like /docs keep full page loads. Links between pages
     // of this site get the attribute as soon as a pointer, focus or click reaches them, so the
-    // router swaps the page in place and preloads it on intent: hover, focus or touch. Nothing else
-    // loads another page's code ahead of time.
+    // router swaps the page in place and preloads it on intent: hover, focus or touch. Touch screens,
+    // which have no hover, also preload the pages their links lead to as the links come into view.
     const markLink = (event: Event) => {
       const anchor = (event.target as Element | null)?.closest?.("a[href]")
       if (!(anchor instanceof HTMLAnchorElement) || anchor.hasAttribute("link") || anchor.target) return
@@ -650,6 +652,10 @@ export function Site(props: {
     }
     for (const type of ["pointerover", "focusin", "touchstart", "click"])
       document.addEventListener(type, markLink, true)
+    const stopPreloads = preloadVisibleLinks(
+      (link) => link.hasAttribute("link") || clientPage(new URL(link.href).pathname),
+      (path) => preloadRoute(path, { preloadData: false }),
+    )
 
     const idle = window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 1500))
     // window.opencode and its greeting for developers who open DevTools (Settings › Other › Console API).
@@ -735,6 +741,7 @@ export function Site(props: {
 
     onCleanup(() => {
       stopMenuLinks()
+      stopPreloads()
       for (const type of ["pointerover", "focusin", "touchstart", "click"])
         document.removeEventListener(type, markLink, true)
       media.removeEventListener("change", syncDark)
