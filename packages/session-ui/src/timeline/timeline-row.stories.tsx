@@ -1,8 +1,14 @@
-import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
-import { createMemo } from "solid-js"
+import type {
+  PromptAttachment,
+  SessionMessageAssistant,
+  SessionMessageInfo,
+  SessionMessageUser,
+} from "@opencode/client/promise"
+import { createMemo, For, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"
 import { SessionTimeline } from "./session-timeline"
+import { CommentCard, commentCardTarget } from "../message/comment-card"
 import type { ReasoningMode } from "./projection"
 import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
 import {
@@ -14,6 +20,7 @@ import {
   compactionCancelledDocument,
   compactionDocument,
   compactionFailedDocument,
+  compactionManualDocument,
   compactionRunningDocument,
   instructionsUpdatedMultipleDocument,
   instructionsUpdatedSingleDocument,
@@ -52,6 +59,67 @@ export const StreamingReasoningAndText = {
       description="The active turn contains a reasoning summary and a partial response."
       document={streamingDocument}
       width="560px"
+    />
+  ),
+}
+
+export const ResponseSpeed = {
+  args: { measured: true, steered: false },
+  render: (args: { measured: boolean; steered: boolean }) => (
+    <CurrentSessionTimelineStory
+      title="Response speed"
+      description="Hover the response to reveal tokens per second across both model steps."
+      width="720px"
+      document={{
+        sessionID: CURRENT_SESSION_ID,
+        status: { type: "idle" },
+        diffs: [],
+        messages: [
+          {
+            id: "msg_speed_user",
+            type: "user",
+            text: "Check the timeline performance.",
+            time: { created: STORY_TIME },
+          },
+          {
+            id: "msg_speed_inspect",
+            type: "assistant",
+            agent: "build",
+            model: STORY_MODEL,
+            content: [{ type: "text", text: "I'll inspect the timeline before checking the results." }],
+            tokens: { input: 1000, output: 270, reasoning: 30, cache: { read: 0, write: 0 } },
+            time: {
+              created: STORY_TIME + 100,
+              streamed: args.measured ? STORY_TIME + 3100 : undefined,
+              completed: STORY_TIME + 290_000,
+            },
+          },
+          ...(args.steered
+            ? [
+                {
+                  id: "msg_speed_steer",
+                  type: "user" as const,
+                  text: "Include narrow layouts in the check.",
+                  time: { created: STORY_TIME + 290_000 },
+                },
+              ]
+            : []),
+          {
+            id: "msg_speed_reply",
+            type: "assistant",
+            agent: "build",
+            model: STORY_MODEL,
+            content: [{ type: "text", text: "The timeline checks passed. No performance regressions were found." }],
+            tokens: { input: 2000, output: 500, reasoning: 100, cache: { read: 0, write: 0 } },
+            time: {
+              created: STORY_TIME + 290_000,
+              streamed: STORY_TIME + 302_000,
+              completed: STORY_TIME + 302_000,
+            },
+          },
+          { id: "msg_speed_idle", type: "idle", outcome: "succeeded", time: { created: STORY_TIME + 302_000 } },
+        ],
+      }}
     />
   ),
 }
@@ -207,7 +275,10 @@ function RetryAndRecoverStory() {
             ? {
                 attempt: 2,
                 at: 1_900_000_000_000,
-                error: { type: "ProviderRateLimitError" as const, message: "Rate limit reached. Retrying with backoff." },
+                error: {
+                  type: "ProviderRateLimitError" as const,
+                  message: "Rate limit reached. Retrying with backoff.",
+                },
               }
             : undefined,
           time: { created: STORY_TIME, completed: finished ? STORY_TIME + 300 : undefined },
@@ -231,7 +302,7 @@ function RetryAndRecoverStory() {
           Finish response
         </button>
       </div>
-      <CurrentSessionProviders document={document()}>
+      <CurrentSessionProviders document={document()} backgroundCompaction>
         <SessionTimeline document={document()} />
       </CurrentSessionProviders>
     </section>
@@ -364,7 +435,7 @@ function CompactSessionStory() {
           Cancel next compaction
         </button>
       </div>
-      <CurrentSessionProviders document={document()}>
+      <CurrentSessionProviders document={document()} backgroundCompaction>
         <SessionTimeline document={document()} />
       </CurrentSessionProviders>
     </section>
@@ -373,25 +444,111 @@ function CompactSessionStory() {
 
 const CompactSession = { render: () => <CompactSessionStory /> }
 
+// Automatic compactions only show quietly with experimental.background_compaction on; turn it off to see today's record.
+const backgroundCompaction = {
+  args: { backgroundCompaction: true },
+  argTypes: { backgroundCompaction: { control: "boolean" } },
+}
+
 export const CompactionInProgress = {
-  render: () => (
+  ...backgroundCompaction,
+  render: (args: { backgroundCompaction: boolean }) => (
     <CurrentSessionTimelineStory
       title="Compaction in progress"
-      description="The production divider remains stable while the context summary streams below it."
+      description="With background compaction on, an automatic compaction is one quiet divider whose lines carry light toward Compacting."
       document={compactionRunningDocument}
       width="600px"
+      backgroundCompaction={args.backgroundCompaction}
     />
   ),
 }
 
 export const CompactionAndContinuation = {
-  render: () => (
+  ...backgroundCompaction,
+  render: (args: { backgroundCompaction: boolean }) => (
     <CurrentSessionTimelineStory
       title="Compaction and continuation"
-      description="The context summary separates earlier output from the continued response."
+      description="With background compaction on, a finished automatic compaction reads Compacted; clicking it opens the summary."
       document={compactionDocument}
       width="600px"
+      backgroundCompaction={args.backgroundCompaction}
     />
+  ),
+}
+
+export const CompactionManual = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Manual compaction"
+      description="A /compact keeps the full record: started divider, summary and usage."
+      document={compactionManualDocument}
+      width="600px"
+      backgroundCompaction
+    />
+  ),
+}
+
+/** Replays an automatic compaction live: Working, then the divider for `duration` ms, then the continued reply. */
+function CompactionReplayStory(props: { duration: number }) {
+  // The fixture's earlier reply was cut off for the compaction; here it finished, so no Interrupted divider shows first.
+  const prelude = compactionDocument.messages
+    .slice(0, 2)
+    .map((message) => (message.type === "assistant" ? { ...message, error: undefined } : message))
+
+  const [compaction, continuation] = [compactionDocument.messages[2], compactionDocument.messages[3]]
+  const [state, setState] = createStore({ phase: "working", created: 0, run: 0 })
+
+  const start = () => {
+    const run = state.run + 1
+    setState({ phase: "working", created: 0, run })
+    const at = (ms: number, apply: () => void) => setTimeout(() => state.run === run && apply(), ms)
+    at(1_500, () => setState({ phase: props.duration > 0 ? "running" : "completed", created: Date.now() }))
+    at(1_500 + props.duration, () => setState("phase", "completed"))
+    at(2_900 + props.duration, () => setState("phase", "continued"))
+  }
+
+  onMount(start)
+  onCleanup(() => setState("run", -1))
+
+  const document = createMemo(() => {
+    if (state.phase === "working" || compaction?.type !== "compaction" || compaction.status !== "completed")
+      return { ...compactionDocument, messages: prelude, status: { type: "busy" } } satisfies SessionDocument
+
+    const message =
+      state.phase === "running"
+        ? { ...compaction, status: "running" as const, time: { created: state.created } }
+        : { ...compaction, time: { created: state.created } }
+
+    return {
+      ...compactionDocument,
+      messages: [...prelude, message, ...(state.phase === "continued" && continuation ? [continuation] : [])],
+      status: { type: state.phase === "continued" ? "idle" : "busy" },
+    } satisfies SessionDocument
+  })
+
+  return (
+    <section class="mx-auto flex w-full max-w-[640px] flex-col gap-4 p-6">
+      <div class="flex gap-3">
+        <button type="button" onClick={start}>
+          Replay
+        </button>
+      </div>
+      <CurrentSessionProviders document={document()} backgroundCompaction>
+        <SessionTimeline document={document()} />
+      </CurrentSessionProviders>
+    </section>
+  )
+}
+
+// `instant` arrives finished, as when started and ended land in one flush; `quick` ends inside the 400 ms grace.
+const replayDurations = { instant: 0, quick: 150, short: 1_200, long: 20_000 }
+
+export const CompactionReplay = {
+  args: { run: "long" },
+  argTypes: { run: { control: "select", options: Object.keys(replayDurations) } },
+  render: (args: { run: string }) => (
+    // SAFETY: the run control only offers replayDurations keys.
+    <CompactionReplayStory duration={replayDurations[args.run as keyof typeof replayDurations]} />
   ),
 }
 
@@ -402,6 +559,7 @@ export const CompactionFailed = {
       description="A failed compaction keeps the production divider and shows the provider error."
       document={compactionFailedDocument}
       width="600px"
+      backgroundCompaction
     />
   ),
 }
@@ -413,6 +571,7 @@ export const CompactionCancelled = {
       description="An interrupted compaction keeps the production divider without an empty error block."
       document={compactionCancelledDocument}
       width="600px"
+      backgroundCompaction
     />
   ),
 }
@@ -450,6 +609,79 @@ export const PromptWithAttachments = {
       width="480px"
     />
   ),
+}
+
+export const QuoteAttachments = {
+  render: () => (
+    <div
+      style={{
+        padding: "24px",
+        display: "grid",
+        "grid-template-columns": "minmax(0, 1fr)",
+        gap: "8px",
+        width: "360px",
+        "max-width": "100%",
+      }}
+    >
+      <CommentCard comment="Remove this" target={{ type: "quote", text: "The menu is hovered." }} wide />
+      <CommentCard
+        comment="Can we make this smaller?"
+        target={{
+          type: "quote",
+          text: "It has a 32px minimum, capped at the track height. The remaining space is reserved for the timeline content.",
+        }}
+        wide
+      />
+    </div>
+  ),
+}
+
+export const NoteAttachments = {
+  render: () => {
+    const [state, setState] = createStore({ selected: "None" })
+
+    const notes = [
+      { name: "Named", label: "button#save", title: "button#save", subtitle: "Browser annotation" },
+      { name: "Unnamed", label: "button", title: "button.icon-only", subtitle: "Browser annotation", comment: " \t " },
+      { name: "Legacy", label: "Legacy element" },
+      { name: "Whitespace", label: "Fallback element", title: " \n ", subtitle: " \t " },
+      { name: "Title only", label: "Original label", title: "button#save" },
+      {
+        name: "Commented",
+        label: "Original selector",
+        title: "Ignored title",
+        subtitle: "Browser annotation",
+        comment: "Fix this",
+      },
+      { name: "RTL subtitle", label: "زر الحفظ", title: "button#save", subtitle: "تعليق المتصفح", rtl: true },
+      { name: "RTL legacy", label: "العنصر الأصلي", rtl: true },
+      {
+        name: "Long selector",
+        label: 'main > section.settings-panel > form > button[data-action="save-all-account-preferences"]',
+        title: 'main > section.settings-panel > form > button[data-action="save-all-account-preferences"]',
+        subtitle: "Browser annotation",
+      },
+    ]
+
+    return (
+      <div style={{ padding: "24px", display: "flex", "flex-wrap": "wrap", gap: "24px", "max-width": "800px" }}>
+        <For each={notes}>
+          {(note) => (
+            <section aria-label={note.name} dir={note.rtl ? "rtl" : "ltr"}>
+              <h2 style={{ "font-size": "13px", "margin-bottom": "8px" }}>{note.name}</h2>
+              <CommentCard
+                target={commentCardTarget({ type: "note", icon: "code", ...note })}
+                comment={note.comment ?? ""}
+                tooltip
+                onClick={() => setState("selected", note.name)}
+              />
+            </section>
+          )}
+        </For>
+        <output aria-label="Selected attachment">{state.selected}</output>
+      </div>
+    )
+  },
 }
 
 export const VoiceMessages = {
@@ -617,6 +849,85 @@ const RichUserAttachments = {
   ),
 }
 
+const UserMessageLinks = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Prompt with links"
+      description="URLs in a prompt open externally; trailing punctuation and mentions stay plain text."
+      document={{
+        ...thinkingDocument,
+        status: { type: "idle" },
+        messages: [
+          {
+            id: "msg_story_user_links",
+            type: "user",
+            text: "set it up on this pc https://github.com/Hona/mesh, then compare @src/a.ts with (https://opencode.ai/docs).",
+            agents: [],
+            files: [
+              {
+                data: "",
+                mime: "text/plain",
+                name: "a.ts",
+                source: { type: "uri", uri: "src/a.ts" },
+                mention: { text: "@src/a.ts", start: 64, end: 73 },
+              },
+            ],
+            time: { created: 1_735_689_633_000 },
+          },
+        ],
+      }}
+      width="620px"
+    />
+  ),
+}
+
+const storyChart = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="120" viewBox="0 0 160 120"><rect width="160" height="120" fill="#f3f4f6"/><path d="M16 96h128" stroke="#9ca3af"/><rect x="28" y="56" width="20" height="40" fill="#009fff"/><rect x="60" y="36" width="20" height="60" fill="#009fff"/><rect x="92" y="68" width="20" height="28" fill="#009fff"/><rect x="124" y="24" width="12" height="72" fill="#009fff"/></svg>',
+)}`
+
+const flakyMedia = `media:${"a".repeat(64)}`
+
+const mediaFiles: PromptAttachment[] = [
+  { mime: "image/svg+xml", name: "flaky.svg", source: { type: "inline" }, uri: flakyMedia },
+  { mime: "image/svg+xml", name: "ready.svg", source: { type: "inline" }, uri: `media:${"b".repeat(64)}` },
+]
+
+const MediaAttachmentRetry = {
+  render: () => {
+    // The first read of `flakyMedia` fails, as an offline server would; a retry reads it.
+    const failed = new Set<string>()
+
+    return (
+      <CurrentSessionTimelineStory
+        title="Prompt with unreadable media"
+        description="A stored image that fails to load shows a failed tile; clicking it reads the image again."
+        readMedia={(uri) => {
+          if (uri !== flakyMedia || failed.has(uri)) return Promise.resolve(storyChart)
+          failed.add(uri)
+
+          return Promise.reject(new Error("offline"))
+        }}
+        document={{
+          ...thinkingDocument,
+          status: { type: "idle" },
+          messages: [
+            {
+              id: "msg_story_media_user",
+              type: "user",
+              text: "Compare these charts",
+              agents: [],
+              // SAFETY: stored files reach the timeline as `media:` refs, a variant the generated message type does not list.
+              files: mediaFiles as SessionMessageUser["files"],
+              time: { created: 1_735_689_633_000 },
+            },
+          ],
+        }}
+        width="620px"
+      />
+    )
+  },
+}
+
 const conversationScenarios = {
   reasoning: AgentReasoning,
   hidden: WorkingWithoutReasoningDetails,
@@ -627,6 +938,92 @@ const conversationScenarios = {
   interruption: InterruptedTurn,
   models: AliasedModelNotices,
   attachments: RichUserAttachments,
+  links: UserMessageLinks,
+  media: MediaAttachmentRetry,
+}
+
+/**
+ * A stack of three prompts arriving, a prompt sent with another model that stands alone, then two steers waiting behind
+ * the running turn. Send next adds the next prompt; Deliver next delivers the oldest steer.
+ */
+export const PromptRuns = {
+  render: () => {
+    const start = Date.now() - 10 * 60_000
+
+    const prompt = (id: string, text: string, minute: number, variant?: string) => ({
+      id,
+      type: "user" as const,
+      text,
+      time: { created: start + minute * 60_000 },
+      metadata: {
+        agent: "build",
+        model: { providerID: "anthropic", id: "claude-opus-5-5", variant: variant ?? "high" },
+      },
+    })
+
+    const prompts = [
+      prompt("msg_end_0", "You don't need to update the tests yet", 0),
+      prompt("msg_end_1", "just play this back against the old fixture first", 1),
+      prompt("msg_end_2", "So that we can see what actually changed", 2),
+      prompt("msg_end_3", "Now try it with max effort", 5, "max"),
+      prompt("msg_end_4", "Also check the retry path", 7, "max"),
+      prompt("msg_end_5", "And rebase on beta first", 8, "max"),
+    ]
+
+    const steers = ["msg_end_4", "msg_end_5"]
+
+    const [state, setState] = createStore<{ count: number; delivered: string[]; removed: string[] }>({
+      count: 1,
+      delivered: [],
+      removed: [],
+    })
+
+    const session = createMemo(
+      (): SessionDocument => ({
+        sessionID: CURRENT_SESSION_ID,
+        messages: prompts.slice(0, state.count).filter((message) => !state.removed.includes(message.id)),
+        status: { type: "busy" },
+        diffs: [],
+      }),
+    )
+
+    const take = async (input: { messageID: string }) => setState("removed", (ids) => [...ids, input.messageID])
+
+    const actions = {
+      revert: () => {},
+      fork: () => {},
+      pending: {
+        status: (messageID: string) =>
+          steers.includes(messageID) && !state.delivered.includes(messageID) ? ("steering" as const) : undefined,
+        queue: take,
+        remove: take,
+      },
+    }
+
+    const deliverNext = () => {
+      const next = steers.find((id) => !state.delivered.includes(id) && !state.removed.includes(id))
+
+      if (next) setState("delivered", (ids) => [...ids, next])
+    }
+
+    return (
+      <section class="mx-auto flex w-full max-w-[760px] flex-col gap-4 p-6 pb-0">
+        <div class="flex gap-2">
+          <button type="button" onClick={() => setState("count", (value) => Math.min(value + 1, prompts.length))}>
+            Send next
+          </button>
+          <button type="button" onClick={deliverNext}>
+            Deliver next
+          </button>
+        </div>
+        {/* Room above, as in a real session, so menus open upward. */}
+        <div class="h-56" />
+        <CurrentSessionProviders document={session()}>
+          <SessionTimeline document={session()} actions={actions} />
+        </CurrentSessionProviders>
+      </section>
+    )
+  },
 }
 
 export const Conversation = {

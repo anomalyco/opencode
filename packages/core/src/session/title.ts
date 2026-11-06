@@ -1,7 +1,7 @@
 export * as SessionTitle from "./title.js"
 
 import { isDeepStrictEqual } from "node:util"
-import { LLMClient, LLMEvent, Message, SystemPart } from "@opencode/ai"
+import { LLMClient, LLMEvent, Message, SystemPart } from "@opencode/ai/effect"
 import type { Agent } from "@opencode/schema/agent"
 import { Context, DateTime, Effect, Layer, Stream } from "effect"
 import { Database } from "../database/database.js"
@@ -78,7 +78,6 @@ export const layer = Layer.effect(
       if (prepared.event.result !== undefined) return prepared.event.result
       yield* llm.stream(prepared.request, prepared.options).pipe(
         Stream.runForEach((event) => {
-          if (LLMEvent.is.providerError(event)) failed = true
           if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
           if (LLMEvent.is.stepFinish(event)) {
             const step = SessionUsage.record(event.usage, input.model.cost)

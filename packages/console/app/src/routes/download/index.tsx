@@ -1,6 +1,5 @@
 import "./index.css"
 import { Meta, Title } from "@solidjs/meta"
-import { A } from "@solidjs/router"
 import { Faq } from "~/component/faq"
 import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
@@ -13,8 +12,8 @@ import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import type { DownloadPlatform } from "./types"
 
-function getDownloadHref(platform: DownloadPlatform, channel: "stable" | "beta" = "stable") {
-  return `/download/${channel}/${platform}`
+function getDownloadHref(platform: DownloadPlatform) {
+  return `/download/latest/${platform}`
 }
 
 function CopyStatus() {
@@ -44,7 +43,7 @@ export default function Download() {
       <Meta name="description" content={i18n.t("download.meta.description")} />
       <SocialMeta title={i18n.t("download.title")} description={i18n.t("download.meta.description")} path="/download" />
       <div data-component="container">
-        <Header hideGetStarted />
+        <Header />
 
         <div data-component="content">
           <section data-component="download-section">
@@ -259,7 +258,7 @@ export default function Download() {
                   </span>
                   <span>VS Code</span>
                 </div>
-                <a href={language.route("/docs/ide/")} data-component="action-button">
+                <a href="/v2/docs/cli/acp/" data-component="action-button">
                   {i18n.t("download.action.install")}
                 </a>
               </div>
@@ -283,7 +282,7 @@ export default function Download() {
                   </span>
                   <span>Cursor</span>
                 </div>
-                <a href={language.route("/docs/ide/")} data-component="action-button">
+                <a href="/v2/docs/cli/acp/" data-component="action-button">
                   {i18n.t("download.action.install")}
                 </a>
               </div>
@@ -300,7 +299,7 @@ export default function Download() {
                   </span>
                   <span>Zed</span>
                 </div>
-                <a href={language.route("/docs/ide/")} data-component="action-button">
+                <a href="/v2/docs/cli/acp/" data-component="action-button">
                   {i18n.t("download.action.install")}
                 </a>
               </div>
@@ -317,7 +316,7 @@ export default function Download() {
                   </span>
                   <span>Windsurf</span>
                 </div>
-                <a href={language.route("/docs/ide/")} data-component="action-button">
+                <a href="/v2/docs/cli/acp/" data-component="action-button">
                   {i18n.t("download.action.install")}
                 </a>
               </div>
@@ -334,7 +333,7 @@ export default function Download() {
                   </span>
                   <span>VSCodium</span>
                 </div>
-                <a href={language.route("/docs/ide/")} data-component="action-button">
+                <a href="/v2/docs/cli/acp/" data-component="action-button">
                   {i18n.t("download.action.install")}
                 </a>
               </div>
@@ -358,7 +357,7 @@ export default function Download() {
                   </span>
                   <span>GitHub</span>
                 </div>
-                <a href={language.route("/docs/github/")} data-component="action-button">
+                <a href="/v2/docs/cli/commands/#ci" data-component="action-button">
                   {i18n.t("download.action.install")}
                 </a>
               </div>
@@ -375,7 +374,7 @@ export default function Download() {
                   </span>
                   <span>GitLab</span>
                 </div>
-                <a href={language.route("/docs/gitlab/")} data-component="action-button">
+                <a href="/v2/docs/cli/commands/#ci" data-component="action-button">
                   {i18n.t("download.action.install")}
                 </a>
               </div>
@@ -393,17 +392,17 @@ export default function Download() {
             </li>
             <li>
               <Faq question={i18n.t("home.faq.q2")}>
-                {i18n.t("home.faq.a2.before")} <a href={language.route("/docs")}>{i18n.t("home.faq.a2.link")}</a>.
+                {i18n.t("home.faq.a2.before")} <a href="/v2/docs">{i18n.t("home.faq.a2.link")}</a>.
               </Faq>
             </li>
             <li>
               <Faq question={i18n.t("home.faq.q3")}>
                 {i18n.t("download.faq.a3.beforeLocal")}{" "}
-                <a href={language.route("/docs/providers/#lm-studio")} target="_blank">
+                <a href="/v2/docs/models/#local" target="_blank">
                   {i18n.t("download.faq.a3.localLink")}
                 </a>{" "}
                 {i18n.t("download.faq.a3.afterLocal.beforeZen")}{" "}
-                <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
+                <a href="https://opencode.ai/console/models">{i18n.t("nav.zen")}</a>
                 {i18n.t("download.faq.a3.afterZen")}
               </Faq>
             </li>
@@ -411,13 +410,13 @@ export default function Download() {
               <Faq question={i18n.t("home.faq.q5")}>
                 {i18n.t("home.faq.a5.beforeDesktop")}{" "}
                 <a href={language.route("/download")}>{i18n.t("home.faq.a5.desktop")}</a> {i18n.t("home.faq.a5.and")}{" "}
-                <a href={language.route("/docs/cli/#web")}>{i18n.t("home.faq.a5.web")}</a>!
+                <a href="/v2/docs/cli/web/">{i18n.t("home.faq.a5.web")}</a>!
               </Faq>
             </li>
             <li>
               <Faq question={i18n.t("home.faq.q6")}>
                 {i18n.t("download.faq.a5.p1")} {i18n.t("download.faq.a5.p2.beforeZen")}{" "}
-                <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
+                <a href="https://opencode.ai/console/models">{i18n.t("nav.zen")}</a>
                 {i18n.t("download.faq.a5.p2.afterZen")}
               </Faq>
             </li>

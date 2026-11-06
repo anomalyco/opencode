@@ -1,11 +1,17 @@
 import { Component } from "solid-js"
+import { Switch } from "@opencode/ui/switch"
+import { Select } from "@opencode/ui/select"
 import { useLanguage } from "@/runtime/i18n/language"
+import { SettingsList } from "@/settings/list"
+import { useSettings } from "@/settings/model"
+import { SettingsRow } from "@/settings/row"
 import "@/settings/settings.css"
 
-export const experimentalSettingsAvailable = false
+export const experimentalSettingsAvailable = true
 
 export const SettingsExperimental: Component = () => {
   const language = useLanguage()
+  const settings = useSettings()
 
   return (
     <>
@@ -17,6 +23,63 @@ export const SettingsExperimental: Component = () => {
               {language.t("settings.experimental.description")}
             </span>
           </div>
+        </div>
+      </div>
+
+      <div class="settings-tab-body">
+        <div class="settings-section">
+          <SettingsList>
+            <SettingsRow
+              title={language.t("settings.experimental.row.sidebarOrganize.title")}
+              description={language.t("settings.experimental.row.sidebarOrganize.description")}
+            >
+              <Select
+                data-action="settings-sidebar-organize"
+                options={["list", "projects"] as const}
+                current={settings.general.sidebarOrganize()}
+                label={(mode) => language.t(`settings.experimental.sidebarOrganize.${mode}`)}
+                onSelect={(mode) => mode && settings.general.setSidebarOrganize(mode)}
+                placement="bottom-end"
+                gutter={6}
+              />
+            </SettingsRow>
+            <SettingsRow
+              title={language.t("settings.experimental.row.newIcons.title")}
+              description={language.t("settings.experimental.row.newIcons.description")}
+            >
+              <div data-action="settings-new-icons">
+                <Switch
+                  checked={settings.general.newIcons()}
+                  onChange={(checked) => settings.general.setNewIcons(checked)}
+                />
+              </div>
+            </SettingsRow>
+            <SettingsRow
+              title={language.t("settings.experimental.row.foldUserMessages.title")}
+              description={language.t("settings.experimental.row.foldUserMessages.description")}
+            >
+              <div data-action="settings-fold-user-messages">
+                <Switch
+                  checked={settings.general.foldUserMessages()}
+                  onChange={(checked) => settings.general.setFoldUserMessages(checked)}
+                />
+              </div>
+            </SettingsRow>
+            <SettingsRow
+              title={language.t("settings.experimental.row.newQuestionUI.title")}
+              description={language.t("settings.experimental.row.newQuestionUI.description")}
+            >
+              <div data-action="settings-new-question-ui">
+                <Switch
+                  checked={settings.general.newQuestionUI()}
+                  onChange={(checked) => settings.general.setNewQuestionUI(checked)}
+                  hideLabel
+                >
+                  {language.t("settings.experimental.row.newQuestionUI.title")}
+                </Switch>
+              </div>
+            </SettingsRow>
+          </SettingsList>
         </div>
       </div>
     </>

@@ -1,6 +1,6 @@
 export * as Voice from "./voice.js"
 
-import { type AIError } from "@opencode/ai"
+import { type AIError } from "@opencode/ai/effect"
 import {
   Realtime,
   type RealtimeSession,
@@ -11,6 +11,7 @@ import {
 import { RequestExecutor } from "@opencode/ai/route"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Redacted, Schema } from "effect"
+import { Credential } from "./credential.js"
 import { requestExecutor } from "./effect/app-node-platform.js"
 import { Integration } from "./integration.js"
 
@@ -19,10 +20,6 @@ export interface ModelInfo {
   readonly provider: string
   readonly transports: readonly RealtimeTransportType[]
   readonly available: boolean
-  /** The integration whose connection starts its sessions: the provider's for a stored key, or a host's. */
-  readonly integration?: string
-  /** The workspace its sessions bill to, for display: set only when a host that names one runs it. */
-  readonly workspace?: string
 }
 
 export interface Models {
@@ -34,30 +31,6 @@ export interface SessionInput {
   readonly model: string
   readonly session?: RealtimeSession
   readonly transport: RealtimeTransportInput
-}
-
-export interface Session {
-  readonly transport: RealtimeTransport
-  /** A hosted session's ID, which `instruct` names it by. */
-  readonly id?: string
-}
-
-export interface InstructInput {
-  readonly id: string
-  readonly instructions: string
-}
-
-/**
- * An integration that runs sessions for some models on its own account instead of a stored provider key, such as
- * the OpenCode Console's hosted GPT-Live. Its sessions' backend instructions change through it.
- */
-export interface Host {
-  readonly integration: string
-  readonly models: readonly string[]
-  /** The workspace its sessions bill to, for display. */
-  readonly workspace?: string
-  readonly session: (input: SessionInput) => Effect.Effect<Session, Error>
-  readonly instruct: (input: InstructInput) => Effect.Effect<void, Error>
 }
 
 export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>()("Voice.InvalidRequestError", {
@@ -73,11 +46,7 @@ export type Error = InvalidRequestError | UnavailableError
 
 export interface Interface {
   readonly models: () => Effect.Effect<Models>
-  readonly session: (input: SessionInput) => Effect.Effect<Session, Error>
-  /** Replaces the backend instructions of a running session the host started. */
-  readonly instruct: (input: InstructInput) => Effect.Effect<void, Error>
-  /** Sets the host whose models start on it instead of a stored key, or removes it. */
-  readonly host: (host: Host | undefined) => Effect.Effect<void>
+  readonly session: (input: SessionInput) => Effect.Effect<RealtimeTransport, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Voice") {}
@@ -87,35 +56,35 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const executor = yield* RequestExecutor.Service
     const integrations = yield* Integration.Service
-    let hosted: Host | undefined
 
     // Integration lists the active credential first, then newer stored credentials, then non-empty env vars.
-    const findConnection = (provider: string) =>
+    const findConnection = (provider: string, methods: readonly string[] = ["key"]) =>
       integrations
         .get(Integration.ID.make(provider))
-        .pipe(Effect.map((info) => info?.connections.find((item) => item.type === "env" || item.method === "key")))
+        .pipe(
+          Effect.map((info) => info?.connections.find((item) => item.type === "env" || methods.includes(item.method))),
+        )
+
+    // Where an engine's sessions start: its provider with the server's key or, for GPT-Live without an OpenAI key,
+    // OpenCode's hosted GPT-Live with the server's OpenCode Console connection, whose sign-in works as well as a key.
+    const source = Effect.fnUntraced(function* (engine: (typeof Realtime.engines)[number]) {
+      const connection = yield* findConnection(engine.provider)
+      if (connection) return { provider: engine.provider, connection }
+      if (engine.id !== "openai-live") return undefined
+      const hosted = yield* findConnection(openCodeLive.provider, ["key", "oauth"])
+      return hosted && { provider: openCodeLive.provider, connection: hosted }
+    })
 
     const models = Effect.fn("Voice.models")(function* () {
-      const host = hosted
-      const list = yield* Effect.forEach(Realtime.engines, (engine): Effect.Effect<ModelInfo> =>
-        host?.models.includes(engine.model)
-          ? Effect.succeed({
-              model: engine.model,
-              provider: engine.provider,
-              transports: engine.transports,
-              available: true,
-              integration: host.integration,
-              ...(host.workspace === undefined ? {} : { workspace: host.workspace }),
-            })
-          : findConnection(engine.provider).pipe(
-              Effect.map((connection) => ({
-                model: engine.model,
-                provider: engine.provider,
-                transports: engine.transports,
-                available: Boolean(connection),
-                ...(connection ? { integration: engine.provider } : {}),
-              })),
-            ),
+      const list = yield* Effect.forEach(Realtime.engines, (engine) =>
+        source(engine).pipe(
+          Effect.map((found) => ({
+            model: engine.model,
+            provider: found?.provider ?? engine.provider,
+            transports: engine.transports,
+            available: found !== undefined,
+          })),
+        ),
       )
       const first = list.find((item) => item.available)?.model
       return first ? { models: list, default: first } : { models: list }
@@ -124,49 +93,37 @@ export const layer = Layer.effect(
     const session = Effect.fn("Voice.session")(function* (input: SessionInput) {
       const engine = Realtime.engine(input.model)
       if (!engine) return yield* new InvalidRequestError({ message: `Unsupported voice model: ${input.model}` })
-      // A host offers a model on purpose, so it runs the model's sessions even where a stored key could.
-      if (hosted?.models.includes(input.model)) return yield* hosted.session(input)
 
-      const connection = yield* findConnection(engine.provider)
-      const credential = connection
+      const found = yield* source(engine)
+      const credential = found
         ? yield* integrations.connection
-            .resolve(connection)
-            .pipe(
-              Effect.mapError((error) => new UnavailableError({ service: engine.provider, message: error.message })),
-            )
+            .resolve(found.connection)
+            .pipe(Effect.mapError((error) => new UnavailableError({ service: found.provider, message: error.message })))
         : undefined
-      if (credential?.type !== "key")
+      const access = found && credential && sessionAccess(found.provider, credential)
+      if (found === undefined || access === undefined)
         return yield* new UnavailableError({
           service: engine.provider,
-          message: missingKeyMessage[engine.provider],
+          message: engine.id === "openai-live" ? missingLiveKeyMessage : missingKeyMessage[engine.provider],
         })
 
-      const transport = yield* Realtime.connect({ ...input, apiKey: Redacted.make(credential.key) }).pipe(
+      return yield* Realtime.connect({
+        model: input.model,
+        session: input.session,
+        transport: input.transport,
+        ...access,
+      }).pipe(
         Effect.provideService(RequestExecutor.Service, executor),
         Effect.mapError(
           (error: AIError): Error =>
             error.reason._tag === "InvalidRequest" || error.reason._tag === "UnsupportedOperation"
               ? new InvalidRequestError({ message: error.message })
-              : new UnavailableError({ message: error.message, service: engine.provider }),
+              : new UnavailableError({ message: error.message, service: found.provider }),
         ),
       )
-      return { transport }
     })
 
-    const instruct = Effect.fn("Voice.instruct")(function* (input: InstructInput) {
-      if (!hosted) return yield* new InvalidRequestError({ message: "Only hosted voice sessions take instructions" })
-      return yield* hosted.instruct(input)
-    })
-
-    return Service.of({
-      models,
-      session,
-      instruct,
-      host: (host) =>
-        Effect.sync(() => {
-          hosted = host
-        }),
-    })
+    return Service.of({ models, session })
   }),
 )
 
@@ -175,6 +132,28 @@ export const node = makeLocationNode({
   layer,
   deps: [Integration.node, requestExecutor],
 })
+
+/** OpenCode hosts GPT-Live on its OpenAI account, billed to the workspace whose credential starts a session. */
+const openCodeLive = { provider: "opencode", baseURL: "https://opencode.ai/inference/openai/v1" } as const
+
+/**
+ * What a credential starts a session with: a provider's API key on its own API, or an OpenCode Console API key or
+ * account sign-in on OpenCode's hosted GPT-Live, for the workspace the sign-in chose.
+ */
+const sessionAccess = (provider: string, credential: Credential.Value) => {
+  if (provider !== openCodeLive.provider)
+    return credential.type === "key" ? { apiKey: Redacted.make(credential.key) } : undefined
+  if (credential.type === "external") return undefined
+  const orgID = credential.metadata?.orgID
+  return {
+    apiKey: Redacted.make(credential.type === "oauth" ? credential.access : credential.key),
+    baseURL: openCodeLive.baseURL,
+    ...(typeof orgID === "string" ? { headers: { "x-opencode-org-id": orgID } } : {}),
+  }
+}
+
+const missingLiveKeyMessage =
+  "GPT-Live needs an OpenAI API key (a stored key or OPENAI_API_KEY) or an OpenCode Console connection on the server. ChatGPT sign-in can't start voice sessions."
 
 const missingKeyMessage = {
   openai:

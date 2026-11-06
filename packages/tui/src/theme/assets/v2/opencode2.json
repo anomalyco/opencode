@@ -10,12 +10,11 @@
     ],
     "text": {
       "base": "$hue.neutral.100",
-      "muted": "$hue.neutral.200",
-      "faint": "$hue.neutral.300",
+      "muted": "$hue.neutral.300",
       "action": {
         "primary": {
           "base": "$text.base",
-          "$disabled": "$text.faint",
+          "$disabled": "$text.muted",
           "$focused": "$text.base",
           "$selected": "$hue.interactive.400"
         },
@@ -26,7 +25,7 @@
         },
         "destructive": {
           "base": "$hue.neutral.900",
-          "$disabled": "$text.faint"
+          "$disabled": "$text.muted"
         }
       },
       "formfield": {
@@ -34,7 +33,7 @@
         "$hovered": "$hue.interactive.400",
         "$focused": "$hue.interactive.400",
         "$pressed": "$hue.interactive.400",
-        "$disabled": "$text.faint",
+        "$disabled": "$text.muted",
         "$selected": "$hue.interactive.400"
       },
       "feedback": {
@@ -158,6 +157,11 @@
           "secondary": {
             "$hovered": "$background.raised.max"
           }
+        }
+      },
+      "@footer": {
+        "text": {
+          "muted": "$hue.neutral.200"
         }
       }
     }

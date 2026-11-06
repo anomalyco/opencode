@@ -1,6 +1,6 @@
 import type { FileSystem } from "@opencode/core/filesystem"
 import { describe, expect } from "bun:test"
-import { LLMClient, LLMEvent, LanguageModel, type LLMRequest } from "@opencode/ai"
+import { LLMClient, LLMEvent, LanguageModel, type LLMRequest } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Config } from "@opencode/core/config"
 import { Database } from "@opencode/core/database/database"
@@ -38,7 +38,7 @@ const client = Layer.mock(LLMClient.Service)({
   },
   generate: () => Effect.die("unused"),
 })
-const config = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
+const config = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]), snapshot: () => [] })
 const models = Layer.mock(SessionRunnerModel.Service)({
   resolve: () =>
     Effect.succeed(

@@ -22,6 +22,25 @@ const keys: Record<string, string> = {
   stored: "sk-stored",
   XAI_API_KEY: "xai-env-key",
   GEMINI_API_KEY: "gemini-env-key",
+  OPENCODE_API_KEY: "opencode-env-key",
+}
+
+// A ChatGPT sign-in can't start voice sessions, so resolving one fails the test; an OpenCode Console sign-in can.
+const resolveCredential: Integration.Interface["connection"]["resolve"] = (connection) => {
+  if (connection.type === "env") return Effect.succeed(Credential.Key.make({ type: "key", key: keys[connection.name] }))
+  if (connection.id === "chatgpt") return Effect.die("a ChatGPT sign-in was resolved")
+  if (connection.id === "console")
+    return Effect.succeed(
+      Credential.OAuth.make({
+        type: "oauth",
+        methodID: Integration.MethodID.make("device"),
+        access: "console-access",
+        refresh: "console-refresh",
+        expires: 1,
+        metadata: { orgID: "wrk_console" },
+      }),
+    )
+  return Effect.succeed(Credential.Key.make({ type: "key", key: keys[connection.id] }))
 }
 
 const unused = () => Effect.die("unused")
@@ -47,92 +66,118 @@ const mockIntegration = (
     command: { connect: unused, status: unused, cancel: unused },
   })
 
-it.effect("uses the first key or env connection Integration lists and never a ChatGPT sign-in", () =>
-  Effect.gen(function* () {
-    yield* TestClock.setTime(1760000000_000)
-    const auths: string[] = []
-    const call = (model: string, connections: Integration.Info["connections"]) =>
-      Effect.flatMap(Voice.Service, (voice) =>
-        voice.session({
-          model,
-          transport:
-            model.startsWith("grok-") || model.startsWith("gemini-")
-              ? { type: "websocket" }
-              : { type: "webrtc", sdp: "v=0" },
-        }),
-      ).pipe(
-        Effect.provide(
-          Voice.layer.pipe(
-            Layer.provide(
-              Layer.merge(
-                mockIntegration(
-                  () => connections,
-                  (connection) =>
-                    connection.type === "credential" && connection.method === "oauth"
-                      ? Effect.die("a ChatGPT sign-in was resolved")
-                      : Effect.succeed(
-                          Credential.Key.make({
-                            type: "key",
-                            key: keys[connection.type === "env" ? connection.name : connection.id],
-                          }),
-                        ),
-                ),
-                RequestExecutor.layer.pipe(
-                  Layer.provide(
-                    Layer.succeed(
-                      HttpClient.HttpClient,
-                      HttpClient.make((req: HttpClientRequest.HttpClientRequest) =>
-                        Effect.sync(() => {
-                          auths.push(req.headers.authorization ?? req.headers["x-goog-api-key"] ?? "")
-                          return HttpClientResponse.fromWeb(
-                            req,
-                            model.startsWith("gemini-")
-                              ? Response.json({ name: "auth_tokens/ek_gemini" })
-                              : model.startsWith("grok-")
-                                ? Response.json({ value: "ek_xai", expires_at: 1760000999 })
-                                : Response.json({ transport: { sdp: "v=0\r\no=answer\r\n" } }),
-                          )
-                        }),
-                      ),
-                    ),
+// Starts a session with each integration's connections, recording the requests it sends upstream.
+const start = (
+  model: string,
+  connections: Partial<Record<string, Integration.Info["connections"]>>,
+  requests: HttpClientRequest.HttpClientRequest[],
+) =>
+  Effect.flatMap(Voice.Service, (voice) =>
+    voice.session({
+      model,
+      transport:
+        model.startsWith("grok-") || model.startsWith("gemini-")
+          ? { type: "websocket" }
+          : { type: "webrtc", sdp: "v=0" },
+    }),
+  ).pipe(
+    Effect.provide(
+      Voice.layer.pipe(
+        Layer.provide(
+          Layer.merge(
+            mockIntegration((id) => connections[id] ?? [], resolveCredential),
+            RequestExecutor.layer.pipe(
+              Layer.provide(
+                Layer.succeed(
+                  HttpClient.HttpClient,
+                  HttpClient.make((req: HttpClientRequest.HttpClientRequest) =>
+                    Effect.sync(() => {
+                      requests.push(req)
+                      return HttpClientResponse.fromWeb(
+                        req,
+                        model.startsWith("gemini-")
+                          ? Response.json({ name: "auth_tokens/ek_gemini" })
+                          : model.startsWith("grok-")
+                            ? Response.json({ value: "ek_xai", expires_at: 1760000999 })
+                            : Response.json({ transport: { sdp: "v=0\r\no=answer\r\n" } }),
+                      )
+                    }),
                   ),
                 ),
               ),
             ),
           ),
         ),
-      )
+      ),
+    ),
+  )
 
-    yield* call("gpt-live-1", [credential("active", "key"), credential("stored", "key")])
-    yield* call("gpt-live-1", [credential("chatgpt", "oauth"), credential("stored", "key")])
-    const grok = yield* call("grok-voice-3.0", [{ type: "env", name: "XAI_API_KEY" }])
-    const gemini = yield* call("gemini-3.8-live", [{ type: "env", name: "GEMINI_API_KEY" }])
-    expect(auths).toEqual(["Bearer sk-active", "Bearer sk-stored", "Bearer xai-env-key", "gemini-env-key"])
+it.effect("uses the first key or env connection Integration lists and never a ChatGPT sign-in", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(1760000000_000)
+    const requests: HttpClientRequest.HttpClientRequest[] = []
+    const call = (model: string, connections: Partial<Record<string, Integration.Info["connections"]>>) =>
+      start(model, connections, requests)
+
+    yield* call("gpt-live-1", { openai: [credential("active", "key"), credential("stored", "key")] })
+    yield* call("gpt-live-1", { openai: [credential("chatgpt", "oauth"), credential("stored", "key")] })
+    const grok = yield* call("grok-voice-3.0", { xai: [{ type: "env", name: "XAI_API_KEY" }] })
+    const gemini = yield* call("gemini-3.8-live", { google: [{ type: "env", name: "GEMINI_API_KEY" }] })
+    expect(requests.map((req) => req.headers.authorization ?? req.headers["x-goog-api-key"])).toEqual([
+      "Bearer sk-active",
+      "Bearer sk-stored",
+      "Bearer xai-env-key",
+      "gemini-env-key",
+    ])
     expect(grok).toEqual({
-      transport: {
-        type: "websocket",
-        url: "wss://api.x.ai/v1/realtime?model=grok-voice-3.0",
-        token: "ek_xai",
-        expiresAt: 1760000999,
-      },
+      type: "websocket",
+      url: "wss://api.x.ai/v1/realtime?model=grok-voice-3.0",
+      token: "ek_xai",
+      expiresAt: 1760000999,
     })
     expect(gemini).toEqual({
-      transport: {
-        type: "websocket",
-        url: "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained",
-        token: "auth_tokens/ek_gemini",
-        expiresAt: 1760000060,
-      },
+      type: "websocket",
+      url: "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained",
+      token: "auth_tokens/ek_gemini",
+      expiresAt: 1760000060,
     })
 
-    const signInOnly = yield* call("gpt-live-1", [credential("chatgpt", "oauth")]).pipe(Effect.flip)
+    const signInOnly = yield* call("gpt-live-1", { openai: [credential("chatgpt", "oauth")] }).pipe(Effect.flip)
     expect(signInOnly._tag).toBe("Voice.UnavailableError")
     expect(signInOnly.message).toContain("OpenAI API key")
 
-    const missingGoogle = yield* call("gemini-3.8-live", []).pipe(Effect.flip)
+    const missingGoogle = yield* call("gemini-3.8-live", {}).pipe(Effect.flip)
     expect(missingGoogle).toMatchObject({ _tag: "Voice.UnavailableError", service: "google" })
     expect(missingGoogle.message).toContain("GEMINI_API_KEY")
   }),
+)
+
+it.effect(
+  "starts GPT-Live on OpenCode's hosted endpoint with an OpenCode Console connection only without an OpenAI key",
+  () =>
+    Effect.gen(function* () {
+      const requests: HttpClientRequest.HttpClientRequest[] = []
+      const opencode = { opencode: [credential("console", "oauth")] }
+
+      yield* start("gpt-live-1", { openai: [credential("chatgpt", "oauth")], ...opencode }, requests)
+      yield* start("gpt-live-1", { opencode: [{ type: "env", name: "OPENCODE_API_KEY" }] }, requests)
+      yield* start("gpt-live-1", { openai: [credential("active", "key")], ...opencode }, requests)
+      expect(
+        requests.map((req): (string | undefined)[] => [
+          req.url,
+          req.headers.authorization,
+          req.headers["x-opencode-org-id"],
+        ]),
+      ).toEqual([
+        ["https://opencode.ai/inference/openai/v1/live/sessions", "Bearer console-access", "wrk_console"],
+        ["https://opencode.ai/inference/openai/v1/live/sessions", "Bearer opencode-env-key", undefined],
+        ["https://api.openai.com/v1/live/sessions", "Bearer sk-active", undefined],
+      ])
+
+      const realtime = yield* start("gpt-realtime-2.1", opencode, requests).pipe(Effect.flip)
+      expect(realtime).toMatchObject({ _tag: "Voice.UnavailableError", service: "openai" })
+      expect(requests).toHaveLength(3)
+    }),
 )
 
 it.effect("lists voice models with availability and default without resolving credentials", () =>
@@ -161,16 +206,22 @@ it.effect("lists voice models with availability and default without resolving cr
       models: [
         { model: "gpt-live-1", provider: "openai", transports: ["webrtc"], available: false },
         { model: "gpt-realtime-2.1", provider: "openai", transports: ["webrtc", "websocket"], available: false },
-        { model: "grok-voice-3.0", provider: "xai", transports: ["websocket"], available: true, integration: "xai" },
-        {
-          model: "gemini-3.8-live",
-          provider: "google",
-          transports: ["websocket"],
-          available: true,
-          integration: "google",
-        },
+        { model: "grok-voice-3.0", provider: "xai", transports: ["websocket"], available: true },
+        { model: "gemini-3.8-live", provider: "google", transports: ["websocket"], available: true },
       ],
       default: "grok-voice-3.0",
+    })
+
+    expect(
+      yield* list({ openai: [credential("chatgpt", "oauth")], opencode: [credential("console", "oauth")] }),
+    ).toEqual({
+      models: [
+        { model: "gpt-live-1", provider: "opencode", transports: ["webrtc"], available: true },
+        { model: "gpt-realtime-2.1", provider: "openai", transports: ["webrtc", "websocket"], available: false },
+        { model: "grok-voice-3.0", provider: "xai", transports: ["websocket"], available: false },
+        { model: "gemini-3.8-live", provider: "google", transports: ["websocket"], available: false },
+      ],
+      default: "gpt-live-1",
     })
 
     const none = yield* list({ openai: [credential("chatgpt", "oauth")] })
@@ -185,85 +236,3 @@ it.effect("lists voice models with availability and default without resolving cr
     expect("default" in none).toBe(false)
   }),
 )
-
-// An OpenAI key the server could use instead, and the requests that reach OpenAI with it.
-const withStoredKey = (requests: string[]) =>
-  Voice.layer.pipe(
-    Layer.provide(
-      Layer.merge(
-        mockIntegration(
-          (id) => (id === "openai" ? [credential("stored", "key")] : []),
-          () => Effect.succeed(Credential.Key.make({ type: "key", key: "sk-stored" })),
-        ),
-        RequestExecutor.layer.pipe(
-          Layer.provide(
-            Layer.succeed(
-              HttpClient.HttpClient,
-              HttpClient.make((req: HttpClientRequest.HttpClientRequest) =>
-                Effect.sync(() => {
-                  requests.push(req.headers.authorization ?? "")
-                  return HttpClientResponse.fromWeb(req, Response.json({ transport: { sdp: "answer:openai" } }))
-                }),
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
-  )
-
-const hostedLive = (instructed: Voice.InstructInput[]): Voice.Host => ({
-  integration: "opencode",
-  models: ["gpt-live-1"],
-  workspace: "Anomaly",
-  session: (input) =>
-    Effect.succeed({
-      transport: { type: "webrtc", sdp: input.transport.type === "webrtc" ? `answer:hosted:${input.transport.sdp}` : "" },
-      id: "sess_hosted",
-    }),
-  instruct: (input) =>
-    Effect.sync(() => {
-      instructed.push(input)
-    }),
-})
-
-const offer = { model: "gpt-live-1", transport: { type: "webrtc", sdp: "v=0" } } as const
-
-it.effect("starts a host's models and relays their instructions on it, even beside a stored key", () => {
-  const requests: string[] = []
-  return Effect.gen(function* () {
-    const voice = yield* Voice.Service
-    const instructed: Voice.InstructInput[] = []
-    yield* voice.host(hostedLive(instructed))
-
-    expect(yield* voice.session(offer)).toEqual({
-      transport: { type: "webrtc", sdp: "answer:hosted:v=0" },
-      id: "sess_hosted",
-    })
-    expect((yield* voice.models()).models.find((item) => item.model === "gpt-live-1")).toEqual({
-      model: "gpt-live-1",
-      provider: "openai",
-      transports: ["webrtc"],
-      available: true,
-      integration: "opencode",
-      workspace: "Anomaly",
-    })
-    yield* voice.instruct({ id: "sess_hosted", instructions: "The screen shows ses_1." })
-    expect(instructed).toEqual([{ id: "sess_hosted", instructions: "The screen shows ses_1." }])
-    expect(requests).toEqual([])
-  }).pipe(Effect.provide(withStoredKey(requests)))
-})
-
-it.effect("goes back to the stored key once the host is removed, and refuses instructions", () => {
-  const requests: string[] = []
-  return Effect.gen(function* () {
-    const voice = yield* Voice.Service
-    yield* voice.host(hostedLive([]))
-    yield* voice.host(undefined)
-
-    expect(yield* voice.session(offer)).toEqual({ transport: { type: "webrtc", sdp: "answer:openai" } })
-    expect(requests).toEqual(["Bearer sk-stored"])
-    const refused = yield* voice.instruct({ id: "sess_hosted", instructions: "Hello" }).pipe(Effect.flip)
-    expect(refused._tag).toBe("Voice.InvalidRequestError")
-  }).pipe(Effect.provide(withStoredKey(requests)))
-})

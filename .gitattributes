@@ -1,5 +1,13 @@
 packages/core/migration/**/snapshot.json linguist-generated
 packages/core/src/database/migration.gen.ts linguist-generated
 packages/core/src/models-dev/snapshot.txt linguist-generated
+packages/core/src/database/schema.gen.ts linguist-generated
+packages/desktop/src/main/storage/migration.gen.ts linguist-generated
+packages/protocol/openapi.json linguist-generated
+packages/client/src/promise/generated/** linguist-generated
+packages/client/src/effect/generated/** linguist-generated
+packages/client/src/effect/api/** linguist-generated
 packages/core/src/**/*.txt text eol=lf
 packages/httpapi-codegen/test/generated/*.ts text eol=lf
+# The site tests compare source text and humans.txt byte for byte, so Windows checkouts keep LF.
+services/site/** text=auto eol=lf

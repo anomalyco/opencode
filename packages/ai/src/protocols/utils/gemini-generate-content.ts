@@ -1,8 +1,16 @@
 import { Effect, Schema, type Stream } from "effect"
-import type { Media } from "../../media.js"
+import type { Tool } from "@opencode/schema/tool"
+import { Media } from "../../media.js"
 import { Framing } from "../../route/framing.js"
 import type { MediaProtocol } from "../../route/media-protocol.js"
-import { AIError, ContentPolicyError, ProviderID, type MediaUsage, type ProviderMetadata } from "../../schema/index.js"
+import {
+  AIError,
+  ContentPolicyError,
+  ProviderID,
+  tokenUsage,
+  type MediaUsage,
+  type ProviderMetadata,
+} from "../../schema/index.js"
 import { ProviderShared } from "../shared.js"
 import { MediaInput } from "./media-input.js"
 
@@ -98,28 +106,15 @@ export const withheld = (name: string, chunk: Chunk, frame: string) => {
   })
 }
 
-/** Any finish reason other than `STOP` means the output may be cut short, so it is surfaced rather than dropped. */
-export const notices = (name: string, state: Metadata): ReadonlyArray<Media.Notice> | undefined =>
-  state.finishReason === undefined || state.finishReason === "STOP"
-    ? undefined
-    : [
-        {
-          type: contentFiltered(state.finishReason) ? "filtered" : "other",
-          message: `${name} finished with ${state.finishReason}`,
-          providerMetadata: { google: { finishReason: state.finishReason } },
-        },
-      ]
-
 export const usage = (usage: UsageMetadata | undefined): MediaUsage | undefined =>
   usage === undefined
     ? undefined
-    : {
-        type: "tokens",
+    : tokenUsage({
         input: usage.promptTokenCount,
         output: usage.candidatesTokenCount,
         total: ProviderShared.totalTokens(usage.promptTokenCount, usage.candidatesTokenCount, usage.totalTokenCount),
         details: { google: usage },
-      }
+      })
 
 export const providerMetadata = (state: Metadata): ProviderMetadata => ({
   google: { finishReason: state.finishReason, modelVersion: state.modelVersion, responseId: state.responseId },
@@ -132,7 +127,11 @@ export const path = (model: string, mode: MediaProtocol.Mode) =>
 export const frames = (bytes: Stream.Stream<Uint8Array, AIError>, mode: MediaProtocol.Mode) =>
   mode === "stream" ? Framing.sse.frame(bytes) : Framing.document.frame(bytes)
 
-// Gemini does not fetch public URLs; inline payloads and Gemini Files references are the accepted inputs.
+export const toolMedia = (item: Tool.FileContent) =>
+  item.mime.startsWith("video/") && item.uri.startsWith("gs://")
+    ? Media.ref(PROVIDER, item.uri, item.mime)
+    : ProviderShared.toolFileMedia(item).media
+
 export const mediaPart = (
   route: string,
   asset: Media.Asset,
@@ -141,7 +140,10 @@ export const mediaPart = (
   | { readonly inlineData: { readonly mimeType: string; readonly data: string } },
   AIError
 > => {
-  const fileUri = MediaInput.refID(asset, PROVIDER)
+  const fileUri =
+    asset.kind === "video" && asset.source.type === "url" && /^https?:\/\//i.test(asset.source.url)
+      ? asset.source.url
+      : MediaInput.refID(asset, PROVIDER)
   if (fileUri !== undefined) return Effect.succeed({ fileData: { mimeType: asset.mediaType, fileUri } })
   return ProviderShared.requireInlineMedia(route, asset).pipe(
     Effect.map((media) => ({ inlineData: { mimeType: media.mime, data: media.base64 } })),

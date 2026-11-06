@@ -5,11 +5,12 @@ import { Tabs } from "@opencode/ui/tabs"
 import { createEffect, ErrorBoundary, For, on, Show, type ComponentProps, type JSX } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ErrorPage } from "@/shell/errors/error"
+import { CollapsedSidebarToggleSpace } from "@/shell/sidebar-toggle"
 import { useSettingsSurface } from "./surface"
 import { SettingsSearch } from "./search"
 import "./search.css"
 
-export type SettingsNavItem = {
+type SettingsNavItem = {
   value: string
   label: string
   icon: ComponentProps<typeof Icon>["name"]
@@ -37,12 +38,11 @@ export function SettingsNavigation(props: {
   const language = useLanguage()
 
   const back = () => {
-    if (!searchable() && surface.search.back()) return
+    if (surface.search.canReturn()) return surface.search.back()
     props.onBack()
   }
 
-  const backLabel = () =>
-    !searchable() && surface.search.state.selected ? language.t("settings.backToSettings") : props.backLabel
+  const backLabel = () => (surface.search.canReturn() ? language.t("settings.backToSettings") : props.backLabel)
 
   const current = () => props.groups.flatMap((group) => group.items).find((item) => item.value === props.value)
 
@@ -51,13 +51,31 @@ export function SettingsNavigation(props: {
     props.onChange(value)
   }
 
+  let root: HTMLDivElement | undefined
+
+  // In the wide layout every page shares this scroller, so a newly opened page starts at its top. The scroll offset is
+  // DOM state, and a page opens from tabs, search, links between pages and history, so this follows the selected page
+  // instead of one event handler.
+  createEffect(
+    on(
+      () => props.value,
+      () => root?.scrollTo({ top: 0 }),
+      { defer: true },
+    ),
+  )
+
   return (
-    <Tabs orientation="vertical" variant="settings" value={props.value} onChange={change} class="settings">
+    <Tabs ref={root} orientation="vertical" variant="settings" value={props.value} onChange={change} class="settings">
       <div class="settings-mobile-nav">
-        <button type="button" class="settings-back" onClick={back}>
-          <Icon name="arrow-left" size="small" class="settings-back-icon" />
-          <span>{backLabel()}</span>
-        </button>
+        <div class="flex min-w-0 items-center">
+          {/* Starts after the shell's 8px inset and this row's 16px padding. Its 32px height makes the row 48px tall,
+              like the session header, so the back button centers on the collapsed sidebar toggle's line. */}
+          <CollapsedSidebarToggleSpace start={24} class="h-8" />
+          <button type="button" class="settings-back" onClick={back}>
+            <Icon name="arrow-left" size="small" class="settings-back-icon" />
+            <span>{backLabel()}</span>
+          </button>
+        </div>
         <div class="settings-mobile-actions">
           {props.mobileAction}
           <Menu placement="bottom-end" gutter={8}>
@@ -109,8 +127,8 @@ export function SettingsNavigation(props: {
           <Show when={searchable()}>
             <SettingsSearch />
           </Show>
-          <Show when={!searchable() || !surface.search.state.query.trim()}>
-            <Tabs.List class="settings-nav-groups">
+          <Show when={!searchable() || !surface.search.active()}>
+            <Tabs.List class="settings-nav-groups" data-scrollable>
               <For each={props.groups}>
                 {(group) => (
                   <div class="settings-nav-group">

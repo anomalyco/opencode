@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "Lülita silumisriba",
+  providerAriaLabel: "Pakkuja jõudluse diagnostika",
+  na: "n/a",
+  "duration.label": "TIME",
+  "duration.tip": "Aeg viimase käigu alustanud viibast kuni vastuse valmimiseni.",
+  "tps.label": "TPS",
+  "tps.tip": "Väljund- ja arutlusmärgid sekundis viimase käigu mudelipäringute lõikes, ilma tööriistade ajata.",
+  "focus.label": "FOCUS",
+  "focus.tip": "Sundige fookusstiilid kõigile interaktiivsetele elementidele",
+  "focus.on": "SEES",
+  "focus.off": "VÄLJAS",
+  "direction.label": "DIR",
+  "direction.tip": "Sunnige kogu rakenduse paigutuse suund valitud keelt muutmata",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

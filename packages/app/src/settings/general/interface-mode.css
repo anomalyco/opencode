@@ -1,0 +1,196 @@
+[data-component="interface-mode"] {
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+[data-slot="interface-mode-option"] {
+  --preview-fill: var(--v2-background-bg-layer-02);
+  --preview-ink: var(--v2-background-bg-layer-03);
+  --preview-ink-strong: var(--v2-background-bg-layer-04);
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  /* A fixed size keeps the row from resizing when the chosen layout changes the panel width. */
+  width: 120px;
+  min-width: 0;
+  flex-direction: column;
+  box-sizing: border-box;
+  border: 1px solid var(--v2-border-border-base);
+  border-radius: 8px;
+  background-color: var(--v2-background-bg-layer-02);
+  cursor: pointer;
+  transition: border-color 120ms ease;
+
+  &:hover {
+    border-color: var(--v2-border-border-strong);
+  }
+
+  &[data-checked] {
+    --preview-ink-strong: color-mix(in srgb, var(--v2-background-bg-accent) 70%, transparent);
+    border-color: var(--v2-border-border-focus);
+
+    /* An inset shadow on the card paints under the opaque name row, so the inner ring sits on top instead. */
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 7px;
+      box-shadow: inset 0 0 0 1px var(--v2-border-border-focus);
+      pointer-events: none;
+    }
+  }
+
+  &:has(input:focus-visible) {
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: 2px;
+  }
+
+  input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  :where(span, i) {
+    display: block;
+    flex-shrink: 0;
+  }
+}
+
+[data-slot="interface-mode-sketch"] {
+  display: flex;
+  overflow: hidden;
+  height: 52px;
+  margin: 10px 10px 0;
+  border: 0.5px solid var(--v2-border-border-base);
+  border-bottom: 0;
+  border-radius: 4px 4px 0 0;
+  background-color: var(--v2-background-bg-base);
+
+  &[data-mode="top"] {
+    flex-direction: column;
+  }
+
+  [data-slot="preview-strip"] {
+    display: flex;
+    gap: 3px;
+    padding: 4px 5px;
+    border-bottom: 0.5px solid var(--v2-border-border-base);
+    background-color: var(--v2-overlay-simple-overlay-pressed);
+
+    [data-slot="preview-tab"] {
+      width: 18px;
+    }
+  }
+
+  [data-slot="preview-rail"] {
+    display: flex;
+    width: 28px;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px 5px;
+    border-inline-end: 0.5px solid var(--v2-border-border-base);
+    background-color: var(--v2-overlay-simple-overlay-pressed);
+  }
+
+  [data-slot="preview-tab"] {
+    height: 5px;
+    border-radius: 2px;
+    background-color: color-mix(in srgb, var(--preview-ink-strong) 45%, transparent);
+
+    &[data-active] {
+      background-color: var(--preview-ink-strong);
+    }
+  }
+
+  &[data-mode="inbox"] [data-slot="preview-tab"] {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background-color: transparent;
+
+    &::after {
+      content: "";
+      height: 3px;
+      flex: 1;
+      border-radius: 1.5px;
+      background-color: color-mix(in srgb, var(--preview-ink-strong) 45%, transparent);
+    }
+
+    &[data-active]::after {
+      background-color: var(--preview-ink-strong);
+    }
+  }
+
+  i[data-status] {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+
+    &[data-status="approval"] {
+      background-color: var(--v2-state-fg-warning);
+    }
+
+    &[data-status="done"] {
+      background-color: var(--v2-state-fg-success);
+    }
+
+    &[data-status="working"] {
+      background-color: var(--v2-state-fg-info);
+    }
+  }
+
+  [data-slot="preview-page"] {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px;
+  }
+
+  [data-slot="preview-line"] {
+    width: 80%;
+    height: 3px;
+    border-radius: 1.5px;
+    background-color: var(--preview-ink);
+
+    & + [data-slot="preview-line"] {
+      width: 56%;
+    }
+  }
+
+  [data-slot="preview-composer"] {
+    height: 8px;
+    margin-top: auto;
+    border-radius: 3px;
+    background-color: var(--preview-fill);
+    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
+  }
+}
+
+[data-slot="interface-mode-name"] {
+  padding: 6px 10px;
+  border-top: 0.5px solid var(--v2-border-border-base);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-compact);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--v2-text-text-muted);
+  background-color: var(--v2-background-bg-base);
+  transition: color 120ms ease;
+
+  [data-slot="interface-mode-option"]:hover &,
+  [data-checked] & {
+    color: var(--v2-text-text-base);
+  }
+}
