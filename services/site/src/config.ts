@@ -27,6 +27,6 @@ export const config = {
     contributors: "1,000+",
     contributorsCompact: "1K+",
     commits: "20,000",
-    monthlyUsers: "16M",
+    monthlyUsers: "22M",
   },
 } as const

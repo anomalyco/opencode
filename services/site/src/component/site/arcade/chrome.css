@@ -13,6 +13,8 @@
   --text: light-dark(hsl(0, 0%, 32%), hsl(0, 0%, 72%));
   --text-weak: light-dark(hsl(0, 0%, 40%), hsl(0, 0%, 56%));
   --text-weaker: light-dark(hsl(0, 0%, 72%), hsl(0, 0%, 32%));
+  --text-muted: light-dark(hsl(0, 0%, 45%), hsl(0, 0%, 49%));
+  --fs-large: 18px;
   --border: light-dark(hsl(0, 0%, 88%), hsl(0, 0%, 18%));
   --link-dark: #4f8bff;
   --link: light-dark(#3b5cf6, var(--link-dark));
@@ -42,9 +44,11 @@
   --bracket-bearing: calc(var(--mono-size) * 0.154);
   /* Nav numbers "1": the ink of "[1]", which the logo's box spans. */
   --bracket-ink: calc(var(--mono-size) * 1.492);
-  /* Settings › Logo size 20×25 (the default): the mark is 20×25, its row starts at --edge, and the
+  /* Settings › Logo size 20×25 (the default): the mark is 20×25, centred in the 4:5 box that spans
+     "[1]"'s ink as on the site (site.css › --logo-inset), so it sits at (25, 25) on every page; the
      nav follows 8px further below it than the row sits below the top. */
-  --top: var(--edge);
+  --logo-inset: round(calc((var(--bracket-ink) - 20px) / 2), 1px);
+  --top: calc(var(--edge) + var(--logo-inset));
   --logo-height: 25px;
   --logo-gap: calc(var(--edge) + 8px);
   /* Where the logo mark and the nav's ink start: the sound switch sits this far from the left and
@@ -55,6 +59,8 @@
 
   @media (max-width: 60rem) {
     --arcade-inset: calc(var(--edge) + 2px);
+    /* The site's mobile type scale (site.css), for the menu sheet. */
+    --fs-large: 19px;
   }
 
   [data-slot="title"] {
@@ -136,7 +142,7 @@
       display: block;
       width: 20px;
       height: 25px;
-      margin-inline-start: round(up, var(--bracket-bearing), 1px / 64);
+      margin-inline-start: calc(round(up, var(--bracket-bearing), 1px / 64) + var(--logo-inset));
     }
 
     path[data-slot="inner"] {
@@ -153,7 +159,7 @@
     }
   }
 
-  nav {
+  [data-slot="sidebar"] nav {
     font-size: var(--mono-size);
     line-height: 20px;
 
@@ -233,8 +239,105 @@
       margin: 3px 2px 2px;
     }
 
-    nav {
+    [data-slot="sidebar"] nav {
       display: none;
+    }
+
+    /* Over the phone bar, which takes the page colour while its menu is open. */
+    [data-slot="sidebar"] {
+      z-index: 13;
+    }
+  }
+}
+
+/* Small screens: the site's top-bar GitHub mark and menu button (github-link.css, phone-menu.css) in
+   the 56px bar the logo is centred in, at the site's sizes and spacing, over the scene. The menu
+   sheet covers the scene below the bar, and the bar takes the page colour with it (at once on open,
+   with the sheet's 120ms fade on close), as on the site. `html` and the doubled scope outrank
+   site.css's own [data-site] rules once the Settings panel loads it. */
+html [data-component="arcade-chrome"] [data-site][data-slot="phone-bar"] {
+  display: none;
+}
+
+@media (max-width: 60rem) {
+  html [data-component="arcade-chrome"] [data-site][data-slot="phone-bar"] {
+    position: fixed;
+    top: 0;
+    inset-inline: 0;
+    z-index: 12;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    height: calc(var(--topbar-height) + env(safe-area-inset-top, 0px));
+    min-height: 0;
+    padding: env(safe-area-inset-top, 0px) calc(var(--edge) + env(safe-area-inset-right, 0px)) 0
+      calc(var(--edge) + env(safe-area-inset-left, 0px));
+    background: none;
+    pointer-events: none;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: var(--bg);
+      opacity: 0;
+      transition: opacity 120ms var(--ease-out);
+    }
+
+    &:has([data-component="menu-toggle"][aria-expanded="true"])::before {
+      opacity: 1;
+      transition: none;
+    }
+
+    > :is([data-component="github-link"], [data-component="menu-toggle"]),
+    [data-component="site-menu-sheet"][data-open] {
+      pointer-events: auto;
+    }
+
+    [data-component="github-link"] {
+      margin-inline-end: 0.5rem;
+
+      &:focus-visible {
+        outline: 2px solid var(--link);
+        outline-offset: -2px;
+      }
+    }
+
+    [data-component="menu-toggle"] {
+      padding: 0;
+      font: inherit;
+      color: inherit;
+      background: none;
+      border: 0;
+      cursor: pointer;
+
+      &:focus-visible {
+        outline: 2px solid var(--link);
+        outline-offset: -2px;
+      }
+    }
+
+    a {
+      text-decoration: none;
+    }
+
+    ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    /* The site's touch targets (tap-targets.css): a 44px GitHub link, and the same press. */
+    @media (pointer: coarse) {
+      --github-size: 2.75rem;
+
+      > :is([data-component="github-link"], [data-component="menu-toggle"]) {
+        transition: transform 160ms var(--ease-out);
+
+        &:active {
+          transform: scale(0.94);
+        }
+      }
     }
   }
 }

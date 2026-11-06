@@ -93,6 +93,7 @@ To add a rule, add one line under its group. Mark a rule that is still being dec
 - Make tap targets at least 44px on coarse pointers (`tap-targets.css`).
 - Close menus on Escape, an outside click and a choice, and return focus to the trigger. → [Language picker](/dev/components#language-picker)
 - Test platform UI with the device preview's `_device` parameter, not a narrow window. → [ProductAction](/dev/components#product-action)
+- On phones the 404 arcade centres the cabinet and has no Insert coin or Back button: a tap on the coin inserts it, and the site's own GitHub mark, menu button and sheet (`phone-menu.tsx`) sit in the top bar beside the logo.
 
 ## Motion
 
