@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import path from "node:path"
 import { parseProgram } from "../../src/vm/runtime/execute.js"
 import { Interpreter } from "../../src/vm/runtime/interpreter.js"
 import { createBuiltins } from "../../src/vm/runtime/intrinsics.js"
@@ -280,8 +281,7 @@ describe("heap as data", () => {
 
 describe("prelude", () => {
   test("a run saved and restored while prelude built-ins run continues in their frames", async () => {
-    const child = Bun.spawn(["bun", `${import.meta.dir}/../fixtures/prelude-roundtrip.ts`], {
-      env: { ...process.env, CODEMODE_ROUNDTRIP: "1" },
+    const child = Bun.spawn(["bun", path.join(import.meta.dir, "../fixtures/prelude-roundtrip.ts")], {
       stdout: "pipe",
       stderr: "inherit",
     })

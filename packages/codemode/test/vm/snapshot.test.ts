@@ -5,7 +5,7 @@ import { type Snapshot, SnapshotError } from "../../src/vm/snapshot/snapshot.js"
 import { ToolRuntime } from "../../src/tool-runtime.js"
 import { hashOf } from "../../src/vm/code.js"
 import { compileSource } from "../../src/vm/compiler/compile.js"
-import { parseVmSource, runProgram } from "./run.js"
+import { moduleUrl, parseVmSource, runProgram } from "./run.js"
 import { buildId } from "../../src/vm/snapshot.js"
 
 // The VM's snapshots: a run saved and restored into a fresh runtime anywhere it slices goes on as if it never stopped.
@@ -247,13 +247,13 @@ describe("determinism", () => {
     const codes = Object.values(programs)
     const local = { hashes: codes.map((code) => hashOf(compileSource(parse(code)))), build: (runtime(), buildId()) }
     const script = `
-      import { hashOf } from "${import.meta.dir}/../../src/vm/code.js"
-      import { compileSource } from "${import.meta.dir}/../../src/vm/compiler/compile.js"
-      import { parseVmSource } from "${import.meta.dir}/run.js"
-      import { buildId } from "${import.meta.dir}/../../src/vm/snapshot.js"
-      import { createBuiltins } from "${import.meta.dir}/../../src/vm/runtime/intrinsics.js"
-      import { Interpreter } from "${import.meta.dir}/../../src/vm/runtime/interpreter.js"
-      import { ToolRuntime } from "${import.meta.dir}/../../src/tool-runtime.js"
+      import { hashOf } from ${moduleUrl("../../src/vm/code.js")}
+      import { compileSource } from ${moduleUrl("../../src/vm/compiler/compile.js")}
+      import { parseVmSource } from ${moduleUrl("run.js")}
+      import { buildId } from ${moduleUrl("../../src/vm/snapshot.js")}
+      import { createBuiltins } from ${moduleUrl("../../src/vm/runtime/intrinsics.js")}
+      import { Interpreter } from ${moduleUrl("../../src/vm/runtime/interpreter.js")}
+      import { ToolRuntime } from ${moduleUrl("../../src/tool-runtime.js")}
       new Interpreter({ tools: ToolRuntime.make(ToolRuntime.prepare({}), undefined, {}), builtins: createBuiltins() })
       const codes = ${JSON.stringify(codes)}
       console.log(JSON.stringify({ hashes: codes.map((code) => hashOf(compileSource(parseVmSource(code).source))), build: buildId() }))`

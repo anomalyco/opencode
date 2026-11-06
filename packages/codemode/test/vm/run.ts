@@ -1,3 +1,5 @@
+import path from "node:path"
+import { pathToFileURL } from "node:url"
 import { parse, type Program } from "acorn"
 import type { DataValue, Diagnostic, Result } from "../../src/codemode.js"
 import { normalizeError } from "../../src/vm/runtime/errors.js"
@@ -9,6 +11,10 @@ import { Interruption } from "../../src/vm/runtime/signals.js"
 import { Source } from "../../src/vm/runtime/source.js"
 import type { ToolRuntime } from "../../src/tool-runtime.js"
 import type { Snapshot } from "../../src/vm/snapshot/snapshot.js"
+
+/** A quoted `file:` URL for a module relative to `test/vm`, to import from a script run with `bun -e` on any platform. */
+export const moduleUrl = (relative: string) =>
+  JSON.stringify(pathToFileURL(path.join(import.meta.dir, relative)).href)
 
 const emptyTools = {
   calls: [],

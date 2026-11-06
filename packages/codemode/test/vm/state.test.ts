@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Glob } from "bun"
+import path from "node:path"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../lib/index.js"
 import { parseProgram } from "../../src/vm/runtime/execute.js"
@@ -382,12 +383,14 @@ describe("vm", () => {
   })
 
   test("the VM does not import Effect", async () => {
-    const files = (await Array.fromAsync(new Glob("src/vm/**/*.ts").scan({ cwd: `${import.meta.dir}/../..` }))).filter(
-      (file) => !file.startsWith("src/vm/runtime/"),
+    const root = path.join(import.meta.dir, "../..")
+    // Glob paths use the platform's separator.
+    const files = (await Array.fromAsync(new Glob("src/vm/**/*.ts").scan({ cwd: root }))).filter(
+      (file) => !file.split(path.sep).join("/").startsWith("src/vm/runtime/"),
     )
     expect(files.length).toBeGreaterThan(0)
     for (const file of files) {
-      expect(await Bun.file(`${import.meta.dir}/../../${file}`).text()).not.toMatch(/from "effect"/)
+      expect(await Bun.file(path.join(root, file)).text()).not.toMatch(/from "effect"/)
     }
   })
 })

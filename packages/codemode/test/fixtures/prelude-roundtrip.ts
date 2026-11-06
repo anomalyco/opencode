@@ -1,9 +1,12 @@
-// Run with CODEMODE_ROUNDTRIP=1: runs prelude built-ins and prints the result and how many round trips were taken
-// while a prelude frame was on the stack.
+// Runs prelude built-ins in the round-trip mode and prints the result and how many round trips were taken while a
+// prelude frame was on the stack.
 import { Effect } from "effect"
 import { CodeMode } from "../../src/index.js"
 import { CodeFlags } from "../../src/vm/opcodes.js"
+import { setRoundTrip } from "../../src/vm/runtime/execute.js"
 import { Vm } from "../../src/vm/vm.js"
+
+setRoundTrip(true)
 
 let saved = 0
 const capture = Vm.prototype.capture
