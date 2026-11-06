@@ -1,4 +1,4 @@
-import { domain, zoneID } from "./stage"
+import { domain } from "./stage"
 
 const GITHUB_APP_ID = new sst.Secret("GITHUB_APP_ID")
 const GITHUB_APP_PRIVATE_KEY = new sst.Secret("GITHUB_APP_PRIVATE_KEY")
@@ -17,7 +17,9 @@ export const api = new sst.cloudflare.Worker("Api", {
   },
 })
 
-const web = new sst.cloudflare.x.Astro("Web", {
+// The V1 docs, at docs.opencode.ai/docs. opencode.ai/docs is the V2 docs (services/site), which sends paths
+// without a V2 page here.
+new sst.cloudflare.x.Astro("Web", {
   domain: "docs." + domain,
   path: "packages/web",
   environment: {
@@ -26,14 +28,3 @@ const web = new sst.cloudflare.x.Astro("Web", {
     VITE_API_URL: api.url.apply((url) => url!),
   },
 })
-
-// The site serves itself under /docs, so this route takes /docs on the main host. An exact `/docs` pattern misses
-// `/docs?query`, so it's a `/docs*` prefix. `sst dev` deploys no Worker.
-const webServer = web.nodes.server
-if (webServer) {
-  new cloudflare.WorkersRoute("WebDocsRoute", {
-    zoneId: zoneID,
-    pattern: `${domain}/docs*`,
-    script: webServer.nodes.worker.scriptName,
-  })
-}
