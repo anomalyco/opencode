@@ -548,6 +548,9 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
         }),
       ),
       Effect.scoped,
+      // A Console that accepts the connection but never answers would otherwise hold the load, including the one at
+      // startup, indefinitely. A timeout is a transient failure, which `SharedCache` retries.
+      Effect.timeout(Duration.seconds(5)),
     )
 }
 
