@@ -1,4 +1,4 @@
-// Where the current docs live: the V2 docs app (services/www), which serves /v2* on opencode.ai.
+// Where the current docs live: the V2 docs (src/docs), which this app serves under /v2.
 export const docsBase = "/v2/docs"
 
 /** Where the separate V1 docs app (Starlight, built for /docs/) serves the V1 docs. */
