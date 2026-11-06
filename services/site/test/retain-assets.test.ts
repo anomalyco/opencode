@@ -99,6 +99,10 @@ test("carries nothing when the live site has no list, and never files that aren'
     retired: {},
   })
 
+  using garbled = serve({ "_build/retained.json": "<html>" })
+  await retainAssets(first, garbled.url.origin)
+  expect((await Bun.file(path.join(first, "_build/retained.json")).json()).retired).toEqual({})
+
   using tampered = serve({
     "_build/retained.json": JSON.stringify({ live: ["index.html", "_build/assets/../../escape.js"], retired: {} }),
     "index.html": "<old html>",

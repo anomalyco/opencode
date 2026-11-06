@@ -17,6 +17,8 @@ import { z } from "zod"
 /** How long a file stays after the last build that served it was replaced, for at most `builds` replaced builds. */
 const retention = 7 * 24 * 60 * 60 * 1000
 const builds = 20
+/** Carrying never holds up a deploy longer than this; what hasn't downloaded by then is left behind. */
+const deadline = 3 * 60 * 1000
 /** Files named by a hash of their contents: immutable in public/_headers, safe to keep beside newer builds. */
 const hashed = /^(_build\/assets\/|docs\/_build\/|textjs\/(chunk|lite|picker|yoga)-)[\w./-]+$/
 const ledgerPath = "_build/retained.json"
@@ -28,9 +30,12 @@ const Ledger = z.object({
 
 /** Carries the files `origin` still needs from earlier builds into `assets` and writes the next list. */
 export async function retainAssets(assets: string, origin: string) {
-  const live = (await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: assets }))).filter((file) => hashed.test(file))
+  const live = (await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: assets })))
+    .map((file) => file.replaceAll("\\", "/"))
+    .filter((file) => hashed.test(file))
   const own = new Set(live)
-  const previous = await readLedger(origin)
+  const signal = AbortSignal.timeout(deadline)
+  const previous = await readLedger(origin, signal)
   const now = new Date()
   const candidates = new Map([
     ...Object.entries(previous.retired),
@@ -48,7 +53,7 @@ export async function retainAssets(assets: string, origin: string) {
     ([file, at]) => kept.has(at) && hashed.test(file) && !file.split("/").includes("..") && !own.has(file),
   )
   const fetched = await mapLimit(wanted, 16, async ([file, at]) => {
-    const bytes = await download(`${origin}/${file}`)
+    const bytes = await download(`${origin}/${file}`, signal)
     if (!bytes) return
     await mkdir(path.dirname(path.join(assets, file)), { recursive: true })
     await Bun.write(path.join(assets, file), bytes)
@@ -67,21 +72,20 @@ export async function retainAssets(assets: string, origin: string) {
   )
 }
 
-async function readLedger(origin: string) {
-  const response = await fetch(`${origin}/${ledgerPath}?t=${Date.now()}`, { cache: "no-store" }).catch(() => undefined)
-  const ledger = response?.ok ? Ledger.safeParse(await response.json().catch(() => undefined)) : undefined
-  if (ledger?.success) return ledger.data
-  const reason = ledger ? "unreadable" : response ? `HTTP ${response.status}` : "unreachable"
-  console.warn(`retain-assets: ${origin}/${ledgerPath} ${reason}; carrying nothing from earlier builds`)
+async function readLedger(origin: string, signal: AbortSignal) {
+  const bytes = await download(`${origin}/${ledgerPath}?t=${Date.now()}`, signal)
+  const ledger = Ledger.safeParse(bytes && (await new Response(bytes).json().catch(() => undefined)))
+  if (ledger.success) return ledger.data
+  console.warn(`retain-assets: ${origin}/${ledgerPath} missing or unreadable; carrying nothing from earlier builds`)
   return { live: [], retired: {} }
 }
 
-/** The file's bytes, trying twice; undefined once it's gone (404) or still failing. */
-async function download(url: string, attempt = 1): Promise<Uint8Array | undefined> {
-  const response = await fetch(url).catch(() => undefined)
+/** The file's bytes, trying twice; undefined once it's gone (404), still failing or past the deadline. */
+async function download(url: string, signal: AbortSignal, attempt = 1): Promise<Uint8Array<ArrayBuffer> | undefined> {
+  const response = await fetch(url, { signal, cache: "no-store" }).catch(() => undefined)
   const bytes = response?.ok ? await response.bytes().catch(() => undefined) : undefined
-  if (bytes || response?.status === 404 || attempt === 2) return bytes
-  return download(url, attempt + 1)
+  if (bytes || response?.status === 404 || attempt === 2 || signal.aborted) return bytes
+  return download(url, signal, attempt + 1)
 }
 
 async function mapLimit<T, R>(items: T[], limit: number, run: (item: T) => Promise<R>) {
