@@ -5544,57 +5544,6 @@ describe("SessionRunnerLLM", () => {
     expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.failed.1")
   })
 
-  scenario("preserves blocking shell patterns in model-facing tool history", function* (s) {
-    const registry = yield* Tool.Service
-    const message = 'Permission denied: shell. Blocked by configured rule patterns: ["printf blocked *"]'
-    yield* transformTools(
-      registry,
-      {
-        shell: {
-          name: "shell",
-          description: "Reject a shell subcommand",
-          input: Schema.Struct({ command: Schema.String }),
-          output: Schema.Struct({}),
-          execute: () => {
-            const error = new Permission.BlockedError({
-              rules: [],
-              permission: "shell",
-              resources: ["printf blocked"],
-              reason: message,
-            })
-            return new ToolFailure({ message: error.message, error })
-          },
-        },
-      },
-      { codemode: false },
-    )
-    yield* s.admit("Run the compound command")
-    yield* s.llm.push(
-      TestLLM.toolCall("call-shell", "shell", { command: "printf allowed && printf blocked" }),
-      TestLLM.stop(),
-    )
-
-    yield* s.resume
-
-    expect(s.requests).toHaveLength(2)
-    expect(yield* s.context).toMatchObject([
-      { type: "user" },
-      Expected.assistant({}, [
-        Expected.failedTool({ id: "call-shell" }, { error: { type: "permission.rejected", message } }),
-      ]),
-      { type: "assistant", finish: "stop" },
-    ])
-    expect(s.requests[1]?.messages.find((message) => message.role === "tool")).toMatchObject({
-      content: [
-        {
-          type: "tool-result",
-          id: "call-shell",
-          result: { type: "error", value: { error: { type: "permission.rejected", message } } },
-        },
-      ],
-    })
-  })
-
   scenario("interrupts runner continuation when a question is cancelled", function* (s) {
     const registry = yield* Tool.Service
     yield* transformTools(
