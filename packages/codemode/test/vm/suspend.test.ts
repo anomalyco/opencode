@@ -159,7 +159,7 @@ describe("suspend", () => {
       const log = ["before"]
       const a = await tools.step({ value: 20 })
       const started = Date.now()
-      while (Date.now() - started < 40) await Promise.resolve()
+      while (Date.now() - started < 300) await Promise.resolve()
       const b = await tools.step({ value: 1 })
       log.push("after " + (a.value + b.value))
       console.log("resumed")
@@ -314,7 +314,7 @@ describe("suspend", () => {
 
   test("a state over the byte budget fails the suspend, and the run goes on", async () => {
     const { run } = await suspendBetweenCalls(
-      `const big = "x".repeat(1000); await tools.step({ value: 1 }); const t = Date.now(); while (Date.now() - t < 40) {} return big.length`,
+      `const big = "x".repeat(1000); await tools.step({ value: 1 }); const t = Date.now(); while (Date.now() - t < 300) {} return big.length`,
       { suspend: { maxBytes: 100 } },
     )
     const error = await blocked(run)
@@ -350,7 +350,7 @@ describe("resume", () => {
       CodeMode.make({ engine: "vm", tools: { slow: step.tool } }).start(`
         const seen = new Map([["first", await tools.slow({ value: 10 })]])
         const started = Date.now()
-        while (Date.now() - started < 40) {}
+        while (Date.now() - started < 300) {}
         const second = await tools.slow({ value: 21 })
         return [seen.get("first").value, second.value]`),
     )
@@ -374,7 +374,7 @@ describe("resume", () => {
 
   test("a resumed run keeps the limits it was saved with", async () => {
     const { step, run } = await suspendBetweenCalls(
-      `await tools.step({ value: 1 }); const t = Date.now(); while (Date.now() - t < 40) {} await tools.step({ value: 2 }); await tools.step({ value: 3 }); return "done"`,
+      `await tools.step({ value: 1 }); const t = Date.now(); while (Date.now() - t < 300) {} await tools.step({ value: 2 }); await tools.step({ value: 3 }); return "done"`,
       { limits: { maxToolCalls: 2, maxOutputBytes: 10 } },
     )
     const suspended = suspendedOf(await Effect.runPromise(run.suspend))
@@ -386,7 +386,7 @@ describe("resume", () => {
     expect(result).toMatchObject({ ok: false, error: { kind: "ToolCallLimitExceeded" } })
 
     const { step: step2, run: long } = await suspendBetweenCalls(
-      `await tools.step({ value: 1 }); const t = Date.now(); while (Date.now() - t < 40) {} return "x".repeat(100)`,
+      `await tools.step({ value: 1 }); const t = Date.now(); while (Date.now() - t < 300) {} return "x".repeat(100)`,
       { limits: { maxOutputBytes: 10 } },
     )
     const saved = suspendedOf(await Effect.runPromise(long.suspend))
@@ -421,7 +421,7 @@ describe("resume", () => {
 
   test("a state is refused by another build, other extensions, or a changed source", async () => {
     const { suspended } = await suspendAt(
-      `await tools.step({ value: 1 }); const t = Date.now(); while (Date.now() - t < 40) {} return 1`,
+      `await tools.step({ value: 1 }); const t = Date.now(); while (Date.now() - t < 300) {} return 1`,
     )
     const state = suspended.state
     const header = state.header
@@ -459,7 +459,7 @@ describe("resume", () => {
       const before = inc(1)
       await tools.step({ value: 0 })
       const t = Date.now()
-      while (Date.now() - t < 40) {}
+      while (Date.now() - t < 300) {}
       try {
         return { before, after: inc(1) }
       } catch (error) {
@@ -508,7 +508,7 @@ describe("resume", () => {
       Array.prototype.extra = "patched"
       await tools.step({ value: 1 })
       const t = Date.now()
-      while (Date.now() - t < 40) {}
+      while (Date.now() - t < 300) {}
       params.append("y", "2")
       view[0] = 9
       globalResolve("later")
@@ -559,10 +559,10 @@ describe("resume", () => {
       Object.preventExtensions(Date.prototype)
       await tools.step({ value: 1 })
       const t1 = Date.now()
-      while (Date.now() - t1 < 40) {}
+      while (Date.now() - t1 < 300) {}
       await tools.step({ value: 2 })
       const t2 = Date.now()
-      while (Date.now() - t2 < 40) {}
+      while (Date.now() - t2 < 300) {}
       return {
         extra: [].extra,
         max: typeof Math.max,
