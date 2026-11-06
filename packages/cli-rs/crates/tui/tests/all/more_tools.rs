@@ -257,6 +257,28 @@ fn a_subagent_row_opens_its_child_session() {
 }
 
 #[test]
+fn a_background_subagent_row_follows_its_child_status() {
+    let messages = turn(vec![tool(
+        "c1",
+        "task",
+        completed(
+            json!({ "description": "Check the docs", "agent": "general" }),
+            "done",
+            json!({ "sessionID": "ses_child", "status": "running" }),
+        ),
+    )]);
+    let h = open(100, 30, messages);
+    h.wait_for("   ✓ General Subagent — Check the docs  Background\n");
+    let child = support::merge(session("ses_child", "Child work"), json!({ "parentID": "ses_t" }));
+    h.tui.data.remember(serde_json::from_value(child).unwrap());
+    let child = SessionID("ses_child".into());
+    h.tui.data.set_status(&child, opencode_store::SessionStatus::Running);
+    h.wait_for("   ⋯ General Subagent — Check the docs  Background\n");
+    h.tui.data.set_status(&child, opencode_store::SessionStatus::Idle);
+    h.wait_for("   ✓ General Subagent — Check the docs  Background\n");
+}
+
+#[test]
 fn execute_lists_its_calls_and_opens_the_dialog() {
     let calls = json!([
         { "tool": "read", "status": "completed", "input": { "path": "src/a.rs" } },

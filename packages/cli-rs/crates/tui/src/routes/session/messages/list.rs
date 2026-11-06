@@ -226,10 +226,14 @@ impl Transcript {
         let pending = changes.pending(session);
         // A tool row waiting on a permission request takes the warning color.
         let permissions = changes.permissions(session);
-        if !changes.any_message(session) && !changes.session(session) && !catalogs && !pending && !permissions {
+        // A subagent row spins while its child session runs.
+        let children = !changes.status.is_empty()
+            && tui.data.read(|state| state.family(session).iter().any(|id| id != session && changes.status(id)));
+        let force =
+            changes.messages(session) || changes.session(session) || catalogs || pending || permissions || children;
+        if !force && !changes.any_message(session) {
             return;
         }
-        let force = changes.messages(session) || changes.session(session) || catalogs || pending || permissions;
         if !force
             && let Some(messages) = changes.message.get(session)
             && self.0.patch(tui, session, messages)
