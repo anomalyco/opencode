@@ -146,14 +146,6 @@ export const copyVariants = {
       `OpenCode is MIT licensed. ${config.stats.contributors} contributors have made ${config.stats.commits}+ commits, and ${config.stats.monthlyUsers} developers use it every month.`,
     ],
   },
-  "home.privacy.title": { label: "Privacy title", lines: 1, options: ["Your code stays yours"] },
-  "home.privacy.body": {
-    label: "Privacy",
-    lines: 1,
-    options: [
-      "OpenCode runs on your computer and keeps your sessions there. Your code goes only to the model provider you choose. If you choose a model hosted by OpenCode, its training and retention terms are listed in the docs.",
-    ],
-  },
   "home.faq.a3": {
     label: "FAQ: extra subscriptions",
     lines: 1,
@@ -180,23 +172,6 @@ export const copyVariants = {
       "OpenCode runs on your computer and keeps your sessions there. Your code goes only to the model provider you choose. If you choose a model hosted by OpenCode, its training and retention terms are listed in the docs.",
     ],
   },
-  // The home email sign-up (signup.tsx); its own copy is the first option.
-  "home.signup.title": {
-    label: "Sign-up title",
-    lines: 1,
-    options: ["Stay in the loop", "Release notes", "Get the updates"],
-  },
-  "home.signup.body": {
-    label: "Sign-up intro",
-    lines: 1,
-    options: [
-      "Release notes and new products by email, when they ship. No spam, and you can unsubscribe at any time.",
-      "One email when something ships: new releases and new products. Nothing else.",
-      "Be the first to hear about new releases and products. Every email has an unsubscribe link.",
-    ],
-  },
-  // Sign-up style "sentence": the button that shows once the address is valid.
-  "home.signup.button": { label: "Sign-up button", lines: 1, options: ["Get early access", "Let me know", "Join"] },
   // The home page's "New" bar (announcement.ts): each option keeps its own link.
   "home.announcement": { label: "Announcement", lines: 1, options: announcements.map(announcementCopy) },
   // "Get started" (lib/get-started.ts); the first option is the page's own copy.
@@ -220,7 +195,7 @@ export const copyVariants = {
     label: "Own subs line",
     lines: 1,
     options: [
-      "Log in with ChatGPT Plus or Pro, GitHub Copilot or Claude Code. Or use an OpenCode subscription.",
+      "Log in with ChatGPT Plus or Pro or GitHub Copilot. Or use an OpenCode subscription.",
       "Log in with OpenAI to use your ChatGPT Plus or Pro account, or with GitHub to use your Copilot account.",
       "Log in with ChatGPT or GitHub Copilot, add any API key, or subscribe to OpenCode Go.",
     ],

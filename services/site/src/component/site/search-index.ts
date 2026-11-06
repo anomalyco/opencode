@@ -1,21 +1,23 @@
 import { joinSentences } from "~/i18n/rich"
 import { config } from "~/config"
 import type { Translate } from "~/i18n"
-import { localize, siteContent } from "~/i18n/content"
+import { localize } from "~/i18n/content"
+import { extensionsSource } from "~/i18n/content/areas/extensions"
+import { productDetailsSource } from "~/i18n/content/areas/product-details"
+import { productsSource } from "~/i18n/content/areas/products"
 import type { Locale } from "~/lib/language"
-import { brandAssets, brandContent, brandMarkdown } from "~/lib/brand-content"
+import { brandContent, brandMarkdown } from "~/lib/brand-content"
+import { brandAssets } from "~/lib/media"
 import type { ChangelogRelease } from "~/lib/changelog"
 import { changelogTimeline } from "~/lib/changelog-notes"
 import { docsConfigure, docsIntro, docsPages, docsProducts, docsToc } from "~/lib/docs-content"
 import { downloadContent } from "~/lib/download-content"
 import { fontContent } from "~/lib/font-content"
 import { homeContent } from "~/lib/home-content"
-import { published, type LegalDocumentContent, type LegalNode } from "~/lib/legal"
-import { privacyPolicy } from "~/lib/legal/privacy-policy"
-import { termsOfService } from "~/lib/legal/terms-of-service"
 import { markdownDocument, type RichText } from "~/lib/markdown"
 import { pressContent } from "~/lib/press-content"
 import { extensionPages } from "./extension-data"
+import legalSearch from "./legal-search.json"
 import { deviceOrder, productPages } from "./product-data"
 
 // The ⌘K search's index and ranking, loaded with a dynamic import the first time the search opens.
@@ -59,7 +61,11 @@ export function buildSearchIndex(
   const download = localize(locale, "download", downloadContent(t, route))
   const press = localize(locale, "press", pressContent(t, route))
   const brand = localize(locale, "brand", brandContent(t))
-  const content = siteContent(locale)
+  const content = {
+    products: localize(locale, "products", productsSource),
+    productDetails: localize(locale, "productDetails", productDetailsSource),
+    extensions: localize(locale, "extensions", extensionsSource),
+  }
   const names = {
     home: t("nav.home"),
     product: t("site.nav.product"),
@@ -115,8 +121,12 @@ export function buildSearchIndex(
     { title: names.press, path: "/press", body: press.hero.body, keywords: "press kit media" },
     { title: "Font", path: "/font", body: fontContent.description, keywords: "typeface type otf letters download" },
     { title: t("site.footer.legal"), path: "/legal" },
-    { title: privacyPolicy.title, path: privacyPolicy.path, body: privacyPolicy.description, keywords: "legal" },
-    { title: termsOfService.title, path: termsOfService.path, body: termsOfService.description, keywords: "legal" },
+    ...legalSearch.map((document) => ({
+      title: document.title,
+      path: document.path,
+      body: document.description,
+      keywords: "legal",
+    })),
   ].map(
     (page): SearchItem => ({
       id: `page:${page.path}`,
@@ -146,7 +156,6 @@ export function buildSearchIndex(
       home.tools.items.map((i) => i.name).join(" "),
     ),
     section(names.home, "/", home.openSource.title, stripTags(home.openSource.lead)),
-    section(names.home, "/", home.privacy.title, plainRich(home.privacy.body)),
     section(names.home, "/", home.faq.title, undefined, "questions"),
     section(names.home, "/", home.console.title, `${home.console.headline} ${home.console.body}`),
   ]
@@ -204,17 +213,19 @@ export function buildSearchIndex(
       brand.donts.examples.map((e) => e.caption).join(" "),
     ),
   ]
-  const legalSections = [privacyPolicy, termsOfService].flatMap(legalHeadings).map(
-    (heading): SearchItem => ({
-      id: `legal:${heading.path}#${heading.id}`,
-      group: "Sections",
-      title: heading.title,
-      context: heading.document,
-      body: heading.body,
-      href: `${route(heading.path)}#${heading.id}`,
-      target: { id: heading.id },
-    }),
-  )
+  const legalSections = legalSearch
+    .flatMap((document) => document.headings)
+    .map(
+      (heading): SearchItem => ({
+        id: `legal:${heading.path}#${heading.id}`,
+        group: "Sections",
+        title: heading.title,
+        context: heading.document,
+        body: heading.body,
+        href: `${route(heading.path)}#${heading.id}`,
+        target: { id: heading.id },
+      }),
+    )
 
   const docsPath = (href: string) => new URL(href, "https://opencode.ai").pathname
   // Only the docs Intro is a page of this site (routes/docs); the other docs pages are the live
@@ -440,25 +451,4 @@ function docsBody(id: string) {
     learn: plainRich(docsIntro.learn),
   }
   return bodies[id]
-}
-
-function legalText(node: LegalNode): string {
-  if (typeof node === "string") return node
-  const [, , ...children] = node
-  return children.filter(published).map(legalText).join("")
-}
-
-/** Each h2 and h3 of a legal document, with the text up to the next heading. */
-function legalHeadings(document: LegalDocumentContent) {
-  return document.body
-    .filter(published)
-    .reduce<{ id: string; title: string; body: string; path: string; document: string }[]>((acc, node) => {
-      if (typeof node !== "string" && (node[0] === "h2" || node[0] === "h3") && node[1].id) {
-        acc.push({ id: node[1].id, title: legalText(node), body: "", path: document.path, document: document.title })
-        return acc
-      }
-      const last = acc.at(-1)
-      if (last && last.body.length < 600) last.body = `${last.body} ${legalText(node)}`.slice(0, 600)
-      return acc
-    }, [])
 }

@@ -1,4 +1,4 @@
-# Builds the site's OpenTUI Mono files from the docs' copies (services/www/src/docs/assets/fonts,
+# Builds the site's OpenTUI Mono files from the docs' copies (src/docs/assets/fonts,
 # the same files as anomalyco/opentui packages/web/public/fonts). Two files per style, split by
 # unicode-range like Inter: "latin" (Latin, punctuation, arrows, shapes and box drawing, what the
 # site sets in mono) and "rest" (every other character the font has, only fetched when a page uses
@@ -10,7 +10,7 @@
 # are kept.
 #
 # OpenTUI Mono is licensed under the SIL Open Font License 1.1 (src/asset/fonts/OpenTUIMono-OFL.txt).
-# Run from packages/console/app:
+# Run from services/site:
 #   uvx --from 'fonttools[woff]==4.60.1' python script/opentui-mono.py
 import json
 from pathlib import Path
@@ -18,7 +18,7 @@ from pathlib import Path
 from fontTools import subset
 from fontTools.ttLib import TTFont
 
-source = Path("../../../services/www/src/docs/assets/fonts")
+source = Path("src/docs/assets/fonts")
 out = Path("src/asset/fonts")
 styles = {
     "regular": "OpenTUIMono-Regular",

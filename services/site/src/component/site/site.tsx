@@ -33,9 +33,11 @@ import { useI18n } from "~/context/i18n"
 import type { Key } from "~/i18n"
 import { useLanguage } from "~/context/language"
 import { strip } from "~/lib/language"
-import { brandAssets } from "~/lib/brand-content"
+import { brandAssets } from "~/lib/media"
 import { status, type ServiceStatus } from "~/lib/status"
 import { useViewportCover } from "~/lib/viewport"
+import { loadMarkdownPages, markdownKey, markdownPagesLoaded } from "./use-markdown"
+import type { MarkdownPages } from "./markdown-pages"
 import { LiveMeta } from "~/component/head-meta"
 import { Chevron, ChevronRight, ExternalArrow, NewTab, ThemeIcon, themes } from "./icons"
 import { GitHubLink } from "./github-link"
@@ -53,7 +55,8 @@ import {
   removeNavItem,
   sortableNav,
 } from "./nav-order"
-import { MarkdownView } from "./markdown-view"
+// The Markdown view's styles load with the page: they also hide the page while the view loads.
+import "./markdown-view.css"
 import { monoFontChoice, monoFontLatin } from "./mono-fonts"
 import { NavVersions } from "./nav-versions"
 import { closeAllMenus, closeMenusOnLinks, onCloseMenus, takeMenuNavigation } from "./menu-open"
@@ -63,10 +66,12 @@ import { bannerThemeColorScript, bannerTopColor, bannerVisible, SiteBanner } fro
 import { bannerDismissScript } from "./site-banner-script"
 import { Tooltips } from "./tooltip"
 import { SiteSearch } from "./search"
+import { preloadVisibleLinks } from "./preload-visible"
 import { adoptVoice, dropVoice } from "./voice/host"
-import { LogoFan } from "./logo-fan"
+// The fan's styles load with the page; its code on first use (loadLogoFan).
+import "./logo-fan.css"
+import type { LogoFan } from "./logo-fan"
 import { logoVariantSvgs } from "./logo-variants"
-import { domMarkdown } from "~/lib/dom-markdown"
 import { AnomalyLogo, Logo, LogoIcon, Wordmark } from "./marks"
 import {
   navGroups,
@@ -100,6 +105,15 @@ const SettingsPanel = import.meta.env.DEV ? lazy(() => import("./settings-panel"
 const DesignMode = import.meta.env.DEV ? lazy(() => import("./design-mode")) : undefined
 const DevicePreview = import.meta.env.DEV ? lazy(() => import("./device-preview")) : undefined
 
+// The logo's fan menu, loaded the first time it may open: a pointer, touch or focus on a logo, or
+// a right-click before any of those.
+const [logoFan, setLogoFan] = createSignal<typeof LogoFan>()
+let logoFanLoad: Promise<void> | undefined
+const loadLogoFan = () => (logoFanLoad ??= import("./logo-fan").then((module) => void setLogoFan(() => module.LogoFan)))
+const prefetchLogoFan = () => {
+  if (siteSettings.logoMenu === "fan") void loadLogoFan().catch(() => (logoFanLoad = undefined))
+}
+
 // Inter as WOFF2, split so most pages only fetch the Latin file (about 95 KB instead of the 870 KB
 // TTF). The other file has the Greek, Cyrillic, Vietnamese and symbol glyphs. The ranges must not
 // overlap: a character in both that Inter lacks would fetch the second file only to fall back. The
@@ -122,19 +136,36 @@ const interFaces = [
   )
   .join("\n")
 
-const markdownKey = "opencode-markdown-view"
-
 // A nav item as the nav renders it: a known one (links.ts) or a custom link (nav-order.tsx).
 type NavItemView = { id: string; label: string; href: string; arrow: boolean; external: boolean; company: boolean }
 
-// Pages of this site that render client-side; everything else keeps a full page load.
-// Of the docs, only the Intro (/docs) is a page of this app; the other docs pages are served
-// separately, so links to them take a full page load.
-const clientPages =
-  /^\/(?:desktop|mobile|terminal|sdk|download|changelog(?:\/v\d[\w.+-]*)?|brand|press|legal(?:\/.*)?|docs)?\/?$/
+// Pages of this site that render client-side; everything else keeps a full page load. The docs
+// (/docs) are served separately, and /download redirects on the server.
+const clientPages = /^\/(?:desktop|mobile|terminal|sdk|changelog(?:\/v\d[\w.+-]*)?|brand|press|legal(?:\/.*)?)?\/?$/
 function clientPage(pathname: string) {
   return clientPages.test(strip(pathname))
 }
+// The full page loads a link here can lead to on this domain (this site's other pages, in any
+// language, the docs and Stats), fetched once the pointer rests on the link so the page opens sooner.
+// Only addresses that are safe to request ahead of time: never the Console or a download, and never a
+// language link (hreflang), whose page sets the language cookie. Browsers without Speculation Rules
+// ignore it.
+const speculationRules = JSON.stringify({
+  prefetch: [
+    {
+      source: "document",
+      eagerness: "moderate",
+      where: {
+        and: [
+          {
+            href_matches: ["{/:locale}?/:page(product|ide|mini|font)", "{/:locale}?/extensions/*", "/docs{/*}?", "/data{/*}?"],
+          },
+          { not: { selector_matches: "[hreflang]" } },
+        ],
+      },
+    },
+  ],
+})
 
 // Labels and headlines match status.opencode.ai.
 const statusLabel = {
@@ -187,7 +218,7 @@ export function Site(props: {
    * The page as Markdown: `href` serves it to agents, `source` renders it in place of the page
    * when the reader turns on the Markdown view.
    */
-  markdown?: { href: string; source: () => string }
+  markdown?: { href: string; source: (pages: MarkdownPages) => string }
   /**
    * Fixed docs component options (data-docs-variants) instead of the reader's Settings › docsVariants,
    * for a reference page that must always show the locked set (/dev/docs).
@@ -211,10 +242,12 @@ export function Site(props: {
   const [theme, setTheme] = createSignal<(typeof themes)[number]>(
     isServer ? "system" : (themes.find((item) => item === localStorage.getItem("opencode-theme")) ?? "system"),
   )
-  // The colour at the top of the screen: the open banner's blue while it covers it, else the page's
-  // background in the scheme the tag's media query stands for (or the chosen theme's).
+  // The browser bar colour: the open banner's blue while it covers the top of the screen, the letters
+  // bar's while it fills the bottom, else the page's background in the scheme the tag's media query
+  // stands for (or the chosen theme's).
   const themeColor = (scheme: "light" | "dark") =>
     bannerTopColor() ??
+    lettersBlue() ??
     ((theme() === "system" ? scheme : theme()) === "dark" ? "#0c0c0c" : siteSettings.lightBackground)
   const colorScheme = () => (theme() === "system" ? "light dark" : theme())
   const [dark, setDark] = createSignal(false)
@@ -233,6 +266,11 @@ export function Site(props: {
     setLogoMenu(undefined)
   })
   const [markdown, setMarkdown] = createSignal(false)
+  // The Markdown view's code, loaded the first time it is wanted: its shortcut's "m", a pointer or
+  // focus on its switch, or a reload in the view.
+  const [markdownPages, setMarkdownPages] = createSignal(markdownPagesLoaded())
+  const loadMarkdown = () => loadMarkdownPages().then((pages) => setMarkdownPages(pages))
+  const prefetchMarkdown = () => void loadMarkdown().catch(() => undefined)
   let page!: HTMLDivElement
   let sidebarNav: HTMLElement | undefined
   let footerNav: HTMLElement | undefined
@@ -255,11 +293,38 @@ export function Site(props: {
     const highlight = i18n.t("footer.wordmark.font")
     return label.startsWith(highlight) ? label.slice(highlight.length).trim() : label
   }
+  // Whether the whole open bar is on screen (the page is scrolled to its end), so it fills the bottom
+  // of the screen.
+  const [lettersBarAtEnd, setLettersBarAtEnd] = createSignal(false)
   const watchLettersBar = (element: HTMLDivElement) => {
-    const observer = new IntersectionObserver(([entry]) => setLettersBarInView(entry.isIntersecting))
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setLettersBarInView(entry.isIntersecting)
+        setLettersBarAtEnd(entry.intersectionRatio >= 0.98)
+      },
+      { threshold: [0, 0.98] },
+    )
     observer.observe(element)
     onCleanup(() => observer.disconnect())
   }
+  // While the open bar fills the bottom of the screen, its blue runs on to the screen's bottom edge:
+  // the page behind the site (what shows past the end, and what iOS Safari tints its bottom toolbar
+  // area from) and the browser bar colour take the bar's blue as painted, and a fixed strip under the
+  // home indicator (site.css) gives Safari a blue element touching the bottom edge.
+  const lettersBottom = () => lettersBarShown() && lettersBarAtEnd()
+  const [lettersBlue, setLettersBlue] = createSignal<string>()
+  createEffect(
+    on(lettersBottom, (bottom) => {
+      const link = document.querySelector<HTMLElement>('[data-component="letters-bar"] a')
+      const blue = bottom && link ? getComputedStyle(link).backgroundColor : undefined
+      setLettersBlue(blue)
+      if (blue) document.documentElement.style.backgroundColor = blue
+      else document.documentElement.style.removeProperty("background-color")
+    }),
+  )
+  onCleanup(() => {
+    if (!isServer) document.documentElement.style.removeProperty("background-color")
+  })
   // The bar grows at the very end of the page. Someone at the bottom stays at the bottom while it
   // grows, so the page visibly moves up with it.
   createEffect(
@@ -476,6 +541,11 @@ export function Site(props: {
   // shows the same controls the Markdown view pins in that spot, so they stay put under the pointer.
   const toggleMarkdown = (fromFooter = false) => {
     const next = !markdown()
+    if (next && !markdownPages())
+      return void loadMarkdown().then(
+        () => !markdown() && toggleMarkdown(fromFooter),
+        () => undefined,
+      )
     setSwapped(true)
     setMarkdown(next)
     if (next) sessionStorage.setItem(markdownKey, "1")
@@ -572,7 +642,8 @@ export function Site(props: {
     // The app's router only handles links marked with a `link` attribute (explicitLinks), so the
     // older console pages and proxied paths like /docs keep full page loads. Links between pages
     // of this site get the attribute as soon as a pointer, focus or click reaches them, so the
-    // router swaps the page in place and preloads it on hover.
+    // router swaps the page in place and preloads it on intent: hover, focus or touch. Touch screens,
+    // which have no hover, also preload the pages their links lead to as the links come into view.
     const markLink = (event: Event) => {
       const anchor = (event.target as Element | null)?.closest?.("a[href]")
       if (!(anchor instanceof HTMLAnchorElement) || anchor.hasAttribute("link") || anchor.target) return
@@ -581,14 +652,12 @@ export function Site(props: {
     }
     for (const type of ["pointerover", "focusin", "touchstart", "click"])
       document.addEventListener(type, markLink, true)
-
-    // Once the page is idle, load the code for the main pages so the first click is instant too.
-    const idle = window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 1500))
-    idle(() =>
-      ["/", "/product", "/desktop", "/mobile", "/terminal", "/sdk", "/docs", "/changelog"].forEach((path) =>
-        preloadRoute(language.route(path), { preloadData: false }),
-      ),
+    const stopPreloads = preloadVisibleLinks(
+      (link) => link.hasAttribute("link") || clientPage(new URL(link.href).pathname),
+      (path) => preloadRoute(path, { preloadData: false }),
     )
+
+    const idle = window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 1500))
     // window.opencode and its greeting for developers who open DevTools (Settings › Other › Console API).
     createEffect(() => {
       if (siteSettings.consoleApi === "off") return void delete (window as { opencode?: unknown }).opencode
@@ -641,15 +710,35 @@ export function Site(props: {
       if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return
       if ((event.target as HTMLElement).closest("input, textarea, select, [contenteditable]")) return
       const key = event.key.toLowerCase()
+      if (key === "m") prefetchMarkdown()
       const quick = lastKey.key === "m" && event.timeStamp - lastKey.time < 600
       lastKey = { key, time: event.timeStamp }
       if (key !== "d" || !quick) return
       lastKey = { key: "", time: 0 }
+      // The funnel's queue (lib/funnel.ts), as the switch reports its own clicks.
+      window.__ocFunnel?.push({
+        event: {
+          name: "ui.clicked",
+          action: "clicked",
+          target: `markdown-view:${markdown() ? "off" : "on"}`,
+          properties: { via: "shortcut" },
+        },
+        at: performance.now(),
+      })
       toggleMarkdown()
     }
-    if (sessionStorage.getItem(markdownKey) === "1") setMarkdown(true)
-    // The pre-paint script hid the page while it waited for the Markdown view.
-    delete document.querySelector<HTMLElement>("[data-site]")?.dataset.markdownBoot
+    // The pre-paint script hid the page while it waited for the Markdown view, whose code it started
+    // loading (entry-server.tsx).
+    const booted = () => delete document.querySelector<HTMLElement>("[data-site]")?.dataset.markdownBoot
+    const restore = sessionStorage.getItem(markdownKey) === "1"
+    if (!restore || markdownPages()) {
+      setMarkdown(restore)
+      booted()
+    }
+    if (restore && !markdownPages())
+      loadMarkdown()
+        .then(() => setMarkdown(true), () => undefined)
+        .finally(booted)
 
     document.addEventListener("keydown", navigateWithNumber)
     document.addEventListener("keydown", markdownShortcut)
@@ -662,6 +751,7 @@ export function Site(props: {
 
     onCleanup(() => {
       stopMenuLinks()
+      stopPreloads()
       for (const type of ["pointerover", "focusin", "touchstart", "click"])
         document.removeEventListener(type, markLink, true)
       media.removeEventListener("change", syncDark)
@@ -740,15 +830,26 @@ export function Site(props: {
 
   const openLogoMenu = (event: MouseEvent & { currentTarget: HTMLElement }, owner: "sidebar" | "topbar") => {
     event.preventDefault()
+    const logo = event.currentTarget
+    // The menu key or Shift+F10 report no pointer position.
+    const keyboard = event.button === 0 && event.clientX === 0 && event.clientY === 0
+    if (siteSettings.logoMenu === "fan" && !logoFan())
+      return void loadLogoFan().then(
+        () => showLogoMenu(logo, owner, keyboard),
+        () => (logoFanLoad = undefined),
+      )
+    showLogoMenu(logo, owner, keyboard)
+  }
+
+  const showLogoMenu = (logo: HTMLElement, owner: "sidebar" | "topbar", keyboard: boolean) => {
     // Always open directly under the logo, wherever the click landed. The menu sits in the same
     // header as the logo, so it stays attached when that header scrolls or sticks.
-    const logo = event.currentTarget
     setMenu(false)
     setLogoMenu({ owner, x: logo.offsetLeft, y: logo.offsetTop + logo.offsetHeight + 8 })
     alignLogoMenu(logo)
-    // Move focus into the menu when it was opened from the keyboard (the menu key or Shift+F10
-    // report no pointer position); a right-click leaves focus where it was.
-    if (event.button === 0 && event.clientX === 0 && event.clientY === 0)
+    // Move focus into the menu when it was opened from the keyboard; a right-click leaves focus
+    // where it was.
+    if (keyboard)
       document
         .querySelector<HTMLElement>(
           ':is([data-component="logo-menu"], [data-component="asset-menu"], [data-component="logo-fan"]) [role="menuitem"]',
@@ -872,11 +973,14 @@ export function Site(props: {
     <Show
       when={siteSettings.logoMenu !== "fan" && logoMenu()?.owner === owner && logoMenu()}
       fallback={
-        <Show when={siteSettings.logoMenu === "fan"}>
-          <LogoFan
-            position={logoMenu()?.owner === owner ? logoMenu() : undefined}
-            onSelect={() => setLogoMenu(undefined)}
-          />
+        <Show when={siteSettings.logoMenu === "fan" && logoFan()}>
+          {(fan) => (
+            <Dynamic
+              component={fan()}
+              position={logoMenu()?.owner === owner ? logoMenu() : undefined}
+              onSelect={() => setLogoMenu(undefined)}
+            />
+          )}
         </Show>
       }
     >
@@ -945,6 +1049,8 @@ export function Site(props: {
       aria-label={i18n.t("nav.logoAlt")}
       title={i18n.t("nav.home")}
       onContextMenu={(event) => openLogoMenu(event, owner)}
+      onPointerEnter={prefetchLogoFan}
+      onFocus={prefetchLogoFan}
       onClick={() => {
         setMenu(false)
         setLogoMenu(undefined)
@@ -988,6 +1094,9 @@ export function Site(props: {
                 type="button"
                 aria-label={markdown() ? i18n.t("site.view.person") : i18n.t("site.view.markdown")}
                 aria-pressed={markdown() ? "true" : "false"}
+                data-funnel={markdown() ? "markdown-view:off" : "markdown-view:on"}
+                onPointerEnter={prefetchMarkdown}
+                onFocus={prefetchMarkdown}
                 onClick={(event) => toggleMarkdown(!!event.currentTarget.closest('[data-component="site-footer"]'))}
               >
                 {/* In the Markdown view the button offers the way back: a person instead of the robot. */}
@@ -1003,6 +1112,9 @@ export function Site(props: {
                 href={href()}
                 aria-label={markdown() ? i18n.t("site.view.person") : i18n.t("site.view.markdown")}
                 data-active={markdown() ? "" : undefined}
+                data-funnel={markdown() ? "markdown-view:off" : "markdown-view:on"}
+                onPointerEnter={prefetchMarkdown}
+                onFocus={prefetchMarkdown}
                 onClick={(event) => {
                   if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
                   event.preventDefault()
@@ -1075,6 +1187,7 @@ export function Site(props: {
       data-theme={theme()}
       data-popover={popoverTheme()}
       data-letters-bar={lettersBarShown() && lettersBarInView() ? "" : undefined}
+      data-letters-end={lettersBottom() ? "" : undefined}
       data-spacer={props.page === "home" || props.page === "product" ? siteSettings.spacer : undefined}
       data-logo={logoVariant()}
       data-hero-install={props.page === "home" ? siteSettings.heroInstall : undefined}
@@ -1122,7 +1235,7 @@ export function Site(props: {
           ones one step more specific until the store takes over. */}
       <style
         innerHTML={
-          spacerGradientRule(siteSettings, "") +
+          (siteSettings.spacer === "dot gradient" ? spacerGradientRule(siteSettings, "") : "") +
           (siteSettings.spacer === "dither gradient" ? ditherGradientRule(siteSettings, "") : "")
         }
       />
@@ -1166,6 +1279,7 @@ export function Site(props: {
       <script
         innerHTML={`if(!document.posterLoads){document.posterLoads=1;document.addEventListener("load",(e)=>{const t=e.target;if(t instanceof HTMLImageElement&&t.hasAttribute("data-poster"))t.setAttribute("data-loaded","")},true);const scan=()=>{document.querySelectorAll("img[data-poster]:not([data-seen])").forEach((i)=>{i.setAttribute("data-seen","");if(i.complete&&i.naturalWidth){i.setAttribute("data-instant","");i.setAttribute("data-loaded","")}});if(document.readyState!=="complete")requestAnimationFrame(scan)};requestAnimationFrame(scan)}`}
       />
+      <script type="speculationrules" innerHTML={speculationRules} />
       <Show when={props.markdown?.href}>{(href) => <Link rel="alternate" type="text/markdown" href={href()} />}</Show>
       {/* Hidden until it has keyboard focus. It moves focus itself, before the router sees the click.
           First in the page, before the banner's link, so it is the first Tab stop. */}
@@ -1286,16 +1400,19 @@ export function Site(props: {
             {props.children}
           </div>
           {/* Pages without a hand-written Markdown version show their own content converted. */}
-          <Show when={markdown()}>
-            <MarkdownView
-              source={props.markdown?.source() ?? domMarkdown(page)}
-              file={
-                props.markdown?.href.split("/").pop() ?? `${strip(location.pathname).split("/").pop() || "index"}.md`
-              }
-              href={props.markdown?.href}
-              home={language.route("/")}
-              onHome={() => markdown() && toggleMarkdown()}
-            />
+          <Show when={markdown() && markdownPages()}>
+            {(pages) => (
+              <Dynamic
+                component={pages().MarkdownView}
+                source={props.markdown?.source(pages()) ?? pages().domMarkdown(page)}
+                file={
+                  props.markdown?.href.split("/").pop() ?? `${strip(location.pathname).split("/").pop() || "index"}.md`
+                }
+                href={props.markdown?.href}
+                home={language.route("/")}
+                onHome={() => markdown() && toggleMarkdown()}
+              />
+            )}
           </Show>
         </main>
 

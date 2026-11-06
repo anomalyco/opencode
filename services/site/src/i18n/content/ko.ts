@@ -278,7 +278,7 @@ export const content = {
   byos: {
     title: "내 구독 사용",
     headline: "이미 가진 구독을 그대로 쓰세요.",
-    line: "ChatGPT Plus 또는 Pro, GitHub Copilot, Claude Code로 로그인하세요. OpenCode 구독을 사용할 수도 있습니다.",
+    line: "ChatGPT Plus 또는 Pro나 GitHub Copilot으로 로그인하세요. OpenCode 구독을 사용할 수도 있습니다.",
     yours: { label: "내 구독", items: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } } },
     planLinks: ["OpenCode 구독", "OpenCode Go"],
     ours: { label: "OpenCode 요금제" },
@@ -710,10 +710,6 @@ export const content = {
     "create-install-and-share-desktop-plugins": {
       text: "데스크톱 플러그인을 만들고, 설치하고, 공유하세요.",
       link: "2.2의 새 기능 보기",
-    },
-    "use-your-claude-code-login-in-opencode": {
-      text: "OpenCode에서 Claude Code 로그인을 사용하세요.",
-      link: "v2.2.3 보기",
     },
     "desktop-terminals-now-survive-restarts": {
       text: "이제 데스크톱 터미널이 재시작 후에도 유지됩니다.",

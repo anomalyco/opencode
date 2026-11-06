@@ -333,7 +333,7 @@ export const content = {
   byos: {
     title: "Brug dit eget abonnement",
     headline: "Brug de abonnementer, du allerede har.",
-    line: "Log ind med ChatGPT Plus eller Pro, GitHub Copilot eller Claude Code. Eller brug et OpenCode-abonnement.",
+    line: "Log ind med ChatGPT Plus eller Pro eller med GitHub Copilot. Eller brug et OpenCode-abonnement.",
     yours: { label: "Dit abonnement", items: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } } },
     planLinks: ["OpenCode-abonnement"],
     ours: { label: "OpenCode-abonnementer" },
@@ -766,7 +766,6 @@ export const content = {
       text: "Opret, installer og del desktop-plugins.",
       link: "Se nyt i 2.2",
     },
-    "use-your-claude-code-login-in-opencode": { text: "Brug dit Claude Code-login i OpenCode.", link: "Se v2.2.3" },
     "desktop-terminals-now-survive-restarts": { text: "Desktop-terminaler overlever nu genstart.", link: "Se v2.2.4" },
     "agents-can-now-generate-images": { text: "Agenter kan nu generere billeder.", link: "Se v2.2.1" },
     "steer-your-sessions-from-your-phone": {

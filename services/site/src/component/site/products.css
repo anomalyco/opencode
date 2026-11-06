@@ -57,16 +57,17 @@
       grid-auto-columns: calc((100% + var(--edge) - var(--gaps) * var(--gutter)) / var(--visible));
     }
 
-    /* The carousel's cards stop short of the small viewport's bottom (100svh, with the browser's
-       toolbars showing) at first load: below the home hero (24 to 28rem down, longer in German) with room under the
-       button. The media keeps its full width (a set width, so the cap shortens it rather than
-       narrowing it) and crops a little more of its height, never under 18rem,
-       so short phones see the whole card once it scrolls into place. */
+    /* The carousel's cards are 4:5, or shorter where that would run past the small viewport
+       (100svh, the browser's toolbars showing): then they end 16px above its bottom at first load,
+       measured from where the cards start (--card-top, set before first paint by the home page;
+       28rem until then). The media keeps its full width (a set width, so the cap shortens it
+       rather than narrowing it) and crops a little more of its height, never under 18rem, so short
+       phones see the whole card once it scrolls into place. */
     :is([data-component="products"]:not([data-layout="grid"]), [data-component="products-skeleton"])
       [data-component="product-card"]
       [data-slot="media"] {
       width: 100%;
-      max-height: max(18rem, calc(100svh - 28rem));
+      max-height: max(18rem, calc(100svh - var(--card-top, 28rem) - 1rem));
     }
 
     /* The carousel card's buttons sit over its dark media in both themes, so they are the light

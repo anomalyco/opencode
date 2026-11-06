@@ -34,8 +34,11 @@ await requireSnapshot()
 await Bun.$`bun ./script/og.ts`.cwd(root).env(env)
 await Bun.$`bun ./textjs/script/build.ts`.cwd(root).env(env)
 await Bun.$`vite build`.cwd(root).env(env)
+// The V2 docs at /docs: prerendered pages, Markdown twins and search (src/docs/script/build.ts).
+await Bun.$`bun ./src/docs/script/build.ts --mode ${mode}`.cwd(root).env(env)
 await Bun.$`bun ./script/check-server-bundle.ts`.cwd(root).env(env)
 await Bun.$`bun ./script/check-client-bundle.ts`.cwd(root).env(env)
+await Bun.$`bun ./script/check-css-output.ts`.cwd(root).env(env)
 
 // @cloudflare/config's file loader refuses Bun; it resolves an imported config the same way.
 const parsed = await resolveAndParseConfig((await import("../cloudflare.config")).default, { isPreview: false, mode })
@@ -59,7 +62,10 @@ await cp(path.join(root, ".output", "public"), assets, {
 })
 const shipped = await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: assets, dot: true }))
 // Every opencode.json and V1 TUI config names these as its $schema; /openapi.json is the protocol's.
-const fixed = ["config.json", "tui.json", "openapi.json"].filter((file) => !shipped.includes(file))
+// The V2 config names /v2/cli.json, and the docs link /docs/openapi.json.
+const fixed = ["config.json", "tui.json", "openapi.json", "v2/cli.json", "docs/openapi.json"].filter(
+  (file) => !shipped.includes(file),
+)
 if (fixed.length) throw new Error(`fixed-URL files missing from Worker assets: ${fixed.join(", ")}`)
 await writeAssets({ root, sourceDirectory: assets })
 
@@ -74,6 +80,8 @@ await writeWorkerConfig({
   config: config.worker,
   manifest: { type: "partial", mainModule: "index.mjs", modules: {} },
 })
+// The bundle checks read the files; this starts the Worker that would be deployed and loads pages.
+await Bun.$`bun ./script/check-worker-start.ts`.cwd(root).env(env)
 console.log(`site: built ${config.worker.name} (${mode}), ${shipped.length} assets`)
 
 /** In CI the snapshot is what /changelog.json serves when GitHub fails, so it must have releases. */

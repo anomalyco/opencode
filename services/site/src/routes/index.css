@@ -1831,14 +1831,36 @@
 
     /* Logo-only tiles ("Bring your own subs"): the mark centred, twice the icon's size. The
        models.dev marks share one square box with their own margins, so one size balances them; it
-       steps down at narrow widths and stays on whole pixels. */
+       steps down at narrow widths and stays on whole pixels.
+       Four across (three on phones) on 12 tracks, so a short last row can share the full width
+       equally and no cell is left empty, whatever the number of logos. --wash-columns tells the
+       entrance wash (reveal.ts) the number of cells across. */
     &[data-tiles="icon"] {
       --icon-size: 40px;
+      --wash-columns: 4;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
 
       li {
+        grid-column: span 3;
         justify-content: center;
         height: 4rem;
         padding-block: 0;
+      }
+
+      @media (width > 40rem) {
+        li:nth-child(4n + 1):nth-last-child(3),
+        li:nth-child(4n + 1):nth-last-child(3) ~ li {
+          grid-column: span 4;
+        }
+
+        li:nth-child(4n + 1):nth-last-child(2),
+        li:nth-child(4n + 1):nth-last-child(2) ~ li {
+          grid-column: span 6;
+        }
+
+        li:nth-child(4n + 1):last-child {
+          grid-column: span 12;
+        }
       }
 
       [data-slot="icon"] {
@@ -1850,10 +1872,23 @@
         --icon-size: 36px;
       }
 
-      /* Phones: three across (the wordmark tiles keep two), so twelve logos make four full rows. */
+      /* Phones: three across (the wordmark tiles keep two). */
       @media (max-width: 40rem) {
         --icon-size: 32px;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        --wash-columns: 3;
+
+        li {
+          grid-column: span 4;
+        }
+
+        li:nth-child(3n + 1):nth-last-child(2),
+        li:nth-child(3n + 1):nth-last-child(2) ~ li {
+          grid-column: span 6;
+        }
+
+        li:nth-child(3n + 1):last-child {
+          grid-column: span 12;
+        }
       }
     }
 

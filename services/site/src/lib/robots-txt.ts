@@ -15,7 +15,7 @@ const message = [
   ...[
     ["https://opencode.ai/llms.txt", "every page, linked as Markdown"],
     ["https://opencode.ai/llms-full.txt", "every page in one file"],
-    ["https://opencode.ai/v2/llms.txt", "the docs, linked as Markdown"],
+    ["https://opencode.ai/docs/llms.txt", "the docs, linked as Markdown"],
     ["Any page + .md", "for example"],
     ["", "https://opencode.ai/product.md"],
     ["", "(or send Accept: text/markdown)"],

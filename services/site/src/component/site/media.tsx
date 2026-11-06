@@ -19,9 +19,10 @@ type Manifest = {
 }
 type MediaKey = "hi" | "phone"
 
-const manifest: Manifest = Object.values(
-  import.meta.glob<Manifest>("./media-manifest.json", { eager: true, import: "default" }),
-)[0] ?? { video: {}, image: {} }
+// Only the stills' half: the pages offer the original videos alone (videoSources), so the video
+// copies' rows stay out of the bundle.
+const images: Manifest["image"] =
+  Object.values(import.meta.glob<Manifest["image"]>("./media-manifest.json", { eager: true, import: "image" }))[0] ?? {}
 
 const base = (src: string) => `/media/${src.replace(/^\/(product-videos\/)?/, "").replace(/\.\w+$/, "")}`
 
@@ -37,7 +38,7 @@ export function videoSources(src: string): VideoSource[] {
 
 /** A still's AVIF and WebP srcsets (if it has copies), and the file for `src`: the smallest WebP. */
 export function imageSources(src: string) {
-  const entry = manifest.image[src]
+  const entry = images[src]
   const file = (format: "avif" | "webp", [width, hash]: [number, string]) => `${base(src)}.${width}.${hash}.${format}`
   const set = (format: "avif" | "webp") =>
     entry?.[format]?.map((item) => `${file(format, item)} ${item[0]}w`).join(", ")
