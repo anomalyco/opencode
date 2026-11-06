@@ -68,9 +68,16 @@ export function SiteBanner() {
     setDismissed(localStorage.getItem(dismissKey) ?? undefined)
     const host = banner?.parentElement
     const link = banner?.querySelector("a")
+    // Reads come before the write, and an unchanged value isn't written again: --banner-scroll sits on
+    // the page's root, so each write restyles the whole page, and a read after it forced that at once.
+    // Unset reads as 0px (site-banner.css's fallback), so a page loaded at the top writes nothing.
+    let offset = "0px"
     const scroll = () => {
-      host?.style.setProperty("--banner-scroll", `${Math.min(window.scrollY, 200)}px`)
-      setOnTop(window.scrollY < (link?.offsetHeight ?? 0))
+      const y = window.scrollY
+      const top = y < (link?.offsetHeight ?? 0)
+      const next = `${Math.min(y, 200)}px`
+      if (next !== offset) host?.style.setProperty("--banner-scroll", (offset = next))
+      setOnTop(top)
     }
     const paint = () => setBlue(link ? getComputedStyle(link).backgroundColor : undefined)
     // The blue changes with the theme (the host's data-theme, or the system's when it follows it)
