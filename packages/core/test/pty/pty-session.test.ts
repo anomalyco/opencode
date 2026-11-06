@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Cause, Deferred, Effect, Exit, Layer, Queue } from "effect"
+import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
@@ -20,6 +21,15 @@ const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Pty.node, Bus.node]), [Location.node.replace(locationLayer)]),
 )
 const ptyTest = process.platform === "win32" ? it.live.skip : it.live
+const ptyEffectTest = process.platform === "win32" ? it.effect.skip : it.effect
+
+const configuredPtyIt = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([Pty.configured({ timeout: "10 seconds" }), Bus.node]),
+    [Location.node.replace(locationLayer)],
+  ),
+)
+const configuredPtyTest = process.platform === "win32" ? configuredPtyIt.effect.skip : configuredPtyIt.effect
 
 const subscribePtyEvents = Effect.fn("PtySessionTest.subscribePtyEvents")(function* () {
   const source = yield* Bus.Service
@@ -198,9 +208,8 @@ describe("pty", () => {
     }),
   )
 
-  ptyTest("reaps unattached sessions after the grace period", () =>
+  ptyEffectTest("reaps unattached sessions after the grace period", () =>
     Effect.gen(function* () {
-      process.env.OPENCODE_PTY_UNATTACHED_TIMEOUT = "200 millis"
       const pty = yield* Pty.Service
       const events = yield* subscribePtyEvents()
       const info = yield* pty.create({
@@ -212,24 +221,20 @@ describe("pty", () => {
       const initial = yield* pty.get(info.id)
       expect(initial.status).toBe("running")
 
+      yield* TestClock.adjust("65 seconds")
+      yield* Effect.yieldNow
+
       expect(yield* waitForEvents(events, info.id, 2)).toEqual(["created", "deleted"])
 
       const missing = yield* pty.get(info.id).pipe(Effect.exit)
       expect(Exit.isFailure(missing)).toBe(true)
       if (Exit.isFailure(missing))
         expect(Cause.squash(missing.cause)).toMatchObject({ _tag: "Pty.NotFoundError", ptyID: info.id })
-    }).pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          delete process.env.OPENCODE_PTY_UNATTACHED_TIMEOUT
-        }),
-      ),
-    ),
+    }),
   )
 
-  ptyTest("does not reap sessions that have been attached", () =>
+  ptyEffectTest("does not reap sessions while attached", () =>
     Effect.gen(function* () {
-      process.env.OPENCODE_PTY_UNATTACHED_TIMEOUT = "200 millis"
       const pty = yield* Pty.Service
       const info = yield* pty.create({
         command: "cat",
@@ -237,20 +242,102 @@ describe("pty", () => {
         env: { TERM: "xterm-256color", OPENCODE_TERMINAL: "1" },
       })
 
-      yield* attachCollecting(info.id)
-      yield* Effect.sleep("350 millis")
+      const attached = yield* attachCollecting(info.id)
+      yield* TestClock.adjust("120 seconds")
+      yield* Effect.yieldNow
 
       const current = yield* pty.get(info.id)
       expect(current.status).toBe("running")
 
+      attached.attachment.detach()
       yield* pty.remove(info.id)
-    }).pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          delete process.env.OPENCODE_PTY_UNATTACHED_TIMEOUT
-        }),
-      ),
-    ),
+    }),
+  )
+
+  ptyEffectTest("reaps session after grace period when last subscriber detaches", () =>
+    Effect.gen(function* () {
+      const pty = yield* Pty.Service
+      const events = yield* subscribePtyEvents()
+      const info = yield* pty.create({
+        command: "cat",
+        cwd: "/tmp",
+        env: { TERM: "xterm-256color", OPENCODE_TERMINAL: "1" },
+      })
+
+      const attached = yield* attachCollecting(info.id)
+      yield* TestClock.adjust("30 seconds")
+      yield* Effect.yieldNow
+
+      const running = yield* pty.get(info.id)
+      expect(running.status).toBe("running")
+
+      attached.attachment.detach()
+
+      yield* TestClock.adjust("30 seconds")
+      yield* Effect.yieldNow
+      const stillRunning = yield* pty.get(info.id)
+      expect(stillRunning.status).toBe("running")
+
+      yield* TestClock.adjust("35 seconds")
+      yield* Effect.yieldNow
+
+      expect(yield* waitForEvents(events, info.id, 2)).toEqual(["created", "deleted"])
+
+      const missing = yield* pty.get(info.id).pipe(Effect.exit)
+      expect(Exit.isFailure(missing)).toBe(true)
+      if (Exit.isFailure(missing))
+        expect(Cause.squash(missing.cause)).toMatchObject({ _tag: "Pty.NotFoundError", ptyID: info.id })
+    }),
+  )
+
+  ptyEffectTest("cancels reaper if client re-attaches before grace period expires", () =>
+    Effect.gen(function* () {
+      const pty = yield* Pty.Service
+      const info = yield* pty.create({
+        command: "cat",
+        cwd: "/tmp",
+        env: { TERM: "xterm-256color", OPENCODE_TERMINAL: "1" },
+      })
+
+      const first = yield* attachCollecting(info.id)
+      first.attachment.detach()
+
+      yield* TestClock.adjust("40 seconds")
+      yield* Effect.yieldNow
+
+      const second = yield* attachCollecting(info.id)
+      yield* TestClock.adjust("60 seconds")
+      yield* Effect.yieldNow
+
+      const current = yield* pty.get(info.id)
+      expect(current.status).toBe("running")
+
+      second.attachment.detach()
+      yield* pty.remove(info.id)
+    }),
+  )
+
+  configuredPtyTest("reaps unattached session using configured timeout", () =>
+    Effect.gen(function* () {
+      const pty = yield* Pty.Service
+      const info = yield* pty.create({
+        command: "cat",
+        cwd: "/tmp",
+        env: { TERM: "xterm-256color", OPENCODE_TERMINAL: "1" },
+      })
+
+      yield* TestClock.adjust("5 seconds")
+      yield* Effect.yieldNow
+      expect((yield* pty.get(info.id)).status).toBe("running")
+
+      yield* TestClock.adjust("6 seconds")
+      yield* Effect.yieldNow
+
+      const missing = yield* pty.get(info.id).pipe(Effect.exit)
+      expect(Exit.isFailure(missing)).toBe(true)
+      if (Exit.isFailure(missing))
+        expect(Cause.squash(missing.cause)).toMatchObject({ _tag: "Pty.NotFoundError", ptyID: info.id })
+    }),
   )
 })
 

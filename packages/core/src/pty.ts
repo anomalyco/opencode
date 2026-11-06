@@ -2,19 +2,33 @@ export * as Pty from "./pty.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Disp, Proc } from "#pty"
-import { Context, Duration, Effect, Fiber, Layer, Schema, Types } from "effect"
+import { Cause, Context, Duration, Effect, Fiber, Layer, Schema, Types } from "effect"
 import { Pty } from "@opencode/schema/pty"
 import { Bus } from "./bus.js"
 import { Location } from "./location.js"
 import { ShellSelect } from "./shell/select.js"
+import { ErrorSummary } from "./util/error-summary.js"
 import { lazy } from "./util/lazy.js"
 
 const BUFFER_LIMIT = 1024 * 1024 * 2
 // Exited sessions stay observable (status, exit code, retained output) until removed explicitly.
 // Cap retention so abandoned terminals do not accumulate unbounded buffers.
 const EXITED_LIMIT = 25
-const unattachedTimeout = () => (process.env.OPENCODE_PTY_UNATTACHED_TIMEOUT || "60 seconds") as Duration.Input
+const DEFAULT_TIMEOUT: Duration.Input = "60 seconds"
 const pty = lazy(() => import("#pty"))
+
+export interface Options {
+  readonly timeout?: Duration.Input
+}
+
+const decodeTimeout = (input?: Duration.Input): Duration.Duration => {
+  if (input === undefined) return Duration.fromInputUnsafe(DEFAULT_TIMEOUT)
+  try {
+    return Duration.fromInputUnsafe(input)
+  } catch {
+    return Duration.fromInputUnsafe(DEFAULT_TIMEOUT)
+  }
+}
 
 type Subscriber = {
   readonly onData: (chunk: string) => void
@@ -33,7 +47,6 @@ type Active = {
   cursor: number
   subscribers: Map<object, Subscriber>
   listeners: Disp[]
-  attached: boolean
   reaperFiber?: Fiber.Fiber<void, unknown>
 }
 
@@ -93,44 +106,73 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Pty") {}
 
-const layer = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const bus = yield* Bus.Service
-    const location = yield* Location.Service
-    const shell = yield* ShellSelect.Service
-    const context = yield* Effect.context()
-    const runFork = Effect.runForkWith(context)
-    const sessions = new Map<ID, Active>()
-    const exitOrder: ID[] = []
+const makeLayer = (options: Options = {}) =>
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const timeout = decodeTimeout(options.timeout)
+      const bus = yield* Bus.Service
+      const location = yield* Location.Service
+      const shell = yield* ShellSelect.Service
+      const context = yield* Effect.context()
+      const runFork = Effect.runForkWith(context)
+      const sessions = new Map<ID, Active>()
+      const exitOrder: ID[] = []
 
-    function notifyEnd(session: Active, event: { exitCode?: number }) {
-      for (const subscriber of session.subscribers.values()) {
-        if (!subscriber.active) {
-          subscriber.end = event
-          continue
+      function cancelReaper(session: Active) {
+        if (session.reaperFiber) {
+          runFork(Fiber.interrupt(session.reaperFiber))
+          session.reaperFiber = undefined
         }
-        try {
-          subscriber.onEnd(event)
-        } catch {}
       }
-      session.subscribers.clear()
-    }
 
-    function teardown(session: Active) {
-      if (session.reaperFiber) {
-        runFork(Fiber.interrupt(session.reaperFiber))
-        session.reaperFiber = undefined
+      function scheduleReaper(session: Active) {
+        if (session.reaperFiber || session.info.status !== "running" || session.subscribers.size > 0) return
+        session.reaperFiber = runFork(
+          Effect.sleep(timeout).pipe(
+            Effect.andThen(
+              Effect.gen(function* () {
+                const current = sessions.get(session.info.id)
+                if (!current || current.subscribers.size > 0 || current.info.status !== "running") return
+                session.reaperFiber = undefined
+                yield* Effect.logWarning("reaping idle pty session", { id: session.info.id })
+                yield* removeSession(session.info.id)
+              }),
+            ),
+            Effect.catchCause((cause: Cause.Cause<unknown>) =>
+              Effect.logError("pty reaper failed", {
+                id: session.info.id,
+                errors: ErrorSummary.from(Cause.squash(cause)),
+              }),
+            ),
+          ),
+        )
       }
-      for (const listener of session.listeners) listener.dispose()
-      session.listeners.length = 0
-      if (session.info.status === "running") {
-        try {
-          session.process.kill()
-        } catch {}
+
+      function notifyEnd(session: Active, event: { exitCode?: number }) {
+        for (const subscriber of session.subscribers.values()) {
+          if (!subscriber.active) {
+            subscriber.end = event
+            continue
+          }
+          try {
+            subscriber.onEnd(event)
+          } catch {}
+        }
+        session.subscribers.clear()
       }
-      notifyEnd(session, {})
-    }
+
+      function teardown(session: Active) {
+        cancelReaper(session)
+        for (const listener of session.listeners) listener.dispose()
+        session.listeners.length = 0
+        if (session.info.status === "running") {
+          try {
+            session.process.kill()
+          } catch {}
+        }
+        notifyEnd(session, {})
+      }
 
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
@@ -205,23 +247,9 @@ const layer = Layer.effect(
         cursor: 0,
         subscribers: new Map(),
         listeners: [],
-        attached: false,
       }
       sessions.set(id, session)
-      session.reaperFiber = yield* Effect.forkDetach(
-        Effect.sleep(unattachedTimeout()).pipe(
-          Effect.andThen(
-            Effect.gen(function* () {
-              const current = sessions.get(id)
-              if (!current || current.attached || current.subscribers.size > 0 || current.info.status === "exited") return
-              session.reaperFiber = undefined
-              yield* Effect.logWarning("reaping unattached pty session", { id })
-              yield* removeSession(id)
-            }),
-          ),
-          Effect.ignore,
-        ),
-      )
+      scheduleReaper(session)
       session.listeners.push(
         proc.onData((chunk) => {
           session.cursor += chunk.length
@@ -234,6 +262,7 @@ const layer = Layer.effect(
               subscriber.onData(chunk)
             } catch {
               session.subscribers.delete(token)
+              if (session.subscribers.size === 0) scheduleReaper(session)
             }
           }
           session.buffer += chunk
@@ -244,6 +273,7 @@ const layer = Layer.effect(
           if (session.info.status === "exited") return
           session.info.status = "exited"
           session.info.exitCode = exitCode
+          cancelReaper(session)
           notifyEnd(session, { exitCode })
           exitOrder.push(id)
           runFork(
@@ -279,11 +309,7 @@ const layer = Layer.effect(
     const attach = Effect.fn("Pty.attach")(function* (id: ID, input: AttachInput) {
       const session = yield* requireSession(id)
       if (session.info.status !== "running") return yield* new ExitedError({ ptyID: id })
-      session.attached = true
-      if (session.reaperFiber) {
-        yield* Fiber.interrupt(session.reaperFiber)
-        session.reaperFiber = undefined
-      }
+      cancelReaper(session)
       yield* Effect.logInfo("client attached to session", { id, directory: location.directory })
       const token = {}
       const subscriber: Subscriber = {
@@ -316,13 +342,16 @@ const layer = Layer.effect(
             if (subscriber.end) subscriber.onEnd(subscriber.end)
           } catch {
             session.subscribers.delete(token)
+            if (session.subscribers.size === 0) scheduleReaper(session)
           }
         },
         detach: () => {
+          if (subscriber.detached) return
           subscriber.detached = true
           subscriber.pending.length = 0
           subscriber.end = undefined
           session.subscribers.delete(token)
+          if (session.subscribers.size === 0) scheduleReaper(session)
         },
       }
     })
@@ -331,8 +360,13 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({
-  service: Service,
-  layer,
-  deps: [Bus.node, Location.node, ShellSelect.node],
-})
+export const layer = makeLayer()
+
+export const configured = (options?: Options) =>
+  makeLocationNode({
+    service: Service,
+    layer: options === undefined ? layer : makeLayer(options),
+    deps: [Bus.node, Location.node, ShellSelect.node],
+  })
+
+export const node = configured()
