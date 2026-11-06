@@ -58,6 +58,8 @@ export type ChangelogView = {
   /** For one entry: the newer and older entries next to it. */
   newer?: { tag: string; title: string }
   older?: { tag: string; title: string }
+  /** The releases are a stand-in (the build snapshot or the last good list) because GitHub failed just now. */
+  stale?: boolean
 }
 
 /** Entries per changelog page. */
@@ -303,7 +305,7 @@ export function changelogView(
 }
 
 /** The entry that includes the release `tag` (merged entries answer to each of their tags), with its neighbours. */
-export function changelogEntryView(releases: ChangelogRelease[], tag: string): ChangelogView {
+export function changelogEntryView(releases: ChangelogRelease[], tag: string, stale?: boolean): ChangelogView {
   const entries = changelogTimeline(releases)
   const index = entries.findIndex((item) => item.releases.some((release) => release.tag === tag))
   const link = (item?: ChangelogEntry) => item && { tag: item.releases[0].tag, title: item.title }
@@ -317,7 +319,18 @@ export function changelogEntryView(releases: ChangelogRelease[], tag: string): C
     filter: [],
     newer: index > 0 ? link(entries[index - 1]) : undefined,
     older: index >= 0 ? link(entries[index + 1]) : undefined,
+    stale,
   }
+}
+
+/**
+ * The HTTP status of one release's page and JSON. A tag missing from GitHub's own list is a 404; one
+ * missing from a stand-in list, or with no list at all, is a 503, because it may be a release the
+ * stand-in doesn't have.
+ */
+export function entryStatus(view: ChangelogView) {
+  if (view.entries.length) return 200
+  return view.ok && !view.stale ? 404 : 503
 }
 
 /** The `?page=…&area=…` query for a changelog view, without the defaults. */

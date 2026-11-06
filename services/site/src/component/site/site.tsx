@@ -127,14 +127,33 @@ const markdownKey = "opencode-markdown-view"
 // A nav item as the nav renders it: a known one (links.ts) or a custom link (nav-order.tsx).
 type NavItemView = { id: string; label: string; href: string; arrow: boolean; external: boolean; company: boolean }
 
-// Pages of this site that render client-side; everything else keeps a full page load.
-// Of the docs, only the Intro (/docs) is a page of this app; the other docs pages are served
-// separately, so links to them take a full page load.
-const clientPages =
-  /^\/(?:desktop|mobile|terminal|sdk|download|changelog(?:\/v\d[\w.+-]*)?|brand|press|legal(?:\/.*)?|docs)?\/?$/
+// Pages of this site that render client-side; everything else keeps a full page load. The docs
+// (/docs and /v2/docs) are served separately, and /download redirects on the server.
+const clientPages = /^\/(?:desktop|mobile|terminal|sdk|changelog(?:\/v\d[\w.+-]*)?|brand|press|legal(?:\/.*)?)?\/?$/
 function clientPage(pathname: string) {
   return clientPages.test(strip(pathname))
 }
+// The full page loads a link here can lead to on this domain (this site's other pages, in any
+// language, the docs and Stats), fetched once the pointer rests on the link so the page opens sooner.
+// Only addresses that are safe to request ahead of time: never the Console or a download, and never a
+// language link (hreflang), whose page sets the language cookie. Browsers without Speculation Rules
+// ignore it.
+const speculationRules = JSON.stringify({
+  prefetch: [
+    {
+      source: "document",
+      eagerness: "moderate",
+      where: {
+        and: [
+          {
+            href_matches: ["{/:locale}?/:page(product|ide|mini|font)", "{/:locale}?/extensions/*", "/v2/*", "/data{/*}?"],
+          },
+          { not: { selector_matches: "[hreflang]" } },
+        ],
+      },
+    },
+  ],
+})
 
 // Labels and headlines match status.opencode.ai.
 const statusLabel = {
@@ -585,7 +604,7 @@ export function Site(props: {
     // Once the page is idle, load the code for the main pages so the first click is instant too.
     const idle = window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 1500))
     idle(() =>
-      ["/", "/product", "/desktop", "/mobile", "/terminal", "/sdk", "/docs", "/changelog"].forEach((path) =>
+      ["/", "/product", "/desktop", "/mobile", "/terminal", "/sdk", "/changelog"].forEach((path) =>
         preloadRoute(language.route(path), { preloadData: false }),
       ),
     )
@@ -1166,6 +1185,7 @@ export function Site(props: {
       <script
         innerHTML={`if(!document.posterLoads){document.posterLoads=1;document.addEventListener("load",(e)=>{const t=e.target;if(t instanceof HTMLImageElement&&t.hasAttribute("data-poster"))t.setAttribute("data-loaded","")},true);const scan=()=>{document.querySelectorAll("img[data-poster]:not([data-seen])").forEach((i)=>{i.setAttribute("data-seen","");if(i.complete&&i.naturalWidth){i.setAttribute("data-instant","");i.setAttribute("data-loaded","")}});if(document.readyState!=="complete")requestAnimationFrame(scan)};requestAnimationFrame(scan)}`}
       />
+      <script type="speculationrules" innerHTML={speculationRules} />
       <Show when={props.markdown?.href}>{(href) => <Link rel="alternate" type="text/markdown" href={href()} />}</Show>
       {/* Hidden until it has keyboard focus. It moves focus itself, before the router sees the click.
           First in the page, before the banner's link, so it is the first Tab stop. */}
