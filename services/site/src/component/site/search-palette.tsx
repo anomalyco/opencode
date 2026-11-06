@@ -557,7 +557,7 @@ export function SearchPalette(props: SiteSearchProps & { openOnMount?: SearchVia
  * panel also tones the page behind it into a narrow band next to the panel colour, so the panel stays
  * at least 97% white (dark: at most 12%) over any page, which keeps its text at 4.5:1 or more.
  */
-function searchLook(s: SiteSettings) {
+export function searchLook(s: SiteSettings) {
   const alpha = s.searchPanelOpacity / 100
   const blur = alpha < 1 && s.searchPanelBlur > 0 ? `blur(${s.searchPanelBlur}px)` : ""
   // Light: map the page's 0–1 onto lo–1 with contrast(c) then brightness(b), in sRGB like compositing.

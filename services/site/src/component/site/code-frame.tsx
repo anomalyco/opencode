@@ -17,6 +17,8 @@ export function CodeFrame(props: {
   copy?: string
   /** A different terminal mark, for the icon options in the code gallery. */
   icon?: "window" | "prompt" | "titlebar"
+  /** The block's language, which the funnel reports with a copy (data-funnel-method). */
+  method?: string
   children: JSX.Element
 }) {
   return (
@@ -26,7 +28,7 @@ export function CodeFrame(props: {
           <Show when={props.kind === "file" && props.label}>{(label) => <FileTypeIcon path={label()} />}</Show>
           {props.label}
         </span>
-        <Show when={props.copy}>{(text) => <CopyButton text={text()} />}</Show>
+        <Show when={props.copy}>{(text) => <CopyButton text={text()} method={props.method} />}</Show>
       </div>
       {props.children}
     </div>
@@ -37,9 +39,10 @@ export function CodeFrame(props: {
  * Copy with visible feedback, text only: "Copy" turns to "Copied" for 1.5s (or "Failed" when the
  * clipboard refuses), and a polite live region says what happened. The three labels share one
  * right-aligned grid cell, so the button keeps the longest label's width and the text's right edge
- * never moves.
+ * never moves. Pages that never hydrate (the docs) copy `data-code` from a delegated listener and
+ * set `data-state` themselves (src/docs/client.ts).
  */
-export function CopyButton(props: { text: string; slot?: "code-copy" | "copy" }) {
+export function CopyButton(props: { text: string; slot?: "code-copy" | "copy"; method?: string }) {
   const i18n = useI18n()
   const [state, setState] = createSignal<"idle" | "copied" | "failed">("idle")
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -49,8 +52,9 @@ export function CopyButton(props: { text: string; slot?: "code-copy" | "copy" })
     clearTimeout(timer)
     timer = setTimeout(() => setState("idle"), 1500)
   }
+  const text = () => props.text.replace(/^\$ /gm, "")
   const copy = () => {
-    const write = navigator.clipboard?.writeText(props.text.replace(/^\$ /gm, ""))
+    const write = navigator.clipboard?.writeText(text())
     if (!write) return show("failed")
     write.then(
       () => show("copied"),
@@ -64,6 +68,8 @@ export function CopyButton(props: { text: string; slot?: "code-copy" | "copy" })
         data-slot={props.slot ?? "code-copy"}
         data-state={state()}
         data-funnel-copy="snippet"
+        data-funnel-method={props.method}
+        data-code={text()}
         aria-label={i18n.t("site.code.copy")}
         onClick={copy}
       >

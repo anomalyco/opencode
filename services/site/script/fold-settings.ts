@@ -1,6 +1,6 @@
 // Production only: Settings and Design mode are development tools, so a production page always
 // renders the default settings (settings-defaults.json) with Design mode off. This is the JavaScript
-// counterpart of cssVariantsForProduction() in vite.config.ts: before Solid compiles a module, it
+// counterpart of cssVariantsForProduction() (script/css-variants-plugin.ts): before Solid compiles a module, it
 // reads every `siteSettings.<key>` as the default's literal, `designMode()` as false and
 // `import.meta.env.DEV` as false, then folds what that decides (`<Show>`, `<Switch>`/`<Match>`,
 // ternaries, `&&`/`||`, `if`), so the branches production never takes, and everything only they
