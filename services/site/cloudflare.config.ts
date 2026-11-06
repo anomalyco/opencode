@@ -34,6 +34,8 @@ export default defineConfig(({ mode }) => {
           : [],
       workersDev: false,
       previewUrls: false,
+      // Workers Logs: requests, errors and console output, searchable in the Cloudflare dashboard.
+      observability: { enabled: true },
     },
   }
 })

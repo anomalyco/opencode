@@ -1,4 +1,4 @@
-# Cache headers for the static files in public/ (Cloudflare Workers static assets; SST uploads
+# Cache headers for the static files in public/ (Cloudflare Workers static assets; script/build.ts ships
 # .output/public/_headers with the assets). Nitro appends its own /_build/assets/* rule (hashed
 # build files, immutable). Rules must not overlap: Cloudflare joins repeated headers with a comma.
 #
