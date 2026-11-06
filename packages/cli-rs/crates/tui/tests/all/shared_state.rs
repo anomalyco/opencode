@@ -11,6 +11,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use opencode_api::generated::{SessionID, V2Event};
+use opencode_api::memory::Memory;
+use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_local::model_pref::Model;
 use opencode_tui::dialogs::session_list::pins;
 use opencode_tui::prompt::history::History;
@@ -187,17 +189,32 @@ fn home_follows_the_canonical_default_location() {
         let directory = directory.trim_end_matches('/');
         support::base(seen, if directory.is_empty() { "/project" } else { directory })
     });
-    let deps = Deps { directory: "/project/".into(), route: Route::Home, ..support::deps(Arc::new(fake)) };
+    // The event stream's first `server.connected` reads the default location, which adopts the server's
+    // directory.
+    let server = Canonical { events: Memory::new(Vec::new()), fake };
+    let deps =
+        Deps { directory: "/project/".into(), route: Route::Home, events: true, ..support::deps(Arc::new(server)) };
     let h = support::mount(100, 30, deps);
-    // The first connection reads the default location, which adopts the server's directory.
-    let connected =
-        opencode_api::events::State { status: opencode_api::events::Status::Connected, attempt: 0, error: None };
-    opencode_tui::features::overlays::connection_changed(&h.tui, &connected);
     h.wait("the home agents", || !h.tui.local.agents().is_empty());
     assert_eq!(
         opencode_tui::features::location::current(&h.tui).map(|location| location.directory).as_deref(),
         Some("/project")
     );
+}
+
+/// `fake`'s answers, with the event stream from [`Memory`].
+struct Canonical {
+    events: Memory,
+    fake: Fake,
+}
+
+impl Transport for Canonical {
+    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
+        if request.url.path() == "/api/event" {
+            return self.events.send(request);
+        }
+        self.fake.send(request)
+    }
 }
 
 /// carbon-3: once the session reports the agent and model a submit committed, the drafts give way, so a
