@@ -67,6 +67,7 @@ export function OpenSourceFork() {
       </h3>
       <div
         data-slot="terminal"
+        data-funnel-copy="fork"
         ref={terminal}
         data-entrance
         data-mounted={wash.mounted() ? "" : undefined}

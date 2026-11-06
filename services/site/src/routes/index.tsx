@@ -230,6 +230,7 @@ export default function Home() {
       <Announcement />
       <section
         data-component="hero"
+        data-section="hero"
         data-design="hero heroTitleSize heroText heroInstall homeAnnouncement"
         data-variant={heroVariant()}
         data-title-size={siteSettings.heroTitleSize}

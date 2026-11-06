@@ -15,6 +15,7 @@
 - Pages are plain HTML. They never hydrate and never load the site's styles, fonts or scripts; the site's never load the docs'. A page links `styles/global.css` and the one browser script, `client.ts`.
 - Everything a page loads lives under `/docs` (the stylesheet, script and fonts are built to `/docs/_build`, images are in `public/docs/assets`), so the docs never depend on the site's files and never collide with them (the site's own build files are at `/_build`). The build fails otherwise.
 - Interactive pieces (search, copy buttons, tabs, the status link) are delegated listeners in `client.ts`, keyed on `data-*` attributes the components render. Don't add Solid state or effects to docs components; they only run on the server.
+- `client.ts` also reports the page to the Console's funnel, as the site's pages do (the site's `AGENTS.md`, "Funnel"). Its config (`lib/funnel-config.ts`) is built in, since a chunk would bring Vite's preload helper into every page. Code blocks are `data-funnel-copy` regions and tabs carry `data-funnel`; search reports counts, never the query.
 - The theme script is inline in `layouts/DocsLayout.tsx` so pages never flash. Navigation is ordinary page loads, made instant by Speculation Rules and cross-document view transitions.
 - `vite.ts` compiles MDX the way Astro's MDX integration did (GitHub-flavoured Markdown, smart punctuation, Shiki with the github-light and github-dark themes, GitHub-style heading ids), so the markup and `global.css` stay unchanged.
 

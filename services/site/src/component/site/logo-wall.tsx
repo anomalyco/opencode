@@ -171,6 +171,7 @@ export function LogoWall(props: {
   return (
     <section
       data-component="logo-wall"
+      data-section="logos"
       data-design="logoWall logoAnimation logoStagger logoLayout logoDividers logoLabel spacer spacerLength spacerCount spacerStartDash spacerStartGap spacerCurve ditherHeight ditherOrientation ditherDirection ditherLength ditherPixel ditherPattern ditherDensity ditherOpacity ditherCurve ditherLine"
       data-kind={props.kind}
       data-layout={label()}

@@ -19,6 +19,13 @@ Read the design-system rules in `DESIGN.md` (also shown at `/dev/components#rule
 
 - A button that opens a menu, popover, dropdown, sheet or dialog sets `aria-expanded="true"` while it is open and is styled from that attribute, not hover: filled and split buttons fill with the link blue (like the product cards' split chevron), neutral buttons keep their pressed grey, and text or nav triggers take the current-item colour with the chevron flipped; Escape closes and returns focus to the trigger.
 
+## Funnel
+
+- Every page and the docs report to the Console's funnel through `src/lib/funnel.ts`: `entry-client.tsx` and `src/docs/client.ts` start it, and it loads the Console's tracker (`/console/funnel/v1.js`) with `src/lib/funnel-config.ts` once the visitor first presses a key or the pointer, or the page is idle. Keep the stub free of imports, and imported only by `entry-client.tsx` on the site, so it stays in the entry chunk and the config and the tracker stay out of every page's first JavaScript.
+- The tracker reads the markup: `data-section` names a part of a page (`section.viewed`, and every click's section), `data-funnel` names a control, `data-funnel-copy` (with `data-funnel-method`) marks what a copy button or a selection inside copies, `data-funnel-surface` names a page's surface (the 404 page), and `data-funnel="ignore"` leaves a control out. Give a new page a surface in `surfaceOf` (`test/funnel.test.ts` fails until you do) and its main parts a `data-section`.
+- `data-section` names, `data-funnel` slugs and surfaces are analytics keys: rename one only together with the reports that read it.
+- Never send what a visitor typed. Code that reports its own events (search, the Markdown shortcut) pushes them onto `window.__ocFunnel` (`Funnel.track` in the docs), with counts and lengths, never text.
+
 ## Boundaries
 
 - This service is the website and the V2 docs, deployed as its own Worker with `cf` (`cloudflare.config.ts`, `script/build.ts`). Never add Wrangler or SST here.

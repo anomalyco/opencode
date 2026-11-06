@@ -95,7 +95,13 @@ export function DocsLayout(props: {
               >
                 <h1>
                   {props.title}
-                  <button type="button" aria-label="Copy page as Markdown" data-copy-markdown data-pagefind-ignore>
+                  <button
+                    type="button"
+                    aria-label="Copy page as Markdown"
+                    data-copy-markdown
+                    data-funnel-copy="page-markdown"
+                    data-pagefind-ignore
+                  >
                     <svg
                       width="16"
                       height="16"

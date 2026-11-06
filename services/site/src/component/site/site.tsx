@@ -715,6 +715,16 @@ export function Site(props: {
       lastKey = { key, time: event.timeStamp }
       if (key !== "d" || !quick) return
       lastKey = { key: "", time: 0 }
+      // The funnel's queue (lib/funnel.ts), as the switch reports its own clicks.
+      window.__ocFunnel?.push({
+        event: {
+          name: "ui.clicked",
+          action: "clicked",
+          target: `markdown-view:${markdown() ? "off" : "on"}`,
+          properties: { via: "shortcut" },
+        },
+        at: performance.now(),
+      })
       toggleMarkdown()
     }
     // The pre-paint script hid the page while it waited for the Markdown view, whose code it started
@@ -1084,6 +1094,7 @@ export function Site(props: {
                 type="button"
                 aria-label={markdown() ? i18n.t("site.view.person") : i18n.t("site.view.markdown")}
                 aria-pressed={markdown() ? "true" : "false"}
+                data-funnel={markdown() ? "markdown-view:off" : "markdown-view:on"}
                 onPointerEnter={prefetchMarkdown}
                 onFocus={prefetchMarkdown}
                 onClick={(event) => toggleMarkdown(!!event.currentTarget.closest('[data-component="site-footer"]'))}
@@ -1101,6 +1112,7 @@ export function Site(props: {
                 href={href()}
                 aria-label={markdown() ? i18n.t("site.view.person") : i18n.t("site.view.markdown")}
                 data-active={markdown() ? "" : undefined}
+                data-funnel={markdown() ? "markdown-view:off" : "markdown-view:on"}
                 onPointerEnter={prefetchMarkdown}
                 onFocus={prefetchMarkdown}
                 onClick={(event) => {
