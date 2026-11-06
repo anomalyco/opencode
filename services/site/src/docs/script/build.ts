@@ -41,6 +41,8 @@ await build({
     outDir: path.join(cache, "client"),
     assetsDir: "_build",
     manifest: true,
+    // The site's target (vite.config.ts): keeps light-dark() native; script/check-css-output.ts fails otherwise.
+    cssTarget: ["chrome123", "edge123", "firefox120", "safari17.5"],
     rolldownOptions: { input: ["src/docs/client.ts", "src/docs/styles/global.css"] },
   },
 })

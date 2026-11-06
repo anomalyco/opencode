@@ -267,6 +267,9 @@ export default function Home() {
 
       {/* The carousel's frame until the carousel itself has streamed in (products.tsx). */}
       <ProductCarouselSkeleton />
+      {/* Before first paint: where the carousel's cards start on the page, so on phones a card runs
+          down to the bottom of the small viewport (products.css) and never past it. Again on resize. */}
+      <script innerHTML={cardTopScript} />
 
       <Show when={siteSettings.logoWall !== "off"}>
         <Show when={siteSettings.logoLayout === "section"} fallback={logoWall()}>
@@ -1453,3 +1456,7 @@ function balanceLogo(metrics: { aspect: number; density: number; centerY: number
 function copyColumnsAttribute(copy: "2 columns" | "3 columns", body: "2 columns" | "3 columns") {
   return copy === body ? undefined : copy.charAt(0)
 }
+
+// The top of the first visible carousel card (the skeleton's until the carousel streams in), in
+// page coordinates, as --card-top on the root.
+const cardTopScript = `(()=>{const r=document.documentElement,f=()=>{const m=[...document.querySelectorAll('[data-component="products-skeleton"] [data-slot="media"],[data-component="products"] [data-slot="media"]')].find(e=>e.getClientRects().length&&e.getBoundingClientRect().height);if(m)r.style.setProperty("--card-top",Math.round(m.getBoundingClientRect().top+scrollY)+"px")};f();addEventListener("resize",f)})()`

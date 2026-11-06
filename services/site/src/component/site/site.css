@@ -2375,9 +2375,9 @@ html:has([data-site][data-theme="dark"]) {
       }
     }
 
+    /* The docs section menu: like the Contents row, no lines (it doesn't pin), and a 16px chevron on
+       the menu button's column that points to the inline end closed and down open. */
     [data-component="section-nav"] {
-      border-block: 1px solid var(--border);
-
       [data-slot="section-toggle"] {
         display: flex;
         align-items: center;
@@ -2389,11 +2389,24 @@ html:has([data-site][data-theme="dark"]) {
         color: var(--text-strong);
 
         [data-slot="chevron"] {
-          /* The chevron flips instantly when the menu opens. */
+          width: 16px;
+          height: 16px;
+          margin-inline-end: calc(34px - var(--edge) - 8px);
+          rotate: -90deg;
+          transition: rotate 180ms var(--ease-out);
+
+          html[dir="rtl"] & {
+            rotate: 90deg;
+          }
+
+          @media (prefers-reduced-motion: reduce) {
+            transition: none;
+          }
         }
 
-        &[aria-expanded="true"] [data-slot="chevron"] {
-          scale: 1 -1;
+        &[aria-expanded="true"] [data-slot="chevron"],
+        html[dir="rtl"] &[aria-expanded="true"] [data-slot="chevron"] {
+          rotate: 0deg;
         }
       }
 
@@ -3304,6 +3317,23 @@ html:has([data-site][data-theme="dark"]) {
    which grows open and pushes the page up while the wordmark's letters are out of order. */
 [data-site] {
   --letters-bar-height: 3.25rem;
+  /* The blue bars' shared look (site-banner.css): the link blue, the same as the blue buttons and
+     the announcement banner (dark mode keeps the deeper light-mode blue, so white keeps 4.5:1). */
+  --bar-blue: light-dark(var(--link), #3b5cf6);
+}
+
+/* While the open bar fills the bottom of the screen, a fixed strip of its blue covers the home
+   indicator's area under it, touching the screen's bottom edge, which iOS Safari tints its bottom
+   toolbar from (the page behind the site takes the blue too: site.tsx). It is as tall as the inset,
+   and a pixel, over the bar's own blue, so it never covers anything else. */
+[data-site][data-letters-end]::after {
+  content: "";
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 1;
+  height: calc(env(safe-area-inset-bottom, 0px) + 1px);
+  background: var(--bar-blue);
+  pointer-events: none;
 }
 
 @media (max-width: 40rem) {
@@ -3345,10 +3375,7 @@ html:has([data-site][data-theme="dark"]) {
     gap: 0.25rem;
     height: calc(var(--letters-bar-height) + env(safe-area-inset-bottom, 0px));
     padding-bottom: env(safe-area-inset-bottom, 0px);
-    /* The blue bars' shared look (site-banner.css): the link blue, the same as the blue buttons and
-       the announcement banner (dark mode keeps the deeper light-mode blue, so white keeps 4.5:1), a
-       highlight and a 92% body. */
-    --bar-blue: light-dark(var(--link), #3b5cf6);
+    /* The blue bars' shared look (--bar-blue above, site-banner.css): a highlight and a 92% body. */
     background: var(--bar-blue);
     font-family: var(--font-sans);
     font-size: var(--fs-ui);
