@@ -22,7 +22,7 @@ import { robotsTxt } from "~/lib/robots-txt"
 import { mediaUrl } from "~/lib/media"
 import { legacyRedirect } from "~/lib/legacy"
 import { metaResponse } from "~/lib/meta"
-import { securityHeaders } from "~/lib/security-headers"
+import { setSecurityHeaders } from "~/lib/security-headers"
 import { v1DocsOrigin } from "~/lib/docs"
 import { docsMiddleware } from "~/docs/middleware"
 
@@ -37,7 +37,7 @@ export default [
       const meta = metaResponse(event.request)
       if (meta) return meta
       // Every other response, pages and redirects included (lib/security-headers.ts).
-      Object.entries(securityHeaders).forEach(([name, value]) => event.response.headers.set(name, value))
+      setSecurityHeaders(event.response.headers)
 
       event.request = sanitizeServerActionRequest(event.request)
 

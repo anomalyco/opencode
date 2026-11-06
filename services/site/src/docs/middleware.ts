@@ -1,6 +1,7 @@
 import { createMiddleware } from "@solidjs/start/middleware"
 import { assets } from "#resource"
 import { config } from "~/config"
+import { securityHeaders, setSecurityHeaders } from "~/lib/security-headers"
 import { base } from "./config"
 import { docsSlugs } from "virtual:docs-pages"
 import { renderLlmsTxt } from "./lib/llms"
@@ -24,6 +25,7 @@ export const docsMiddleware = createMiddleware({
     const url = new URL(event.request.url)
     if (!url.pathname.startsWith(base) && url.pathname !== base.slice(0, -1)) return
     const path = url.pathname.slice(base.length - 1)
+    setSecurityHeaders(event.response.headers)
     if (path === "" || path === "/") return redirect(`${base}docs/`, 301)
     if (path === "/install" || path === "/install/") return install()
     // Static assets in the Worker, so only the development server reaches these two.
@@ -87,8 +89,9 @@ function redirect(location: string, status: number) {
   return new Response(null, { status, headers: { Location: location } })
 }
 
+// h3 doesn't add the prepared headers to an error response, so this one carries them itself.
 function notFound() {
-  return new Response("Not found", { status: 404, headers: { "Cache-Control": "no-store" } })
+  return new Response("Not found", { status: 404, headers: { "Cache-Control": "no-store", ...securityHeaders } })
 }
 
 async function install() {
