@@ -41,7 +41,7 @@ pub fn show(tui: &Tui, location: Option<Location>, on_select: OnSelect) {
                     Ok(()) => Load::Loaded(tui.data.read(|state| {
                         state.location(Some(&read)).and_then(|data| data.skill.clone()).unwrap_or_default()
                     })),
-                    Err(error) => Load::Failed(error.to_string()),
+                    Err(error) => Load::Failed(error.tui_message()),
                 };
             open(&tui, load, on_select);
         }),
