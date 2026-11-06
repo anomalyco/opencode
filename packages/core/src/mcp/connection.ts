@@ -120,7 +120,6 @@ export function make(input: Input): Connection {
 
   const refreshPrompts = (client: McpClient.Connection) =>
     client.prompts().pipe(
-      Effect.orElseSucceed(() => []),
       Effect.map((prompts) => {
         state.prompts = prompts
       }),
