@@ -1450,6 +1450,7 @@ export function Session(props: {
   }))
 
   Keymap.createLayer(() => ({
+    mode: "composer",
     enabled: () => renderer.currentFocusedEditor === null,
     bindings: baseAndUnfocusedCommands.map((command) => command.id),
   }))
