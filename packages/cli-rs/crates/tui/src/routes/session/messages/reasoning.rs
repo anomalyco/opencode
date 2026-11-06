@@ -27,7 +27,6 @@ struct Inner {
     expanded: Cell<bool>,
     hover: Cell<bool>,
     painted: RefCell<Painted>,
-    animations: bool,
 }
 
 #[derive(Clone, Default, PartialEq)]
@@ -85,7 +84,6 @@ impl Reasoning {
             expanded: Cell::new(false),
             hover: Cell::new(false),
             painted: RefCell::new(Painted::None),
-            animations: cx.animations,
         });
         inner.header.on_click(bind!(inner, |inner, _, _| {
             if !inner.state.borrow().hide {
@@ -197,7 +195,7 @@ impl Inner {
                 Some(title) => format!("Thinking: {title}"),
                 None => "Thinking".to_owned(),
             };
-            let spinner = Spinner::new(&self.app).color(fg).label(label).animations(self.animations);
+            let spinner = Spinner::new(&self.app).color(fg).label(label);
             self.header.add(&View::new(&self.app).row().child(&spinner));
             *self.painted.borrow_mut() = Painted::Thinking(spinner);
         }

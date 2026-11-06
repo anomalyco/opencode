@@ -672,7 +672,6 @@ impl Inner {
             groups: &self.groups,
             tps: view.tps,
             verbose_tokens: view.turn_tokens == Some(TurnTokens::Verbose),
-            animations: opencode_ui::motion::enabled(tui.config().info.animations),
             mode: tui.theme.borrow().mode(),
             width: tui.app.size().0,
             session_agent: info.and_then(|info| info.agent.as_ref()).map(|agent| agent.as_str()),
@@ -1044,8 +1043,6 @@ pub struct Context<'a> {
     pub image_preview: bool,
     /// The session's directory.
     pub directory: Option<&'a str>,
-    /// `animations` (spinners move).
-    pub animations: bool,
     pub mode: ThemeMode,
     /// The terminal width.
     pub width: u16,

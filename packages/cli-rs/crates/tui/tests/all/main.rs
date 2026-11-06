@@ -4,6 +4,7 @@
 mod support;
 
 mod actions;
+mod animations;
 mod app;
 mod attach;
 mod attention;

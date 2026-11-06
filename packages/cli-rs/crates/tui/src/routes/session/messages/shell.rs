@@ -34,7 +34,6 @@ struct Inner {
     command: Text,
     output: Text,
     error: Text,
-    animations: bool,
     props: RefCell<Option<Props>>,
     /// The header shows a spinner: the command is running.
     spinning: Cell<Option<bool>>,
@@ -102,7 +101,6 @@ impl Shell {
             command,
             output,
             error,
-            animations: cx.animations,
             props: RefCell::default(),
             spinning: Cell::new(None),
             expanded: Cell::new(false),
@@ -307,7 +305,7 @@ impl Inner {
                 let row = View::new(&self.app)
                     .row()
                     .gap(1)
-                    .child(&Spinner::new(&self.app).color(theme.text.base).animations(self.animations))
+                    .child(&Spinner::new(&self.app).color(theme.text.base))
                     .child(&self.command.clone().grow(1.0).min_width(0));
                 self.header.add(&row);
             } else {

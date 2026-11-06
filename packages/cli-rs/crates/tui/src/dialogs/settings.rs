@@ -608,6 +608,7 @@ fn apply(tui: &Tui, info: Info) {
     if changed {
         tui.theme_changed();
     }
+    opencode_ui::motion::set_running(&tui.app, opencode_ui::motion::enabled(info.animations));
     let leader = tui.settings.config().leader_timeout;
     tui.keymap.set_leader_timeout(leader);
     crate::tabs::route_changed(tui);
