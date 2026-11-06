@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store"
 import { dedupeWith } from "effect/Array"
 import { createSimpleContext } from "./helper"
-import { batch, createMemo, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { useEvent } from "./event"
 import path from "path"
 import { useTuiPaths } from "./runtime"
@@ -42,6 +42,28 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const event = useEvent()
     const permission = usePermission()
     const location = useLocation()
+
+    // Team auto-approval (ported from v2-custom): in autoaccept mode, sync
+    // permissions for every session (members have no boss screen) and reply
+    // once to every pending request across all sessions.
+    const autoApproved = new Set<string>()
+    createEffect(() => {
+      if (permission.mode !== "autoaccept" || client.connection.status() !== "connected") return
+      void Promise.allSettled(data.session.list().map((session) => data.session.permission.sync(session.id)))
+    })
+    createEffect(() => {
+      if (permission.mode !== "autoaccept" || client.connection.status() !== "connected") return
+      data.session.permission.list()?.forEach((request) => {
+        if (autoApproved.has(request.id)) return
+        autoApproved.add(request.id)
+        void data.session.permission
+          .reply({ sessionID: request.sessionID, decision: "once", requestID: request.id })
+          .catch((error) => {
+            autoApproved.delete(request.id)
+            toast.error(error)
+          })
+      })
+    })
 
     const models = () => data.location.model.list(location.ref)
     const providers = () => data.location.provider.list(location.ref)

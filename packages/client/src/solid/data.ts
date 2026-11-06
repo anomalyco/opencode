@@ -1931,8 +1931,10 @@ export function createData(config: CreateDataInput) {
         },
       },
       permission: {
-        list(sessionID: string) {
-          return store.session.permission[sessionID]
+        list(sessionID?: string) {
+          return sessionID === undefined
+            ? Object.values(store.session.permission).flat()
+            : store.session.permission[sessionID]
         },
         sessions() {
           return Object.entries(store.session.permission).flatMap(([sessionID, requests]) =>
