@@ -5,8 +5,8 @@ empty prompt shows `Ask anything… "<one picked at random>"` in the muted color
 
 Rust: E.1 builds the home as TS does (the logo, the prompt slot of at most 75 columns, the footer with the
 version), and E.2's prompt fills the slot cell for cell. The prompt has no placeholder yet, so its first row is
-empty. P-APP `E.1/home`, `E.1/home-narrow`, `E.1/events`, `E.1/mcp-toast`, `E.1/model-invalid` mask that row
-(the TS text is random anyway); `H.2/home-sessions` (`home`, `list`) differs in it.
+empty. The P-APP and P-TUI scenarios that show the home mask that row with a rectangle (the TS text is random
+anyway), or its first three cells where a dialog covers the rest.
 
 Reason: not built yet. The prompt (E.2's `prompt/editor.rs`) takes the placeholders; then the masks keep only
-the random text, and this file and the `deviation` entries that name it go.
+the random text, and this file goes.
