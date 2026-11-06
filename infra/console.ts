@@ -1,5 +1,31 @@
-import { domain } from "./stage"
+import { domain, zoneID } from "./stage"
 import { EMAILOCTOPUS_API_KEY } from "./app"
+
+// opencode.ai and dev.opencode.ai belong to the site Worker (services/site) now, so the old Console Worker gets
+// no custom domain there. Its custom domain was moved to the site Worker in place, keeping its ID (Cloudflare
+// won't let a placeholder DNS record sit beside a Worker-managed one, and deleting the record first would leave
+// the apex without DNS). SiteDomain adopts that resource so SST stops managing it without deleting the live
+// hostname: it is retained on delete, and its inputs are ignored so it is never updated or replaced.
+const siteOwnsDomain = $app.stage === "production" || $app.stage === "dev"
+if (siteOwnsDomain) {
+  new cloudflare.WorkersCustomDomain(
+    "SiteDomain",
+    {
+      accountId: "15d29c8639fd3733b1b5486a2acfd968",
+      hostname: domain,
+      service: `opencode-site-${$app.stage}`,
+      zoneId: zoneID,
+      environment: "production",
+    },
+    {
+      aliases: [
+        `urn:pulumi:${$app.stage}::${$app.name}::sst:cloudflare:SolidStart$sst:cloudflare:Worker$cloudflare:index/workersCustomDomain:WorkersCustomDomain::ConsoleWorkerDomain`,
+      ],
+      retainOnDelete: true,
+      ignoreChanges: ["accountId", "hostname", "service", "zoneId", "environment"],
+    },
+  )
+}
 
 // Archived Zen request/response dumps (writer removed May 2026). Retained on purpose; nothing reads or writes them.
 new sst.cloudflare.Bucket("ZenData")
@@ -19,7 +45,7 @@ const SALESFORCE_CLIENT_SECRET = new sst.Secret("SALESFORCE_CLIENT_SECRET")
 const SALESFORCE_INSTANCE_URL = new sst.Secret("SALESFORCE_INSTANCE_URL")
 
 new sst.cloudflare.x.SolidStart("Console", {
-  domain,
+  domain: siteOwnsDomain ? undefined : domain,
   path: "packages/console/app",
   link: [
     EMAILOCTOPUS_API_KEY,
