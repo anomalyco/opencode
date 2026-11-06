@@ -7,14 +7,14 @@ const here = { directory: "/tmp/opencode/packages/tui" }
 const event = (id: string, type: string, data: unknown, location: unknown = here) => ({
   event: { id, created: 3, type, location, data },
 })
-// The home prompt's placeholder row (T17-home-prompt).
+// The home prompt's placeholder row: its example is random.
 const prompt = [
   {
     x: 16,
     y: 16,
     width: 84,
     height: 1,
-    reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)",
+    reason: "the placeholder example: random in TS and Rust",
   },
 ]
 
