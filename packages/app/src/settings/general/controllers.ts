@@ -174,6 +174,10 @@ export function createAppearanceSettingsController() {
       current: settings.appearance.reduceMotion,
       select: (value: ReduceMotion) => settings.appearance.setReduceMotion(value),
     },
+    visuals: {
+      current: settings.appearance.visuals,
+      select: (value: "inline") => settings.appearance.setVisuals(value),
+    },
     fonts: {
       ui: createMemo(() => ({
         value: sansInput(settings.appearance.uiFont()),

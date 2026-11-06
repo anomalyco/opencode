@@ -1,0 +1,656 @@
+.vz {
+  --v-bg: var(--background-strong, #121212);
+  --v-raised: var(--background-stronger, #151515);
+  --v-fg: var(--text-strong, #ededed);
+  --v-fg-2: var(--text-base, rgba(255, 255, 255, 0.62));
+  --v-fg-3: var(--text-base, rgba(255, 255, 255, 0.62));
+  --v-line: var(--border-weaker-base, #202020);
+  --v-line-2: var(--border-weak-base, #2a2a2a);
+  --v-accent: color-mix(in srgb, var(--surface-brand-base, #fab283) 64%, var(--text-strong, #ededed));
+  --v-accent-2: color-mix(in srgb, var(--v-accent) 22%, transparent);
+  --v-accent-text: color-mix(in srgb, var(--surface-brand-base, #fab283) 42%, var(--text-strong, #ededed));
+  --v-critical: var(--surface-critical-strong, #fc533a);
+  --v-success: var(--surface-success-strong, #12c905);
+  --v-grid: color-mix(in srgb, var(--v-fg) 8%, transparent);
+  --v-font: var(--font-family-sans, sans-serif);
+  --v-mono: var(--font-family-mono, monospace);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--v-line);
+  border-radius: var(--radius-md, 6px);
+  background: var(--v-bg);
+  color: var(--v-fg);
+  font-family: var(--v-font);
+  font-size: 13px;
+  line-height: 1.45;
+  contain: layout paint style;
+}
+
+.vz *,
+.vz *::before,
+.vz *::after {
+  box-sizing: border-box;
+}
+
+.vz button {
+  font: inherit;
+  color: inherit;
+}
+
+.vz :focus-visible {
+  outline: 2px solid var(--v-accent);
+  outline-offset: 2.5px;
+}
+
+.vz-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 10px 9px 12px;
+  border-bottom: 1px solid var(--v-line);
+  background: var(--v-bg);
+}
+
+.vz-heading {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vz-kicker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--v-fg-2);
+  font-family: var(--v-mono);
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.vz-kicker > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vz-dot {
+  width: 1px;
+  height: 9px;
+  border-radius: 0;
+  background: var(--v-line-2);
+  flex: none;
+}
+
+.vz-title {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--v-fg);
+  font-size: 15px;
+  font-weight: 530;
+  letter-spacing: -0.1px;
+  line-height: 1.3;
+}
+
+.vz-subtitle {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--v-fg-2);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+/* The session timeline overlays its Copy and action buttons on the block's top end corner. */
+.vz-inline .vz-tools {
+  margin-right: 38px;
+}
+
+.vz-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  margin-top: -2px;
+}
+
+.vz-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--v-fg-3);
+  cursor: pointer;
+}
+
+.vz-icon:hover {
+  background: var(--v-line);
+  color: var(--v-fg);
+}
+
+.vz-icon[aria-pressed="true"] {
+  color: var(--v-accent);
+}
+
+.vz-icon svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.vz-stage {
+  position: relative;
+  min-width: 0;
+  padding: 8px 12px 4px;
+}
+
+.vz-stage svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.vz-stage text {
+  font-family: var(--v-mono);
+  font-size: 13.5px;
+  fill: var(--v-fg-2);
+  paint-order: stroke;
+  stroke: var(--v-bg);
+  stroke-width: 2.5px;
+  stroke-linejoin: round;
+}
+
+.vz-stage .vz-svg-title {
+  font-family: var(--v-font);
+  font-size: 13.5px;
+  font-weight: 530;
+  fill: var(--v-fg);
+}
+
+.vz-stage .vz-svg-key {
+  font-family: var(--v-mono);
+  font-size: 13.5px;
+  fill: var(--v-fg-3);
+}
+
+.vz-stage .vz-svg-value {
+  font-family: var(--v-mono);
+  font-size: 13.5px;
+  fill: var(--v-fg);
+}
+
+.vz-axis {
+  stroke: var(--v-line-2);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.vz-guide {
+  stroke: var(--v-line);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.vz-line {
+  fill: none;
+  stroke: var(--v-fg-2);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.vz-line-accent {
+  fill: none;
+  stroke: var(--v-accent);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.vz-line-muted {
+  fill: none;
+  stroke: var(--v-fg-3);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.vz-fill-accent {
+  fill: var(--v-accent-2);
+  stroke: none;
+}
+
+.vz-node {
+  fill: var(--v-bg);
+  stroke: var(--v-line-2);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.vz-node-accent {
+  fill: var(--v-accent);
+  stroke: var(--v-accent);
+}
+
+.vz-arrow {
+  fill: var(--v-fg-2);
+}
+
+.vz-arrow-accent {
+  fill: var(--v-accent);
+}
+
+.vz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 7px 12px;
+  border-top: 1px solid var(--v-line);
+}
+
+.vz-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--v-fg-2);
+  font-family: var(--v-mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.vz-control > output {
+  min-width: 52px;
+  color: var(--v-fg);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.vz-range {
+  width: 112px;
+  height: 18px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  cursor: ew-resize;
+}
+
+.vz-range::-webkit-slider-runnable-track {
+  height: 1px;
+  background: var(--v-line-2);
+}
+
+.vz-range::-webkit-slider-thumb {
+  width: 9px;
+  height: 9px;
+  margin-top: -4px;
+  appearance: none;
+  border: 0;
+  border-radius: 50%;
+  background: var(--v-accent);
+}
+
+.vz-range::-moz-range-track {
+  height: 1px;
+  background: var(--v-line-2);
+}
+
+.vz-range::-moz-range-thumb {
+  width: 9px;
+  height: 9px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--v-accent);
+}
+
+.vz-segment {
+  display: inline-flex;
+  padding: 1px;
+  border: 1px solid var(--v-line);
+  border-radius: var(--radius-sm, 4px);
+}
+
+.vz-segment button {
+  min-width: 24px;
+  height: 20px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--v-fg-3);
+  font-family: var(--v-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.vz-segment button[aria-pressed="true"] {
+  background: var(--v-line);
+  color: var(--v-fg);
+}
+
+.vz-readout {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-family: var(--v-mono);
+  font-size: 11px;
+  color: var(--v-fg-2);
+  white-space: nowrap;
+}
+
+.vz-readout b {
+  color: var(--v-fg);
+  font-weight: 440;
+  font-variant-numeric: tabular-nums;
+}
+
+.vz-readout[data-tone="accent"] b {
+  color: var(--v-accent-text);
+}
+
+.vz-readout[data-tone="critical"] b {
+  color: var(--v-critical);
+}
+
+.vz-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 12px 10px;
+}
+
+.vz-caption {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--v-fg-2);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.vz-note {
+  margin: 0;
+  color: var(--v-fg-2);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.vz-note b {
+  color: var(--v-fg-2);
+  font-weight: 530;
+}
+
+.vz-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--v-fg-2);
+  font-family: var(--v-mono);
+  font-size: 11px;
+}
+
+.vz-error {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 12px;
+  color: var(--v-fg-2);
+  font-size: 12px;
+}
+
+.vz-error strong {
+  color: var(--v-fg);
+  font-weight: 530;
+}
+
+.vz-error code {
+  overflow-wrap: anywhere;
+  color: var(--v-fg-2);
+  font-family: var(--v-mono);
+  font-size: 11px;
+}
+
+.vz-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--v-fg-3);
+  font-family: var(--v-mono);
+  font-size: 11px;
+}
+
+.vz-fallback {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1px;
+  background: var(--v-line);
+  border-top: 1px solid var(--v-line);
+}
+
+.vz-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  background: var(--v-bg);
+}
+
+.vz-metric span {
+  color: var(--v-fg-3);
+  font-family: var(--v-mono);
+  font-size: 11px;
+}
+
+.vz-metric b {
+  color: var(--v-fg);
+  font-family: var(--v-mono);
+  font-size: 12px;
+  font-weight: 440;
+  font-variant-numeric: tabular-nums;
+}
+
+.vz:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  background: var(--v-bg);
+  contain: none;
+}
+
+.vz:fullscreen .vz-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  padding: 24px;
+  min-height: 0;
+}
+
+.vz:fullscreen .vz-stage > .vz-assembly {
+  flex: 1;
+  min-height: 0;
+}
+
+.vz-assembly {
+  position: relative;
+  height: 100%;
+  min-height: 240px;
+}
+
+.vz:fullscreen .vz-stage > svg {
+  display: block;
+  width: auto;
+  max-width: min(100%, 1200px);
+  max-height: 100%;
+  margin: 0 auto;
+}
+
+.vz:fullscreen .vz-strip {
+  display: none !important;
+}
+
+.vz:fullscreen .vz-caption {
+  max-width: 84ch;
+}
+
+.vz-dash {
+  animation: vz-flow 2.4s linear infinite;
+}
+
+.vz-pulse {
+  animation: vz-pulse 1.8s ease-in-out infinite;
+}
+
+.vz-sweep {
+  transform-origin: center;
+  animation: vz-sweep 4s linear infinite;
+}
+
+@keyframes vz-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+@keyframes vz-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes vz-sweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vz-dash,
+  .vz-pulse,
+  .vz-sweep {
+    animation: none;
+  }
+}
+
+:root[data-motion="reduce"] .vz-dash,
+:root[data-motion="reduce"] .vz-pulse,
+:root[data-motion="reduce"] .vz-sweep {
+  animation: none;
+}
+
+@media (max-width: 560px) {
+  .vz-stage {
+    padding: 6px 8px 2px;
+  }
+  .vz-header,
+  .vz-controls,
+  .vz-foot {
+    padding-left: 9px;
+    padding-right: 9px;
+  }
+  .vz-range {
+    width: 84px;
+  }
+}
+
+.vz button.vz-toggle {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--v-fg-2);
+  font-family: var(--v-mono);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.vz button.vz-toggle:hover {
+  color: var(--v-fg);
+}
+
+.vz button.vz-toggle b {
+  color: var(--v-accent-text);
+  font-weight: 440;
+}
+
+.vz-strip {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: -2px;
+}
+
+.vz-open {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border-weaker-base, #202020);
+  border-radius: var(--radius-md, 6px);
+  background: var(--background-strong, #121212);
+  color: var(--text-strong, #ededed);
+  font-family: var(--font-family-sans, sans-serif);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vz-open:hover {
+  background: var(--surface-base, rgba(255, 255, 255, 0.031));
+}
+
+.vz-open:focus-visible {
+  outline: 2px solid var(--border-selected, #fab283);
+  outline-offset: 2.5px;
+}
+
+.vz-open-kind,
+.vz-open-action {
+  flex: none;
+  color: var(--text-base, rgba(255, 255, 255, 0.62));
+  font-family: var(--font-family-mono, monospace);
+  font-size: 11px;
+}
+
+.vz-open-title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vz-open-action {
+  color: var(--text-interactive-base, #9dbefe);
+}
+

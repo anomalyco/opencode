@@ -16,6 +16,8 @@ const reduceMotionOptions = [
   { value: "off" as const, label: "settings.appearance.row.reduceMotion.off" as const },
 ]
 
+const visualOptions = [{ value: "inline" as const, label: "settings.appearance.row.visuals.inline" as const }]
+
 const fontSettings = {
   ui: {
     action: "settings-ui-font",
@@ -152,6 +154,22 @@ export const SettingsAppearance: Component = () => {
                 />
               </SettingsRow>
             </Show>
+
+            <SettingsRow
+              title={language.t("settings.appearance.row.visuals.title")}
+              description={language.t("settings.appearance.row.visuals.description")}
+            >
+              <Select
+                data-action="settings-visuals"
+                options={visualOptions}
+                current={visualOptions.find((option) => option.value === appearance.visuals.current())}
+                placement="bottom-end"
+                gutter={6}
+                value={(option) => option.value}
+                label={(option) => language.t(option.label)}
+                onSelect={(option) => option && appearance.visuals.select(option.value)}
+              />
+            </SettingsRow>
 
             <SettingsRow
               title={language.t("settings.appearance.row.reduceMotion.title")}

@@ -166,6 +166,12 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "appearance",
+    label: "settings.appearance.row.visuals.title",
+    target: "settings-visuals",
+    keywords: "visuals diagrams mechanisms inline",
+  },
+  {
+    tab: "appearance",
     label: "settings.appearance.row.reduceMotion.title",
     target: "settings-reduce-motion",
     keywords: "animation accessibility",

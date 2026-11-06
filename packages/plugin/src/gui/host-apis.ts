@@ -1192,6 +1192,16 @@ export interface Appearance {
    * ```
    */
   mode(): "light" | "dark"
+  /**
+   * Where generative visuals render. Reactive.
+   * - `inline`: in the conversation, at the fenced block.
+   * - `panel`: in the session's visual workbench, with a link in the conversation.
+   * @example
+   * ```ts
+   * const inline = ctx.appearance.visualDisplay() === "inline"
+   * ```
+   */
+  visualDisplay(): "inline" | "panel"
 }
 
 /** The app's route. */
