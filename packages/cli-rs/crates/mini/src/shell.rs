@@ -40,6 +40,9 @@ const FOOTER_HEIGHT: u16 = 4;
 const TWO_PRESS: Duration = Duration::from_secs(5);
 /// `NOTICE_DURATION`.
 const NOTICE: Duration = Duration::from_secs(3);
+/// `SHELL_OUTPUT_GRACE_MS`: how long a shell turn waits after `session.shell` answers for its
+/// `session.shell.ended` event.
+const SHELL_OUTPUT_GRACE: Duration = Duration::from_millis(1500);
 
 pub fn run(input: Input) -> anyhow::Result<()> {
     let settings = MiniSettings::resolve(input.config.mini.as_ref());
@@ -103,6 +106,7 @@ pub fn run(input: Input) -> anyhow::Result<()> {
         config_store: CliConfig::new(&input.paths),
         queue: RefCell::new(Queue::default()),
         state: RefCell::new(State::default()),
+        shell: RefCell::new(None),
         theme_input,
         settings: Cell::new(settings),
         input: Meta {
@@ -204,6 +208,18 @@ struct State {
     turn: bool,
 }
 
+/// The `!` shell turn in flight (`ShellWait`). It holds no server drain, so the two-press gesture aborts its
+/// request instead of interrupting the session.
+struct ShellWait {
+    message_id: String,
+    /// The shell's ID, from the `session.shell.started` event of this message.
+    shell_id: Option<String>,
+    ended: bool,
+    task: Option<opentui::app::TaskHandle>,
+    /// `session.shell` answered; the turn waits for `session.shell.ended` until this timer fires.
+    grace: Option<TimerId>,
+}
+
 struct Mini {
     app: App,
     client: Client,
@@ -227,6 +243,7 @@ struct Mini {
     config_store: CliConfig,
     queue: RefCell<Queue>,
     state: RefCell<State>,
+    shell: RefCell<Option<ShellWait>>,
     theme_input: ThemeInput,
     settings: Cell<MiniSettings>,
     input: Meta,
@@ -740,7 +757,7 @@ impl Mini {
     }
 
     /// Writes a transcript output: footer events, commits, then the status.
-    fn output(&self, cx: &mut Cx<'_>, output: Output) {
+    fn output(self: &Rc<Self>, cx: &mut Cx<'_>, output: Output) {
         for event in &output.footer {
             if matches!(
                 event,
@@ -770,6 +787,10 @@ impl Mini {
         if let Some(mut patch) = output.patch {
             let idle = patch.running == Some(false);
             // `contextLimit`: the share of the model's context window the step used.
+            // A new status replaces the notice (`eventPatch`).
+            if patch.status.is_some() {
+                self.set_notice("");
+            }
             let limit = self.selection().and_then(|model| crate::variants::context_limit(&self.providers(), &model));
             if let (Some(Some(usage)), Some(limit)) = (patch.usage.as_mut(), limit) {
                 usage.percent = Some((usage.tokens as f64 / limit as f64 * 100.0 + 0.5).floor() as u64);
@@ -793,6 +814,10 @@ impl Mini {
             if idle && !self.state.borrow().running {
                 self.complete(cx);
             }
+        }
+        // After the commits, so a shell's output prints before its turn ends.
+        for event in &output.footer {
+            self.shell_event(cx, event);
         }
     }
 
@@ -924,18 +949,27 @@ impl Mini {
             self.sending("running shell");
             self.trace("send.shell", json!({ "sessionID": session.id, "id": id, "command": prompt.text }));
             let command = prompt.text.clone();
-            self.app.spawn(
+            let message_id = id.clone();
+            let task = self.app.spawn(
                 {
                     let id = id.clone();
                     async move { crate::prompt::api::shell(&client, &session.id, &id, &command).await }
                 },
                 move |cx, result| {
-                    if let Err(error) = result {
-                        mini.prompt_error(cx, &id, error);
+                    if let Some(wait) = mini.shell.borrow_mut().as_mut() {
+                        wait.task = None;
                     }
-                    mini.finish(cx);
+                    match result {
+                        Ok(()) => mini.shell_answered(cx),
+                        Err(error) => {
+                            mini.prompt_error(cx, &id, error);
+                            mini.end_shell(cx);
+                        }
+                    }
                 },
             );
+            *self.shell.borrow_mut() =
+                Some(ShellWait { message_id, shell_id: None, ended: false, task: Some(task), grace: None });
             return;
         }
         let id = prompt.message_id.clone().unwrap_or_else(opencode_api::id::message);
@@ -953,6 +987,9 @@ impl Mini {
             ),
         }
         let command = prompt.command.is_some();
+        if !command && let Some(transcript) = self.transcript.borrow_mut().as_mut() {
+            transcript.begin_wait(&id);
+        }
         let text = prompt.text.clone();
         let sent = prompt.clone();
         self.app.spawn(
@@ -989,11 +1026,64 @@ impl Mini {
                     mini.settle(&session.id, started);
                 }
                 Err(error) => {
+                    if let Some(transcript) = mini.transcript.borrow_mut().as_mut() {
+                        transcript.end_wait();
+                    }
                     mini.prompt_error(cx, &id, error);
                     mini.finish(cx);
                 }
             },
         );
+    }
+
+    /// `session.shell` answered: the turn ends with the shell's `session.shell.ended` event, or after the grace.
+    fn shell_answered(self: &Rc<Self>, cx: &mut Cx<'_>) {
+        let Some(ended) = self.shell.borrow().as_ref().map(|wait| wait.ended) else { return };
+        if ended {
+            self.end_shell(cx);
+            return;
+        }
+        let mini = self.clone();
+        let timer = self.app.set_timeout(SHELL_OUTPUT_GRACE, move |cx| mini.end_shell(cx));
+        if let Some(wait) = self.shell.borrow_mut().as_mut() {
+            wait.grace = Some(timer);
+        }
+    }
+
+    /// The shell turn ended, was aborted, or failed; the next work starts.
+    fn end_shell(self: &Rc<Self>, cx: &mut Cx<'_>) {
+        let Some(wait) = self.shell.borrow_mut().take() else { return };
+        if let Some(timer) = wait.grace {
+            self.app.cancel_timer(timer);
+        }
+        if let Some(task) = wait.task {
+            task.abort();
+        }
+        self.finish(cx);
+    }
+
+    /// Follows the shell turn's live events: its shell's ID, then its end.
+    fn shell_event(self: &Rc<Self>, cx: &mut Cx<'_>, event: &V2Event) {
+        let answered = {
+            let mut shell = self.shell.borrow_mut();
+            let Some(wait) = shell.as_mut() else { return };
+            match event {
+                V2Event::SessionShellStarted(started)
+                    if replay::message_from_event(started.id.as_str()) == wait.message_id =>
+                {
+                    wait.shell_id = Some(started.data.shell.id.as_str().to_owned());
+                    return;
+                }
+                V2Event::SessionShellEnded(ended) if wait.shell_id.as_deref() == Some(ended.data.shell.id.as_str()) => {
+                    wait.ended = true;
+                    wait.grace.is_some()
+                }
+                _ => return,
+            }
+        };
+        if answered {
+            self.end_shell(cx);
+        }
     }
 
     /// A prompt submitted while an ordinary turn runs goes to the inbox at once (`input.admit`).
@@ -1151,6 +1241,10 @@ impl Mini {
                     mini.settle(&session, started);
                     return;
                 }
+                let error = mini.transcript.borrow_mut().as_mut().and_then(Transcript::end_wait);
+                if let Some(error) = error {
+                    mini.append(cx, error);
+                }
                 mini.turn_summary(cx, started);
                 mini.finish(cx);
             },
@@ -1220,9 +1314,19 @@ impl Mini {
         }
         self.patch(|state| state.interrupt = 0);
         self.set_notice("interrupting");
+        // A running shell holds no drain, so `session.interrupt` cannot reach it: its request is aborted instead,
+        // and the command on the server keeps its own lifecycle.
+        if self.shell.borrow().is_some() {
+            let mini = self.clone();
+            self.app.defer(move |cx| mini.end_shell(cx));
+            return true;
+        }
         let Some(session) = self.session.borrow().clone() else {
             return true;
         };
+        if let Some(transcript) = self.transcript.borrow_mut().as_mut() {
+            transcript.interrupt_wait();
+        }
         self.trace("send.interrupt", json!({ "sessionID": session.id }));
         let client = self.client.clone();
         self.app.spawn(async move { replay::interrupt(&client, &session.id, Some(true)).await }, |_, result| {
