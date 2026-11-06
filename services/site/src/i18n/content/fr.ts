@@ -462,7 +462,7 @@ export const content = {
   byos: {
     title: "Apportez votre abonnement",
     headline: "Utilisez les abonnements que vous avez déjà.",
-    line: "Connectez-vous avec ChatGPT Plus ou Pro, GitHub Copilot ou Claude Code. Ou prenez un abonnement OpenCode.",
+    line: "Connectez-vous avec ChatGPT Plus ou Pro, ou avec GitHub Copilot. Ou prenez un abonnement OpenCode.",
     yours: {
       label: "Votre abonnement",
       items: {
@@ -1226,10 +1226,6 @@ export const content = {
     "create-install-and-share-desktop-plugins": {
       text: "Créez, installez et partagez des plugins desktop.",
       link: "Nouveautés de la 2.2",
-    },
-    "use-your-claude-code-login-in-opencode": {
-      text: "Utilisez votre connexion Claude Code dans OpenCode.",
-      link: "Voir la v2.2.3",
     },
     "desktop-terminals-now-survive-restarts": {
       text: "Les terminaux de l'app desktop survivent aux redémarrages.",

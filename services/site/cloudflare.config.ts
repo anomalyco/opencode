@@ -32,8 +32,6 @@ export default defineConfig(({ mode }) => {
       env: {
         ASSETS: bindings.assets(),
         STAGE: bindings.text(dev ? "dev" : "production"),
-        // The email sign-up's OpenSend key (lib/opensend.ts). A deploy fails until it's set on the Worker.
-        OPENSEND_API_KEY: bindings.secret(),
       },
       triggers:
         dev || productionOwnsRoot

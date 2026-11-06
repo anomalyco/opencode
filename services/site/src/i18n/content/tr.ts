@@ -6,10 +6,6 @@ export const content = {
       text: "Masaüstü eklentileri oluşturun, kurun ve paylaşın.",
       link: "2.2'deki yenilikler",
     },
-    "use-your-claude-code-login-in-opencode": {
-      text: "Claude Code girişinizi OpenCode'da kullanın.",
-      link: "v2.2.3'e bakın",
-    },
     "desktop-terminals-now-survive-restarts": {
       text: "Masaüstü terminalleri artık yeniden başlatmalarda kapanmıyor.",
       link: "v2.2.4'e bakın",
@@ -476,9 +472,6 @@ export const content = {
       "github-copilot": {
         name: "GitHub Copilot",
       },
-      "claude-code": {
-        name: "Claude Code",
-      },
     },
     plans: {
       "opencode-go": {
@@ -508,7 +501,7 @@ export const content = {
   byos: {
     title: "Kendi aboneliğinizi getirin",
     headline: "Zaten sahip olduğunuz abonelikleri kullanın.",
-    line: "ChatGPT Plus ya da Pro, GitHub Copilot veya Claude Code ile giriş yapın. Ya da bir OpenCode aboneliği kullanın.",
+    line: "ChatGPT Plus ya da Pro veya GitHub Copilot ile giriş yapın. Ya da bir OpenCode aboneliği kullanın.",
     yours: {
       label: "Aboneliğiniz",
       items: {
@@ -517,9 +510,6 @@ export const content = {
         },
         "github-copilot": {
           name: "GitHub Copilot",
-        },
-        "claude-code": {
-          name: "Claude Code",
         },
       },
     },

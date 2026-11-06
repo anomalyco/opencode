@@ -176,8 +176,6 @@ const preloadRules: [string, string, (s: SiteSettings, el: HTMLElement, d: SiteS
   ],
   ['ul[data-component="tools"]', "data-settling", (s, el, d) => (s.toolTiles !== d.toolTiles ? "" : undefined)],
   ['dl[data-component="stats"]', "data-settling", (s, el, d) => (s.stats !== d.stats ? "" : undefined)],
-  ['section[data-section="signup"]', "data-off", (s) => (s.signupSection === "off" ? "" : undefined)],
-  ['[data-component="signup"]', "data-settling", (s, el, d) => (s.signupStyle !== d.signupStyle ? "" : undefined)],
   [
     "section[data-console-height]",
     "data-settling",

@@ -229,7 +229,7 @@ export const content = {
   byos: {
     title: "自備訂閱",
     headline: "使用你已有的訂閱。",
-    line: "使用 ChatGPT Plus 或 Pro、GitHub Copilot 或 Claude Code 登入，或是使用 OpenCode 訂閱。",
+    line: "使用 ChatGPT Plus 或 Pro 或 GitHub Copilot 登入，或是使用 OpenCode 訂閱。",
     yours: { label: "你的訂閱", items: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } } },
     planLinks: ["OpenCode 訂閱", "OpenCode Go"],
     ours: { label: "OpenCode 方案" },
@@ -650,10 +650,6 @@ export const content = {
   },
   announcements: {
     "create-install-and-share-desktop-plugins": { text: "建立、安裝和分享桌面外掛。", link: "查看 2.2 的新功能" },
-    "use-your-claude-code-login-in-opencode": {
-      text: "在 OpenCode 中使用你的 Claude Code 登入。",
-      link: "查看 v2.2.3",
-    },
     "desktop-terminals-now-survive-restarts": { text: "桌面終端機現在重新啟動後依然保留。", link: "查看 v2.2.4" },
     "agents-can-now-generate-images": { text: "代理現在可以產生圖片了。", link: "查看 v2.2.1" },
     "steer-your-sessions-from-your-phone": { text: "用手機引導你的工作階段。", link: "認識 OpenCode Mobile" },

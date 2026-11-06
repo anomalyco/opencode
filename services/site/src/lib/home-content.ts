@@ -199,14 +199,6 @@ export function homeContent(t: Translate, route: (path: string) => string) {
         { label: t("home.growth.monthlyDevs"), value: config.stats.monthlyUsers },
       ],
     },
-    privacy: {
-      title: t("home.privacy.title"),
-      body: [
-        `${t("home.privacy.body")} `,
-        { text: `${t("home.privacy.learnMore")} ${t("home.privacy.link")}`, href: docs("/policies/") },
-        ".",
-      ] satisfies RichText,
-    },
     console: {
       title: t("site.nav.console"),
       headline: t("home.console.headline"),

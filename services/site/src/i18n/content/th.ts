@@ -282,7 +282,7 @@ export const content = {
   byos: {
     title: "ใช้การสมัครสมาชิกของคุณ",
     headline: "ใช้การสมัครสมาชิกที่คุณมีอยู่แล้ว",
-    line: "เข้าสู่ระบบด้วย ChatGPT Plus หรือ Pro, GitHub Copilot หรือ Claude Code หรือใช้การสมัครสมาชิก OpenCode",
+    line: "เข้าสู่ระบบด้วย ChatGPT Plus หรือ Pro หรือ GitHub Copilot หรือใช้การสมัครสมาชิก OpenCode",
     yours: { label: "การสมัครสมาชิกของคุณ", items: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } } },
     planLinks: ["การสมัครสมาชิก OpenCode", "OpenCode Go"],
     ours: { label: "แผนของ OpenCode" },
@@ -730,10 +730,6 @@ export const content = {
     "create-install-and-share-desktop-plugins": {
       text: "สร้าง ติดตั้ง และแชร์ปลั๊กอินเดสก์ท็อปได้แล้ว",
       link: "ดูสิ่งใหม่ในรุ่น 2.2",
-    },
-    "use-your-claude-code-login-in-opencode": {
-      text: "ใช้การล็อกอิน Claude Code ของคุณใน OpenCode",
-      link: "ดู v2.2.3",
     },
     "desktop-terminals-now-survive-restarts": { text: "เทอร์มินัลในแอปเดสก์ท็อปยังอยู่แม้รีสตาร์ต", link: "ดู v2.2.4" },
     "agents-can-now-generate-images": { text: "เอเจนต์สร้างรูปภาพได้แล้ว", link: "ดู v2.2.1" },

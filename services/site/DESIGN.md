@@ -25,7 +25,7 @@ To add a rule, add one line under its group. Mark a rule that is still being dec
 - Use OpenTUI Mono (`--font-mono`), Anomaly's own font, for nav, labels, titles and code, and Inter (`--font-sans`) for body and reading text. → [Fonts](/dev/components#fonts)
 - Serve only fonts we own or that are openly licensed (OpenTUI Mono, the OpenCode font, Inter), never a commercial face. `test/fonts.test.ts` enforces it.
 - Step text once, at 960px. Only page titles (`--fs-h1`) and display titles are fluid. → [Type scale](/dev/components#type-scale)
-- Set inputs with `--fs-input`, 16px on touch, so iOS doesn't zoom. → [Signup form](/dev/components#signup)
+- Set inputs with `--fs-input`, 16px on touch, so iOS doesn't zoom.
 - Give section titles `--title-size` with the `--title-stroke` faux medium; the current nav item gets the same stroke.
 - Keep reading text within `--measure` (about 70 characters a line).
 - Let hero and product leads run as two long lines, with no max-width cap. Why — the cap was tried and removed by David.
