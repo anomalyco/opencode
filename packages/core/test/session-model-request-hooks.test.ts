@@ -132,7 +132,7 @@ describe("SessionModelRequest HTTP hooks", () => {
   it.effect("carries a hook-returned request's redirect mode to the transport", () =>
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
-      let redirect: RequestRedirect | undefined
+      let redirect: RequestInit["redirect"] | undefined
       yield* hooks.register("session", "http.request", (event) =>
         Effect.sync(() => {
           if (redirect === undefined) return
