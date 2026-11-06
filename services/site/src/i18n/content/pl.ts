@@ -6,10 +6,6 @@ export const content = {
       text: "Twórz, instaluj i udostępniaj pluginy desktopowe.",
       link: "Zobacz nowości w 2.2",
     },
-    "use-your-claude-code-login-in-opencode": {
-      text: "Używaj logowania Claude Code w OpenCode.",
-      link: "Zobacz v2.2.3",
-    },
     "desktop-terminals-now-survive-restarts": {
       text: "Terminale w Desktop przetrwają teraz restart.",
       link: "Zobacz v2.2.4",
@@ -63,68 +59,34 @@ export const content = {
     desktop: {
       title: "OpenCode | Aplikacja desktopowa na macOS, Windows i Linux",
       description:
-        "Uruchamiaj kilku agentów OpenCode naraz, każdego w osobnej karcie. Przeglądaj każdą zmianę jako diff, komentuj dowolną linię i sprawdzaj wynik we wbudowanej przeglądarce.",
+        "Uruchamiaj równolegle tylu agentów OpenCode, ilu chcesz, oglądaj każdą zmianę w przeglądarce obok i kontynuuj na dowolnym urządzeniu. Na macOS, Windows i Linux.",
       intro:
         "Uruchamiaj kilku agentów naraz, każdą sesję w osobnej karcie. Przeglądaj każdą zmianę jako diff, komentuj dowolną linię i sprawdzaj wynik we wbudowanej przeglądarce. Na macOS, Windows i Linux.",
-      features: {
-        "built-in-terminal": {
-          title: "Wbudowany terminal",
-          body: "Uruchamiaj polecenia w karcie terminala obok sesji.",
-        },
-        "ssh-servers": {
-          title: "Serwery SSH",
-          body: "Połącz się z inną maszyną przez SSH i pracuj nad jej projektami.",
-        },
-        extensions: {
-          title: "Rozszerzenia",
-          body: "Zarządzaj serwerami MCP, pluginami i skillami w jednym menu.",
-        },
-        wsl: {
-          title: "WSL",
-          body: "W Windows uruchamiaj sesje w dystrybucji WSL 2 zamiast natywnie.",
-        },
-        "office-files": {
-          title: "Pliki Office",
-          body: "Otwieraj pliki Word, Excel i PowerPoint obok sesji.",
-        },
-        "keyboard-shortcuts": {
-          title: "Skróty",
-          body: "Każda akcja ma skrót klawiszowy, a każdy z nich możesz zmienić.",
-        },
-        "updates-itself": {
-          title: "Aktualizacje",
-          body: "Nowe wersje pobierają się i instalują z poziomu aplikacji.",
-        },
-        "all-your-projects": {
-          title: "Wszystkie projekty",
-          body: "Przełączaj się między projektami i ich sesjami w jednym oknie.",
-        },
-      },
       showcase: {
-        "sessions-in-tabs": {
-          title: "Sesje w kartach",
-          body: "Niech kilku agentów pracuje naraz, każda sesja w osobnej karcie.",
-        },
-        "review-and-comment": {
-          title: "Przeglądaj i komentuj",
-          body: "Czytaj każdą zmianę jako diff, skomentuj linię i odeślij ją.",
+        "parallel-agents": {
+          title: "Agenci równolegle",
+          body: "Uruchom tylu agentów, ilu chcesz, i pozwól im pracować równolegle. Przełączaj się między nimi, gdy kończą.",
         },
         "see-it-in-the-browser": {
           title: "Zobacz w przeglądarce",
-          body: "Praca agenta otwiera się w przeglądarce obok sesji na bieżąco.",
+          body: "Twoja aplikacja otwiera się w przeglądarce obok agenta, więc oboje widzicie każdą zmianę na bieżąco.",
         },
-        "pair-your-phone": {
-          title: "Sparuj telefon",
-          body: "Zeskanuj kod QR w OpenCode Mobile, aby sterować sesjami z iPhone'a.",
+        "on-every-device": {
+          title: "Na każdym urządzeniu",
+          body: "Uruchamiaj agentów na wszystkich swoich urządzeniach i kontynuuj w aplikacji desktopowej, terminalu lub na telefonie.",
+        },
+        "extend-it": {
+          title: "Rozszerzaj",
+          body: "Podłącz swoje narzędzia i usługi, aby agent mógł pracować ze wszystkim. Albo pozwól OpenCode zbudować wtyczki dla samego siebie, z własnym interfejsem w panelu bocznym.",
         },
       },
     },
     mobile: {
       title: "OpenCode | Mobile, Twoje sesje programowania na telefonie",
       description:
-        "Uruchamiaj, prowadź i zatwierdzaj sesje OpenCode z telefonu. Rozmawiaj z agentem, przeglądaj jego zmiany i zezwalaj na to, czego potrzebuje, gdy działa na Twoim komputerze.",
+        "Uruchamiaj i prowadź sesje OpenCode z telefonu. Rozmawiaj z agentem, gdy działa na Twoim komputerze.",
       intro:
-        "Uruchamiaj, prowadź i zatwierdzaj sesje z telefonu, gdziekolwiek jesteś. Zadzwoń do sesji i porozmawiaj z agentem, przejrzyj jego zmiany i zezwól na to, czego potrzebuje. Wszystko w OpenCode działającym na Twoim komputerze.",
+        "Uruchamiaj i prowadź sesje z telefonu, gdziekolwiek jesteś. Zadzwoń do sesji i rozmawiaj z agentem albo otwórz sesję i kontynuuj od miejsca, w którym skończyłeś, wszystko z OpenCode na Twoim komputerze.",
       features: {
         "notify-when-done": {
           title: "Powiadomienia",
@@ -163,10 +125,6 @@ export const content = {
         voice: {
           title: "Głos",
           body: "Zadzwoń do sesji i powiedz, czego chcesz. Agent odpowie na głos.",
-        },
-        approvals: {
-          title: "Zgody",
-          body: "Gdy agent poprosi o zgodę, przejrzyj zmianę i zatwierdź ją z telefonu.",
         },
         sessions: {
           title: "Sesje",
@@ -432,7 +390,7 @@ export const content = {
         },
       },
       install:
-        "Uruchom to raz. Dodaje serwer MCP browse do wybranych agentów i paruje rozszerzenie z Chrome Web Store. Wymaga Node.js 22.19 lub nowszego.",
+        "Jedna linia instaluje Browse, dodaje go do znalezionych agentów i paruje rozszerzenie. W Windows uruchom irm https://opencode.ai/browse/install.ps1 | iex. Możesz też poprosić agenta o skonfigurowanie.",
     },
   },
   apps: {
@@ -476,9 +434,6 @@ export const content = {
       "github-copilot": {
         name: "GitHub Copilot",
       },
-      "claude-code": {
-        name: "Claude Code",
-      },
     },
     plans: {
       "opencode-go": {
@@ -508,7 +463,7 @@ export const content = {
   byos: {
     title: "Własne subskrypcje",
     headline: "Używaj subskrypcji, które już masz.",
-    line: "Zaloguj się przez ChatGPT Plus lub Pro, GitHub Copilot albo Claude Code. Możesz też wybrać subskrypcję OpenCode.",
+    line: "Zaloguj się przez ChatGPT Plus lub Pro albo GitHub Copilot. Możesz też wybrać subskrypcję OpenCode.",
     yours: {
       label: "Twoja subskrypcja",
       items: {
@@ -517,9 +472,6 @@ export const content = {
         },
         "github-copilot": {
           name: "GitHub Copilot",
-        },
-        "claude-code": {
-          name: "Claude Code",
         },
       },
     },
@@ -1211,19 +1163,6 @@ export const content = {
         },
         vscodium: {
           label: "VSCodium",
-        },
-      },
-    },
-    integrations: {
-      title: "Integracje",
-      items: {
-        github: {
-          label: "GitHub",
-          body: "Używaj OpenCode w GitHub Actions.",
-        },
-        gitlab: {
-          label: "GitLab",
-          body: "Używaj OpenCode w GitLab CI/CD lub Duo.",
         },
       },
     },

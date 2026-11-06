@@ -221,6 +221,11 @@
     --lockup-face: 30px;
   }
 
+  /* A page that renders a copy in each host (DocsLockup inline) shows the top bar's here. */
+  [data-site] [data-component="docs-lockup"][data-host="sidebar"] {
+    display: none;
+  }
+
   [data-site]:not([data-logo="icon"]) [data-component="docs-lockup"] {
     --lockup-text: calc(var(--edge) + env(safe-area-inset-left, 0px) + 30px * 234 / 42 + 12px);
   }
@@ -453,7 +458,9 @@
    after another (docs-lockup.tsx). The rows keep the shared hover tint and active bar. Beside the
    sidebar only; the phone sheet keeps the list. */
 @media (min-width: 60.0625rem) {
-  [data-site][data-section-menu="fan"] [data-component="docs-lockup"] :is([data-slot="menu"], [data-slot="submenu"]) {
+  [data-site][data-section-menu="fan"]
+    [data-component="docs-lockup"]
+    :is([data-slot="menu"], [data-slot="submenu"]):not([hidden]) {
     display: flex;
     flex-direction: column;
     gap: 0.375rem;
@@ -476,7 +483,7 @@
   /* As under the logo fan (logo-fan.css), the docs nav under the cards fades out while they're
      open, so it doesn't show through the gaps and the see-through cards. */
   [data-site][data-section-menu="fan"]
-    [data-component="sidebar"]:has([data-component="docs-lockup"] [data-slot="menu"])
+    [data-component="sidebar"]:has([data-component="docs-lockup"] [data-slot="menu"]:not([hidden]))
     > [data-component="section-nav"] {
     opacity: 0;
     pointer-events: none;

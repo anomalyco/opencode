@@ -212,7 +212,7 @@ export const voiceAnswers: VoiceAnswer[] = [
     asks: ["what is browse", "can it use my browser", "browser automation"],
     keys: ["browse", "browser", "chrome", "tabs", "playwright", "web"],
     text: "Browse lets your agents use your real browser, with your tabs, logins and extensions. They drive background tabs, and hand the tab back to you for a login or a payment.",
-    links: [{ label: "Browse", href: "/browse" }],
+    links: [{ label: "Browse", href: "/product/browse" }],
   },
   {
     id: "who",

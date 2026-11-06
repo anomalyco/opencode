@@ -19,7 +19,7 @@ import { changelogQuery } from "~/lib/changelog-notes"
 import { desktopBuilds, desktopInstall, getDownloadHref } from "~/lib/download"
 import { config } from "~/config"
 import { fourthClips } from "~/component/site/videos"
-import { dict } from "~/i18n/en"
+import { english } from "~/i18n/english"
 import { blocks, codeFence, link, type MarkdownContext } from "~/lib/markdown"
 
 /** A product page as Markdown: the intro, how to get it, its features and its latest releases. */
@@ -32,9 +32,10 @@ export function productMarkdown(slug: PageSlug) {
     return blocks(
       `# ${product.name}`,
       productDetails[slug].intro,
-      // The clips the page shows: the first three, and a fourth once its footage exists.
+      // The clips the page shows: the first three, and a fourth once its footage exists or when it
+      // has no clip at all (a row whose clip is still to come).
       ...productDetails[slug].showcase
-        .filter((row, index) => index < 3 || fourthClips.includes(row.clip?.split("/").pop() ?? ""))
+        .filter((row, index) => index < 3 || !row.clip || fourthClips.includes(row.clip.split("/").pop() ?? ""))
         .map((row) => blocks(`## ${row.title}`, row.body).trimEnd()),
       ...(productDetails[slug].features.length > 0
         ? [
@@ -51,9 +52,9 @@ export function productMarkdown(slug: PageSlug) {
 }
 
 /** The /product hero subtitle; Design mode offers alternatives ("products.hero.body"). */
-export const productsSubtitle = dict["product.hero.subtitle"]
+export const productsSubtitle = english["product.hero.subtitle"]
 
-/** The /product page as Markdown: every product with a page, then Anomaly's other products. */
+/** The /product page as Markdown: every product with a page, then more products from Anomaly. */
 export function productsMarkdown(context: MarkdownContext) {
   return blocks(
     "# Product",
@@ -61,10 +62,18 @@ export function productsMarkdown(context: MarkdownContext) {
     productPages
       .map((product) => `- ${link(product.name, context.route(`/${product.slug}`))}: ${product.body}`)
       .join("\n"),
-    ...(extensionPages.length > 0
+    "## More products",
+    [
+      ...extensionPages
+        .filter((extension) => extension.product)
+        .map((extension) => `- ${link(extension.name, context.route(`/product/${extension.slug}`))}: ${extension.body}`),
+      ...anomalyProducts.map((app) => `- ${link(app.name, app.href)}: ${app.body}`),
+    ].join("\n"),
+    ...(extensionPages.some((extension) => !extension.product)
       ? [
           "## Extensions",
           extensionPages
+            .filter((extension) => !extension.product)
             .map(
               (extension) =>
                 `- ${link(extension.name, context.route(`/extensions/${extension.slug}`))}: ${extension.body}`,
@@ -72,15 +81,10 @@ export function productsMarkdown(context: MarkdownContext) {
             .join("\n"),
         ]
       : []),
-    // The download page's sections, as at the bottom of the page (without its hero or the apps), with
-    // More from Anomaly right above the FAQ.
+    // The download page's sections, as at the bottom of the page (without its hero or the apps).
     downloadSectionsMarkdown(context, {
       apps: false,
       editors: false,
-      beforeFaq: blocks(
-        "## More from Anomaly",
-        anomalyProducts.map((app) => `- ${link(app.name, app.href)}: ${app.body}`).join("\n"),
-      ).trimEnd(),
     }).trimEnd(),
   )
 }
@@ -142,6 +146,7 @@ export function extensionMarkdown(slug: ExtensionSlug) {
       "## Features",
       extension.features.map((feature) => `- **${feature.title}:** ${feature.body}`).join("\n"),
       "## Install",
+      extension.store && `Add to Chrome from the ${link("Chrome Web Store", extension.store)}.`,
       extension.install.lead,
       extension.install.command && codeFence("bash", extension.install.command),
       `Source: ${link(extension.source.replace("https://", ""), extension.source)}`,

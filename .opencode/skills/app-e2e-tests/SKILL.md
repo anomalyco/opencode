@@ -105,7 +105,7 @@ Most of these rarely reproduce on an idle local machine.
 Run from `packages/app`:
 
 - [ ] Run in built mode, as CI does: `bun run test:e2e:built -- e2e/regression/<file>.spec.ts`. Dev mode serves unbundled modules, with the API on another origin (`playwright.config.ts:19-21`).
-- [ ] Use a free port when another worktree or agent may hold 3000: `PLAYWRIGHT_PORT=4310 bun run test:e2e:built -- ...`. Built runs never reuse a server, and `serve.ts` fails on a busy port. Stay below 49152 on Windows: it reserves ports from there up and hands them out for outgoing connections (`services/www/src/docs/content/cli/web.mdx:43`, `packages/client/test/fixture/service-fixture.ts:108-109`).
+- [ ] Use a free port when another worktree or agent may hold 3000: `PLAYWRIGHT_PORT=4310 bun run test:e2e:built -- ...`. Built runs never reuse a server, and `serve.ts` fails on a busy port. Stay below 49152 on Windows: it reserves ports from there up and hands them out for outgoing connections (`services/site/src/docs/content/cli/web.mdx:43`, `packages/client/test/fixture/service-fixture.ts:108-109`).
 - [ ] To repeat without rebuilding:
   - build once with `VITE_OPENCODE_TEST_FIXTURES=1 bun run build`;
   - keep `bun e2e/utils/serve.ts --host 127.0.0.1 --port 4310` running;

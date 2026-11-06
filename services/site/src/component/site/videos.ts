@@ -200,18 +200,24 @@ const focusedClips = [
 ]
 
 /**
- * The fourth showcase clips (`<slug>-4`) whose full-UI files exist so far (features/<slug>-4.mp4
- * and .jpg). Add a name here when its files land, and to focusedClips when focused/<slug>-4.* does.
- * Until then the showcase shows a black placeholder.
+ * The fourth showcase clips (`<slug>-4`) whose full-UI still exists so far (features/<slug>-4.jpg).
+ * Add a name here when its files land, and to focusedClips when focused/<slug>-4.* does. Until then
+ * the showcase shows a black placeholder.
  */
 export const fourthClips: string[] = ["terminal-4", "desktop-4", "mobile-4"]
 
 /**
- * A feature clip's video and poster: the focused version when that setting is on and it exists,
- * otherwise the full-UI clip. Nothing for a fourth
- * clip that doesn't exist yet.
+ * The fourth clips whose video (features/<slug>-4.mp4) is in the files bucket. The others show
+ * their still alone, so the page requests no video that isn't there.
  */
-export function featureClip(clip: string) {
+const fourthVideos: string[] = []
+
+/**
+ * A feature clip's video and poster: the focused version when that setting is on and it exists,
+ * otherwise the full-UI clip. Nothing for a fourth clip that doesn't exist yet, and no video for
+ * one whose video isn't uploaded.
+ */
+export function featureClip(clip: string): { src?: string; poster: string } | undefined {
   const name = clip.split("/").pop() ?? ""
   const fourth = name.endsWith("-4")
   if (siteSettings.featureClipStyle === "focused" && focusedClips.includes(name))
@@ -221,7 +227,7 @@ export function featureClip(clip: string) {
     }
   if (fourth && !fourthClips.includes(name)) return
   return {
-    src: `${clip}.mp4`,
+    src: fourth && !fourthVideos.includes(name) ? undefined : `${clip}.mp4`,
     poster: `${clip}.jpg`,
   }
 }

@@ -14,7 +14,6 @@ const config = (plugins: Info["plugins"] = []) =>
     Config.Service,
     Config.Service.of({
       entries: () => Effect.succeed([new Document({ type: "document", info: new Info({ plugins }) })]),
-      snapshot: () => [new Document({ type: "document", info: new Info({ plugins }) })],
       changes: () => Stream.never,
     }),
   )
@@ -73,7 +72,12 @@ describe("SkillPlugin.Plugin", () => {
       expect(report?.content).toContain("- Active plugins: -disabled, local.ts, package-plugin, package-plugin")
     }).pipe(
       Effect.provide(
-        config(["package-plugin", "-disabled", "local.ts", { package: "package-plugin", options: { enabled: true } }]),
+        config([
+          "package-plugin",
+          "-disabled",
+          "local.ts",
+          { package: "package-plugin", options: { enabled: true } },
+        ]),
       ),
     ),
   )

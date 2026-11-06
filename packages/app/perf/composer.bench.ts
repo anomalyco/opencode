@@ -17,9 +17,10 @@ export default bench({
     web: web({
       expect: { title: "OpenCode" },
       viewport: { width: 1440, height: 900 },
-      async prepare({ case: name, playwright, mock, url }) {
+      async prepare(ctx) {
+        const { case: name, url } = ctx
         const server = new URL(url).origin
-        const page = cached(playwright.page, mock)
+        const page = cached(ctx)
 
         if (!name.includes("history")) {
           await countDraftEncodes(page)
@@ -27,11 +28,11 @@ export default bench({
           return mockLargeDraft(page, server)
         }
 
-        await seedHistory(page, server)
         await mockStressTimeline(page, { server })
         await installProjects(page, [fixture.directory])
 
-        return { path: "/" }
+        // A static file first: setup seeds the history before the app opens its store.
+        return { path: "/favicon.svg" }
       },
       url: ({ prepared }) => prepared.path,
     }),
@@ -39,7 +40,8 @@ export default bench({
 
   async setup({ case: name, page }) {
     if (name.includes("history")) {
-      await page.waitFor('[data-action="home-new-session"]', { timeout: 60_000 })
+      await page.eval(seedHistory)
+      await page.goto("/", { until: '[data-action="home-new-session"]', timeout: 60_000 })
       await page.idle()
 
       return

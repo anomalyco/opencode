@@ -49,6 +49,24 @@ export function legacyRedirect(request: Legacy): Response | undefined {
   // V1 share links. Sharing is discontinued: opncd.ai/share/<id> explains that (410). Hundreds a day.
   const share = request.path.match(/^\/s\/([^/]+)\/?$/)
   if (share) return redirect(301, `https://opncd.ai/share/${share[1]}`)
+
+  // The V2 docs' first address, before they moved to /docs in Nov 2026. Apps up to v2.2.5 (Help menu,
+  // settings links, the opencode skill), the READMEs and install script of those releases, search
+  // engines and outside links. Pages, Markdown twins and the docs' files (llms.txt, the sitemap,
+  // openapi.json) keep their path under /docs. The install script and the V2 config schema
+  // (/v2/install, /v2/cli.json) are not docs and stay at /v2.
+  const v2 = v2DocsPath(request.path)
+  if (v2 && read) return redirect(301, `${v2}${request.search}`)
+}
+
+/** Where a /v2 docs URL lives under /docs, or undefined for any other path. */
+function v2DocsPath(path: string) {
+  const match = path.match(/^\/v2(\/.*)?$/)
+  if (!match || path === "/v2/install" || path === "/v2/cli.json") return
+  const rest = match[1] ?? "/"
+  // The intro's Markdown twin.
+  if (rest === "/docs.md") return "/docs/index.md"
+  return `/docs${rest.replace(/^\/docs(?=$|\/)/, "") || "/"}`
 }
 
 const moves = new Map([
