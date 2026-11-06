@@ -5,7 +5,7 @@ import path from "node:path"
 import { isolatedEnv } from "../fixture/environment"
 import { tmpdir } from "../fixture/tmpdir"
 
-test("run uses the shell PWD before connecting to the server", async () => {
+test.each(["run", "mini"])("%s uses the shell PWD before connecting to the server", async (command) => {
   await using directory = await tmpdir()
   const work = path.join(directory.path, "work tree")
   await mkdir(work)
@@ -17,10 +17,19 @@ test("run uses the shell PWD before connecting to the server", async () => {
     [
       process.execPath,
       "--eval",
-      `import { runNonInteractive } from ${JSON.stringify(new URL("../../src/run/run.ts", import.meta.url).href)}
+      `process.once("exit", () => console.log("RUN_CWD " + JSON.stringify(process.cwd())))
+${
+  command === "mini"
+    ? `import { runMini } from ${JSON.stringify(new URL("../../src/mini.ts", import.meta.url).href)}
+// Exercise directory selection in an isolated child without opening a terminal or rendering the UI.
+Object.defineProperty(process.stdin, "isTTY", { value: true })
+Object.defineProperty(process.stdout, "isTTY", { value: true })
+// Invalid model syntax stops after directory selection and before any server/model access.
+await runMini({ model: "invalid", prompt: "hello", server: { endpoint: { url: "http://127.0.0.1:1" } }, paths: { home: ${JSON.stringify(work)}, state: ${JSON.stringify(work)}, log: ${JSON.stringify(work)} } })`
+    : `import { runNonInteractive } from ${JSON.stringify(new URL("../../src/run/run.ts", import.meta.url).href)}
 // An invalid endpoint stops after directory selection without starting a server or calling a model.
-await runNonInteractive({ message: ["hello"], format: "json", file: [], server: { endpoint: { url: "http://[" } } }, new AbortController().signal)
-console.log("RUN_CWD " + JSON.stringify(process.cwd()))`,
+await runNonInteractive({ message: ["hello"], format: "json", file: [], server: { endpoint: { url: "http://[" } } }, new AbortController().signal)`
+}`,
     ],
     {
       cwd: path.join(import.meta.dir, "../.."),
@@ -36,7 +45,9 @@ console.log("RUN_CWD " + JSON.stringify(process.cwd()))`,
     new Response(child.stderr).text(),
     child.exited,
   ])
-  expect(stderr).toBe("")
+  if (command === "mini") expect(stderr).toContain("--model must use the format provider/model[#variant]")
+  if (command === "run") expect(stderr).toBe("")
+  expect(stderr).not.toContain("Failed to change directory")
   expect(stdout).not.toContain("Failed to change directory")
   const cwd = stdout.split("\n").find((line) => line.startsWith("RUN_CWD "))
   if (!cwd) throw new Error(stdout)
