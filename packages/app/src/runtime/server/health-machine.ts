@@ -165,6 +165,7 @@ export function isServerIncompatible(health: ServerHealth | undefined) {
   return health?.type === "incompatible"
 }
 
+/** Version from a healthy probe only. Incompatible health has no version — callers must not invent one. */
 export function selectServerVersion(health: ServerHealth | undefined) {
   return health?.type === "healthy" ? health.version : undefined
 }

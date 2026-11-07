@@ -11,6 +11,14 @@ export function ServerUnavailablePanel(props: { reason: "incompatible" | "unreac
   const language = useLanguage()
   const server = useServer()
   const servers = useServers()
+  const incompatibleDescription = () => {
+    const version = selectServerVersion(server.health)
+    const label = servers.label(server.conn)
+
+    if (version) return language.t("session.error.incompatible.description", { server: label, version })
+
+    return language.t("session.error.incompatible.description.unknown", { server: label })
+  }
 
   return (
     <div class="flex-1 min-h-0 overflow-hidden">
@@ -24,10 +32,7 @@ export function ServerUnavailablePanel(props: { reason: "incompatible" | "unreac
           </div>
           <div class="text-13-regular text-text-weak max-w-md">
             {props.reason === "incompatible"
-              ? language.t("session.error.incompatible.description", {
-                  server: servers.label(server.conn),
-                  version: selectServerVersion(server.health) ?? "1",
-                })
+              ? incompatibleDescription()
               : language.t("session.error.unreachable.description", { server: servers.label(server.conn) })}
           </div>
         </div>

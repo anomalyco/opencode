@@ -387,6 +387,13 @@ function HomeServerRow(props: {
   const healthy = () => isServerHealthy(props.health)
   const authentication = () => signInRequired(props.server, props.health)
   const incompatible = () => isServerIncompatible(props.health)
+  const incompatibleLabel = () => {
+    const version = selectServerVersion(props.health)
+
+    if (version) return props.language.t("server.row.incompatible", { version })
+
+    return props.language.t("server.row.incompatible.unknown")
+  }
   const canToggle = () => healthy() && props.projectsForServer(props.server).length > 0
   const contextMenuID = () => serverContextMenuID(props.server)
   onCleanup(() => {
@@ -402,11 +409,7 @@ function HomeServerRow(props: {
       placement="top"
       class="flex h-7 w-full min-w-0"
       inactive={!incompatible() && !authentication()}
-      value={
-        authentication()
-          ? props.language.t("server.status.authentication")
-          : props.language.t("server.row.incompatible", { version: selectServerVersion(props.health) ?? "1" })
-      }
+      value={authentication() ? props.language.t("server.status.authentication") : incompatibleLabel()}
     >
       <div
         class="group/server relative flex h-7 w-full min-w-0 items-center rounded-[6px]"
