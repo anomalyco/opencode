@@ -483,11 +483,4 @@ function rowBoundaryMessageID(row: SessionRow, messages: Map<string, SessionMess
   if (message?.type === "assistant") return message.id
 }
 
-export function resolvePart(message: SessionMessageAssistant, partID: string) {
-  const tool = message.content.find((part) => part.type === "tool" && part.id === partID)
-  if (tool) return tool
-  const match = /^(text|reasoning):(\d+)$/.exec(partID)
-  if (!match) return
-  const ordinal = Number(match[2])
-  return message.content.filter((part) => part.type === match[1])[ordinal]
-}
+export { resolvePart } from "../../util/session"

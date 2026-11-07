@@ -17,6 +17,7 @@ import type {
   ProviderInfo,
   ReferenceInfo,
   SessionInfo,
+  SessionMessageAssistant,
   SessionMessageInfo,
   SessionInboxInfo,
   ShellInfo,
@@ -24,7 +25,7 @@ import type {
   VcsInfo,
 } from "@opencode/client"
 import type { ResolvedTheme } from "@opencode/theme/tui"
-import type { CliRenderer, KeyEvent, MarkdownCodeBlockRenderer, Renderable } from "@opentui/core"
+import type { CliRenderer, KeyEvent, MarkdownCodeBlockRenderer, Renderable, RGBA } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
 import type { Store } from "solid-js/store"
 
@@ -60,6 +61,27 @@ interface LocationCollection<Value> {
 
 type OpenCodeEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
 
+/** One part of an assistant message: text, reasoning or a tool call. */
+export type SessionPart = SessionMessageAssistant["content"][number]
+
+/** How much of its model's context window a session's last turn used. */
+export interface SessionUsage {
+  /** Input, output, reasoning and cache tokens of the last assistant turn with usage. */
+  readonly tokens: number
+  /** The model's context window, when the model is known. */
+  readonly limit?: number
+  /** `tokens` as a rounded percentage of `limit`. */
+  readonly percent?: number
+}
+
+/** The goal `/goal` set on a session. */
+export interface SessionGoal {
+  readonly objective: string
+  readonly status: "active" | "paused" | "complete"
+  /** Why the goal last changed. */
+  readonly reason?: string
+}
+
 export interface Data {
   readonly on: <Type extends OpenCodeEvent["type"]>(
     type: Type,
@@ -73,6 +95,17 @@ export interface Data {
     family(sessionID: string): string[]
     cost(sessionID: string): number
     status(sessionID: string): "idle" | "running"
+    /**
+     * The context window the session's last turn used, up to its revert point.
+     * Undefined until a turn reports usage. Reactive when read in a Solid computation.
+     */
+    usage(sessionID: string): SessionUsage | undefined
+    /**
+     * The session's goal, or undefined when none is set or the server has no
+     * goal plugin. Fetched on first read and kept current from the server.
+     * Reactive when read in a Solid computation.
+     */
+    goal(sessionID: string): SessionGoal | undefined
     readonly pending: {
       list(sessionID: string): SessionInboxInfo[]
       sync(sessionID: string): Promise<void>
@@ -85,6 +118,13 @@ export interface Data {
       get(sessionID: string, messageID: string): SessionMessageInfo | undefined
       sync(sessionID: string): Promise<void>
       invalidate(sessionID: string): void
+    }
+    readonly part: {
+      /**
+       * One part of an assistant message, by the `partID` a session.part.*
+       * slot receives. Reactive when read in a Solid computation.
+       */
+      get(sessionID: string, messageID: string, partID: string): SessionPart | undefined
     }
     readonly permission: {
       list(sessionID: string): PermissionRequest[] | undefined
@@ -162,6 +202,17 @@ type PromptFooterInput = {
   readonly showDetails: boolean
 }
 
+/** One message of a session transcript. */
+export interface SessionMessageInput {
+  readonly sessionID: string
+  readonly messageID: string
+}
+
+/** One part of an assistant message; read it with data.session.part.get. */
+export interface SessionPartInput extends SessionMessageInput {
+  readonly partID: string
+}
+
 export type PanelPresentation = "panel" | "fullscreen"
 
 /** Client-local state of the selected session panel. The host owns its layout and input scope. */
@@ -196,6 +247,18 @@ export interface SlotMap {
   readonly "prompt.footer.status": PromptFooterInput
   readonly "prompt.footer.file": PromptFooterInput
   readonly "session.composer.top": { readonly sessionID: string }
+  /** Above the transcript, full width. Empty by default. */
+  readonly "session.header": { readonly sessionID: string }
+  /** First child of the transcript scroll area. Empty by default. */
+  readonly "session.transcript.start": { readonly sessionID: string }
+  /** A user prompt in the transcript. */
+  readonly "session.message.user": SessionMessageInput
+  /** The agent, model and duration line closing an assistant turn. */
+  readonly "session.message.assistant.footer": SessionMessageInput
+  readonly "session.part.text": SessionPartInput
+  readonly "session.part.reasoning": SessionPartInput
+  /** One tool call; `tool` is the canonical tool name (shell, patch, subagent, read, ...). */
+  readonly "session.part.tool": SessionPartInput & { readonly tool: string }
   readonly "session.panel": PanelInput
   readonly "sidebar.content": { readonly sessionID: string }
   readonly "sidebar.footer": { readonly sessionID: string }
@@ -487,6 +550,51 @@ export interface Keymap {
   }
 }
 
+/** The kind of one transcript row, as layout rules see it. */
+export type TranscriptRowKind = "user" | "text" | "reasoning" | "tool" | "group" | "footer" | "other"
+
+/**
+ * Host layout knobs a plugin may set. Every field is optional; an unset field
+ * keeps the host default. When several active plugins set one field, the
+ * last-enabled plugin wins.
+ */
+export interface Layout {
+  /** Blank rows above a transcript row. The host default is 1. */
+  readonly rowGap?: (row: { readonly kind: TranscriptRowKind; readonly previous?: TranscriptRowKind }) => number
+  /** Horizontal padding of the transcript and the dock, in cells. The host default is 2. */
+  readonly inset?: number
+  /**
+   * The composer's chrome. "bar" is the host default: a left accent bar and a
+   * metadata row. "band" is a full-width band on raised.base with a blank row
+   * above and below the editor and the given prefix before it.
+   */
+  readonly composer?: { readonly chrome: "bar" } | { readonly chrome: "band"; readonly prefix?: string }
+  /**
+   * Transcript defaults for users who have not chosen. The user's `session`
+   * config wins over them. Fields merge across plugins one by one.
+   */
+  readonly transcript?: {
+    /** "auto" groups related tool calls into one row; "none" shows each call. The host default is "auto". */
+    readonly grouping?: "auto" | "none"
+    /** Whether reasoning shows in full. The host default is "hide". */
+    readonly thinking?: "show" | "hide"
+  }
+}
+
+/** Renders one tool call in the transcript. */
+export type ToolRender = (input: SessionPartInput & { readonly tool: string }) => JSX.Element
+
+/** Host markdown, styled with the current theme's syntax and every registered code-block renderer. */
+export type MarkdownProps = {
+  readonly content: string
+  /** True while the text may still grow, so a trailing block is not finalized. */
+  readonly streaming?: boolean
+  /** Text colour. The theme's markdown text by default. */
+  readonly fg?: RGBA
+  /** Background. The theme's base background by default. */
+  readonly bg?: RGBA
+}
+
 export interface UI {
   readonly dialog: Dialog
   readonly toast: Toast
@@ -539,6 +647,17 @@ export interface UI {
   }
   /** Claims a place in the slot tree; see SlotClaim. */
   readonly slot: (claim: SlotClaim) => () => void
+  /** Sets host layout knobs until the returned cleanup runs; see Layout. */
+  readonly layout: (layout: Layout) => () => void
+  /**
+   * Renders every call of one tool, by its canonical name (shell, patch,
+   * subagent, read, ...), until the returned cleanup runs. When several
+   * active plugins render one tool, the last-enabled one wins. A slot claim
+   * that replaces session.part.tool still wins over it.
+   */
+  readonly tool: (name: string, render: ToolRender) => () => void
+  /** The host's markdown renderer, for text that should read like the transcript. */
+  readonly Markdown: (props: MarkdownProps) => JSX.Element
 }
 
 export interface Context {
