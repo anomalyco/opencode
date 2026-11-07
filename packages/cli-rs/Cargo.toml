@@ -40,6 +40,9 @@ chrono = { version = "0.4", default-features = false, features = ["std", "clock"
 clap = { version = "4", features = ["derive", "wrap_help"] }
 clap_complete = "4"
 futures-util = { version = "0.3", default-features = false, features = ["std", "sink"] }
+# The IDNA stub: `url` rejects non-ASCII hosts instead of pulling ICU4X (deviation A10-ascii-hosts). Pinned so a
+# `cargo update` cannot bring 1.2 back.
+idna_adapter = "=1.0.0"
 indexmap = { version = "2", features = ["serde"] }
 libloading = "0.9"
 log = { version = "0.4", features = ["std"] }
