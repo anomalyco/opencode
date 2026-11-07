@@ -4,6 +4,7 @@ import { Integration } from "@opencode/core/integration"
 import { WebSearch } from "@opencode/core/websearch"
 import { WebSearchExa } from "@opencode/core/plugin/websearch/exa"
 import { WebSearchFirecrawl } from "@opencode/core/plugin/websearch/firecrawl"
+import { WebSearchMcp } from "@opencode/core/plugin/websearch/mcp"
 import { WebSearchParallel } from "@opencode/core/plugin/websearch/parallel"
 import { WebSearchTavily } from "@opencode/core/plugin/websearch/tavily"
 import { WebSearchTinyFish } from "@opencode/core/plugin/websearch/tinyfish"
@@ -57,6 +58,32 @@ describe("built-in web search providers", () => {
       }),
     )
   })
+
+  ;[WebSearchExa.Plugin, WebSearchParallel.Plugin, WebSearchFirecrawl.Plugin, WebSearchTinyFish.Plugin].forEach(
+    (plugin) => {
+      it.effect(`reports MCP tool errors from ${plugin.id} instead of empty results`, () =>
+        Effect.gen(function* () {
+          const message = "You've hit the free MCP rate limit."
+          resetWebSearchFixture(
+            `event: message\ndata: ${JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              result: { isError: true, content: [{ type: "text", text: message }] },
+            })}\n\n`,
+          )
+          const integrations = yield* Integration.Service
+          const websearch = yield* WebSearch.Service
+          yield* plugin.effect(host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }))
+          const [provider] = yield* websearch.providers()
+          const error = yield* websearch.query({ query: "limited", providerID: provider?.id }).pipe(Effect.flip)
+          expect(error).toBeInstanceOf(WebSearch.RequestError)
+          if (!(error instanceof WebSearch.RequestError)) return
+          expect(error.cause).toBeInstanceOf(WebSearchMcp.ToolError)
+          expect(error.cause).toMatchObject({ message })
+        }),
+      )
+    },
+  )
 
   it.effect("registers a provider without an integration", () =>
     Effect.gen(function* () {
