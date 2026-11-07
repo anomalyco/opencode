@@ -41,12 +41,6 @@
     }
   }
 
-  /* The FAQ always spans two card columns, whatever the section width setting, so its plus signs
-     end on the third column's right edge. */
-  &[data-site] [data-component="block"]:has([data-component="faq"]) [data-slot="body"] {
-    max-width: var(--two-cards);
-  }
-
   /* "What is OpenCode?": ten features in five rows of two, one feature per card column, under the
      two-column lead. */
   &[data-site] [data-component="block"]:has([data-component="features"]) [data-slot="body"] {
@@ -957,6 +951,11 @@
         height: 1lh;
       }
     }
+
+    /* A reel keeps its cells once it has spun (SlotDigit); only a spinning reel shows them. */
+    [data-slot="reel"]:not([data-spinning]) [data-slot="strip"] > span + span {
+      display: none;
+    }
   }
 
   [data-component="odometer"] {
@@ -1195,7 +1194,7 @@
 }
 
 /* No divider above, whatever the section spacer is (the second attribute outranks the spacer
-   rules). The gap below the FAQ is half the "space" spacer's (David, 5 Nov: 184px to 92px, and
+   rules). The gap above the Console is half the "space" spacer's (David, 5 Nov: 184px to 92px, and
    96px to 48px on phones). The "section" option keeps the spacer. */
 [data-page="home"][data-site] [data-component="block"][data-console]:not([data-console="section"]) {
   margin-top: calc(var(--block-space) + 1.25rem);
@@ -1831,14 +1830,36 @@
 
     /* Logo-only tiles ("Bring your own subs"): the mark centred, twice the icon's size. The
        models.dev marks share one square box with their own margins, so one size balances them; it
-       steps down at narrow widths and stays on whole pixels. */
+       steps down at narrow widths and stays on whole pixels.
+       Four across (three on phones) on 12 tracks, so a short last row can share the full width
+       equally and no cell is left empty, whatever the number of logos. --wash-columns tells the
+       entrance wash (reveal.ts) the number of cells across. */
     &[data-tiles="icon"] {
       --icon-size: 40px;
+      --wash-columns: 4;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
 
       li {
+        grid-column: span 3;
         justify-content: center;
         height: 4rem;
         padding-block: 0;
+      }
+
+      @media (width > 40rem) {
+        li:nth-child(4n + 1):nth-last-child(3),
+        li:nth-child(4n + 1):nth-last-child(3) ~ li {
+          grid-column: span 4;
+        }
+
+        li:nth-child(4n + 1):nth-last-child(2),
+        li:nth-child(4n + 1):nth-last-child(2) ~ li {
+          grid-column: span 6;
+        }
+
+        li:nth-child(4n + 1):last-child {
+          grid-column: span 12;
+        }
       }
 
       [data-slot="icon"] {
@@ -1850,10 +1871,23 @@
         --icon-size: 36px;
       }
 
-      /* Phones: three across (the wordmark tiles keep two), so twelve logos make four full rows. */
+      /* Phones: three across (the wordmark tiles keep two). */
       @media (max-width: 40rem) {
         --icon-size: 32px;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        --wash-columns: 3;
+
+        li {
+          grid-column: span 4;
+        }
+
+        li:nth-child(3n + 1):nth-last-child(2),
+        li:nth-child(3n + 1):nth-last-child(2) ~ li {
+          grid-column: span 6;
+        }
+
+        li:nth-child(3n + 1):last-child {
+          grid-column: span 12;
+        }
       }
     }
 

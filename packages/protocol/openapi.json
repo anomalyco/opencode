@@ -10181,6 +10181,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
           }
         },
         "description": "Retrieve currently registered skills.",
@@ -16897,6 +16907,9 @@
                 "type": "boolean"
               },
               "artifacts": {
+                "type": "boolean"
+              },
+              "codemode_vm": {
                 "type": "boolean"
               },
               "part_rows": {

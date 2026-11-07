@@ -58,6 +58,8 @@ test("after a reload, the close shortcut closes the restored terminal", async ({
 
   await openSide(page)
   await showTerminal(page, "Shell", "pty_shell")
+  // Focus comes before the connection; a reload during its connect-token request would leave nothing connected.
+  await expect.poll(() => persistentPty.sockets.map((socket) => socket.id)).toEqual(["pty_shell"])
 
   // The restored tab is selected before the server lists the session's terminals.
   const list = await holdRoute(page, /\/api\/experimental\/session\/ses_terminals\/terminal(\?|$)/, { method: "GET" })

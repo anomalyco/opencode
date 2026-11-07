@@ -50,14 +50,14 @@ export default bench({
     web: web({
       expect: { title: "OpenCode" },
       viewport: { width: 1366, height: 768 },
-      prepare: ({ case: name, playwright, mock, url }) =>
-        mockTimelineSession(cached(playwright.page, mock), {
-          server: new URL(url).origin,
-          historyTurns: name === "stream into a tool-heavy history" ? 320 : 120,
-          toolHeavy: name === "stream into a tool-heavy history",
+      prepare: (ctx) =>
+        mockTimelineSession(cached(ctx), {
+          server: new URL(ctx.url).origin,
+          historyTurns: ctx.case === "stream into a tool-heavy history" ? 320 : 120,
+          toolHeavy: ctx.case === "stream into a tool-heavy history",
           busy: true,
           stream: true,
-          vcsDiff: name === "stream with review open" ? reviewDiffs() : undefined,
+          vcsDiff: ctx.case === "stream with review open" ? reviewDiffs() : undefined,
         }),
       url: ({ prepared }) => prepared.path,
     }),

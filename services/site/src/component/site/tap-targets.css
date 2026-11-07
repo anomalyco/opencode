@@ -54,17 +54,6 @@
     }
 
     @media (max-width: 60rem) {
-      /* The product pages' previous and next chevrons: 44px wide (their band above and below
-         already makes them 44px tall), 8px clear of the GitHub mark's target. [data-page] and a[href]
-         outrank product-page.css, which loads later. */
-      &[data-page] nav[data-component="product-cycle"] {
-        inset-inline-end: calc(var(--edge) + env(safe-area-inset-right, 0px) + 5.75rem);
-      }
-
-      [data-component="product-cycle"] a[href] {
-        width: 2.75rem;
-      }
-
       &:not([data-bare]) > [data-component="announcement-banner"] button[data-slot="dismiss"] {
         --dismiss-centre: calc(var(--edge) + env(safe-area-inset-right, 0px) + 3.875rem);
       }

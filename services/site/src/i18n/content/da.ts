@@ -32,59 +32,34 @@ export const content = {
     desktop: {
       title: "OpenCode | Desktopapp til macOS, Windows og Linux",
       description:
-        "Kør flere OpenCode-agenter på én gang, hver i sin egen fane. Gennemgå hver ændring som et diff, kommenter enhver linje, og se resultatet i den indbyggede browser.",
+        "Kør så mange OpenCode-agenter parallelt, som du vil, se hver ændring i en browser ved siden af, og fortsæt på enhver enhed. Til macOS, Windows og Linux.",
       intro:
         "Kør flere agenter på én gang, hver session i sin egen fane. Gennemgå hver ændring som et diff, kommenter enhver linje, og tjek resultatet i den indbyggede browser. Til macOS, Windows og Linux.",
-      features: {
-        "built-in-terminal": {
-          title: "Indbygget terminal",
-          body: "Kør kommandoer i en terminalfane ved siden af sessionen.",
-        },
-        "ssh-servers": {
-          title: "SSH-servere",
-          body: "Forbind til en anden maskine over SSH, og arbejd på dens projekter.",
-        },
-        extensions: { title: "Udvidelser", body: "Administrer MCP-servere, plugins og skills i én menu." },
-        wsl: { title: "WSL", body: "Kør sessioner i en WSL 2-distro på Windows i stedet for direkte." },
-        "office-files": {
-          title: "Office-filer",
-          body: "Åbn Word-, Excel- og PowerPoint-filer ved siden af sessionen.",
-        },
-        "keyboard-shortcuts": {
-          title: "Genveje",
-          body: "Alle handlinger har en tastaturgenvej, og du kan ændre dem alle.",
-        },
-        "updates-itself": { title: "Opdaterer sig selv", body: "Nye versioner downloades og installeres fra appen." },
-        "all-your-projects": {
-          title: "Alle dine projekter",
-          body: "Skift mellem projekter og deres sessioner i ét vindue.",
-        },
-      },
       showcase: {
-        "sessions-in-tabs": {
-          title: "Sessioner i faner",
-          body: "Lad flere agenter arbejde på én gang, hver session i sin egen fane.",
-        },
-        "review-and-comment": {
-          title: "Gennemgå og kommenter",
-          body: "Læs hver ændring som et diff, kommenter en linje, og send den tilbage.",
+        "parallel-agents": {
+          title: "Parallelle agenter",
+          body: "Start så mange agenter, du vil, og lad dem alle arbejde parallelt. Skift mellem dem, efterhånden som de bliver færdige.",
         },
         "see-it-in-the-browser": {
           title: "Se det i browseren",
-          body: "Agentens arbejde åbner i en browser ved siden af sessionen.",
+          body: "Din app åbner i en browser ved siden af agenten, så I begge ser hver ændring lande.",
         },
-        "pair-your-phone": {
-          title: "Par din telefon",
-          body: "Scan en QR-kode i OpenCode Mobile for at styre sessioner fra din iPhone.",
+        "on-every-device": {
+          title: "På alle enheder",
+          body: "Start agenter på alle dine enheder, og fortsæt i desktop-appen, terminalen eller på din telefon.",
+        },
+        "extend-it": {
+          title: "Udvid den",
+          body: "Forbind dine værktøjer og tjenester, så agenten kan arbejde med alt. Eller lad OpenCode bygge plugins til sig selv med deres egen brugerflade i sidepanelet.",
         },
       },
     },
     mobile: {
       title: "OpenCode | Mobile, dine kodningssessioner på telefonen",
       description:
-        "Start, styr og godkend OpenCode-sessioner fra din telefon. Tal med agenten, gennemgå dens ændringer, og tillad det, den har brug for, mens den kører på din computer.",
+        "Start og styr OpenCode-sessioner fra din telefon. Tal med agenten, mens den kører på din computer.",
       intro:
-        "Start, styr og godkend sessioner fra din telefon, uanset hvor du er. Ring til en session og tal med agenten, gennemgå dens ændringer, og tillad det, den har brug for, alt sammen med OpenCode på din egen computer.",
+        "Start og styr sessioner fra din telefon, hvor du end er. Ring til en session og tal med agenten, eller åbn en session og fortsæt, hvor du slap, alt med OpenCode på din egen computer.",
       features: {
         "notify-when-done": {
           title: "Besked når færdig",
@@ -106,10 +81,6 @@ export const content = {
       },
       showcase: {
         voice: { title: "Stemme", body: "Ring til en session, og sig, hvad du har brug for. Agenten svarer højt." },
-        approvals: {
-          title: "Godkendelser",
-          body: "Gennemgå ændringen, og tillad den fra telefonen, når agenten spørger.",
-        },
         sessions: { title: "Sessioner", body: "Åbn en session for at se, hvor den er, og fortsæt, hvor du slap." },
         steer: { title: "Styr", body: "Send en opfølgning for at skifte retning midt i sessionen." },
         results: { title: "Resultater", body: "Opkaldet fortæller dig, hvad der er ændret, når arbejdet er færdigt." },
@@ -291,17 +262,21 @@ export const content = {
           title: "Enhver MCP-klient",
           body: "OpenCode, Claude Code, Cursor, Codex, Zed og mange flere.",
         },
-        "named-sessions": {
-          title: "Navngivne sessioner",
-          body: "Hver session beholder sine egne faner, også efter genstart.",
+        "all-your-logins": {
+          title: "Alle dine logins",
+          body: "Agenter bruger de sites, du allerede er logget ind på. Ingen nøgler, ingen opsætning.",
         },
         allowlists: { title: "Hvidlister", body: "Begræns en sessions faner til de sites, du angiver." },
       },
       install:
-        "Kør dette én gang. Det tilføjer browse-MCP-serveren til de agenter, du vælger, og parrer udvidelsen fra Chrome Web Store. Kræver Node.js 22.19 eller nyere.",
+        "Installer [Chrome-udvidelsen] først. Den guider dig gennem resten af trinene. Vil du installere CLI'en direkte (det burde du ikke have brug for), så brug en af disse.",
     },
   },
   apps: {
+    browse: {
+      category: "Browserstyring for agenter",
+      body: "Lad din agent bruge din rigtige browser, med dine logins og faner.",
+    },
     opentunnel: { category: "Lokale tunneler", body: "Offentlige HTTPS-URL'er til lokale apps." },
     opentui: { category: "Bibliotek", body: "Et bibliotek til terminalbrugerflader." },
     hex: { category: "Diktering", body: "Diktering direkte på enheden til enhver app." },
@@ -317,7 +292,7 @@ export const content = {
     },
     subscriptions: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } },
     steps: {
-      download: { title: "Download", line: "Desktop, mobil eller terminal." },
+      download: { title: "Download", line: "Desktop, terminal eller mobil." },
       "use-free-models": {
         title: "Brug gratis modeller",
         line: "OpenCode har et sæt gratis modeller. Ingen konto nødvendig.",
@@ -333,7 +308,7 @@ export const content = {
   byos: {
     title: "Brug dit eget abonnement",
     headline: "Brug de abonnementer, du allerede har.",
-    line: "Log ind med ChatGPT Plus eller Pro, GitHub Copilot eller Claude Code. Eller brug et OpenCode-abonnement.",
+    line: "Log ind med ChatGPT Plus eller Pro eller med GitHub Copilot. Eller brug et OpenCode-abonnement.",
     yours: { label: "Dit abonnement", items: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } } },
     planLinks: ["OpenCode-abonnement"],
     ours: { label: "OpenCode-abonnementer" },
@@ -501,7 +476,7 @@ export const content = {
       learnMore: "Læs mere på [anoma.ly](site).",
       projects: {
         opencode: {
-          body: "Open source-kodningsagenten med apps til desktop, mobil og terminal og et SDK. MIT-licenseret, over 220.000 GitHub-stjerner.",
+          body: "Open source-kodningsagenten med apps til desktop, terminal og mobil og et SDK. MIT-licenseret, over 220.000 GitHub-stjerner.",
         },
         sst: {
           body: "Et framework til at bygge full-stack-apps på din egen infrastruktur. MIT-licenseret, åbent siden 2020, med over 26.000 GitHub-stjerner.",
@@ -524,9 +499,9 @@ export const content = {
     about: {
       title: "Om OpenCode",
       boilerplate: {
-        long: "OpenCode er en open source-kodningsagent. Den findes som desktopapp, mobilapp, terminal-UI og SDK og virker med modeller fra enhver udbyder, bl.a. Claude, GPT og Gemini. OpenCode er MIT-licenseret og lavet af Anomaly. Den har over 220.000 GitHub-stjerner og mere end 1.000 bidragydere, og over 22 millioner udviklere bruger den hver måned.",
+        long: "OpenCode er en open source-kodningsagent. Den findes som desktopapp, terminal-UI, mobilapp og SDK og virker med modeller fra enhver udbyder, bl.a. Claude, GPT og Gemini. OpenCode er MIT-licenseret og lavet af Anomaly. Den har over 220.000 GitHub-stjerner og mere end 1.000 bidragydere, og over 22 millioner udviklere bruger den hver måned.",
         short:
-          "OpenCode er en open source-kodningsagent fra Anomaly med apps til desktop, mobil og terminal og et SDK.",
+          "OpenCode er en open source-kodningsagent fra Anomaly med apps til desktop, terminal og mobil og et SDK.",
       },
       products: {
         "opencode-console": {
@@ -710,13 +685,6 @@ export const content = {
         vscodium: { label: "VSCodium" },
       },
     },
-    integrations: {
-      title: "Integrationer",
-      items: {
-        github: { body: "Brug OpenCode i GitHub Actions." },
-        gitlab: { label: "GitLab", body: "Brug OpenCode i GitLab CI/CD eller Duo." },
-      },
-    },
   },
   productDownloads: {
     terminal: { commands: { curl: { name: "Script" } } },
@@ -766,7 +734,6 @@ export const content = {
       text: "Opret, installer og del desktop-plugins.",
       link: "Se nyt i 2.2",
     },
-    "use-your-claude-code-login-in-opencode": { text: "Brug dit Claude Code-login i OpenCode.", link: "Se v2.2.3" },
     "desktop-terminals-now-survive-restarts": { text: "Desktop-terminaler overlever nu genstart.", link: "Se v2.2.4" },
     "agents-can-now-generate-images": { text: "Agenter kan nu generere billeder.", link: "Se v2.2.1" },
     "steer-your-sessions-from-your-phone": {
