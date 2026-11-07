@@ -1,5 +1,6 @@
 import type { SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
 import { projectedPromptInput } from "../prompt/codec"
+import type { CostSession } from "../util/session"
 import { requestOptions } from "./catalog.shared"
 import { promptCopy, promptSame } from "./prompt.shared"
 import type { RunInput, RunPrompt } from "./types"
@@ -20,6 +21,9 @@ export type RunSession = {
   turns: Turn[]
   model?: NonNullable<RunInput["model"]>
   variant?: string
+  /** Session totals and model, priced by the footer spend estimate. */
+  session?: CostSession
+  messages?: SessionMessageInfo[]
 }
 
 export function messagePrompt(message: Pick<SessionMessageUser, "text" | "files" | "agents" | "skills">): RunPrompt {
@@ -67,6 +71,7 @@ export function createSession(messages: SessionMessages): RunSession {
         ? [{ prompt: messagePrompt(message), provider: undefined, model: undefined, variant: undefined }]
         : [],
     ),
+    messages,
   }
 }
 
@@ -89,6 +94,14 @@ export async function resolveCurrentSession(
       model: session.model?.id,
       variant: session.model?.variant,
     })),
+    session: {
+      id: session.id,
+      model: session.model && { providerID: session.model.providerID, id: session.model.id },
+      tokens: session.tokens,
+      cost: session.cost,
+      fork: session.fork,
+      time: { created: session.time.created },
+    },
     ...(session.model && {
       model: { providerID: session.model.providerID, modelID: session.model.id },
       variant: session.model.variant,

@@ -179,7 +179,7 @@ export type FooterState = {
   status: string
   notice: string
   model: string
-  usage: { tokens: number; percent?: number; cost?: number } | undefined
+  usage: { tokens: number; percent?: number; cost?: number; estimate?: number } | undefined
   first: boolean
   interrupt: number
   exit: number
@@ -407,7 +407,7 @@ export type FormCancel = {
 
 export type RunTuiConfig = Pick<
   Config.Resolved,
-  "keybinds" | "leader" | "theme" | "mini" | "prompt" | "session" | "cursor" | "animations"
+  "keybinds" | "leader" | "theme" | "mini" | "prompt" | "session" | "cursor" | "animations" | "experimental"
 >
 
 export type MiniSettings = {

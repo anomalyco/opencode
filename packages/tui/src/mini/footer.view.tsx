@@ -214,7 +214,13 @@ export function RunFooterView(props: RunFooterViewProps) {
     const current = usage()
     return current && current.tokens > 0 ? formatContextUsage(current.tokens, current.percent) : ""
   })
-  const cost = createMemo(() => (usage()?.cost ? money.format(usage()!.cost!) : ""))
+  const cost = createMemo(() => {
+    const current = usage()
+    if (!current) return ""
+    if (current.cost) return money.format(current.cost)
+    if (!current.estimate) return ""
+    return `≈ ${current.estimate < 0.01 ? "<$0.01" : money.format(current.estimate)}`
+  })
   const takeover = createMemo(() => exiting() || (busy() && armed()) || !!props.state().notice.trim())
   const footerDetails = createMemo(() => props.miniSettings().footer === "show" && !takeover())
   const interruptLabel = createMemo(() => {
