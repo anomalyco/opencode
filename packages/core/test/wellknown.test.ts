@@ -127,3 +127,23 @@ serviceIt.live("refreshes changed manifests", () =>
     ({ server }) => Effect.promise(() => server.stop(true)),
   ),
 )
+
+serviceIt.live("skips an unreachable source without a cached manifest", () =>
+  Effect.acquireUseRelease(
+    Effect.sync(() =>
+      Bun.serve({
+        port: 0,
+        fetch: () => Response.json({ auth: { command: ["login"], env: "TOKEN" } }),
+      }),
+    ),
+    (server) =>
+      Effect.gen(function* () {
+        const wellknown = yield* WellKnown.Service
+        const kv = yield* KV.Service
+        yield* kv.set("wellknown:sources", ["http://127.0.0.1:1", server.url.origin])
+
+        expect((yield* wellknown.entries()).map((entry) => entry.origin)).toEqual([server.url.origin])
+      }),
+    (server) => Effect.promise(() => server.stop(true)),
+  ),
+)
