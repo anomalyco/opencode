@@ -404,7 +404,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
   ) {
     const attempt = withRegistration(false, (current) =>
       Effect.tryPromise({
-        try: () => subscribePromise(current, terminalID, input),
+        try: (signal) => subscribePromise(current, terminalID, input, signal),
         catch: (cause) => (cause instanceof DaemonError ? cause : failure("connect", cause)),
       }),
     )
@@ -559,8 +559,9 @@ async function subscribePromise(
   registration: Registration,
   id: number,
   input: SubscribeInput,
+  signal: AbortSignal,
 ): Promise<DaemonAttachment> {
-  const socket = net.createConnection(registration.socket)
+  const socket = net.createConnection({ path: registration.socket, signal })
   const frames = decoder(socket)
   try {
     await new Promise<void>((resolve, reject) => {
