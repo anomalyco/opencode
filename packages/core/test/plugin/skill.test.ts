@@ -41,6 +41,7 @@ describe("SkillPlugin.Plugin", () => {
           name: "OpenCode",
           path: "skill://opencode/SKILL.md",
           description: expect.stringContaining("any question about OpenCode itself"),
+          content: expect.stringContaining("`/mcp` in the desktop or web app, or `/mcps` in the TUI"),
         }),
       )
       expect(skills).toContainEqual(
