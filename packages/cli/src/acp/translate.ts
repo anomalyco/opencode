@@ -125,7 +125,12 @@ export function fold(state: TurnState, event: OpenCodeEvent, ctx: TurnContext): 
   if (!sessionID || (sessionID !== ctx.sessionID && !child)) return { state, outputs: [] }
   if (event.type === "session.inbox.delivered" && event.data.inboxID === ctx.start.id)
     return { state: { ...state, started: true }, outputs: [] }
-  if (!state.started) return { state, outputs: [] }
+  if (!state.started) {
+    // A turn that fails before its prompt is delivered never delivers it, so waiting for that
+    // event would leave the prompt pending forever. Report the failure that ended it instead.
+    if (!child && event.type === "session.execution.failed") return rootEvent(state, event, ctx)
+    return { state, outputs: [] }
+  }
   return child ? childEvent(state, event, ctx, child) : rootEvent(state, event, ctx)
 }
 

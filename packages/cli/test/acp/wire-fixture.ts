@@ -135,6 +135,8 @@ export type WireOptions = {
     readonly signal: AbortSignal
   }>
   readonly onInterrupt?: Hook<{ readonly sessionID: string }>
+  /** Holds the idle long poll until the test resolves it; without it the poll never answers. */
+  readonly wait?: (input: { readonly sessionID: string }) => void | Promise<void>
   readonly onFormCancel?: Hook<{ readonly sessionID: string; readonly formID: string }>
   readonly onFormReply?: Hook<FormReply>
   readonly permission?: (
@@ -586,6 +588,7 @@ function startServer(options: WireOptions, changed: () => void) {
   const selections: Selection[] = []
   const interrupts: string[] = []
   const replies: Array<{ readonly sessionID: string; readonly requestID: string; readonly decision: string }> = []
+  const waits: string[] = []
   const cancelledForms: Array<{ readonly sessionID: string; readonly formID: string; readonly message?: string }> = []
   const repliedForms: FormReply[] = []
   const mcp: Array<{ readonly name: string; readonly directory?: string; readonly config: unknown }> = []
@@ -601,6 +604,7 @@ function startServer(options: WireOptions, changed: () => void) {
     selections,
     interrupts,
     replies,
+    waits,
     cancelledForms,
     repliedForms,
     mcp,
@@ -838,6 +842,15 @@ function startServer(options: WireOptions, changed: () => void) {
           const reply = { sessionID: req.params.sessionID, formID: req.params.formID, answer: input.answer }
           fake.repliedForms.push(reply)
           await emit(options.onFormReply?.(reply))
+          return noContent()
+        }),
+      },
+      "/api/experimental/session/:sessionID/wait": {
+        POST: route(async (req) => {
+          const sessionID = req.params.sessionID
+          waits.push(sessionID)
+          if (!fake.sessions.has(sessionID)) return notFound(sessionID)
+          await (options.wait?.({ sessionID }) ?? new Promise(() => {}))
           return noContent()
         }),
       },

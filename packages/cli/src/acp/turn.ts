@@ -41,6 +41,11 @@ export const CancelDrainTimeout = Context.Reference<Duration.Input>("@opencode/c
   defaultValue: () => "5 seconds",
 })
 
+/** `session/wait` answers on its own request and can beat the event stream, so an idle turn drains first. */
+export const IdleDrainTimeout = Context.Reference<Duration.Input>("@opencode/cli/acp/Turn/IdleDrainTimeout", {
+  defaultValue: () => "1 second",
+})
+
 type Subscription = {
   readonly scope: Scope.Closeable
   readonly events: Queue.Dequeue<OpenCodeEvent, unknown>
@@ -65,6 +70,7 @@ export const make = Effect.fnUntraced(function* (input: {
 }) {
   const scope = yield* Effect.scope
   const drainTimeout = yield* CancelDrainTimeout
+  const idleDrainTimeout = yield* IdleDrainTimeout
   const turns = yield* FiberMap.make<string, PromptResponse, ACPError.Failure>()
 
   const open = Effect.fnUntraced(function* (ctx: ACPTranslate.TurnContext, state: Ref.Ref<ACPTranslate.TurnState>) {
@@ -193,8 +199,7 @@ export const make = Effect.fnUntraced(function* (input: {
     }
   }
 
-  const advance = Effect.fnUntraced(function* (turn: Turn) {
-    const event = yield* take(turn.subscription)
+  const fold = Effect.fnUntraced(function* (turn: Turn, event: OpenCodeEvent) {
     const folded = yield* Ref.modify(turn.state, (current) => {
       const next =
         turn.background && !ACPTranslate.fromTrackedChild(current, event)
@@ -206,9 +211,55 @@ export const make = Effect.fnUntraced(function* (input: {
     return folded
   })
 
-  const consume = Effect.fnUntraced(function* (turn: Turn) {
+  const advance = Effect.fnUntraced(function* (turn: Turn) {
+    return yield* fold(turn, yield* take(turn.subscription))
+  })
+
+  const settleIdle = Effect.fnUntraced(function* (turn: Turn) {
+    // `session/wait` resolves on its own request, so the events that end the turn can still be in
+    // flight when it reports idle. Read until one of them arrives or the stream goes quiet.
     while (true) {
-      const folded = yield* advance(turn)
+      const next = yield* take(turn.subscription).pipe(Effect.timeoutOption(idleDrainTimeout))
+      if (Option.isNone(next)) break
+      const folded = yield* fold(turn, next.value)
+      if (!folded.terminal) continue
+      yield* asksSettled(turn.subscription)
+      return folded.terminal
+    }
+    // Nothing ever said how the turn ended: a failed durable write dropped the outcome. Report it
+    // rather than completing the prompt as if the turn had succeeded.
+    yield* Ref.update(turn.state, (state) => ({
+      ...state,
+      executionError: state.executionError ?? {
+        type: "session.outcome-lost",
+        message: "The session went idle before it reported how the turn ended",
+      },
+    }))
+    return "failed" as const
+  })
+
+  const consume = Effect.fnUntraced(function* (turn: Turn) {
+    const delivered = yield* Deferred.make<void>()
+    const idle = yield* Deferred.make<void>()
+    // A failed durable write can drop the outcome event, and the turn would wait for it forever.
+    // `session.wait` resolves through `awaitIdle`, so an idle session ends the turn either way.
+    yield* Deferred.await(delivered).pipe(
+      Effect.andThen(input.client.experimental.session.wait({ sessionID: turn.ctx.sessionID })),
+      Effect.tapCause((cause) =>
+        Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP session wait failed", cause),
+      ),
+      Effect.flatMap(() => Deferred.succeed(idle, undefined)),
+      Effect.catchCause(() => Effect.void),
+      Effect.forkScoped,
+    )
+    while (true) {
+      const next = yield* Effect.raceFirst(
+        take(turn.subscription).pipe(Effect.map((event) => Option.some(event))),
+        Deferred.await(idle).pipe(Effect.as(Option.none<OpenCodeEvent>())),
+      )
+      if (Option.isNone(next)) return yield* settleIdle(turn)
+      const folded = yield* fold(turn, next.value)
+      if (folded.state.started) yield* Deferred.succeed(delivered, undefined)
       if (folded.terminal) {
         yield* asksSettled(turn.subscription)
         return folded.terminal
