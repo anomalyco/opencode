@@ -2,9 +2,11 @@ import { builtinCatalog } from "@opencode/plugin/gui/builtin"
 import { Plugin, Store } from "@opencode/plugin/gui"
 import { OpenAppPreferences } from "./apps"
 import en from "./i18n/en"
+import { Schema } from "effect"
 
 export default Plugin.define({
   stores: {
+    viewer: Store.global(Schema.Struct({ wrap: Schema.Boolean }), { wrap: true }, "viewer"),
     // The open-in-app choice. Only the desktop reads it.
     app: Store.global(OpenAppPreferences, { app: "finder" }, "open.app"),
   },
