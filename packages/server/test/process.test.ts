@@ -2,6 +2,7 @@ import { expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { it } from "../../core/test/lib/effect"
+import { ServerInfo } from "../src/server-info"
 import { ServerProcess } from "../src/process"
 
 it.live("authenticates API requests behind the frontend transform while allowing browser preflight", () =>
@@ -219,7 +220,9 @@ it.live("pairing links sign in browsers with a cookie and API clients with a tok
     const client = yield* pair
     const redeemed = yield* request(`/auth/connect/${client.code}`)
     expect(redeemed.status).toBe(200)
-    const session = (yield* Effect.promise(() => redeemed.json())) as { token: string }
+    const session = (yield* Effect.promise(() => redeemed.json())) as { token: string; device?: { name: string } }
+    expect(session.device?.name).toBe(yield* ServerInfo.deviceName)
+    expect(session.device?.name).toBeTruthy()
     expect(
       (yield* request("/api/info", { headers: { authorization: `Basic ${btoa(`opencode:${session.token}`)}` } }))
         .status,
