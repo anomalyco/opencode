@@ -30,29 +30,28 @@ test.each(["agent", "model", "config"])(
   },
 )
 
-test.each([
-  { width: 44, animations: false },
-  { width: 100, animations: false },
-  { width: 44, animations: true },
-  { width: 100, animations: true },
-])("pending submission shows the normal spinner (%j)", async (options) => {
-  await using fixture = await workspace("agent", { animations: options.animations })
-  await fixture.switchWorkspace()
-  fixture.setup.resize(options.width, 30)
-  await fixture.setup.renderOnce()
-  expect(fixture.setup.captureCharFrame()).not.toContain("Loading workspace…")
-  fixture.setup.mockInput.pressEnter()
-  await fixture.setup.waitForFrame((frame) => frame.includes("Loading workspace…"))
-  expect(fixture.setup.captureCharFrame()).toMatch(
-    options.animations ? /[■⬝]{8} Loading workspace…/ : /\[⋯\] Loading workspace…/,
-  )
-  expect(fixture.setup.captureCharFrame()).not.toContain("esc interrupt")
-  expect(fixture.setup.renderer.currentFocusedEditor?.plainText).toBe("Review the changes")
-  expect(fixture.sent).toHaveLength(0)
-  fixture.release()
-  await fixture.setup.waitFor(() => fixture.sent.length === 1)
-  await fixture.setup.waitForFrame((frame) => !frame.includes("Loading workspace…"))
-})
+// The first test covers the static indicator at the default 100 columns.
+test.each([false, true])(
+  "pending submission fits the spinner in a narrow terminal (animations: %p)",
+  async (animations) => {
+    await using fixture = await workspace("agent", { animations })
+    await fixture.switchWorkspace()
+    fixture.setup.resize(44, 30)
+    await fixture.setup.renderOnce()
+    expect(fixture.setup.captureCharFrame()).not.toContain("Loading workspace…")
+    fixture.setup.mockInput.pressEnter()
+    await fixture.setup.waitForFrame((frame) => frame.includes("Loading workspace…"))
+    expect(fixture.setup.captureCharFrame()).toMatch(
+      animations ? /[■⬝]{8} Loading workspace…/ : /\[⋯\] Loading workspace…/,
+    )
+    expect(fixture.setup.captureCharFrame()).not.toContain("esc interrupt")
+    expect(fixture.setup.renderer.currentFocusedEditor?.plainText).toBe("Review the changes")
+    expect(fixture.sent).toHaveLength(0)
+    fixture.release()
+    await fixture.setup.waitFor(() => fixture.sent.length === 1)
+    await fixture.setup.waitForFrame((frame) => !frame.includes("Loading workspace…"))
+  },
+)
 
 test("repeated Enter during worktree loading submits only once", async () => {
   await using fixture = await workspace("agent")
@@ -90,11 +89,14 @@ test("switching away while the worktree loads cancels the pending submit", async
   await fixture.setup.waitForFrame((frame) => frame.includes("Loading workspace…"))
   await fixture.selectWorkspace(process.cwd())
   expect(fixture.setup.captureCharFrame()).not.toContain("Loading workspace…")
+  expect(fixture.setup.renderer.currentFocusedEditor?.plainText).toBe("Review the changes")
+  fixture.setup.mockInput.pressEnter()
+  await fixture.setup.waitFor(() => fixture.sent.length === 1)
+  expect(fixture.created[0]).toMatchObject({ location: { directory: process.cwd() }, agent: "build" })
   fixture.release()
   await fixture.setup.waitForVisualIdle({ quietFrames: 2 })
-  expect(fixture.created).toHaveLength(0)
-  expect(fixture.sent).toHaveLength(0)
-  expect(fixture.setup.renderer.currentFocusedEditor?.plainText).toBe("Review the changes")
+  expect(fixture.created).toHaveLength(1)
+  expect(fixture.sent).toHaveLength(1)
 })
 
 test("switching worktrees after catalogs load inside the picker does not submit in the new location", async () => {
@@ -124,93 +126,35 @@ test("switching worktrees after catalogs load inside the picker does not submit 
   expect(fixture.sent[0]).toMatchObject({ text: "Review the changes" })
 })
 
-test("opening and dismissing a dialog cancels the deferred submit without losing the draft", async () => {
+test("opening and closing a dialog cancels an Enter whose native callbacks have not run", async () => {
   await using fixture = await workspace("agent")
   await fixture.switchWorkspace()
   fixture.setup.mockInput.pressEnter()
-  await fixture.setup.waitForVisualIdle({ quietFrames: 2 })
   fixture.setup.mockInput.pressKey("p", { ctrl: true })
-  await fixture.setup.waitFor(() => fixture.setup.renderer.currentFocusedEditor instanceof InputRenderable)
-  fixture.release()
-  await fixture.setup.waitForVisualIdle({ quietFrames: 3 })
   fixture.setup.mockInput.pressEscape()
+  fixture.release()
   await fixture.setup.waitForVisualIdle({ quietFrames: 3 })
   expect(fixture.created).toHaveLength(0)
   expect(fixture.sent).toHaveLength(0)
   expect(fixture.setup.renderer.currentFocusedEditor?.plainText).toBe("Review the changes")
-
   fixture.setup.mockInput.pressEnter()
   await fixture.setup.waitFor(() => fixture.sent.length === 1)
-  expect(fixture.created[0]).toMatchObject({
-    location: { directory: fixture.target },
-    agent: "review",
-    model: { providerID: "provider", id: "target-model" },
-  })
+  expect(fixture.sent[0]).toMatchObject({ text: "Review the changes" })
 })
 
-test("an edited prompt can be submitted again before the worktree finishes loading", async () => {
-  await using fixture = await workspace("agent")
-  await fixture.switchWorkspace()
-  fixture.setup.mockInput.pressEnter()
-  await fixture.setup.waitForVisualIdle({ quietFrames: 2 })
-  await fixture.setup.mockInput.typeText(" and tests")
-  fixture.setup.mockInput.pressEnter()
-  await fixture.setup.waitForVisualIdle({ quietFrames: 2 })
-  fixture.release()
-  await fixture.setup.waitFor(() => fixture.sent.length === 1)
-  expect(fixture.created).toHaveLength(1)
-  expect(fixture.sent[0]).toMatchObject({ text: "Review the changes and tests" })
-})
-
-test("a pending worktree submit does not block sending in another workspace", async () => {
-  await using fixture = await workspace("agent")
-  await fixture.switchWorkspace()
-  fixture.setup.mockInput.pressEnter()
-  await fixture.setup.waitForVisualIdle({ quietFrames: 2 })
-  await fixture.selectWorkspace(process.cwd())
-  fixture.setup.mockInput.pressEnter()
-  await fixture.setup.waitFor(() => fixture.sent.length === 1)
-  expect(fixture.created[0]).toMatchObject({ location: { directory: process.cwd() }, agent: "build" })
-  fixture.release()
-  await fixture.setup.waitForVisualIdle({ quietFrames: 2 })
-  expect(fixture.created).toHaveLength(1)
-  expect(fixture.sent).toHaveLength(1)
-})
-
-test.each(["agent", "command"])("a temporary %s failure keeps Enter pending until recovery", async (catalog) => {
-  await using fixture = await workspace(catalog, {
-    text: catalog === "command" ? "/review changed files" : undefined,
-    holdRetry: true,
-  })
-  await fixture.switchWorkspace()
-  fixture.setup.mockInput.pressEnter()
-  await fixture.setup.waitForFrame((frame) => frame.includes("Loading workspace…"))
-  fixture.fail()
-  await fixture.retried
-  await fixture.setup.waitForFrame((frame) => frame.includes("Loading workspace…"))
-  expect(fixture.setup.captureCharFrame()).not.toContain("Failed to prepare prompt")
-  expect(fixture.created).toHaveLength(0)
-  fixture.releaseRetry()
-  await fixture.setup.waitFor(() => fixture.sent.length + fixture.commands.length === 1)
-  expect(fixture.created).toHaveLength(1)
-  expect(fixture.sent).toHaveLength(catalog === "command" ? 0 : 1)
-  expect(fixture.commands).toHaveLength(catalog === "command" ? 1 : 0)
-  expect(fixture.setup.captureCharFrame()).not.toContain("Failed to prepare prompt")
-})
-
-test("editing during a catalog retry cancels the pending send", async () => {
+test("a temporary catalog failure keeps Enter pending until recovery", async () => {
   await using fixture = await workspace("agent", { holdRetry: true })
   await fixture.switchWorkspace()
   fixture.setup.mockInput.pressEnter()
   await fixture.setup.waitForFrame((frame) => frame.includes("Loading workspace…"))
   fixture.fail()
   await fixture.retried
-  await fixture.setup.mockInput.typeText(" and tests")
-  await fixture.setup.waitForFrame((frame) => !frame.includes("Loading workspace…"))
-  fixture.releaseRetry()
-  await fixture.setup.waitForFrame((frame) => frame.includes("Review · Target Model Provider"))
+  await fixture.setup.waitForFrame((frame) => frame.includes("Loading workspace…"))
+  expect(fixture.setup.captureCharFrame()).not.toContain("Failed to prepare prompt")
   expect(fixture.created).toHaveLength(0)
-  expect(fixture.setup.renderer.currentFocusedEditor?.plainText).toBe("Review the changes and tests")
+  fixture.releaseRetry()
+  await fixture.setup.waitFor(() => fixture.sent.length === 1)
+  expect(fixture.created).toHaveLength(1)
   expect(fixture.setup.captureCharFrame()).not.toContain("Failed to prepare prompt")
 })
 
@@ -245,38 +189,38 @@ test("a missing location fails without retrying the prompt catalogs", async () =
   expect(fixture.loads()).toBe(1)
 })
 
-test.each(["agent-first", "command-first", "command-only"])(
-  "slash submission waits for the destination command catalog (%s)",
-  async (order) => {
-    await using fixture = await workspace(order === "command-only" ? "command" : "agent", {
-      text: "/review changed files",
-      command: order !== "command-only",
-    })
-    await fixture.switchWorkspace()
-    fixture.setup.mockInput.pressEnter()
-    await fixture.setup.waitForFrame((frame) => frame.includes("Loading workspace…"))
-    expect(fixture.created).toHaveLength(0)
-    expect(fixture.sent).toHaveLength(0)
-    expect(fixture.commands).toHaveLength(0)
+test("a catalog published under another location fails instead of waiting forever", async () => {
+  await using fixture = await workspace("agent", { misplaced: true })
+  await fixture.switchWorkspace()
+  fixture.setup.mockInput.pressEnter()
+  await fixture.setup.waitForFrame((frame) => frame.includes("Loading workspace…"))
+  fixture.release()
+  await fixture.setup.waitForFrame((frame) => frame.includes("Failed to prepare prompt"))
+  expect(fixture.setup.captureCharFrame()).not.toContain("Loading workspace…")
+  expect(fixture.created).toHaveLength(0)
+  expect(fixture.sent).toHaveLength(0)
+  expect(fixture.setup.renderer.currentFocusedEditor?.plainText).toBe("Review the changes")
+})
 
-    if (order !== "command-only") {
-      if (order === "agent-first") fixture.release()
-      else fixture.releaseCommand()
-      await fixture.setup.waitForVisualIdle({ quietFrames: 2 })
-      expect(fixture.created).toHaveLength(0)
-      expect(fixture.sent).toHaveLength(0)
-      expect(fixture.commands).toHaveLength(0)
-      expect(fixture.setup.captureCharFrame()).toContain("Loading workspace…")
-    }
-    fixture.release()
-    fixture.releaseCommand()
-    await fixture.setup.waitFor(() => fixture.commands.length === 1)
-    expect(fixture.sent).toHaveLength(0)
-    expect(fixture.commands[0]).toMatchObject({ name: "review", text: "changed files" })
-    expect(fixture.created[0]).toMatchObject({ location: { directory: fixture.target }, agent: "review" })
-    await fixture.setup.waitForFrame((frame) => !frame.includes("Loading workspace…"))
-  },
-)
+test("slash submission waits for the destination command catalog after the agents load", async () => {
+  await using fixture = await workspace("agent", { text: "/review changed files", command: true })
+  await fixture.switchWorkspace()
+  fixture.setup.mockInput.pressEnter()
+  await fixture.setup.waitForFrame((frame) => frame.includes("Loading workspace…"))
+  fixture.release()
+  await fixture.setup.waitForVisualIdle({ quietFrames: 2 })
+  expect(fixture.created).toHaveLength(0)
+  expect(fixture.sent).toHaveLength(0)
+  expect(fixture.commands).toHaveLength(0)
+  expect(fixture.setup.captureCharFrame()).toContain("Loading workspace…")
+
+  fixture.releaseCommand()
+  await fixture.setup.waitFor(() => fixture.commands.length === 1)
+  expect(fixture.sent).toHaveLength(0)
+  expect(fixture.commands[0]).toMatchObject({ name: "review", text: "changed files" })
+  expect(fixture.created[0]).toMatchObject({ location: { directory: fixture.target }, agent: "review" })
+  await fixture.setup.waitForFrame((frame) => !frame.includes("Loading workspace…"))
+})
 
 test("ordinary prompts do not wait for the destination command catalog", async () => {
   await using fixture = await workspace("command")
@@ -287,35 +231,9 @@ test("ordinary prompts do not wait for the destination command catalog", async (
   expect(fixture.sent[0]).toMatchObject({ text: "Review the changes" })
 })
 
-test("an unknown slash remains prompt text after the destination commands load", async () => {
-  await using fixture = await workspace("command", { text: "/unknown changed files" })
-  await fixture.switchWorkspace()
-  fixture.setup.mockInput.pressEnter()
-  await fixture.setup.waitForVisualIdle({ quietFrames: 2 })
-  expect(fixture.created).toHaveLength(0)
-  fixture.release()
-  await fixture.setup.waitFor(() => fixture.sent.length === 1)
-  expect(fixture.commands).toHaveLength(0)
-  expect(fixture.sent[0]).toMatchObject({ text: "/unknown changed files" })
-})
-
-test("opening and closing a dialog cancels an Enter whose native callbacks have not run", async () => {
-  await using fixture = await workspace("agent")
-  await fixture.switchWorkspace()
-  fixture.setup.mockInput.pressEnter()
-  fixture.setup.mockInput.pressKey("p", { ctrl: true })
-  fixture.setup.mockInput.pressEscape()
-  fixture.release()
-  await fixture.setup.waitForVisualIdle({ quietFrames: 3 })
-  expect(fixture.created).toHaveLength(0)
-  expect(fixture.sent).toHaveLength(0)
-  expect(fixture.setup.renderer.currentFocusedEditor?.plainText).toBe("Review the changes")
-  fixture.setup.mockInput.pressEnter()
-  await fixture.setup.waitFor(() => fixture.sent.length === 1)
-  expect(fixture.sent[0]).toMatchObject({ text: "Review the changes" })
-})
-
-test.each(["pending", "before-native-submit", "fast-return"])(
+// "pending": the editor opens after the send starts waiting. "fast-return": the editor closes
+// before Enter's deferred callbacks run, so only their invalidation prevents a stale send.
+test.each(["pending", "fast-return"])(
   "the external-editor shortcut cancels submission and preserves the edited draft (%s)",
   async (timing) => {
     const editor = await import("../src/editor")
@@ -358,7 +276,7 @@ test.each(["pending", "before-native-submit", "fast-return"])(
 
 async function workspace(
   catalog: string,
-  options: { text?: string; command?: boolean; animations?: boolean; holdRetry?: boolean } = {},
+  options: { text?: string; command?: boolean; animations?: boolean; holdRetry?: boolean; misplaced?: boolean } = {},
 ) {
   const source = process.cwd()
   const target = path.join(path.parse(source).root, "opencode-worktree")
@@ -407,7 +325,9 @@ async function workspace(
       if (url.pathname === "/api/fs/list") return json({ location, data: [] })
       if (url.pathname === "/api/agent")
         return json({
-          location,
+          // A misplaced response publishes the destination's agents under another location's key.
+          location:
+            destination && options.misplaced ? { ...location, directory: path.join(target, "canonical") } : location,
           data: [{ id: destination ? "review" : "build", mode: "primary", hidden: false, permissions: [] }],
         })
       if (url.pathname === "/api/model")

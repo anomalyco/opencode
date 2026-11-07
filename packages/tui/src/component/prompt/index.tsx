@@ -84,7 +84,7 @@ import { truncateFilePath } from "../../ui/file-path"
 import { PromptMetadataRow } from "./metadata"
 import { limitLabel, useUsageLimits } from "../usage"
 import { isDeepEqual } from "remeda"
-import { isLocationNotFoundError } from "@opencode/client"
+import { isLocationNotFoundError, type LocationRef } from "@opencode/client"
 import { retry } from "@opencode/util/retry"
 
 export type PromptProps = {
@@ -1131,6 +1131,16 @@ export function Prompt(props: PromptProps) {
     delivery: SessionInbox.Delivery
     slash: boolean
   }>()
+  // Catalogs a submission reads: the agent, its model, and the configured default model.
+  // Slash input also needs commands so it is not sent as an ordinary prompt.
+  function missingSubmitCatalogs(location: LocationRef, slash: boolean) {
+    return [
+      data.location.agent,
+      data.location.model,
+      data.location.config,
+      ...(slash ? [data.location.command] : []),
+    ].filter((catalog) => catalog.list(location) === undefined)
+  }
   createEffect(() => {
     // Cancel even native Enter callbacks that have not created a pending load yet.
     const modalOpen = dialog.stack.length > 0
@@ -1151,15 +1161,7 @@ export function Prompt(props: PromptProps) {
       setPendingSubmit(undefined)
       return
     }
-    if (
-      [
-        data.location.agent,
-        data.location.model,
-        data.location.config,
-        ...(pending.slash ? [data.location.command] : []),
-      ].some((catalog) => catalog.list(location) === undefined)
-    )
-      return
+    if (missingSubmitCatalogs(location, pending.slash).length > 0) return
     setPendingSubmit(undefined)
     untrack(() => void submit(pending.delivery))
   })
@@ -1225,12 +1227,7 @@ export function Prompt(props: PromptProps) {
     const location = currentLocation.ref ?? data.location.default()
     const slashHead = parseSlashHead(inputText, /\s/)
     const slashInput = store.mode === "normal" && slashHead !== undefined
-    const catalogs = [
-      data.location.agent,
-      data.location.model,
-      data.location.config,
-      ...(slashInput ? [data.location.command] : []),
-    ].filter((catalog) => catalog.list(location) === undefined)
+    const catalogs = missingSubmitCatalogs(location, slashInput)
     if (catalogs.length > 0) {
       const pending = {
         location: locationKey(location),
@@ -1251,11 +1248,18 @@ export function Prompt(props: PromptProps) {
         {
           retryIf: (error) => !disposed && pendingSubmit() === pending && !isLocationNotFoundError(error),
         },
-      ).catch((error: unknown) => {
-        if (disposed || pendingSubmit() !== pending) return
-        setPendingSubmit(undefined)
-        toast.show({ title: "Failed to prepare prompt", message: errorMessage(error), variant: "error" })
-      })
+      )
+        .then(() => {
+          // Only the effect above sends. A load can settle without publishing under this
+          // location's key, and repeating it would join the settled entry, so fail instead.
+          if (disposed || pendingSubmit() !== pending) return
+          if (missingSubmitCatalogs(location, slashInput).length > 0) throw new Error("Workspace data did not load")
+        })
+        .catch((error: unknown) => {
+          if (disposed || pendingSubmit() !== pending) return
+          setPendingSubmit(undefined)
+          toast.show({ title: "Failed to prepare prompt", message: errorMessage(error), variant: "error" })
+        })
       return false
     }
     const isCommand =
