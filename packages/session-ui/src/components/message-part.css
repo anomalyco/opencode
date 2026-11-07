@@ -645,6 +645,13 @@
     }
   }
 
+  [data-slot="text-part-meta-time"] {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+  }
+
   [data-slot="text-part-meta-separator"] {
     flex: none;
   }

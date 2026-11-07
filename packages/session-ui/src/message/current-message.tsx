@@ -68,6 +68,7 @@ export function SessionAssistantContent(props: {
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number | null
   turnTokensPerSecond?: number
+  turnCompletedAt?: number
   sources?: TurnSources
   onOpenSources?: () => void
   defaultOpen?: boolean
@@ -87,6 +88,7 @@ export function SessionAssistantContent(props: {
             showCopy={props.showAssistantCopyPartID === props.contentID}
             turnDurationMs={props.turnDurationMs}
             turnTokensPerSecond={props.turnTokensPerSecond}
+            turnCompletedAt={props.turnCompletedAt}
             sources={props.sources}
             onOpenSources={props.onOpenSources}
           />
