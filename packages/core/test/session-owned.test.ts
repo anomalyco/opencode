@@ -188,7 +188,11 @@ describe("Session-owned handles", () => {
       })
       yield* fixture.db
         .update(SessionTable)
-        .set({ time_idle: 0 })
+        .set({
+          agent: Agent.ID.make("build"),
+          model: { ...model, id: Model.ID.make("initial-model") },
+          time_idle: 0,
+        })
         .where(eq(SessionTable.id, sessionID))
         .run()
         .pipe(Effect.orDie)
