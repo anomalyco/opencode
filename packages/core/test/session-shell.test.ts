@@ -315,7 +315,8 @@ describe("Session.shell", () => {
             },
           },
         ])
-        expect(inbox[0]).not.toHaveProperty("payload.metadata.exit")
+        // A timed-out process still exits after the kill, so only a removed shell has no exit code.
+        if (outcome.status === "killed") expect(inbox[0]).not.toHaveProperty("payload.metadata.exit")
         expect(fixture.control.wakes).toEqual([])
       }),
     )

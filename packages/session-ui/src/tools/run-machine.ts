@@ -39,7 +39,9 @@ export function shellRunProps(tool: ShellTool, shellRunning: (id: string) => boo
 // A completed agent result leads with a model-facing `Exit code: ` header, then `Output:`, then the command output.
 function resultOutput(text: string) {
   const index = text.indexOf("\nOutput:\n")
+
   if (index === -1 || !text.startsWith("Exit code: ")) return text
+
   return text.slice(index + "\nOutput:\n".length)
 }
 
