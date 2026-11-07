@@ -1852,6 +1852,58 @@ describe("SessionRunnerLLM", () => {
     expect(systemTexts(s.requests.at(-1)!)).toEqual(["Fork context"])
   })
 
+  scenario("omits copied notices after instructions return to their initial value", function* (s) {
+    yield* s.runPrompt("First")
+    s.systemBaseline = "Changed context"
+    const second = yield* s.runPrompt("Second")
+    s.systemBaseline = "Initial context"
+    yield* s.runPrompt("Third")
+
+    const forked = yield* s.session.fork({ sessionID, before: second.id })
+    yield* s.session.prompt({ sessionID: forked.id, text: "Forked", resume: false })
+    yield* s.session.resume(forked.id)
+
+    const request = s.requests.at(-1)
+    if (!request) throw new Error("Expected continuation request")
+    expect(userTexts(request).at(-1)).toBe("Forked")
+    expect(request.system.map((part) => part.text)).toContain("Initial context")
+    expect(systemTexts(request)).toEqual([])
+  })
+
+  scenario("omits copied notices when forking before a native checkpoint", function* (s) {
+    yield* s.runPrompt("First")
+    s.systemBaseline = "Changed context"
+    const second = yield* s.runPrompt("Second")
+    s.systemBaseline = "Latest context"
+    yield* s.runPrompt("Third")
+    const replacement = [
+      Message.assistant(CompactionPart.make({ provider: s.currentModel.provider, encrypted: "checkpoint" })),
+    ]
+    yield* s.bus.publish(SessionEvent.Compaction.Ended, {
+      sessionID,
+      reason: "manual",
+      model: Model.Ref.make({
+        id: Model.ID.make(s.currentModel.id),
+        providerID: Provider.ID.make(s.currentModel.provider),
+      }),
+      text: "",
+      native: { messages: JSON.parse(JSON.stringify(replacement)) },
+    })
+
+    const forked = yield* s.session.fork({ sessionID, before: second.id })
+    yield* s.session.prompt({ sessionID: forked.id, text: "Forked", resume: false })
+    yield* s.session.resume(forked.id)
+
+    const request = s.requests.at(-1)
+    if (!request) throw new Error("Expected continuation request")
+    expect(userTexts(request).at(-1)).toBe("Forked")
+    expect(request.system.map((part) => part.text)).toContain("Latest context")
+    expect(systemTexts(request)).toEqual([])
+    expect(request.messages.flatMap((message) => [...message.content]).some((part) => part.type === "compaction")).toBe(
+      false,
+    )
+  })
+
   scenario("keeps nested forks self-contained", function* (s) {
     yield* s.runPrompt("First")
     s.systemBaseline = "Changed context"
