@@ -17,11 +17,18 @@ export interface Sources {
   /** macOS MDM managed preferences plist (`ai.opencode.managed`), when one is deployed. */
   readonly preferences?: AbsolutePath
   readonly global?: AbsolutePath
+  /** Every global config directory, primary first — more than one when `OPENCODE_CONFIG_DIR` adds to the XDG default. */
+  readonly globalDirs?: readonly AbsolutePath[]
   readonly explicit?: AbsolutePath
   readonly direct: readonly AbsolutePath[]
   readonly project: readonly { readonly path: AbsolutePath; readonly present: boolean }[]
   readonly claude: readonly AbsolutePath[]
   readonly agents: readonly AbsolutePath[]
+}
+
+/** Global config directories of a discovery result, primary first. */
+export function globalDirectories(sources: Sources): readonly AbsolutePath[] {
+  return sources.globalDirs ?? (sources.global ? [sources.global] : [])
 }
 
 /** Platform system configuration directory (`/Library/Application Support/opencode`, `/etc/opencode`, `%ProgramData%\opencode`). */
@@ -65,10 +72,11 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
     if (typeof options?.system === "string") return AbsolutePath.make(path.resolve(options.system))
     return systemDirectory()
   })()
-  const globalDirectory = AbsolutePath.make(global.config)
+  const globalDirs = [...new Set(global.configDirs.map((directory) => AbsolutePath.make(directory)))]
+  const globalDirectory = globalDirs[0]
   const globalAgentsDirectory = AbsolutePath.make(path.join(global.home, ".agents"))
   const globalClaudeDirectory = AbsolutePath.make(path.join(global.home, ".claude"))
-  const configDirectories = [...(system ? [system] : []), globalDirectory]
+  const configDirectories = [...(system ? [system] : []), ...globalDirs]
   const globalRoots = yield* Effect.forEach(
     [...configDirectories, globalClaudeDirectory, globalAgentsDirectory],
     (item) => fs.resolve(item),
@@ -138,7 +146,8 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
   return {
     system: globalEnabled && system ? { path: system, present: yield* fs.isDir(system) } : undefined,
     preferences,
-    global: globalEnabled ? globalDirectory : undefined,
+    global: globalEnabled && globalDirectory ? globalDirectory : undefined,
+    globalDirs: globalEnabled ? globalDirs : [],
     explicit: options?.file ? AbsolutePath.make(path.resolve(options.file)) : undefined,
     direct: visible.filter((item) => ![".agents", ".claude", ".opencode"].includes(path.basename(item))).toReversed(),
     project: yield* Effect.forEach(
