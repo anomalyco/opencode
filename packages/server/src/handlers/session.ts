@@ -26,12 +26,21 @@ import {
   SessionBusyError,
   SkillNotFoundError,
 } from "@opencode/protocol/errors"
+import { storedAbsolutePath } from "@opencode/core/database/path"
 import { AbsolutePath } from "@opencode/core/schema"
 import { locationErrors } from "../location"
 import { failedMessageDecode, failedSnapshot, missingMessage, missingSession } from "./session-error"
 
 function missingForm(id: Form.ID) {
   return new FormNotFoundError({ id, message: `Form not found: ${id}` })
+}
+
+// Session and project rows only store absolute directories, so anything else would die at insert as an empty 500.
+function requireStorableLocation(location: { readonly directory: string } | undefined) {
+  if (location === undefined || storedAbsolutePath(location.directory) !== undefined) return Effect.void
+  return Effect.fail(
+    new InvalidRequestError({ message: "location.directory must be an absolute path", field: "location" }),
+  )
 }
 
 export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
@@ -101,6 +110,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.create",
         Effect.fn(function* (ctx) {
+          if (ctx.payload.parentID === undefined) yield* requireStorableLocation(ctx.payload.location)
           return {
             data: yield* session
               .create({
@@ -121,6 +131,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.import",
         Effect.fn(function* (ctx) {
+          yield* requireStorableLocation(ctx.payload.location)
           return {
             data: yield* transfer
               .import({

@@ -1059,7 +1059,7 @@
             }
           }
         },
-        "description": "Create a session at the requested location. A parentID creates a linked child session at its parent's location.",
+        "description": "Create a session at the requested location. A parentID creates a linked child session at its parent's location. The location directory must be an absolute path.",
         "summary": "Create session",
         "requestBody": {
           "content": {
@@ -1312,7 +1312,7 @@
             }
           }
         },
-        "description": "Import a projected session transcript at the requested location. Accepts transcripts exported by earlier releases. If parentID is supplied, the parent session must already exist; import parents before children.",
+        "description": "Import a projected session transcript at the requested location. Accepts transcripts exported by earlier releases. If parentID is supplied, the parent session must already exist; import parents before children. The location directory must be an absolute path.",
         "summary": "Import session",
         "requestBody": {
           "content": {

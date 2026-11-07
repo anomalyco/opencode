@@ -174,13 +174,13 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           permissions: Permission.Ruleset.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: PublicSessionInfo }),
-        error: SessionNotFoundError,
+        error: [InvalidRequestError, SessionNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.create",
           summary: "Create session",
           description:
-            "Create a session at the requested location. A parentID creates a linked child session at its parent's location.",
+            "Create a session at the requested location. A parentID creates a linked child session at its parent's location. The location directory must be an absolute path.",
         }),
       ),
     )
@@ -192,13 +192,13 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           location: Location.PublicRef.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: PublicSessionInfo }),
-        error: [ConflictError, SessionNotFoundError],
+        error: [ConflictError, InvalidRequestError, SessionNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "experimental.session.import",
           summary: "Import session",
           description:
-            "Import a projected session transcript at the requested location. Accepts transcripts exported by earlier releases. If parentID is supplied, the parent session must already exist; import parents before children.",
+            "Import a projected session transcript at the requested location. Accepts transcripts exported by earlier releases. If parentID is supplied, the parent session must already exist; import parents before children. The location directory must be an absolute path.",
         }),
       ),
     )
