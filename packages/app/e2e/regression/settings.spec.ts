@@ -6,6 +6,8 @@ import { mockRemoteServer, mockWorkspace, openSession, openSettings, type Worksp
 import { recordNotifications } from "../utils/notifications"
 import { installSseTransport } from "../utils/sse-transport"
 
+import { modelCatalog } from "../utils/model-catalog"
+
 const directory = "C:/Projects/settings-demo"
 
 const projectID = "proj_settings_demo"
@@ -2267,6 +2269,72 @@ test("providers: switching Console accounts keeps the list until the new workspa
   await expect(connected).not.toHaveAttribute("data-flashed")
 })
 
+test("models: gateway catalogs keep mounted rows bounded while scrolling, searching and persisting visibility", async ({
+  page,
+}) => {
+  const { settings } = await open(page, { provider: modelCatalog() })
+  await settings.getByRole("tab", { name: "Models", exact: true }).click()
+  const panel = settings.locator(".settings-panel:visible")
+  const models = settings.locator(".settings-models")
+  const search = settings.getByRole("searchbox", { name: "Search models", exact: true })
+  const group = (id: string) =>
+    models
+      .locator('[data-component="settings-models-provider"]')
+      .filter({ has: page.getByRole("button", { name: `Gateway ${id.slice(-1).toUpperCase()}`, exact: true }) })
+  const trigger = (id: string) => group(id).locator(".settings-models-group-trigger")
+  const bounded = async () => {
+    // Even a dense viewport plus overscan must not mount the entire 900-model catalog.
+    await expect
+      .poll(() => models.getByRole("switch").count())
+      .toBeLessThan(Math.ceil(page.viewportSize()!.height / 16) + 36)
+  }
+
+  await expect(models.getByRole("switch", { name: "A Model 000", exact: true })).toBeVisible()
+  await bounded()
+  await panel.evaluate((element) => {
+    const scroller = getComputedStyle(element).overflowY !== "visible" ? element : element.closest(".settings")!
+    scroller.scrollTop = scroller.scrollHeight
+  })
+  const far = models.getByRole("switch", { name: "C Model 299", exact: true })
+  await expect(far).toBeVisible()
+  await expect(far).not.toBeChecked()
+  await far.locator("..").locator('[data-slot="switch-control"]').click()
+  await expect(far).toBeChecked()
+  await bounded()
+
+  await search.fill("Model 299")
+  await expect(models.getByRole("switch")).toHaveCount(3)
+  await expect(models.getByRole("switch", { name: "A Model 299", exact: true })).not.toBeChecked()
+  await expect(far).toBeChecked()
+  await search.fill("C Model 299")
+  await expect(models.getByRole("switch")).toHaveCount(1)
+  await expect(far).toBeVisible()
+  await search.clear()
+  await trigger("gateway-a").click()
+  await expect(trigger("gateway-a")).toHaveAttribute("aria-expanded", "false")
+  await trigger("gateway-c").click()
+  await expect(trigger("gateway-c")).toHaveAttribute("aria-expanded", "false")
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  await settings.getByRole("tab", { name: "Models", exact: true }).click()
+  await expect(trigger("gateway-c")).toHaveAttribute("aria-expanded", "false")
+  await expect(trigger("gateway-a")).toHaveAttribute("aria-expanded", "false")
+  await trigger("gateway-c").click()
+  await expect(trigger("gateway-c")).toHaveAttribute("aria-expanded", "true")
+  await bounded()
+  await search.fill("C Model 299")
+  await expect(far).toBeChecked()
+  await search.clear()
+  await page.setViewportSize({ width: 640, height: 720 })
+  await panel.evaluate((element) => {
+    const scroller = getComputedStyle(element).overflowY !== "visible" ? element : element.closest(".settings")!
+    scroller.scrollTop = scroller.scrollHeight
+  })
+  await expect(far).toBeVisible()
+  await expect(far).toBeChecked()
+  await bounded()
+})
+
 test("models: a Console provider picked on Providers opens its collapsed group, then the search types normally", async ({
   page,
 }) => {
@@ -2319,6 +2387,13 @@ test("models: a Console provider picked on Providers opens its collapsed group, 
   const google = settings.locator('[data-component="provider-model-group"][data-provider="console-google"]')
   await expect(group).toHaveAttribute("aria-expanded", "true")
   await expect(google.locator(".provider-model-group-trigger")).toBeFocused()
+
+  await google.getByRole("button", { name: "More options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Disable all models", exact: true }).click()
+  await expect(google.getByRole("switch", { name: "Managed Gemini", exact: true })).not.toBeChecked()
+  await google.getByRole("button", { name: "More options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Enable all models", exact: true }).click()
+  await expect(google.getByRole("switch", { name: "Managed Gemini", exact: true })).toBeChecked()
 
   const search = settings.getByRole("searchbox", { name: "Search models", exact: true })
   await search.pressSequentially("gemini")
