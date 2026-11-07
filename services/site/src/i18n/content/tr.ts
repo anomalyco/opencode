@@ -394,6 +394,10 @@ export const content = {
     },
   },
   apps: {
+    browse: {
+      category: "Ajanlar için tarayıcı kontrolü",
+      body: "Ajanınız gerçek tarayıcınızı, oturumlarınız ve sekmelerinizle kullansın.",
+    },
     hex: {
       category: "Sesle dikte",
       body: "Her uygulama için cihaz üzerinde sesle dikte.",

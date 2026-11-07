@@ -316,7 +316,7 @@ export const dict = {
   "site.product.isNew": "{{name}}은(는) 새로 나온 제품입니다. 업데이트는 여기에 표시됩니다.",
   "site.extensions": "확장 프로그램",
   "site.contents": "목차",
-  "site.companions": "더 많은 오픈 소스 제품",
+  "site.companions": "OpenCode와 함께 쓰면 좋은 앱",
   "site.notFound.title": "페이지를 찾을 수 없습니다",
   "site.arcade.alt": "밤의 버려진 오락실. 한 오락기의 화면에 아직 404가 빛나고, 그 앞 바닥에 토큰 하나가 떨어져 있습니다.",
   "site.arcade.token": "오락실 토큰. Enter를 눌러 기계에 넣으세요.",

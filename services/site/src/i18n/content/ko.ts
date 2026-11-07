@@ -236,6 +236,10 @@ export const content = {
     },
   },
   apps: {
+    browse: {
+      category: "에이전트용 브라우저 제어",
+      body: "로그인과 탭이 그대로인 실제 브라우저를 에이전트가 사용하게 하세요.",
+    },
     hex: { category: "음성 받아쓰기", body: "어떤 앱에서든 쓰는 온디바이스 음성 받아쓰기." },
     opentunnel: { category: "로컬 터널", body: "로컬 앱을 위한 공개 HTTPS URL." },
     opentui: { category: "라이브러리", body: "터미널 사용자 인터페이스를 위한 라이브러리." },

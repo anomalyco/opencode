@@ -316,7 +316,7 @@ export const dict = {
   "site.product.isNew": "{{name}} เพิ่งเปิดตัว อัปเดตจะแสดงที่นี่",
   "site.extensions": "ส่วนขยาย",
   "site.contents": "สารบัญ",
-  "site.companions": "ผลิตภัณฑ์โอเพนซอร์สอื่นๆ",
+  "site.companions": "ใช้คู่กับ OpenCode ได้อย่างลงตัว",
   "site.notFound.title": "ไม่พบหน้านี้",
   "site.arcade.alt": "ร้านเกมตู้ร้างยามค่ำคืน หน้าจอของตู้หนึ่งยังเรืองแสงเป็นเลข 404 และมีเหรียญตกอยู่บนพื้นตรงหน้า",
   "site.arcade.token": "เหรียญเกมตู้ กด Enter เพื่อหยอดเหรียญเข้าเครื่อง",

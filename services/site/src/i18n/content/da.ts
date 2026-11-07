@@ -273,6 +273,10 @@ export const content = {
     },
   },
   apps: {
+    browse: {
+      category: "Browserstyring for agenter",
+      body: "Lad din agent bruge din rigtige browser, med dine logins og faner.",
+    },
     opentunnel: { category: "Lokale tunneler", body: "Offentlige HTTPS-URL'er til lokale apps." },
     opentui: { category: "Bibliotek", body: "Et bibliotek til terminalbrugerflader." },
     hex: { category: "Diktering", body: "Diktering direkte på enheden til enhver app." },

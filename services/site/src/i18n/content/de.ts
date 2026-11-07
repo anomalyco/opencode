@@ -306,6 +306,10 @@ export const content = {
     },
   },
   apps: {
+    browse: {
+      category: "Browsersteuerung für Agenten",
+      body: "Lass deinen Agenten deinen echten Browser nutzen, mit deinen Logins und Tabs.",
+    },
     opentunnel: { category: "Lokale Tunnel", body: "Öffentliche HTTPS-URLs für lokale Apps." },
     opentui: { category: "Bibliothek", body: "Eine Bibliothek für Terminal-Oberflächen." },
     hex: { category: "Sprachdiktat", body: "Sprachdiktat direkt auf dem Gerät, für jede App." },

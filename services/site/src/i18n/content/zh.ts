@@ -198,6 +198,7 @@ export const content = {
     },
   },
   apps: {
+    browse: { category: "代理浏览器控制", body: "让你的代理使用你真实的浏览器，保留登录状态和标签页。" },
     hex: { category: "语音听写", body: "适用于任意应用的设备端语音听写。" },
     opentunnel: { category: "本地隧道", body: "为本地应用提供公开的 HTTPS URL。" },
     opentui: { category: "库", body: "用于构建终端用户界面的库。" },

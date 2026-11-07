@@ -14,7 +14,7 @@ import { useArea } from "~/i18n/content"
 import { productDetailsSource } from "~/i18n/content/areas/product-details"
 import { productsSource } from "~/i18n/content/areas/products"
 import { ChangelogSettings, ChangelogTimeline, ChangelogUnavailable } from "./changelog-entry"
-import { MoreFromAnomaly } from "./product-list"
+import { Companions } from "./companions"
 import { moreProducts, productAreas, productDetails, type PageSlug } from "./product-data"
 import { orderedProducts } from "./products-order"
 import { designCopy, designEditing } from "./design-copy"
@@ -404,6 +404,8 @@ export function ProductPage(props: { slug: PageSlug }) {
 
       <ProductDownload slug={props.slug} />
 
+      <Companions />
+
       <Show when={areas()}>
         {(filter) => (
           <section data-component="block" data-slot="product-changelog" data-section="changelog">
@@ -433,8 +435,6 @@ export function ProductPage(props: { slug: PageSlug }) {
           </section>
         )}
       </Show>
-
-      <MoreFromAnomaly slot="more-from-anomaly" />
     </Site>
   )
 }

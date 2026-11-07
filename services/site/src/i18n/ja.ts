@@ -312,7 +312,7 @@ export const dict = {
   "site.product.isNew": "{{name}}は新しい製品です。更新情報はここに表示されます。",
   "site.extensions": "拡張機能",
   "site.contents": "目次",
-  "site.companions": "その他のオープンソース製品",
+  "site.companions": "OpenCodeと相性抜群",
   "site.notFound.title": "ページが見つかりません",
   "site.arcade.alt": "夜の廃れたゲームセンター。1台の筐体の画面がまだ光っていて「404」と表示され、その前の床にコインが1枚落ちています。",
   "site.arcade.token": "ゲーム用のコイン。Enterキーを押すとマシンに投入します。",

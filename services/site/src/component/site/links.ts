@@ -81,7 +81,7 @@ export function siteLinks(t: Translate, route: (path: string) => string) {
       },
       {
         title: t("site.footer.moreOpenSource"),
-        links: anomalyApps.map((app) => ({ label: app.name, href: app.href, external: true })),
+        links: anomalyApps.map((app) => ({ label: app.name, ...appLink(app, route) })),
       },
       {
         title: "Anomaly",
@@ -100,8 +100,17 @@ export function siteLinks(t: Translate, route: (path: string) => string) {
 
 // Anomaly's shipped open source apps, as listed in Abattoir (content/projects/*.md with
 // `stage: shipped` and a public repo). A category line sits under each name, like an app store.
-// The description and icon (public/apps) are for /product.
+// The description and icon (public/apps) are for /product. Browse has a page on this site, so its
+// href is a path (see appLink); the others are other sites.
 export const anomalyApps = [
+  {
+    id: "browse",
+    name: "Browse",
+    category: "Browser control for agents",
+    body: "Let your agent use your real browser, with your logins and tabs.",
+    icon: "/apps/browse.png",
+    href: "/product/browse",
+  },
   {
     id: "hex",
     name: "Hex",
@@ -144,3 +153,9 @@ export const anomalyProducts = [
     href: "https://opentui.com",
   },
 ] as const
+
+/** Where an app links: a page on this site in the reader's language, or another site in a new tab. */
+export function appLink(app: { href: string }, route: (path: string) => string) {
+  const external = !app.href.startsWith("/")
+  return { href: external ? app.href : route(app.href), external }
+}

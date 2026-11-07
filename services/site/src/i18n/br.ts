@@ -312,7 +312,7 @@ export const dict = {
   "site.product.isNew": "{{name}} é novo. As novidades vão aparecer aqui.",
   "site.extensions": "Extensões",
   "site.contents": "Conteúdo",
-  "site.companions": "Mais produtos de código aberto",
+  "site.companions": "Combina muito bem com o OpenCode",
   "site.notFound.title": "Página não encontrada",
   "site.arcade.alt": "Um fliperama abandonado à noite. A tela de uma máquina ainda brilha com 404, e uma ficha está no chão à frente dela.",
   "site.arcade.token": "Ficha de fliperama. Pressione Enter para colocá-la na máquina.",

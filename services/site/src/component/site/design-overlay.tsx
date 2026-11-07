@@ -313,7 +313,7 @@ const settingControls: Record<string, Control> = {
   productVideos: setting("productVideos", "Product videos", videoSetIds),
   featureClipStyle: setting("featureClipStyle", "Feature clips", () => featureClipStyles),
   featureClipCount: setting("featureClipCount", "Feature clips count", () => featureClipCounts),
-  companionStyle: setting("companionStyle", "More products", () => companionStyles),
+  companionStyle: setting("companionStyle", "Works great with OpenCode", () => companionStyles),
   docsSwitcher: setting("docsSwitcher", "Docs switcher", () => docsSwitchers),
   docsSubmenu: setting("docsSubmenu", "Docs submenu", () => docsSubmenus),
   docsNav: setting("docsNav", "Docs nav", () => docsNavs),

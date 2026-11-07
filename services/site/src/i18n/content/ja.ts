@@ -285,6 +285,10 @@ export const content = {
     },
   },
   apps: {
+    browse: {
+      category: "エージェント向けブラウザ操作",
+      body: "ログインもタブもそのまま、いつものブラウザをエージェントが使えます。",
+    },
     opentunnel: { category: "ローカルトンネル", body: "ローカルアプリに公開HTTPS URLを。" },
     opentui: { category: "ライブラリ", body: "ターミナルUIのためのライブラリ。" },
     hex: { category: "音声入力", body: "どのアプリでも使える、デバイス上の音声入力。" },

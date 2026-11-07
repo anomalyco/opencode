@@ -316,7 +316,7 @@ export const dict = {
   "site.product.isNew": "{{name}} es nuevo. Sus novedades aparecerán aquí.",
   "site.extensions": "Extensiones",
   "site.contents": "Contenido",
-  "site.companions": "Más productos de código abierto",
+  "site.companions": "Funciona genial con OpenCode",
   "site.notFound.title": "Página no encontrada",
   "site.arcade.alt": "Un salón recreativo abandonado de noche. La pantalla de una máquina aún brilla y muestra 404, y hay una ficha en el suelo delante de ella.",
   "site.arcade.token": "Ficha de arcade. Pulsa Intro para meterla en la máquina.",

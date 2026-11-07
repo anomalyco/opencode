@@ -312,7 +312,7 @@ export const dict = {
   "site.product.isNew": "{{name}} est nouveau. Ses mises à jour apparaîtront ici.",
   "site.extensions": "Extensions",
   "site.contents": "Sommaire",
-  "site.companions": "Autres produits open source",
+  "site.companions": "Va parfaitement avec OpenCode",
   "site.notFound.title": "Page introuvable",
   "site.arcade.alt": "Une salle d'arcade abandonnée, la nuit. L'écran d'une borne brille encore et affiche 404, et un jeton traîne au sol devant elle.",
   "site.arcade.token": "Jeton d'arcade. Appuyez sur Entrée pour l'insérer dans la machine.",
