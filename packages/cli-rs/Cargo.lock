@@ -21,12 +21,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anyhow"
-version = "1.0.104"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
-
-[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -681,7 +675,6 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 name = "opencode-acp"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "base64",
  "bytes",
  "futures-util",
@@ -739,7 +732,6 @@ dependencies = [
 name = "opencode-cli"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "base64",
  "futures-util",
  "indexmap",
@@ -828,7 +820,6 @@ dependencies = [
 name = "opencode-mini"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "base64",
  "futures-util",
  "indexmap",
@@ -884,7 +875,6 @@ dependencies = [
 name = "opencode-service"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "base64",
  "bytes",
  "futures-util",

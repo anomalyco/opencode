@@ -12,11 +12,12 @@ use opencode_local::paths::{self, Paths};
 use opencode_service::connect::{self, Env, Options, Source};
 use opencode_tui::plugins::host::External;
 use opencode_tui::{Args, Deps, Launch, Route, app::Roots};
+use opencode_util::{err, error};
 
 use super::Context;
 use crate::args::RootArgs;
 
-pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
+pub fn run(context: &Context, args: &RootArgs) -> error::Result<()> {
     let directory = match &args.directory {
         Some(directory) => paths::enter(std::path::Path::new(directory))?,
         None => paths::start_directory()?,
@@ -55,7 +56,7 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
             let id = SessionID(id.clone());
             let found = runtime
                 .block_on(opencode_store::target::find_session(&client, &id))
-                .map_err(|error| anyhow::anyhow!(error.error_message()))?;
+                .map_err(|error| err!(error.error_message()))?;
             Some((id, found.is_some()))
         }
         None => None,
@@ -110,15 +111,13 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
 
 /// The server's canonical name for `directory`, or the server's own directory when it cannot list this one,
 /// as a `--server` on another machine (`app.tsx`'s `file.list` probe).
-async fn server_directory(client: &Client, directory: &str) -> anyhow::Result<String> {
+async fn server_directory(client: &Client, directory: &str) -> error::Result<String> {
     let location = Some(LocationQueryInput { directory: Some(directory.to_owned()) });
     if let Ok(listed) = client.file_list(&FileListInput { location, path: None }).await {
         return Ok(listed.location.directory.0);
     }
-    let info = client
-        .location_get(&LocationGetInput { location: None })
-        .await
-        .map_err(|error| anyhow::anyhow!(error.error_message()))?;
+    let info =
+        client.location_get(&LocationGetInput { location: None }).await.map_err(|error| err!(error.error_message()))?;
     Ok(info.directory.0)
 }
 

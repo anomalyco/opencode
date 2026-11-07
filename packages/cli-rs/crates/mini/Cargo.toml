@@ -16,7 +16,6 @@ opencode-ui.workspace = true
 opencode-store.workspace = true
 opencode-local.workspace = true
 opencode-util.workspace = true
-anyhow.workspace = true
 base64.workspace = true
 futures-util.workspace = true
 indexmap.workspace = true

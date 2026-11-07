@@ -10,7 +10,7 @@ use opencode_service::connect::{self, Env, Options};
 use std::sync::Arc;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut env = Env::from_env();
     env.print_logs |= args.iter().any(|arg| arg == "--print-logs");
