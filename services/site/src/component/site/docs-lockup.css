@@ -366,8 +366,8 @@
   }
 }
 
-/* The chevron rests muted, and fills as the product chevrons do (packages/nav-menus); no specificity, so the shared
-   states below win. */
+/* The chevron rests at strong ink and fills as the product chevrons do (packages/nav-menus); no specificity, so the
+   shared states below win. */
 :where([data-site] [data-component="docs-lockup"] [data-slot="toggle"]) {
   --lockup-hover: var(--nav-chevron-hover);
   --lockup-press: var(--nav-chevron-press);
