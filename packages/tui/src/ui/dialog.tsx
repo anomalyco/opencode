@@ -327,18 +327,21 @@ function init() {
   function refocus() {
     setTimeout(() => {
       if (store.stack.length > 0) return
-      if (!focus) return
-      if (focus.isDestroyed) return
+      // Restore at most once; later clear() calls with no dialog open must not steal focus back.
+      const saved = focus
+      focus = null
+      if (!saved) return
+      if (saved.isDestroyed) return
       function find(item: Renderable) {
         for (const child of item.getChildren()) {
-          if (child === focus) return true
+          if (child === saved) return true
           if (find(child)) return true
         }
         return false
       }
       const found = find(renderer.root)
       if (!found) return
-      focus.focus()
+      saved.focus()
     }, 1)
   }
 
