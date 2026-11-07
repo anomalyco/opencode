@@ -160,16 +160,41 @@ describe("goal plugin", () => {
     Effect.gen(function* () {
       const session = yield* project()
       const sessions = yield* Session.Service
-      const verdicts = reviewer("Looks good to me.", "I think so.")
-      yield* serve(verdicts.respond)
+      const prompts: string[] = []
+      const verdicts = reviewer("Looks <good> to me.", "I think so.")
+      yield* serve((request) => {
+        if (isReview(request)) prompts.push(JSON.stringify(request.messages.at(-1)))
+        return verdicts.respond(request)
+      })
 
       yield* sessions.command({ sessionID: session.id, command: "goal", text: "Ship it" })
       yield* sessions.wait(session.id)
 
       expect(verdicts.asked()).toBe(2)
+      // The retry shows the reviewer its unusable answer.
+      expect(prompts[1]).toContain("<previous_reply>\\nLooks &lt;good&gt; to me.\\n</previous_reply>")
       expect(yield* goal(session.id)).toMatchObject({
         status: "paused",
         reason: "The goal reviewer gave no usable verdict",
+      })
+    }),
+  )
+
+  it.live("accepts a verdict whose reason escapes a character JSON does not allow escaping", () =>
+    Effect.gen(function* () {
+      const session = yield* project()
+      const sessions = yield* Session.Service
+      // Reviewers quote commands in backticks and sometimes escape them, which strict JSON rejects.
+      const verdicts = reviewer('{"verdict":"done","reason":"\\`bun test\\` reports 4 pass, and C:\\\\tmp exists."}')
+      yield* serve(verdicts.respond)
+
+      yield* sessions.command({ sessionID: session.id, command: "goal", text: "Make the tests pass" })
+      yield* sessions.wait(session.id)
+
+      expect(verdicts.asked()).toBe(1)
+      expect(yield* goal(session.id)).toMatchObject({
+        status: "complete",
+        reason: "`bun test` reports 4 pass, and C:\\tmp exists.",
       })
     }),
   )
