@@ -756,6 +756,12 @@ export function createData(config: CreateDataInput) {
         sync.complete(`session.pending:${event.data.sessionID}`)
         sync.complete(`session.message:${event.data.sessionID}`)
         return
+      case "session.forked":
+        // A fork publishes its own event instead of session.created, so the new
+        // session needs the same initial sync before it can appear in any list.
+        result.session.invalidate(event.data.sessionID)
+        refresh(() => result.session.sync(event.data.sessionID))
+        return
       case "session.deleted":
         markDeleted(event.data.sessionID)
         return

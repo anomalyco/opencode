@@ -1500,6 +1500,39 @@ test("projects background user shell metadata from durable shell data", () => {
   }
 })
 
+test("syncs a forked session into the client", async () => {
+  const fork = {
+    ...session(0),
+    id: "ses_fork",
+    title: "Fork",
+    fork: { sessionID: "ses_parent", boundary: { type: "through" as const, messageID: "msg_1" } },
+  }
+  const setup = activityFixture(() => Response.json({ data: {} }), [fork])
+  try {
+    setup.emit({
+      id: "evt_forked",
+      created: 1,
+      type: "session.forked",
+      durable: { aggregateID: "ses_fork", seq: 1, version: 2 },
+      data: {
+        sessionID: "ses_fork",
+        parentID: "ses_parent",
+        boundary: { type: "through", messageID: "msg_1" },
+      },
+    })
+
+    await wait(() => setup.data.session.get("ses_fork") !== undefined)
+    expect(setup.data.session.get("ses_fork")).toMatchObject({
+      id: "ses_fork",
+      title: "Fork",
+      fork: { sessionID: "ses_parent", boundary: { type: "through", messageID: "msg_1" } },
+    })
+    expect(setup.data.session.get("ses_fork")?.parentID).toBeUndefined()
+  } finally {
+    setup.dispose()
+  }
+})
+
 function modelInfo(name: string): ModelInfo {
   return {
     id: "chat",
