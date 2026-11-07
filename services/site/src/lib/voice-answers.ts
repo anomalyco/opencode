@@ -28,7 +28,7 @@ export const voiceAnswers: VoiceAnswer[] = [
     id: "what-is",
     asks: ["what is opencode", "what does opencode do", "tell me about opencode", "what is this", "explain opencode"],
     keys: ["what", "opencode", "about", "explain", "overview"],
-    text: "OpenCode is an open source coding agent. It runs on your computer, works with any model, and you can use it from the desktop app, your phone, the terminal or your own code with the SDK.",
+    text: "OpenCode is an open source coding agent. It runs on your computer, works with any model, and you can use it from the desktop app, the terminal, your phone or your own code with the SDK.",
     links: [
       { label: "Home", href: "/" },
       { label: "Docs", href: docsUrl("/") },
