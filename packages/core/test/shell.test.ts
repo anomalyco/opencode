@@ -56,12 +56,24 @@ describe("shell", () => {
     expect(ShellSelect.args("/usr/bin/fish", "echo hi")).toEqual(["-c", "echo hi"])
     expect(ShellSelect.args("/bin/zsh", "echo hi")).toEqual(["-c", "echo hi"])
     expect(ShellSelect.args("/bin/bash", "echo hi")).toEqual(["-c", "echo hi"])
+    // PowerShell cannot report a native command's exit code on its own, so the command body is
+    // wrapped in an exit-recovery suffix that reports $LASTEXITCODE only when the last
+    // statement was native, without masking pure PowerShell failures.
+    const psCommand = (command: string) =>
+      `${command}\nif ($?) { exit 0 } elseif ($LASTEXITCODE -ne $null -and @($error | Where-Object { $_.FullyQualifiedErrorId -notlike "NativeCommandError*" }).Count -eq 0) { exit $LASTEXITCODE } else { exit 1 }`
     expect(ShellSelect.args("pwsh", "Write-Output hi")).toEqual([
       "-NoLogo",
       "-NoProfile",
       "-NonInteractive",
       "-Command",
-      "Write-Output hi",
+      psCommand("Write-Output hi"),
+    ])
+    expect(ShellSelect.args("powershell", "cmd /c exit 3")).toEqual([
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      psCommand("cmd /c exit 3"),
     ])
   })
 
