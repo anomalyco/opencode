@@ -124,12 +124,36 @@ const withRegionEndings = (region: string, replacement: string, fallback: string
   return after.map((line, index) => (index === after.length - 1 ? line : line + (endings[source[index]!] ?? fallback))).join("")
 }
 
+/** Largest LCS table alignLines builds, in cells of 4 bytes; bigger alignments pair lines by position instead. */
+const alignCells = 1 << 22
+
 /**
  * For each line of `after`, the index of the `before` line it keeps (longest common subsequence) or, between kept
  * lines, the line it takes the place of; undefined for lines with no counterpart.
+ *
+ * Alignments that fit the table keep the original tie-break. Larger ones first drop the lines shared at either end,
+ * so a small change inside a large match costs memory linear in the match rather than `before × after` cells. A
+ * middle still larger than `alignCells` is paired by position, which matches every line to the one it replaces.
  */
 const alignLines = (before: string[], after: string[]) => {
+  if ((before.length + 1) * (after.length + 1) <= alignCells) return alignMiddle(before, after)
+  const shared = Math.min(before.length, after.length)
+  let prefix = 0
+  while (prefix < shared && before[prefix] === after[prefix]) prefix++
+  let suffix = 0
+  while (suffix < shared - prefix && before[before.length - 1 - suffix] === after[after.length - 1 - suffix]) suffix++
+  const middle = alignMiddle(before.slice(prefix, before.length - suffix), after.slice(prefix, after.length - suffix))
+  return after.map((_, index) => {
+    if (index < prefix) return index
+    if (index >= after.length - suffix) return before.length - (after.length - index)
+    const source = middle[index - prefix]
+    return source === undefined ? undefined : source + prefix
+  })
+}
+
+const alignMiddle = (before: string[], after: string[]) => {
   const width = after.length + 1
+  if ((before.length + 1) * width > alignCells) return after.map((_, index) => (index < before.length ? index : undefined))
   const table = new Uint32Array((before.length + 1) * width)
   for (let i = before.length - 1; i >= 0; i--)
     for (let j = after.length - 1; j >= 0; j--)
