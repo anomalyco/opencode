@@ -5,7 +5,7 @@ import { Global } from "@opencode/util/global"
 import { AppProcess } from "@opencode/util/process"
 import { expect, spyOn, test } from "bun:test"
 import { Effect, FileSystem, Layer, PlatformError, Stream } from "effect"
-import { ChildProcessSpawner } from "effect/process"
+import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { Updater } from "../src/services/updater"
@@ -19,6 +19,7 @@ function fixture(
   respond: (command: {
     readonly command: string
     readonly args: ReadonlyArray<string>
+    readonly env?: ChildProcess.CommandOptions["env"]
   }) => Partial<AppProcess.RunResult> & {
     error?: AppProcess.AppProcessError
   } = () => ({}),
@@ -118,7 +119,7 @@ function fixture(
               if (!lookup) commands.push([command.command, ...args])
               const result = lookup
                 ? { stdout: Buffer.from(`${path.join(git, "mingw64", "libexec", "git-core")}\n`) }
-                : respond({ command: command.command, args })
+                : respond({ command: command.command, args, env: command.options?.env })
               if (result.error) return Effect.fail(result.error)
               return Effect.succeed({
                 command: command.command,
@@ -304,6 +305,18 @@ it.live("method detection tolerates unavailable package managers", () =>
     )
     expect(yield* test.updater.method()).toBe("yarn")
     expect(test.commands).toHaveLength(5)
+  }),
+)
+
+it.live("global installation probes disable corepack auto-pin (#62246)", () =>
+  Effect.gen(function* () {
+    let probedEnv: ChildProcess.CommandOptions["env"]
+    const test = yield* fixture((command) => {
+      probedEnv = command.env
+      return {}
+    })
+    yield* test.updater.method()
+    expect(probedEnv?.COREPACK_ENABLE_AUTO_PIN).toBe("0")
   }),
 )
 

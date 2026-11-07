@@ -173,11 +173,20 @@ const make = Effect.gen(function* () {
 
   const exec = Effect.fnUntraced(function* (command: string[], timeout: Duration.Input = "30 seconds") {
     return yield* appProcess
-      .run(ChildProcess.make(command[0], command.slice(1)), {
-        timeout,
-        maxOutputBytes: 100_000,
-        maxErrorBytes: 100_000,
-      })
+      .run(
+        ChildProcess.make(command[0], command.slice(1), {
+          // These commands run from the project directory. With COREPACK_ENABLE_AUTO_PIN enabled,
+          // the pnpm/yarn corepack shims write a `packageManager` field into the project
+          // package.json as a side effect of merely probing how OpenCode was installed (#62246).
+          extendEnv: true,
+          env: { COREPACK_ENABLE_AUTO_PIN: "0" },
+        }),
+        {
+          timeout,
+          maxOutputBytes: 100_000,
+          maxErrorBytes: 100_000,
+        },
+      )
       .pipe(
         Effect.map((result) => ({
           code: result.exitCode,
