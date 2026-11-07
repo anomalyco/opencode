@@ -44,6 +44,11 @@ export interface Events {
 export interface Input {
   readonly name: string
   readonly config: Mcp.ServerConfig
+  /**
+   * Resolved on every attempt and used in place of `config`, so per-attempt settings such as a
+   * certificate pin also apply to reconnects. A failure is reported through `failed`.
+   */
+  readonly resolveConfig?: () => Effect.Effect<Mcp.ServerConfig, Error>
   readonly directory: string
   /**
    * Serves several Locations: it answers no `roots/list`, since no one directory owns it, and skips the
@@ -163,10 +168,20 @@ export function make(input: Input): Connection {
   const start: Effect.Effect<void> = Effect.suspend(() =>
     Effect.gen(function* () {
       yield* input.events.connecting
-      // Checked before the OAuth provider is built, which parses the URL too.
-      if (input.config.type === "remote" && !URL.canParse(input.config.url))
+      const resolved = yield* (input.resolveConfig ? input.resolveConfig() : Effect.succeed(input.config)).pipe(Effect.exit)
+      if (Exit.isFailure(resolved)) {
+        const error = Cause.squash(resolved.cause)
         return yield* input.events.failed(
-          { status: "failed", error: `Invalid MCP server URL: ${input.config.url}` },
+          { status: "failed", error: error instanceof Error ? error.message : String(error) },
+          // The pin check probed the server, which answered with the untrusted certificate.
+          true,
+        )
+      }
+      const config = resolved.value
+      // Checked before the OAuth provider is built, which parses the URL too.
+      if (config.type === "remote" && !URL.canParse(config.url))
+        return yield* input.events.failed(
+          { status: "failed", error: `Invalid MCP server URL: ${config.url}` },
           false,
         )
       const scope = yield* Scope.fork(input.scope)
@@ -176,7 +191,6 @@ export function make(input: Input): Connection {
       // List tools as part of connect so a failure here marks the server failed rather than
       // leaving it connected with a silently empty tool list and no path to recover. A shared connection
       // decides first: it can only be shared on 2026-07-28, so an older server is never asked to list.
-      const config = input.config
       const result = yield* McpClient.connect({
         server: input.name,
         config,

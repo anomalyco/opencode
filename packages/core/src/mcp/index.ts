@@ -7,21 +7,7 @@ import type { Session } from "@opencode/schema/session"
 import type { Transport } from "@modelcontextprotocol/client"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
-import {
-  Clock,
-  Context,
-  Effect,
-  Exit,
-  Fiber,
-  FiberSet,
-  Latch,
-  Layer,
-  Schema,
-  Scope,
-  Semaphore,
-  Stream,
-  Types,
-} from "effect"
+import { Clock, Context, DateTime, Effect, Exit, Fiber, FiberSet, Latch, Layer, Schema, Scope, Semaphore, Stream, Types } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { httpFetch } from "@opencode/util/effect/app-node-platform"
@@ -35,6 +21,7 @@ import { Location } from "../location.js"
 import { waitForAbort } from "@opencode/util/process"
 import { State } from "../state.js"
 import type { McpClient } from "./client.js"
+import { McpTrustedHost } from "./trust.js"
 import { McpConnection } from "./connection.js"
 import { McpPool } from "./pool.js"
 
@@ -145,12 +132,28 @@ export type Editor = {
 
 const cloneConfig = (config: Mcp.ServerConfig) => structuredClone(config) as Types.DeepMutable<Mcp.ServerConfig>
 
+const toError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)))
+
 export interface Interface extends State.Transformable<Editor> {
   readonly servers: () => Effect.Effect<ServerInfo[]>
   readonly add: (server: ServerName | string, config: Mcp.ServerConfig) => Effect.Effect<void>
   readonly connect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
   readonly disconnect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
   readonly remove: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
+  /**
+   * Reads the certificate a remote server presents without trusting it, for trust-on-first-use
+   * confirmation. Only private IP hosts qualify.
+   */
+  readonly trustInspect: (input: { readonly url: string }) => Effect.Effect<Mcp.TrustInspect, Error>
+  /**
+   * Records the certificate a private-network server presents as trusted for this location's project,
+   * or re-pins it after a rotation when `force` is set.
+   */
+  readonly trust: (input: {
+    readonly url: string
+    readonly force?: boolean
+    readonly expectFingerprint?: string
+  }) => Effect.Effect<Mcp.TrustResult, Error>
   /**
    * Attaches a client-hosted MCP server for the lifetime of the calling scope. Its tools are named after
    * `name` like any server's. Attaching a name again stacks the new connection on top: it serves the
@@ -206,6 +209,7 @@ export const layer = (options?: Options) =>
       const forms = yield* Form.Service
       const integration = yield* Integration.Service
       const credentials = yield* Credential.Service
+      const trustedHosts = yield* McpTrustedHost.Service
       const fetch = yield* FetchHttpClient.Fetch
       const pool = yield* McpPool.Service
       const root = yield* Effect.scope
@@ -408,6 +412,9 @@ export const layer = (options?: Options) =>
               }
             }),
           })
+        // Pooling offers 2026-07-28, the only revision a connection can be shared on.
+        const connectionConfig: Mcp.ServerConfig =
+          config.pool && config.protocol === undefined ? { ...config, protocol: "auto" } : config
         const entry: ServerEntry = {
           config,
           status: { status: "pending" },
@@ -415,8 +422,10 @@ export const layer = (options?: Options) =>
           attempt: { started, settled: Latch.makeUnsafe() },
           connection: (pooled ? share : McpConnection.make)({
             name,
-            // Pooling offers 2026-07-28, the only revision a connection can be shared on.
-            config: config.pool && config.protocol === undefined ? { ...config, protocol: "auto" } : config,
+            config: connectionConfig,
+            // Pinned on every attempt so the stored certificate fingerprint also applies to reconnects;
+            // a mismatched pin fails the attempt with the rotation message, unpinned hosts pass through.
+            resolveConfig: () => pinTrusted(connectionConfig),
             directory: location.directory,
             clientInfo: options?.clientInfo,
             authProvider: Effect.suspend(() =>
@@ -452,7 +461,11 @@ export const layer = (options?: Options) =>
               }),
               failed: (failure) =>
                 Effect.gen(function* () {
-                  entry.status = failure
+                  // Certificate verification failures get the trust hint; everything else keeps its message.
+                  entry.status =
+                    failure.status === "failed"
+                      ? { status: "failed", error: yield* explainFailure(entry.config, failure.error) }
+                      : failure
                   yield* Effect.logWarning("mcp connect failed", { server: name, status: entry.status })
                   yield* bus.publish(McpEvent.StatusChanged, { server: name })
                 }),
@@ -474,6 +487,72 @@ export const layer = (options?: Options) =>
         }
         return entry
       }
+
+      const trustTarget = Effect.fnUntraced(function* (rawUrl: string) {
+        if (!URL.canParse(rawUrl)) return yield* Effect.fail(new Error(`Invalid URL: ${rawUrl}`))
+        const url = new URL(rawUrl)
+        if (url.protocol !== "https:") return yield* Effect.fail(new Error(`Trust requires an https URL: ${rawUrl}`))
+        const { McpTls } = yield* Effect.promise(() => import("./tls.js"))
+        const host = McpTls.privateHost(url.hostname)
+        if (!host)
+          return yield* Effect.fail(
+            new Error(`Trust is only available for private IP addresses. ${url.hostname} is not a private IP address.`),
+          )
+        return { url, host, port: McpTls.port(url) }
+      })
+
+      const presentedCertificate = Effect.fnUntraced(function* (url: URL) {
+        const { McpTls } = yield* Effect.promise(() => import("./tls.js"))
+        return yield* Effect.tryPromise({
+          try: () => McpTls.probeCertificate(url.hostname, McpTls.port(url)),
+          catch: (error) =>
+            new Error(`Cannot read the TLS certificate from ${url.hostname}:${McpTls.port(url)}: ${toError(error).message}`),
+        })
+      })
+
+      // A remote server at a private IP with no explicit TLS config connects pinned by the
+      // certificate's fingerprint (if this project already trusts one), which also covers
+      // appliance certificates without IP SANs. A rotated certificate fails the connection
+      // instead of being silently accepted.
+      const pinTrusted = Effect.fnUntraced(function* (config: Mcp.ServerConfig) {
+        if (config.type !== "remote" || config.tls || !URL.canParse(config.url)) return config
+        const url = new URL(config.url)
+        if (url.protocol !== "https:") return config
+        const { McpTls } = yield* Effect.promise(() => import("./tls.js"))
+        const host = McpTls.privateHost(url.hostname)
+        if (!host) return config
+        const stored = yield* trustedHosts.get({ projectID: location.project.id, host, port: McpTls.port(url) })
+        if (!stored) return config
+        const cert = yield* presentedCertificate(url)
+        if (cert.fingerprint !== stored.fingerprint)
+          return yield* Effect.fail(
+            new Error(
+              `TLS certificate for ${host}:${McpTls.port(url)} changed since it was last trusted: expected ${stored.fingerprint}, got ${cert.fingerprint}. If the appliance rotated its certificate, re-pin it with: opencode mcp trust ${config.url} --force`,
+            ),
+          )
+        return { ...config, tls: { fingerprint: cert.fingerprint } }
+      })
+
+      const explainFailure = Effect.fnUntraced(function* (config: Mcp.ServerConfig, error: unknown) {
+        const message = error instanceof Error ? error.message : String(error)
+        if (config.type !== "remote" || config.tls || !URL.canParse(config.url)) return message
+        const url = new URL(config.url)
+        if (url.protocol !== "https:") return message
+        const { McpTls } = yield* Effect.promise(() => import("./tls.js"))
+        const host = McpTls.privateHost(url.hostname)
+        if (!host) return message
+        // Only certificate verification failures get the trust hint; network, protocol, and HTTP
+        // failures keep their original message (and do not pay for a TLS probe).
+        if (!McpTls.isTlsCertificateError(error)) return message
+        const portNumber = McpTls.port(url)
+        const cert = yield* presentedCertificate(url).pipe(Effect.orElseSucceed(() => undefined))
+        if (!cert) return message
+        const stored = yield* trustedHosts.get({ projectID: location.project.id, host, port: portNumber })
+        if (stored && stored.fingerprint === cert.fingerprint) return message
+        if (stored)
+          return `TLS certificate for ${host}:${portNumber} changed since it was last trusted: expected ${stored.fingerprint}, got ${cert.fingerprint}. If the appliance rotated its certificate, re-pin it with: opencode mcp trust ${config.url} --force`
+        return `TLS certificate for ${host}:${portNumber} is not trusted. Fingerprint: SHA256:${cert.fingerprint}. Subject: ${cert.subject}. If this is a server on your private network, trust it with: opencode mcp trust ${config.url}`
+      })
 
       // MCP.tools() runs every step and the tool registry compares tools by identity, so tag the
       // connection's list once per listing instead of on every read.
@@ -781,6 +860,54 @@ export const layer = (options?: Options) =>
           overrides.set(name, false)
           yield* state.reload()
         }),
+        trustInspect: Effect.fn("MCP.trustInspect")(function* (input) {
+          const target = yield* trustTarget(input.url)
+          const cert = yield* presentedCertificate(target.url)
+          const stored = yield* trustedHosts.get({ projectID: location.project.id, host: target.host, port: target.port })
+          return {
+            cert: {
+              host: target.host,
+              port: target.port,
+              fingerprint: cert.fingerprint,
+              subject: cert.subject,
+              validTo: DateTime.makeUnsafe(cert.validTo),
+            },
+            stored: stored
+              ? {
+                  host: stored.host,
+                  port: stored.port,
+                  fingerprint: stored.fingerprint,
+                  subject: stored.subject,
+                  validTo: stored.validTo,
+                }
+              : undefined,
+          }
+        }),
+        trust: Effect.fn("MCP.trust")(function* (input) {
+          const target = yield* trustTarget(input.url)
+          const cert = yield* presentedCertificate(target.url)
+          if (input.expectFingerprint && cert.fingerprint !== input.expectFingerprint)
+            return yield* Effect.fail(
+              new Error("The certificate changed between the check and the confirmation. Run opencode mcp trust again."),
+            )
+          const key = { projectID: location.project.id, host: target.host, port: target.port }
+          const existing = yield* trustedHosts.get(key)
+          if (existing && existing.fingerprint !== cert.fingerprint && !input.force)
+            return yield* Effect.fail(
+              new Error(
+                `The certificate for ${target.host}:${target.port} changed since it was last trusted (expected ${existing.fingerprint}, got ${cert.fingerprint}). Re-pin it with: opencode mcp trust ${input.url} --force`,
+              ),
+            )
+          yield* trustedHosts.put({ ...key, fingerprint: cert.fingerprint, subject: cert.subject, validTo: cert.validTo })
+          return {
+            host: target.host,
+            port: target.port,
+            fingerprint: cert.fingerprint,
+            subject: cert.subject,
+            validTo: DateTime.makeUnsafe(cert.validTo),
+            replaced: existing !== undefined && existing.fingerprint !== cert.fingerprint,
+          }
+        }),
         attach: Effect.fn("MCP.attach")(function* (client, transport) {
           yield* attach(ServerName.make(client), transport)
         }),
@@ -929,6 +1056,7 @@ export function configured(options?: Options) {
       Form.node,
       Integration.node,
       Credential.node,
+      McpTrustedHost.node,
       httpFetch,
       McpPool.node,
     ],
