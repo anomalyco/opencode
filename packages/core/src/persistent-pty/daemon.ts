@@ -169,32 +169,27 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
   inherited?: Handoff,
 ) {
   const startup = Semaphore.makeUnsafe(1)
-  // Each daemon owns the runtime directory `<root>/<id>`.
-  let id = initialID
-  let registration: Registration | undefined
-  let owner: Awaited<ReturnType<typeof openOwner>> | undefined
-  let closed = false
-  yield* Effect.addFinalizer(() =>
-    Effect.sync(() => {
-      closed = true
-      owner?.socket.destroy()
-    }),
-  )
+  // Each daemon owns the runtime directory `<root>/<id>`. The owner connection always belongs to
+  // `registration`'s instance. `stale` keeps it open, since dropping it stops the daemon, but
+  // rediscovers the registration before the next request.
+  let state: State = { status: "unregistered", id: initialID }
+  const replace = (next: State) => {
+    if ("owner" in state && (!("owner" in next) || next.owner !== state.owner)) state.owner.socket.destroy()
+    state = next
+  }
+  yield* Effect.addFinalizer(() => Effect.sync(() => replace({ status: "closed", id: state.id })))
 
   const claim = (current: Registration, ticket?: string) =>
     Effect.tryPromise({
       try: async (signal) => {
         const connection = await openOwner(current, ticket, signal)
-        if (closed || signal.aborted) {
+        if (state.status === "closed" || signal.aborted) {
           connection.socket.destroy()
           throw new Error("PTY owner scope is closed")
         }
-        owner = connection
-        registration = current
+        replace({ status: "owned", id: state.id, registration: current, owner: connection })
         connection.socket.once("close", () => {
-          if (owner !== connection) return
-          owner = undefined
-          registration = undefined
+          if ("owner" in state && state.owner === connection) replace({ status: "unregistered", id: state.id })
         })
       },
       catch: (cause) => failure("connect", cause),
@@ -205,7 +200,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       }),
     )
 
-  const discover = Effect.fn("PersistentPty.daemon.discover")(function* (directory = path.join(root, id)) {
+  const discover = Effect.fn("PersistentPty.daemon.discover")(function* (directory = path.join(root, state.id)) {
     const value = yield* Effect.tryPromise({
       try: () => readFile(path.join(directory, "service.json"), "utf8"),
       catch: (cause) => failure("connect", cause),
@@ -240,7 +235,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
         new Promise<ReturnType<typeof spawn>>((resolve, reject) => {
           const child = spawn(
             executable,
-            ["daemon", "--runtime-dir", root, "--name", id],
+            ["daemon", "--runtime-dir", root, "--name", state.id],
             { detached: true, windowsHide: true, stdio: "ignore" },
           )
           child.once("spawn", () => {
@@ -292,27 +287,24 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       ),
     )
 
-  const abandon = () => {
-    owner?.socket.destroy()
-    owner = undefined
-    registration = undefined
-    id = crypto.randomUUID()
-  }
+  const abandon = () => replace({ status: "unregistered", id: crypto.randomUUID() })
 
   const connect = Effect.fn("PersistentPty.daemon.connect")(function* (shouldStart: boolean) {
-    if (closed) return yield* Effect.fail(new DaemonError({ kind: "connect", message: "PTY owner scope is closed" }))
-    if (registration) return registration
+    if (state.status === "closed")
+      return yield* Effect.fail(new DaemonError({ kind: "connect", message: "PTY owner scope is closed" }))
+    if (state.status === "owned") return state.registration
     return yield* startup.withPermit(
       Effect.gen(function* () {
-        if (registration) return registration
+        if (state.status === "owned") return state.registration
         const found = yield* discover().pipe(
           Effect.catch((error) => {
             if (shouldStart && error.kind === "connect") return start()
             return Effect.fail(error)
           }),
         )
-        if (!owner) yield* claim(found)
-        registration = found
+        if ("owner" in state && state.registration.instance_id === found.instance_id)
+          replace({ ...state, status: "owned", registration: found })
+        else yield* claim(found)
         return found
       }),
     )
@@ -324,7 +316,8 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       const current = yield* connect(shouldStart)
       return yield* run(current).pipe(
         Effect.catch((error) => {
-          if (error.kind === "registration" && registration === current) registration = undefined
+          if (error.kind === "registration" && state.status === "owned" && state.registration === current)
+            replace({ ...state, status: "stale" })
           return Effect.fail(error)
         }),
       )
@@ -339,7 +332,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       Effect.catch((error) => {
         if (error.kind === "registration") return attempt(value, shouldStart)
         if (error.kind !== "connect") return Effect.fail(error)
-        registration = undefined
+        if (state.status === "owned") replace({ ...state, status: "stale" })
         if (!shouldStart) return Effect.fail(error)
         return attempt(value, true)
       }),
@@ -358,7 +351,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
 
   const shutdown = Effect.gen(function* () {
     const response = yield* requestIfRunning({ op: "shutdown" })
-    registration = undefined
+    if (state.status !== "closed") replace({ status: "unregistered", id: state.id })
     if (!response) return undefined
     const deadline = Date.now() + 5_000
     while (Date.now() < deadline) {
@@ -374,11 +367,10 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
 
   const handoff = startup.withPermit(
     Effect.gen(function* () {
-      const current = owner
-      const registered = registration
-      if (!current || !registered) return null
+      const current = state
+      if (!("owner" in current)) return null
       const response = yield* Effect.tryPromise({
-        try: (signal) => current.exchange({ op: "prepare_handoff" }, signal),
+        try: (signal) => current.owner.exchange({ op: "prepare_handoff" }, signal),
         catch: (cause) => failure("response", cause),
       }).pipe(
         Effect.timeoutOrElse({
@@ -390,8 +382,8 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       if (response.type !== "handoff")
         return yield* Effect.fail(new DaemonError({ kind: "protocol", message: "Expected PTY handoff ticket" }))
       return {
-        directory: path.join(root, id),
-        instanceID: registered.instance_id,
+        directory: path.join(root, current.id),
+        instanceID: current.registration.instance_id,
         ticket: response.ticket,
         expiresAt: response.expires_at,
       }
@@ -419,12 +411,12 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       if (inherited.expiresAt <= Date.now())
         return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart handoff expired" }))
       // Older releases put the daemon directory outside the root; its directory name is still the ID.
-      id = path.basename(inherited.directory)
+      replace({ status: "unregistered", id: path.basename(inherited.directory) })
       found = yield* discover(inherited.directory)
       if (found.instance_id !== inherited.instanceID)
         return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart daemon changed" }))
-      if (path.resolve(inherited.directory) !== path.resolve(root, id))
-        yield* migrate(inherited.directory, path.join(root, id))
+      if (path.resolve(inherited.directory) !== path.resolve(root, state.id))
+        yield* migrate(inherited.directory, path.join(root, state.id))
       yield* claim(found, inherited.ticket)
     }).pipe(
       Effect.catchCause((cause) =>
@@ -442,6 +434,15 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
 
   return { request, requestIfRunning, supports, shutdown, handoff, subscribe } satisfies DaemonTransport
 })
+
+type State =
+  | { readonly status: "unregistered" | "closed"; readonly id: string }
+  | {
+      readonly status: "owned" | "stale"
+      readonly id: string
+      readonly registration: Registration
+      readonly owner: Awaited<ReturnType<typeof openOwner>>
+    }
 
 // Older releases kept registrations in purgeable temp directories. Renaming keeps the lock file's
 // inode, so the still-running daemon keeps holding its lock in the new location.
