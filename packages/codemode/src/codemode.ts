@@ -51,6 +51,12 @@ export type ResolvedExecutionLimits = {
 /** Execution engine: the default AST generator interpreter (`"legacy"`) or the experimental bytecode VM (`"vm"`). */
 export type Engine = "legacy" | "vm"
 
+/** Options for `VmRuntime.program`. */
+export type ProgramOptions = {
+  /** Names this run's host calls (`<runId>:<callId>`); a random UUID by default. */
+  readonly runId?: string
+}
+
 /** How `program.suspend` saves a run's state (`engine: "vm"` only). */
 export type SuspendOptions = {
   /** The most bytes a saved state may take; a larger one fails the suspend, and the run goes on. */
@@ -167,7 +173,11 @@ export type Runtime<R = never> = {
 /** A runtime on the bytecode VM (`engine: "vm"`, experimental): it can also suspend runs and resume them. */
 export type VmRuntime<R = never> = Runtime<R> & {
   /** A program ready to run once; nothing runs until `program.run()`. */
-  readonly program: (code: string, bindings?: Readonly<Record<string, DataValue>>) => Program<R>
+  readonly program: (
+    code: string,
+    bindings?: Readonly<Record<string, DataValue>>,
+    options?: ProgramOptions,
+  ) => Program<R>
   /**
    * A suspended run (its `state`, or that state as bytes) as a program to continue in this runtime, which must be the
    * same build with the same extensions. The state is checked when it runs: `run()` fails with a `SnapshotError` when
@@ -225,7 +235,9 @@ export function make<
 export function make<
   const Provided extends Record<string, unknown> = {},
   const Extensions extends ReadonlyArray<Extension> = [],
->(options: Options<Provided, Extensions> = {}): Runtime<Environment<Provided, Extensions>> | VmRuntime<Environment<Provided, Extensions>> {
+>(
+  options: Options<Provided, Extensions> = {},
+): Runtime<Environment<Provided, Extensions>> | VmRuntime<Environment<Provided, Extensions>> {
   type R = Environment<Provided, Extensions>
   const prepared = ToolRuntime.prepare<R>((options.tools ?? {}) as Tools<Services<Provided>>)
   const limits = resolveExecutionLimits(options.limits)
@@ -257,30 +269,27 @@ export function make<
       limits,
       hooks: options.hooks ?? {},
       globals: extensions.length === 0 ? undefined : (ctx) => vm.extensionGlobals(ctx, extensions),
-      lossy: extensions.length > 0,
+      lossy: extensions.some((extension) => extension.snapshot === undefined),
     })
   const data = (vm: typeof VmEngine, bindings: Readonly<Record<string, DataValue>> | undefined) =>
     bindings === undefined
       ? undefined
       : (ctx: Parameters<typeof vm.fromJson>[0]) =>
           Object.entries(bindings).map(([name, value]) => [name, vm.fromJson(ctx, value)] as const)
-  const program = (code: string, bindings?: Readonly<Record<string, DataValue>>) =>
-    vmProgram((vm) => Effect.succeed(vm.startProgram(getSetup(vm), code, data(vm, bindings))))
+  const program = (code: string, bindings?: Readonly<Record<string, DataValue>>, programOptions?: ProgramOptions) =>
+    vmProgram((vm) => Effect.succeed(vm.startProgram(getSetup(vm), code, data(vm, bindings), programOptions?.runId)))
   return {
     get catalog() {
       return prepared.catalog
     },
-    execute: (code, bindings) =>
-      Effect.flatMap(loadVm(), (vm) => vm.finishExecution(program(code, bindings).run())),
+    execute: (code, bindings) => Effect.flatMap(loadVm(), (vm) => vm.finishExecution(program(code, bindings).run())),
     program,
     resume: (state) => vmProgram((vm) => vm.resumeProgram(getSetup(vm), state)),
   } satisfies VmRuntime<R>
 }
 
 // A program's one run: `start` makes it once the VM is loaded, and a suspend waits for it.
-const vmProgram = <R, E>(
-  start: (vm: typeof VmEngine) => Effect.Effect<VmEngine.Running<R>, E>,
-): Program<R, E> => {
+const vmProgram = <R, E>(start: (vm: typeof VmEngine) => Effect.Effect<VmEngine.Running<R>, E>): Program<R, E> => {
   let claimed = false
   const started = Deferred.makeUnsafe<VmEngine.Running<R>, SuspendError>()
   return {
@@ -318,9 +327,10 @@ let vmEngine: Promise<typeof VmEngine> | undefined
 const loadVm = () =>
   vmLoaded !== undefined
     ? Effect.succeed(vmLoaded)
-    : Effect.promise(() =>
-        (vmEngine ??= import("./vm/index.js").then((mod) => {
-          vmLoaded = mod
-          return mod
-        })),
+    : Effect.promise(
+        () =>
+          (vmEngine ??= import("./vm/index.js").then((mod) => {
+            vmLoaded = mod
+            return mod
+          })),
       )

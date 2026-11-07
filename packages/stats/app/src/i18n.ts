@@ -57,7 +57,7 @@ const en = {
   "footer.contact": "Contact us",
   "footer.community": "Community",
   "footer.youtube": "YouTube",
-  "footer.homeAria": "OpenCode home",
+  "footer.homeAria": "OpenCode Home",
   "footer.status.operational": "All systems operational",
   "footer.status.degraded": "Degraded performance",
   "footer.status.outage": "Service disruption",

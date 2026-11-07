@@ -24,6 +24,10 @@ const handle = '[data-slot="session-chat-panel"] > div > [data-component="resize
 let divider: Divider | undefined
 
 export default bench({
+  // The session a case's launch loads: the edits alone, the history beside the review, or the history. Cases with the
+  // same one share a launch.
+  setupKey: (ctx) => (ctx.case === "expand an edit" ? "edits" : ctx.case === drag ? "review" : "history"),
+
   targets: {
     web: web({
       expect: { title: "OpenCode" },
@@ -32,20 +36,20 @@ export default bench({
         mockTimelineSession(cached(ctx), {
           server: new URL(ctx.url).origin,
           // The edits alone, so the case measures the diff, not the history around it.
-          historyTurns: ctx.case === "expand an edit" ? 0 : 120,
-          collapsedEdits: ctx.case === "expand an edit",
-          tools: ctx.case === "expand an edit" ? await editTools() : undefined,
-          vcsDiff: ctx.case === drag ? reviewDiffs() : undefined,
+          historyTurns: ctx.setupKey === "edits" ? 0 : 120,
+          collapsedEdits: ctx.setupKey === "edits",
+          tools: ctx.setupKey === "edits" ? await editTools() : undefined,
+          vcsDiff: ctx.setupKey === "review" ? reviewDiffs() : undefined,
         }),
       url: ({ prepared }) => prepared.path,
     }),
   },
 
-  async setup({ case: name, page }) {
+  async setup({ setupKey, page }) {
     await page.waitFor(timeline, { timeout: 60_000 })
     await page.waitFor(composer)
 
-    if (name === drag) {
+    if (setupKey === "review") {
       await openReview(page)
       await page.idle()
       divider = await page.eval(measureDivider, {
