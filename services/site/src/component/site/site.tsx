@@ -209,6 +209,11 @@ export function Site(props: {
    * for a reference page that must always show the locked set (/dev/docs).
    */
   docsVariants?: string
+  /**
+   * Stands in for the status API's answer (`undefined` as a failed fetch), for the gallery of status
+   * states (/dev/components#sidebar-status). Overrides Settings › Status preview.
+   */
+  status?: () => ServiceStatus[] | undefined
 }) {
   const i18n = useI18n()
   const language = useLanguage()
@@ -343,8 +348,8 @@ export function Site(props: {
   const navVariant = () => siteSettings.nav
   const logoVariant = () => siteSettings.logo
   const popoverTheme = () => siteSettings.popover
-  const statusPreview = () => siteSettings.status
-  const liveStatus = createAsync(() => status())
+  const statusPreview = () => (props.status ? "live" : siteSettings.status)
+  const liveStatus = props.status ?? createAsync(() => status())
   const statusView = () => {
     const preview = statusPreview()
     const bars = preview === "live" ? (liveStatus() ?? statusSamples.operational) : statusSamples[preview]

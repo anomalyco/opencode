@@ -820,6 +820,7 @@ export const content = {
     },
     about: {
       title: "OpenCode hakkında",
+      body: "OpenCode ve ürünleri için hazır tanıtım metinleri; her biri uzun ve kısa sürümüyle haberinize kopyalanmaya hazır.",
       boilerplate: {
         long: "OpenCode açık kaynaklı bir kodlama ajanıdır. Masaüstü uygulaması, terminal arayüzü, mobil uygulama ve SDK olarak gelir ve Claude, GPT ve Gemini dahil her sağlayıcının modelleriyle çalışır. OpenCode MIT lisanslıdır ve Anomaly tarafından geliştirilir. 220.000'den fazla GitHub yıldızı ve 1.000'den fazla katkıcısı vardır, her ay 22 milyondan fazla geliştirici onu kullanır.",
         short:

@@ -72,6 +72,7 @@ To add a rule, add one line under its group. Mark a rule that is still being dec
 - Use `component/faq.tsx` for every accordion. → [Accordion](/dev/components#faq)
 - Every dropdown uses the shared Dropdown component; no one-off menus. On the site that is `SiteMenu` (`component/site/site-menu.tsx`), which brings the shared menu look, keyboard support and the phone sheet.
 - Open every dropdown with `placeMenu` (`component/site/place-menu.ts`; SiteMenu already does). It opens below the trigger, above only when below has no room, and in the top layer, so a scrolling box such as the carousel never cuts it off.
+- A dropdown that opens from a button with an icon starts at the button's inline-start edge, and its row icons and labels sit exactly under the button's icon and label (within 0.5px; mirrored in RTL). Set the rows' inset and gap from the button's own tokens (`--icon-inset`, `--icon-gap` in `site.css`), never per menu. Phone bottom sheets are not anchored to the button, so they don't follow this. → [Split button](/dev/components#split-button)
 - Turn dropdowns into the shared bottom sheet (`sheet.tsx`) on touch phones. → [Bottom sheet](/dev/components#sheet)
 - Give long pages the Contents rail (`OnThisPage`) and its phone bar (`ContentsMenu`). → [Contents](/dev/components#contents)
 - Draw breadcrumbs with muted ancestors, `|` separators and the current page in ink. → [Breadcrumbs](/dev/components#breadcrumb)
