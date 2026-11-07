@@ -846,10 +846,12 @@ const fragmentFixture = (kind: FragmentKind, id: string, chunks: readonly string
         completeEvents: [
           ...partialEvents,
           LLMEvent.reasoningEnd({ id }),
+          LLMEvent.textStart({ id: "answer" }),
+          LLMEvent.textEnd({ id: "answer", text: "Done" }),
           LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" } }),
           LLMEvent.finish({ reason: { normalized: "stop" } }),
         ],
-        expectedAssistant: { type: "assistant", finish: "stop", content: [expectedContent] },
+        expectedAssistant: { type: "assistant", finish: "stop", content: [expectedContent, Expected.text("Done")] },
         expectedContent,
       }
     }
@@ -1435,7 +1437,7 @@ describe("SessionRunnerLLM", () => {
       Stream.unwrap(
         Deferred.succeed(secondStarted, undefined).pipe(
           Effect.andThen(Deferred.await(releaseSecond)),
-          Effect.as(Stream.fromIterable(TestLLM.stop())),
+          Effect.as(Stream.fromIterable(TestLLM.text("Done", "done"))),
         ),
       ),
       Stream.fromIterable(TestLLM.text("Handled completion", "text-completion")),
@@ -3673,8 +3675,8 @@ describe("SessionRunnerLLM", () => {
       TestLLM.failAfter(providerRejected({ message: "prompt too long", classification: "context-overflow" })),
       TestLLM.text("## Objective\n- Overflow summary", "overflow-summary"),
       TestLLM.text("Recovered", "overflow-recovered"),
-      TestLLM.stop(),
-      TestLLM.stop(),
+      TestLLM.text("Done", "done"),
+      TestLLM.text("Done", "done"),
     )
     const first = yield* s.llm.gate()
     const run = yield* s.resume.pipe(Effect.forkChild)
@@ -4079,7 +4081,7 @@ describe("SessionRunnerLLM", () => {
   scenario("reloads a model switch before a tool-driven continuation step", function* (s) {
     yield* s.admit("Echo this")
 
-    yield* s.llm.push(TestLLM.toolCall("call-echo", "echo", { text: "hello" }), TestLLM.stop())
+    yield* s.llm.push(TestLLM.toolCall("call-echo", "echo", { text: "hello" }), TestLLM.text("Done", "done"))
     const tools = yield* s.blockTools()
     const run = yield* Effect.forkChild(s.resume)
     yield* tools.started
@@ -4119,7 +4121,7 @@ describe("SessionRunnerLLM", () => {
         ),
         Stream.onEnd(Deferred.succeed(finished, undefined)),
       ),
-      TestLLM.stop(),
+      TestLLM.text("Done", "done"),
     )
     const tools = yield* s.blockTools()
     const streamed = yield* s.bus.subscribe(SessionEvent.Step.Streamed).pipe(
@@ -4190,6 +4192,8 @@ describe("SessionRunnerLLM", () => {
             anthropic: { ignored: true },
           },
         }),
+        LLMEvent.textStart({ id: "answer" }),
+        LLMEvent.textEnd({ id: "answer", text: "Done" }),
       ),
     )
     yield* s.resume
@@ -4208,6 +4212,7 @@ describe("SessionRunnerLLM", () => {
           text: "Encrypted thought",
           native: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
         },
+        Expected.text("Done"),
       ]),
     ])
 
@@ -4226,6 +4231,7 @@ describe("SessionRunnerLLM", () => {
         text: "Encrypted thought",
         providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
       },
+      { type: "text", text: "Done" },
     ])
   })
 
@@ -4468,7 +4474,7 @@ describe("SessionRunnerLLM", () => {
   scenario("steers an active step with newly recorded prompts", function* (s) {
     yield* s.admit("Start working")
 
-    yield* s.llm.push(TestLLM.stop(), TestLLM.stop())
+    yield* s.llm.push(TestLLM.text("Done", "done"), TestLLM.text("Done", "done"))
 
     const first = yield* s.resumePaused
     yield* s.session.prompt({ sessionID, text: "Change direction" })
@@ -4484,7 +4490,11 @@ describe("SessionRunnerLLM", () => {
   scenario("promotes queued input after continuation ends", function* (s) {
     yield* s.admit("Start working")
 
-    yield* s.llm.push(TestLLM.toolCall("call-echo", "echo", { text: "hello" }), TestLLM.stop(), TestLLM.stop())
+    yield* s.llm.push(
+      TestLLM.toolCall("call-echo", "echo", { text: "hello" }),
+      TestLLM.text("Done", "done"),
+      TestLLM.text("Done", "done"),
+    )
 
     const first = yield* s.resumePaused
     yield* s.session.prompt({
@@ -4503,7 +4513,7 @@ describe("SessionRunnerLLM", () => {
   scenario("keeps queued input parked when a steer is cancelled during preparation", function* (s) {
     const runner = yield* SessionRunner.Service
     yield* s.admit("A")
-    yield* s.llm.push(TestLLM.stop(), TestLLM.stop(), TestLLM.stop())
+    yield* s.llm.push(TestLLM.text("Done", "done"), TestLLM.text("Done", "done"), TestLLM.text("Done", "done"))
     const stream = yield* s.llm.gate()
     const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
     yield* stream.started
@@ -4527,7 +4537,7 @@ describe("SessionRunnerLLM", () => {
 
     const location = Location.Ref.make({ directory: AbsolutePath.make("/moved") })
     yield* s.admit("A")
-    yield* s.llm.push(TestLLM.stop(), TestLLM.stop())
+    yield* s.llm.push(TestLLM.text("Done", "done"), TestLLM.text("Done", "done"))
     const stream = yield* s.llm.gate()
     const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
     yield* stream.started
@@ -4561,7 +4571,7 @@ describe("SessionRunnerLLM", () => {
   scenario("preserves durable queued input for a later wake after interruption", function* (s) {
     yield* s.admit("Interrupt current work")
 
-    yield* s.llm.push([], TestLLM.stop())
+    yield* s.llm.push([], TestLLM.text("Done", "done"))
     const stream = yield* s.llm.gate()
 
     const run = yield* s.resume.pipe(Effect.forkChild)
@@ -4588,7 +4598,7 @@ describe("SessionRunnerLLM", () => {
   scenario("preserves durable steering input for a later resume after interruption", function* (s) {
     yield* s.admit("Interrupt current work")
 
-    yield* s.llm.push([], TestLLM.stop())
+    yield* s.llm.push([], TestLLM.text("Done", "done"))
     const stream = yield* s.llm.gate()
 
     const run = yield* s.resume.pipe(Effect.forkChild)
@@ -4615,7 +4625,7 @@ describe("SessionRunnerLLM", () => {
   scenario("promotes queued inputs one at a time in FIFO order", function* (s) {
     yield* s.admit("Start working")
 
-    yield* s.llm.push(TestLLM.stop(), TestLLM.stop(), TestLLM.stop())
+    yield* s.llm.push(TestLLM.text("Done", "done"), TestLLM.text("Done", "done"), TestLLM.text("Done", "done"))
 
     const first = yield* s.resumePaused
     yield* s.session.prompt({ sessionID, text: "Queue first", delivery: "queue" })
@@ -4631,7 +4641,7 @@ describe("SessionRunnerLLM", () => {
   scenario("stops a steer-scoped drain before queued input", function* (s) {
     yield* s.session.prompt({ sessionID, text: "Queue for later", delivery: "queue", resume: false })
     yield* s.session.prompt({ sessionID, text: "Steer now", resume: false })
-    yield* s.llm.push(TestLLM.stop())
+    yield* s.llm.push(TestLLM.text("Done", "done"))
 
     const runner = yield* SessionRunner.Service
     yield* runner.drain({ sessionID, force: false, promotable: "steer" })
@@ -4689,7 +4699,7 @@ describe("SessionRunnerLLM", () => {
       resume: false,
     })
 
-    yield* s.llm.push(TestLLM.stop(), TestLLM.stop())
+    yield* s.llm.push(TestLLM.text("Done", "done"), TestLLM.text("Done", "done"))
 
     yield* s.resume
 
@@ -4701,7 +4711,12 @@ describe("SessionRunnerLLM", () => {
   scenario("promotes steers before the next queued input", function* (s) {
     yield* s.admit("Start working")
 
-    yield* s.llm.push(TestLLM.stop(), TestLLM.stop(), TestLLM.stop(), TestLLM.stop())
+    yield* s.llm.push(
+      TestLLM.text("Done", "done"),
+      TestLLM.text("Done", "done"),
+      TestLLM.text("Done", "done"),
+      TestLLM.text("Done", "done"),
+    )
     const firstStream = yield* s.llm.gate()
 
     const first = yield* s.resume.pipe(Effect.forkChild)
@@ -4744,7 +4759,7 @@ describe("SessionRunnerLLM", () => {
     const execution = yield* SessionExecution.Service
     yield* s.admit("Start working")
 
-    yield* s.llm.push(TestLLM.stop(), TestLLM.stop())
+    yield* s.llm.push(TestLLM.text("Done", "done"), TestLLM.text("Done", "done"))
 
     const first = yield* s.resumePaused
     yield* s.session.prompt({ sessionID, text: "First steer" })
@@ -5172,7 +5187,7 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.resume.pipe(Effect.catchDefect(Effect.succeed))).toBe(defect)
     fail = false
     s.requests.length = 0
-    yield* s.llm.push(TestLLM.stop())
+    yield* s.llm.push(TestLLM.text("Done", "done"))
 
     const stream = yield* s.llm.gate()
     yield* execution.wake(sessionID)
@@ -5368,7 +5383,7 @@ describe("SessionRunnerLLM", () => {
         LLMEvent.toolCall({ id: "call-beta", name: "echo", input: { text: "beta-block" } }),
         LLMEvent.toolCall({ id: "call-ok", name: "echo", input: { text: "ok" } }),
       ),
-      TestLLM.stop(),
+      TestLLM.text("Done", "done"),
     )
     yield* s.resume
     expect(calls).toEqual(["call-alpha", "call-beta", "call-ok"])
@@ -5405,7 +5420,7 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.admit("Call blocked")
 
-    yield* s.llm.push(TestLLM.toolCall("call-blocked", "blocked", {}), TestLLM.stop())
+    yield* s.llm.push(TestLLM.toolCall("call-blocked", "blocked", {}), TestLLM.text("Done", "done"))
 
     yield* s.resume
 
@@ -5500,7 +5515,7 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.admit("Call corrected")
 
-    yield* s.llm.push(TestLLM.toolCall("call-corrected", "corrected", {}), TestLLM.stop())
+    yield* s.llm.push(TestLLM.toolCall("call-corrected", "corrected", {}), TestLLM.text("Done", "done"))
 
     yield* s.resume
 
@@ -5518,10 +5533,7 @@ describe("SessionRunnerLLM", () => {
     const registry = yield* Tool.Service
     yield* transformTools(registry, { permissionfail: permissionFail }, { codemode: false })
     yield* s.admit("Reject permission")
-    yield* s.llm.push(TestLLM.toolCall("call-permission", "permissionfail", {}), [
-      LLMEvent.stepStart({ index: 0 }),
-      LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" } }),
-    ])
+    yield* s.llm.push(TestLLM.toolCall("call-permission", "permissionfail", {}), TestLLM.text("Done", "done"))
 
     yield* s.resume
 
@@ -5759,7 +5771,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(
       TestLLM.toolCall("call-before-steer", "echo", { text: "before" }),
       TestLLM.toolCall("call-after-steer", "echo", { text: "after" }),
-      TestLLM.stop(),
+      TestLLM.text("Done", "done"),
     )
 
     const run = yield* s.resumePaused
@@ -6050,6 +6062,135 @@ describe("SessionRunnerLLM", () => {
       { type: "user" },
       Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
     ])
+  })
+
+  scenario("continues an empty successful response after automatic compaction", function* (s) {
+    yield* s.llm.push(TestLLM.textWithUsage("Earlier answer", "earlier", 3_950))
+    yield* s.runPrompt("Earlier question ".repeat(180))
+    s.currentModel = compactModel
+    s.requests.length = 0
+    yield* s.llm.push(
+      TestLLM.text("## Objective\n- Finish the task", "summary"),
+      TestLLM.complete({ reason: { normalized: "stop" } }),
+      TestLLM.text("Finished", "finished"),
+    )
+
+    yield* s.runPrompt("Recent exact request ".repeat(180))
+
+    expect(s.requests).toHaveLength(3)
+    expect(userTexts(s.requests[2]).at(-1)).toBe(
+      "Your last response contained no answer or tool calls. Continue the task with the next action or a final answer.",
+    )
+    expect(yield* s.context).toMatchObject([
+      { type: "compaction", status: "completed" },
+      { type: "assistant", finish: "stop", content: [] },
+      { type: "synthetic" },
+      Expected.assistant({ finish: "stop" }, [Expected.text("Finished")]),
+    ])
+  })
+
+  for (const content of ["none", "empty text", "whitespace", "reasoning"] as const) {
+    scenario(`bounds empty successful response recovery (${content})`, function* (s) {
+      const events =
+        content === "none"
+          ? []
+          : content === "reasoning"
+            ? [
+                LLMEvent.reasoningStart({ id: "thinking" }),
+                LLMEvent.reasoningDelta({ id: "thinking", text: "Thinking without an answer" }),
+                LLMEvent.reasoningEnd({ id: "thinking" }),
+              ]
+            : [
+                LLMEvent.textStart({ id: "empty" }),
+                LLMEvent.textDelta({ id: "empty", text: content === "whitespace" ? " \n" : "" }),
+                LLMEvent.textEnd({ id: "empty" }),
+              ]
+      const empty = () => TestLLM.complete({ reason: { normalized: "stop" } }, ...events)
+      yield* s.llm.push(empty(), empty())
+
+      expect(yield* s.runPrompt("Finish the task").pipe(Effect.flip)).toMatchObject({
+        error: { type: "empty-response" },
+      })
+      expect(s.requests).toHaveLength(2)
+      expect((yield* s.messages).filter((message) => message.type === "synthetic")).toHaveLength(1)
+
+      yield* s.llm.push(empty(), TestLLM.text("Finished", "finished"))
+      yield* s.runPrompt("Try again")
+      expect(s.requests).toHaveLength(4)
+      expect((yield* s.context).at(-1)).toMatchObject(Expected.assistant({}, [Expected.text("Finished")]))
+    })
+  }
+
+  for (const recovery of ["output limit", "incomplete stream"] as const) {
+    scenario(`resets empty response recovery after nonempty ${recovery} output`, function* (s) {
+      const partial = [
+        LLMEvent.textStart({ id: "partial" }),
+        LLMEvent.textDelta({ id: "partial", text: "Progress" }),
+        LLMEvent.textEnd({ id: "partial" }),
+      ]
+      yield* s.llm.push(
+        TestLLM.stop(),
+        recovery === "output limit"
+          ? TestLLM.complete({ reason: { normalized: "length" } }, ...partial)
+          : TestLLM.failAfter(incompleteStream(), LLMEvent.stepStart({ index: 0 }), ...partial),
+        TestLLM.stop(),
+        TestLLM.text("Finished", "finished"),
+      )
+
+      const scheduled = yield* subscribeRetries(s)
+      const run = yield* s.runPrompt("Finish the task").pipe(Effect.forkChild)
+      if (recovery === "incomplete stream") {
+        yield* Queue.take(scheduled)
+        yield* TestClock.adjust("2400 millis")
+      }
+      yield* Fiber.join(run)
+
+      expect(s.requests).toHaveLength(4)
+      expect(userTexts(s.requests[1]).at(-1)).toBe(userTexts(s.requests[3]).at(-1))
+      expect((yield* s.messages).filter((message) => message.type === "synthetic")).toHaveLength(3)
+      expect((yield* s.context).at(-1)).toMatchObject(Expected.assistant({}, [Expected.text("Finished")]))
+    })
+  }
+
+  scenario("keeps the empty response bound across an empty output-limit response", function* (s) {
+    yield* s.llm.push(TestLLM.stop(), TestLLM.complete({ reason: { normalized: "length" } }), TestLLM.stop())
+
+    expect(yield* s.runPrompt("Finish the task").pipe(Effect.flip)).toMatchObject({
+      error: { type: "empty-response" },
+    })
+    expect(s.requests).toHaveLength(3)
+  })
+
+  scenario("accepts text supplied only at text end without empty response recovery", function* (s) {
+    yield* s.llm.push(
+      TestLLM.complete(
+        { reason: { normalized: "stop" } },
+        LLMEvent.textStart({ id: "answer" }),
+        LLMEvent.textEnd({ id: "answer", text: "Finished" }),
+      ),
+    )
+    yield* s.runPrompt("Finish the task")
+    expect(s.requests).toHaveLength(1)
+    expect((yield* s.context).at(-1)).toMatchObject(Expected.assistant({}, [Expected.text("Finished")]))
+  })
+
+  scenario("does not recover an empty response when the stream fails after its finish event", function* (s) {
+    const failure = invalidRequest()
+    yield* s.llm.push(TestLLM.failAfter(failure, ...TestLLM.stop()))
+
+    expect(yield* s.runPrompt("Finish the task").pipe(Effect.flip)).toBe(failure)
+    expect(s.requests).toHaveLength(1)
+    expect((yield* s.messages).filter((message) => message.type === "synthetic")).toHaveLength(0)
+  })
+
+  scenario("does not recover an empty response when the stream is interrupted", function* (s) {
+    yield* s.llm.push(Stream.fromIterable(TestLLM.stop()).pipe(Stream.concat(Stream.fromEffect(Effect.interrupt))))
+
+    const exit = yield* s.runPrompt("Finish the task").pipe(Effect.exit)
+    expect(exit._tag).toBe("Failure")
+    if (Exit.isFailure(exit)) expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+    expect(s.requests).toHaveLength(1)
+    expect((yield* s.messages).filter((message) => message.type === "synthetic")).toHaveLength(0)
   })
 
   scenario("uses a larger provider retry-after delay", function* (s) {
@@ -6605,7 +6746,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Retry without consuming a step")
     const failure = providerUnavailable()
     yield* s.llm.push(Stream.fail(failure))
-    yield* s.llm.push(TestLLM.toolCall("call-after-retry", "echo", { text: "recovered" }), TestLLM.stop())
+    yield* s.llm.push(TestLLM.toolCall("call-after-retry", "echo", { text: "recovered" }), TestLLM.text("Done", "done"))
 
     const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
@@ -6699,7 +6840,7 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.runPrompt("Call a malformed tool").pipe(Effect.flip)).toBe(failure)
     const assistant = requireAssistant(yield* s.context)
 
-    yield* s.llm.push(TestLLM.stop())
+    yield* s.llm.push(TestLLM.text("Done", "done"))
     yield* s.runPrompt("Continue")
 
     expect(yield* recordedStepSettlementEvents(sessionID, assistant.id)).toMatchObject([
@@ -6726,7 +6867,7 @@ describe("SessionRunnerLLM", () => {
         LLMEvent.toolInputStart({ id: "call-incomplete", name: "echo" }),
         LLMEvent.toolInputDelta({ id: "call-incomplete", name: "echo", text: '{"text":"partial' }),
       ),
-      TestLLM.stop(),
+      TestLLM.text("Done", "done"),
     )
 
     yield* s.runPrompt("Recover unfinished tool input")
@@ -6792,7 +6933,7 @@ describe("SessionRunnerLLM", () => {
             raw,
           }),
         ),
-        TestLLM.stop(),
+        TestLLM.text("Done", "done"),
       )
 
       yield* s.runPrompt("Recover malformed tool input")
@@ -6881,7 +7022,7 @@ describe("SessionRunnerLLM", () => {
           raw: '{"text":"partial',
         }),
       ),
-      TestLLM.stop(),
+      TestLLM.text("Done", "done"),
     )
 
     const run = yield* s.resume.pipe(Effect.forkChild)
@@ -6998,7 +7139,7 @@ describe("SessionRunnerLLM", () => {
       malformed("call-first"),
       TestLLM.toolCall("call-valid-between", "echo", { text: "valid" }),
       malformed("call-second"),
-      TestLLM.stop(),
+      TestLLM.text("Done", "done"),
     )
 
     yield* s.runPrompt("Keep producing malformed tools")
