@@ -7894,7 +7894,9 @@
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "style": "deepObject",
+            "explode": true
           },
           {
             "name": "name",
@@ -12580,7 +12582,9 @@
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "style": "deepObject",
+            "explode": true
           }
         ],
         "security": [],
@@ -12687,7 +12691,9 @@
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "style": "deepObject",
+            "explode": true
           },
           {
             "name": "sessionID",
@@ -12815,7 +12821,9 @@
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "style": "deepObject",
+            "explode": true
           }
         ],
         "security": [],
@@ -12947,7 +12955,9 @@
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "style": "deepObject",
+            "explode": true
           }
         ],
         "security": [],
@@ -13064,7 +13074,9 @@
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "style": "deepObject",
+            "explode": true
           }
         ],
         "security": [],
@@ -13194,7 +13206,9 @@
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "style": "deepObject",
+            "explode": true
           }
         ],
         "security": [],
@@ -13296,7 +13310,9 @@
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "style": "deepObject",
+            "explode": true
           }
         ],
         "security": [],
