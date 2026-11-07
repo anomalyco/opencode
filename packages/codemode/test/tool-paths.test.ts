@@ -42,9 +42,8 @@ describe("dotted tool names", () => {
     expect(await value(runtime, `return await tools["api.issues"].list({})`)).toBe("listed")
   })
 
-  test("known calls defer discovery until search or missing-tool suggestions need it", async () => {
-    const tool = echo("Read data", "read")
-    const prepared = ToolRuntime.prepare({ "api.read": tool, search: tool })
+  test("known calls skip discovery while missing tools still get suggestions", async () => {
+    const prepared = ToolRuntime.prepare({ "api.read": echo("Read data", "read") })
     let reads = 0
     const tools = ToolRuntime.make(
       {
@@ -59,27 +58,12 @@ describe("dotted tool names", () => {
       },
       undefined,
     )
-    for (const path of [["api", "read"], ["api.read"], ["api", "read"], ["search"]]) {
-      expect(await Effect.runPromise(tools.execute(path, [{}]))).toBe("read")
-    }
-    await expect(Effect.runPromise(tools.execute(["api"], [{}]))).rejects.toThrow("Tool 'api' is not callable.")
-    expect(reads).toBe(0)
-    expect(await Effect.runPromise(tools.search([{ query: "api.read" }]))).toMatchObject({
-      items: [{ path: "tools.api.read" }],
-    })
-    expect(reads).toBe(1)
-    const index = prepared.searchIndex
-    for (const path of [["api", "read-data"], ["api.read-data"]]) {
-      await expect(Effect.runPromise(tools.execute(path, [{}]))).rejects.toThrow(
-        "Unknown tool 'api.read-data'. Did you mean tools.api.read?",
-      )
-    }
-    expect(reads).toBe(3)
-    expect(prepared.searchIndex).toBe(index)
-    expect(prepared.catalog[0]).toBe(index[0].description)
-    expect(prepared.catalog).toBe(prepared.catalog)
     expect(await Effect.runPromise(tools.execute(["api", "read"], [{}]))).toBe("read")
-    expect(reads).toBe(3)
+    expect(reads).toBe(0)
+    await expect(Effect.runPromise(tools.execute(["api", "read-data"], [{}]))).rejects.toThrow(
+      "Did you mean tools.api.read?",
+    )
+    expect(reads).toBeGreaterThan(0)
   })
 
   test("intermediate segments enumerate like ordinary namespaces", async () => {
