@@ -78,6 +78,7 @@ export const dict = {
   "dialog.usageExceeded.freeTier.title": "免费额度已用完",
   "dialog.usageExceeded.freeTier.description": "每月 $10 订阅 OpenCode Go，可靠地使用最佳开源模型。",
   "dialog.usageExceeded.freeTier.actionLabel": "订阅",
+  "dialog.usageExceeded.freeTier.reset": "你的免费消息额度将在 {{time}} 重置。",
 
   "ui.sessionTurn.status.delegating": "正在委派工作",
   "ui.sessionTurn.status.planning": "正在规划下一步",
@@ -320,7 +321,7 @@ export const dict = {
   "ui.message.copyOutput": "复制输出",
   "ui.message.duration.hoursMinutes": "{{hours}} 小时 {{minutes}} 分钟",
   "ui.message.tokensPerSecond": "{{value}} 词元/秒",
-  "ui.message.modelVariant": "{{model}}({{variant}})",
+  "ui.message.modelVariant": "{{model}}（{{variant}}）",
   "ui.message.time.justNow": "刚刚",
   "ui.message.time.minutesAgo": "{{count}} 分钟前",
   "ui.message.time.hoursAgo": "{{count}} 小时前",
@@ -339,5 +340,4 @@ export const dict = {
   "ui.question.singleHint": "选择一个答案",
   "ui.question.classic.multiHint": "选择所有适用的答案",
   "ui.question.custom.answerPlaceholder": "输入你自己的答案…",
-  "dialog.usageExceeded.freeTier.reset": "你的免费消息额度将在 {{time}} 重置。",
 } satisfies Partial<Record<Keys, string>>

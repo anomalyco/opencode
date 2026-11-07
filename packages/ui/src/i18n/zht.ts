@@ -78,6 +78,7 @@ export const dict = {
   "dialog.usageExceeded.freeTier.title": "已達免費額度上限",
   "dialog.usageExceeded.freeTier.description": "每月 $10 訂閱 OpenCode Go，可靠地使用最佳開源模型。",
   "dialog.usageExceeded.freeTier.actionLabel": "訂閱",
+  "dialog.usageExceeded.freeTier.reset": "你的免費訊息額度將於 {{time}} 重設。",
 
   "ui.sessionTurn.status.delegating": "正在委派工作",
   "ui.sessionTurn.status.planning": "正在規劃下一步",
@@ -320,7 +321,7 @@ export const dict = {
   "ui.message.copyOutput": "複製輸出",
   "ui.message.duration.hoursMinutes": "{{hours}} 小時 {{minutes}} 分鐘",
   "ui.message.tokensPerSecond": "{{value}} 詞元/秒",
-  "ui.message.modelVariant": "{{model}}({{variant}})",
+  "ui.message.modelVariant": "{{model}}（{{variant}}）",
   "ui.message.time.justNow": "剛剛",
   "ui.message.time.minutesAgo": "{{count}} 分鐘前",
   "ui.message.time.hoursAgo": "{{count}} 小時前",
@@ -339,5 +340,4 @@ export const dict = {
   "ui.question.singleHint": "選擇一個答案",
   "ui.question.classic.multiHint": "選擇所有適用的答案",
   "ui.question.custom.answerPlaceholder": "輸入你自己的答案…",
-  "dialog.usageExceeded.freeTier.reset": "你的免費訊息額度將於 {{time}} 重設。",
 } satisfies Partial<Record<Keys, string>>
