@@ -17,6 +17,7 @@ import { useSettings } from "@/settings/model"
 import { useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { Timeline } from "@opencode/session-ui/timeline/projection"
+import { ToolElapsed } from "@opencode/session-ui/tool-elapsed"
 import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/row"
 import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
@@ -403,6 +404,36 @@ function MessageTimelineView(
   // The lane keeps its height while empty, so Working and the hint come and go without moving the rows around it.
   // The bottom lane also keeps its height while live status moves into the Activity row, so the tail the activity pill
   // floats in never closes and a pinned timeline does not shift when input waits.
+  // The working row tracks the active turn from its user prompt, so it keeps counting until the turn finishes.
+  // Pending steers still project under the previous response until delivery, so anchor on the latest
+  // user input instead of the turn's original prompt: otherwise a follow-up sent seconds ago would
+  // immediately read minutes old. Delivered inputs briefly have neither pending nor active status
+  // while the projection catches up, so also anchor on the newest delivered prompt.
+  const workingTime = createMemo(() => {
+    const id = projection.activeMessageID()
+
+    if (!id) return undefined
+
+    const message = messageByID().get(id)
+
+    if (message?.type !== "user") return undefined
+
+    let start = message.time.created
+
+    for (const item of messageByID().values()) {
+      if (item.type === "user" && item.time.created > start) start = item.time.created
+    }
+
+    const session = sessionID()
+    const pending = session ? data.session.pending.list(session) : []
+
+    for (const item of pending) {
+      if (item.type === "user" && item.time.created > start) start = item.time.created
+    }
+
+    return { created: start, ran: start }
+  })
+
   const activity = (live: () => boolean) => (
     <div
       classList={{
@@ -412,8 +443,9 @@ function MessageTimelineView(
     >
       <div class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${turnPadding()}`}>
         <Show when={live() && showWorking()}>
-          <div data-component="session-working" role="status">
+          <div data-component="session-working" role="status" class="flex items-center gap-1.5">
             <TextShimmer text={language.t("session.timeline.working")} active />
+            <ToolElapsed time={workingTime()} running />
           </div>
         </Show>
         <Show when={live() && backgroundHintPresence.present()}>

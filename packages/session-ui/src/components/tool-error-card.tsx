@@ -1,3 +1,5 @@
+import type { SessionMessageAssistantTool } from "@opencode/client/promise"
+import { ToolElapsed } from "./tool-elapsed"
 import { type ComponentProps, createMemo, onMount, Show, splitProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Card, CardDescription } from "@opencode/ui/card"
@@ -10,6 +12,7 @@ import { createCopyFeedback } from "./copy"
 import { createDisclosure } from "./disclosure"
 
 export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "children" | "variant"> {
+  time?: SessionMessageAssistantTool["time"]
   tool: string
   error: string
   title?: string
@@ -48,6 +51,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
   })
 
   const [split, rest] = splitProps(props, [
+    "time",
     "tool",
     "error",
     "title",
@@ -177,6 +181,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                     <Show when={!open()}>
                       <span data-slot="tool-error-card-summary">{summary()}</span>
                     </Show>
+                    <ToolElapsed time={props.time} />
                   </div>
                 </div>
               </div>

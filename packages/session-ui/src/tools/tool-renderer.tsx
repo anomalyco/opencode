@@ -27,6 +27,7 @@ import { type SessionSummary, useData } from "../context"
 import { useFileComponent } from "@opencode/ui/context/file"
 import { type UiI18n, useI18n } from "@opencode/ui/context/i18n"
 import { BasicTool, GenericTool } from "../components/basic-tool"
+import { ToolElapsed } from "../components/tool-elapsed"
 import { createDisclosure } from "../components/disclosure"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
@@ -411,10 +412,39 @@ function ExaOutput(props: { output?: string }) {
   )
 }
 
+// A group renders one header, so it reports the span from its earliest start to its latest finish.
+type GroupElapsedInput = { created?: number; ran?: number; completed?: number }
+
+function groupedElapsedTime(
+  times: ReadonlyArray<GroupElapsedInput | undefined>,
+  running: boolean,
+): { created: number; ran?: number; completed?: number } | undefined {
+  const starts = times.flatMap((time) => {
+    const start = time?.ran ?? time?.created
+
+    return start === undefined ? [] : [start]
+  })
+
+  if (starts.length === 0) return undefined
+
+  const start = Math.min(...starts)
+
+  if (running) return { created: start, ran: start }
+
+  const ends = times.flatMap((time) => (time?.completed === undefined ? [] : [time.completed]))
+
+  return { created: start, ran: start, completed: ends.length === 0 ? undefined : Math.max(...ends) }
+}
+
 export type ContextGroupPart =
   | SessionMessageAssistantTool
   | (SessionMessageAssistantReasoning & { id: string; streaming?: boolean })
-  | { type: "notice" | "shell" | "text"; id: string; render: () => JSX.Element }
+  | {
+    type: "notice" | "shell" | "text"
+    id: string
+    render: () => JSX.Element
+    time?: { created: number; completed?: number }
+  }
 
 export function CurrentContextToolGroup(props: {
   parts: ContextGroupPart[]
@@ -438,6 +468,9 @@ export function CurrentContextToolGroup(props: {
   const pending = createMemo(
     () => props.busy || tools().some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
   )
+
+  // Shell and notice rows are not tools, so the header spans every part, not just tool parts.
+  const span = () => groupedElapsedTime(props.parts.map((part) => part.time), pending())
 
   const names = createMemo(() =>
     i18n.list([
@@ -603,6 +636,7 @@ export function CurrentContextToolGroup(props: {
       <BasicTool
         icon="glasses"
         status={pending() ? "running" : "completed"}
+        time={span()}
         compact
         hasContent
         allowOpenWhilePending
@@ -806,6 +840,19 @@ export function CurrentContextToolGroup(props: {
                                       </span>
                                     )}
                                   </Show>
+                                  <ToolElapsed
+                                    time={groupedElapsedTime(
+                                      group().map((item) => item.time),
+                                      group().some(
+                                        (item) =>
+                                          item.state.status === "streaming" || item.state.status === "running",
+                                      ),
+                                    )}
+                                    running={group().some(
+                                      (item) =>
+                                        item.state.status === "streaming" || item.state.status === "running",
+                                    )}
+                                  />
                                 </div>
                               </Show>
                             }
@@ -937,6 +984,13 @@ export function CurrentReadToolGroup(props: {
                     )}
                   </Index>
                 </span>
+                <ToolElapsed
+                  time={groupedElapsedTime(
+                    props.tools.map((tool) => tool.time),
+                    pending(),
+                  )}
+                  running={pending()}
+                />
               </div>
             </div>
           </div>
@@ -1063,6 +1117,10 @@ export function CurrentFileToolGroup(props: {
         tool={tool()}
         input={{}}
         metadata={metadata()}
+        time={groupedElapsedTime(
+          props.tools.map((tool) => tool.time),
+          pending(),
+        )}
         status={pending() ? "running" : "completed"}
         fileOpen={props.fileOpen}
         onFileOpenChange={props.onFileOpenChange}
@@ -1139,6 +1197,7 @@ export interface ToolProps {
   tool: string
   sessionID?: string
   output?: string
+  time?: SessionMessageAssistantTool["time"]
   status?: string
   hideDetails?: boolean
   defaultOpen?: boolean
@@ -1386,6 +1445,7 @@ export function ToolDisplay(
 
               return (
                 <ToolErrorCard
+                  time={props.time}
                   tool={props.tool}
                   error={error()}
                   title={
@@ -1768,6 +1828,34 @@ ToolRegistry.register({
       return value
     })
 
+    const running = createMemo(() => {
+      if (props.status === "streaming" || props.status === "running") return true
+      const id = childSessionId()
+
+      if (!id) return false
+
+      return (data.store.session_status[id]?.type ?? "idle") !== "idle"
+    })
+
+    // Background dispatches complete the tool call at launch, so its own timestamps would freeze at 0s.
+    // Track the child session instead: tick while it runs, freeze when it settles.
+    const start = createMemo(() => props.time?.ran ?? props.time?.created)
+    const endAt = createMemo((previous?: number) => (running() ? undefined : (previous ?? Date.now())))
+
+    const liveTime = createMemo(() => {
+      const begin = start()
+
+      if (begin === undefined) return undefined
+
+      if (running()) return { created: begin, ran: begin }
+
+      const realEnd = props.time?.completed
+
+      if (realEnd !== undefined && realEnd > begin) return { created: begin, ran: begin, completed: realEnd }
+
+      return { created: begin, ran: begin, completed: endAt() }
+    })
+
     const href = createMemo(() => sessionLink(childSessionId(), data.sessionHref))
     const clickable = createMemo(() => !!(childSessionId() && (data.navigateToSession || href())))
 
@@ -1806,6 +1894,7 @@ ToolRegistry.register({
               <Show when={subtitle()}>
                 <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
               </Show>
+              <ToolElapsed time={liveTime()} running={running()} />
             </div>
             <Show when={clickable()}>
               <div data-component="task-tool-action">
@@ -1824,6 +1913,7 @@ ToolRegistry.register({
           <BasicTool
             icon="task"
             status={view().basicStatus}
+            time={undefined}
             trigger={trigger()}
             hideDetails
             triggerAsLink
@@ -1840,6 +1930,7 @@ ToolRegistry.register({
         >
           <SessionProgressIndicatorV2 />
           <span class="min-w-0 truncate">{i18n.t("ui.tool.agent.delegating")}</span>
+          <ToolElapsed time={props.time} running />
         </div>
       </Show>
     )
@@ -2356,12 +2447,28 @@ export function SessionShellMessage(props: {
         }}
         output={props.message.output?.output}
         status={props.message.status === "running" ? "running" : "completed"}
+        time={{
+          created: props.message.time.created,
+          ran: props.message.time.created,
+          completed: props.message.time.completed,
+        }}
         defaultOpen={props.defaultOpen}
         open={props.open}
         onOpenChange={props.onOpenChange}
       />
       <Show when={error()}>
-        {(error) => <ToolErrorCard tool="shell" error={error()} subtitle={props.message.command} />}
+        {(error) => (
+          <ToolErrorCard
+            tool="shell"
+            error={error()}
+            subtitle={props.message.command}
+            time={{
+              created: props.message.time.created,
+              ran: props.message.time.created,
+              completed: props.message.time.completed,
+            }}
+          />
+        )}
       </Show>
     </div>
   )
@@ -2460,12 +2567,14 @@ ToolRegistry.register({
     const path = createMemo(() => toolInput(props.input).path ?? "")
     const content = createMemo(() => toolInput(props.input).content ?? "")
     const diagnostics = createMemo(() => getDiagnostics(toolMetadata(props.metadata).diagnostics, path()))
+    const running = () => props.status === "running"
 
     return (
       <div data-component="write-tool">
         <Show when={content() && path()}>
           <ToolFileAccordion
             path={path()}
+            actions={<ToolElapsed time={props.time} running={running()} />}
             defaultOpen={props.defaultOpen}
             open={props.open}
             onOpenChange={props.onOpenChange}
@@ -2522,76 +2631,77 @@ ToolRegistry.register({
       <div data-component="apply-patch-tool">
         <Show when={files().length > 0} fallback={<FileTool {...props} title={title()} count={0} />}>
           <FileAccordionGroup>
-            <Index each={files()}>
-              {(file) => {
-                // Each file opens on its own: the owner's `fileOpen` controls it, otherwise it keeps its own state.
-                const disclosure = createDisclosure({
-                  open: () => (props.fileOpen ? props.fileOpen(file().path) === true : undefined),
-                  defer: () => props.deferContent !== false,
-                  onOpenChange: (open) => props.onFileOpenChange?.(file().path, open),
-                })
+              <Index each={files()}>
+                {(file) => {
+                  // Each file opens on its own: the owner's `fileOpen` controls it, otherwise it keeps its own state.
+                  const disclosure = createDisclosure({
+                    open: () => (props.fileOpen ? props.fileOpen(file().path) === true : undefined),
+                    defer: () => props.deferContent !== false,
+                    onOpenChange: (open) => props.onFileOpenChange?.(file().path, open),
+                  })
 
-                return (
-                  <FileAccordionItem
-                    open={disclosure.open()}
-                    onOpenChange={disclosure.setOpen}
-                    type={file().type}
-                    header={
-                      <div data-slot="apply-patch-trigger-content">
-                        <div data-slot="apply-patch-file-info">
-                          <FileIcon node={{ path: file().path, type: "file" }} />
-                          <div data-slot="apply-patch-file-name-container">
-                            <Show when={file().path.includes("/")}>
-                              <span data-slot="apply-patch-directory">{`\u202A${displayDirectory(file().path)}\u202C`}</span>
-                            </Show>
-                            <span data-slot="apply-patch-filename">{getFilename(file().path)}</span>
+                  return (
+                    <FileAccordionItem
+                      open={disclosure.open()}
+                      onOpenChange={disclosure.setOpen}
+                      type={file().type}
+                      header={
+                        <div data-slot="apply-patch-trigger-content">
+                          <div data-slot="apply-patch-file-info">
+                            <FileIcon node={{ path: file().path, type: "file" }} />
+                            <div data-slot="apply-patch-file-name-container">
+                              <Show when={file().path.includes("/")}>
+                                <span data-slot="apply-patch-directory">{`\u202A${displayDirectory(file().path)}\u202C`}</span>
+                              </Show>
+                              <span data-slot="apply-patch-filename">{getFilename(file().path)}</span>
+                            </div>
+                          </div>
+                          <div data-slot="apply-patch-trigger-actions">
+                            <Switch>
+                              <Match when={file().type === "add"}>
+                                <span data-slot="apply-patch-change" data-type="added">
+                                  {i18n.t("ui.patch.action.created")}
+                                </span>
+                              </Match>
+                              <Match when={file().type === "delete"}>
+                                <span data-slot="apply-patch-change" data-type="removed">
+                                  {i18n.t("ui.patch.action.deleted")}
+                                </span>
+                              </Match>
+                              <Match when={true}>
+                                <DiffChanges
+                                  appearance="standard"
+                                  changes={{ additions: file().additions, deletions: file().deletions }}
+                                />
+                              </Match>
+                            </Switch>
+                            <ToolElapsed time={props.time} running={props.status === "running"} />
+                            <Icon name="chevron-grabber-vertical" size="small" />
                           </div>
                         </div>
-                        <div data-slot="apply-patch-trigger-actions">
-                          <Switch>
-                            <Match when={file().type === "add"}>
-                              <span data-slot="apply-patch-change" data-type="added">
-                                {i18n.t("ui.patch.action.created")}
-                              </span>
-                            </Match>
-                            <Match when={file().type === "delete"}>
-                              <span data-slot="apply-patch-change" data-type="removed">
-                                {i18n.t("ui.patch.action.deleted")}
-                              </span>
-                            </Match>
-                            <Match when={true}>
-                              <DiffChanges
-                                appearance="standard"
-                                changes={{ additions: file().additions, deletions: file().deletions }}
+                      }
+                    >
+                      <Show when={disclosure.mounted()}>
+                        <For each={file().views}>
+                          {(view) => (
+                            <div data-component="apply-patch-file-diff">
+                              <Dynamic
+                                component={fileComponent}
+                                mode="diff"
+                                virtualize={props.virtualizeDiff}
+                                fileDiff={view.fileDiff}
+                                hunkSeparators={view.fileDiff.isPartial ? "simple" : "line-info-basic"}
+                                onRendered={props.onContentRendered}
                               />
-                            </Match>
-                          </Switch>
-                          <Icon name="chevron-grabber-vertical" size="small" />
-                        </div>
-                      </div>
-                    }
-                  >
-                    <Show when={disclosure.mounted()}>
-                      <For each={file().views}>
-                        {(view) => (
-                          <div data-component="apply-patch-file-diff">
-                            <Dynamic
-                              component={fileComponent}
-                              mode="diff"
-                              virtualize={props.virtualizeDiff}
-                              fileDiff={view.fileDiff}
-                              hunkSeparators={view.fileDiff.isPartial ? "simple" : "line-info-basic"}
-                              onRendered={props.onContentRendered}
-                            />
-                          </div>
-                        )}
-                      </For>
-                    </Show>
-                  </FileAccordionItem>
-                )
-              }}
-            </Index>
-          </FileAccordionGroup>
+                            </div>
+                          )}
+                        </For>
+                      </Show>
+                    </FileAccordionItem>
+                  )
+                }}
+              </Index>
+            </FileAccordionGroup>
         </Show>
       </div>
     )
@@ -2680,6 +2790,7 @@ ToolRegistry.register({
                 </span>
               )}
             </Show>
+            <ToolElapsed time={props.time} running={running()} />
           </div>
         )}
       </Show>
