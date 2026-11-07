@@ -2,7 +2,7 @@ import "./index.css"
 import "~/component/site/hero-title.css"
 import { titleCells } from "~/component/site/hero-title"
 import { Meta, Title } from "@solidjs/meta"
-import { Show } from "solid-js"
+import { createMemo, Show } from "solid-js"
 import { LocaleLinks } from "~/component/locale-links"
 import { ShareMeta } from "~/component/share-meta"
 import { ogImage } from "~/lib/og"
@@ -11,9 +11,10 @@ import { DownloadSections } from "~/component/site/download-sections"
 import { extensionPages } from "~/component/site/extension-data"
 import { SectionHeading } from "~/component/site/on-this-page"
 import { ProductGrid } from "~/component/site/products"
-import { MoreFromAnomaly, ProductList } from "~/component/site/product-list"
-import { BrowseMark, GitHubMark, GitLabMark } from "~/component/site/icons"
-import { downloadContent } from "~/lib/download-content"
+import { anomalyMarks, ProductList } from "~/component/site/product-list"
+import { BrowseMark } from "~/component/site/icons"
+import { anomalyProducts, appLink } from "~/component/site/links"
+import { appsSource } from "~/i18n/content/areas/apps"
 import "~/component/site/product-list.css"
 import { productsOrderScript } from "~/component/site/products-order"
 import { Site } from "~/component/site/site"
@@ -21,9 +22,8 @@ import { PageTitle } from "~/component/site/sticky-title"
 import { designCopy } from "~/component/site/design-copy"
 import { useMarkdown } from "~/component/site/use-markdown"
 import { useLanguage } from "~/context/language"
-import { productsMarkdown } from "~/lib/product-markdown"
 import { useI18n } from "~/context/i18n"
-import { localize, useArea } from "~/i18n/content"
+import { useArea } from "~/i18n/content"
 import { extensionsSource } from "~/i18n/content/areas/extensions"
 import { siteSettings } from "~/component/site/settings"
 
@@ -31,10 +31,29 @@ export default function Product() {
   const language = useLanguage()
   const i18n = useI18n()
   const extensionCopy = useArea("extensions", extensionsSource)
+  const appCopy = useArea("apps", appsSource)
+  const productLandingPages = () => extensionPages.filter((extension) => extension.product)
+  const extensionPagesListed = () => extensionPages.filter((extension) => !extension.product)
+  const moreProducts = createMemo(() => [
+    ...productLandingPages().map((extension) => ({
+      name: extensionCopy()[extension.slug].name,
+      description: extensionCopy()[extension.slug].body,
+      href: language.route(`/product/${extension.slug}`),
+      icon: <BrowseMark />,
+    })),
+    // Browse is listed above with its own page.
+    ...anomalyProducts
+      .filter((app) => !productLandingPages().some((extension) => extension.slug === app.id))
+      .map((app) => ({
+        name: app.name,
+        description: appCopy()[app.id].body,
+        ...appLink(app, language.route),
+        icon: anomalyMarks[app.id](),
+      })),
+  ])
   const title = () => i18n.t("product.title")
   const description = () => i18n.t("product.meta.description")
-  const download = () => localize(language.locale(), "download", downloadContent(i18n.t, language.route))
-  const markdown = useMarkdown("/product", productsMarkdown)
+  const markdown = useMarkdown("/product", (context, pages) => pages.productsMarkdown(context))
 
   return (
     <Site page="products" markdown={markdown}>
@@ -53,6 +72,7 @@ export default function Product() {
           and the cards below land where the home page's do (hero-title.css). */}
       <section
         data-component="hero"
+        data-section="hero"
         data-design="hero heroTitleSize"
         data-variant={siteSettings.hero}
         data-title-size={siteSettings.heroTitleSize}
@@ -68,14 +88,24 @@ export default function Product() {
       {/* Right after the grid, so a saved order (Design mode, development only) applies before it paints. */}
       {import.meta.env.DEV && <script innerHTML={productsOrderScript} />}
 
-      {/* Hidden while extensionPages is empty. */}
-      <Show when={extensionPages.length > 0}>
-        <section data-component="block" data-slot="products-extensions">
+      {/* Products with a light page of their own, and Anomaly's other open source products. */}
+      <Show when={moreProducts().length > 0}>
+        <section data-component="block" data-slot="products-more" data-section="more-products">
+          <SectionHeading id="more-products" title={i18n.t("site.moreProducts")} label />
+          <div data-slot="body">
+            <ProductList items={moreProducts()} />
+          </div>
+        </section>
+      </Show>
+
+      {/* Hidden while no extension is listed; SSH and WSL are commented out in extension-data.ts. */}
+      <Show when={extensionPagesListed().length > 0}>
+        <section data-component="block" data-slot="products-extensions" data-section="extensions">
           <SectionHeading id="extensions" title={i18n.t("site.extensions")} label />
           <div data-slot="body">
             {/* Each extension's page, with its install steps; a blank tile until one has an icon. */}
             <ProductList
-              items={extensionPages.map((extension) => ({
+              items={extensionPagesListed().map((extension) => ({
                 name: extensionCopy()[extension.slug].name,
                 description: extensionCopy()[extension.slug].body,
                 href: language.route(`/extensions/${extension.slug}`),
@@ -86,29 +116,11 @@ export default function Product() {
         </section>
       </Show>
 
-      {/* /product#download lands here, the first of the download page's sections on this page. */}
-      <section data-component="block" data-slot="products-integrations">
-        <SectionHeading id="download" title={download().integrations.title} label />
-        <div data-slot="body">
-          <ProductList
-            items={download().integrations.items.map((integration) => ({
-              name: integration.label,
-              description: integration.body,
-              href: integration.href,
-              external: true,
-              icon: integration.id === "github" ? <GitHubMark /> : <GitLabMark />,
-            }))}
-          />
-        </div>
-      </section>
-
-      {/* Everything the download page has, in this page's layout (/product#download). */}
+      {/* Everything the download page has, in this page's layout. */}
       <DownloadSections
         columns
         apps={false}
         editors={false}
-        integrations={false}
-        beforeFaq={<MoreFromAnomaly slot="products-anomaly" />}
         heading={(id, title) => <SectionHeading id={id} title={title} label />}
       />
     </Site>

@@ -76,12 +76,20 @@
 
     /* Divided like /press's boilerplate accordion (press/index.css): a 1px line between rows and
        one under the last, each title evenly spaced between its lines. */
-    > li + li {
+    > li + li,
+    > li:first-child {
       border-top: 1px solid var(--border);
     }
 
     > li:last-child {
       border-bottom: 1px solid var(--border);
+    }
+
+    /* With a line above the first row too, it is padded like the others. */
+    && > li:first-child [data-slot="faq-question"] {
+      --padding-top: 1rem;
+      min-height: var(--row-height);
+      margin-top: 0;
     }
 
     && [data-slot="faq-question"] {

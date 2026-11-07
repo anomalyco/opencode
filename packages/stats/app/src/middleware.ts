@@ -21,6 +21,7 @@ import {
   route,
   strip,
 } from "./lib/language"
+import { noindexOutsideProduction } from "./lib/noindex"
 import { loadComparePage, loadHomePage, loadLabPage, loadModelPage } from "./lib/page-data"
 import { canonicalModelEntry, catalogModelPath, findModelCatalogLab, loadModelCatalog } from "./routes/model-catalog"
 import { statsPageCacheControl } from "./routes/stats-cache"
@@ -47,7 +48,7 @@ const contentTypes = {
   text: "text/plain",
 } as const satisfies Record<Format, string>
 
-export default createMiddleware({
+const pageMiddleware = createMiddleware({
   onRequest: async (event) => {
     const request = event.request
     if (request.method !== "GET" && request.method !== "HEAD") return
@@ -81,6 +82,9 @@ export default createMiddleware({
     return formatResponse(await render(parsed.target, format), format, { negotiated, head: request.method === "HEAD" })
   },
 })
+
+// The noindex header outside production first (lib/noindex.ts), so every response carries it.
+export default [noindexOutsideProduction, ...pageMiddleware]
 
 // Unprefixed pages redirect to the visitor's language from their cookie or Accept-Language. /en/data stays put so
 // English remains reachable for visitors whose browser prefers another language.

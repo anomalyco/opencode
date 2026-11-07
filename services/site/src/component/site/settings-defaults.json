@@ -21,8 +21,6 @@
   "stats": "slot",
   "ossProof": "stats",
   "ossVariant": "current",
-  "signupSection": "off",
-  "signupStyle": "sentence",
   "avatarAnimation": "same as logos",
   "avatarLink": "commits",
   "avatarStagger": 30,
@@ -112,8 +110,8 @@
   "navVersion": "default",
   "productsOrder": [
     "desktop",
-    "mobile",
     "terminal",
+    "mobile",
     "sdk"
   ],
   "linkBlue": "console",
@@ -314,9 +312,6 @@
     "byos",
     "tools",
     "openSource",
-    "privacy",
-    "faq",
-    "signup",
     "console"
   ],
   "toolTiles": "logo",
@@ -350,8 +345,6 @@
   "whatColumns": "2 columns",
   "toolsColumns": "2 columns",
   "openSourceColumns": "2 columns",
-  "privacyColumns": "2 columns",
-  "faqColumns": "2 columns",
   "consoleColumns": "2 columns",
   "whatCopyColumns": "2 columns",
   "toolsCopyColumns": "2 columns",

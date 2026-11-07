@@ -75,7 +75,7 @@ function shown() {
 
 describe("quote machine", () => {
   test("a press that never sees its release no longer blocks the toolbar after a session switch", () => {
-    const pressed = transitionQuote(createQuoteState(), { type: "pointer.down" })
+    const pressed = transitionQuote(createQuoteState(), { type: "pointer.down", collapsed: true })
     expect(pressed.effects).toEqual([{ type: "press.watch" }])
     expect(isQuotePressing(pressed.state)).toBe(true)
 
@@ -98,7 +98,12 @@ describe("quote machine", () => {
   })
 
   test("a release seen as a primary-button-up move reads the drag selection", () => {
-    const result = play([{ type: "pointer.down" }, SELECTION_CHANGED_QUOTE_EVENT, SELECTION_CHANGED_QUOTE_EVENT])
+    const result = play([
+      { type: "pointer.down", collapsed: true },
+      SELECTION_CHANGED_QUOTE_EVENT,
+      SELECTION_CHANGED_QUOTE_EVENT,
+    ])
+
     // The selection waits for the release.
     expect(result.effects).toEqual([{ type: "press.watch" }])
 
@@ -122,7 +127,7 @@ describe("quote machine", () => {
 
   test("a settle timer from before a press is ignored", () => {
     const changed = transitionQuote(createQuoteState(), SELECTION_CHANGED_QUOTE_EVENT).state
-    const pressed = transitionQuote(changed, { type: "pointer.down" })
+    const pressed = transitionQuote(changed, { type: "pointer.down", collapsed: false })
     expect(pressed.effects).toEqual([{ type: "settle.cancel" }, { type: "press.watch" }])
     expect(transitionQuote(pressed.state, { type: "settle.ready", attempt: settleOf(changed) }).state).toBe(
       pressed.state,
@@ -134,7 +139,7 @@ describe("quote machine", () => {
     ["a new selection", SELECTION_CHANGED_QUOTE_EVENT],
     ["a cleared selection", SELECTION_CLEARED_QUOTE_EVENT],
   ])("the unselectable-press clear is cancelled by %s", (_name, event) => {
-    const pressed = transitionQuote(shown(), { type: "pointer.down", clearRange: selected.range })
+    const pressed = transitionQuote(shown(), { type: "pointer.down", collapsed: false, clearRange: selected.range })
     const clear = pressed.state.status === "shown" ? pressed.state.clear : undefined
     expect(clear).toBeDefined()
     expect(pressed.effects).toContainEqual({ type: "clear.schedule", attempt: clear!.attempt })
@@ -148,7 +153,12 @@ describe("quote machine", () => {
   })
 
   test("the unselectable-press clear runs while its press is current", () => {
-    const pressed = transitionQuote(shown(), { type: "pointer.down", clearRange: selected.range }).state
+    const pressed = transitionQuote(shown(), {
+      type: "pointer.down",
+      collapsed: false,
+      clearRange: selected.range,
+    }).state
+
     const clear = pressed.status === "shown" ? pressed.clear! : undefined
 
     expect(transitionQuote(pressed, { type: "clear.ready", attempt: clear!.attempt }).effects).toEqual([
@@ -219,9 +229,30 @@ describe("quote machine", () => {
     expect(transitionQuote(dismissed.state, SELECTION_CLEARED_QUOTE_EVENT).state.status).toBe("idle")
   })
 
+  test("a press after the dismissed selection was cleared shows a drag over the same range", () => {
+    const dismissed = transitionQuote(shown(), { type: "escape", range: selected.range, toolbarFocused: false }).state
+
+    // The clear's selectionchange is coalesced with the drag's, so the machine only sees the press on nothing.
+    const released = play(
+      [
+        { type: "pointer.down", collapsed: true },
+        SELECTION_CHANGED_QUOTE_EVENT,
+        { type: "pointer.up", collapsed: false },
+      ],
+      dismissed,
+    ).state
+
+    const read = transitionQuote(released, { type: "settle.ready", attempt: settleOf(released) })
+    expect(read.effects).toEqual([{ type: "quote.read" }])
+
+    // A press while the dismissed selection is still there keeps it dismissed.
+    const held = transitionQuote(dismissed, { type: "pointer.down", collapsed: false }).state
+    expect(held.status).toBe("dismissed")
+  })
+
   test("a resize reads the quote again only once the press is released", () => {
     const state = shown()
-    const pressed = transitionQuote(state, { type: "pointer.down" }).state
+    const pressed = transitionQuote(state, { type: "pointer.down", collapsed: false }).state
     expect(transitionQuote(pressed, ROOT_RESIZED_QUOTE_EVENT).state).toBe(pressed)
 
     const resized = transitionQuote(state, ROOT_RESIZED_QUOTE_EVENT)

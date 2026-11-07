@@ -1,16 +1,14 @@
 import { bindings, defineConfig, triggers } from "cf/config"
+import { base, files } from "./src/docs/config"
 
 // The opencode.ai website (SolidStart). `--mode dev` deploys opencode-site-dev on dev.opencode.ai;
 // any other mode deploys opencode-site-production on opencode.ai. It is the catch-all: more specific
 // routes on the zone (Console, inference, changelog, update, files, stats, …) keep beating it. It
-// also serves the V2 docs at /v2 (src/docs).
+// also serves the V2 docs at /docs (src/docs).
 //
 // Production takes no routes until the go-live flips this switch (the `production` branch is shared
 // with every other service, so an unrelated push must not take the domain).
-const productionOwnsRoot = false
-// Until then, production's /v2* can move to this Worker on its own: flip this once the route has
-// been moved over from the old docs Worker (opencode-www-production), so deploys keep it.
-const productionOwnsDocs = false
+const productionOwnsRoot = true
 
 export default defineConfig(({ mode }) => {
   const dev = mode === "dev"
@@ -25,9 +23,14 @@ export default defineConfig(({ mode }) => {
       compatibilityFlags: ["nodejs_compat"],
       assets: {
         htmlHandling: "drop-trailing-slash",
-        // Docs pages answer with HTML or Markdown from one URL, so the Worker picks the asset
-        // (src/docs/middleware.ts). Search's files are plain assets.
-        runWorkerFirst: ["/v2/docs", "/v2/docs/*", "!/v2/docs/pagefind/*"],
+        // Docs pages answer with HTML or Markdown from one URL, and a /docs URL without a V2 page
+        // goes to the V1 docs, so the Worker picks the asset (src/docs/middleware.ts). The docs' own
+        // files (search, stylesheets, images, llms.txt, …) are plain assets.
+        runWorkerFirst: [
+          base.slice(0, -1),
+          `${base}*`,
+          ...files.map((file) => `!${base}${file}${file.includes(".") ? "" : "/*"}`),
+        ],
       },
       env: {
         ASSETS: bindings.assets(),
@@ -39,9 +42,7 @@ export default defineConfig(({ mode }) => {
               triggers.fetch({ pattern: host, zone: "opencode.ai" }),
               triggers.fetch({ pattern: `${host}/*`, zone: "opencode.ai" }),
             ]
-          : productionOwnsDocs
-            ? [triggers.fetch({ pattern: `${host}/v2*`, zone: "opencode.ai" })]
-            : [],
+          : [],
       workersDev: false,
       previewUrls: false,
       // Workers Logs: requests, errors and console output, searchable in the Cloudflare dashboard.

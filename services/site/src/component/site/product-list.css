@@ -1,5 +1,5 @@
-/* The quiet product lists (icon, name, description and an Install button): Extensions on /product,
-   and More from Anomaly there and on every product and extension page (product-list.tsx). */
+/* The quiet product lists (icon, name, description and an Install button): More products on
+   /product, and More from Anomaly on every product and extension page (product-list.tsx). */
 [data-site] {
   /* The one space between items, in every list (Extensions, Integrations, More from Anomaly). */
   --product-list-gap: 2.25rem;

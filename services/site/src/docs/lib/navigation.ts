@@ -184,12 +184,15 @@ const assetSlugs = new Set(["api"])
 
 export function docsHref(slug: string, anchor?: string) {
   const path = slug === "index" ? "" : `${slug.replace(/\/index$/, "")}${assetSlugs.has(slug) ? "" : "/"}`
-  return `${base}docs/${path}${anchor ? `#${anchor}` : ""}`
+  return `${base}${path}${anchor ? `#${anchor}` : ""}`
 }
 
-/** The Markdown twin of a docs page: its URL without the trailing slash, plus `.md`. */
+/**
+ * The Markdown twin of a docs page: its URL without the trailing slash, plus `.md`. The intro's is
+ * `/docs/index.md`, so it stays under the docs' prefix (middleware.ts also answers `/docs.md`).
+ */
 export function docsMarkdownHref(slug: string) {
-  return `${docsHref(slug).replace(/\/$/, "")}.md`
+  return slug === "index" ? `${base}index.md` : `${docsHref(slug).replace(/\/$/, "")}.md`
 }
 
 /** A content file's slug: its path under content/ without `.mdx` or a trailing `/index`. */

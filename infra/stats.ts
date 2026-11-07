@@ -1,4 +1,3 @@
-import { EMAILOCTOPUS_API_KEY } from "./app"
 import { LOCALES } from "../packages/stats/app/src/lib/language"
 import { domain, zoneID } from "./stage"
 
@@ -68,7 +67,7 @@ export const publicUrl = `https://${domain}/data`
 const app = new sst.cloudflare.x.SolidStart("Stats", {
   path: "packages/stats/app",
   buildCommand: "bun run build",
-  link: [database, EMAILOCTOPUS_API_KEY],
+  link: [database],
   environment: {
     PUBLIC_URL: publicUrl,
   },

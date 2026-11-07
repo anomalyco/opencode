@@ -10,7 +10,7 @@ export function renderLlmsTxt(site: URL) {
       ...(group.title && group.title !== section.title ? [`### ${group.title}`, ""] : []),
       ...group.items.map((item) => {
         const path = item.slug === "index" ? "" : `${item.slug.replace(/\/index$/, "")}/`
-        return `- [${item.title}](${new URL(`docs/${path}`, root)})`
+        return `- [${item.title}](${new URL(path, root)})`
       }),
       "",
     ]),

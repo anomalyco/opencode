@@ -21,7 +21,8 @@ export function NotFoundPage(props: { title: string; status: number; only3D?: bo
   const [phone, setPhone] = createSignal(false)
   onMount(() => setPhone(isPhone()))
   return (
-    <main data-page="not-found">
+    // Names its surface for the funnel, whatever the address (lib/funnel.ts).
+    <main data-page="not-found" data-funnel-surface="www-404">
       <Title>{props.title}</Title>
       <Meta name="robots" content="noindex" />
       {/* A dead link pasted into a chat still unfurls, so the 404 has its own card (script/og.ts). */}
