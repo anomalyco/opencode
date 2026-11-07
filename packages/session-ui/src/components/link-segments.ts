@@ -1,15 +1,14 @@
-const openers: Readonly<Record<string, string | undefined>> = { ")": "(", "]": "[" }
-
 /** Drops punctuation trailing a URL, but keeps a closing bracket that pairs with one inside it (`…/Mercury_(planet)`). */
 function trimTrailing(url: string) {
   let end = url.length
 
   while (end > 0) {
     const char = url[end - 1]!
-    const opener = openers[char]
+    const opener = ["()", "[]"].find((pair) => pair[1] === char)?.[0]
 
     if (opener) {
       const head = url.slice(0, end)
+
       if (count(head, opener) >= count(head, char)) break
     } else if (!",.;:!?".includes(char)) break
 
