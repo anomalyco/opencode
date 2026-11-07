@@ -349,7 +349,7 @@ const REPLAY_STUB_MIN = 800
 // truncated tool output is spilled to a file; keep that pointer so the model can page it back
 const SAVED_PATH = /full output saved to ([^\]]+)\]/
 // read results start with this header, written by the read tool itself
-const READ_HEADER = /^Read (?:file|directory) (.+?),/
+const READ_HEADER = /^Read (?:file|directory) (.+?), (?:lines|entries) (\d+)-(\d+)|^Read (?:file|directory) (.+?), 0/
 
 /** Chars the gc pass reclaimed, for span telemetry. */
 export type GCStats = { reclaimed: number }
@@ -360,18 +360,26 @@ const resultSize = (result: ToolResultValue) => {
   return typeof result.value === "string" ? result.value.length : (JSON.stringify(result.value)?.length ?? 0)
 }
 
-const readPath = (part: ToolResultPart) => {
+// the file a read result covers and which lines of it; a different range is a different view,
+// never a base for "unchanged" or a diff
+const readRef = (part: ToolResultPart) => {
   if (part.name !== "read" || part.result.type !== "text" || typeof part.result.value !== "string") return
-  return READ_HEADER.exec(part.result.value)?.[1]
+  const match = READ_HEADER.exec(part.result.value)
+  if (!match) return
+  const path = match[1] ?? match[4]
+  if (path === undefined) return
+  return { path, start: match[2] === undefined ? 0 : Number(match[2]), end: match[3] === undefined ? 0 : Number(match[3]) }
 }
 
-const stubResult = (part: ToolResultPart, index: number, latestRead: Map<string, number>) => {
+const stubResult = (part: ToolResultPart, index: number, latestRead: Map<string, { index: number; start: number; end: number }>) => {
   // providerMetadata is model-scoped replay proof; rewriting those parts breaks the provider's own checks
   if (part.providerMetadata !== undefined) return part
-  // a file the model re-read later is dead weight at any size; the newer copy carries the current truth
-  const path = readPath(part)
-  if (path !== undefined && (latestRead.get(path) ?? 0) > index)
-    return { ...part, result: { type: "text" as const, value: `[superseded by a newer read of ${path}]` } }
+  // a file the model re-read later is dead weight at any size — but only when the newer
+  // read covers the same or more of it, otherwise the old lines are still the only copy
+  const ref = readRef(part)
+  const newer = ref === undefined ? undefined : latestRead.get(ref.path)
+  if (ref !== undefined && newer !== undefined && newer.index > index && newer.start <= ref.start && newer.end >= ref.end)
+    return { ...part, result: { type: "text" as const, value: `[superseded by a newer read of ${ref.path}]` } }
   if (resultSize(part.result) < REPLAY_STUB_MIN) return part
   const saved = typeof part.result.value === "string" ? SAVED_PATH.exec(part.result.value)?.[1] : undefined
   const value = saved ? `[cleared to save context; full output saved to ${saved}]` : REPLAY_STUB
@@ -381,7 +389,7 @@ const stubResult = (part: ToolResultPart, index: number, latestRead: Map<string,
   }
 }
 
-const gcMessage = (message: Message, index: number, latestRead: Map<string, number>): Message => {
+const gcMessage = (message: Message, index: number, latestRead: Map<string, { index: number; start: number; end: number }>): Message => {
   switch (message.role) {
     case "system":
     case "user":
@@ -430,12 +438,12 @@ const messageSize = (message: Message) =>
 export const pruneTranscript = (messages: ReadonlyArray<Message>, boundary: number, stats?: GCStats): Message[] => {
   if (boundary <= 0) return messages.slice()
   // newest read result per file, anywhere in the transcript; older copies are superseded
-  const latestRead = new Map<string, number>()
+  const latestRead = new Map<string, { index: number; start: number; end: number }>()
   messages.forEach((message, index) => {
     for (const part of message.content)
       if (part.type === "tool-result") {
-        const path = readPath(part)
-        if (path !== undefined) latestRead.set(path, index)
+        const ref = readRef(part)
+        if (ref !== undefined) latestRead.set(ref.path, { index, start: ref.start, end: ref.end })
       }
   })
   let changed = false
@@ -453,26 +461,28 @@ export const pruneTranscript = (messages: ReadonlyArray<Message>, boundary: numb
   // a stubbed result no longer matches READ_HEADER, so it can never be mistaken for a base.
   const previousRead = new Map<string, string>()
   const dedupePart = (part: ToolResultPart, fresh: boolean): ToolResultPart => {
-    const path = readPath(part)
+    const ref = readRef(part)
     const text = part.result.type === "text" && typeof part.result.value === "string" ? part.result.value : undefined
-    if (path === undefined || text === undefined) return part
-    const prev = previousRead.get(path)
+    if (ref === undefined || text === undefined) return part
+    // same range only: a read of lines 200-300 is not a new version of lines 1-100
+    const key = `${ref.path} ${ref.start}:${ref.end}`
+    const prev = previousRead.get(key)
     // in the settled zone superseded/size stubs already ran; just remember the visible copy
     if (!fresh || prev === undefined) {
-      previousRead.set(path, text)
+      previousRead.set(key, text)
       return part
     }
     if (prev === text) {
       if (stats) stats.reclaimed += text.length
-      return { ...part, result: { type: "text" as const, value: `[unchanged since the previous read of ${path}]` } }
+      return { ...part, result: { type: "text" as const, value: `[unchanged since the previous read of ${ref.path}]` } }
     }
     const patch = readDiff(prev, text)
-    previousRead.set(path, text)
+    previousRead.set(key, text)
     if (patch === undefined) return part
     if (stats) stats.reclaimed += text.length - patch.length
     return {
       ...part,
-      result: { type: "text" as const, value: `${path} changed since the previous read; diff vs that version:\n${patch}` },
+      result: { type: "text" as const, value: `${ref.path} changed since the previous read; diff vs that version:\n${patch}` },
     }
   }
   for (let i = 0; i < next.length; i++) {
