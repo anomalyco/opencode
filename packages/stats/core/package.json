@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode/stats-core",
+  "name": "@Mackery6969/stats-core",
   "version": "2.2.5",
   "private": true,
   "type": "module",

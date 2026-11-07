@@ -94,7 +94,7 @@ const abortEffect = (signal: AbortSignal | undefined) =>
 export const make = (options: Options = {}) => {
   const runtime = ManagedRuntime.make(AIClient.layerWith(options.layer ?? RequestExecutor.fetchLayer))
 
-  /** Run any package Effect (for example `ai.compact(...)` from `@opencode/ai/effect`) inside this runtime. */
+  /** Run any package Effect (for example `ai.compact(...)` from `@Mackery6969/ai/effect`) inside this runtime. */
   const run = <A, E>(effect: Effect.Effect<A, E, Services>, options?: RunOptions) =>
     runtime.runPromise(Effect.raceFirst(effect, abortEffect(options?.signal)))
 
@@ -304,7 +304,7 @@ export type Client = ReturnType<typeof make>
 const fileError = (message: string, cause: unknown) =>
   new AIError({ reason: new InvalidRequestError({ message, cause }) })
 
-/** `tool` from `@opencode/ai/effect`, with an `execute` that returns a value or a Promise and throws to fail. */
+/** `tool` from `@Mackery6969/ai/effect`, with an `execute` that returns a value or a Promise and throws to fail. */
 export const tool = <
   Input extends ToolInput = typeof Schema.Unknown,
   Success extends ToolSchema<any> = typeof Schema.Unknown,

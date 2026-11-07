@@ -1,5 +1,5 @@
-import type { ModelApi } from "@opencode/client/effect/api"
-import type { Model } from "@opencode/schema/model"
+import type { ModelApi } from "@Mackery6969/client/effect/api"
+import type { Model } from "@Mackery6969/schema/model"
 import type { Effect, Types } from "effect"
 import type { ProviderRecord } from "./provider.js"
 import type { Transform } from "./registration.js"

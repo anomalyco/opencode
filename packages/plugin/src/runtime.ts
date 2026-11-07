@@ -29,7 +29,7 @@ export function ensurePluginRuntime() {
         const match = args.path.match(foreignPkgPattern)
         const target = match ? `${match[2] ?? match[3]}/${match[4]}`.replaceAll("\\", "/") : args.path
         throw new Error(
-          `Cannot load "${target}" from plugin node_modules: "${target}" is not provided by OpenCode; plugins must use the host's "effect" and "@opencode/plugin" modules.`,
+          `Cannot load "${target}" from plugin node_modules: "${target}" is not provided by OpenCode; plugins must use the host's "effect" and "@Mackery6969/plugin" modules.`,
         )
       })
     },

@@ -3,7 +3,7 @@ import { evaluatePluginBundle, inertModule, pluginIdAvailable, type InertModule 
 import { Contract } from "../src/gui/core"
 import { define } from "../src/gui/plugin"
 
-const modules = new Map<string, object>([["@opencode/plugin/gui", { Contract, Plugin: { define } }]])
+const modules = new Map<string, object>([["@Mackery6969/plugin/gui", { Contract, Plugin: { define } }]])
 
 const evaluate = (code: string, process: "window" | "main" = "window") =>
   evaluatePluginBundle(code, {
@@ -13,7 +13,7 @@ const evaluate = (code: string, process: "window" | "main" = "window") =>
 
       if (module) return module
 
-      if (name === "@opencode/plugin/gui/review") return inertModule(name)
+      if (name === "@Mackery6969/plugin/gui/review") return inertModule(name)
 
       throw new Error(`not shared: ${name}`)
     },
@@ -22,7 +22,7 @@ const evaluate = (code: string, process: "window" | "main" = "window") =>
 describe("plugin GUI bundles", () => {
   test("read the default export's declarations and setups", () => {
     const bundle = evaluate(`
-      const sdk = require("@opencode/plugin/gui")
+      const sdk = require("@Mackery6969/plugin/gui")
       exports.default = sdk.Plugin.define({
         os: ["macos"],
         i18n: { fr: { title: "Notes" } },
@@ -38,7 +38,7 @@ describe("plugin GUI bundles", () => {
 
   test("load in main when they import a window-only module, which main gets as a placeholder", () => {
     const code = `
-      const review = require("@opencode/plugin/gui/review")
+      const review = require("@Mackery6969/plugin/gui/review")
       exports.default = { setup: () => void review.Changes, main() {} }
     `
 

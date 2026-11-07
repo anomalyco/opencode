@@ -1,5 +1,5 @@
 import type { Locator } from "@playwright/test"
-import type { MotionKnob } from "@opencode/ui/motion-tuning"
+import type { MotionKnob } from "@Mackery6969/ui/motion-tuning"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 for (const variant of ["classic", "experimental"] as const) {

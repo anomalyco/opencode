@@ -1,8 +1,8 @@
 export * as RpcRuntime from "./rpc-runtime.js"
 
-import type { Rpc } from "@opencode/schema/rpc"
-import type { OpenCodeEvent } from "@opencode/protocol/groups/event"
-import { RpcError, RpcInternalError } from "@opencode/protocol/errors"
+import type { Rpc } from "@Mackery6969/schema/rpc"
+import type { OpenCodeEvent } from "@Mackery6969/protocol/groups/event"
+import { RpcError, RpcInternalError } from "@Mackery6969/protocol/errors"
 import { Effect, Schema } from "effect"
 
 type RpcEvent = Extract<OpenCodeEvent, { type: `rpc.${string}` }>

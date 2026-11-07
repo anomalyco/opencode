@@ -1,5 +1,5 @@
-import { Generate } from "@opencode/schema/generate"
-import { Model } from "@opencode/schema/model"
+import { Generate } from "@Mackery6969/schema/generate"
+import { Model } from "@Mackery6969/schema/model"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import {

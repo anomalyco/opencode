@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode/stats-app",
+  "name": "@Mackery6969/stats-app",
   "version": "2.2.5",
   "private": true,
   "type": "module",
@@ -16,8 +16,8 @@
   "dependencies": {
     "@ibm/plex": "6.4.1",
     "@kobalte/core": "catalog:",
-    "@opencode/stats-core": "workspace:*",
-    "@opencode/ui": "workspace:*",
+    "@Mackery6969/stats-core": "workspace:*",
+    "@Mackery6969/ui": "workspace:*",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",

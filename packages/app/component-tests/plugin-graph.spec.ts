@@ -1,5 +1,5 @@
 import { expect, sourceURL, story } from "../../stories/playwright/story"
-import type { Entry } from "@opencode/plugin/gui/host"
+import type { Entry } from "@Mackery6969/plugin/gui/host"
 
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 

@@ -1,5 +1,5 @@
-import type { Artifact } from "@opencode/schema/artifact"
-import type { Session } from "@opencode/schema/session"
+import type { Artifact } from "@Mackery6969/schema/artifact"
+import type { Session } from "@Mackery6969/schema/session"
 import type { Effect } from "effect"
 import type { Transform } from "./registration.js"
 

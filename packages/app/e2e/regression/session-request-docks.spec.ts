@@ -1,4 +1,4 @@
-import type { OpenCodeEvent } from "@opencode/client/promise"
+import type { OpenCodeEvent } from "@Mackery6969/client/promise"
 import { expect, test, type Page } from "@playwright/test"
 import { SERVER, sessionHref } from "../utils/app"
 import { installSseTransport } from "../utils/sse-transport"

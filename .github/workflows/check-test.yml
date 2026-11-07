@@ -58,7 +58,7 @@ jobs:
             exit 0
           fi
           # packages/stories hosts the component tests, but no app package depends on it.
-          bun x turbo@2.10.2 ls --affected --filter=@opencode/app --filter=@opencode/stories --output=json > affected.json
+          bun x turbo@2.10.2 ls --affected --filter=@Mackery6969/app --filter=@Mackery6969/stories --output=json > affected.json
           bun -e 'const result = await Bun.file("affected.json").json(); console.log(`app=${result.packages.count > 0}`)' >> "$GITHUB_OUTPUT"
 
   unit:
@@ -129,10 +129,10 @@ jobs:
         timeout-minutes: 15
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            bun turbo verify:package --filter=@opencode/sdk
+            bun turbo verify:package --filter=@Mackery6969/sdk
             exit 0
           fi
-          bun turbo verify:package --affected --filter=@opencode/sdk
+          bun turbo verify:package --affected --filter=@Mackery6969/sdk
         env:
           TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
           TURBO_SCM_HEAD: ${{ github.sha }}
@@ -190,10 +190,10 @@ jobs:
         timeout-minutes: 10
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            bun turbo build --concurrency=3 --filter='@opencode/cli^...' --filter='@opencode/app^...'
+            bun turbo build --concurrency=3 --filter='@Mackery6969/cli^...' --filter='@Mackery6969/app^...'
             exit 0
           fi
-          bun turbo build --affected --concurrency=3 --filter='@opencode/cli^...' --filter='@opencode/app^...'
+          bun turbo build --affected --concurrency=3 --filter='@Mackery6969/cli^...' --filter='@Mackery6969/app^...'
         env:
           TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
           TURBO_SCM_HEAD: ${{ github.sha }}

@@ -10,7 +10,7 @@ import type { RpcCallOptions } from "../promise/rpc.js"
 
 type EventType = NonNullable<EventSubscribeInput["types"]>[number]
 
-const CurrentHeaders = Context.Reference<RpcCallOptions["headers"]>("@opencode/client/effect/rpc/headers", {
+const CurrentHeaders = Context.Reference<RpcCallOptions["headers"]>("@Mackery6969/client/effect/rpc/headers", {
   defaultValue: () => undefined,
 })
 

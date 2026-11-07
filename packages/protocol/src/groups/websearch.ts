@@ -1,5 +1,5 @@
-import { Location } from "@opencode/schema/location"
-import { WebSearch } from "@opencode/schema/websearch"
+import { Location } from "@Mackery6969/schema/location"
+import { WebSearch } from "@Mackery6969/schema/websearch"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { InvalidRequestError, ServiceUnavailableError } from "../errors.js"

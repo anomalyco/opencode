@@ -12,10 +12,10 @@ import {
   LLMEvent,
   Media,
   RawEvent,
-} from "@opencode/ai/effect"
-import { AI } from "@opencode/ai"
-import { Speech, SpeechClient, SpeechEvent, TranscriptionClient, Video, VideoClient } from "@opencode/ai/experimental"
-import { Route, Protocol, RequestExecutor, WebSocketTransport } from "@opencode/ai/route"
+} from "@Mackery6969/ai/effect"
+import { AI } from "@Mackery6969/ai"
+import { Speech, SpeechClient, SpeechEvent, TranscriptionClient, Video, VideoClient } from "@Mackery6969/ai/experimental"
+import { Route, Protocol, RequestExecutor, WebSocketTransport } from "@Mackery6969/ai/route"
 import {
   Alibaba,
   AssemblyAI,
@@ -40,7 +40,7 @@ import {
   VercelAIGateway,
   XAI,
   ZAI,
-} from "@opencode/ai/providers"
+} from "@Mackery6969/ai/providers"
 import {
   AnthropicMessages,
   OpenAIChat,
@@ -49,8 +49,8 @@ import {
   OpenAIResponses,
   OpenResponses,
   OpenResponsesChannel,
-} from "@opencode/ai/protocols"
-import { TestLLM } from "@opencode/ai/testing"
+} from "@Mackery6969/ai/protocols"
+import { TestLLM } from "@Mackery6969/ai/testing"
 
 describe("public exports", () => {
   test("modality, provider, and protocol entrypoints load first in a fresh process", async () => {
@@ -125,7 +125,7 @@ describe("public exports", () => {
   })
 
   test("provider barrels expose user-facing facades", async () => {
-    const { OpenAICompatibleResponses } = await import("@opencode/ai/providers")
+    const { OpenAICompatibleResponses } = await import("@Mackery6969/ai/providers")
 
     expect(OpenAI.model).toBeFunction()
     expect(OpenAI.provider.responses).toBe(OpenAI.responses)

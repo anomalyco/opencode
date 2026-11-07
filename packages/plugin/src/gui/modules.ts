@@ -2,19 +2,19 @@
 
 /**
  * The modules a plugin's `./gui-experimental` bundle may require that both processes provide, each its own instance.
- * Main maps `@opencode/plugin/gui` to the main SDK and a window maps `@opencode/plugin/gui/main` to the window SDK:
+ * Main maps `@Mackery6969/plugin/gui` to the main SDK and a window maps `@Mackery6969/plugin/gui/main` to the window SDK:
  * both export the same `Plugin`, `Store`, `Ipc`, `Contract` and `Registry`, so one definition and contract serve both
- * processes. `@opencode/plugin/rpc` is here because a plugin's `./rpc` contract imports it, and its GUI imports that
+ * processes. `@Mackery6969/plugin/rpc` is here because a plugin's `./rpc` contract imports it, and its GUI imports that
  * contract.
  */
 export const pluginSharedModules = [
   "effect",
-  "@opencode/plugin/gui",
-  "@opencode/plugin/gui/main",
-  "@opencode/plugin/rpc",
-  "@opencode/schema/rpc",
-  "@opencode/client",
-  "@opencode/client/effect",
+  "@Mackery6969/plugin/gui",
+  "@Mackery6969/plugin/gui/main",
+  "@Mackery6969/plugin/rpc",
+  "@Mackery6969/schema/rpc",
+  "@Mackery6969/client",
+  "@Mackery6969/client/effect",
 ] as const
 
 /**
@@ -25,10 +25,10 @@ export const pluginWindowModules = [
   "solid-js",
   "solid-js/web",
   "solid-js/store",
-  "@opencode/plugin/gui/file",
-  "@opencode/plugin/gui/review",
-  "@opencode/plugin/gui/browser",
-  "@opencode/client/solid",
+  "@Mackery6969/plugin/gui/file",
+  "@Mackery6969/plugin/gui/review",
+  "@Mackery6969/plugin/gui/browser",
+  "@Mackery6969/client/solid",
 ] as const
 
 /** A module name in `pluginSharedModules` or `pluginWindowModules`. */

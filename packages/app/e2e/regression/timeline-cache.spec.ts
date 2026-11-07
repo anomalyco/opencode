@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
-import { timelinePresets } from "@opencode/session-ui/timeline/detail"
+import type { OpenCodeEvent, SessionMessageInfo } from "@Mackery6969/client/promise"
+import { timelinePresets } from "@Mackery6969/session-ui/timeline/detail"
 import { expected, messages } from "../utils/markdown-sessions"
 import { expectPath, holdRoute, seed, sessionHref, type SeedInput } from "../utils/app"
 import type { MockServerConfig } from "../utils/mock-server"

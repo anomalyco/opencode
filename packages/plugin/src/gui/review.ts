@@ -1,4 +1,4 @@
-import type { FileDiffInfo } from "@opencode/client/promise"
+import type { FileDiffInfo } from "@Mackery6969/client/promise"
 import { Contract } from "./core.js"
 import type { SessionRef, SessionScreen } from "./host-apis.js"
 

@@ -1,7 +1,7 @@
 import { MemoryRouter, createMemoryHistory } from "@solidjs/router"
 import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
-import type { Bridge } from "@opencode/plugin/gui/host"
+import type { Bridge } from "@Mackery6969/plugin/gui/host"
 import { AppBaseProviders, AppInterface } from "../../src/app"
 import { PlatformProvider, type Platform } from "../../src/runtime/platform/platform"
 

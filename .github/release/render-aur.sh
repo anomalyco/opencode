@@ -13,8 +13,8 @@ printf '#!/bin/sh\nexec "$(dirname "$0")/opencode" "$@"\n' > "$aur/opencode2"
 sum() { sha256 "$1" | cut -c1-64; }
 x64=$(sum "$npm/opencode-cli-linux-x64-baseline-$OPENCODE_VERSION.tgz")
 arm64=$(sum "$npm/opencode-cli-linux-arm64-$OPENCODE_VERSION.tgz")
-x64_url="https://registry.npmjs.org/@opencode/cli-linux-x64-baseline/-/cli-linux-x64-baseline-$OPENCODE_VERSION.tgz"
-arm64_url="https://registry.npmjs.org/@opencode/cli-linux-arm64/-/cli-linux-arm64-$OPENCODE_VERSION.tgz"
+x64_url="https://registry.npmjs.org/@Mackery6969/cli-linux-x64-baseline/-/cli-linux-x64-baseline-$OPENCODE_VERSION.tgz"
+arm64_url="https://registry.npmjs.org/@Mackery6969/cli-linux-arm64/-/cli-linux-arm64-$OPENCODE_VERSION.tgz"
 license=$(sum "$aur/LICENSE")
 shim=$(sum "$aur/opencode2")
 

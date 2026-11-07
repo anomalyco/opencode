@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode/codemode",
+  "name": "@Mackery6969/codemode",
   "version": "2.2.5",
   "description": "Effect-native confined code execution over schema-described tools",
   "type": "module",

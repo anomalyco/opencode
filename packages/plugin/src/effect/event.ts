@@ -1,4 +1,4 @@
-import type { EventSubscribeInput, EventSubscribeOutput, SelectedEvent } from "@opencode/client/effect/api"
+import type { EventSubscribeInput, EventSubscribeOutput, SelectedEvent } from "@Mackery6969/client/effect/api"
 import type { Stream } from "effect"
 
 type EventType = NonNullable<EventSubscribeInput["types"]>[number]

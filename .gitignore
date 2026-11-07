@@ -39,3 +39,6 @@ tsconfig.tsbuildinfo
 
 # Legal drafts pending review are kept outside the repository; never copy them in.
 legal-drafts-private/
+
+# Auth tokens for package registries (injected by CI or local setup)
+.npmrc.local

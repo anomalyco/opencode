@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode/client",
+  "name": "@Mackery6969/client",
   "version": "2.2.5",
   "type": "module",
   "license": "MIT",
@@ -36,8 +36,8 @@
     "typecheck:tsc": "tsc --noEmit"
   },
   "dependencies": {
-    "@opencode/schema": "workspace:*",
-    "@opencode/protocol": "workspace:*"
+    "@Mackery6969/schema": "workspace:*",
+    "@Mackery6969/protocol": "workspace:*"
   },
   "peerDependencies": {
     "effect": "catalog:",
@@ -54,7 +54,7 @@
   "devDependencies": {
     "@effect/platform-node": "catalog:",
     "@modelcontextprotocol/client": "2.3.1",
-    "@opencode/httpapi-codegen": "workspace:*",
+    "@Mackery6969/httpapi-codegen": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native": "catalog:",

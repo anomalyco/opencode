@@ -1,7 +1,7 @@
-import type { PermissionApi } from "@opencode/client/promise/api"
-import type { Agent } from "@opencode/schema/agent"
-import type { Permission } from "@opencode/schema/permission"
-import type { Session } from "@opencode/schema/session"
+import type { PermissionApi } from "@Mackery6969/client/promise/api"
+import type { Agent } from "@Mackery6969/schema/agent"
+import type { Permission } from "@Mackery6969/schema/permission"
+import type { Session } from "@Mackery6969/schema/session"
 import type { AssertInput } from "../permission.js"
 import type { Hooks } from "./registration.js"
 

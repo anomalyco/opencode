@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import path from "node:path"
-import { Hash } from "@opencode/util/hash"
+import { Hash } from "@Mackery6969/util/hash"
 
 // Keep source fingerprints and import attempts together. Filesystem events
 // should reload changed local graphs, not repeat unchanged evaluations.

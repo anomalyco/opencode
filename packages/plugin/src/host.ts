@@ -3,7 +3,7 @@ export * as Host from "./host.js"
 import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { Option, Schema } from "effect"
-import { importModule, resolveModule } from "@opencode/util/runtime-import"
+import { importModule, resolveModule } from "@Mackery6969/util/runtime-import"
 
 export interface Target {
   readonly directory: string

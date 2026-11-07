@@ -1,7 +1,7 @@
-import type { ProviderApi } from "@opencode/client/promise/api"
-import type { Model } from "@opencode/schema/model"
-import type { Provider } from "@opencode/schema/provider"
-import type { ConnectionInfo } from "@opencode/client"
+import type { ProviderApi } from "@Mackery6969/client/promise/api"
+import type { Model } from "@Mackery6969/schema/model"
+import type { Provider } from "@Mackery6969/schema/provider"
+import type { ConnectionInfo } from "@Mackery6969/client"
 import type { Types } from "effect"
 import type { Transform } from "./registration.js"
 

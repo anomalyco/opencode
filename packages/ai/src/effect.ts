@@ -5,7 +5,7 @@ import { Speech } from "./speech.js"
 import { Transcription } from "./transcription.js"
 import { Video } from "./video.js"
 
-/** The Effect API: the same shape as `ai` from `@opencode/ai`, returning `Effect` and `Stream`. */
+/** The Effect API: the same shape as `ai` from `@Mackery6969/ai`, returning `Effect` and `Stream`. */
 export const ai = {
   request: LLM.request,
   generate: LLM.generate,

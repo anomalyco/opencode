@@ -1,5 +1,5 @@
-import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
-import { timelinePresets } from "@opencode/session-ui/timeline/detail"
+import type { OpenCodeEvent, SessionMessageInfo } from "@Mackery6969/client/promise"
+import { timelinePresets } from "@Mackery6969/session-ui/timeline/detail"
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import { expectPath, SERVER, sessionHref } from "../utils/app"
 import { currentSession } from "../utils/mock-server"
