@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   dispatch:
-    if: github.repository == 'anomalyco/opencode'
+    if: github.repository == 'Mackery6969/opencode'
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch beta test runs
@@ -24,7 +24,7 @@ jobs:
           gh workflow run check-test.yml --repo "$GITHUB_REPOSITORY" --ref beta -f quarantine=true
 
   build:
-    if: github.repository == 'anomalyco/opencode'
+    if: github.repository == 'Mackery6969/opencode'
     runs-on: ubuntu-latest
     outputs:
       new_commits: ${{ steps.check.outputs.new_commits }}
