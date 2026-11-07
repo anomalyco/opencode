@@ -62,7 +62,7 @@ const vmSpecs = (): ReadonlyArray<ClassSpec> =>
       name: "HostCalls",
       ctor: HostCalls,
       anchor: "hosts",
-      fields: ["queued", "running", "inbox", "nextID", "blocked", "input"],
+      fields: ["runId", "queued", "running", "inbox", "nextID", "blocked", "input"],
       skip: ["ctx", "promises", "extension", "extensionResume"],
     },
     {
@@ -146,6 +146,7 @@ export const captureVm = (
     },
     lost,
     strict: options.strict,
+    hosts: ctx.hosts,
     specs: vmSpecs(),
     external: (value): Json | undefined => {
       if (value === HOLE) return "hole"
@@ -160,6 +161,7 @@ export const captureVm = (
     header: {
       build: buildId(),
       hosts: hostsId(ctx),
+      runId: vm.hosts.runId,
       sources: programs.map((source) => ({
         id: source.id,
         code: source.code,
@@ -215,6 +217,7 @@ export const restoreVm = (vm: Vm, saved: unknown, options: RestoreOptions): Snap
     anchor: (name) => anchors.get(name),
     node: (source, index) => sources.get(source)?.nodes[index],
     interruption: options.interruption,
+    hosts: ctx.hosts,
     specs: vmSpecs(),
     external: (data) => {
       if (data === "hole") return HOLE
