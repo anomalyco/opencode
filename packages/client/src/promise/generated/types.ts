@@ -226,7 +226,7 @@ export type IntegrationEnvMethod = { type: "env"; names: Array<string> }
 
 export type CredentialID = string
 
-export type ConnectionStatus = { status: "needs_auth"; message: string; url?: string }
+export type ConnectionStatus = { status: "needs_auth" | "restricted"; message: string; url?: string }
 
 export type IntegrationAttemptID = string
 

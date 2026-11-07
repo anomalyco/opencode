@@ -7,10 +7,12 @@ import { optional } from "./schema.js"
 /**
  * Runtime problem an integration reported for a connection. `needs_auth` asks the user to sign in again:
  * at `url` when set (the credential itself stays valid), otherwise by reconnecting the integration.
+ * `restricted` means the server rejected the account or workspace itself, so signing in again cannot
+ * help; `url` is where the user can check it.
  */
 export interface Status extends Schema.Schema.Type<typeof Status> {}
 export const Status = Schema.Struct({
-  status: Schema.Literals(["needs_auth"]),
+  status: Schema.Literals(["needs_auth", "restricted"]),
   message: Schema.String,
   url: optional(Schema.String),
 }).annotate({ identifier: "Connection.Status" })
