@@ -1,45 +1,121 @@
+/* OpenTUI Mono, Anomaly's font (SIL OFL 1.1, ../asset/fonts/OpenTUIMono-OFL.txt), copied from
+   services/site/src/asset/fonts. "latin" covers Latin, punctuation, arrows and box drawing; "rest" loads only
+   when a page uses one of the font's other characters. Regular serves weights up to 599 and bold the rest, so
+   500 and 600 never get a synthesized face. */
 @font-face {
-  font-family: "IBM Plex Mono";
+  font-family: "OpenTUI Mono";
   font-style: normal;
-  font-weight: 400;
+  font-weight: 100 599;
   font-display: swap;
-  src: url("@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Regular-Latin1.woff2") format("woff2");
+  src: url("../asset/fonts/opentui-mono-regular-latin.woff2") format("woff2");
   unicode-range:
-    U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2013-2014, U+2018-201A, U+201C-201E,
-    U+2020-2022, U+2026, U+2030, U+2039-203A, U+2044, U+20AC, U+2122, U+2212, U+FB01-FB02;
+    U+0020-007E, U+00A0-017F, U+2000-200D, U+2010-2029, U+202F-2064, U+20AC, U+2190-21E6, U+21E8-21FF, U+2212,
+    U+2500-25FF;
 }
 
 @font-face {
-  font-family: "IBM Plex Mono";
+  font-family: "OpenTUI Mono";
   font-style: normal;
-  font-weight: 500;
+  font-weight: 100 599;
   font-display: swap;
-  src: url("@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Medium-Latin1.woff2") format("woff2");
+  src: url("../asset/fonts/opentui-mono-regular-rest.woff2") format("woff2");
   unicode-range:
-    U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2013-2014, U+2018-201A, U+201C-201E,
-    U+2020-2022, U+2026, U+2030, U+2039-203A, U+2044, U+20AC, U+2122, U+2212, U+FB01-FB02;
+    U+01AB, U+01AE, U+0218-021B, U+0237, U+024B, U+0256, U+026B, U+026D, U+0273, U+0279, U+027B, U+027D-027E, U+0282,
+    U+0285, U+0288, U+0290, U+02AF, U+02B5, U+0300-036F, U+1D6C-1D76, U+1D80-1D9A, U+1DA9-1DAA, U+1DAF, U+1DB3, U+1DB5,
+    U+1DBC, U+1E03, U+1E0B, U+1E23, U+2070, U+2074-2079, U+2080-2089, U+20A1, U+20A3-20AB, U+20AD-20AF, U+20B1-20B5,
+    U+20B8-20BA, U+20BC-20BF, U+20D2, U+20D8, U+20EB, U+2200-2211, U+2213-22FF, U+2948, U+2ADC, U+2AEE, U+2B30, U+2C62,
+    U+2C64, U+A78E, U+A794-A795, U+A7BA-A7BF, U+A7C4-A7C6, U+AB39, U+AB5E, U+AB66-AB68, U+E0B8, U+E0BA, U+E0BC, U+E0BE,
+    U+F882-F883, U+F891-F892, U+10788, U+1078B, U+1078D, U+1079D, U+1079F, U+107A7-107A8, U+107AD, U+107AF, U+107B9,
+    U+1DF05, U+1DF08-1DF0A, U+1DF12-1DF1D;
 }
 
 @font-face {
-  font-family: "IBM Plex Mono";
+  font-family: "OpenTUI Mono";
   font-style: normal;
-  font-weight: 600;
+  font-weight: 600 900;
   font-display: swap;
-  src: url("@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-SemiBold-Latin1.woff2") format("woff2");
+  src: url("../asset/fonts/opentui-mono-bold-latin.woff2") format("woff2");
   unicode-range:
-    U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2013-2014, U+2018-201A, U+201C-201E,
-    U+2020-2022, U+2026, U+2030, U+2039-203A, U+2044, U+20AC, U+2122, U+2212, U+FB01-FB02;
+    U+0020-007E, U+00A0-017F, U+2000-200D, U+2010-2029, U+202F-2064, U+20AC, U+2190-21E6, U+21E8-21FF, U+2212,
+    U+2500-25FF;
 }
 
 @font-face {
-  font-family: "IBM Plex Mono";
+  font-family: "OpenTUI Mono";
   font-style: normal;
-  font-weight: 700;
+  font-weight: 600 900;
   font-display: swap;
-  src: url("@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Bold-Latin1.woff2") format("woff2");
+  src: url("../asset/fonts/opentui-mono-bold-rest.woff2") format("woff2");
   unicode-range:
-    U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2013-2014, U+2018-201A, U+201C-201E,
-    U+2020-2022, U+2026, U+2030, U+2039-203A, U+2044, U+20AC, U+2122, U+2212, U+FB01-FB02;
+    U+01AB, U+01AE, U+0218-021B, U+0237, U+024B, U+0256, U+026B, U+026D, U+0273, U+0279, U+027B, U+027D-027E, U+0282,
+    U+0285, U+0288, U+0290, U+02AF, U+02B5, U+0300-036F, U+1D6C-1D76, U+1D80-1D9A, U+1DA9-1DAA, U+1DAF, U+1DB3, U+1DB5,
+    U+1DBC, U+1E03, U+1E0B, U+1E23, U+2070, U+2074-2079, U+2080-2089, U+20A1, U+20A3-20AB, U+20AD-20AF, U+20B1-20B5,
+    U+20B8-20BA, U+20BC-20BF, U+20D2, U+20D8, U+20EB, U+2200-2211, U+2213-22FF, U+2948, U+2ADC, U+2AEE, U+2B30, U+2C62,
+    U+2C64, U+A78E, U+A794-A795, U+A7BA-A7BF, U+A7C4-A7C6, U+AB39, U+AB5E, U+AB66-AB68, U+E0B8, U+E0BA, U+E0BC, U+E0BE,
+    U+F882-F883, U+F891-F892, U+10788, U+1078B, U+1078D, U+1079D, U+1079F, U+107A7-107A8, U+107AD, U+107AF, U+107B9,
+    U+1DF05, U+1DF08-1DF0A, U+1DF12-1DF1D;
+}
+
+/* Stand-ins while OpenTUI Mono loads (as in services/site mono-fonts.ts): the system monospace font scaled to
+   OpenTUI Mono's 0.6 em advance with its line metrics, so the swap changes letter shapes only, not layout. */
+@font-face {
+  font-family: "OpenTUI Mono Menlo";
+  src: local("Menlo Regular"), local("Menlo-Regular"), local("DejaVu Sans Mono");
+  font-weight: 100 599;
+  size-adjust: 99.66%;
+  ascent-override: 96.83%;
+  descent-override: 22.08%;
+  line-gap-override: 6.52%;
+}
+
+@font-face {
+  font-family: "OpenTUI Mono Menlo";
+  src: local("Menlo Bold"), local("DejaVu Sans Mono Bold");
+  font-weight: 600 900;
+  size-adjust: 99.66%;
+  ascent-override: 96.83%;
+  descent-override: 22.08%;
+  line-gap-override: 6.52%;
+}
+
+@font-face {
+  font-family: "OpenTUI Mono Consolas";
+  src: local("Consolas");
+  font-weight: 100 599;
+  size-adjust: 109.13%;
+  ascent-override: 88.43%;
+  descent-override: 26.12%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "OpenTUI Mono Consolas";
+  src: local("Consolas Bold");
+  font-weight: 600 900;
+  size-adjust: 109.13%;
+  ascent-override: 88.43%;
+  descent-override: 26.12%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "OpenTUI Mono Courier";
+  src: local("Courier New");
+  font-weight: 100 599;
+  size-adjust: 99.98%;
+  ascent-override: 96.52%;
+  descent-override: 28.5%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "OpenTUI Mono Courier";
+  src: local("Courier New Bold");
+  font-weight: 600 900;
+  size-adjust: 99.98%;
+  ascent-override: 96.52%;
+  descent-override: 28.5%;
+  line-gap-override: 0%;
 }
 
 :root {
@@ -132,7 +208,7 @@ body {
 [data-page="stats"] [data-component="content"] {
   color: var(--stats-text);
   font-family:
-    "IBM Plex Mono",
+    "OpenTUI Mono", "OpenTUI Mono Menlo", "OpenTUI Mono Consolas", "OpenTUI Mono Courier",
     var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
 }
 
@@ -152,7 +228,7 @@ body {
   color: var(--stats-text);
   background: var(--stats-bg);
   font-family:
-    "IBM Plex Mono",
+    "OpenTUI Mono", "OpenTUI Mono Menlo", "OpenTUI Mono Consolas", "OpenTUI Mono Courier",
     var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
 }
 
@@ -160,13 +236,42 @@ body {
   box-sizing: border-box;
 }
 
+[data-page="stats"] {
+  /* opencode.ai's bar (packages/nav-menus): the logo where the site has it, the last item at its GitHub mark's edge. */
+  --stats-header-height: var(--nav-bar-height);
+}
+
 [data-page="stats"] [data-slot="header-bar"] {
   display: flex;
   align-items: center;
   gap: 16px;
-  min-height: 72px;
-  padding: 20px 20px 20px 24px;
-  overflow: hidden;
+  box-sizing: border-box;
+  height: var(--nav-bar-height);
+  padding: 0 var(--nav-end) 0 var(--nav-edge);
+  border-bottom: 1px solid var(--nav-rule);
+}
+
+[data-page="stats"] [data-component="product-lockup"] {
+  margin-inline-end: auto;
+}
+
+[data-page="stats"] [data-slot="github-mark"] {
+  --github-ink: var(--stats-text);
+  --github-page: var(--stats-bg);
+  --github-focus: var(--stats-accent);
+}
+
+/* Phones: the rule is drawn inside the 56px bar, as opencode.ai's top bar does, and the menu button's centre is where
+   the site's is (its 32px box 6px further in than the site's 44px one). */
+@media (max-width: 60rem) {
+  [data-page="stats"] [data-slot="header-bar"] {
+    border-bottom: 0;
+    box-shadow: inset 0 -1px 0 var(--nav-rule);
+  }
+
+  [data-page="stats"] [data-slot="menu-button"] {
+    margin-inline-end: 6px;
+  }
 }
 
 [data-page="stats"] [data-component="top"] a {
@@ -175,22 +280,6 @@ body {
 
 [data-page="stats"] [data-component="top"] a:hover {
   text-decoration: none;
-}
-
-[data-page="stats"] [data-slot="brand"] {
-  flex: 0 0 auto;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  margin-right: auto;
-  color: var(--stats-text);
-}
-
-[data-page="stats"] [data-slot="stats-wordmark"] {
-  display: block;
-  flex-shrink: 0;
-  width: 66px;
-  height: 20px;
 }
 
 [data-page="stats"] [data-component="section-nav"] {
@@ -279,23 +368,6 @@ body {
   white-space: nowrap;
 }
 
-[data-page="stats"] [data-slot="header-button"][data-variant="neutral"] {
-  display: none;
-  gap: 6px;
-  color: #161616;
-  background: #ffffff;
-  box-shadow:
-    0 0 0 0 #00000024,
-    0 0 0 0.5px #00000024,
-    0 1px 1.5px 0 #0000001a;
-}
-
-[data-page="stats"] [data-slot="header-button"][data-variant="neutral"] span {
-  color: #5c5c5c;
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
-}
-
 [data-page="stats"] [data-slot="header-button"][data-variant="contrast"] {
   gap: 8px;
   color: #ffffff;
@@ -323,15 +395,14 @@ body {
 [data-page="stats"] [data-slot="header-button"]:focus-visible,
 [data-page="stats"] [data-slot="menu-button"]:focus-visible,
 [data-page="stats"] [data-component="section-nav"] a:focus-visible,
-[data-page="stats"] [data-slot="mobile-menu-item"]:focus-visible,
-[data-page="stats"] [data-slot="brand"]:focus-visible {
+[data-page="stats"] [data-slot="mobile-menu-item"]:focus-visible {
   outline: 2px solid var(--stats-accent);
   outline-offset: 2px;
 }
 
 [data-page="stats"] [data-slot="mobile-menu"] {
   position: fixed;
-  top: 72px;
+  top: var(--stats-header-height);
   right: 0;
   bottom: 0;
   left: 0;
@@ -385,7 +456,7 @@ body {
   padding: 112px clamp(32px, 4vw, 48px) 24px;
   color: var(--stats-text);
   font-family:
-    "IBM Plex Mono",
+    "OpenTUI Mono", "OpenTUI Mono Menlo", "OpenTUI Mono Consolas", "OpenTUI Mono Courier",
     var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
   font-size: 11px;
 }
@@ -6330,7 +6401,7 @@ body {
 
 [data-page="stats"] [data-component="compare-detail-heading-scroll"] {
   position: sticky;
-  top: 72px;
+  top: var(--stats-header-height);
   z-index: 9;
   overflow-x: auto;
   overscroll-behavior-x: none;
@@ -7333,11 +7404,7 @@ body {
   background: #ffffff0d;
 }
 
-[data-page="stats"][data-theme="dark"] [data-slot="header-button"][data-variant="neutral"],
 [data-page="stats"][data-theme="dark"] [data-slot="menu-button"],
-:root[data-stats-theme="dark"]
-  [data-page="stats"]:not([data-theme="light"])
-  [data-slot="header-button"][data-variant="neutral"],
 :root[data-stats-theme="dark"] [data-page="stats"]:not([data-theme="light"]) [data-slot="menu-button"] {
   color: #fafafa;
   background: #ffffff0f;
@@ -7345,14 +7412,6 @@ body {
     0 -0.5px 0 0 #ffffff33,
     0 0 0 0.5px #ffffff33,
     0 1px 2px 0 #00000066;
-}
-
-[data-page="stats"][data-theme="dark"] [data-slot="header-button"][data-variant="neutral"] span,
-:root[data-stats-theme="dark"]
-  [data-page="stats"]:not([data-theme="light"])
-  [data-slot="header-button"][data-variant="neutral"]
-  span {
-  color: #aeaeae;
 }
 
 [data-page="stats"][data-theme="dark"] [data-slot="header-button"][data-variant="contrast"],
@@ -7479,9 +7538,6 @@ body {
     opacity: 0.78;
   }
 
-  :root:not([data-stats-theme="light"])
-    [data-page="stats"]:not([data-theme="light"])
-    [data-slot="header-button"][data-variant="neutral"],
   :root:not([data-stats-theme="light"]) [data-page="stats"]:not([data-theme="light"]) [data-slot="menu-button"] {
     color: #fafafa;
     background: #ffffff0f;
@@ -7489,13 +7545,6 @@ body {
       0 -0.5px 0 0 #ffffff33,
       0 0 0 0.5px #ffffff33,
       0 1px 2px 0 #00000066;
-  }
-
-  :root:not([data-stats-theme="light"])
-    [data-page="stats"]:not([data-theme="light"])
-    [data-slot="header-button"][data-variant="neutral"]
-    span {
-    color: #aeaeae;
   }
 
   :root:not([data-stats-theme="light"])
@@ -7537,12 +7586,6 @@ body {
   background: var(--stats-bg);
 }
 
-@media (min-width: 48rem) {
-  [data-page="stats"] [data-slot="header-button"][data-variant="neutral"] {
-    display: inline-flex;
-  }
-}
-
 @media (min-width: 90rem) {
   [data-page="stats"] [data-slot="header-bar"] {
     display: grid;
@@ -7550,14 +7593,14 @@ body {
     gap: 32px;
   }
 
-  [data-page="stats"] [data-slot="brand"],
+  [data-page="stats"] [data-component="product-lockup"],
   [data-page="stats"] [data-component="section-nav"],
   [data-page="stats"] [data-slot="header-actions"] {
     min-width: 0;
   }
 
-  [data-page="stats"] [data-slot="brand"] {
-    margin-right: 0;
+  [data-page="stats"] [data-component="product-lockup"] {
+    margin-inline-end: 0;
   }
 
   [data-page="stats"] [data-component="section-nav"] {
