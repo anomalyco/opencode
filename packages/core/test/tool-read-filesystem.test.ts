@@ -258,6 +258,21 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
+  it.effect("does not split a surrogate pair when truncating a long line", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = path.join(directory, "emoji.txt")
+      yield* files.writeFileString(file, `${"a".repeat(1_999)}😀tail`)
+
+      const result = yield* ReadToolFileSystem.read(environment, absolute(file), "emoji.txt", { limit: 1 })
+
+      expect(result).toMatchObject({
+        type: "text-page",
+        content: `${"a".repeat(1_999)}... (line truncated to 2000 chars)`,
+      })
+    }),
+  )
+
   it.effect("enforces line and byte budgets with continuation offsets", () =>
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
