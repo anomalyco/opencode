@@ -334,6 +334,16 @@ describe("Patch", () => {
     })
   })
 
+  test("matches canonically equivalent Unicode without rewriting untouched text", () => {
+    const nfc = "caf\u00e9"
+    const nfd = "cafe\u0301"
+    expect(Patch.derive("nfc.txt", [{ oldLines: [nfc], newLines: ["tea"] }], `${nfd}\n`).content).toBe("tea\n")
+    expect(Patch.derive("nfd.txt", [{ oldLines: [nfd], newLines: ["tea"] }], `${nfc}\n`).content).toBe("tea\n")
+    expect(
+      Patch.derive("keep.txt", [{ oldLines: [nfc], newLines: ["tea"] }], `${nfd}\nother ${nfd}\n`).content,
+    ).toBe(`tea\nother ${nfd}\n`)
+  })
+
   test("does not normalize ellipses", () => {
     expect(() => Patch.derive("ellipsis.txt", [{ oldLines: ["wait..."], newLines: ["done"] }], "wait…\n")).toThrow(
       "Failed to find expected lines",
