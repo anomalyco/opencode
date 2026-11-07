@@ -355,9 +355,9 @@ export const content = {
           title: "Todo cliente MCP",
           body: "OpenCode, Claude Code, Cursor, Codex, Zed y muchos más.",
         },
-        "named-sessions": {
-          title: "Sesiones con nombre",
-          body: "Cada sesión conserva sus pestañas, incluso tras reiniciar.",
+        "all-your-logins": {
+          title: "Todas tus sesiones iniciadas",
+          body: "Los agentes usan los sitios en los que ya has iniciado sesión. Sin claves, sin configuración.",
         },
         allowlists: {
           title: "Lista blanca",

@@ -380,9 +380,9 @@ export const content = {
           title: "Todo cliente MCP",
           body: "OpenCode, Claude Code, Cursor, Codex, Zed e muitos outros.",
         },
-        "named-sessions": {
-          title: "Sessões nomeadas",
-          body: "Cada sessão mantém suas abas, mesmo após reiniciar.",
+        "all-your-logins": {
+          title: "Todos os seus logins",
+          body: "Os agentes usam os sites em que você já está conectado. Sem chaves, sem configuração.",
         },
         allowlists: {
           title: "Lista de sites",

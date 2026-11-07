@@ -225,7 +225,10 @@ export const content = {
           title: "모든 MCP 클라이언트",
           body: "OpenCode, Claude Code, Cursor, Codex, Zed 등 다양한 클라이언트.",
         },
-        "named-sessions": { title: "이름 있는 세션", body: "각 세션은 재시작 후에도 자기 탭을 유지합니다." },
+        "all-your-logins": {
+          title: "모든 로그인 그대로",
+          body: "에이전트가 이미 로그인한 사이트를 그대로 사용합니다. 키도, 설정도 필요 없습니다.",
+        },
         allowlists: { title: "허용 목록", body: "세션의 탭을 지정한 사이트로만 제한하세요." },
       },
       install:

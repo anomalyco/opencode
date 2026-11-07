@@ -187,7 +187,10 @@ export const content = {
           title: "任意 MCP 客户端",
           body: "OpenCode、Claude Code、Cursor、Codex、Zed 等众多客户端。",
         },
-        "named-sessions": { title: "命名会话", body: "每个会话都保留自己的标签页，重启后依然存在。" },
+        "all-your-logins": {
+          title: "沿用你的所有登录",
+          body: "智能体直接使用你已登录的网站。无需密钥，无需设置。",
+        },
         allowlists: { title: "允许列表", body: "将会话的标签页限制在您指定的网站内。" },
       },
       install:
