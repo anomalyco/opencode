@@ -173,7 +173,6 @@ export const homeSections = [
   "byos",
   "tools",
   "openSource",
-  "faq",
   "console",
 ] as const
 export type HomeSection = (typeof homeSections)[number]
@@ -495,8 +494,10 @@ export const bannerLabels = ["badge", "plain"] as const
 // a sentence, a dense grid with the count, or a slow marquee.
 export const providerLogoStyles = ["none", "row", "inline", "grid", "marquee"] as const
 // "Bring your own subs": the providers' grid then the plans, your subscriptions beside the plans,
-// or tabs between the two.
-export const subsStyles = ["grid", "split", "tabs"] as const
+// or tabs between the two. A, B and C (byos-options.tsx) explore showing that OpenCode works with
+// nearly every subscription, provider and model: a ruled row per way in, a wall of every provider's
+// mark, or the names set as one run of text.
+export const subsStyles = ["grid", "split", "tabs", "A rows", "B wall", "C names"] as const
 // "Get started": a numbered path, a price ladder, one large sentence, a terminal transcript, or two
 // cells in the tools grid's borders.
 export const getStartedStyles = ["steps", "ladder", "sentence", "terminal", "cards"] as const
@@ -813,7 +814,7 @@ function createSchema() {
     ditherOpacity: z.number().min(10).max(100).catch(20),
     ditherCurve: z.number().min(1).max(4).catch(1),
     ditherLine: z.enum(toggles).catch("off"),
-    // The Console section between the FAQ and the footer on the home page.
+    // The Console section above the footer on the home page.
     consoleSection: z.enum(consoleSections).catch("panel"),
     consoleHeight: z.enum(consoleHeights).catch("compact"),
     consoleLabel: z.enum(consoleLabels).catch("left"),
@@ -1041,7 +1042,6 @@ function createSchema() {
     whatColumns: z.enum(sectionColumns).catch("2 columns"),
     toolsColumns: z.enum(sectionColumns).catch("2 columns"),
     openSourceColumns: z.enum(sectionColumns).catch("2 columns"),
-    faqColumns: z.enum(sectionColumns).catch("2 columns"),
     consoleColumns: z.enum(sectionColumns).catch("2 columns"),
     // The intro copy (lead or Console headline) beside the body columns above; the section body is
     // as wide as the wider of the two.

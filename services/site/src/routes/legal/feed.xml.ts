@@ -1,5 +1,5 @@
 import { config } from "~/config"
-import { legalFeedEntries } from "~/lib/legal"
+import { legalFeedEntries } from "~/lib/legal-documents"
 
 /**
  * Changes to the published legal documents as RSS 2.0 (it was Atom at first; the URL stays, and

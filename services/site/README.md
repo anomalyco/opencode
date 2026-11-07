@@ -48,7 +48,13 @@ dev.opencode.ai, `opencode-site-production` on opencode.ai), its bindings and it
 pushes to `dev` and `production` (`.github/workflows/deploy-site.yml`). Production takes no routes until
 `productionOwnsRoot` is switched on.
 
-The V2 docs at `/v2` are part of this app (`src/docs/`, see `src/docs/AGENTS.md`). `script/build.ts` prerenders
-them into the Worker's assets after `vite build`.
+Each build also carries the hashed scripts and stylesheets of the last 20 builds it replaces (for up to a
+week), downloaded from the live site's `/_build/retained.json`, so pages already open keep loading their
+code after a deploy (`script/retain-assets.ts`). A rollback in the Cloudflare dashboard restores the older
+version's assets only, so tabs opened on the rolled-back build reload once.
+
+The V2 docs at `/docs` are part of this app (`src/docs/`, see `src/docs/AGENTS.md`). `script/build.ts` prerenders
+them into the Worker's assets after `vite build`. A `/docs` URL without a V2 page redirects to the V1 docs app on
+docs.opencode.ai.
 
 ## This project was created with the [Solid CLI](https://github.com/solidjs-community/solid-cli)

@@ -26,15 +26,25 @@ const buildLabels: Record<string, string> = {
   "darwin-aarch64-dmg": "macOS (Apple Silicon)",
   "darwin-x64-dmg": "macOS (Intel)",
   "windows-x64-nsis": "Windows (x64)",
-  "linux-x64-deb": "Linux (.deb)",
-  "linux-x64-rpm": "Linux (.rpm)",
+  "windows-aarch64-nsis": "Windows (ARM64)",
+  "linux-x64-deb": "Linux (.deb, x64)",
+  "linux-aarch64-deb": "Linux (.deb, ARM64)",
+  "linux-x64-rpm": "Linux (.rpm, x64)",
+  "linux-aarch64-rpm": "Linux (.rpm, ARM64)",
+  "linux-x64-appimage": "Linux (AppImage, x64)",
+  "linux-aarch64-appimage": "Linux (AppImage, ARM64)",
 }
 const buildIds: Record<string, string> = {
   "darwin-aarch64-dmg": "mac-arm",
   "darwin-x64-dmg": "mac-intel",
   "windows-x64-nsis": "windows",
+  "windows-aarch64-nsis": "windows-arm",
   "linux-x64-deb": "deb",
+  "linux-aarch64-deb": "deb-arm",
   "linux-x64-rpm": "rpm",
+  "linux-aarch64-rpm": "rpm-arm",
+  "linux-x64-appimage": "appimage",
+  "linux-aarch64-appimage": "appimage-arm",
 }
 const liteQuitKey = "opencode-lite-quit"
 const docsTopics = [...docsPages, ...docsConfigure, ...docsProducts.filter((item) => item.label !== "V1")]

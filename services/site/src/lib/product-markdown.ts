@@ -1,4 +1,4 @@
-import { anomalyProducts } from "~/component/site/links"
+import { anomalyApps, anomalyProducts } from "~/component/site/links"
 import { extensionPages, type ExtensionSlug } from "~/component/site/extension-data"
 import {
   acpDocs,
@@ -32,9 +32,10 @@ export function productMarkdown(slug: PageSlug) {
     return blocks(
       `# ${product.name}`,
       productDetails[slug].intro,
-      // The clips the page shows: the first three, and a fourth once its footage exists.
+      // The clips the page shows: the first three, and a fourth once its footage exists or when it
+      // has no clip at all (a row whose clip is still to come).
       ...productDetails[slug].showcase
-        .filter((row, index) => index < 3 || fourthClips.includes(row.clip?.split("/").pop() ?? ""))
+        .filter((row, index) => index < 3 || !row.clip || fourthClips.includes(row.clip.split("/").pop() ?? ""))
         .map((row) => blocks(`## ${row.title}`, row.body).trimEnd()),
       ...(productDetails[slug].features.length > 0
         ? [
@@ -43,9 +44,9 @@ export function productMarkdown(slug: PageSlug) {
           ]
         : []),
       productDownloadMarkdown(slug, context),
+      `## ${context.t("site.companions")}`,
+      anomalyApps.map((app) => `- ${appMarkdown(app, context)}: ${app.body}`).join("\n"),
       ...(areas ? changelogBlocks(product.name, areas, context) : []),
-      "## More from Anomaly",
-      anomalyProducts.map((app) => `- ${link(app.name, app.href)}: ${app.body}`).join("\n"),
     )
   }
 }
@@ -53,7 +54,7 @@ export function productMarkdown(slug: PageSlug) {
 /** The /product hero subtitle; Design mode offers alternatives ("products.hero.body"). */
 export const productsSubtitle = english["product.hero.subtitle"]
 
-/** The /product page as Markdown: every product with a page, then Anomaly's other products. */
+/** The /product page as Markdown: every product with a page, then more products from Anomaly. */
 export function productsMarkdown(context: MarkdownContext) {
   return blocks(
     "# Product",
@@ -61,10 +62,21 @@ export function productsMarkdown(context: MarkdownContext) {
     productPages
       .map((product) => `- ${link(product.name, context.route(`/${product.slug}`))}: ${product.body}`)
       .join("\n"),
-    ...(extensionPages.length > 0
+    "## More products",
+    [
+      ...extensionPages
+        .filter((extension) => extension.product)
+        .map((extension) => `- ${link(extension.name, context.route(`/product/${extension.slug}`))}: ${extension.body}`),
+      // Browse is listed above with its own page.
+      ...anomalyProducts
+        .filter((app) => !extensionPages.some((extension) => extension.product && extension.slug === app.id))
+        .map((app) => `- ${appMarkdown(app, context)}: ${app.body}`),
+    ].join("\n"),
+    ...(extensionPages.some((extension) => !extension.product)
       ? [
           "## Extensions",
           extensionPages
+            .filter((extension) => !extension.product)
             .map(
               (extension) =>
                 `- ${link(extension.name, context.route(`/extensions/${extension.slug}`))}: ${extension.body}`,
@@ -72,15 +84,10 @@ export function productsMarkdown(context: MarkdownContext) {
             .join("\n"),
         ]
       : []),
-    // The download page's sections, as at the bottom of the page (without its hero or the apps), with
-    // More from Anomaly right above the FAQ.
+    // The download page's sections, as at the bottom of the page (without its hero or the apps).
     downloadSectionsMarkdown(context, {
       apps: false,
       editors: false,
-      beforeFaq: blocks(
-        "## More from Anomaly",
-        anomalyProducts.map((app) => `- ${link(app.name, app.href)}: ${app.body}`).join("\n"),
-      ).trimEnd(),
     }).trimEnd(),
   )
 }
@@ -134,7 +141,7 @@ export function productActionMarkdown(slug: PageSlug, context: MarkdownContext) 
 
 /** An extension's page as Markdown: what it does, its features, how to install it and its source. */
 export function extensionMarkdown(slug: ExtensionSlug) {
-  return () => {
+  return (context: MarkdownContext) => {
     const extension = extensionPages.find((item) => item.slug === slug)!
     return blocks(
       `# ${extension.name}`,
@@ -142,11 +149,23 @@ export function extensionMarkdown(slug: ExtensionSlug) {
       "## Features",
       extension.features.map((feature) => `- **${feature.title}:** ${feature.body}`).join("\n"),
       "## Install",
-      extension.install.lead,
+      extension.store && `Add to Chrome from the ${link("Chrome Web Store", extension.store)}.`,
+      extension.store
+        ? extension.install.lead.replace(/\[([^\]]+)\]/g, (_, text) => link(text, extension.store!))
+        : extension.install.lead.replace(/\[([^\]]+)\]/g, "$1"),
       extension.install.command && codeFence("bash", extension.install.command),
+      extension.install.commands && codeFence("bash", extension.install.commands.map((item) => item.command).join("\n")),
       `Source: ${link(extension.source.replace("https://", ""), extension.source)}`,
       "## More from Anomaly",
-      anomalyProducts.map((app) => `- ${link(app.name, app.href)}: ${app.body}`).join("\n"),
+      anomalyProducts
+        .filter((app) => app.id !== slug)
+        .map((app) => `- ${appMarkdown(app, context)}: ${app.body}`)
+        .join("\n"),
     )
   }
+}
+
+/** An app's name linked to its page, on this site in the reader's language or on its own site. */
+function appMarkdown(app: { name: string; href: string }, context: MarkdownContext) {
+  return link(app.name, app.href.startsWith("/") ? context.route(app.href) : app.href)
 }

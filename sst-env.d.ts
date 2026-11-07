@@ -11,10 +11,6 @@ declare module "sst" {
       "value": string
     }
     "Api": import("@cloudflare/workers-types").Service
-    "EMAILOCTOPUS_API_KEY": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
     "GITHUB_APP_ID": {
       "type": "sst.sst.Secret"
       "value": string

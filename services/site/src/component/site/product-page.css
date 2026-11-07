@@ -275,14 +275,11 @@
       }
     }
 
-    /* The intro has room below it, so the menu opens downward from the right edge. */
+    /* The menu opens from the right edge. */
     [data-slot="menu"] {
       inset-inline-start: auto;
       inset-inline-end: 0;
-      top: calc(100% + 0.5rem);
-      bottom: auto;
       transform-origin: top var(--x-end, right);
-      --menu-shift: -4px;
     }
 
     /* The exposed install commands need two columns: the copy takes the first two. */
@@ -503,6 +500,27 @@
       /* The first frame shown at rest; the video plays under it on hover. */
       [data-slot="still"][data-hidden] {
         opacity: 0;
+      }
+
+      /* A row with no footage yet: the logo mark, dimmed, in the middle of the black frame. */
+      [data-slot="placeholder"] {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+
+        svg {
+          width: 2.5rem;
+          height: auto;
+        }
+
+        [data-slot="code"] {
+          fill: rgb(255 255 255 / 0.16);
+        }
+
+        [data-slot="inner"] {
+          fill: rgb(255 255 255 / 0.06);
+        }
       }
     }
 

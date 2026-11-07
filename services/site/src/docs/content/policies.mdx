@@ -315,12 +315,12 @@ Blocked by Acme's policy
 
 Statements follow the connected account.
 
-| Event                       | Result                                                                                                     |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Console policy changes      | Applied on the next fetch: about once a minute, or when a prompt starts over a minute after the last fetch |
-| Switch to another workspace | Statements replaced with that workspace's                                                                  |
-| Disconnect                  | Statements cleared                                                                                         |
-| Console unreachable         | Last statements for that connection stay in effect                                                         |
+| Event                       | Result                                             |
+| --------------------------- | -------------------------------------------------- |
+| Console policy changes      | Applied on the next fetch, about once a minute     |
+| Switch to another workspace | Statements replaced with that workspace's          |
+| Disconnect                  | Statements cleared                                 |
+| Console unreachable         | Last statements for that connection stay in effect |
 
 The Console plugin and the policy plugin cannot be disabled from `plugins`; see
 [plugin control](/plugins#control).

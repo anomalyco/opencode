@@ -95,11 +95,11 @@ brew install --cask opencode-desktop
 Также включен сабагент **general** для сложных поисков и многошаговых задач.
 Он используется внутренне и может быть вызван в сообщениях через `@general`.
 
-Подробнее об [agents](https://opencode.ai/v2/docs/agents).
+Подробнее об [agents](https://opencode.ai/docs/agents).
 
 ### Документация
 
-Больше информации о том, как настроить OpenCode: [**наши docs**](https://opencode.ai/v2/docs).
+Больше информации о том, как настроить OpenCode: [**наши docs**](https://opencode.ai/docs).
 
 ### Вклад
 

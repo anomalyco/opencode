@@ -235,7 +235,7 @@ export const themeScript = (settings: boolean) =>
  * The site root's settings attributes with the default settings, the only values production
  * renders (Settings and Design mode are development tools): `null` for an attribute it leaves off.
  * script/css-variants.ts writes them to css-variants.json, from which the production build drops the
- * CSS for every other value (vite.config.ts); test/css-variants.test.ts keeps the file current.
+ * CSS for every other value (script/css-variants-plugin.ts); test/css-variants.test.ts keeps the file current.
  */
 export function defaultRootAttributes() {
   // The root as production renders it: every settings attribute present, docs variants not fixed.

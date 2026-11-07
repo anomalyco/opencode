@@ -1,5 +1,4 @@
 import { config } from "~/config"
-import type { RichText } from "~/lib/markdown"
 
 // Structured data (https://schema.org) for search engines, one JSON-LD script per type.
 
@@ -90,24 +89,6 @@ export function breadcrumbData(items: { name: string; path: string }[]) {
       position: index + 1,
       name: item.name,
       item: `${config.baseUrl}${item.path}`,
-    })),
-  }
-}
-
-/** The FAQ as plain text: link runs keep their text. */
-export function faqData(items: { question: string; answer: RichText }[]) {
-  return {
-    "@type": "FAQPage",
-    mainEntity: items.map((item) => ({
-      "@type": "Question",
-      name: item.question,
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: item.answer
-          .map((run) => (typeof run === "string" ? run : "code" in run ? run.code : run.text))
-          .join("")
-          .trim(),
-      },
     })),
   }
 }

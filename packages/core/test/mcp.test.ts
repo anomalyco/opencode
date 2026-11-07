@@ -370,7 +370,6 @@ function resourceMcpLayer(
 ) {
   const directory = AbsolutePath.make(overrides?.directory ?? import.meta.dir)
   const unusedIntegration = () => Effect.die("unused integration service")
-  const entries = overrides?.entries
   return Layer.effectDiscard(
     Effect.gen(function* () {
       const bus = yield* Bus.Service
@@ -388,10 +387,13 @@ function resourceMcpLayer(
     Layer.provide(
       Layer.mergeAll(
         overrides?.pool ?? poolLayer,
-        entries
+        overrides?.entries
           ? Layer.succeed(
               Config.Service,
-              Config.Service.of({ entries, snapshot: () => Effect.runSync(entries()), changes: () => Stream.never }),
+              Config.Service.of({
+                entries: overrides.entries,
+                changes: () => Stream.never,
+              }),
             )
           : Config.testLayer([
               new Document({
@@ -1553,7 +1555,9 @@ test("acknowledges completed MCP URL elicitations without returning internal con
           const result = yield* Fiber.join(call)
           expect(yield* forms.state(form.id)).toEqual({ status: "answered", answer: { elicitation: true } })
           return result
-        }).pipe(Effect.provide(resourceMcpLayer(server.url, (form) => recordForm(created, form))))
+        }).pipe(
+          Effect.provide(resourceMcpLayer(server.url, (form) => recordForm(created, form))),
+        )
 
         expect(result.structured).toEqual({ action: "accept" })
       }),
@@ -1574,12 +1578,10 @@ test("cancels MCP elicitation forms when the server gives up on them", async () 
           const { form } = yield* Deferred.await(created)
           yield* Fiber.await(call)
           // The server's cancellation and its tool error race; the form settles shortly after either.
-          const state = yield* forms
-            .state(form.id)
-            .pipe(
-              Effect.repeat({ until: (state) => state.status !== "pending", schedule: Schedule.spaced("10 millis") }),
-              Effect.timeout("2 seconds"),
-            )
+          const state = yield* forms.state(form.id).pipe(
+            Effect.repeat({ until: (state) => state.status !== "pending", schedule: Schedule.spaced("10 millis") }),
+            Effect.timeout("2 seconds"),
+          )
           expect(state.status).toBe("cancelled")
         }).pipe(Effect.provide(resourceMcpLayer(server.url, (form) => recordForm(created, form))))
       }),
@@ -3179,81 +3181,85 @@ for (const modern of [false, true]) {
 }
 
 for (const source of ["config", "organization"] as const) {
-  testEffect(Config.testLayer()).live(`revokes and restores a connected MCP through ${source} policy`, () =>
-    Effect.gen(function* () {
-      const server = yield* resourceServer()
-      const config = yield* Config.Service
-      const test = yield* Config.Test
-      const updates = yield* PubSub.unbounded<{ readonly type: string }>()
-      const document = (effect: ConfigPolicy.Effect) =>
-        new Document({
-          type: "document",
-          info: new Info({
-            mcp: new ConfigMCP.Info({
-              servers: { resources: new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }) },
+  testEffect(Config.testLayer()).live(
+    `revokes and restores a connected MCP through ${source} policy`,
+    () =>
+      Effect.gen(function* () {
+        const server = yield* resourceServer()
+        const config = yield* Config.Service
+        const test = yield* Config.Test
+        const updates = yield* PubSub.unbounded<{ readonly type: string }>()
+        const document = (effect: ConfigPolicy.Effect) =>
+          new Document({
+            type: "document",
+            info: new Info({
+              mcp: new ConfigMCP.Info({
+                servers: { resources: new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }) },
+              }),
+              policies: [{ action: "mcp.use", resource: "*", effect }],
             }),
-            policies: [{ action: "mcp.use", resource: "*", effect }],
-          }),
-        })
-      yield* test.setEntries([document("allow")])
-      yield* Effect.gen(function* () {
-        const service = yield* Mcp.Service
-        expect(yield* settled(service)).toEqual({ status: "connected" })
-        expect((yield* service.tools()).length).toBeGreaterThan(0)
-        if (source === "config") yield* test.setEntries([document("deny")])
-        if (source === "organization")
-          yield* setOrganizationPolicy([{ action: "mcp.use", resource: "*", effect: "deny" }])
-        yield* PubSub.publish(updates, { type: Event.Updated.type })
-        yield* service.servers().pipe(
-          Effect.filterOrFail(
-            (servers) => servers.length === 0,
-            () => new Error("MCP policy was not applied"),
+          })
+        yield* test.setEntries([document("allow")])
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          expect(yield* settled(service)).toEqual({ status: "connected" })
+          expect((yield* service.tools()).length).toBeGreaterThan(0)
+          if (source === "config") yield* test.setEntries([document("deny")])
+          if (source === "organization")
+            yield* setOrganizationPolicy([{ action: "mcp.use", resource: "*", effect: "deny" }])
+          yield* PubSub.publish(updates, { type: Event.Updated.type })
+          yield* service.servers().pipe(
+            Effect.filterOrFail(
+              (servers) => servers.length === 0,
+              () => new Error("MCP policy was not applied"),
+            ),
+            Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
+          )
+          expect(yield* service.servers()).toEqual([])
+          expect(yield* service.tools()).toEqual([])
+          expect(yield* service.instructions()).toEqual([])
+          expect(yield* service.prompts()).toEqual([])
+          expect(yield* service.resourceCatalog()).toEqual({ resources: [], templates: [] })
+          expect(Exit.isFailure(yield* service.resources({ server: "resources" }).pipe(Effect.exit))).toBe(true)
+          expect(Exit.isFailure(yield* service.prompt({ server: "resources", name: "greet" }).pipe(Effect.exit))).toBe(
+            true,
+          )
+          expect(
+            Exit.isFailure(
+              yield* service.readResource({ server: "resources", uri: "docs://readme" }).pipe(Effect.exit),
+            ),
+          ).toBe(true)
+          expect(Exit.isFailure(yield* service.connect("resources").pipe(Effect.exit))).toBe(true)
+          expect(Exit.isFailure(yield* service.callTool({ server: "resources", name: "echo" }).pipe(Effect.exit))).toBe(
+            true,
+          )
+          expect(server.state.toolCalls).toEqual([])
+          expect(server.state.resourceReads).toEqual([])
+          yield* Effect.promise(server.restart)
+          if (source === "config") yield* test.setEntries([document("allow")])
+          if (source === "organization") yield* setOrganizationPolicy(undefined)
+          yield* PubSub.publish(updates, { type: Event.Updated.type })
+          yield* service.servers().pipe(
+            Effect.filterOrFail(
+              (servers) => servers.some((server) => server.status.status === "connected"),
+              () => new Error("MCP policy was not restored"),
+            ),
+            Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
+          )
+          expect(yield* settled(service)).toEqual({ status: "connected" })
+          expect((yield* service.tools()).length).toBeGreaterThan(0)
+        }).pipe(
+          Effect.provide(
+            resourceMcpLayer(server.url, undefined, undefined, {
+              entries: config.entries,
+              subscribe: ((definition?: { readonly type: string }) =>
+                Stream.fromPubSub(updates).pipe(
+                  Stream.filter((event) => !definition || event.type === definition.type),
+                )) as Bus.Interface["subscribe"],
+            }),
           ),
-          Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
         )
-        expect(yield* service.servers()).toEqual([])
-        expect(yield* service.tools()).toEqual([])
-        expect(yield* service.instructions()).toEqual([])
-        expect(yield* service.prompts()).toEqual([])
-        expect(yield* service.resourceCatalog()).toEqual({ resources: [], templates: [] })
-        expect(Exit.isFailure(yield* service.resources({ server: "resources" }).pipe(Effect.exit))).toBe(true)
-        expect(Exit.isFailure(yield* service.prompt({ server: "resources", name: "greet" }).pipe(Effect.exit))).toBe(
-          true,
-        )
-        expect(
-          Exit.isFailure(yield* service.readResource({ server: "resources", uri: "docs://readme" }).pipe(Effect.exit)),
-        ).toBe(true)
-        expect(Exit.isFailure(yield* service.connect("resources").pipe(Effect.exit))).toBe(true)
-        expect(Exit.isFailure(yield* service.callTool({ server: "resources", name: "echo" }).pipe(Effect.exit))).toBe(
-          true,
-        )
-        expect(server.state.toolCalls).toEqual([])
-        expect(server.state.resourceReads).toEqual([])
-        yield* Effect.promise(server.restart)
-        if (source === "config") yield* test.setEntries([document("allow")])
-        if (source === "organization") yield* setOrganizationPolicy(undefined)
-        yield* PubSub.publish(updates, { type: Event.Updated.type })
-        yield* service.servers().pipe(
-          Effect.filterOrFail(
-            (servers) => servers.some((server) => server.status.status === "connected"),
-            () => new Error("MCP policy was not restored"),
-          ),
-          Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
-        )
-        expect(yield* settled(service)).toEqual({ status: "connected" })
-        expect((yield* service.tools()).length).toBeGreaterThan(0)
-      }).pipe(
-        Effect.provide(
-          resourceMcpLayer(server.url, undefined, undefined, {
-            entries: config.entries,
-            subscribe: ((definition?: { readonly type: string }) =>
-              Stream.fromPubSub(updates).pipe(
-                Stream.filter((event) => !definition || event.type === definition.type),
-              )) as Bus.Interface["subscribe"],
-          }),
-        ),
-      )
-    }),
+      }),
   )
 }
 
