@@ -105,7 +105,11 @@ const jsonSchema = (schema: JsonSchema.JsonSchema) => {
     (typeof schema.$schema === "string" && schema.$schema.includes("draft-07")) || "definitions" in schema
       ? JsonSchema.fromSchemaDraft07(schema)
       : JsonSchema.fromSchemaDraft2020_12(schema)
-  return Schema.make<Schema.Codec<unknown>>(SchemaRepresentation.fromJsonSchemaDocument(draft).ast)
+  // A pattern makes the import throw by default, and a schema that can't be imported isn't validated at all.
+  // Skip patterns rather than apply them: plugin and MCP schemas are untrusted, and their regexes could ReDoS.
+  return Schema.make<Schema.Codec<unknown>>(
+    SchemaRepresentation.fromJsonSchemaDocument(draft, { patterns: "ignore" }).ast,
+  )
 }
 
 const encodeOutput = (schema: Tool.ValueSchema<any>, value: unknown) => {
