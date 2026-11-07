@@ -344,16 +344,14 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: SessionInbox.User }),
-        error: [ConflictError, InvalidRequestError, SessionNotFoundError],
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "session.prompt",
-            summary: "Send message",
-            description: "Durably admit one session input and schedule agent-loop execution unless resume is false.",
-          }),
-        ),
+        error: [ConflictError, InvalidRequestError, SessionNotFoundError, LocationNotFoundError],
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "session.prompt",
+          summary: "Send message",
+          description: "Durably admit one session input and schedule agent-loop execution unless resume is false.",
+        }),
+      ),
     )
     .add(
       HttpApiEndpoint.post("session.command", "/api/session/:sessionID/command", {
@@ -364,16 +362,20 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           delivery: SessionInbox.Delivery.pipe(Schema.optional),
         }),
         success: HttpApiSchema.NoContent,
-        error: [SessionNotFoundError, CommandNotFoundError, CommandExecutionError],
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "session.command",
-            summary: "Run command",
-            description: "Execute a slash command callback immediately.",
-          }),
-        ),
+        error: [
+          InvalidRequestError,
+          SessionNotFoundError,
+          CommandNotFoundError,
+          CommandExecutionError,
+          LocationNotFoundError,
+        ],
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "session.command",
+          summary: "Run command",
+          description: "Execute a slash command callback immediately.",
+        }),
+      ),
     )
     .add(
       HttpApiEndpoint.post("session.skill", "/api/experimental/session/:sessionID/skill", {
@@ -383,16 +385,14 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
         success: HttpApiSchema.NoContent,
-        error: [SessionNotFoundError, SkillNotFoundError],
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "experimental.session.skill",
-            summary: "Activate skill",
-            description: "Activate a skill for a session by appending a skill message and resuming execution.",
-          }),
-        ),
+        error: [InvalidRequestError, SessionNotFoundError, SkillNotFoundError, LocationNotFoundError],
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "experimental.session.skill",
+          summary: "Activate skill",
+          description: "Activate a skill for a session by appending a skill message and resuming execution.",
+        }),
+      ),
     )
     .add(
       HttpApiEndpoint.post("session.synthetic", "/api/session/:sessionID/synthetic", {
@@ -423,17 +423,15 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           command: Schema.String,
         }),
         success: HttpApiSchema.NoContent,
-        error: SessionNotFoundError,
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "session.shell",
-            summary: "Run shell command",
-            description:
-              "Execute one shell command in the session's working directory. Emits a shell.started event before execution and a shell.ended event with the merged output after.",
-          }),
-        ),
+        error: [InvalidRequestError, SessionNotFoundError, LocationNotFoundError],
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "session.shell",
+          summary: "Run shell command",
+          description:
+            "Execute one shell command in the session's working directory. Emits a shell.started event before execution and a shell.ended event with the merged output after.",
+        }),
+      ),
     )
     .add(
       HttpApiEndpoint.post("session.compact", "/api/session/:sessionID/compact", {

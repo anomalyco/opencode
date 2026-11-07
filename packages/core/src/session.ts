@@ -478,7 +478,8 @@ const layer = Layer.effect(
               Bus.isSynced(item) || isDurableSessionEvent(item),
           ),
         ),
-      prompt: (input) => sessions.forSession(input.sessionID).prompt(input),
+      prompt: (input) =>
+        moves.revive(input.sessionID).pipe(Effect.andThen(sessions.forSession(input.sessionID).prompt(input))),
       generate: Effect.fn("Session.generate")(function* (input) {
         const session = yield* result.get(input.sessionID)
         return yield* SessionGenerate.generate({ session, prompt: input.prompt }).pipe(
@@ -488,13 +489,16 @@ const layer = Layer.effect(
         )
       }),
       command: Effect.fn("Session.command")(function* (input) {
+        yield* moves.revive(input.sessionID)
         const session = yield* result.get(input.sessionID)
         return yield* SessionCommand.execute({ ...input, session }).pipe(
           Effect.provideService(Instance.Service, instances),
         )
       }),
-      shell: (input) => sessions.forSession(input.sessionID).shell(input),
-      skill: (input) => sessions.forSession(input.sessionID).skill(input),
+      shell: (input) =>
+        moves.revive(input.sessionID).pipe(Effect.andThen(sessions.forSession(input.sessionID).shell(input))),
+      skill: (input) =>
+        moves.revive(input.sessionID).pipe(Effect.andThen(sessions.forSession(input.sessionID).skill(input))),
       switchAgent: (input) => sessions.forSession(input.sessionID).switchAgent(input),
       switchModel: (input) => sessions.forSession(input.sessionID).switchModel(input),
       rename: (input) => sessions.forSession(input.sessionID).rename(input),
@@ -503,7 +507,8 @@ const layer = Layer.effect(
       setMetadata: (input) => sessions.forSession(input.sessionID).setMetadata(input),
       setPermissions: (input) => sessions.forSession(input.sessionID).setPermissions(input),
       move: moves.move,
-      compact: (input) => sessions.forSession(input.sessionID).compact(input),
+      compact: (input) =>
+        moves.revive(input.sessionID).pipe(Effect.andThen(sessions.forSession(input.sessionID).compact(input))),
       wait: (sessionID) => sessions.forSession(sessionID).wait(),
       active: execution.active,
       background: Effect.fn("Session.background")(function* (sessionID) {
@@ -524,7 +529,7 @@ const layer = Layer.effect(
           })
           .pipe(Effect.catchTag("Session.SyntheticConflictError", Effect.die))
       }),
-      resume: (sessionID) => sessions.forSession(sessionID).resume(),
+      resume: (sessionID) => moves.revive(sessionID).pipe(Effect.andThen(sessions.forSession(sessionID).resume())),
       synthetic: (input) => sessions.forSession(input.sessionID).synthetic(input),
       interrupt: (sessionID, options) => sessions.forSession(sessionID).interrupt(options),
       revert: {
