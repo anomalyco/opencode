@@ -316,6 +316,27 @@ it.live("method detection keeps global package probes out of the project directo
   }),
 )
 
+it.live("upgrade and removal commands disable corepack auto-pin", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture()
+    yield* test.updater.upgrade("pnpm", "v2.3.4-beta.1")
+    const removal = test.updater.removal("pnpm")
+    if (!removal) return yield* Effect.die("Expected pnpm removal command")
+    yield* removal.run
+    expect(test.commands).toEqual([
+      ["pnpm", "add", "--global", "--allow-build=@opencode/cli", "@opencode/cli@2.3.4-beta.1"],
+      ["pnpm", "remove", "--global", "@opencode/cli"],
+    ])
+    expect(test.probes).toHaveLength(2)
+    for (const probe of test.probes) {
+      expect(probe.autoPin).toBe("0")
+      expect(probe.extendEnv).toBe(true)
+      // Installs keep the project cwd so .npmrc/.yarnrc/bunfig.toml still resolve.
+      expect(probe.cwd).toBeUndefined()
+    }
+  }),
+)
+
 it.live("method detection tolerates unavailable package managers", () =>
   Effect.gen(function* () {
     const test = yield* fixture((command) =>

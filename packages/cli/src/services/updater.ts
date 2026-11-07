@@ -215,6 +215,12 @@ const make = Effect.gen(function* () {
     )
   })
 
+  // corepack shims auto-pin `packageManager` into the nearest package.json when they start
+  // inside a project (#62246). Every package-manager command disables that. Install and
+  // removal commands keep the project cwd so project-level .npmrc/.yarnrc/bunfig.toml
+  // still resolve; the read-only detection probes need no project context and run from tmp.
+  const noAutoPin = { env: { COREPACK_ENABLE_AUTO_PIN: "0" }, extendEnv: true }
+
   const method = Effect.fnUntraced(function* () {
     if (executable === curlBinary) return "curl"
     if (installedFormula) return "brew"
@@ -230,17 +236,10 @@ const make = Effect.gen(function* () {
       { method: "vp", command: ["vp", "list", "-g", "--json", installedPackage] },
     ]
     checks.sort((a, b) => Number(parts.includes(b.method)) - Number(parts.includes(a.method)))
-    // These queries only inspect global installs, so they do not need the project directory. Running a
-    // corepack shim from one makes it auto-pin `packageManager` into the project's package.json (#62246).
-    const options = {
-      cwd: global.tmp,
-      env: { COREPACK_ENABLE_AUTO_PIN: "0" },
-      extendEnv: true,
-    }
     const results = yield* Effect.forEach(
       checks,
       (check) =>
-        exec(check.command, "30 seconds", options).pipe(
+        exec(check.command, "30 seconds", { ...noAutoPin, cwd: global.tmp }).pipe(
           Effect.orElseSucceed(() => ({ code: 1, stdout: "", stderr: "" })),
           Effect.map((result) => ({ check, result })),
         ),
@@ -275,7 +274,7 @@ const make = Effect.gen(function* () {
       command,
       run: retaining(
         method,
-        exec(command, "5 minutes").pipe(
+        exec(command, "5 minutes", noAutoPin).pipe(
           Effect.flatMap((result) => (result.code === 0 ? Effect.void : Effect.fail(new Error(resultDetail(result))))),
         ),
         global.tmp,
@@ -416,7 +415,7 @@ const make = Effect.gen(function* () {
         },
         cause === undefined ? undefined : { cause },
       )
-    return exec(input.command, "5 minutes").pipe(
+    return exec(input.command, "5 minutes", noAutoPin).pipe(
       Effect.flatMap((result) =>
         result.code === 0 ? Effect.succeed(result) : Effect.fail(failure(resultDetail(result))),
       ),
