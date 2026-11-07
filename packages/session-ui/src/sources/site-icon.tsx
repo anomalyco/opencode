@@ -1,6 +1,5 @@
 import { createSignal, Show } from "solid-js"
 import type { SiteIconMode } from "./experiment"
-import "./sources.css"
 
 // The project avatar colours, so a site's tile reads like the rest of the app's letter tiles in light and dark.
 const colors = ["orange", "yellow", "cyan", "green", "red", "pink", "blue", "purple"]

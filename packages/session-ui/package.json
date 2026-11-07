@@ -45,7 +45,6 @@
     "./sources/experiment": "./src/sources/experiment.ts",
     "./sources/panel": "./src/sources/sources-panel.tsx",
     "./sources/title": "./src/sources/sources-title.tsx",
-    "./sources/site-icon": "./src/sources/site-icon.tsx",
     "./styles": "./src/styles/index.css",
     "./storybook": "./src/storybook/index.ts",
     "./tools/ansi": "./src/tools/ansi.ts",
