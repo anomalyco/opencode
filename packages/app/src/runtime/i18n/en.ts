@@ -1067,6 +1067,9 @@ export const dict = {
   "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
   "settings.general.row.spellcheck.title": "Spellcheck",
   "settings.general.row.spellcheck.description": "Underline misspelled words while typing",
+  "settings.general.row.keepServiceRunning.title": "Keep server running after quit",
+  "settings.general.row.keepServiceRunning.description":
+    "Agents, terminals, and MCP servers keep working after you quit. Turning this off also stops sessions started from the CLI",
 
   "sound.option.none": "None",
   "sound.option.alert01": "Alert 01",
