@@ -31,9 +31,11 @@ const sourceAssets = Effect.fnUntraced(function* () {
     (yield* Effect.forEach(
       files.filter((file) => !file.endsWith(".map")),
       Effect.fnUntraced(function* (file) {
-        const target = path.join(root, file)
+        // Recursive directory reads use the platform separator; asset keys are URL paths, so normalize to "/".
+        const name = file.replaceAll("\\", "/")
+        const target = path.join(root, name)
         if ((yield* fs.stat(target)).type === "Directory") return
-        return [file, target] as const
+        return [name, target] as const
       }),
       { concurrency: "unbounded" },
     )).filter((asset) => asset !== undefined),
