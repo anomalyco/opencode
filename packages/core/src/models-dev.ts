@@ -550,6 +550,7 @@ export const layer = (options?: Options) =>
       const metaKey = `${key}:meta`
       const ttl = Duration.minutes(5)
       const lock = Semaphore.makeUnsafe(1)
+      const refreshLock = Semaphore.makeUnsafe(1)
       // The v1 catalog was cached under unversioned keys; free that multi-MB row.
       yield* kv.remove(key.replace("models-dev:v2:", "models-dev:"))
       yield* kv.remove(`${key.replace("models-dev:v2:", "models-dev:")}:meta`)
@@ -658,31 +659,46 @@ export const layer = (options?: Options) =>
       const get = (): Effect.Effect<readonly Snapshot[]> => cachedGet
 
       const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
-        yield* lock
+        yield* refreshLock
           .withPermit(
             Effect.gen(function* () {
-              const stored = Option.getOrUndefined(
-                Schema.decodeUnknownOption(CacheMeta)((yield* kv.get(metaKey)) ?? (yield* kv.get(key))),
+              const stored = yield* lock.withPermit(
+                Effect.gen(function* () {
+                  const meta = Option.getOrUndefined(
+                    Schema.decodeUnknownOption(CacheMeta)((yield* kv.get(metaKey)) ?? (yield* kv.get(key))),
+                  )
+                  if (!force && meta && Date.now() - meta.updatedAt < Duration.toMillis(ttl)) return undefined
+                  return meta ?? null
+                }),
               )
-              if (!force && stored && Date.now() - stored.updatedAt < Duration.toMillis(ttl)) return
+              if (stored === undefined) return
+
               const response = yield* fetchApi(force ? undefined : stored?.etag)
               const digest = response && bodyDigest(response.text)
-              // models.dev rarely changes between polls; skip invalidation and
-              // the Refreshed event for a byte-identical body so downstream
-              // provider/model update listeners stay quiet.
-              if (!force && stored && (!response || stored.digest === digest)) {
-                yield* writeMeta(Date.now(), stored.digest, response?.etag ?? stored.etag)
-                return
-              }
-              if (!response) return
-              yield* decodeCatalog(response.text)
-              yield* writeCache(response.text, response.etag, digest)
-              yield* invalidate
-              yield* bus.publish(ModelsDev.Event.Refreshed, {}, { global: true })
+
+              yield* lock.withPermit(
+                Effect.gen(function* () {
+                  const latest = Option.getOrUndefined(
+                    Schema.decodeUnknownOption(CacheMeta)((yield* kv.get(metaKey)) ?? (yield* kv.get(key))),
+                  )
+                  // models.dev rarely changes between polls; skip invalidation and
+                  // the Refreshed event for a byte-identical body so downstream
+                  // provider/model update listeners stay quiet.
+                  if (!force && latest && (!response || latest.digest === digest)) {
+                    yield* writeMeta(Date.now(), latest.digest, response?.etag ?? latest.etag)
+                    return
+                  }
+                  if (!response) return
+                  yield* decodeCatalog(response.text)
+                  yield* writeCache(response.text, response.etag, digest)
+                  yield* invalidate
+                  yield* bus.publish(ModelsDev.Event.Refreshed, {}, { global: true })
+                }),
+              )
             }),
           )
           .pipe(
-            Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause: cause })),
+            Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause })),
             Effect.ignore,
           )
       })
