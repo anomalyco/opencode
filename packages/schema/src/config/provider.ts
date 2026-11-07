@@ -5,7 +5,7 @@ import { Money } from "../money.js"
 import { Capabilities, Compatibility, Family, ID, Model, Type, VariantID } from "../model.js"
 import { ProviderCompatibility } from "../model-compatibility.js"
 import { Provider } from "../provider.js"
-import { optional } from "../schema.js"
+import { NonNegativeInt, optional } from "../schema.js"
 
 export const Settings = Schema.StructWithRest(Schema.Struct(Provider.Settings.schema.fields), [
   Schema.Record(Schema.String, Schema.UndefinedOr(Schema.Json)),
@@ -55,6 +55,9 @@ class Limit extends Schema.Class<Limit>("Config.Model.Limit")({
   context: Schema.Int.pipe(optional),
   input: Schema.Int.pipe(optional),
   output: Schema.Int.pipe(optional),
+  images: NonNegativeInt.annotate({
+    description: "Most images one request may carry. Older images are replaced with a note once a request has more.",
+  }).pipe(optional),
 }) {}
 
 // models.dev v2's `capabilities.reasoning`. OpenCode builds the model's variants from it; no control means none.

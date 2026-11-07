@@ -110,6 +110,8 @@ test("defensively syncs advertised Copilot models", async () => {
       Model.VariantID.make("high"),
     ])
     expect(model?.capabilities.input).toEqual(["text", "image", "pdf"])
+    expect(model?.limit).toMatchObject({ context: 200000, input: 180000, output: 16384, images: 10 })
+    expect(models.get(Model.ID.make("claude-sonnet"))?.limit.images).toBeUndefined()
     expect(models.get(Model.ID.make("claude-sonnet"))?.package).toBe("@opencode/ai/providers/anthropic")
     expect(models.get(Model.ID.make("claude-sonnet"))?.settings).toMatchObject({
       baseURL: `${server.url.origin}/v1`,

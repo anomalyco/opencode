@@ -1,7 +1,7 @@
 export * as Model from "./model.js"
 
 import { Schema, Struct } from "effect"
-import { optional, statics } from "./schema.js"
+import { NonNegativeInt, optional, statics } from "./schema.js"
 import { Provider } from "./provider.js"
 import { Compatibility, MaxTokensField, MediaInput, ReasoningField } from "./model-compatibility.js"
 import { Money } from "./money.js"
@@ -134,6 +134,7 @@ export const Info = Schema.Struct({
     context: Schema.Int,
     input: Schema.Int.pipe(optional),
     output: Schema.Int,
+    images: NonNegativeInt.pipe(optional),
   }),
 })
   .annotate({ identifier: "Model.Info" })
