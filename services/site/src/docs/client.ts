@@ -565,7 +565,6 @@ function choose(option: HTMLAnchorElement) {
 // The status bars, as the site's footer shows them: the last five 3-hour windows by their worst
 // service, then the live status. Kept a minute in sessionStorage, since every docs page is a full load.
 type Status = "operational" | "degraded" | "outage" | "unknown"
-const statusLabels = { operational: "Normal", degraded: "Degraded", outage: "Outage", unknown: "No data" }
 const headlines = {
   operational: "All systems operational",
   degraded: "Degraded performance",
@@ -577,9 +576,15 @@ function showStatus(bars: Status[]) {
   const link = $("[data-component=status]")
   if (!link) return
   const current = bars.at(-1)!
+  const normal = current === "operational"
   link.dataset.state = current
   link.title = headlines[current]
-  $("[data-slot=status-text]", link)!.textContent = statusLabels[current]
+  // As in the site's footer, "Normal" or else "Status"; screen readers hear the headline instead.
+  $("[data-slot=sr-only]", link)!.textContent = normal ? "Status: " : `Status: ${headlines[current]}`
+  const text = $("[data-slot=status-text]", link)!
+  text.textContent = normal ? "Normal" : "Status"
+  if (normal) text.removeAttribute("aria-hidden")
+  else text.setAttribute("aria-hidden", "true")
   $$("[data-slot=bars] > span", link).forEach((bar, index) => (bar.dataset.state = bars[index] ?? "unknown"))
 }
 const saved = JSON.parse(sessionStorage.getItem("docs-status-bars") ?? "null") as { bars: Status[]; at: number } | null
