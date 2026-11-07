@@ -61,7 +61,6 @@ rustls-platform-verifier = "0.7"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
 sha1 = "0.11"
-similar = "3"
 tempfile = "3"
 thiserror = "2"
 tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "sync", "time", "io-util", "process", "fs", "net", "signal"] }

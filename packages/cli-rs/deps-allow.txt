@@ -77,7 +77,6 @@ serde_json build
 sha1
 shlex
 signal-hook-registry
-similar
 slab
 smallvec
 socket2
