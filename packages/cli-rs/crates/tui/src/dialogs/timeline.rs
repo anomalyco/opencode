@@ -3,11 +3,11 @@
 
 use std::rc::Rc;
 
-use chrono::{Local, TimeZone};
 use opencode_api::generated::{SessionID, SessionMessageInfo};
 use opencode_ui::bind;
 use opencode_ui::dialog::{DialogOptions, DialogSize};
 use opencode_ui::select::{self, SelectOption, SelectProps};
+use opencode_util::time::Zone;
 
 use crate::app::Tui;
 
@@ -60,9 +60,5 @@ pub(crate) fn prompts(messages: &[SessionMessageInfo]) -> Vec<(String, String, f
 /// `Locale.time`: `toLocaleTimeString(undefined, { timeStyle: "short" })` in en-US. Bun's ICU puts a plain space
 /// before AM/PM.
 pub(crate) fn time(created: f64) -> String {
-    Local
-        .timestamp_millis_opt(created as i64)
-        .single()
-        .map(|date| date.format("%-I:%M %p").to_string())
-        .unwrap_or_default()
+    Zone::Local.at(created as i64).map(|date| date.short_time(" ")).unwrap_or_default()
 }

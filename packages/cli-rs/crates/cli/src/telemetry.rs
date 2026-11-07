@@ -13,6 +13,7 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender};
 use std::time::{Duration, Instant, SystemTime};
 
 use log::{Level, LevelFilter, Log, Metadata, Record};
+use opencode_util::time;
 use serde_json::{Value, json};
 
 use crate::args::LogLevel;
@@ -260,7 +261,7 @@ impl Field {
 /// One line of the TypeScript file format (`logging.ts:16-30`):
 /// `timestamp=… level=INFO run=… message=… <fields>`, each value bare or as a JSON string.
 pub fn format_line(now: SystemTime, level: Level, run: &str, message: &str, fields: &[(String, Field)]) -> String {
-    let timestamp = chrono::DateTime::<chrono::Utc>::from(now).to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let timestamp = time::iso(time::millis(now)).unwrap_or_default();
     [
         ("timestamp".to_owned(), timestamp),
         ("level".to_owned(), level.as_str().to_owned()),

@@ -27,6 +27,7 @@ opencode-service = { path = "crates/service" }
 opencode-store = { path = "crates/store" }
 opencode-tui = { path = "crates/tui" }
 opencode-ui = { path = "crates/ui" }
+opencode-util = { path = "crates/util" }
 
 # The local opentui-rust checkout on main; see README.md for the native library.
 opentui = { path = "/home/simon/src/opentui-rust/crates/opentui", features = ["static", "tokio", "tree-sitter"] }
@@ -36,6 +37,7 @@ opentui = { path = "/home/simon/src/opentui-rust/crates/opentui", features = ["s
 anyhow = "1"
 base64 = "0.23"
 bytes = "1"
+# Only a dev-dependency of opencode-util, for the differential test of its time module.
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 clap = { version = "4", features = ["derive", "wrap_help"] }
 clap_complete = "4"
@@ -44,6 +46,7 @@ futures-util = { version = "0.3", default-features = false, features = ["std", "
 # `cargo update` cannot bring 1.2 back.
 idna_adapter = "=1.0.0"
 indexmap = { version = "2", features = ["serde"] }
+libc = "0.2"
 libloading = "0.9"
 log = { version = "0.4", features = ["std"] }
 memchr = "2"

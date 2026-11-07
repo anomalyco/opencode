@@ -7,10 +7,10 @@
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
-use chrono::{Local, TimeZone};
 use opencode_ui::bind;
 use opencode_ui::dialog::{DialogOptions, DialogSize};
 use opencode_ui::select::{self, Select, SelectAction, SelectOption, SelectProps};
+use opencode_util::time::Zone;
 use serde_json::Value;
 
 use crate::app::Tui;
@@ -163,11 +163,7 @@ fn relative_time(timestamp: f64, now: f64) -> String {
 
 /// `Locale.datetime`: the short time, then `toLocaleDateString` in en-US.
 fn datetime(timestamp: f64) -> String {
-    let date = Local
-        .timestamp_millis_opt(timestamp as i64)
-        .single()
-        .map(|date| date.format("%-m/%-d/%Y").to_string())
-        .unwrap_or_default();
+    let date = Zone::Local.at(timestamp as i64).map(|date| date.numeric_date()).unwrap_or_default();
     format!("{} · {date}", crate::dialogs::timeline::time(timestamp))
 }
 

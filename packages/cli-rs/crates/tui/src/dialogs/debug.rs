@@ -12,6 +12,7 @@ use opencode_ui::dialog::{
 };
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
+use opencode_util::time;
 use opentui::prelude::*;
 
 use crate::app::Tui;
@@ -35,7 +36,7 @@ pub fn entries(tui: &Tui) -> Vec<(&'static str, String)> {
     };
     vec![
         ("Version", format!("{VERSION} ({channel})")),
-        ("Date", chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()),
+        ("Date", time::iso(time::now_ms()).unwrap_or_default()),
         ("OS", describe_os()),
         ("Terminal", describe_terminal(|name| std::env::var(name).ok())),
         ("Session ID", session),
