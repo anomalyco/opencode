@@ -82,6 +82,7 @@ const effectTypeReferences = [
   ...namespaceTypes("Integration", "@opencode/schema/integration", Integration),
   ...namespaceTypes("Job", "@opencode/schema/job", Job),
   typeReference("Location.PublicRef", "@opencode/schema/location", Location.PublicRef),
+  typeReference("Location.Input", "@opencode/schema/location", Location.Input),
   typeReference("Location.PublicInfo", "@opencode/schema/location", Location.PublicInfo),
   ...namespaceTypes("Mcp", "@opencode/schema/mcp", Mcp),
   ...namespaceTypes("Model", "@opencode/schema/model", Model),
