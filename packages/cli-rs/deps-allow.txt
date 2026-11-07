@@ -33,7 +33,6 @@ futures-task
 futures-util
 getrandom build
 hashbrown
-html-escape
 http
 http-body
 http-body-util
