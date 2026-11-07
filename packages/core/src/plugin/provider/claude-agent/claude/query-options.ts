@@ -19,6 +19,8 @@ const ISOLATION_ENV = {
   CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK: "1",
   // Raised so opencode's own truncation applies instead
   MAX_MCP_OUTPUT_TOKENS: "200000",
+  // The SDK's default `sdk-ts` label uses the 5-hour plan limit about 1.8x faster (anthropics/claude-code#97074)
+  CLAUDE_CODE_ENTRYPOINT: "opencode",
   // Skips OAuth, so the subscription would not be used
   CLAUDE_CODE_SIMPLE: undefined,
   // A shell-level effort override would take precedence over OpenCode's live effort settings.
