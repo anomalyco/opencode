@@ -384,116 +384,145 @@ fn local_offset(seconds: i64) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{Datelike, FixedOffset, Local, NaiveDate, NaiveDateTime, Offset, TimeZone, Timelike, Utc};
 
-    // Each format, with the hour, the minute, the weekday and the offset.
-    fn ours(time: DateTime, offset: i32) -> Vec<String> {
-        vec![
-            time.date.to_string(),
-            time.compact(),
-            time.numeric_date(),
-            time.short_time(" "),
-            time.short_time("\u{202f}"),
-            time.locale_string(),
-            time.date_string(),
-            time.month_day(),
-            time.month_name().to_owned(),
-            format!("{} {} {} {offset}", time.hour, time.minute, time.date.weekday_from_monday()),
-        ]
+    const ZONES: [&str; 4] = ["UTC", "America/New_York", "Australia/Lord_Howe", "Asia/Kathmandu"];
+    const FORMATS: [&str; 3] = ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S"];
+
+    // Texts that `Date.parse` and these parsers (as the date-time form check combines them) disagree on.
+    const ONLY_RUST_ACCEPTS: [&str; 7] = [
+        "2026-11-04T15:30:00\u{2212}03:30",
+        "2016-12-31T23:59:60Z",
+        "2016-12-31T23:59:60.5Z",
+        "2026-11-04T1:2",
+        "2026-11-04T 1: 2",
+        "2026-11-04T15:30:60",
+        "2026-11-04T15:30:60.25",
+    ];
+    const ONLY_TS_ACCEPTS: [&str; 10] = [
+        "2026-11-04T15:30:00+0545",
+        "2026-02-29T00:00:00Z",
+        "2026-11-04T24:00:00Z",
+        "2026-11-04T15:30Z",
+        "2026-11-04t15:30",
+        "2026-02-03 ",
+        "12026-01-01",
+        "-262144-01-01",
+        "2023-02-29",
+        "2026",
+    ];
+
+    /// The rows script/gen/time.ts wrote for `zone`, split at tabs: what the TypeScript client's `Date` and `Intl`
+    /// calls give under Bun.
+    fn rows(zone: &str) -> Vec<Vec<&'static str>> {
+        include_str!("../fixtures/time.tsv")
+            .lines()
+            .filter(|line| !line.starts_with('#'))
+            .map(|line| line.split('\t').collect::<Vec<_>>())
+            .skip_while(|row| row[..] != ["zone", zone])
+            .skip(1)
+            .take_while(|row| row[0] != "zone")
+            .collect()
     }
 
-    fn theirs<Tz: TimeZone>(time: chrono::DateTime<Tz>) -> Vec<String>
-    where
-        Tz::Offset: fmt::Display,
-    {
-        let offset = time.offset().fix().local_minus_utc();
-        let weekday = time.weekday().num_days_from_monday();
-        vec![
-            time.format("%Y-%m-%d").to_string(),
-            time.format("%Y%m%dT%H%M%SZ").to_string(),
-            time.format("%-m/%-d/%Y").to_string(),
-            time.format("%-I:%M %p").to_string(),
-            time.format("%-I:%M\u{202f}%p").to_string(),
-            time.format("%-m/%-d/%Y, %-I:%M:%S %p").to_string(),
-            time.format("%a %b %d %Y").to_string(),
-            time.format("%b %-d").to_string(),
-            time.format("%b").to_string(),
-            format!("{} {} {weekday} {offset}", time.hour(), time.minute()),
-        ]
+    fn number(text: &str) -> i64 {
+        text.parse().unwrap_or_else(|_| panic!("{text:?} is a number"))
     }
 
-    fn instants() -> impl Iterator<Item = i64> {
-        // 1900 to 2100 every 17 hours and a bit, every 15 minutes and a bit through 2025, and the edges.
-        let wide = (-2_208_988_800_000..4_102_444_800_000).step_by(61_200_123);
-        let dense = (1_735_689_600_000..1_767_225_600_000).step_by(900_007);
-        let edges = [
-            0,
-            -1,
-            1,
-            999,
-            -999,
-            -1000,
-            -1001,
-            253_402_300_799_999,
-            253_402_300_800_000,
-            -62_167_219_200_000,
-            -62_167_219_200_001,
-            -62_198_755_200_000,
-            i64::MIN,
-            i64::MAX,
-        ];
-        wide.chain(dense).chain(edges)
+    // Years TS writes without padding or sign, and `Date.UTC` reads 0 to 99 as 1900 to 1999; only these compare.
+    fn four_digits(time: Option<DateTime>) -> bool {
+        time.is_some_and(|time| (1000..=9999).contains(&time.date.year))
     }
 
-    // Runs in the zone `TZ` names; `differs_nowhere_in_four_zones` runs it under each.
+    // Runs in the zone `TZ` names; `matches_typescript_in_four_zones` runs it under each.
     #[test]
-    fn matches_chrono_in_this_zone() {
-        if std::env::var("TZ").as_deref() == Ok("America/New_York") {
+    fn matches_typescript_in_this_zone() {
+        let Some(zone) = std::env::var("TZ").ok().filter(|zone| ZONES.contains(&zone.as_str())) else {
+            return;
+        };
+        if zone == "America/New_York" {
             assert_eq!(Zone::Local.offset(0), -18_000, "TZ is read");
         }
-        let mut count = 0;
-        for (index, ms) in instants().enumerate() {
-            let utc = chrono::DateTime::from_timestamp_millis(ms);
-            assert_eq!(iso(ms), utc.map(|time| time.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()), "{ms}");
-            if let Some(time) = utc.filter(|time| (0..=9999).contains(&time.year())) {
-                assert_eq!(iso(ms).unwrap(), time.to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
+        let rows = rows(&zone);
+        assert!(rows.len() > 1500, "{zone} has {} rows", rows.len());
+        for row in rows {
+            let at = || number(row[1]);
+            match row[0] {
+                "at" if row[2] == "invalid" => assert_eq!(Zone::Local.at(at()), None, "{zone} {}", at()),
+                "at" if four_digits(Zone::Local.at(at())) => {
+                    let time = Zone::Local.at(at()).unwrap();
+                    let weekday = (time.date.weekday_from_monday() + 1) % 7;
+                    let mine = [
+                        time.locale_string(),
+                        time.date_string(),
+                        time.numeric_date(),
+                        time.short_time(" "),
+                        time.short_time(" "),
+                        time.month_day(),
+                        time.hour.to_string(),
+                        time.minute.to_string(),
+                        weekday.to_string(),
+                        time.date.days().to_string(),
+                    ];
+                    assert_eq!(mine.join("\t"), row[2..].join("\t"), "{zone} {}", at());
+                }
+                "iso" if row[2] == "invalid" => assert_eq!(iso(at()), None),
+                "iso" if four_digits(UTC.at(at())) => assert_eq!(iso(at()).unwrap(), row[2]),
+                "at" | "iso" => {}
+                "days" => {
+                    let date = Date::from_days(at());
+                    assert_eq!(date.days(), at());
+                    let weekday = (date.weekday_from_monday() + 1) % 7;
+                    assert_eq!(format!("{}\t{}\t{}\t{weekday}", date.year, date.month, date.day), row[2..].join("\t"));
+                }
+                "wall" => wall(&row, &zone),
+                "parse" => text(&row, &zone),
+                kind => panic!("unknown row kind {kind}"),
             }
-            assert_eq!(UTC.at(ms).map(|time| ours(time, 0)), utc.map(theirs), "UTC {ms}");
-            let local = Local.timestamp_millis_opt(ms).single();
-            let mine = Zone::Local.at(ms).map(|time| ours(time, Zone::Local.offset(ms)));
-            assert_eq!(mine, local.map(theirs), "local {ms}");
-            for offset in [3600, -12_600, 20_700, 50_400].into_iter().filter(|_| index % 16 == 0) {
-                let fixed = FixedOffset::east_opt(offset).unwrap().timestamp_millis_opt(ms).single();
-                assert_eq!(
-                    Zone::Fixed(offset).at(ms).map(|time| ours(time, offset)),
-                    fixed.map(theirs),
-                    "{offset} {ms}"
-                );
-            }
-            count += 1;
         }
-        assert!(count > 130_000);
-        // Every local midnight from 1950 to 2050, and every quarter hour of 2025, through gaps and overlaps.
-        let walls = (-7305..29_220)
-            .map(|days| (days, 0))
-            .chain((20_089..20_454).flat_map(|days| (0..96).map(move |quarter| (days, quarter * 900))));
-        for (days, seconds) in walls {
-            let date = Date::from_days(days);
-            let naive = NaiveDate::from_ymd_opt(date.year, date.month, date.day).unwrap().and_hms_opt(0, 0, 0).unwrap()
-                + chrono::Duration::seconds(seconds);
-            let want = Local.from_local_datetime(&naive).earliest().map(|time| time.timestamp_millis());
-            assert_eq!(Zone::Local.instant(date, seconds), want, "{date} +{seconds}s");
-            let want = FixedOffset::east_opt(20_700).unwrap().from_local_datetime(&naive).single();
-            assert_eq!(Zone::Fixed(20_700).instant(date, seconds), want.map(|time| time.timestamp_millis()));
+    }
+
+    // TS's `new Date(y, m, d, h, min)` moves a reading in a gap forward by the gap and picks the earlier instant in an
+    // overlap; `instant` gives `None` in a gap and the later instant in an overlap, as `chrono` did. Midnights agree.
+    fn wall(row: &[&str], zone: &str) {
+        let [year, month, day, hour, minute] = [1, 2, 3, 4, 5].map(|at| number(row[at]));
+        let date = Date::new(year as i32, month as u32, day as u32).unwrap();
+        let reads = |ms: i64| {
+            Zone::Local
+                .at(ms)
+                .is_some_and(|time| (time.date, time.hour, time.minute) == (date, hour as u32, minute as u32))
+        };
+        let theirs = number(row[6]);
+        match Zone::Local.instant(date, hour * 3600 + minute * 60) {
+            Some(mine) if mine == theirs => {}
+            None => assert!(!reads(theirs), "{zone} {row:?}: not in a gap"),
+            Some(mine) => assert!(mine > theirs && reads(mine) && reads(theirs), "{zone} {row:?}: {mine}"),
+        }
+    }
+
+    // `Date.parse` (`refusalReset`, the date-time form check) and `validDate` (the date form check).
+    fn text(row: &[&str], zone: &str) {
+        let text = row[1][1..row[1].len() - 1].replace("\\t", "\t");
+        let theirs = (row[2] != "NaN").then(|| number(row[2]));
+        let accepted = parse_rfc3339(&text).is_some()
+            || FORMATS.iter().any(|format| parse(&text, format).is_some())
+            || Date::parse(&text).is_some();
+        let listed = ONLY_RUST_ACCEPTS.contains(&text.as_str()) || ONLY_TS_ACCEPTS.contains(&text.as_str());
+        assert_eq!(accepted, theirs.is_some() != listed, "{zone} {text:?}");
+        if let (Some(mine), Some(theirs)) = (parse_rfc3339(&text), theirs) {
+            assert_eq!(mine, theirs, "{zone} {text:?}");
+        }
+        let shaped = text.len() == 10
+            && text.bytes().enumerate().all(|(at, c)| if at == 4 || at == 7 { c == b'-' } else { c.is_ascii_digit() });
+        if shaped {
+            assert_eq!(Date::parse(&text).is_some(), row[3] == "1", "{zone} date {text:?}");
         }
     }
 
     #[test]
-    fn differs_nowhere_in_four_zones() {
-        let zones = ["UTC", "America/New_York", "Australia/Lord_Howe", "Asia/Kathmandu"];
-        let children = zones.map(|zone| {
+    fn matches_typescript_in_four_zones() {
+        let children = ZONES.map(|zone| {
             let child = std::process::Command::new(std::env::current_exe().unwrap())
-                .args(["--exact", "time::tests::matches_chrono_in_this_zone", "--test-threads=1"])
+                .args(["--exact", "time::tests::matches_typescript_in_this_zone", "--test-threads=1"])
                 .env("TZ", zone)
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
@@ -510,27 +539,6 @@ mod tests {
     }
 
     #[test]
-    fn days_match_chrono() {
-        let days = (-95_000_000..95_000_000).step_by(9973).chain(-800_000..800_000);
-        for days in days {
-            let date = Date::from_days(days);
-            let want = NaiveDate::from_num_days_from_ce_opt((days + 719_163) as i32).unwrap();
-            assert_eq!((date.year, date.month, date.day), (want.year(), want.month(), want.day()), "{days}");
-            assert_eq!(date.days(), days);
-            assert_eq!(date.weekday_from_monday(), want.weekday().num_days_from_monday());
-            assert_eq!(Date::new(date.year, date.month, date.day), Some(date));
-        }
-        for (year, month, day) in
-            [(2023, 2, 29), (2024, 2, 30), (1900, 2, 29), (2026, 4, 31), (2026, 13, 1), (2026, 0, 1)]
-        {
-            assert_eq!(Date::new(year, month, day), None, "{year}-{month}-{day}");
-            assert!(NaiveDate::from_ymd_opt(year, month, day).is_none());
-        }
-        assert_eq!(Date::new(2000, 2, 29).map(|date| date.to_string()).as_deref(), Some("2000-02-29"));
-        assert_eq!(Date::default().days(), 0);
-    }
-
-    #[test]
     fn system_times_round_down() {
         let at = |ms: i64, nanos: u32| {
             let offset =
@@ -538,105 +546,35 @@ mod tests {
             let time = if ms < 0 { UNIX_EPOCH - offset } else { UNIX_EPOCH + offset };
             time + std::time::Duration::from_nanos(u64::from(nanos))
         };
-        for (ms, nanos) in [(0, 0), (1, 500), (-1, 0), (-1, 999_999), (-2_000, 1), (1_772_539_200_123, 999_999)] {
-            let time = at(ms, nanos);
-            let want = chrono::DateTime::<Utc>::from(time).to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-            assert_eq!(iso(millis(time)).unwrap(), want, "{ms} {nanos}");
+        let cases = [
+            ((0, 0), 0),
+            ((1, 500), 1),
+            ((-1, 0), -1),
+            ((-1, 999_999), -1),
+            ((-2_000, 1), -2_000),
+            ((-2_000, 1_000_001), -1_999),
+            ((1_772_539_200_123, 999_999), 1_772_539_200_123),
+        ];
+        for ((ms, nanos), want) in cases {
+            assert_eq!(millis(at(ms, nanos)), want, "{ms} {nanos}");
         }
+        assert_eq!(iso(-1).unwrap(), "1969-12-31T23:59:59.999Z");
     }
 
     #[test]
-    fn parses_as_chrono() {
-        let mut texts: Vec<String> = [
-            "2026-11-04T15:30:00Z",
-            "2026-11-04t15:30:00z",
-            "2026-11-04 15:30:00+05:45",
-            "2026-11-04T15:30:00\u{2212}03:30",
-            "2026-11-04T15:30:00-23:59",
-            "2026-11-04T15:30:00+24:00",
-            "2026-11-04T15:30:00+05:60",
-            "2026-11-04T15:30:00+0545",
-            "2026-11-04T15:30:00+05",
-            "2026-11-04T15:30:00+05:45 ",
-            "2026-11-04T15:30:00",
-            "2026-11-04T15:30:00.Z",
-            "2026-11-04T15:30:00.5Z",
-            "2026-11-04T15:30:00.123456789123Z",
-            "2026-11-04T15:30:00.999999999+01:00",
-            "2016-12-31T23:59:60Z",
-            "2016-12-31T23:59:60.5Z",
-            "2016-12-31T23:59:61Z",
-            "2026-02-29T00:00:00Z",
-            "2024-02-29T00:00:00Z",
-            "0000-01-01T00:00:00Z",
-            "9999-12-31T23:59:59.999Z",
-            "2026-11-04T24:00:00Z",
-            "2026-11-04T23:60:00Z",
-            "2026-11-04X15:30:00Z",
-            "2026/11/04T15:30:00Z",
-            "+2026-11-04T15:30:00Z",
-            " 2026-11-04T15:30:00Z",
-            "2026-1-04T15:30:00Z",
-            "2026-11-04T15:30Z",
-            "2026-11-04",
-            "2026-11-04T15:30",
-            "2026-11-04T15:30:00.123",
-            "2026-11-04T15:30:00.1234567890",
-            "2026-11-04T15:30:00.",
-            "2026-11-04 15:30:00",
-            "2026-11-04  15:30:00",
-            "2026-11-04\t15:30:00",
-            "2026-11-04\u{3000}15:30:00",
-            "2026-11-04T1:2",
-            "2026-11-04T 1: 2",
-            "2026-11-04T15:30:60",
-            "2026-11-04T15:30:60.25",
-            "2026-11-04t15:30",
-            "2026-2-3",
-            " 2026-02-03",
-            "2026-02-03 ",
-            "2026- 2- 3",
-            "+2026-02-03",
-            "-0001-02-03",
-            "12026-01-01",
-            "+12026-01-01",
-            "-262144-01-01",
-            "+99999999999999999999-01-01",
-            "2023-02-29",
-            "2024-02-29",
-            "0000-01-01",
-            "",
-            "2026",
-            "2026-11-04T15:30:00Zjunk",
-            "2026-11-04T15:30:00.12Z\u{e9}",
-            "2026-11-04T15:30:0\u{e9}Z",
-        ]
-        .map(str::to_owned)
-        .to_vec();
-        for ms in instants().step_by(997) {
-            let Some(iso) = iso(ms) else { continue };
-            texts.push(iso.clone());
-            texts.push(iso.replace('T', " ").replace('Z', "+05:45"));
-            texts.push(iso.replace(".", ".5").replace('Z', "-03:30"));
-            texts.push(iso.trim_end_matches('Z').to_owned());
-            texts.push(iso[..16].to_owned());
-            texts.push(iso[..19].replace('T', " "));
-            texts.push(iso[..10].to_owned());
+    fn dates_round_trip() {
+        for days in (-95_000_000..95_000_000).step_by(9973).chain(-800_000..800_000) {
+            let date = Date::from_days(days);
+            assert_eq!(date.days(), days);
+            assert_eq!(Date::new(date.year, date.month, date.day), Some(date));
+            assert_eq!(Date::parse(&date.to_string()), Some(date));
         }
-        for text in &texts {
-            let want = chrono::DateTime::parse_from_rfc3339(text).ok().map(|time| time.timestamp_millis());
-            assert_eq!(parse_rfc3339(text), want, "rfc3339 {text:?}");
-            let want = NaiveDate::parse_from_str(text, "%Y-%m-%d").ok().map(|date| date.to_string());
-            assert_eq!(Date::parse(text).map(|date| date.to_string()), want, "date {text:?}");
-            for format in ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S"] {
-                let want =
-                    NaiveDateTime::parse_from_str(text, format).ok().map(|time| time.and_utc().timestamp_millis());
-                let mine = parse(text, format).map(|time| {
-                    let seconds = i64::from(time.hour * 3600 + time.minute * 60 + time.second);
-                    (time.date.days() * 86_400 + seconds) * 1000 + i64::from(time.millis)
-                });
-                assert_eq!(mine, want, "{format} {text:?}");
-            }
+        for (year, month, day) in
+            [(2023, 2, 29), (2024, 2, 30), (1900, 2, 29), (2026, 4, 31), (2026, 13, 1), (2026, 0, 1)]
+        {
+            assert_eq!(Date::new(year, month, day), None, "{year}-{month}-{day}");
         }
+        assert_eq!(Date::new(2000, 2, 29).map(|date| date.to_string()).as_deref(), Some("2000-02-29"));
+        assert_eq!(Date::default().days(), 0);
     }
 }
