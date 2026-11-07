@@ -1,10 +1,12 @@
 import { describe, expect } from "bun:test"
 import { ToolDefinition } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
+import { RequestExecutor } from "@opencode/ai/route"
 import { Agent } from "@opencode/schema/agent"
 import { Money } from "@opencode/schema/money"
 import { Session } from "@opencode/schema/session"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
+import { LayerNodePlatform } from "@opencode/core/effect/app-node-platform"
 import { Location } from "@opencode/core/location"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Project } from "@opencode/core/project"
@@ -12,8 +14,8 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
-import { DateTime, Effect, Stream } from "effect"
-import { HttpClientRequest, HttpClientResponse } from "effect/http"
+import { Context, DateTime, Effect, Layer, Stream } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
 
@@ -129,6 +131,66 @@ describe("SessionModelRequest HTTP hooks", () => {
     }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
   )
 
+  it.live("carries a hook-returned request's redirect mode to fetch", () => {
+    // Every reading below is taken where `FetchHttpClient` reads it: the fetch options in the request's context.
+    const sent: Array<RequestInit | undefined> = []
+    const httpTransport = HttpClient.make((request, _url, _signal, fiber) => {
+      sent.push(Context.getOrUndefined(fiber.context, FetchHttpClient.RequestInit))
+      return Effect.succeed(HttpClientResponse.fromWeb(request, new Response('{"ok":true}', { status: 200 })))
+    })
+    // The same two real layers the executor node wires together, with only the transport beneath them replaced.
+    const executor = RequestExecutor.layer.pipe(
+      Layer.provide(LayerNodePlatform.withoutBunTimeout),
+      Layer.provide(Layer.succeed(HttpClient.HttpClient, httpTransport)),
+    )
+    return Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      let redirect: RequestInit["redirect"] | undefined
+      yield* hooks.register("session", "http.request", (event) =>
+        Effect.sync(() => {
+          if (redirect === undefined) return
+          event.request = new Request(event.request.url, { method: "POST", redirect })
+        }),
+      )
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      const prepared = yield* requests.primary({
+        session,
+        agent: Agent.ID.make("build"),
+        model,
+        system: [],
+        messages: [],
+      })
+      const middleware = prepared.options.http
+      if (!middleware) throw new Error("Expected HTTP middleware")
+      const service = yield* RequestExecutor.Service
+      const send = () =>
+        service.execute(
+          HttpClientRequest.post("https://example.test/v1/chat/completions").pipe(
+            HttpClientRequest.bodyText('{"messages":[]}', "application/json"),
+          ),
+          middleware,
+        )
+
+      yield* send()
+      expect(sent).toHaveLength(1)
+      // Bun's idle timeout is off for provider requests.
+      expect((sent[0] as BunFetchRequestInit | undefined)?.timeout).toBe(false)
+      // A hook that leaves the default alone sets no redirect mode, so fetch keeps its own.
+      expect(sent[0]?.redirect).toBeUndefined()
+
+      for (const mode of ["manual", "error"] as const) {
+        redirect = mode
+        yield* send()
+        expect(sent.at(-1)?.redirect).toBe(mode)
+        // The timeout the platform layer adds must merge with the hook's options, never replace them.
+        expect((sent.at(-1) as BunFetchRequestInit | undefined)?.timeout).toBe(false)
+      }
+    }).pipe(
+      Effect.provide(executor, { local: true }),
+      Effect.provideService(SessionModelTransport.Service, transport),
+    )
+  })
+
   it.effect("keeps hook edits to a tool schema out of later requests", () =>
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
@@ -146,14 +208,12 @@ describe("SessionModelRequest HTTP hooks", () => {
       }
 
       const required = yield* Effect.forEach([1, 2], () =>
-        requests
-          .primary({ session, agent: Agent.ID.make("build"), model, system: [], messages: [], tools })
-          .pipe(
-            Effect.map((prepared) => {
-              const tool = prepared.request.tools[0]
-              return tool?.type === "tool" ? tool.inputSchema.required : undefined
-            }),
-          ),
+        requests.primary({ session, agent: Agent.ID.make("build"), model, system: [], messages: [], tools }).pipe(
+          Effect.map((prepared) => {
+            const tool = prepared.request.tools[0]
+            return tool?.type === "tool" ? tool.inputSchema.required : undefined
+          }),
+        ),
       )
 
       expect(required).toEqual([
