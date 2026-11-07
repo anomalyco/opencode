@@ -9,6 +9,7 @@ const project = path.resolve("watch-plan-project")
 const root = AbsolutePath.make(path.join(project, ".opencode"))
 const sources: ConfigDiscovery.Sources = {
   direct: ["opencode.json", "opencode.jsonc"].map((name) => AbsolutePath.make(path.join(project, name))),
+  targets: [],
   project: [{ path: root, present: false }],
   claude: [AbsolutePath.make(path.join(project, ".claude"))],
   agents: [AbsolutePath.make(path.join(project, ".agents"))],
@@ -49,5 +50,30 @@ describe("ConfigWatch.plan", () => {
         ConfigWatch.plan({ ...sources, explicit: AbsolutePath.make(path.join(directory, "custom.json")) }).values(),
       ),
     ).toContainEqual({ path: directory, type: "entries", names: ["custom.json"] })
+  })
+
+  test("watches resolved targets outside config roots", () => {
+    const dotfiles = path.resolve("watch-plan-dotfiles")
+    const plan = ConfigWatch.plan({
+      ...sources,
+      project: [{ path: root, present: true }],
+      targets: [AbsolutePath.make(path.join(dotfiles, "opencode.json"))],
+    })
+    expect(Array.from(plan.values())).toContainEqual({
+      path: dotfiles,
+      type: "entries",
+      names: ["opencode.json"],
+    })
+  })
+
+  test("does not duplicate targets already covered by a watched root", () => {
+    const plan = ConfigWatch.plan({
+      ...sources,
+      project: [{ path: root, present: true }],
+      targets: [AbsolutePath.make(path.join(root, "opencode.json"))],
+    })
+    expect(Array.from(plan.values()).filter((entry) => entry.path === root)).toEqual([
+      { path: root, type: "directory", ignore: FSUtil.ignoreGlobs },
+    ])
   })
 })

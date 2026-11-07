@@ -19,6 +19,8 @@ export interface Sources {
   readonly global?: AbsolutePath
   readonly explicit?: AbsolutePath
   readonly direct: readonly AbsolutePath[]
+  /** Resolved paths of present config files, so symlink targets outside a watched root are observable. */
+  readonly targets: readonly AbsolutePath[]
   readonly project: readonly { readonly path: AbsolutePath; readonly present: boolean }[]
   readonly claude: readonly AbsolutePath[]
   readonly agents: readonly AbsolutePath[]
@@ -126,6 +128,19 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
   )
   const visible = visibleEntries.map((entry) => entry.item)
 
+  // A symlinked config file receives its changes at the target path, which can live outside
+  // every watched config directory. Resolve present files so watches follow their targets.
+  const targets = yield* Effect.forEach(
+    [
+      ...(globalEnabled ? globalFiles : []),
+      ...visibleEntries
+        .filter((entry) => !entry.missing && names.includes(path.basename(entry.item)))
+        .map((entry) => entry.resolved),
+    ],
+    (file) => fs.isFile(file).pipe(Effect.map((present) => (present ? AbsolutePath.make(file) : undefined))),
+    { concurrency: "unbounded" },
+  ).pipe(Effect.map((items) => items.filter((item): item is AbsolutePath => item !== undefined)))
+
   // A custom system directory replaces platform discovery, so it also skips host MDM preferences.
   const preferences =
     globalEnabled && (options?.system ?? true) === true && process.platform === "darwin"
@@ -141,6 +156,7 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
     global: globalEnabled ? globalDirectory : undefined,
     explicit: options?.file ? AbsolutePath.make(path.resolve(options.file)) : undefined,
     direct: visible.filter((item) => ![".agents", ".claude", ".opencode"].includes(path.basename(item))).toReversed(),
+    targets,
     project: yield* Effect.forEach(
       visibleEntries.filter((entry) => path.basename(entry.item) === ".opencode").toReversed(),
       (entry) =>

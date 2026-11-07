@@ -147,4 +147,24 @@ describe("ConfigDiscovery.discover", () => {
       ),
     ),
   )
+
+  it.live("resolves symlinked global config targets for watching", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const root = yield* Effect.promise(() => fs.realpath(tmp.path))
+          const target = path.join(root, "dotfiles", "opencode.json")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(root, "global"), { recursive: true })
+            await fs.mkdir(path.join(root, "dotfiles"), { recursive: true })
+            await fs.writeFile(target, "{}")
+            await fs.symlink(target, path.join(root, "global", "opencode.json"))
+          })
+
+          const sources = yield* discoverWith(root, root)
+          expect(sources.targets).toContain(AbsolutePath.make(target))
+        }),
+      ),
+    ),
+  )
 })

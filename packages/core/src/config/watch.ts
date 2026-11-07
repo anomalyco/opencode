@@ -14,6 +14,7 @@ export function plan(sources: ConfigDiscovery.Sources) {
   const files = [
     ...(sources.system ? [sources.system.path] : []),
     ...sources.direct,
+    ...sources.targets,
     ...sources.project.map((root) => root.path),
     ...sources.claude,
     ...sources.agents,
