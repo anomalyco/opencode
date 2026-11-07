@@ -68,9 +68,11 @@ export const register = Effect.fn("ClaudeProvider.register")(function* (
       Effect.gen(function* () {
         if (state.type !== "ready") return
         const baseURL = (yield* connection(ctx)).ANTHROPIC_BASE_URL ?? io.env().ANTHROPIC_BASE_URL
+        const saved = Schema.decodeUnknownOption(Catalog)(yield* ctx.storage.get(CATALOG_KEY))
+        const known = [...current.catalog.models, ...Option.getOrElse(saved, (): Catalog => ({ models: [] })).models]
         const next = {
           priceSource: priceSource(state.probe.account, baseURL),
-          models: fromClaude(state.probe.models, current.catalog.models),
+          models: fromClaude(state.probe.models, known),
         }
         if (JSON.stringify(next) === JSON.stringify(current.catalog)) return
         current.catalog = next
@@ -81,8 +83,12 @@ export const register = Effect.fn("ClaudeProvider.register")(function* (
     Effect.forkScoped,
   )
 
-  // Without a saved list there is no model to pick, so the first message that would fill it can never be sent.
-  if (current.catalog.models.length === 0 && (yield* ctx.integration.connection.active(ID))) {
+  // Chat startup reports cannot fill missing context windows; only a full check discovers them.
+  if (
+    (current.catalog.models.length === 0 ||
+      current.catalog.models.some((model) => model.contextWindow === undefined)) &&
+    (yield* ctx.integration.connection.active(ID))
+  ) {
     yield* status.refresh().pipe(Effect.forkScoped)
   }
 })
@@ -97,7 +103,9 @@ export const connection = Effect.fn("ClaudeProvider.connection")(function* (ctx:
 // Context windows only come from the full check, so a chat's startup report keeps the saved ones.
 function fromClaude(models: readonly ClaudeProbe.Model[], saved: readonly CatalogModel[]): CatalogModel[] {
   const known = new Map<string, number | undefined>()
-  for (const model of saved) known.set(model.id, model.contextWindow)
+  for (const model of saved) {
+    if (model.contextWindow !== undefined) known.set(model.id, model.contextWindow)
+  }
   const result: CatalogModel[] = []
   for (const model of models) {
     // "default" follows Claude Code's own default, which can change under a running opencode session
