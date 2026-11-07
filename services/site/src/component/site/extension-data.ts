@@ -26,6 +26,8 @@ type Extension = {
   product?: boolean
   /** For the page's structured data; every OS when left out. */
   operatingSystem?: string
+  /** A hero still per theme (videos.ts heroStills); the hero stays black when left out. */
+  hero?: boolean
 }
 
 export const extensionPages: readonly Extension[] = [
@@ -54,6 +56,7 @@ export const extensionPages: readonly Extension[] = [
     },
     store: "https://chromewebstore.google.com/detail/mfnicocicmmlkpjnaffgihfjhdgjkdjg",
     product: true,
+    hero: true,
     source: "https://github.com/anomalyco/browse",
   },
   // {
