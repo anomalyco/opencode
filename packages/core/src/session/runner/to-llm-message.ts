@@ -318,12 +318,11 @@ export const toLLMMessages = (
   providerMetadataKey: string = model.providerID,
   prune = false,
 ) => {
-  // every message kind that emits a user- or system-role entry; the last one opens the current turn
+  // only kinds that emit a user-role entry count; system messages are mid-turn
+  // updates and must not move the boundary forward over a live tool call
   const lastBoundary = prune
     ? messages.findLastIndex((message) =>
-        ["user", "synthetic", "skill", "shell", "system", "location-switched", "model-switched", "compaction"].includes(
-          message.type,
-        ),
+        ["user", "synthetic", "skill", "shell", "location-switched", "compaction"].includes(message.type),
       )
     : -1
   const result = messages.flatMap((message, index) =>
@@ -381,12 +380,12 @@ const gcMessage = (message: Message): Message => {
 
 /**
  * Reclaim space from turns that are already over. Everything before the last
- * user/system message is settled history: readable reasoning there can never be
- * re-entered, and large tool outputs are almost never re-read. The current turn
- * is left alone so in-flight tool calls keep their full context.
+ * user message is settled history: readable reasoning there can never be
+ * re-entered, and large tool outputs are almost never re-read. The current
+ * turn is left alone so in-flight tool calls keep their full context.
  */
 export const pruneTranscript = (messages: ReadonlyArray<Message>): Message[] => {
-  const boundary = messages.findLastIndex((m) => m.role === "user" || m.role === "system")
+  const boundary = messages.findLastIndex((m) => m.role === "user")
   if (boundary <= 0) return messages.slice()
   let changed = false
   const next = messages.map((message, index) => {
