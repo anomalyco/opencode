@@ -125,7 +125,7 @@ function migrateStandardProvider(info: ConfigProviderV1.Info) {
     env: info.env,
     package: info.npm ? packageSpecifier(info.npm) : undefined,
     compatibility: setCacheKey === undefined ? undefined : { supportsPromptCacheKey: setCacheKey },
-    settings: info.api ? { ...options.settings, baseURL: info.api } : info.options ? options.settings : undefined,
+    settings: info.api ? { baseURL: info.api, ...options.settings } : info.options ? options.settings : undefined,
     headers: info.options && options.headers,
     body: info.options && options.body,
     models:
