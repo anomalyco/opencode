@@ -93,12 +93,10 @@ function parseArguments(input: string) {
   return (input.match(argsRegex) ?? []).map((argument) => argument.replace(quoteTrimRegex, ""))
 }
 
-function promptMessageText(content: unknown) {
-  if (typeof content === "string") return content
-  if (!content || typeof content !== "object") return ""
-  if (!("type" in content) || content.type !== "text") return ""
-  if (!("text" in content) || typeof content.text !== "string") return ""
-  return content.text
+function promptMessageText(content: Mcp.PromptResult["messages"][number]["content"]) {
+  if (content.type === "text") return content.text
+  if (content.type === "resource" && "text" in content.resource) return content.resource.text
+  return ""
 }
 
 function mcpCommandName(server: string, prompt: string) {
