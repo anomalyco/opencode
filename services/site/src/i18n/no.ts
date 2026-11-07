@@ -316,7 +316,7 @@ export const dict = {
   "site.product.isNew": "{{name}} er ny. Oppdateringene vises her.",
   "site.extensions": "Utvidelser",
   "site.contents": "Innhold",
-  "site.companions": "Flere produkter med åpen kildekode",
+  "site.companions": "Fungerer godt med OpenCode",
   "site.notFound.title": "Fant ikke siden",
   "site.arcade.alt": "En forlatt spillehall om natten. Skjermen på én maskin lyser fortsatt og viser 404, og en spillemynt ligger på gulvet foran den.",
   "site.arcade.token": "Spillemynt. Trykk Enter for å sette den inn i maskinen.",

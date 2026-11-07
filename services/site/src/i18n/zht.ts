@@ -316,7 +316,7 @@ export const dict = {
   "site.product.isNew": "{{name}} 是新產品，它的更新會顯示在這裡。",
   "site.extensions": "擴充功能",
   "site.contents": "目錄",
-  "site.companions": "更多開源產品",
+  "site.companions": "與 OpenCode 完美搭配",
   "site.notFound.title": "找不到頁面",
   "site.arcade.alt": "夜裡廢棄的遊樂場。一台機台的螢幕仍亮著，顯示 404，螢幕前的地上躺著一枚代幣。",
   "site.arcade.token": "遊戲代幣。按 Enter 把它投進機台。",

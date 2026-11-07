@@ -394,6 +394,10 @@ export const content = {
     },
   },
   apps: {
+    browse: {
+      category: "Sterowanie przeglądarką dla agentów",
+      body: "Pozwól agentowi korzystać z Twojej prawdziwej przeglądarki, z Twoimi logowaniami i kartami.",
+    },
     hex: {
       category: "Dyktowanie głosowe",
       body: "Dyktowanie głosowe na urządzeniu w każdej aplikacji.",

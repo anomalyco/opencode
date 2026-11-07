@@ -394,6 +394,10 @@ export const content = {
     },
   },
   apps: {
+    browse: {
+      category: "Controle do navegador para agentes",
+      body: "Deixe seu agente usar seu navegador de verdade, com seus logins e abas.",
+    },
     hex: {
       category: "Ditado por voz",
       body: "Ditado por voz no aparelho para qualquer app.",

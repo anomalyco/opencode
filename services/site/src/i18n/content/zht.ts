@@ -202,6 +202,7 @@ export const content = {
     },
   },
   apps: {
+    browse: { category: "代理瀏覽器控制", body: "讓你的代理使用你真正的瀏覽器，保留登入狀態和分頁。" },
     hex: { category: "語音聽寫", body: "適用於任何應用程式的裝置端語音聽寫。" },
     opentunnel: { category: "本機通道", body: "為本機應用程式提供公開的 HTTPS URL。" },
     opentui: { category: "函式庫", body: "用於打造終端機使用者介面的函式庫。" },

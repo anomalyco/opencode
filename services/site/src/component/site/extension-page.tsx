@@ -37,7 +37,7 @@ export function ExtensionPage(props: { slug: ExtensionSlug; path?: string }) {
     const slug = extensionPages[(index + step + extensionPages.length) % extensionPages.length].slug
     return { slug, name: extensionCopy()[slug].name }
   }
-  const markdown = useMarkdown(path(), (_, pages) => pages.extensionMarkdown(props.slug)())
+  const markdown = useMarkdown(path(), (context, pages) => pages.extensionMarkdown(props.slug)(context))
   const command = () => data().install.command
 
   onMount(() => {
@@ -158,7 +158,7 @@ export function ExtensionPage(props: { slug: ExtensionSlug; path?: string }) {
 
       <ExtensionDownload lead={extension().install} command={command()} />
 
-      <MoreFromAnomaly slot="more-from-anomaly" />
+      <MoreFromAnomaly slot="more-from-anomaly" exclude={props.slug} />
     </Site>
   )
 }

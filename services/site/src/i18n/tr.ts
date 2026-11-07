@@ -316,7 +316,7 @@ export const dict = {
   "site.product.isNew": "{{name}} yeni. Güncellemeleri burada görünecek.",
   "site.extensions": "Eklentiler",
   "site.contents": "İçindekiler",
-  "site.companions": "Diğer açık kaynak ürünler",
+  "site.companions": "OpenCode ile harika çalışır",
   "site.notFound.title": "Sayfa bulunamadı",
   "site.arcade.alt": "Gece terk edilmiş bir oyun salonu. Bir makinenin ekranı hâlâ 404 yazısıyla parlıyor ve önündeki yerde bir jeton duruyor.",
   "site.arcade.token": "Oyun jetonu. Makineye atmak için Enter tuşuna basın.",

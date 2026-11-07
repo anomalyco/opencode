@@ -369,6 +369,10 @@ export const content = {
     },
   },
   apps: {
+    browse: {
+      category: "Contrôle du navigateur pour agents",
+      body: "Laissez votre agent utiliser votre vrai navigateur, avec vos connexions et vos onglets.",
+    },
     opentunnel: {
       category: "Tunnels locaux",
       body: "Des URL HTTPS publiques pour vos apps locales.",

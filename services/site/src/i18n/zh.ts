@@ -312,7 +312,7 @@ export const dict = {
   "site.product.isNew": "{{name}} 是新产品，它的更新会显示在这里。",
   "site.extensions": "扩展",
   "site.contents": "目录",
-  "site.companions": "更多开源产品",
+  "site.companions": "与 OpenCode 完美搭配",
   "site.notFound.title": "页面未找到",
   "site.arcade.alt": "夜晚废弃的街机厅。一台街机的屏幕仍亮着，显示 404，屏幕前的地上躺着一枚代币。",
   "site.arcade.token": "街机代币。按 Enter 把它投进机器。",

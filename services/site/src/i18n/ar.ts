@@ -306,7 +306,7 @@ export const dict = {
   "site.product.isNew": "{{name}} جديد. ستظهر تحديثاته هنا.",
   "site.extensions": "الإضافات",
   "site.contents": "المحتويات",
-  "site.companions": "منتجات أخرى مفتوحة المصدر",
+  "site.companions": "يعمل بشكل رائع مع OpenCode",
   "site.notFound.title": "الصفحة غير موجودة",
   "site.arcade.alt": "صالة ألعاب مهجورة ليلًا. لا تزال شاشة إحدى الآلات مضيئة وعليها 404، وأمامها على الأرض قطعة نقدية للعب.",
   "site.arcade.token": "قطعة نقدية للعب. اضغط Enter لإدخالها في الآلة.",
