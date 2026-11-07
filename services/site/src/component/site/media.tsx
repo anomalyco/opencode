@@ -118,3 +118,29 @@ export function Still(props: JSX.ImgHTMLAttributes<HTMLImageElement> & { src: st
     </picture>
   )
 }
+
+/**
+ * Loads a video again once it is on the page. A client-rendered video gets its src while it still
+ * belongs to Solid's template document, and while the router holds a new page off screen for its
+ * data, Chromium tries the load there and rejects the URL ("URL safety check"). Joining the page
+ * does not retry it. A video that has already picked its source is left alone.
+ */
+export function rescueMedia(video: HTMLVideoElement | undefined) {
+  if (video && (video.getAttribute("src") || video.querySelector("source[src]")) && !video.currentSrc) video.load()
+}
+
+/** True when the user asks for reduced motion. Always false during SSR. */
+export function prefersReducedMotion() {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+}
+
+/**
+ * The page's colour scheme on the client: the site's theme (the site root's data-theme, which the
+ * pre-paint script sets from the saved choice), else the system's. Server: undefined.
+ */
+export function pageScheme(): "light" | "dark" | undefined {
+  if (typeof document === "undefined") return
+  const theme = document.querySelector<HTMLElement>("[data-site]")?.dataset.theme
+  if (theme === "light" || theme === "dark") return theme
+  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+}

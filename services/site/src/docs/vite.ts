@@ -12,8 +12,6 @@ import { base } from "./config"
 import { frontmatterSchema } from "./frontmatter"
 import { docsSlug } from "./lib/navigation"
 import recmaSolid from "./recma-solid"
-import legacyRehypeHeadings from "./legacy/rehype-headings"
-import legacyRehypeShiki from "./legacy/rehype-shiki"
 import rehypeHeadings from "./rehype-headings"
 import rehypeShiki from "./rehype-shiki"
 import rehypeTableScroll from "./rehype-table-scroll"
@@ -26,12 +24,9 @@ const pages = "virtual:docs-pages"
 /**
  * The docs in the site's Vite build: compiles content/*.mdx into server-only Solid modules (for
  * script/build.ts and the development server) and provides `virtual:docs-pages`, the list of page
- * slugs. The docs' stylesheet and script are built by script/build.ts, under /docs/_build. `restyle`
- * picks the restyle's Markdown plugins or the legacy ones (config.ts `restyled`); the development
- * server renders the restyle.
+ * slugs. The docs' stylesheet and script are built by script/build.ts, under /docs/_build.
  */
-export function docs(options: { restyle?: boolean } = {}): Plugin {
-  const restyle = options.restyle ?? true
+export function docs(): Plugin {
   return {
     name: "opencode-docs",
     enforce: "pre",
@@ -41,14 +36,11 @@ export function docs(options: { restyle?: boolean } = {}): Plugin {
       const slugs = readdirSync(content, { recursive: true, encoding: "utf8" })
         .filter((file) => file.endsWith(".mdx"))
         .map((file) => docsSlug(file.replaceAll("\\", "/")))
-      return [
-        `export const docsSlugs = ${JSON.stringify([...slugs, "api"].toSorted())}`,
-        `export const restyle = ${restyle}`,
-      ].join("\n")
+      return `export const docsSlugs = ${JSON.stringify([...slugs, "api"].toSorted())}`
     },
     async transform(source, id) {
       if (!id.endsWith(".mdx")) return
-      const code = await compileMdx(source, id, restyle)
+      const code = await compileMdx(source, id)
       const result = await transformAsync(code, {
         filename: id,
         presets: [
@@ -64,10 +56,9 @@ export function docs(options: { restyle?: boolean } = {}): Plugin {
 }
 
 // MDX as Astro's MDX integration compiled it (GitHub-flavoured Markdown, smart punctuation, Shiki,
-// heading ids), with the docs' own plugins: the restyle's wrap code in the site's CodeFrame and
-// headings in HeadingLink, the legacy ones keep the Astro markup. The module also exports the page's frontmatter, its
-// headings and its Markdown twin (`# Title` and the source, as the docs have always served it).
-async function compileMdx(source: string, id: string, restyle: boolean) {
+// heading ids), with the docs' own plugins, which wrap code in the site's CodeFrame and headings in
+// HeadingLink. The module also exports the page's frontmatter, its headings and its Markdown twin (`# Title` and the source, as the docs have always served it).
+async function compileMdx(source: string, id: string) {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(source)
   const parsed = frontmatterSchema.safeParse(match ? parse(match[1]) : {})
   if (!parsed.success) throw new Error(`${id}: invalid frontmatter\n${parsed.error.message}`)
@@ -80,9 +71,7 @@ async function compileMdx(source: string, id: string, restyle: boolean) {
     elementAttributeNameCase: "html",
     stylePropertyNameCase: "css",
     remarkPlugins: [remarkGfm, remarkSmartypants, [remarkDocsLinks, { base }], remarkSlots],
-    rehypePlugins: restyle
-      ? [rehypeShiki, rehypeTableScroll, rehypeHeadings]
-      : [legacyRehypeShiki, rehypeTableScroll, legacyRehypeHeadings],
+    rehypePlugins: [rehypeShiki, rehypeTableScroll, rehypeHeadings],
     recmaPlugins: [recmaSolid],
   })
   return [

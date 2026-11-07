@@ -24,8 +24,8 @@ import { monoFontFaces } from "~/component/site/mono-fonts"
 const shareImagePages = [
   "/",
   "/desktop",
-  "/mobile",
   "/terminal",
+  "/mobile",
   "/sdk",
   "/ide",
   "/mini",

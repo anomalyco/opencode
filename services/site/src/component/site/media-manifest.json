@@ -918,6 +918,26 @@
         [1200, "ce830aa0"]
       ]
     },
+    "/product-videos/heroes/browse-landscape-dark.webp": {
+      "avif": [
+        [1280, "431eacac"],
+        [1920, "d34997ae"]
+      ],
+      "webp": [
+        [1280, "573fc3b7"],
+        [1920, "d861eb55"]
+      ]
+    },
+    "/product-videos/heroes/browse-landscape-light.webp": {
+      "avif": [
+        [1280, "6ad5a4af"],
+        [1920, "2cb0c207"]
+      ],
+      "webp": [
+        [1280, "2e5a8cca"],
+        [1920, "83c6b047"]
+      ]
+    },
     "/product-videos/heroes/desktop-landscape-dark.webp": {
       "avif": [
         [1280, "70657b3a"],

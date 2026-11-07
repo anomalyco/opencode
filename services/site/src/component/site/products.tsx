@@ -24,7 +24,7 @@ import { extensionCardSource, productsSource } from "~/i18n/content/areas/produc
 import type { DownloadPlatform } from "~/routes/download/types"
 import {
   desktopBuilds,
-  detectDesktopBuild,
+  detectDesktopDownload,
   detectOS,
   getDownloadHref,
   getDownloadPlatform,
@@ -55,29 +55,24 @@ import {
 import { designCopy, designMode } from "./design-copy"
 import { sortableProducts } from "./products-order"
 import { carouselBreakpoints, cardEasingCurves, siteSettings } from "./settings"
-import { pageMedia, pageScheme, productVideo } from "./videos"
-import { imageSources, loadStill, posterFile, Still, stillSizes, VideoSources } from "./media"
+import { pageMedia, productVideo } from "./videos"
+import {
+  imageSources,
+  loadStill,
+  pageScheme,
+  posterFile,
+  prefersReducedMotion,
+  rescueMedia,
+  Still,
+  stillSizes,
+  VideoSources,
+} from "./media"
 import { inlineKey } from "~/lib/direction"
 
 export { installs, products, sdkSnippet, type ProductSlug } from "./product-data"
 
 // Loaded only for a fine pointer once the carousel's cards overflow (ProductCarousel).
 const ProductsArrows = lazy(() => import("./products-arrows"))
-
-/**
- * Loads a video again once it is on the page. A client-rendered video gets its src while it still
- * belongs to Solid's template document, and while the router holds a new page off screen for its
- * data, Chromium tries the load there and rejects the URL ("URL safety check"). Joining the page
- * does not retry it. A video that has already picked its source is left alone.
- */
-export function rescueMedia(video: HTMLVideoElement | undefined) {
-  if (video && (video.getAttribute("src") || video.querySelector("source[src]")) && !video.currentSrc) video.load()
-}
-
-/** True when the user asks for reduced motion. Always false during SSR. */
-export function prefersReducedMotion() {
-  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
-}
 
 type Scroll = { y: number; x: number }
 /** The pages a product page's hero can shrink back into a card on: the home carousel and the /product grid. */
@@ -962,7 +957,7 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
   const platform = useDevicePlatform()
   const mobile = () => isMobile(platform())
   const [os, setOS] = createSignal<OS>(requestOS())
-  // The exact build for this computer, once the browser has said (the Mac's chip; detectDesktopBuild).
+  // The build for this computer, once the browser has said (the Mac's chip, Windows or Linux on ARM64; detectDesktopDownload).
   const [build, setBuild] = createSignal<DownloadPlatform>()
   const [open, setOpen] = createSignal(false)
   onCloseMenus(() => setOpen(false))
@@ -1002,7 +997,7 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
   onMount(() => {
     setOS(detectOS())
     setSheet(prefersSheet())
-    if (props.slug === "desktop") void detectDesktopBuild().then(setBuild)
+    if (props.slug === "desktop") void detectDesktopDownload().then(setBuild)
     const close = (event: Event) => {
       if (event instanceof KeyboardEvent && event.key !== "Escape") return
       if (event instanceof MouseEvent && menu?.contains(event.target as Node)) return
