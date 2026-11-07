@@ -52,9 +52,9 @@ export type ExecuteFn<Input = unknown, Output = unknown, R = never> = (
 ) => Effect.Effect<Output, unknown, R>
 
 /**
- * A tool execution wrapper for idempotent work that is safe to run again. If a suspend lands while the call is running
- * (`engine: "vm"`), the VM interrupts it without firing `tool.after`, keeps the call queued in the snapshot, and
- * re-runs it on resume with the same `key` without double-counting against `maxToolCalls`.
+ * A tool execution wrapper for idempotent work that is safe to run again. If a suspend lands while the call is running,
+ * the VM interrupts it without firing `tool.after`, keeps the call queued in the snapshot, and re-runs it on resume
+ * with the same `key` without double-counting against `maxToolCalls`.
  */
 export type Idempotent<Input = unknown, Output = unknown, R = never> = {
   (input: Input, context: ToolContext): Effect.Effect<Output, unknown, R>
