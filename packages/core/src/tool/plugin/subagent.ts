@@ -161,10 +161,24 @@ export const Plugin = {
                             new ToolFailure({ message: `Subagent session not found: ${input.sessionID}`, error }),
                         ),
                       )
-              if (existing !== undefined && existing.parentID !== context.sessionID)
+              if (existing !== undefined && existing.parentID !== context.sessionID) {
+                // A child of any session this one was forked from (a fork of a fork too) reports there, not here.
+                const seen = new Set<string>([parent.id])
+                let original = parent.fork?.sessionID
+                while (original !== undefined && original !== existing.parentID && !seen.has(original)) {
+                  seen.add(original)
+                  original = yield* sessions.get(original).pipe(
+                    Effect.map((session) => session.fork?.sessionID),
+                    Effect.orElseSucceed(() => undefined),
+                  )
+                }
                 return yield* new ToolFailure({
-                  message: `Session ${existing.id} is not a child of the current session`,
+                  message:
+                    original !== undefined && original === existing.parentID
+                      ? `Session ${existing.id} belongs to ${existing.parentID}, which this session was forked from, so that subagent reports there. Start a new subagent here instead.`
+                      : `Session ${existing.id} is not a child of the current session`,
                 })
+              }
               const override = input.model === undefined ? undefined : yield* resolveModel(input.model)
               // Continuing with a different agent switches the child, mirroring create semantics
               // where an explicit model wins over the agent's configured model, which wins over the inherited one.

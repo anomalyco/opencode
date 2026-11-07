@@ -84,6 +84,12 @@ export type ListInput = SessionStore.ListInput
 
 const DefaultListLimit = 50
 
+/** Forks copy subagent launches, but those subagents still report to the original. */
+const forkNotice = (parent: SessionSchema.Info) =>
+  `This session is a fork of ${parent.id}${parent.title === undefined ? "" : ` ("${parent.title}")`}. ` +
+  "Subagents started before the fork belong to the original and report there, not here. " +
+  "Don't wait for them; start a new subagent if this fork needs that work."
+
 type CreateBaseInput = {
   id?: SessionSchema.ID
   title?: string
@@ -379,6 +385,15 @@ const layer = Layer.effect(
             ...inherited,
           })
           .pipe(Effect.provideService(SessionBlob.ForkMedia, media))
+        // Appended to history after the copied rows, so the prompt-cache prefix stays byte-identical. Written directly
+        // rather than through the inbox: an inbox steer would be promoted, and start a turn, on the fork's next move,
+        // compaction or revert.
+        yield* bus.publish(SessionEvent.Synthetic, {
+          sessionID,
+          description: "Fork notice",
+          text: forkNotice(parent),
+          metadata: { source: "fork", forkOf: parent.id },
+        })
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
       get: (sessionID) => sessions.forSession(sessionID).get(),

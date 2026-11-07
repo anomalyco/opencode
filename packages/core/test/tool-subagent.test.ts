@@ -723,6 +723,51 @@ describe("SubagentTool", () => {
     ),
   )
 
+  it.live("rejects continuing the original's subagent from a fork of a fork", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const bus = yield* Bus.Service
+          const { db } = yield* Database.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          yield* sessions.prompt({ sessionID: parent.id, text: "First", resume: false })
+          yield* SessionInbox.promote(db, bus, parent.id, "steer")
+          const child = yield* sessions.create({
+            parentID: parent.id,
+            title: "original review",
+            agent: Agent.ID.make("reviewer"),
+          })
+          const first = yield* sessions.fork({ sessionID: parent.id })
+          const forked = yield* sessions.fork({ sessionID: first.id })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(forked.location)))
+
+          expect(
+            yield* executeTool(registry, {
+              sessionID: forked.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-fork-child",
+                name: SubagentTool.name,
+                input: { agent: "reviewer", description: "follow up", prompt: "continue", sessionID: child.id },
+              },
+            }),
+          ).toEqual({
+            status: "error",
+            error: {
+              type: "tool.execution",
+              message: `Session ${child.id} belongs to ${parent.id}, which this session was forked from, so that subagent reports there. Start a new subagent here instead.`,
+            },
+          })
+        }),
+      ),
+    ),
+  )
+
   it.live("runs the child on an explicitly requested model", () =>
     tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
