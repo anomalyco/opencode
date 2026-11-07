@@ -240,46 +240,56 @@ const rank = (entries: ReadonlyArray<SearchEntry>, query: string): Array<SearchE
     .map(({ entry }) => entry)
 }
 
-const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
-  _tag: "CodeModeTool",
-  description: "Search available tools",
-  input: SearchInput,
-  output: SearchOutput,
-  execute: (input) =>
-    Effect.sync(() => {
-      const request = input as typeof SearchInput.Type
-      const query = request.query ?? ""
-      const offset = request.offset ?? 0
-      let ns = request.namespace
-      if (ns !== undefined && !searchIndex.some((entry) => entry.description.path.startsWith("tools."))) {
-        if (ns === "tools") ns = undefined
-        else if (ns.startsWith("tools.")) ns = ns.slice("tools.".length)
-      }
-      const scoped =
-        ns === undefined
-          ? searchIndex
-          : searchIndex.filter((entry) => entry.description.path === ns || entry.description.path.startsWith(`${ns}.`))
-      const trimmed = query.trim()
-      const pathQuery = trimmed.startsWith("tools.") ? trimmed.slice("tools.".length) : trimmed
-      const exact =
-        pathQuery === ""
-          ? undefined
-          : scoped.find(
-              (entry) => entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed,
-            )
-      const ranked = exact !== undefined ? [exact] : rank(scoped, query)
-      const items = ranked.slice(offset, offset + (request.limit ?? defaultSearchLimit)).map(({ description }) => ({
-        ...description,
-        path: toolExpression(description.path),
-      }))
-      const remaining = Math.max(0, ranked.length - offset - items.length)
-      return {
-        items,
-        remaining,
-        next: remaining > 0 ? { offset: offset + items.length } : null,
-      }
-    }),
-})
+const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => {
+  // Paths are shown with a `tools.` prefix, so a namespace or a query may repeat it. A prefix can also be real: a
+  // server named `tools` publishes paths under that namespace. Drop it only when the written form names nothing.
+  const names = (value: string) =>
+    searchIndex.some((entry) => entry.description.path === value || entry.description.path.startsWith(`${value}.`))
+  const unprefixed = (value: string) => {
+    if (value === "tools") return undefined
+    if (!value.startsWith("tools.")) return value
+    return value.slice("tools.".length)
+  }
+  const normalized = (value: string) => (names(value) ? value : unprefixed(value))
+  return {
+    _tag: "CodeModeTool",
+    description: "Search available tools",
+    input: SearchInput,
+    output: SearchOutput,
+    execute: (input) =>
+      Effect.sync(() => {
+        const request = input as typeof SearchInput.Type
+        const query = request.query ?? ""
+        const offset = request.offset ?? 0
+        const ns = request.namespace === undefined ? undefined : normalized(request.namespace)
+        const scoped =
+          ns === undefined
+            ? searchIndex
+            : searchIndex.filter(
+                (entry) => entry.description.path === ns || entry.description.path.startsWith(`${ns}.`),
+              )
+        const trimmed = query.trim()
+        const pathQuery = names(trimmed) ? trimmed : (unprefixed(trimmed) ?? "")
+        const exact =
+          pathQuery === ""
+            ? undefined
+            : scoped.find(
+                (entry) => entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed,
+              )
+        const ranked = exact !== undefined ? [exact] : rank(scoped, query)
+        const items = ranked.slice(offset, offset + (request.limit ?? defaultSearchLimit)).map(({ description }) => ({
+          ...description,
+          path: toolExpression(description.path),
+        }))
+        const remaining = Math.max(0, ranked.length - offset - items.length)
+        return {
+          items,
+          remaining,
+          next: remaining > 0 ? { offset: offset + items.length } : null,
+        }
+      }),
+  }
+}
 
 /** Exact callable signature of the built-in `search` function, for host-owned instructions. */
 export const searchSignature = (() => {
