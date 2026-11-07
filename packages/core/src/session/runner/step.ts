@@ -172,7 +172,10 @@ export const make = Effect.gen(function* () {
           Exit.isSuccess(stream) && recorded.finish?.finish === "unknown"
             ? new AIError({
                 reason: new InvalidProviderOutputError({
-                  message: "The provider response ended with an unknown finish reason.",
+                  message:
+                    recorded.finish.rawFinish === undefined
+                      ? "The provider response ended with an unknown finish reason."
+                      : `The provider response ended with an unknown finish reason: ${JSON.stringify(recorded.finish.rawFinish)}`,
                   classification: "incomplete-stream",
                 }),
               })
