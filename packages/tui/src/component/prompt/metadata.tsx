@@ -10,7 +10,7 @@ export function PromptMetadataRow(props: {
   agent?: string
   auto: boolean
   model: string
-  provider: string
+  provider?: string
   variant?: string
   /** What the workspace's limits leave for the model, once it is running low. */
   limit?: { readonly text: string; readonly danger: boolean }
@@ -120,12 +120,12 @@ function promptMetadataLayout(input: {
   agent: string
   auto?: boolean
   model: string
-  provider: string
+  provider?: string
   variant?: string
   limit?: string
 }) {
   const agent = input.terminalWidth < 44 ? undefined : input.agent
-  const provider = input.terminalWidth < 44 ? "" : input.provider
+  const provider = input.terminalWidth < 44 ? "" : (input.provider ?? "")
   const limit = input.limit
   const candidates: Layout[] = [
     { agent, auto: input.auto, model: input.model, provider, variant: input.variant, limit },
