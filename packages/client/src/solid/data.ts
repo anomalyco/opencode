@@ -1350,12 +1350,15 @@ export function createData(config: CreateDataInput) {
     const location = event.location
     switch (event.type) {
       case "provider.updated":
+        bootstrapLocation(location)
         refreshLocation("provider", result.location.provider, location)
         break
       case "model.updated":
+        bootstrapLocation(location)
         refreshLocation("model", result.location.model, location)
         break
       case "agent.updated":
+        bootstrapLocation(location)
         refreshLocation("agent", result.location.agent, location)
         break
       case "command.updated":
@@ -1446,6 +1449,18 @@ export function createData(config: CreateDataInput) {
     const active = hasLocation(field, location)
     resource.invalidate(location)
     if (active) refresh(() => resource.sync(location))
+  }
+
+  // A cold Location answers catalog reads with 503 while its plugins activate, so an initial sync can
+  // fail before anything was stored. When the Location finishes booting it publishes these catalog
+  // events; bootstrap the whole Location instead of dropping them, otherwise the failed sync never recovers.
+  function bootstrapLocation(location: LocationRef) {
+    // syncInfo creates the `info` entry before the catalog reads; a location without it was only ever
+    // touched by an individual resource (e.g. vcs), so its catalog event is not a dropped full sync.
+    if (!store.location[locationKey(location)]?.info) return
+    const loaded = ["agent", "model", "provider"] as const
+    if (loaded.some((field) => hasLocation(field, location))) return
+    refresh(() => result.location.sync(location))
   }
 
   // A cached per-location catalog. `sync` loads once per invalidation, keyed by the
