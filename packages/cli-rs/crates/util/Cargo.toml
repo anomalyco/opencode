@@ -1,0 +1,17 @@
+[package]
+name = "opencode-util"
+description = "Small shared modules on libc alone: civil time and local offsets."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+libc.workspace = true
+
+[dev-dependencies]
+# Only the differential test of `time` (deps-plan C7); it does not ship.
+chrono.workspace = true

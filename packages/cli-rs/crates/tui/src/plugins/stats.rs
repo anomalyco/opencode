@@ -6,7 +6,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use chrono::{Datelike, Local, NaiveDate, TimeZone};
 use opencode_api::generated::{ExperimentalSessionStatsInput, ExperimentalSessionStatsInputTools, SessionStatsInfo};
 use opencode_plugin::{Definition, Slotted};
 use opencode_store::Changes;
@@ -14,6 +13,7 @@ use opencode_ui::activity_calendar::{activity_calendar, time_zone};
 use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::theme::Theme;
+use opencode_util::time::{self, Date, Zone};
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
 
@@ -109,8 +109,8 @@ impl Drop for Page {
 
 /// Reads this year's stats in the local time zone, without tool details.
 fn load(tui: &Tui, content: &View) {
-    let now = Local::now();
-    let from = Local.with_ymd_and_hms(now.year(), 1, 1, 0, 0, 0).earliest().map_or(0, |start| start.timestamp_millis());
+    let year = Zone::Local.at(time::now_ms()).unwrap_or_default().date.year;
+    let from = Zone::Local.instant(Date { year, month: 1, day: 1 }, 0).unwrap_or(0);
     let input = ExperimentalSessionStatsInput {
         from: Some(from as f64),
         timezone: Some(time_zone()),
@@ -239,7 +239,7 @@ fn poster(tui: &Tui, theme: &Theme, stats: &SessionStatsInfo) -> View {
 
 fn calendar_view(app: &App, theme: &Theme, stats: &SessionStatsInfo, width: u32) -> View {
     let calendar = activity_calendar(
-        &Local,
+        Zone::Local,
         &stats.activity,
         stats.range.from as i64,
         stats.range.to as i64,
@@ -302,18 +302,16 @@ fn trim(value: f64) -> String {
 /// `formatRange` of `{ month: "short", year: "numeric" }`: `Jan – Nov 2026`, `Nov 2026`, or
 /// `Dec 2025 – Jan 2026`.
 fn dates(from: f64, to: f64) -> String {
-    let date = |time: f64| {
-        Local.timestamp_millis_opt(time as i64).single().map_or(NaiveDate::default(), |date| date.date_naive())
-    };
+    let date = |time: f64| Zone::Local.at(time as i64).map_or(Date::default(), |date| date.date);
     let (start, end) = (date(from), date(from.max(to - 1.0)));
-    let month = |date: NaiveDate| date.format("%b").to_string();
-    if start.year() != end.year() {
-        return format!("{} {} – {} {}", month(start), start.year(), month(end), end.year());
+    let month = |date: Date| time::MONTHS[date.month as usize - 1];
+    if start.year != end.year {
+        return format!("{} {} – {} {}", month(start), start.year, month(end), end.year);
     }
-    if start.month() != end.month() {
-        return format!("{} – {} {}", month(start), month(end), end.year());
+    if start.month != end.month {
+        return format!("{} – {} {}", month(start), month(end), end.year);
     }
-    format!("{} {}", month(end), end.year())
+    format!("{} {}", month(end), end.year)
 }
 
 #[cfg(test)]

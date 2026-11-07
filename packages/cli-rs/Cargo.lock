@@ -834,12 +834,12 @@ dependencies = [
  "anyhow",
  "base64",
  "bytes",
- "chrono",
  "futures-util",
  "indexmap",
  "log",
  "opencode-api",
  "opencode-service",
+ "opencode-util",
  "percent-encoding",
  "regex",
  "serde_json",
@@ -892,7 +892,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64",
- "chrono",
  "clap",
  "clap_complete",
  "futures-util",
@@ -908,6 +907,7 @@ dependencies = [
  "opencode-store",
  "opencode-tui",
  "opencode-ui",
+ "opencode-util",
  "regex",
  "reqwest",
  "rustix",
@@ -948,10 +948,10 @@ name = "opencode-local"
 version = "0.1.0"
 dependencies = [
  "base64",
- "chrono",
  "indexmap",
  "log",
  "notify",
+ "opencode-util",
  "rand",
  "rustix",
  "serde",
@@ -984,7 +984,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64",
- "chrono",
  "futures-util",
  "indexmap",
  "log",
@@ -992,6 +991,7 @@ dependencies = [
  "opencode-local",
  "opencode-store",
  "opencode-ui",
+ "opencode-util",
  "opentui",
  "rustix",
  "serde",
@@ -1079,7 +1079,6 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "bytes",
- "chrono",
  "futures-util",
  "indexmap",
  "libloading",
@@ -1093,6 +1092,7 @@ dependencies = [
  "opencode-plugin",
  "opencode-store",
  "opencode-ui",
+ "opencode-util",
  "opentui",
  "rand",
  "regex",
@@ -1111,11 +1111,11 @@ name = "opencode-ui"
 version = "0.1.0"
 dependencies = [
  "base64",
- "chrono",
  "indexmap",
  "log",
  "opencode-api-types",
  "opencode-parity",
+ "opencode-util",
  "opentui",
  "regex",
  "serde",
@@ -1159,6 +1159,14 @@ dependencies = [
  "tree-sitter-zig",
  "unicode-width",
  "url",
+]
+
+[[package]]
+name = "opencode-util"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "libc",
 ]
 
 [[package]]

@@ -9,6 +9,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use opencode_util::time;
 use opentui::prelude::*;
 use serde_json::{Value, json};
 
@@ -36,7 +37,7 @@ impl Trace {
 
     fn start(log: &Path, pid: u32, cwd: &str, argv: &[String]) -> std::io::Result<Self> {
         let directory = log.join("direct");
-        let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ");
+        let stamp = time::UTC.at(time::now_ms()).map(|now| now.compact()).unwrap_or_default();
         let path = directory.join(format!("{stamp}-{pid}.jsonl"));
         fs::create_dir_all(&directory)?;
         let latest = json!({ "time": now(), "pid": pid, "cwd": cwd, "argv": argv, "path": path });
@@ -65,7 +66,7 @@ impl Trace {
 
 /// `new Date().toISOString()`.
 fn now() -> String {
-    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
+    time::iso(time::now_ms()).unwrap_or_default()
 }
 
 /// Sent to the app on each SIGUSR2 (`signals.sigusr2`); mini reloads its theme.

@@ -312,7 +312,5 @@ fn title(session: &SessionInfo) -> String {
 /// `Date.prototype.toISOString`.
 fn iso(millis: f64) -> String {
     #[allow(clippy::cast_possible_truncation)]
-    chrono::DateTime::from_timestamp_millis(millis as i64)
-        .map(|time| time.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string())
-        .unwrap_or_default()
+    opencode_util::time::iso(millis as i64).unwrap_or_default()
 }

@@ -513,15 +513,12 @@ fn tool_markdown(item: &Value) -> String {
 
 /// `new Date(ms).toLocaleString()` in en-US as Bun prints it: `3/3/2026, 12:00:00 PM`.
 fn locale_string(ms: f64) -> String {
-    use chrono::TimeZone;
     if !ms.is_finite() {
         return "Invalid Date".to_owned();
     }
-    chrono::Local
-        .timestamp_millis_opt(ms as i64)
-        .single()
-        .map(|date| date.format("%-m/%-d/%Y, %-I:%M:%S %p").to_string())
-        .unwrap_or_else(|| "Invalid Date".to_owned())
+    opencode_util::time::Zone::Local
+        .at(ms as i64)
+        .map_or_else(|| "Invalid Date".to_owned(), |date| date.locale_string())
 }
 
 fn toast(tui: &Tui, message: Result<&str, &str>) {

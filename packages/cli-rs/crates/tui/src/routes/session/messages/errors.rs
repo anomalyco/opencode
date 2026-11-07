@@ -8,11 +8,11 @@ use std::collections::HashSet;
 use std::rc::{Rc, Weak};
 use std::time::Duration;
 
-use chrono::{Local as Clock, TimeZone};
 use opencode_api::generated::{
     SessionMessageAssistant, SessionMessageAssistantRetry, SessionMessageInfo, SessionStructuredError,
 };
 use opencode_ui::bind;
+use opencode_util::time::{self, Zone};
 use opentui::prelude::*;
 
 use super::list::Context;
@@ -333,20 +333,20 @@ fn limit_notice(
 pub fn free_limit_reset(delay: Option<f64>, base: f64, now: f64) -> Option<String> {
     let delay = delay.filter(|delay| delay.is_finite() && *delay >= 0.0 && *delay <= 7.0 * DAY_MS)?;
     let at = base + delay;
-    let date = Clock.timestamp_millis_opt(at as i64).single()?;
-    let today = Clock.timestamp_millis_opt(now as i64).single()?;
+    let date = Zone::Local.at(at as i64)?;
+    let today = Zone::Local.at(now as i64)?;
     // `toLocaleTimeString(undefined, { timeStyle: "short" })` in en-US puts a narrow no-break space before AM/PM.
-    let time = date.format("%-I:%M\u{202f}%p").to_string();
-    if date.date_naive() == today.date_naive() && at - now < DAY_MS {
+    let time = date.short_time("\u{202f}");
+    if date.date == today.date && at - now < DAY_MS {
         return Some(time);
     }
-    Some(format!("{time} · {}", date.format("%-m/%-d/%Y")))
+    Some(format!("{time} · {}", date.numeric_date()))
 }
 
 /// `refusalReset`: OpenCode Console names the reset `resetsAt` in the error body.
 fn refusal_reset(body: &str) -> Option<f64> {
     let at = json_string(body, "resetsAt")?;
-    chrono::DateTime::parse_from_rfc3339(at).ok().map(|at| at.timestamp_millis() as f64)
+    time::parse_rfc3339(at).map(|at| at as f64)
 }
 
 /// `retryReset`: `retry-after` from `base`; nothing past 45 days, as a bad header.

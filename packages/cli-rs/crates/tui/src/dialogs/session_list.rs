@@ -25,6 +25,7 @@ use opencode_ui::motion::Spinner;
 use opencode_ui::select::{self, FooterHint, Gutter, Select, SelectAction, SelectOption, SelectProps};
 use opencode_ui::theme::Theme;
 use opencode_ui::toast::{ToastOptions, Variant};
+use opencode_util::time::{self, Zone};
 use opentui::prelude::*;
 use serde_json::{Value, json};
 
@@ -627,9 +628,7 @@ pub fn title(session: &SessionInfo) -> String {
         return title.clone();
     }
     let kind = if session.parent_id.is_some() { "Child" } else { "New" };
-    let created = chrono::DateTime::from_timestamp_millis(session.time.created as i64)
-        .unwrap_or_default()
-        .format("%Y-%m-%dT%H:%M:%S%.3fZ");
+    let created = time::iso(session.time.created as i64).or_else(|| time::iso(0)).unwrap_or_default();
     format!("{kind} session - {created}")
 }
 
@@ -680,11 +679,7 @@ pub fn status_gutter(
 
 /// `new Date(ms).toDateString()` in local time.
 pub fn date_string(ms: f64) -> String {
-    chrono::DateTime::from_timestamp_millis(ms as i64)
-        .unwrap_or_default()
-        .with_timezone(&chrono::Local)
-        .format("%a %b %d %Y")
-        .to_string()
+    Zone::Local.at(ms as i64).or_else(|| Zone::Local.at(0)).unwrap_or_default().date_string()
 }
 
 pub fn now_ms() -> f64 {

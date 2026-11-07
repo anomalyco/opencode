@@ -11,9 +11,9 @@ workspace = true
 
 [dependencies]
 base64.workspace = true
-chrono.workspace = true
 indexmap.workspace = true
 log.workspace = true
+opencode-util.workspace = true
 rand.workspace = true
 serde.workspace = true
 serde_json.workspace = true

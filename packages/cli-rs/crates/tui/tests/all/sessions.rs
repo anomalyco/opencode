@@ -11,7 +11,6 @@ use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness};
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::TimeZone;
 use opencode_api::generated::SessionID;
 use opencode_parity::assert_fixture;
 use opencode_tui::{Args, Deps, Route};
@@ -84,7 +83,8 @@ fn fake(mode: Mode, now: f64, delete_status: u16) -> Fake {
 }
 
 fn noon(day: u32) -> f64 {
-    chrono::Utc.with_ymd_and_hms(2026, 3, day, 12, 0, 0).unwrap().timestamp_millis() as f64
+    let date = opencode_util::time::Date { year: 2026, month: 3, day };
+    opencode_util::time::UTC.instant(date, 12 * 3600).unwrap() as f64
 }
 
 fn session(id: &str, title: Option<&str>, updated: f64, extra: Value) -> Value {

@@ -7,6 +7,7 @@ use opencode_api_types::js::number_to_string;
 use opencode_api_types::{
     FormField, FormOption, FormValue, FormWhen, FormWhenOp, FormWhenValue, SessionMessageShellExit,
 };
+use opencode_util::time::{self, Date};
 /// A choice row: an option, or Yes and No for a boolean (`FormRow`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Row {
@@ -375,16 +376,16 @@ pub fn date(text: &str) -> bool {
             4 | 7 => byte == b'-',
             _ => byte.is_ascii_digit(),
         });
-    shaped && chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").is_ok()
+    shaped && Date::parse(text).is_some()
 }
 
 /// What `new Date(text)` accepts, for the ISO shapes forms use.
 pub fn date_time(text: &str) -> bool {
-    chrono::DateTime::parse_from_rfc3339(text).is_ok()
+    time::parse_rfc3339(text).is_some()
         || ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S"]
             .iter()
-            .any(|format| chrono::NaiveDateTime::parse_from_str(text, format).is_ok())
-        || chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").is_ok()
+            .any(|format| time::parse(text, format).is_some())
+        || Date::parse(text).is_some()
 }
 
 /// `field.when`: every condition holds on the answers of the fields before it that show.
