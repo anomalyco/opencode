@@ -62,7 +62,7 @@ export function pressContent(t: Translate, route: (path: string) => string) {
     },
     about: {
       title: "About OpenCode",
-      body: "Boilerplate for OpenCode and its products, each in a long and a short version, ready to copy into your story.",
+      body: "Descriptions of OpenCode and its products in long and short versions, ready to copy.",
       // Both versions name the products in the site's order (products in product-data.ts): desktop,
       // terminal, mobile, SDK.
       boilerplate: {
