@@ -27,7 +27,6 @@ const selectors: Record<HomeSection, string> = {
   tools: '[data-section="tools"]',
   // Open source proof as its own section moves with the stats, right after them.
   openSource: ':is([data-section="openSource"], [data-section="openSourceProof"])',
-  faq: '[data-section="faq"]',
   console: '[data-section="console"]',
 }
 
@@ -39,7 +38,6 @@ const labels: Record<HomeSection, string> = {
   byos: "Bring your own subs",
   tools: "Bring your own tools",
   openSource: "Open source",
-  faq: "FAQ",
   console: "Console",
 }
 

@@ -84,19 +84,6 @@ export function buildSearchIndex(
     href: route(path),
     target: { text: title },
   })
-  const faq = (page: string, path: string) =>
-    home.faq.items.map(
-      (item): SearchItem => ({
-        id: `faq:${path}:${item.question}`,
-        group: "Sections",
-        title: item.question,
-        context: t("site.search.faq", { page }),
-        body: plainRich(item.answer),
-        keywords: "faq question",
-        href: route(path),
-        target: { faq: item.question },
-      }),
-    )
 
   const pages: SearchItem[] = [
     { title: names.home, path: "/", body: joinSentences([home.hero.title, ...home.hero.subtitle]) },
@@ -161,7 +148,6 @@ export function buildSearchIndex(
       home.tools.items.map((i) => i.name).join(" "),
     ),
     section(names.home, "/", home.openSource.title, stripTags(home.openSource.lead)),
-    section(names.home, "/", home.faq.title, undefined, "questions"),
     section(names.home, "/", home.console.title, `${home.console.headline} ${home.console.body}`),
   ]
   const productSections = productPages.flatMap((product) => [
@@ -181,16 +167,16 @@ export function buildSearchIndex(
       download.desktop.builds.map((b) => b.label).join(" "),
     ),
     section(
+      content.products.terminal.name,
+      "/terminal#install",
+      t("download.action.install"),
+      download.terminal.installs.map((i) => i.command).join(" "),
+    ),
+    section(
       content.products.mobile.name,
       "/mobile#download",
       t("download.action.download"),
       "iOS iPhone TestFlight beta Android Google Play",
-    ),
-    section(
-      content.products.terminal.name,
-      "/terminal#download",
-      t("download.action.download"),
-      download.terminal.installs.map((i) => i.command).join(" "),
     ),
     section(
       names.product,
@@ -314,7 +300,6 @@ export function buildSearchIndex(
     ...homeSections,
     ...productSections,
     ...downloadSections,
-    ...faq(names.home, "/"),
     ...pressSections,
     ...brandSections,
     ...legalSections,

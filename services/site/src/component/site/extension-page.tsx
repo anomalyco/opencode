@@ -13,6 +13,7 @@ import { extensionsSource } from "~/i18n/content/areas/extensions"
 import { ExtensionDownload } from "./download-sections"
 import { extensionPages, type ExtensionSlug } from "./extension-data"
 import { NewTab } from "./icons"
+import { heroStills, ProductHero } from "./product-hero"
 import { MoreFromAnomaly } from "./product-list"
 import { siteSettings } from "./settings"
 import { Site } from "./site"
@@ -37,7 +38,7 @@ export function ExtensionPage(props: { slug: ExtensionSlug; path?: string }) {
     const slug = extensionPages[(index + step + extensionPages.length) % extensionPages.length].slug
     return { slug, name: extensionCopy()[slug].name }
   }
-  const markdown = useMarkdown(path(), (_, pages) => pages.extensionMarkdown(props.slug)())
+  const markdown = useMarkdown(path(), (context, pages) => pages.extensionMarkdown(props.slug)(context))
   const command = () => data().install.command
 
   onMount(() => {
@@ -108,8 +109,8 @@ export function ExtensionPage(props: { slug: ExtensionSlug; path?: string }) {
       </Show>
 
       <div data-slot="first-screen">
-        {/* Plain black until there is real footage of the product. */}
-        <div data-component="product-hero" data-product={props.slug} data-empty />
+        {/* Plain black until the extension has a hero. */}
+        <ProductHero slug={props.slug} media={data().hero ? heroStills(props.slug) : undefined} />
 
         <section data-component="product-intro" data-section="intro">
           <div data-slot="copy">
@@ -156,9 +157,9 @@ export function ExtensionPage(props: { slug: ExtensionSlug; path?: string }) {
         </For>
       </ul>
 
-      <ExtensionDownload lead={extension().install} command={command()} />
+      <ExtensionDownload lead={extension().install} command={command()} commands={data().install.commands} store={data().store} />
 
-      <MoreFromAnomaly slot="more-from-anomaly" />
+      <MoreFromAnomaly slot="more-from-anomaly" exclude={props.slug} />
     </Site>
   )
 }

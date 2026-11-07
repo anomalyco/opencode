@@ -7,6 +7,7 @@ import { getUserShell, loadShellEnv } from "../service/shell-env"
 import { registerRendererProtocol, setDockIcon, setProtocolReporter } from "../windows"
 import { scoped } from "../native/logging"
 import { applySpellcheck, spellcheckMenuItems } from "../native/spellcheck"
+import { nativeT } from "../native/translations"
 
 // electron-context-menu attaches to every existing and future window, so it can load once the first
 // window is up instead of holding up startup with its dependency tree.
@@ -16,6 +17,21 @@ export const installContextMenu = Effect.gen(function* () {
     showSaveImageAs: true,
     showLookUpSelection: false,
     showSearchWithGoogle: false,
+    // Getters, because electron-context-menu reads the labels each time the menu opens.
+    labels: {
+      get cut() {
+        return nativeT("desktop.menu.cut")
+      },
+      get copy() {
+        return nativeT("desktop.menu.copy")
+      },
+      get paste() {
+        return nativeT("desktop.menu.paste")
+      },
+      get selectAll() {
+        return nativeT("desktop.menu.selectAll")
+      },
+    },
     append: (_actions, params) => (params.isEditable ? spellcheckMenuItems() : []),
   })
 })

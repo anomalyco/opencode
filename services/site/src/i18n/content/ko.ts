@@ -225,14 +225,21 @@ export const content = {
           title: "모든 MCP 클라이언트",
           body: "OpenCode, Claude Code, Cursor, Codex, Zed 등 다양한 클라이언트.",
         },
-        "named-sessions": { title: "이름 있는 세션", body: "각 세션은 재시작 후에도 자기 탭을 유지합니다." },
+        "all-your-logins": {
+          title: "모든 로그인 그대로",
+          body: "에이전트가 이미 로그인한 사이트를 그대로 사용합니다. 키도, 설정도 필요 없습니다.",
+        },
         allowlists: { title: "허용 목록", body: "세션의 탭을 지정한 사이트로만 제한하세요." },
       },
       install:
-        "한 줄로 Browse를 설치하고, 찾은 에이전트에 추가하고 확장 프로그램과 페어링합니다. Windows에서는 irm https://opencode.ai/browse/install.ps1 | iex 를 실행하세요. 에이전트에게 설정을 맡겨도 됩니다.",
+        "먼저 [Chrome 확장 프로그램]을 설치하세요. 나머지 단계는 확장 프로그램이 안내합니다. CLI를 직접 설치하려면(보통은 필요 없습니다) 아래 명령 중 하나를 사용하세요.",
     },
   },
   apps: {
+    browse: {
+      category: "에이전트용 브라우저 제어",
+      body: "로그인과 탭이 그대로인 실제 브라우저를 에이전트가 사용하게 하세요.",
+    },
     hex: { category: "음성 받아쓰기", body: "어떤 앱에서든 쓰는 온디바이스 음성 받아쓰기." },
     opentunnel: { category: "로컬 터널", body: "로컬 앱을 위한 공개 HTTPS URL." },
     opentui: { category: "라이브러리", body: "터미널 사용자 인터페이스를 위한 라이브러리." },
@@ -249,7 +256,7 @@ export const content = {
     },
     subscriptions: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } },
     steps: {
-      download: { title: "다운로드", line: "데스크톱, 모바일, 터미널 중에서 고르세요." },
+      download: { title: "다운로드", line: "데스크톱, 터미널, 모바일 중에서 고르세요." },
       "use-free-models": {
         title: "무료 모델 사용",
         line: "OpenCode에는 무료 모델이 기본으로 들어 있습니다. 계정은 필요 없습니다.",
@@ -431,7 +438,7 @@ export const content = {
       projects: {
         opencode: {
           name: "OpenCode",
-          body: "데스크톱, 모바일, 터미널 앱과 SDK를 갖춘 오픈 소스 코딩 에이전트. MIT 라이선스, GitHub 스타 220,000개 이상.",
+          body: "데스크톱, 터미널, 모바일 앱과 SDK를 갖춘 오픈 소스 코딩 에이전트. MIT 라이선스, GitHub 스타 220,000개 이상.",
         },
         sst: {
           name: "SST",
@@ -458,8 +465,8 @@ export const content = {
     about: {
       title: "OpenCode 소개",
       boilerplate: {
-        long: "OpenCode는 오픈 소스 코딩 에이전트입니다. 데스크톱 앱, 모바일 앱, 터미널 UI, SDK로 제공되며, Claude, GPT, Gemini를 비롯해 모든 제공자의 모델과 함께 작동합니다. OpenCode는 MIT 라이선스이며 Anomaly가 만듭니다. GitHub 스타 220,000개 이상, 기여자 1,000명 이상을 보유하고 있으며, 매달 2,200만 명 이상의 개발자가 사용합니다.",
-        short: "OpenCode는 Anomaly가 만든 오픈 소스 코딩 에이전트로, 데스크톱, 모바일, 터미널 앱과 SDK를 제공합니다.",
+        long: "OpenCode는 오픈 소스 코딩 에이전트입니다. 데스크톱 앱, 터미널 UI, 모바일 앱, SDK로 제공되며, Claude, GPT, Gemini를 비롯해 모든 제공자의 모델과 함께 작동합니다. OpenCode는 MIT 라이선스이며 Anomaly가 만듭니다. GitHub 스타 220,000개 이상, 기여자 1,000명 이상을 보유하고 있으며, 매달 2,200만 명 이상의 개발자가 사용합니다.",
+        short: "OpenCode는 Anomaly가 만든 오픈 소스 코딩 에이전트로, 데스크톱, 터미널, 모바일 앱과 SDK를 제공합니다.",
       },
       products: {
         "opencode-console": {

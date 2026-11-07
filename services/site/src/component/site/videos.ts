@@ -136,8 +136,8 @@ const moreMedia: Partial<Record<MoreSlug, true>> = { mini: true }
  */
 const themedHeroes: Partial<Record<PageSlug, true>> = {
   desktop: true,
-  mobile: true,
   terminal: true,
+  mobile: true,
   sdk: true,
   mini: true,
 }
@@ -151,17 +151,6 @@ function heroThemes(slug: PageSlug) {
   }
 }
 
-/**
- * The page's colour scheme on the client: the site's theme (the site root's data-theme, which the
- * pre-paint script sets from the saved choice), else the system's. Server: undefined.
- */
-export function pageScheme(): "light" | "dark" | undefined {
-  if (typeof document === "undefined") return
-  const theme = document.querySelector<HTMLElement>("[data-site]")?.dataset.theme
-  if (theme === "light" || theme === "dark") return theme
-  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
-}
-
 /** The default product video set: locked-off real UI shots joined by hard cuts (public/product-videos/locked). */
 const defaultSet = "locked"
 
@@ -171,17 +160,17 @@ const defaultSet = "locked"
  * "continue" (the cover's first second, then the same shots); made in product-videos/cinematic next
  * to the checkout (lock.py, angle.py, continue.sh).
  */
-const angledCuts: Partial<Record<ProductSlug, true>> = { desktop: true, mobile: true, terminal: true, sdk: true }
+const angledCuts: Partial<Record<ProductSlug, true>> = { desktop: true, terminal: true, mobile: true, sdk: true }
 
 /** The carousel cards with hover cuts; they replace the set's portrait video, whatever set is chosen. */
-const cardHovers: Partial<Record<ProductSlug, true>> = { desktop: true, mobile: true, terminal: true, sdk: true }
+const cardHovers: Partial<Record<ProductSlug, true>> = { desktop: true, terminal: true, mobile: true, sdk: true }
 
 /**
  * The carousel cards' resting state for every set, in place of the portrait poster: a short
  * seamless loop of the product's key element (`<slug>.mp4`) and its first frame (`<slug>.webp`).
  * They are not frames of the product videos, so the card crossfades between them.
  */
-const cardLoops: Partial<Record<ProductSlug, true>> = { desktop: true, mobile: true, terminal: true, sdk: true }
+const cardLoops: Partial<Record<ProductSlug, true>> = { desktop: true, terminal: true, mobile: true, sdk: true }
 
 /** The focused (essential UI only) clips that exist so far. */
 const focusedClips = [

@@ -96,6 +96,11 @@ export function changelogEntryMarkdown(
     ...entry.features.map((feature) =>
       blocks(`${heading}# ${feature.title}`, feature.body && `${feature.body}${refsMarkdown(feature)}`).trimEnd(),
     ),
+    entry.hiddenFeatures > 0 &&
+      link(
+        options.context.t("changelog.highlights.all", { tag: entry.releases[0].tag }),
+        options.context.route(`/changelog/${entry.releases[0].tag}`),
+      ),
     entry.breaking.length > 0 &&
       blocks(
         `${heading}# ${options.context.t("changelog.breaking")}`,
