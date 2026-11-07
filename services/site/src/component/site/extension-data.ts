@@ -26,7 +26,7 @@ type Extension = {
   product?: boolean
   /** For the page's structured data; every OS when left out. */
   operatingSystem?: string
-  /** A hero still per theme (videos.ts heroStills); the hero stays black when left out. */
+  /** A hero still per theme (product-hero.tsx heroStills); the hero stays black when left out. */
   hero?: boolean
 }
 

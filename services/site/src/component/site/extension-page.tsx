@@ -13,12 +13,11 @@ import { extensionsSource } from "~/i18n/content/areas/extensions"
 import { ExtensionDownload } from "./download-sections"
 import { extensionPages, type ExtensionSlug } from "./extension-data"
 import { NewTab } from "./icons"
-import { ProductHero } from "./product-hero"
+import { heroStills, ProductHero } from "./product-hero"
 import { MoreFromAnomaly } from "./product-list"
 import { siteSettings } from "./settings"
 import { Site } from "./site"
 import { useMarkdown } from "./use-markdown"
-import { heroStills } from "./videos"
 import { inlineKey } from "~/lib/direction"
 
 /**
