@@ -1,0 +1,177 @@
+# Third-party crates in the shipped graph of opencode-cli for x86_64-unknown-linux-gnu (normal and build edges,
+# not dev), one name per line (all versions of a crate share it), sorted. Marks: `build` (has a build script), `cc`
+# (the build script compiles C with `cc`), `proc-macro`. crates/cli/tests/deps.rs fails unless this file equals the
+# graph.
+#
+# Adding a line needs an orchestrator decision (O-58: an O- entry in decisions.md). A crate that leaves the graph
+# leaves this file in the same commit.
+
+aho-corasick
+anstream
+anstyle
+anstyle-parse
+anstyle-query
+anyhow build
+atomic-waker
+autocfg
+base64
+bitflags
+block-buffer
+bytes
+cc
+cfg-if
+chacha20
+chrono
+clap
+clap_builder
+clap_complete
+clap_derive proc-macro
+clap_lex
+colorchoice
+const-oid
+cpufeatures
+crypto-common
+data-encoding
+digest
+displaydoc proc-macro
+equivalent
+errno
+find-msvc-tools
+foldhash
+form_urlencoded
+futures-channel
+futures-core
+futures-sink
+futures-task
+futures-util
+getrandom build
+hashbrown
+heck
+html-escape
+http
+http-body
+http-body-util
+httparse build
+hybrid-array
+hyper
+hyper-rustls
+hyper-util
+iana-time-zone
+icu_collections
+icu_locale_core
+icu_normalizer
+icu_normalizer_data build
+icu_properties
+icu_properties_data build
+icu_provider
+idna
+idna_adapter
+indexmap
+inotify
+inotify-sys build
+ipnet
+is_terminal_polyfill
+itoa
+libc build
+libloading
+linux-raw-sys
+litemap
+log
+memchr
+mio
+notify
+notify-types
+num-traits build
+once_cell
+openssl-probe
+percent-encoding
+pin-project-lite
+potential_utf
+proc-macro2 build
+quote build
+rand
+rand_core
+regex
+regex-automata
+regex-syntax
+reqwest
+ring build cc
+rustix build
+rustls build
+rustls-native-certs
+rustls-pki-types
+rustls-platform-verifier
+rustls-webpki
+same-file
+serde build
+serde_core build
+serde_derive proc-macro
+serde_json build
+sha1
+sha2
+shlex
+signal-hook-registry
+similar
+slab
+smallvec
+socket2
+stable_deref_trait
+streaming-iterator
+strsim
+subtle
+syn
+sync_wrapper
+synstructure
+terminal_size
+thiserror build
+thiserror-impl proc-macro
+tinystr
+tokio
+tokio-macros proc-macro
+tokio-rustls
+tokio-tungstenite
+tokio-util
+tower
+tower-http
+tower-layer
+tower-service
+tracing
+tracing-core
+tree-sitter build cc
+tree-sitter-bash build cc
+tree-sitter-css build cc
+tree-sitter-diff build cc
+tree-sitter-go build cc
+tree-sitter-html build cc
+tree-sitter-javascript build cc
+tree-sitter-json build cc
+tree-sitter-language build
+tree-sitter-md build cc
+tree-sitter-python build cc
+tree-sitter-rust build cc
+tree-sitter-typescript build cc
+tree-sitter-yaml build cc
+tree-sitter-zig build cc
+try-lock
+tungstenite
+typenum
+unicode-ident
+unicode-segmentation
+unicode-width
+untrusted
+url
+utf8_iter
+utf8parse
+utf_types
+walkdir
+want
+writeable
+yoke
+yoke-derive proc-macro
+zerofrom
+zerofrom-derive proc-macro
+zeroize
+zerotrie
+zerovec
+zerovec-derive proc-macro
+zmij build
