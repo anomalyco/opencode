@@ -1,0 +1,139 @@
+---
+title: "Tiện ích mở rộng"
+---
+
+Thêm các gói đã phát hành, gói có gắn phiên bản, gói có phạm vi hoặc thư mục tiện ích mở rộng cục bộ vào `opencode.json(c)`.
+
+## Cấu hình
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin.ts",
+    "/absolute/path/plugin.ts",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+Đường dẫn tương đối được phân giải từ tệp cấu hình chứa mục đó. Mảng tiện ích mở rộng từ các tệp cấu hình có liên quan được chồng lên nhau
+từ mức ưu tiên thấp nhất đến cao nhất thay vì thay thế lẫn nhau.
+
+```text
+~/.config/opencode/opencode.jsonc
+./opencode.jsonc
+./.opencode/opencode.jsonc
+```
+
+## Khám phá
+
+OpenCode cũng nạp các tệp `.ts` và `.js` trực tiếp cùng các thư mục gói tiện ích mở rộng ngay bên dưới mọi thư mục `.opencode/plugins/`
+được phát hiện.
+
+```text
+.opencode/
+└── plugins/
+    ├── concise.ts
+    ├── reviewer.js
+    └── acme-package/
+```
+
+Tiện ích mở rộng toàn cục dùng cùng cấu trúc thư mục đó trong thư mục cấu hình của OpenCode.
+
+```text
+~/.config/opencode/plugins/
+```
+
+Một thư mục `plugins/` nằm cạnh `opencode.json(c)` ở thư mục gốc dự án sẽ không được phát hiện tự động; hãy cấu hình rõ các
+tệp của nó hoặc chuyển nó vào `.opencode/`.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["./plugins/local"]
+}
+```
+
+## Điều khiển
+
+Các mục tiện ích mở rộng được xử lý theo thứ tự. Thêm tiền tố `-` vào một ID hoặc ký tự đại diện để tắt nó, dùng `*` cho mọi tiện ích mở rộng, và dùng
+`.*` để khớp một tiền tố ID. Một ID xuất hiện sau sẽ bật lại tiện ích mở rộng.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+}
+```
+
+Hai tiện ích mở rộng tích hợp sẵn bỏ qua các lệnh gỡ bỏ để một kho lưu trữ không thể tắt việc thực thi
+[chính sách](/policies): `opencode.config.policy` và
+`opencode.provider.opencode`, tức là kết nối Console phân phối chính
+sách tổ chức.
+
+## Quản lý
+
+Cài đặt, liệt kê, kiểm tra, cập nhật hoặc gỡ bỏ các gói tiện ích mở rộng toàn cục bằng CLI.
+
+```sh
+opencode plugin add opencode-acme-plugin@1.2.0
+opencode plugin list
+opencode plugin list --builtin
+opencode plugin check
+opencode plugin update
+opencode plugin update opencode-acme-plugin
+opencode plugin remove opencode-acme-plugin@1.2.0
+```
+
+`plugin check` kiểm tra cập nhật cho các gói tiện ích mở rộng của server và chỉ dành cho TUI. `plugin update` cập nhật mọi gói lỗi thời;
+hãy truyền một gói đã cấu hình làm đích để chỉ kiểm tra hoặc cập nhật gói đó. Tiện ích mở rộng cục bộ và các bản ghi chính xác của gói sẽ
+bị bỏ qua.
+
+Cài đặt gói chấp nhận tên npm kèm phiên bản, thẻ hoặc dải phiên bản, cùng các đặc tả gói Git tương thích npm. Kho Git có thể dùng
+phím tắt đã lưu trữ, HTTPS hoặc SSH, bao gồm cả các kho riêng tư truy cập được bằng thông tin xác thực Git hiện có của bạn.
+
+```sh
+opencode plugin add @acme/opencode-plugin@latest
+opencode plugin add github:acme/opencode-plugin
+opencode plugin add git+ssh://git@github.com/acme/opencode-plugin.git#main
+opencode plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
+```
+
+Các nhánh, thẻ, hash commit đầy đủ và bộ chọn thư mục con `::path:` của npm đều được hỗ trợ. Hãy cấu hình trực tiếp các đường
+dẫn cục bộ; `plugin add` không chấp nhận đích tarball hay bí danh npm.
+
+## Tải lại
+
+Các thay đổi trong những thư mục cấu hình được theo dõi sẽ tự động tải lại. Khi khởi động, server nạp ngay các gói tiện ích mở rộng đã lưu
+đệm, cài các gói còn thiếu ở nền, và kiểm tra cập nhật cho các tiện ích mở rộng npm và Git chưa ghim phiên bản mà không thay đổi gói đã
+cài. Phiên bản npm chính xác và hash commit Git đầy đủ vẫn được ghim. Thay đổi với các phụ thuộc cục bộ không được theo dõi
+có thể vẫn cần khởi động lại OpenCode.
+
+```sh
+touch .opencode/plugins/concise/index.ts
+opencode service restart
+```
+
+## Terminal
+
+Tiện ích mở rộng chỉ dành cho CLI được cấu hình riêng và vẫn hoạt động khi kết nối với một server từ xa.
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-cli"]
+}
+```
+
+<Card title="Xây dựng tiện ích mở rộng" href="/build/plugins">
+  Tạo tiện ích mở rộng bổ sung công cụ, hook, tích hợp, lệnh, tác nhân và các hành vi khác.
+</Card>

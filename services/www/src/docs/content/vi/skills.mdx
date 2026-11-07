@@ -1,0 +1,266 @@
+---
+title: "Kỹ năng"
+---
+
+Tạo một kỹ năng để trao cho một tác nhân những chỉ dẫn tái sử dụng cho một tác vụ cụ
+thể. Đặt một tệp `SKILL.md` trong `.opencode/skills/<skill-id>` và mô tả khi nào nên dùng
+nó trong `description`.
+
+```markdown title=".opencode/skills/git-release/SKILL.md"
+---
+name: Git Release
+description: Prepare release notes, version bumps, and GitHub releases
+---
+
+## Workflow
+
+1. Read `references/release-policy.md`.
+2. Summarize merged changes since the previous tag.
+3. Propose the version bump before changing files.
+4. Run `scripts/changelog.ts` only after the user approves the version.
+```
+
+OpenCode giới thiệu kỹ năng này khi nó phù hợp. Tác nhân sau đó có thể tải các chỉ dẫn
+của nó bằng công cụ `skill`, thay vì thêm mọi kỹ năng vào mọi lời nhắc.
+
+## Tạo
+
+Đặt các script, tham chiếu và mẫu liên quan cạnh `SKILL.md`:
+
+```text
+.opencode/skills/
+└── git-release/
+    ├── SKILL.md
+    ├── scripts/
+    │   └── changelog.ts
+    └── references/
+        └── release-policy.md
+```
+
+Các đường dẫn viết bên trong kỹ năng có tính tương đối so với thư mục chứa `SKILL.md`.
+Dạng thư mục được khuyến nghị vì nó cho các tệp hỗ trợ một thư mục gốc riêng.
+
+## Phát hiện
+
+OpenCode tự động tìm kiếm các vị trí sau:
+
+| Phạm vi                 | Nguồn                                |
+| --------------------- | -------------------------------------- |
+| Toàn cục                | `~/.config/opencode/skills`            |
+| Tương thích toàn cục  | `~/.claude/skills`, `~/.agents/skills` |
+| Dự án               | `.opencode/skills`                     |
+| Tương thích dự án | `.claude/skills`, `.agents/skills`     |
+
+Với các nguồn thuộc dự án, OpenCode tìm kiếm từ thư mục hiện tại lên đến gốc dự án và
+bao gồm các thư mục khớp ở mọi cấp.
+
+Mỗi nguồn có thể chứa một trong hai dạng:
+
+```text
+skills/
+├── review.md
+└── git-release/
+    └── SKILL.md
+```
+
+- Các tệp Markdown phải nằm ở gốc nguồn, chẳng hạn như `skills/review.md`.
+- Các tệp được đặt tên chính xác là `SKILL.md` có thể nằm ở bất kỳ độ sâu nào, chẳng hạn
+  như `skills/git-release/SKILL.md`.
+
+## Nguồn
+
+Thêm các thư mục cục bộ hoặc danh mục HTTP khác bằng mảng `skills` trong bất kỳ tệp
+`opencode.json` hoặc `opencode.jsonc` nào:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": [
+    "./team-skills",
+    "~/shared/opencode-skills",
+    "/opt/company-skills",
+    "https://example.com/opencode/skills/",
+  ],
+}
+```
+
+| Giá trị | Cách phân giải |
+| ----- | ---------- |
+| Đường dẫn tương đối | Từ thư mục làm việc đang hoạt động của OpenCode, không phải từ tệp cấu hình |
+| Đường dẫn `~/` | Từ thư mục home của người dùng hiện tại |
+| Đường dẫn tuyệt đối | Dùng đúng như đã viết |
+| URL `http://` hoặc `https://` | Được nạp như một danh mục HTTP |
+
+Mỗi tệp cấu hình được phát hiện đều đóng góp các mục của nó. Các mảng `skills` được kết
+hợp chứ không bị thay thế.
+
+## Danh mục
+
+Một danh mục HTTP là một URL gốc kèm một tệp `index.json`:
+
+```json title="index.json"
+{
+  "skills": [
+    {
+      "name": "git-release",
+      "version": "3",
+      "files": ["git-release.md", "references/release-policy.md"]
+    }
+  ]
+}
+```
+
+Với mục đó, OpenCode tải từng tệp từ `<base-url>/git-release/<file>`.
+
+| Quy tắc | Yêu cầu |
+| ---- | ----------- |
+| Đường dẫn | Phải an toàn, tương đối và cùng origin |
+| Tệp mục | Bao gồm `SKILL.md` hoặc `<name>.md`, chẳng hạn như `git-release.md` |
+| Cập nhật | Tăng `version` khi tệp thay đổi để OpenCode làm mới bộ nhớ đệm |
+
+Trong danh mục HTTP, hãy ưu tiên dạng Markdown có tên. Mỗi thư mục kỹ năng được tải về
+trở thành một gốc nguồn, nên `git-release.md` có ID là `git-release`. Hiện tại trong V2,
+một `SKILL.md` ở cấp gốc có ID nguyên văn là `SKILL`.
+
+## Frontmatter
+
+Dùng frontmatter để đặt tên cho kỹ năng và kiểm soát nơi nó xuất hiện:
+
+```markdown title="SKILL.md"
+---
+name: Git Release
+description: Prepare a repository release
+metadata:
+  opencode/autoinvoke: false
+---
+
+Prepare the changelog, version bump, tag, and release notes.
+```
+
+| Trường                          | Hành vi                                                          |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `name`                         | Tên hiển thị; mặc định là ID suy ra từ đường dẫn                     |
+| `description`                  | Tóm tắt dùng để giới thiệu kỹ năng cho mô hình                       |
+| `metadata.opencode/autoinvoke` | Đặt thành `false` để loại kỹ năng khỏi danh sách khả dụng của mô hình  |
+| `disable-model-invocation`     | Đặt thành `true` để có cùng tác dụng với `opencode/autoinvoke: false` |
+
+Toàn bộ frontmatter là tùy chọn ở thời gian chạy. Hãy thêm một `description` rõ ràng khi
+mô hình cần phát hiện kỹ năng; những kỹ năng không có mô tả sẽ không được giới thiệu.
+
+`opencode/autoinvoke: false` chỉ ẩn kỹ năng khỏi danh sách khả dụng của mô hình. Kỹ năng
+vẫn được đăng ký và vẫn có thể được tải tường minh theo ID. Khi cả `disable-model-invocation`
+và `opencode/autoinvoke` đều được đặt, `opencode/autoinvoke` thắng. V2 chấp nhận các trường
+khả chuyển như `license` và `compatibility` nhưng không diễn giải chúng.
+
+## ID
+
+Đường dẫn tệp quyết định ID của kỹ năng. `name` trong frontmatter chỉ là nhãn hiển thị.
+
+| Tệp                              | ID            |
+| --------------------------------- | ------------- |
+| `<source>/git-release.md`         | `git-release` |
+| `<source>/git-release/SKILL.md`   | `git-release` |
+| `<source>/teams/release/SKILL.md` | `release`     |
+
+ID phải chính xác và phân biệt chữ hoa chữ thường. Với các kỹ năng khả chuyển, hãy dùng
+một ID kebab-case chữ thường duy nhất dài 1–64 ký tự và giữ nó khớp với tên thư mục:
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+Hiện tại V2 không thực thi mẫu này, khuyến nghị 1–64 ký tự, yêu cầu `name` khớp với thư
+mục, hay độ dài tối đa cho mô tả.
+
+## Thứ tự ưu tiên
+
+Kỹ năng được chọn theo ID. Nếu hai nguồn cùng định nghĩa `git-release`, nguồn được đăng ký
+sau sẽ cung cấp kỹ năng mà OpenCode tải:
+
+```text
+~/.config/opencode/skills/git-release/SKILL.md  ← lower precedence
+.opencode/skills/git-release/SKILL.md           ← loaded
+```
+
+Các nguồn được đăng ký từ quyền ưu tiên thấp đến cao:
+
+1. Kỹ năng tích hợp sẵn
+2. `.claude/skills`, bắt đầu từ bản toàn cục, rồi từ thư mục tổ tiên xa nhất hướng về thư mục hiện tại
+3. `.agents/skills`, bắt đầu từ bản toàn cục, rồi từ thư mục tổ tiên xa nhất hướng về thư mục hiện tại
+4. `~/.config/opencode/skills`
+5. `.opencode/skills` của dự án, từ gốc dự án hướng về thư mục hiện tại
+6. Các mục cấu hình `skills` tường minh, theo thứ tự ưu tiên cấu hình và thứ tự trong mảng
+
+Hãy tránh ID trùng lặp trừ khi bạn muốn ghi đè một kỹ năng đứng trước.
+
+## Tải
+
+Ở mỗi bước mô hình, OpenCode liệt kê các kỹ năng được phép có mô tả và không đặt
+`opencode/autoinvoke` thành `false`. Danh sách chỉ gồm ID, tên và mô tả, không có toàn bộ
+phần thân Markdown.
+
+Mô hình tải một kỹ năng bằng cách gọi công cụ `skill` với ID chính xác của nó:
+
+```json title="skill tool input"
+{
+  "id": "git-release"
+}
+```
+
+Sau đó OpenCode:
+
+1. Chọn định nghĩa hiện tại cho ID đó.
+2. Kiểm tra quyền `skill` của tác nhân được chọn.
+3. Thêm phần thân Markdown, không kèm frontmatter, vào cuộc trò chuyện.
+4. Cung cấp thư mục gốc của kỹ năng và một mẫu tối đa mười đường dẫn tệp hỗ trợ.
+
+Để tự tải một kỹ năng, hãy nhắc đến nó trong lời nhắc của bạn dưới dạng `@skill-id`.
+
+Nội dung các tệp hỗ trợ không được nạp tự động. Tác nhân đọc chúng khi kỹ năng chỉ định
+làm như vậy. Mẫu tệp khả dụng cho các kỹ năng `SKILL.md` dạng thư mục; các kỹ năng
+Markdown phẳng không nhận danh sách tệp lân cận.
+
+## Quyền
+
+Dùng hành động `skill` và ID của kỹ năng làm tài nguyên. Các quy tắc chạy theo thứ tự,
+và quy tắc khớp cuối cùng sẽ thắng:
+
+```jsonc title="opencode.jsonc"
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "allow" },
+    { "action": "skill", "resource": "internal-*", "effect": "deny" },
+    { "action": "skill", "resource": "experimental-*", "effect": "ask" },
+  ],
+}
+```
+
+| Hiệu ứng | Hành vi |
+| ------ | -------- |
+| `allow` | Giới thiệu và tải các kỹ năng khớp mà không cần phê duyệt |
+| `ask` | Giới thiệu các kỹ năng khớp và hỏi trước khi tải |
+| `deny` | Ẩn các kỹ năng khớp khỏi mô hình và từ chối việc tải |
+
+Đặt các quy tắc tương tự dưới `agents.<id>.permissions` để chúng chỉ áp dụng cho một tác
+nhân.
+
+## Khắc phục sự cố
+
+Ví dụ, ID của kỹ năng này là `release`, không phải tên trong frontmatter là `Git Release`:
+
+```text
+.opencode/skills/release/SKILL.md
+                      └─ ID: release
+```
+
+Nếu một kỹ năng bị thiếu hoặc tải sai nội dung:
+
+1. Xác nhận tệp hoặc là một tệp `*.md` ở cấp gốc, hoặc là một tệp lồng được đặt tên chính
+   xác là `SKILL.md`.
+2. Kiểm tra ID suy ra từ đường dẫn, phân biệt chữ hoa chữ thường, thay vì `name` trong
+   frontmatter.
+3. Thêm một `description` nếu mô hình cần phát hiện kỹ năng.
+4. Kiểm tra `opencode/autoinvoke` và quyền `skill` của tác nhân được chọn.
+5. Tìm một nguồn đặt sau định nghĩa cùng ID đó.
+6. Với danh mục HTTP, hãy xác minh `index.json`, các đường dẫn tệp cùng origin và một
+   `version` đã thay đổi.

@@ -1,0 +1,367 @@
+---
+title: "Tác nhân"
+---
+
+Tạo một tệp Markdown để thêm một tác nhân có thể tái sử dụng. Ví dụ này thêm một
+reviewer chỉ đọc mà tác nhân chính có thể khởi chạy cho các lượt đánh giá mã:
+
+```md title=".opencode/agents/reviewer.md"
+---
+description: Reviews changes for correctness and regressions
+mode: subagent
+model: anthropic/claude-sonnet-4-5#high
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+  - action: shell
+    resource: "*"
+    effect: deny
+---
+
+Review the current changes. List findings in severity order with file and line references.
+```
+
+Yêu cầu tác nhân chính của bạn dùng nó:
+
+```text
+Use the reviewer subagent to review my current changes.
+```
+
+Một tác nhân gộp lời nhắc hệ thống, lựa chọn mô hình, quyền và các chi tiết hiển thị
+thành một hồ sơ trợ lý có tên.
+
+## Vị trí
+
+Lưu tác nhân Markdown ở phạm vi toàn cục cho mọi dự án hoặc bên trong một dự án:
+
+```text
+~/.config/opencode/agents/<name>.md
+.opencode/agents/<name>.md
+```
+
+OpenCode phát hiện các thư mục `.opencode` của dự án từ thư mục hiện tại lên đến gốc dự
+án. Một đường dẫn lồng nhau sẽ trở thành một phần của ID tác nhân:
+
+```text
+.opencode/agents/team/reviewer.md  →  team/reviewer
+```
+
+## Định dạng
+
+### Markdown
+
+Frontmatter chấp nhận các trường giống như một mục cấu hình `agents`. Phần thân
+Markdown trở thành lời nhắc `system` của tác nhân:
+
+```md title=".opencode/agents/explainer.md"
+---
+description: Explains code without changing it
+mode: subagent
+---
+
+Explain the relevant code with short examples. Do not edit files.
+```
+
+### JSONC
+
+Định nghĩa các tác nhân dưới `agents` trong bất kỳ [tệp cấu hình OpenCode](/config) nào:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agents": {
+    "reviewer": {
+      "description": "Reviews current changes",
+      "mode": "subagent",
+      "system": "Report findings in severity order.",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}
+```
+
+## Chọn
+
+Đặt tác nhân chính được dùng khi một phiên chưa chọn tác nhân nào:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "writer",
+  "agents": {
+    "writer": { "mode": "primary" },
+  },
+}
+```
+
+Tác nhân chính mặc định được chọn phải tồn tại, nhìn thấy được và hỗ trợ việc chạy ở
+chế độ chính. Nếu không, OpenCode dùng `build`, rồi đến tác nhân đầu tiên nhìn thấy
+được và có thể chạy chính. Thay đổi cài đặt này không thay thế tác nhân đã lưu trên một
+phiên hiện có.
+
+## Chế độ
+
+Đặt `mode` tùy theo nơi tác nhân nên chạy:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "mode": "subagent" },
+  },
+}
+```
+
+| Chế độ | Hành vi |
+| --- | --- |
+| `primary` | Chạy làm tác nhân chính cho một phiên. Đây là mặc định cho một tác nhân tùy chỉnh mới. |
+| `subagent` | Chỉ chạy trong một phiên con thông qua công cụ `subagent`. |
+| `all` | Chạy vừa được với vai trò tác nhân chính vừa với vai trò subagent. |
+
+Subagent chạy với ngữ cảnh mới trong các phiên con ở tiền cảnh hoặc nền. Quyền
+`subagent` của tác nhân cha kiểm soát những tác nhân mà nó có thể khởi chạy; tác nhân
+con dùng các quyền được cấu hình riêng của nó.
+
+```jsonc
+{
+  "agents": {
+    "orchestrator": {
+      "permissions": [
+        { "action": "subagent", "resource": "*", "effect": "deny" },
+        { "action": "subagent", "resource": "reviewer", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+## Tác nhân tích hợp
+
+OpenCode bao gồm các tác nhân nhìn thấy được sau:
+
+| Tác nhân | Chế độ | Mục đích |
+| --- | --- | --- |
+| **Build** (`build`) | `primary` | Tác nhân lập trình mặc định. Các công cụ được cho phép theo mặc định; việc đọc các tệp môi trường nhạy cảm và truy cập ra ngoài không gian làm việc cần phê duyệt. |
+| **Plan** (`plan`) | `primary` | Khám phá và lập kế hoạch mà không chỉnh sửa các tệp dự án thông thường. Nó có thể ghi các tệp kế hoạch của OpenCode khi được yêu cầu, và các lệnh shell vẫn chịu sự kiểm soát quyền. |
+| **General** (`general`) | `subagent` | Xử lý nghiên cứu và công việc nhiều bước với quyền truy cập công cụ rộng, nhưng không thể khởi chạy thêm subagent. |
+| **Explore** (`explore`) | `subagent` | Tìm kiếm và đọc mã hoặc nguồn web mà không chỉnh sửa tệp. |
+
+Ghi đè một tác nhân tích hợp bằng cách dùng cùng ID:
+
+```jsonc
+{
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git push *", "effect": "ask" },
+      ],
+    },
+  },
+}
+```
+
+Các tác nhân ẩn `compaction`, `title` và `summary` thực hiện việc bảo trì và không thể
+chọn trực tiếp. V2 không có tác nhân `scout` tích hợp.
+
+## Hợp nhất
+
+Định nghĩa tác nhân hợp nhất theo thứ tự cấu hình. Giá trị vô hướng đặt sau thay thế giá
+trị đứng trước, các map request hợp nhất theo khóa, và quy tắc quyền được thêm vào:
+
+```jsonc
+{
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+  ],
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git status", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+Quyền `permissions` toàn cục có hiệu lực trước các quy tắc riêng của tác nhân, nên các
+quy tắc tác nhân đặt sau có thể tinh chỉnh chúng.
+
+## Tùy chọn
+
+### Description
+
+`description` giải thích mục đích của tác nhân. Hãy thêm nó cho subagent vì OpenCode
+hiển thị nó cho mô hình đang chọn tác nhân nào để khởi chạy:
+
+```yaml
+description: Reviews database migrations for safety
+```
+
+### Mode
+
+`mode` nhận `primary`, `subagent` hoặc `all`. Khi bỏ qua trong một tác nhân tùy chỉnh
+mới, nó mặc định là `primary`:
+
+```yaml
+mode: all
+```
+
+### Mô hình
+
+`model` dùng `provider/model` với `#variant` tùy chọn:
+
+```yaml
+model: anthropic/claude-sonnet-4-5#high
+```
+
+Cấu hình JSON cũng chấp nhận dạng mở rộng:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "model": {
+        "providerID": "anthropic",
+        "model": "claude-sonnet-4-5",
+        "variant": "high",
+      },
+    },
+  },
+}
+```
+
+- Một subagent dùng mô hình đã cấu hình của nó, hoặc kế thừa mô hình của phiên cha khi
+  không có mô hình nào được cấu hình.
+- Một phiên lưu riêng mô hình đã chọn của nó. Chọn một tác nhân chính theo ID không thay
+  đổi mô hình đó.
+
+### System
+
+`system` đặt lời nhắc hệ thống của tác nhân. Giá trị không rỗng sẽ thay thế lời nhắc cơ
+sở của nhà cung cấp cho tác nhân đó:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "system": "Review only. Do not modify files." },
+  },
+}
+```
+
+Các chỉ dẫn của dự án, kỹ năng, tham chiếu và các nguồn chỉ dẫn khác vẫn được thêm vào.
+Trong một tác nhân Markdown, hãy đặt văn bản này trong phần thân của tài liệu thay vì
+trường frontmatter `system`.
+
+### Quyền
+
+`permissions` là một danh sách có thứ tự các quy tắc so khớp:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "permissions": [
+        { "action": "*", "resource": "*", "effect": "deny" },
+        { "action": "read", "resource": "src/**", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+| Trường | Ý nghĩa |
+| --- | --- |
+| `action` | Hành động của công cụ hoặc của quyền. Hỗ trợ ký tự đại diện. |
+| `resource` | Đường dẫn, lệnh, ID tác nhân hoặc giá trị khác mà hành động so khớp. Hỗ trợ ký tự đại diện. |
+| `effect` | `allow`, `ask` hoặc `deny`. |
+
+Quy tắc khớp cuối cùng sẽ thắng, vì vậy hãy đặt các quy tắc rộng trước các ngoại lệ.
+Các hành động phổ biến gồm:
+
+| Hành động | Bao phủ |
+| --- | --- |
+| `shell` | Lệnh shell |
+| `edit` | Các công cụ edit, write và patch |
+| `subagent` | Tác nhân con |
+| `read`, `glob`, `grep` | Công cụ tìm kiếm cục bộ |
+| `webfetch`, `websearch` | Công cụ web |
+| `skill` | Tải kỹ năng |
+
+Với tài nguyên `read`, `edit` và `external_directory`, OpenCode mở rộng `~` và `$HOME`:
+
+```jsonc
+{ "action": "read", "resource": "~/notes/**", "effect": "allow" }
+```
+
+Tài nguyên shell vẫn là văn bản lệnh thô và không mở rộng các giá trị đó.
+
+### Steps
+
+`steps` đặt số bước mô hình tối đa là một số dương:
+
+```yaml
+steps: 8
+```
+
+Ở bước cuối, OpenCode bỏ các công cụ và yêu cầu mô hình tóm tắt bằng văn bản. Đầu vào
+người dùng mới sẽ đặt lại hạn mức.
+
+### Hidden
+
+`hidden` loại một tác nhân khỏi danh sách thông thường, khỏi việc tìm kiếm tương tác và
+khỏi danh mục subagent:
+
+```yaml
+hidden: true
+```
+
+Điều này điều khiển khả năng hiển thị, không phải bảo mật. Hãy dùng quyền để hạn chế
+hành vi.
+
+### Color
+
+`color` đặt màu giao diện của tác nhân bằng một giá trị hex sáu chữ số:
+
+```yaml
+color: "#ff6b6b"
+```
+
+### Disabled
+
+`disabled` loại một tác nhân tích hợp hoặc tùy chỉnh tại thời điểm đó trong quá trình nạp
+cấu hình:
+
+```jsonc
+{
+  "agents": {
+    "plan": { "disabled": true },
+  },
+}
+```
+
+### Request
+
+`request` nhận các lớp phủ header và JSON body riêng cho từng tác nhân:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "request": {
+        "headers": { "x-agent": "reviewer" },
+        "body": { "temperature": 0.1 },
+      },
+    },
+  },
+}
+```
+
+<Callout type="warning">
+  Bộ chạy phiên của V2 giữ nguyên các giá trị này nhưng chưa gửi chúng kèm các yêu cầu mô hình. Hãy cấu hình các thiết lập
+  request đang hoạt động trên nhà cung cấp, mô hình hoặc biến thể mô hình.
+</Callout>
+
+Không dùng các trường cấp cao nhất cũ như `temperature`, `top_p`, `prompt`,
+`permission`, `tools`, `disable` hoặc `maxSteps` trong cấu hình tác nhân V2 mới.
