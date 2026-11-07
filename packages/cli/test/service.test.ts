@@ -21,27 +21,35 @@ import { testEffect } from "../../core/test/lib/effect"
 const it = testEffect(NodeFileSystem.layer)
 
 test("managed service ports are stable per installation channel", () => {
-  expect(ServiceConfig.defaultPort("latest", "linux")).toBe(0x70de)
-  expect(ServiceConfig.defaultPort("dev", "linux")).toBe(0x70de)
-  expect(ServiceConfig.defaultPort("beta", "linux")).toBe(0x70de)
-  expect(ServiceConfig.defaultPort("next", "linux")).toBe(0x70de)
-  expect(ServiceConfig.defaultPort("local", "linux")).toBe(0x70df)
-  expect(ServiceConfig.defaultPort("latest", "darwin")).toBe(0x70de)
+  expect(ServiceConfig.defaultPort("latest", "linux")).toBe(0xc0de)
+  expect(ServiceConfig.defaultPort("dev", "linux")).toBe(0xc0de)
+  expect(ServiceConfig.defaultPort("beta", "linux")).toBe(0xc0de)
+  expect(ServiceConfig.defaultPort("next", "linux")).toBe(0xc0de)
+  expect(ServiceConfig.defaultPort("local", "linux")).toBe(0xc0df)
+  expect(ServiceConfig.defaultPort("latest", "darwin")).toBe(0xc0de)
   expect(ServiceConfig.defaultPort("preview-a", "linux")).toBe(ServiceConfig.defaultPort("preview-a", "linux"))
   expect(ServiceConfig.defaultPort("preview-a", "linux")).not.toBe(ServiceConfig.defaultPort("preview-b", "linux"))
 })
 
-test("managed service ports stay below the ranges Windows and WSL reserve on every platform", () => {
+test("managed service ports on Windows and WSL stay below reserved ranges and do not collide", () => {
   expect(ServiceConfig.defaultPort("latest", "win32")).toBe(0x70de)
   expect(ServiceConfig.defaultPort("dev", "win32")).toBe(0x70de)
   expect(ServiceConfig.defaultPort("local", "win32")).toBe(0x70df)
+  expect(ServiceConfig.defaultPort("latest", "wsl")).toBe(0x60de)
+  expect(ServiceConfig.defaultPort("dev", "wsl")).toBe(0x60de)
+  expect(ServiceConfig.defaultPort("local", "wsl")).toBe(0x60df)
+  expect(ServiceConfig.defaultPort("latest", "linux", { WSL_DISTRO_NAME: "Ubuntu" })).toBe(0x60de)
   const ports = Array.from({ length: 200 }, (_, index) => ({
     windows: ServiceConfig.defaultPort(`preview-${index}`, "win32"),
+    wsl: ServiceConfig.defaultPort(`preview-${index}`, "wsl"),
     linux: ServiceConfig.defaultPort(`preview-${index}`, "linux"),
   }))
-  expect(ports.every((port) => port.linux >= 10_000 && port.linux < 0x8000)).toBe(true)
+  expect(ports.some((port) => port.linux >= 0x8000)).toBe(true)
   expect(ports.every((port) => port.windows >= 10_000 && port.windows < 0x8000)).toBe(true)
-  expect(ports.every((port) => port.windows === port.linux)).toBe(true)
+  expect(ports.every((port) => port.wsl >= 10_000 && port.wsl < 0x8000)).toBe(true)
+  expect(ports.filter((port) => port.linux >= 0x8000).every((port) => port.windows !== port.wsl)).toBe(true)
+  expect(ports.filter((port) => port.linux < 0x8000 && port.windows !== port.linux)).toEqual([])
+  expect(ports.filter((port) => port.linux < 0x8000 && port.wsl !== port.linux)).toEqual([])
 })
 
 test("service disabled accepts only booleans without changing configuration on invalid input", async () => {
