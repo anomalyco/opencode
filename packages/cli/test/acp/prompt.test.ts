@@ -160,6 +160,45 @@ describe("acp prompt turns over the wire", () => {
     })
   })
 
+  test("streams a running shell command's output until the tool completes", async () => {
+    const shell = { output: "line 1\n" }
+    await using acp = await startSession({
+      shellOutputInterval: "10 millis",
+      onPrompt: ({ sessionID, id }) => [
+        delivered(sessionID, id),
+        toolStarted(sessionID, "call_shell", "shell"),
+        toolCalled(sessionID, "call_shell", { command: "for i in 1 2; do echo line $i; sleep 1; done" }),
+        toolProgress(sessionID, "call_shell", { shellID: "sh_1" }),
+      ],
+      fetch: (request) => {
+        if (request.path !== "/api/shell/sh_1/output") return
+        const output = shell.output.slice(Number(request.query.cursor ?? 0))
+        return Response.json({
+          location: { directory: "/workspace", project: { id: "global", directory: "/workspace" } },
+          data: { output, cursor: shell.output.length, size: shell.output.length, truncated: false },
+        })
+      },
+    })
+
+    const prompt = acp.prompt(acp.sessionId, "run it")
+    await acp.waitForUpdate((item) => runningText(item.update) === "line 1\n", "first line")
+    shell.output += "line 2\n"
+    await acp.waitForUpdate((item) => runningText(item.update) === "line 1\nline 2\n", "second line")
+    acp.server.send(toolSucceeded(acp.sessionId, "call_shell", { exit: 0 }, "line 1\nline 2"), succeeded(acp.sessionId))
+    expect((await prompt).stopReason).toBe("end_turn")
+
+    const updates = turnUpdates(acp.updates).map((item) => item.update)
+    expect(updates.findLast((update) => runningText(update) !== undefined)).toMatchObject({
+      toolCallId: "call_shell",
+      status: "in_progress",
+      title: "for i in 1 2; do echo line $i; sleep 1; done",
+    })
+    expect(updates.at(-1)).toMatchObject({ toolCallId: "call_shell", status: "completed" })
+    expect(acp.server.requests.find((request) => request.path === "/api/shell/sh_1/output")?.query).toMatchObject({
+      "location[directory]": "/workspace",
+    })
+  })
+
   test("reports full-file diffs for a completed edit and patch", async () => {
     await using dir = await tmpdir()
     const file = (name: string) => path.resolve(dir.path, name)
@@ -581,6 +620,12 @@ function trimmed(file: string, before: string, after: string) {
       )
       .join("\n"),
   }
+}
+
+function runningText(update: SessionNotification["update"]) {
+  if (update.sessionUpdate !== "tool_call_update" || update.status !== "in_progress") return
+  const part = update.content?.[0]
+  return part?.type === "content" && part.content.type === "text" ? part.content.text : undefined
 }
 
 function turnUpdates(updates: readonly SessionNotification[]) {
