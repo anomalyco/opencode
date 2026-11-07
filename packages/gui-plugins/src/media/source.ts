@@ -1,7 +1,9 @@
-import { mediaHashFromUri } from "@opencode/client/promise"
+import { mediaHashFromUri, type PromptAttachment } from "@opencode/client/promise"
 import type { MountedSession } from "@opencode/plugin/gui"
+import type { SessionMedia } from "@opencode/schema/session-media"
 import { createSignal, onCleanup } from "solid-js"
-import { mimeOf, type MediaSource } from "./collect"
+
+type MediaSource = SessionMedia.Source
 
 export type MediaLoader = {
   /** The item's URL, or undefined when its bytes are gone (e.g. a deleted file). */
@@ -55,18 +57,31 @@ export function createMediaLoader(): MediaLoader {
       { signal: controller.signal },
     )
 
-    return blob(bytes, mime === "application/octet-stream" ? mimeOf(file) : mime)
+    return blob(bytes, mime)
   }
 
-  // The store keeps tool output without its inline bytes; the message as the server stores it still has them.
-  const tool = async (session: MountedSession, source: Extract<MediaSource, { type: "tool" }>, mime: string) => {
-    const message = await session.server.client.session.message.get(
-      { sessionID: session.id, messageID: source.messageID },
-      { signal: controller.signal },
-    )
+  // Inline bytes stay in their message; a page names the message and where in it they are.
+  const message = (session: MountedSession, messageID: string) =>
+    session.server.client.session.message.get({ sessionID: session.id, messageID }, { signal: controller.signal })
 
-    if (message.type !== "assistant") return undefined
-    const part = message.content.find((item) => item.type === "tool" && item.id === source.toolID)
+  const attachment = async (session: MountedSession, source: Extract<MediaSource, { type: "attachment" }>) => {
+    const found = await message(session, source.messageID)
+    // Stored media comes back as a ref, which the generated message type does not list.
+    const files: readonly PromptAttachment[] = found.type === "user" ? (found.files ?? []) : []
+    const file = files[source.index]
+
+    if (!file) return undefined
+
+    if ("uri" in file) return media(session, file.uri, file.mime)
+
+    return file.data ? `data:${file.mime};base64,${file.data}` : undefined
+  }
+
+  const tool = async (session: MountedSession, source: Extract<MediaSource, { type: "tool" }>, mime: string) => {
+    const found = await message(session, source.messageID)
+
+    if (found.type !== "assistant") return undefined
+    const part = found.content.find((item) => item.type === "tool" && item.id === source.toolID)
     const state = part?.type === "tool" ? part.state : undefined
 
     const content =
@@ -85,6 +100,8 @@ export function createMediaLoader(): MediaLoader {
     if (source.type === "media") return media(session, source.uri, mime)
 
     if (source.type === "path") return path(session, source.path, mime)
+
+    if (source.type === "attachment") return attachment(session, source)
 
     return tool(session, source, mime)
   }

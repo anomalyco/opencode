@@ -16,6 +16,6 @@ export const registry = {
   schedules: "Enable experimental scheduled tasks that wake a session with a prompt.",
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
   session_media:
-    "Show a Media panel in the desktop and web app that lists the images, videos, files and links shared in a session, by you or the agent.",
+    "Show a Media panel in the desktop and web app that lists the images, videos and links shared in a session, by you or the agent.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry

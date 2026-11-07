@@ -10,8 +10,7 @@
     display: flex;
     flex: none;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+    gap: 4px;
     height: 40px;
     padding-inline: 8px 6px;
     border-bottom: 1px solid var(--v2-border-border-muted);
@@ -36,6 +35,26 @@
 
     &::before {
       display: none;
+    }
+  }
+
+  [data-slot="media-panel-search-toggle"] {
+    margin-inline-start: auto;
+
+    &[aria-pressed="true"] {
+      background-color: var(--v2-overlay-simple-overlay-hover);
+      color: var(--v2-text-text-base);
+    }
+  }
+
+  /* Opens under the filters, across the panel, while a search is on. */
+  [data-slot="media-panel-search"] {
+    flex: none;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--v2-border-border-muted);
+
+    > [data-component="text-input-v2"] {
+      width: 100%;
     }
   }
 
@@ -189,31 +208,95 @@
     white-space: nowrap;
   }
 
-  /* Rows pad their own content, so the list reaches past the body padding to line text up with the headings. */
-  [data-slot="media-panel-list"] {
+  [data-slot="media-links"] {
     display: flex;
     flex-direction: column;
-    gap: 0;
-    margin-inline: -6px;
+    gap: 14px;
   }
 
-  [data-slot="media-row"] {
-    display: grid;
-    grid-template-columns: 28px minmax(0, 1fr) auto;
+  [data-slot="media-link-group"] {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  [data-slot="media-link-group-header"] {
+    display: flex;
     align-items: center;
-    column-gap: 10px;
-    width: 100%;
-    padding: 5px 6px;
-    border-radius: 8px;
+    gap: 8px;
+    min-width: 0;
+    font-size: 13px;
+    line-height: 20px;
+  }
+
+  [data-slot="media-link-group-label"] {
+    overflow: hidden;
     color: var(--v2-text-text-base);
-    text-align: start;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  [data-slot="media-link-group-count"] {
+    color: var(--v2-text-text-faint);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* GitHub's mark and the globe take the text colour; a loaded favicon covers the globe. */
+  [data-slot="media-link-icon"] {
+    position: relative;
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    color: var(--v2-text-text-muted);
+
+    > img {
+      position: absolute;
+      inset: 0;
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      opacity: 0;
+    }
+
+    &[data-loaded] > img {
+      opacity: 1;
+    }
+  }
+
+  /* Chips line up under the group's name, past its icon. */
+  [data-slot="media-link-chips"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding-inline-start: 24px;
+  }
+
+  [data-slot="media-link"],
+  [data-slot="media-link-more"] {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    height: 22px;
+    padding-inline: 7px;
+    overflow: hidden;
+    border-radius: 6px;
+    background-color: var(--v2-overlay-simple-overlay-hover);
+    color: var(--v2-text-text-base);
+    font-size: 12px;
     text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     cursor: default;
     transition: background-color 150ms ease-out;
 
-    &:is(a, button):hover,
-    &:focus-visible {
-      background-color: var(--v2-overlay-simple-overlay-hover);
+    &:hover {
+      background-color: var(--v2-overlay-simple-overlay-pressed);
+      box-shadow: inset 0 0 0 1px var(--v2-border-border-muted);
     }
 
     &:focus-visible {
@@ -222,95 +305,20 @@
     }
   }
 
-  [data-slot="media-row-icon"] {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 7px;
-    background-color: var(--v2-background-bg-layer-02);
-    box-shadow: inset 0 0 0 1px var(--v2-border-border-muted);
-
-    > svg {
-      width: 16px;
-      height: 16px;
-    }
-
-    /* A link's site fills its tile, as a coloured letter square rather than a small circle. */
-    > [data-component="site-icon"] {
-      --site-icon-size: 28px;
-      border-radius: 7px;
-      font-size: 12px;
-    }
+  /* A title runs long; it shows whole on hover. */
+  [data-slot="media-link"] {
+    display: block;
+    max-width: 240px;
+    line-height: 22px;
   }
 
-  [data-slot="media-row-text"] {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    min-width: 0;
-  }
-
-  [data-slot="media-row-title"] {
-    overflow: hidden;
-    font-size: 13px;
-    font-weight: 500;
-    line-height: 1.3;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  [data-slot="media-row-detail"] {
-    display: flex;
-    gap: 4px;
-    min-width: 0;
-    color: var(--v2-text-text-faint);
-    font-size: 11px;
-    line-height: 1.3;
-    white-space: nowrap;
-  }
-
-  /* The place gives way first, so who did what always shows. */
-  [data-slot="media-row-place"] {
-    overflow: hidden;
-    color: var(--v2-text-text-muted);
-    text-overflow: ellipsis;
-  }
-
-  [data-slot="media-row-separator"],
-  [data-slot="media-row-action"] {
-    flex: none;
-  }
-
-  /* The time, swapped for an open arrow while the row is hovered or focused. */
-  [data-slot="media-row-end"] {
-    display: grid;
-    justify-items: end;
-    color: var(--v2-text-text-faint);
-    font-size: 11px;
+  [data-slot="media-link"][data-ref] {
     font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-
-    > * {
-      grid-area: 1 / 1;
-      transition: opacity 120ms ease-out;
-    }
-
-    > [data-slot="icon-svg"] {
-      opacity: 0;
-      color: var(--v2-text-text-muted);
-    }
   }
 
-  [data-slot="media-row"]:is(:hover, :focus-visible) [data-slot="media-row-end"]:has([data-slot="icon-svg"]) {
-    > time {
-      opacity: 0;
-    }
-
-    > [data-slot="icon-svg"] {
-      opacity: 1;
-    }
+  [data-slot="media-link-more"] {
+    background-color: transparent;
+    color: var(--v2-text-text-muted);
   }
 
   [data-slot="media-panel-empty"] {
@@ -321,28 +329,31 @@
     text-wrap: balance;
   }
 
-  /* Only a page of history is loaded; older items come in when asked, as the timeline does when scrolled up. */
-  [data-slot="media-panel-more"] {
+  /* Where older history comes in as the list scrolls to its end, and where a failed read says so. */
+  [data-slot="media-panel-end"] {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-top: 12px;
-    padding-top: 10px;
-    border-top: 1px solid var(--v2-border-border-muted);
+    justify-content: center;
+    gap: 8px;
+    min-height: 1px;
+    padding-block: 16px 8px;
     color: var(--v2-text-text-faint);
-    font-size: 11px;
+    font-size: 12px;
 
-    > button {
-      padding: 1px 4px;
-      border-radius: 4px;
-      color: var(--v2-text-text-muted);
-      font-weight: 500;
-      cursor: default;
+    &:empty {
+      padding: 0;
+    }
+  }
 
-      &:not(:disabled):hover {
-        background-color: var(--v2-overlay-simple-overlay-hover);
-        color: var(--v2-text-text-base);
-      }
+  [data-slot="media-panel-retry"] {
+    padding: 2px 8px;
+    border-radius: 6px;
+    color: var(--v2-text-text-muted);
+    cursor: default;
+
+    &:hover {
+      background-color: var(--v2-overlay-simple-overlay-hover);
+      color: var(--v2-text-text-base);
     }
   }
 }
@@ -365,8 +376,8 @@
     transform: none;
   }
 
-  [data-slot="media-row"],
-  [data-slot="media-row-end"] > * {
+  [data-slot="media-link"],
+  [data-slot="media-link-more"] {
     transition: none;
   }
 }

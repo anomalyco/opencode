@@ -18,7 +18,7 @@ import styles from "./media.css?inline"
 const TAB = "main"
 
 /**
- * The session's Media panel: the images, videos, files and links the user and the agent shared, behind the
+ * The session's Media panel: the images, videos and links the user and the agent shared, behind the
  * `session_media` feature flag of the session's directory. Turning the flag off stops listing the tab, which closes it.
  */
 const setup: Plugin.Setup<typeof Media> = (ctx) => {

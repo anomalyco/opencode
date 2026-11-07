@@ -1,48 +1,122 @@
-import { createMemo, createSignal, For, mapArray, Match, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
+import { createMemo, createSignal, For, Match, on, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
 import { ImagePreview } from "@opencode/ui/image-preview"
+import { Loader } from "@opencode/ui/loader"
 import { Tabs } from "@opencode/ui/tabs"
 import { Select } from "@opencode/ui/select"
-import { SiteIcon } from "@opencode/session-ui/sources/site-icon"
-import { createLatest, usePlugin, type MountedSession } from "@opencode/plugin/gui"
+import { TextInput } from "@opencode/ui/text-input"
+import { createKeyed, createLatest, usePlugin, type MountedSession } from "@opencode/plugin/gui"
 import { Browser } from "@opencode/plugin/gui/browser"
+import type { SessionMedia } from "@opencode/schema/session-media"
 import type Media from "./index"
-import { combineMedia, messageMedia, type FileItem, type LinkItem, type MediaItem, type Sender } from "./collect"
+import { createMediaHistory } from "./history"
+import { LinkGroups } from "./links"
 import { createMediaLoader, type MediaLoader } from "./source"
 
-type Kind = "media" | "files" | "links"
+type MediaItem = SessionMedia.Media
 
-type From = "all" | Sender
+type Kind = "media" | "links"
 
-const KINDS: readonly Kind[] = ["media", "files", "links"]
+type From = "all" | SessionMedia.Sender
+
+const KINDS: readonly Kind[] = ["media", "links"]
 
 const FROM: readonly From[] = ["all", "user", "agent"]
 
 export default function MediaPanel(props: { session: MountedSession }) {
   const ctx = usePlugin<typeof Media>()
   const load = createMediaLoader()
-  const [kind, setKind] = createSignal<Kind>("media")
-  const [from, setFrom] = createSignal<From>("all")
+  // The tab and sender stay per session, so leaving the panel and coming back keeps them.
+  const stored = () => ctx.stores.view(props.session)
+  const kind = (): Kind => stored().value?.kind ?? "media"
+  const from = (): From => stored().value?.from ?? "all"
+
+  const setKind = (next: Kind) =>
+    stored().update((draft) => {
+      draft.kind = next
+    })
+
+  const setFrom = (next: From) =>
+    stored().update((draft) => {
+      draft.from = next
+    })
+
+  const [searching, setSearching] = createSignal(false)
+  const [query, setQuery] = createSignal("")
+
+  const closeSearch = () => {
+    setQuery("")
+    setSearching(false)
+  }
+
   const messages = () => props.session.server.data.session.message
 
-  // One memo per message, so a streaming reply derives its own items again rather than the whole session's.
-  const perMessage = mapArray(
-    () => messages().list(props.session.id),
-    (message) => createMemo(() => messageMedia(message)),
+  // The server reads the whole session's history for the panel; a new session starts a new history.
+  const history = createMemo(
+    on(
+      () => `${props.session.key}\n${props.session.directory}`,
+      () => untrack(() => createMediaHistory(props.session)),
+    ),
   )
 
-  const all = createMemo(() => combineMedia(perMessage().map((items) => items())))
+  // What the timeline has changes when a message arrives, a tool settles or a reply ends: read the newest messages again.
+  const tip = () => {
+    const list = messages().list(props.session.id)
+    const last = list.at(-1)
 
-  const shown = <T extends { readonly from: Sender }>(items: readonly T[]) =>
-    from() === "all" ? items : items.filter((item) => item.from === from())
+    if (!last) return `${props.session.key}:empty`
+    const settled = last.type === "assistant" ? last.content.filter(isSettled).length : 0
+    const completed = last.type === "assistant" ? last.time.completed : undefined
 
-  const media = createMemo(() => shown(all().media))
-  const files = createMemo(() => shown(all().files))
-  const links = createMemo(() => shown(all().links))
+    return `${props.session.key}:${list.length}:${last.id}:${settled}:${completed ?? ""}`
+  }
+
+  createKeyed(tip, () => history().refresh())
+
+  const needle = () => query().trim().toLowerCase()
+
+  const matches = (sender: SessionMedia.Sender, text: readonly (string | undefined)[]) =>
+    (from() === "all" || sender === from()) &&
+    (!needle() || text.some((value) => value?.toLowerCase().includes(needle())))
+
+  const media = createMemo(() =>
+    history()
+      .items()
+      .media.filter((item) =>
+        matches(item.from, [item.name, item.source.type === "path" ? item.source.path : undefined]),
+      ),
+  )
+
+  const links = createMemo(() =>
+    history()
+      .items()
+      .links.filter((item) => matches(item.from, [item.title, item.url])),
+  )
+
+  // Older history comes in while the end of the list is on screen: as the user scrolls down, and again after each
+  // read while a short list still leaves it showing. A search reads the whole session, so it finds what is not yet
+  // listed. Every tab reads the same history, so a page fills both.
+  const [end, setEnd] = createSignal(false)
+
+  createKeyed(
+    () => (end() || !!needle()) && history().status() === "more" && `${props.session.key}:${history().settled()}`,
+    () => history().older(),
+  )
+
+  const observeEnd = (element: HTMLElement) => {
+    const observer = new IntersectionObserver((entries) => setEnd(entries.some((entry) => entry.isIntersecting)), {
+      rootMargin: "300px",
+    })
+
+    observer.observe(element)
+    onCleanup(() => observer.disconnect())
+  }
 
   const empty = () => {
+    if (needle()) return ctx.t("empty.search")
+
     if (from() !== "all") return ctx.t(from() === "user" ? "empty.user" : "empty.agent")
 
     return ctx.t(`empty.${kind()}`)
@@ -56,6 +130,8 @@ export default function MediaPanel(props: { session: MountedSession }) {
   }
 
   const openPath = (path: string) => ctx.links.open({ href: path, exact: true, session: props.session })
+
+  const reading = () => history().status() === "empty" || history().status() === "loading"
 
   const dialog = useDialog()
   // Each image card's thumbnail, so the viewer opens from and closes into the card of the image it shows.
@@ -99,6 +175,15 @@ export default function MediaPanel(props: { session: MountedSession }) {
             <For each={KINDS}>{(value) => <Tabs.Trigger value={value}>{ctx.t(`kind.${value}`)}</Tabs.Trigger>}</For>
           </Tabs.List>
         </Tabs>
+        <IconButton
+          size="small"
+          variant="ghost-muted"
+          icon={<Icon name="magnifying-glass" />}
+          aria-label={ctx.t("search.label")}
+          aria-pressed={searching()}
+          data-slot="media-panel-search-toggle"
+          onClick={() => (searching() ? closeSearch() : setSearching(true))}
+        />
         <Select
           options={[...FROM]}
           current={from()}
@@ -111,6 +196,27 @@ export default function MediaPanel(props: { session: MountedSession }) {
           class="shrink-0"
         />
       </div>
+      <Show when={searching()}>
+        <div data-slot="media-panel-search">
+          <TextInput
+            ref={(element) => queueMicrotask(() => element.focus())}
+            type="search"
+            appearance="small"
+            surface="layer-1"
+            leadingIcon={<Icon name="magnifying-glass" size="small" />}
+            placeholder={ctx.t("search.placeholder")}
+            aria-label={ctx.t("search.label")}
+            value={query()}
+            onInput={(event) => setQuery(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") return
+              event.preventDefault()
+              closeSearch()
+            }}
+            onBlur={() => !query() && setSearching(false)}
+          />
+        </div>
+      </Show>
       <div data-slot="media-panel-body" data-scrollable>
         <Switch>
           <Match when={kind() === "media" && media().length > 0}>
@@ -124,36 +230,27 @@ export default function MediaPanel(props: { session: MountedSession }) {
               thumbnail={thumbnail}
             />
           </Match>
-          <Match when={kind() === "files" && files().length > 0}>
-            <DayGroups items={files()} layout="list">
-              {(item) => <FileRow item={item} directory={props.session.directory} openPath={openPath} />}
-            </DayGroups>
-          </Match>
           <Match when={kind() === "links" && links().length > 0}>
-            <DayGroups items={links()} layout="list">
-              {(item) => <LinkRow item={item} openURL={openURL} />}
-            </DayGroups>
+            <LinkGroups links={links()} openURL={openURL} />
           </Match>
-          <Match when={true}>
+          <Match when={history().status() === "done"}>
             <div data-slot="media-panel-empty">{empty()}</div>
           </Match>
         </Switch>
-        <Show when={messages().more(props.session.id)}>
-          <div data-slot="media-panel-more">
-            <span>{ctx.t("load.note")}</span>
-            <button
-              type="button"
-              disabled={messages().loading(props.session.id)}
-              onClick={() =>
-                void messages()
-                  .loadMore(props.session.id)
-                  .catch(() => {})
-              }
-            >
-              {ctx.t(messages().loading(props.session.id) ? "load.loading" : "load.more")}
-            </button>
-          </div>
-        </Show>
+        <div ref={observeEnd} data-slot="media-panel-end">
+          <Switch>
+            <Match when={history().status() === "failed"}>
+              <span>{ctx.t("history.failed")}</span>
+              <button type="button" data-slot="media-panel-retry" onClick={() => history().retry()}>
+                {ctx.t("history.retry")}
+              </button>
+            </Match>
+            <Match when={reading() || history().status() === "more"}>
+              <Loader width={14} height={14} />
+              <span>{ctx.t("history.loading")}</span>
+            </Match>
+          </Switch>
+        </div>
       </div>
     </div>
   )
@@ -169,7 +266,7 @@ function MediaGrid(props: {
   thumbnail: (id: string, element: HTMLImageElement | undefined) => void
 }) {
   return (
-    <DayGroups items={props.items} layout="grid">
+    <DayGroups items={props.items}>
       {(item) => (
         <MediaCard
           item={item}
@@ -191,7 +288,6 @@ function MediaGrid(props: {
  */
 function DayGroups<T extends { readonly id: string; readonly time: number }>(props: {
   items: readonly T[]
-  layout: "grid" | "list"
   children: (item: T) => JSX.Element
 }) {
   const ctx = usePlugin<typeof Media>()
@@ -226,7 +322,7 @@ function DayGroups<T extends { readonly id: string; readonly time: number }>(pro
         {(day) => (
           <section data-slot="media-panel-day">
             <h3 data-slot="media-panel-day-title">{label(day)}</h3>
-            <div data-slot={props.layout === "grid" ? "media-panel-grid" : "media-panel-list"}>
+            <div data-slot="media-panel-grid">
               <For each={days().get(day) ?? []}>
                 {(id) => <Show when={byID().get(id)}>{(item) => props.children(item())}</Show>}
               </For>
@@ -439,124 +535,5 @@ const yearFormat = new Intl.DateTimeFormat(undefined, { year: "numeric", month: 
 
 const timeFormat = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" })
 
-function FileRow(props: { item: FileItem; directory: string; openPath: (path: string) => void }) {
-  const ctx = usePlugin<typeof Media>()
-
-  const href = () => {
-    const source = props.item.source
-
-    return source?.type === "url" ? source.url : undefined
-  }
-
-  // The folder the file sits in, relative to the session's directory when it is inside it.
-  const folder = () => {
-    const path = props.item.path
-
-    if (!path) return undefined
-    const root = props.directory.replace(/\/+$/, "") + "/"
-    const relative = path.startsWith(root) ? path.slice(root.length) : path
-    const split = relative.lastIndexOf("/")
-
-    return split > 0 ? relative.slice(0, split) : undefined
-  }
-
-  const content = () => (
-    <Row
-      icon={<FileIcon node={{ path: props.item.name, type: "file" }} />}
-      title={props.item.name}
-      place={folder()}
-      action={ctx.t(`file.${props.item.from}.${props.item.action}`)}
-      time={props.item.time}
-      opens={!!props.item.path || !!href()}
-    />
-  )
-
-  return (
-    <Switch fallback={<div data-slot="media-row">{content()}</div>}>
-      <Match when={props.item.path}>
-        {(path) => (
-          <button type="button" data-slot="media-row" title={path()} onClick={() => props.openPath(path())}>
-            {content()}
-          </button>
-        )}
-      </Match>
-      <Match when={href()}>
-        {(url) => (
-          <a data-slot="media-row" href={url()} download={props.item.name}>
-            {content()}
-          </a>
-        )}
-      </Match>
-    </Switch>
-  )
-}
-
-function LinkRow(props: { item: LinkItem; openURL: (url: string) => void }) {
-  const ctx = usePlugin<typeof Media>()
-
-  // The page without its scheme, `www.` or trailing slash, as the address bar would show it.
-  const page = () => {
-    const url = new URL(props.item.url)
-
-    return `${url.pathname.replace(/\/+$/, "")}${url.search}`
-  }
-
-  return (
-    <a
-      data-slot="media-row"
-      href={props.item.url}
-      title={props.item.url}
-      onClick={(event) => {
-        event.preventDefault()
-        props.openURL(props.item.url)
-      }}
-    >
-      <Row
-        icon={<SiteIcon site={props.item.site} host={props.item.host} mode="letters" />}
-        title={props.item.title ?? `${props.item.site}${page()}`}
-        place={props.item.title ? `${props.item.site}${page()}` : undefined}
-        action={ctx.t(`link.${props.item.from}.${props.item.via}`)}
-        time={props.item.time}
-        opens
-      />
-    </a>
-  )
-}
-
-/** A file or link row's content: its icon tile, title, where it is and who did what, and the time. */
-function Row(props: {
-  icon: JSX.Element
-  title: string
-  place?: string
-  action: string
-  time: number
-  opens: boolean
-}) {
-  return (
-    <>
-      <span data-slot="media-row-icon">{props.icon}</span>
-      <span data-slot="media-row-text">
-        <span data-slot="media-row-title">{props.title}</span>
-        <span data-slot="media-row-detail">
-          <Show when={props.place}>
-            {(place) => (
-              <>
-                <span data-slot="media-row-place">{place()}</span>
-                <span data-slot="media-row-separator" aria-hidden="true">
-                  ·
-                </span>
-              </>
-            )}
-          </Show>
-          <span data-slot="media-row-action">{props.action}</span>
-        </span>
-      </span>
-      <span data-slot="media-row-end">
-        <time datetime={new Date(props.time).toISOString()}>{timeFormat.format(props.time)}</time>
-        <Show when={props.opens}>
-          <Icon name="outline-arrow-up-right" size="small" />
-        </Show>
-      </span>
-    </>
-  )
-}
+const isSettled = (part: { readonly type: string; readonly state?: { readonly status: string } }) =>
+  part.type === "tool" && (part.state?.status === "completed" || part.state?.status === "error")
