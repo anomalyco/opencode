@@ -1,0 +1,57 @@
+/* OpenTUI Mono, the site's nav face, for the product name and its menus (packages/nav-menus styles the lockup). Latin
+   only: the product names are Latin in every language. */
+@font-face {
+  font-family: "OpenTUI Mono";
+  src: url("../asset/fonts/opentui-mono-regular-latin.woff2") format("woff2");
+  font-weight: 100 599;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "OpenTUI Mono";
+  src: url("../asset/fonts/opentui-mono-bold-latin.woff2") format("woff2");
+  font-weight: 600 900;
+  font-display: swap;
+}
+
+/* The site's GitHub mark: a 40px circular link, the mark on a page-coloured disc. */
+[data-slot="github-mark"] {
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--github-ink, currentColor);
+
+  &::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 24px;
+    height: 24px;
+    translate: -50% -50%;
+    border-radius: 50%;
+    background: var(--github-page, transparent);
+  }
+
+  /* A 44px target around the 40px circle. */
+  &::after {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+  }
+
+  svg {
+    position: relative;
+    display: block;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--github-focus, currentColor);
+    outline-offset: 2px;
+  }
+}
