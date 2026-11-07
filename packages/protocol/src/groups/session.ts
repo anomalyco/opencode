@@ -67,6 +67,14 @@ const PublicSessionListInfo = Schema.Struct({
   }).pipe(optional),
 }).annotate({ identifier: "Session.ListInfo" })
 
+export const SessionListResponse = Schema.Struct({
+  data: Schema.Array(PublicSessionListInfo),
+  cursor: Schema.Struct({
+    previous: Session.ListCursor.pipe(Schema.optional),
+    next: Session.ListCursor.pipe(Schema.optional),
+  }),
+}).annotate({ identifier: "SessionsResponse" })
+
 const PublicSessionTransfer = Schema.Struct({
   info: PublicSessionInfo,
   messages: Schema.Array(PublicSessionMessage),
@@ -145,13 +153,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.get("session.list", "/api/session", {
         query: SessionsQuery,
-        success: Schema.Struct({
-          data: Schema.Array(PublicSessionListInfo),
-          cursor: Schema.Struct({
-            previous: Session.ListCursor.pipe(Schema.optional),
-            next: Session.ListCursor.pipe(Schema.optional),
-          }),
-        }).annotate({ identifier: "SessionsResponse" }),
+        success: SessionListResponse,
         error: [InvalidCursorError, InvalidRequestError],
       }).annotateMerge(
         OpenApi.annotations({
