@@ -71,7 +71,6 @@ import { adoptVoice, dropVoice } from "./voice/host"
 // The logo menu's other styles (Settings › Logo menu: list, cards) and the shared nav menus in the site's colours.
 import "./logo-fan.css"
 import "./nav-menus.css"
-import { closeNavMenus, installNavMenus } from "@opencode/nav-menus"
 import { logoVariantSvgs } from "./logo-variants"
 import { AnomalyLogo, Logo, LogoIcon, Wordmark } from "./marks"
 import {
@@ -236,11 +235,13 @@ export function Site(props: {
   const [logoMenu, setLogoMenu] = createSignal<{ owner: "sidebar" | "topbar"; x: number; y: number; origin?: number }>()
   const [menu, setMenu] = createSignal(false)
   const [sectionNav, setSectionNav] = createSignal(false)
+  // The shared nav menus (packages/nav-menus), once their code has loaded (onMount).
+  let navMenus: { close: () => void; stop: () => void } | undefined
   onCloseMenus(() => {
     setMenu(false)
     setSectionNav(false)
     setLogoMenu(undefined)
-    closeNavMenus()
+    navMenus?.close()
   })
   const [markdown, setMarkdown] = createSignal(false)
   // The Markdown view's code, loaded the first time it is wanted: its shortcut's "m", a pointer or
@@ -771,9 +772,15 @@ export function Site(props: {
     const stopMenuLinks = closeMenusOnLinks()
     // Settings › Logo menu › fan (the default) is the shared nav menus' logo menu (packages/nav-menus), as on the
     // docs, Data, the Console and the status page; the home, Brand and Press links stay in the visitor's language.
-    // Opening it closes the site's own menus.
-    const stopNavMenus = installNavMenus({
-      link: (path) => (["/", "/brand", "/press"].includes(path) ? language.route(path) : path),
+    // Opening it closes the site's own menus. Its code (with the inlined brand files) loads after the page, so it stays
+    // out of every page's first JavaScript (script/check-client-bundle.ts).
+    let unmounted = false
+    void import("@opencode/nav-menus").then((module) => {
+      if (unmounted) return
+      const stop = module.installNavMenus({
+        link: (path) => (["/", "/brand", "/press"].includes(path) ? language.route(path) : path),
+      })
+      navMenus = { close: () => module.closeNavMenus(), stop }
     })
     const closeSiteMenus = () => {
       setMenu(false)
@@ -783,7 +790,9 @@ export function Site(props: {
     document.addEventListener("opencode-nav-menu-open", closeSiteMenus)
 
     onCleanup(() => {
-      stopNavMenus()
+      unmounted = true
+      navMenus?.stop()
+      navMenus = undefined
       document.removeEventListener("opencode-nav-menu-open", closeSiteMenus)
       stopMenuLinks()
       stopPreloads()
