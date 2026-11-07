@@ -569,6 +569,7 @@ const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenR
       ? metadata.reasoningEncryptedContent
       : undefined
   if (part.text.length === 0 && !encryptedContent) return undefined
+  if (id === undefined && !encryptedContent) return undefined
   return {
     type: "reasoning",
     ...(id === undefined ? {} : { id }),

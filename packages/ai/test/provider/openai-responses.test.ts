@@ -3929,10 +3929,6 @@ describe("OpenAI Responses route", () => {
           encrypted_content: "another-state",
         },
         {
-          type: "reasoning",
-          summary: [{ type: "summary_text", text: "No prefix separator." }],
-        },
-        {
           type: "function_call",
           id: "toolu_01A",
           call_id: "call_1",
