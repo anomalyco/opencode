@@ -384,18 +384,15 @@
 
 /* Every interactive segment of the lockup (the section word, its chevron, the combined trigger and
    the version) shares one set of states, as the Data and Console product names do
-   (public/nav-demo/switcher.css): hover fills with the logo's inner square beside it (--logo-inner,
-   site.css) with the text at full strength, pressed and open one step further from the page, and a
-   2px ring for the keyboard. Neutral grey whatever Settings › Menu color. The visible fill is the
+   (public/nav-demo/switcher.css): hover fills with half the logo's inner square beside it
+   (--logo-inner, site.css) over the page, with the text at full strength; pressed and open take the
+   full inner-square colour, the next step from the page; and a 2px ring for the keyboard. Neutral grey whatever Settings › Menu color. The visible fill is the
    logo mark's height (the lockup row is the mark's height and top); a transparent ::before keeps
    each hit area 32px tall beside the sidebar and 44px for touch. The separator isn't interactive. */
 [data-site] [data-component="docs-lockup"] {
   --segment-height: 32px;
-  --lockup-hover: var(--logo-inner);
-  --lockup-press: light-dark(
-    color-mix(in srgb, var(--logo-inner) 94%, black),
-    color-mix(in srgb, var(--logo-inner) 94%, white)
-  );
+  --lockup-hover: color-mix(in srgb, var(--logo-inner) 50%, transparent);
+  --lockup-press: var(--logo-inner);
 
   @media (max-width: 60rem), (pointer: coarse) {
     --segment-height: 44px;

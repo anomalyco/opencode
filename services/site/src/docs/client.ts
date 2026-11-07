@@ -362,6 +362,16 @@ if (currentPage && currentPage.offsetTop + currentPage.offsetHeight > nav.client
 new ResizeObserver(fade).observe(nav)
 nav.addEventListener("scroll", fade, { passive: true })
 
+// The sidebar leaves with the article at the page's end, but the logo and lockup stay fixed
+// (site.css): while it is on its way out its items pass under them, and data-under fades them there,
+// as Site does on the site's own pages.
+const sidebar = nav.parentElement!
+function under() {
+  sidebar.toggleAttribute("data-under", sidebar.getBoundingClientRect().top < -0.5)
+}
+window.addEventListener("scroll", under, { passive: true })
+under()
+
 // The Contents rail and its phone bar mark the section being read: the last heading past a third of
 // the window, or at the end of the page the one the address names (else the last in view). The rail
 // keeps it in view; the phone bar draws its lines once pinned (data-stuck).
@@ -506,12 +516,14 @@ input.addEventListener("input", async () => {
       return option
     }),
   )
-  if (!pages.length) {
+  if (query && !pages.length) {
     const empty = document.createElement("p")
     empty.dataset.slot = "empty"
-    empty.textContent = query ? `No results for “${query}”` : ""
+    empty.innerHTML = `<span></span>. Try a shorter word, or <a href="${base}">browse the docs</a>.`
+    empty.firstChild!.textContent = `No results for “${query}”`
     results.append(empty)
   }
+  input.setAttribute("aria-expanded", String(!!query))
   highlight(0)
 })
 
@@ -563,7 +575,6 @@ function choose(option: HTMLAnchorElement) {
 // The status bars, as the site's footer shows them: the last five 3-hour windows by their worst
 // service, then the live status. Kept a minute in sessionStorage, since every docs page is a full load.
 type Status = "operational" | "degraded" | "outage" | "unknown"
-const statusLabels = { operational: "Normal", degraded: "Degraded", outage: "Outage", unknown: "No data" }
 const headlines = {
   operational: "All systems operational",
   degraded: "Degraded performance",
@@ -575,9 +586,15 @@ function showStatus(bars: Status[]) {
   const link = $("[data-component=status]")
   if (!link) return
   const current = bars.at(-1)!
+  const normal = current === "operational"
   link.dataset.state = current
   link.title = headlines[current]
-  $("[data-slot=status-text]", link)!.textContent = statusLabels[current]
+  // As in the site's footer, "Normal" or else "Status"; screen readers hear the headline instead.
+  $("[data-slot=sr-only]", link)!.textContent = normal ? "Status: " : `Status: ${headlines[current]}`
+  const text = $("[data-slot=status-text]", link)!
+  text.textContent = normal ? "Normal" : "Status"
+  if (normal) text.removeAttribute("aria-hidden")
+  else text.setAttribute("aria-hidden", "true")
   $$("[data-slot=bars] > span", link).forEach((bar, index) => (bar.dataset.state = bars[index] ?? "unknown"))
 }
 const saved = JSON.parse(sessionStorage.getItem("docs-status-bars") ?? "null") as { bars: Status[]; at: number } | null
