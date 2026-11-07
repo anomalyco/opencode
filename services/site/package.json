@@ -69,7 +69,7 @@
     "remark-gfm": "4.0.1",
     "remark-smartypants": "3.0.3",
     "satori": "0.63.2",
-    "sharp": "0.34.5",
+    "sharp": "0.35.5",
     "shiki": "catalog:",
     "typescript": "catalog:",
     "unist-util-visit": "5.1.0",
