@@ -36,7 +36,7 @@ export function pickVariant(model: RunInput["model"], input: RunSession | Sessio
   return sessionVariant(Array.isArray(input) ? createSession(input) : input, model)
 }
 
-function fitVariant(value: string | undefined, variants: string[]): string | undefined {
+export function fitVariant(value: string | undefined, variants: string[]): string | undefined {
   const normalized = normalizeModelVariant(value)
   return normalized && (variants.length === 0 || variants.includes(normalized)) ? normalized : undefined
 }
