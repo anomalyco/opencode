@@ -1426,6 +1426,64 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("accepts reasoning streamed as an encrypted object", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate({
+        ...request,
+        tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+      }).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                choices: [
+                  {
+                    delta: {
+                      role: "assistant",
+                      content: null,
+                      reasoning: { content: null, encrypted_content: "opaque", summary: "Plan" },
+                      tool_calls: [
+                        { index: 0, id: "call_1", function: { name: "lookup", arguments: '{"query":"weather"}' } },
+                      ],
+                    },
+                    finish_reason: "tool_calls",
+                  },
+                ],
+              },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Plan")
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        openai: {
+          reasoningDetails: [
+            { type: "reasoning.summary", summary: "Plan" },
+            { type: "reasoning.encrypted", data: "opaque" },
+          ],
+        },
+      })
+
+      const replay = yield* compileRequest(ai.request({ model, messages: [response.message] }))
+      expect(replay.body.messages[0]).toEqual({
+        role: "assistant",
+        content: null,
+        reasoning_details: [
+          { type: "reasoning.summary", summary: "Plan" },
+          { type: "reasoning.encrypted", data: "opaque" },
+        ],
+        tool_calls: [
+          {
+            id: "call_1",
+            type: "function",
+            function: { name: "lookup", arguments: '{"query":"weather"}' },
+          },
+        ],
+      })
+    }),
+  )
+
   it.effect("uses reasoning details as display fallback without inventing a scalar replay field", () =>
     Effect.gen(function* () {
       const details = [
