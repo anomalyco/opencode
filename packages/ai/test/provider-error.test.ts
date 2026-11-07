@@ -514,6 +514,20 @@ describe("provider error classification", () => {
     ).toBe("ProviderInternal")
   })
 
+  test("retries a dropped upstream endpoint even when the gateway reports a 4xx", () => {
+    const message = "Upstream request failed: Endpoint is unavailable."
+    const body = JSON.stringify({ error: { type: "server_error", message } })
+    const error = new AIError({ reason: classifyProviderFailure({ message, status: 400, rawBody: body }) })
+    expect(error.reason._tag).toBe("ProviderInternal")
+    expect(isRetryable(error)).toBe(true)
+    for (const status of [404, 422, 451]) {
+      expect(classifyProviderFailure({ message, status, rawBody: body })._tag).toBe("InvalidRequest")
+    }
+    expect(
+      classifyProviderFailure({ message: "Upstream request failed: Model is unavailable.", status: 400 })._tag,
+    ).toBe("InvalidRequest")
+  })
+
   test("classifies nested provider codes when a top-level code is also present", () => {
     expect(
       [
