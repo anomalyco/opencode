@@ -5,8 +5,6 @@ import { Slash } from "@opencode/ui/slash"
 import { Keybind } from "@opencode/ui/keybind"
 import { useCommand } from "@/shell/commands/command"
 import { Show, createMemo, createSignal, untrack, type JSX } from "solid-js"
-import { createStore } from "solid-js/store"
-import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { getFilename } from "@opencode/util/path"
 import {
   displayName,
@@ -121,7 +119,6 @@ export function NewSessionView(props: {
                     <NewSessionLocation
                       project={project()}
                       workspace={props.workspace.bar.visible() ? props.workspace.selection.value() : "main"}
-                      root={props.workspace.project.root()}
                       branch={<NewSessionBranch workspace={props.workspace} onDone={props.composer.restoreFocus} />}
                       onboarding={onboardingReady() && !onboarding.used && props.workspace.bar.visible()}
                       onClick={() => location()}
@@ -248,38 +245,14 @@ function NewSessionTips(props: { selection: ComposerModel["model"]["selection"];
   )
 }
 
-// Keeps as many leading segments as fit, then "…/", then the last two segments. The cut always lands on a slash.
-function fitPath(value: string, width: number, font: string) {
-  const separator = value.includes("/") ? "/" : "\\"
-  const parts = value.split(separator)
-  const context = document.createElement("canvas").getContext("2d")
-
-  if (!context) return { text: value, minimum: 0 }
-  context.font = font
-  const fits = (text: string) => context.measureText(text).width <= width
-  const first = parts[0] === "" ? 2 : 1
-
-  const candidates = Array.from({ length: Math.max(0, parts.length - 2 - first) }, (_, index) =>
-    [...parts.slice(0, parts.length - 3 - index), "…", ...parts.slice(-2)].join(separator),
-  )
-
-  const minimum = candidates.at(-1) ?? value
-
-  return {
-    text: !width || fits(value) ? value : (candidates.find(fits) ?? minimum),
-    minimum: context.measureText(minimum).width,
-  }
-}
-
 const TRIGGER =
   "flex h-7 items-center gap-1.5 rounded-sm text-start ps-1.5 pe-2 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none"
 
-/** The composer tray: project and worktree pickers, Git context, and the session's directory. */
+/** The composer tray: project and worktree pickers, and Git context. */
 function NewSessionLocation(props: {
   project: PromptProject
   /** "main", "create", or a worktree directory. */
   workspace: string
-  root: string
   branch?: JSX.Element
   onboarding: boolean
   onClick: () => void
@@ -288,7 +261,6 @@ function NewSessionLocation(props: {
 }) {
   const language = useLanguage()
   const command = useCommand()
-  const [layout, setLayout] = createStore({ width: 0, font: "" })
 
   command.register("new-session-worktree", () => [
     {
@@ -308,14 +280,6 @@ function NewSessionLocation(props: {
 
     return getFilename(props.workspace)
   }
-
-  const path = () => {
-    if (props.workspace === "create") return
-
-    return props.workspace === "main" ? props.root : props.workspace
-  }
-
-  const fitted = createMemo(() => fitPath(path() ?? "", layout.width, layout.font))
 
   return (
     <div class="relative flex min-h-9 min-w-0 items-center gap-3 ps-2 pe-1.5 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px]">
@@ -416,48 +380,6 @@ function NewSessionLocation(props: {
         </div>
         {props.branch}
       </div>
-      {/* An open tooltip can outlive this row; keep its path instead of a stale Show accessor. */}
-      <Show when={path()} keyed>
-        {(directory) => (
-          <div
-            class="flex min-w-0 flex-1 justify-end pe-1.5 @max-[560px]:hidden"
-            style={{ "min-width": `min(50%, ${Math.ceil(fitted().minimum) + 6}px)` }}
-          >
-            <Tooltip
-              placement="top"
-              value={directory}
-              disabled={fitted().text === directory && fitted().minimum <= layout.width}
-              class="flex min-w-0 flex-1"
-              contentClass="max-w-[calc(100vw-32px)] break-all"
-            >
-              <span
-                ref={(row) =>
-                  createResizeObserver(row, () =>
-                    setLayout({
-                      width: row.clientWidth,
-                      font: getComputedStyle(row).font,
-                    }),
-                  )
-                }
-                class="flex min-w-0 flex-1 items-center justify-end"
-                dir="ltr"
-              >
-                <span
-                  data-slot="new-session-location-path"
-                  class="min-w-0 cursor-text select-text overflow-hidden whitespace-nowrap text-v2-text-text-faint [direction:rtl] [text-align:end]"
-                  onCopy={(event) => {
-                    if (!event.clipboardData || window.getSelection()?.toString() !== fitted().text) return
-                    event.clipboardData.setData("text/plain", directory)
-                    event.preventDefault()
-                  }}
-                >
-                  <bdi dir="ltr">{fitted().text}</bdi>
-                </span>
-              </span>
-            </Tooltip>
-          </div>
-        )}
-      </Show>
     </div>
   )
 }
