@@ -151,11 +151,33 @@ pub fn permission_asked(session_id: &str, id: &str, input: Value) -> Value {
     ephemeral_event("permission.asked", data)
 }
 
-/// A `FileDiff.Info` with a unified patch from `before` to `after` (`createTwoFilesPatch`).
+/// A `FileDiff.Info` with a unified patch from `before` to `after` (`createTwoFilesPatch`). The texts are small, so
+/// one hunk holds the whole file: the common first and last lines as context, the rest removed and added.
 pub fn file_diff(file: &str, before: &str, after: &str, status: &str) -> Value {
-    let patch =
-        similar::TextDiff::from_lines(before, after).unified_diff().context_radius(4).header(file, file).to_string();
-    let patch = format!("===================================================================\n{patch}");
+    let (old, new): (Vec<&str>, Vec<&str>) =
+        (before.split_inclusive('\n').collect(), after.split_inclusive('\n').collect());
+    let prefix = old.iter().zip(&new).take_while(|(a, b)| a == b).count();
+    let suffix = old[prefix..].iter().rev().zip(new[prefix..].iter().rev()).take_while(|(a, b)| a == b).count();
+    let start = |lines: usize| usize::from(lines > 0);
+    let mut patch = format!(
+        "===================================================================\n--- {file}\n+++ {file}\n@@ -{},{} +{},{} @@\n",
+        start(old.len()),
+        old.len(),
+        start(new.len()),
+        new.len()
+    );
+    let lines = old[..prefix]
+        .iter()
+        .map(|line| (' ', line))
+        .chain(old[prefix..old.len() - suffix].iter().map(|line| ('-', line)))
+        .chain(new[prefix..new.len() - suffix].iter().map(|line| ('+', line)))
+        .chain(old[old.len() - suffix..].iter().map(|line| (' ', line)));
+    for (mark, line) in lines {
+        match line.strip_suffix('\n') {
+            Some(line) => patch.push_str(&format!("{mark}{line}\n")),
+            None => patch.push_str(&format!("{mark}{line}\n\\ No newline at end of file\n")),
+        }
+    }
     json!({ "file": file, "patch": patch, "additions": 1, "deletions": 1, "status": status })
 }
 

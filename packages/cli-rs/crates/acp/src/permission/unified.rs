@@ -1,8 +1,6 @@
 //! The parts of jsdiff 8 (`diff`) the previews use: `parsePatch`, `reversePatch`, `applyPatch` with
 //! its default options (no fuzz, line endings converted), and the hunk ranges of `structuredPatch`.
 
-use similar::{Algorithm, TextDiff};
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hunk {
     pub old_start: i64,
@@ -405,17 +403,152 @@ pub fn ranges(hunks: &[Hunk]) -> String {
 
 /// The hunk ranges `structuredPatch(old, new)` reports, with its default four lines of context.
 pub fn structured_ranges(old: &str, new: &str) -> String {
-    let diff = TextDiff::configure().algorithm(Algorithm::Myers).diff_lines(old, new);
-    diff.grouped_ops(4)
-        .iter()
-        .filter_map(|group| {
-            let (first, last) = (group.first()?, group.last()?);
-            let (old_range, new_range) =
-                (first.old_range().start..last.old_range().end, first.new_range().start..last.new_range().end);
-            Some(format!("{},{},{},{}", old_range.start + 1, old_range.len(), new_range.start + 1, new_range.len()))
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+    const CONTEXT: usize = 4;
+    let changes = diff_lines(old, new);
+    let mut hunks = Vec::new();
+    let (mut old_line, mut new_line) = (1, 1);
+    // Where the open hunk starts, its leading context included.
+    let mut start: Option<(usize, usize)> = None;
+    let mut close = |(old_start, new_start): (usize, usize), old_line: usize, new_line: usize, context: usize| {
+        hunks.push(format!(
+            "{old_start},{},{new_start},{}",
+            old_line - old_start + context,
+            new_line - new_start + context
+        ))
+    };
+    for (index, &(change, count)) in changes.iter().enumerate() {
+        if change != Change::Same {
+            start.get_or_insert_with(|| {
+                let before = index.checked_sub(1).map_or(0, |previous| changes[previous].1.min(CONTEXT));
+                (old_line - before, new_line - before)
+            });
+            match change {
+                Change::Added => new_line += count,
+                _ => old_line += count,
+            }
+            continue;
+        }
+        // Context of up to twice the window joins two changes, unless nothing follows it.
+        if let Some(open) = start
+            && (count > 2 * CONTEXT || index + 1 == changes.len())
+        {
+            close(open, old_line, new_line, count.min(CONTEXT));
+            start = None;
+        }
+        old_line += count;
+        new_line += count;
+    }
+    if let Some(open) = start {
+        close(open, old_line, new_line, 0);
+    }
+    hunks.join(" ")
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Change {
+    Same,
+    Added,
+    Removed,
+}
+
+/// `diffLines`: runs of `(change, lines)`, by jsdiff's own Myers search, whose tie-breaking (prefer the path that
+/// is further along the old text, and on a tie an insertion) decides where equal-cost changes land.
+fn diff_lines(old: &str, new: &str) -> Vec<(Change, usize)> {
+    // `tokenize`: lines with their `\n` or `\r\n`; an empty text has none.
+    let (old, new): (Vec<&str>, Vec<&str>) = (old.split_inclusive('\n').collect(), new.split_inclusive('\n').collect());
+    let (old_len, new_len) = (old.len() as isize, new.len() as isize);
+    // Components form linked lists that paths share, so they live in an arena and are never changed.
+    let mut components: Vec<(Change, usize, Option<usize>)> = Vec::new();
+    let common = |components: &mut Vec<(Change, usize, Option<usize>)>, path: &mut Path, diagonal: isize| {
+        let mut old_pos = path.old_pos;
+        let mut new_pos = old_pos - diagonal;
+        let begin = old_pos;
+        while new_pos + 1 < new_len
+            && old_pos + 1 < old_len
+            && old[(old_pos + 1) as usize] == new[(new_pos + 1) as usize]
+        {
+            old_pos += 1;
+            new_pos += 1;
+        }
+        if old_pos > begin {
+            components.push((Change::Same, (old_pos - begin) as usize, path.last));
+            path.last = Some(components.len() - 1);
+        }
+        path.old_pos = old_pos;
+        new_pos
+    };
+    let offset = old_len + new_len + 1;
+    let mut best: Vec<Option<Path>> = vec![None; (2 * offset + 1) as usize];
+    let slot = |diagonal: isize| (diagonal + offset) as usize;
+    let mut first = Path { old_pos: -1, last: None };
+    let new_pos = common(&mut components, &mut first, 0);
+    if first.old_pos + 1 >= old_len && new_pos + 1 >= new_len {
+        return build(&components, first.last);
+    }
+    best[slot(0)] = Some(first);
+    let (mut min_diagonal, mut max_diagonal) = (isize::MIN, isize::MAX);
+    for edit_length in 1..=old_len + new_len {
+        let mut diagonal = min_diagonal.max(-edit_length);
+        while diagonal <= max_diagonal.min(edit_length) {
+            let remove_path = best[slot(diagonal - 1)].take();
+            let add_path = best[slot(diagonal + 1)];
+            let can_add = add_path.is_some_and(|path| (0..new_len).contains(&(path.old_pos - diagonal)));
+            let can_remove = remove_path.is_some_and(|path| path.old_pos + 1 < old_len);
+            if !can_add && !can_remove {
+                best[slot(diagonal)] = None;
+                diagonal += 2;
+                continue;
+            }
+            let mut path = match (add_path, remove_path) {
+                (Some(add), remove) if !can_remove || (can_add && remove.unwrap().old_pos < add.old_pos) => {
+                    extend(&mut components, add, Change::Added, 0)
+                }
+                (_, remove) => extend(&mut components, remove.unwrap(), Change::Removed, 1),
+            };
+            let new_pos = common(&mut components, &mut path, diagonal);
+            if path.old_pos + 1 >= old_len && new_pos + 1 >= new_len {
+                return build(&components, path.last);
+            }
+            best[slot(diagonal)] = Some(path);
+            if path.old_pos + 1 >= old_len {
+                max_diagonal = max_diagonal.min(diagonal - 1);
+            }
+            if new_pos + 1 >= new_len {
+                min_diagonal = min_diagonal.max(diagonal + 1);
+            }
+            diagonal += 2;
+        }
+    }
+    unreachable!("an edit script is at most as long as both texts")
+}
+
+#[derive(Clone, Copy)]
+struct Path {
+    old_pos: isize,
+    last: Option<usize>,
+}
+
+/// `addToPath`: one more line added or removed, as a new component (a longer copy of the last when it is the same
+/// change).
+fn extend(components: &mut Vec<(Change, usize, Option<usize>)>, path: Path, change: Change, old_step: isize) -> Path {
+    let component = match path.last.map(|last| components[last]) {
+        Some((last, count, previous)) if last == change => (change, count + 1, previous),
+        _ => (change, 1, path.last),
+    };
+    components.push(component);
+    Path { old_pos: path.old_pos + old_step, last: Some(components.len() - 1) }
+}
+
+/// `buildValues`: the list ending at `last`, in order.
+fn build(components: &[(Change, usize, Option<usize>)], mut last: Option<usize>) -> Vec<(Change, usize)> {
+    let mut out = Vec::new();
+    while let Some(index) = last {
+        let (change, count, previous) = components[index];
+        out.push((change, count));
+        last = previous;
+    }
+    out.reverse();
+    out
 }
 
 #[cfg(test)]
@@ -447,16 +580,11 @@ mod tests {
     }
 
     #[test]
-    fn reports_structured_patch_ranges() {
-        assert_eq!(structured_ranges("a\nb\nc\n", "a\nB\nc\n"), "1,3,1,3");
-        let old: String = (1..=20).map(|n| format!("{n}\n")).collect();
-        let new: String = (1..=20)
-            .map(|n| match n {
-                2 => "two\n".to_owned(),
-                19 => "nineteen\n".to_owned(),
-                n => format!("{n}\n"),
-            })
-            .collect();
-        assert_eq!(structured_ranges(&old, &new), "1,6,1,6 15,6,15,6");
+    fn structured_ranges_match_jsdiff() {
+        // Written by script/gen/structured-patch.ts from jsdiff itself.
+        let cases: Vec<[String; 3]> = serde_json::from_str(include_str!("structured_patch.json")).unwrap();
+        for [old, new, ranges] in cases {
+            assert_eq!(structured_ranges(&old, &new), ranges, "{old:?} -> {new:?}");
+        }
     }
 }
