@@ -118,12 +118,12 @@ export function productDownloads(slug: PageSlug, route: (path: string) => string
   return result
 }
 
-/** A product page's Download section as Markdown. */
+/** A product page's Download section (Install on the Terminal page) as Markdown. */
 export function productDownloadMarkdown(slug: PageSlug, context: MarkdownContext) {
   const content = downloadContent(context.t, context.route)
   const details = productDownloads(slug, context.route)
   return blocks(
-    "## Download",
+    slug === "terminal" ? "## Install" : "## Download",
     details.lead,
     slug === "desktop" &&
       blocks(

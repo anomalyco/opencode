@@ -168,8 +168,8 @@ export function buildSearchIndex(
     ),
     section(
       content.products.terminal.name,
-      "/terminal#download",
-      t("download.action.download"),
+      "/terminal#install",
+      t("download.action.install"),
       download.terminal.installs.map((i) => i.command).join(" "),
     ),
     section(

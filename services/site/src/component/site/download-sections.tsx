@@ -295,7 +295,8 @@ function LinkList(props: { items: readonly { label: string; href: string; extern
 /**
  * A product page's "Download" section, below its features: that product's builds, stores or install
  * commands from the same data as /product (lib/download-content.ts), under the page's usual section
- * heading, at #download.
+ * heading, at #download. The Terminal page installs rather than downloads, so its section is
+ * "Install" at #install, and the section keeps #download for links made before the rename.
  */
 export function ProductDownload(props: { slug: PageSlug }) {
   const i18n = useI18n()
@@ -320,8 +321,17 @@ export function ProductDownload(props: { slug: PageSlug }) {
   })
 
   return (
-    <section data-component="block" data-slot="product-download" data-section="download">
-      <SectionHeading id="download" title={i18n.t("download.action.download")} label />
+    <section
+      id={props.slug === "terminal" ? "download" : undefined}
+      data-component="block"
+      data-slot="product-download"
+      data-section="download"
+    >
+      <SectionHeading
+        id={props.slug === "terminal" ? "install" : "download"}
+        title={i18n.t(props.slug === "terminal" ? "download.action.install" : "download.action.download")}
+        label
+      />
       <div data-slot="body" ref={root}>
         <Show when={details().lead}>{(lead) => <p data-slot="lead">{lead()}</p>}</Show>
         <Switch>
