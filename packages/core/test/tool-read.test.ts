@@ -9,6 +9,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "@opencode/core/location"
 import { Image } from "@opencode/core/image"
 import { Permission } from "@opencode/core/permission"
+import { Ripgrep } from "@opencode/core/ripgrep"
 import { Session } from "@opencode/core/session"
 import { Skill } from "@opencode/core/skill"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
@@ -37,6 +38,7 @@ const readToolNode = makeLocationNode({
     SessionInstructions.node,
     Skill.node,
     FSUtil.node,
+    Ripgrep.node,
     Location.node,
   ],
 })
@@ -79,6 +81,11 @@ const reader = Layer.succeed(
     },
   }),
 )
+let indexedFiles: string[] = []
+const ripgrep = Layer.mock(Ripgrep.Service, {
+  glob: () =>
+    Effect.succeed(indexedFiles.map((file) => FileSystem.Entry.make({ path: RelativePath.make(file), type: "file" }))),
+})
 let allow = true
 let deniedResource: string | undefined
 const permission = permissionLayer({
@@ -98,12 +105,14 @@ const permission = permissionLayer({
             ),
       ),
     ),
+  allows: (input) => Effect.succeed(allow && !input.resources.includes(deniedResource ?? "")),
 })
 const config = Config.testLayer()
 const imageLayer = AppNodeBuilder.build(Image.node)
+const vcs = { type: "git", store: AbsolutePath.make(path.join(process.cwd(), ".git")) }
 const locationLayer = Layer.succeed(
   Location.Service,
-  Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) })),
+  Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) }, { vcs })),
 )
 const unavailableImage = Layer.mock(Image.Service, {
   normalize: () => Effect.fail(new Image.ResizerUnavailableError()),
@@ -112,6 +121,7 @@ const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
   Layer.mergeAll(
     AppNodeBuilder.build(LayerNode.group([Tool.node, readToolNode, Skill.node]), [
       ReadToolFileSystem.node.replace(reader),
+      Ripgrep.node.replace(ripgrep),
       Permission.node.replace(permission),
       Config.node.replace(config),
       Image.node.replace(imageLayer),
@@ -136,6 +146,7 @@ describe("ReadTool", () => {
     readDefect = undefined
     missingDirectories = []
     directoryEntryDetails = []
+    indexedFiles = []
     readResult = {
       type: "file",
       uri: "file:///README.md",
@@ -644,25 +655,14 @@ describe("ReadTool", () => {
   it.effect("preserves actionable read failure messages", () =>
     Effect.gen(function* () {
       const registry = yield* Tool.Service
-      for (const [error, message] of [
-        [
-          new ReadToolFileSystem.OffsetOutOfRangeError({ offset: 10, lines: 3 }),
-          "Offset 10 is out of range for this file (3 lines)",
-        ],
-        [
-          new ReadToolFileSystem.PathKindError({ resource: "socket", expected: "a file" }),
-          "Path is not a file: socket",
-        ],
-      ] as const) {
-        readFailure = error
-        expect(
-          yield* executeTool(registry, {
-            sessionID,
-            ...toolIdentity,
-            call: { type: "tool-call", id: `call-${error._tag}`, name: "read", input: { path: "target" } },
-          }),
-        ).toEqual({ status: "error", error: { type: "unknown", message } })
-      }
+      readFailure = new ReadToolFileSystem.PathKindError({ resource: "socket", expected: "a file" })
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-path-kind", name: "read", input: { path: "target" } },
+        }),
+      ).toEqual({ status: "error", error: { type: "unknown", message: "Path is not a file: socket" } })
     }),
   )
 
@@ -791,6 +791,41 @@ describe("ReadTool", () => {
           message: `File not found: ${requested}\n\nDid you mean one of these?\n${path.join(process.cwd(), "__only_in_workspace__", "file.tsx")}`,
         },
       })
+    }),
+  )
+
+  it.effect("suggests close names nearby and readable same-name files elsewhere, nearest first", () =>
+    Effect.gen(function* () {
+      const moved = "src/cluster/queue.rs"
+      indexedFiles = ["tests/queue.rs", "src/queue.ts", "src/land/queue.rs", "queue.rs.bak", moved, "secret/queue.rs"]
+      deniedResource = "secret/queue.rs"
+      missingDirectories = [path.join(process.cwd(), "src", "cluster")]
+      directoryEntryDetails = [{ name: "clusters", type: "directory" }]
+      readFailure = new Environment.NotFound({ path: path.join(process.cwd(), moved) })
+      const registry = yield* Tool.Service
+      const read = (input: string) =>
+        executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-elsewhere", name: "read", input: { path: input } },
+        }).pipe(Effect.map((result) => result.error?.message))
+      const cwd = (...parts: string[]) => path.join(process.cwd(), ...parts)
+
+      expect(yield* read(moved)).toBe(
+        `File not found: ${moved}\n\nThe folder ${cwd("src", "cluster")} does not exist. The nearest folder that does is ${cwd("src")}.\n\nDid you mean one of these?\nsrc/land/queue.rs\ntests/queue.rs\n${cwd("src", "clusters")}`,
+      )
+      missingDirectories = []
+      directoryEntryDetails = [{ name: "queue.ts", type: "file" }]
+      expect(yield* read(cwd("lib", "queue.rs"))).toBe(
+        `File not found: ${cwd("lib", "queue.rs")}\n\nDid you mean one of these?\n${cwd("lib", "queue.ts")}\n${cwd("tests", "queue.rs")}\n${cwd("src", "land", "queue.rs")}`,
+      )
+      directoryEntryDetails = ["config.ts", "db.ts"].map((name) => ({ name, type: "file" as const }))
+      expect(yield* read("conifg.ts")).toBe("File not found: conifg.ts\n\nDid you mean one of these?\nconfig.ts")
+      expect(yield* read("ui.ts")).toBe("File not found: ui.ts")
+      // A name common enough to fill the search cap gives no repo-wide suggestions, since the nearest may be missing.
+      indexedFiles = Array.from({ length: 200 }, (_, index) => `pkg${index}/queue.rs`)
+      directoryEntryDetails = []
+      expect(yield* read("lib/queue.rs")).toBe("File not found: lib/queue.rs")
     }),
   )
 

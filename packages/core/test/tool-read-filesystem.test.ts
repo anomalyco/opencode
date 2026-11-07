@@ -212,18 +212,30 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
-  it.effect("reports out-of-range pagination as a typed error", () =>
+  it.effect("returns the last lines when the offset is past the end", () =>
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
-      const file = path.join(directory, "short.txt")
-      yield* files.writeFileString(file, "one\n")
+      const read = (name: string, content: string, page: ReadToolFileSystem.PageInput) =>
+        files.writeFileString(path.join(directory, name), content).pipe(
+          Effect.andThen(ReadToolFileSystem.read(environment, absolute(path.join(directory, name)), name, page)),
+          Effect.map((result) => String(ReadTool.toModelContent(name, page.offset, result)).split("\n")),
+        )
+      const long = Array.from({ length: 1_800 }, (_, index) => `${index + 1}`.padEnd(1_000, "x"))
 
-      const error = yield* ReadToolFileSystem.read(environment, absolute(file), "short.txt", { offset: 2 }).pipe(
-        Effect.flip,
-      )
-
-      expect(error).toBeInstanceOf(ReadToolFileSystem.OffsetOutOfRangeError)
-      expect(error.message).toBe("Offset 2 is out of range for this file (1 line)")
+      expect(yield* read("short.txt", "one\ntwo\nthree\nfour\nfive\n", { offset: 9, limit: 2 })).toEqual([
+        "Read file short.txt, lines 4-5 (offset 9 is past the end; the file has 5 lines)",
+        "4: four",
+        "5: five",
+      ])
+      expect(yield* read("empty.txt", "", { offset: 5 })).toEqual([
+        "Read file empty.txt, 0 lines (offset 5 is past the end; the file has 0 lines)",
+      ])
+      // The 50 KB cap keeps the last 51 of 100 tail lines, still ending at the last line.
+      const tail = yield* read("long.txt", long.join("\n"), { offset: 2_000, limit: 2_000 })
+      expect([tail[0], tail.at(-1)]).toEqual([
+        "Read file long.txt, lines 1750-1800 (offset 2000 is past the end; the file has 1800 lines)",
+        `1800: ${long.at(-1)}`,
+      ])
     }),
   )
 
