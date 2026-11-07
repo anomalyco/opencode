@@ -4,9 +4,27 @@ import { Schema, SchemaGetter } from "effect"
 import { PositiveInt } from "../../schema.js"
 import { ConfigPermissionV1 } from "./permission.js"
 
+export const ThemeColorNames = ["primary", "secondary", "accent", "success", "warning", "error", "info"] as const
+
+// V1 accepted theme color names for an agent `color`; V2 requires hex. Migration resolves the known
+// names to the default theme's hex instead of replacing them with a grey fallback.
+export const ThemeColorHex: Record<(typeof ThemeColorNames)[number], string> = {
+  primary: "#fab283",
+  secondary: "#5c9cf5",
+  accent: "#9d7cd8",
+  success: "#7fd88f",
+  warning: "#f5a742",
+  error: "#e06c75",
+  info: "#56b6c2",
+}
+
+export function resolveThemeColor(color: string) {
+  return Object.hasOwn(ThemeColorHex, color) ? ThemeColorHex[color as (typeof ThemeColorNames)[number]] : color
+}
+
 const Color = Schema.Union([
   Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/)),
-  Schema.Literals(["primary", "secondary", "accent", "success", "warning", "error", "info"]),
+  Schema.Literals([...ThemeColorNames]),
 ])
 
 const AgentSchema = Schema.StructWithRest(
