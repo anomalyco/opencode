@@ -231,8 +231,8 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
   // Rows are keyed by stable strings so live session updates do not remount them.
   const byKey = createMemo(() => new Map(entries().map((entry) => [entry.key, entry])))
 
-  // The index can arrive before the active-session snapshot. Check unfinished runs too so pending requests
-  // settle before the first paint.
+  // The index can arrive before the active-session snapshot. Wait for that snapshot, which moves running sessions into
+  // Working, and check unfinished runs too so pending requests settle before the first paint.
   const [settleState, setSettleState] = createSignal(INITIAL_INBOX_SETTLE_STATE)
   let revealTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -284,7 +284,7 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
       serversSettled: connections().every((item, index) => {
         if (!canUseServer(global.servers.health[ServerConnection.key(item.conn)])) return true
 
-        return !!queries[index]?.isSuccess || !!queries[index]?.isError
+        return (!!queries[index]?.isSuccess || !!queries[index]?.isError) && item.ctx.data.session.activeSettled()
       }),
       workingKeys: entries().flatMap((entry) =>
         entry.status === "working" || workingSince(entry.session) !== undefined ? [entry.key] : [],

@@ -7,8 +7,9 @@ export type InboxRequestCheck = "checking" | "checked"
 type Checks = Readonly<Record<string, InboxRequestCheck>>
 
 /**
- * The inbox's first load. It settles once every usable server answered the index and every working root's requests
- * loaded, or when the reveal timer fires; once settled it stays settled, so a session starting later never blanks it.
+ * The inbox's first load. It settles once every usable server answered the index and its running sessions and every
+ * working root's requests loaded, or when the reveal timer fires; once settled it stays settled, so a session starting
+ * later never blanks it.
  * Request checks keep running after it settles.
  */
 export type InboxSettleState =

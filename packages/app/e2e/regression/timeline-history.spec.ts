@@ -40,7 +40,6 @@ test.describe("timeline history", () => {
     ]
 
     const requests: (string | undefined)[] = []
-    await page.clock.install()
     await openSession(page, {
       name: "HistoryRestore",
       sessions: [{ id }, { id: other, directory: "C:/OpenCode/HistoryOther" }],
@@ -68,6 +67,9 @@ test.describe("timeline history", () => {
 
     await page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(other)}"]`).click()
     await expect(page.getByText("Other session", { exact: true })).toBeVisible()
+    // Only the return needs controlled time. A fake clock from the start also runs the first mount's frames late,
+    // and a scroll to the end queued by one of them lands after the upward gesture.
+    await page.clock.install()
     await page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(id)}"]`).click()
     await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
     // Exhaust the delayed leading-turn enrichment without a real-time sleep.
