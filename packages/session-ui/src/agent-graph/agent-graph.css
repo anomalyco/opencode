@@ -1,0 +1,544 @@
+[data-component="agent-graph"] {
+  position: relative;
+  font-family: var(--v2-font-family-sans);
+  color: var(--v2-text-text-base);
+
+  [data-slot="agent-graph-empty"] {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 24px 16px;
+    text-align: center;
+
+    [data-slot="agent-graph-empty-title"] {
+      font-size: 13px;
+      font-weight: 530;
+      line-height: var(--line-height-compact);
+      color: var(--v2-text-text-muted);
+    }
+
+    [data-slot="agent-graph-empty-body"] {
+      font-size: 12px;
+      line-height: var(--line-height-compact);
+      color: var(--v2-text-text-faint);
+    }
+  }
+
+  [data-slot="agent-graph-edges"] {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    pointer-events: none;
+
+    [data-slot="agent-graph-spawn"] {
+      fill: none;
+      stroke: var(--v2-icon-icon-muted);
+      stroke-width: 1.5;
+    }
+
+    [data-slot="agent-graph-marker"] {
+      &[data-kind="message"] {
+        fill: var(--v2-state-fg-info);
+      }
+
+      &[data-kind="report"] {
+        fill: var(--v2-state-fg-success);
+      }
+    }
+
+    [data-slot="agent-graph-message"] {
+      [data-slot="agent-graph-message-arc"] {
+        fill: none;
+        stroke: var(--v2-state-fg-info);
+        stroke-width: 1.5;
+      }
+
+      &[data-kind="report"] [data-slot="agent-graph-message-arc"] {
+        stroke: var(--v2-state-fg-success);
+      }
+    }
+  }
+}
+
+[data-component="agent-graph"] [data-slot="agent-graph-message"] {
+  [data-slot="agent-graph-message-hit"] {
+    stroke: transparent;
+    stroke-width: 16;
+    fill: none;
+    pointer-events: stroke;
+    cursor: pointer;
+  }
+
+  [data-slot="agent-graph-message-hit"]:hover,
+  [data-slot="agent-graph-message-hit"]:focus-visible,
+  &:has([data-slot="agent-graph-message-hit"]:hover),
+  &:has([data-slot="agent-graph-message-hit"]:focus-visible) {
+    [data-slot="agent-graph-message-arc"] {
+      stroke-width: 2.5;
+    }
+  }
+
+  [data-slot="agent-graph-message-hit"]:focus-visible {
+    stroke: var(--v2-border-border-focus);
+    stroke-opacity: 0.4;
+  }
+
+  &[data-selected] {
+    [data-slot="agent-graph-message-arc"] {
+      stroke-width: 2.5;
+    }
+
+    [data-slot="agent-graph-message-hit"] {
+      stroke: var(--v2-border-border-focus);
+      stroke-opacity: 0.35;
+    }
+  }
+}
+
+[data-component="agent-graph"][data-pair-selected] {
+  [data-slot="agent-graph-spawn"] {
+    opacity: 0.45;
+  }
+
+  [data-slot="agent-graph-message"]:not([data-selected]) {
+    opacity: 0.4;
+  }
+
+  [data-slot="agent-graph-node"]:not([data-related]) {
+    opacity: 0.55;
+  }
+}
+
+[data-component="agent-graph"] [data-slot="agent-graph-nodes"] {
+  position: relative;
+}
+
+[data-component="agent-graph"] [data-slot="agent-graph-node"] {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  position: absolute;
+  padding: 8px 10px;
+  border: 1px solid var(--v2-border-border-muted);
+  border-radius: 10px;
+  background-color: var(--v2-background-bg-layer-02);
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease-out,
+    background-color 150ms ease-out;
+
+  &:hover {
+    border-color: var(--v2-border-border-strong);
+  }
+
+  &:focus-visible {
+    outline: 1px solid var(--v2-border-border-focus);
+    outline-offset: 1px;
+  }
+
+  &[data-selected] {
+    border-color: var(--v2-icon-icon-accent);
+    background-color: var(--v2-background-bg-layer-03);
+  }
+
+  [data-slot="agent-graph-node-row"] {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  [data-slot="agent-graph-node-dot"] {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 9999px;
+    background-color: var(--agent-graph-agent-color, var(--v2-text-text-faint));
+  }
+
+  [data-slot="agent-graph-node-name"] {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 13px;
+    font-weight: 530;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+  }
+
+  [data-slot="agent-graph-node-running"] {
+    flex: none;
+    color: var(--v2-icon-icon-accent);
+  }
+
+  [data-slot="agent-graph-node-label"] {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 12px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: 0.05px;
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="agent-graph-node-usage"] {
+    align-self: flex-start;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+    padding: 1px 6px;
+    border-radius: 9999px;
+    background-color: var(--v2-overlay-simple-overlay-hover);
+    font-size: 12px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: 0.05px;
+    font-variant-numeric: tabular-nums;
+    color: var(--v2-text-text-muted);
+  }
+}
+
+:root[data-motion="reduce"] [data-component="agent-graph"] [data-slot="agent-graph-node"] {
+  transition: none;
+}
+
+[data-component="agent-graph"] [data-slot="agent-graph-messages"] {
+  position: absolute;
+  z-index: 2;
+  width: 320px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  max-height: 280px;
+  overflow: hidden;
+  border: 1px solid var(--v2-border-border-base);
+  border-radius: 10px;
+  background-color: var(--v2-background-bg-layer-03);
+  box-shadow: var(--v2-elevation-floating);
+
+  [data-slot="agent-graph-messages-header"] {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 6px 6px 10px;
+    border-block-end: 1px solid var(--v2-border-border-base);
+  }
+
+  [data-slot="agent-graph-messages-title"] {
+    flex: none;
+    font-size: 12px;
+    font-weight: 530;
+    line-height: var(--line-height-compact);
+    letter-spacing: 0.05px;
+    color: var(--v2-text-text-base);
+  }
+
+  [data-slot="agent-graph-messages-count"] {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    font-size: 12px;
+    line-height: var(--line-height-compact);
+    letter-spacing: 0.05px;
+    font-variant-numeric: tabular-nums;
+    color: var(--v2-text-text-faint);
+  }
+
+  [data-slot="agent-graph-messages-close"] {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: 6px;
+    background-color: transparent;
+    color: var(--v2-text-text-muted);
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+      background-color: var(--v2-overlay-simple-overlay-hover);
+      color: var(--v2-text-text-base);
+    }
+
+    &:focus-visible {
+      outline: 1px solid var(--v2-border-border-focus);
+      outline-offset: -1px;
+    }
+  }
+
+  [data-slot="agent-graph-messages-list"] {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 8px 10px;
+    list-style: none;
+    overflow-y: auto;
+  }
+
+  [data-slot="agent-graph-message-none"] {
+    font-size: 12px;
+    line-height: var(--line-height-compact);
+    letter-spacing: 0.05px;
+    color: var(--v2-text-text-faint);
+  }
+
+  [data-slot="agent-graph-message-entry"] {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  [data-slot="agent-graph-message-entry-meta"] {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-size: 12px;
+    line-height: var(--line-height-compact);
+    letter-spacing: 0.05px;
+    color: var(--v2-text-text-faint);
+  }
+
+  [data-slot="agent-graph-message-entry-kind"] {
+    flex: none;
+    padding: 0 5px;
+    border-radius: 4px;
+    background-color: var(--v2-overlay-simple-overlay-hover);
+    font-size: 11px;
+    font-weight: 530;
+    line-height: var(--line-height-compact);
+    color: var(--v2-text-text-muted);
+
+    &[data-kind="report"] {
+      color: var(--v2-state-fg-success);
+    }
+  }
+
+  [data-slot="agent-graph-message-entry-route"] {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  [data-slot="agent-graph-message-entry-time"] {
+    flex: none;
+    font-variant-numeric: tabular-nums;
+  }
+
+  [data-slot="agent-graph-message-entry-body"] {
+    margin: 0;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    font-family: var(--v2-font-family-code);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+    color: var(--v2-text-text-base);
+  }
+}
+
+[data-component="agent-graph-detail"] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  font-family: var(--v2-font-family-sans);
+  color: var(--v2-text-text-base);
+
+  [data-slot="agent-graph-detail-header"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  [data-slot="agent-graph-detail-heading"] {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+  }
+
+  [data-slot="agent-graph-detail-dot"] {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 9999px;
+    background-color: var(--agent-graph-agent-color, var(--v2-text-text-faint));
+  }
+
+  [data-slot="agent-graph-detail-title"] {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 13px;
+    font-weight: 530;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+  }
+
+  [data-slot="agent-graph-detail-identity"] {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+  }
+
+  [data-slot="agent-graph-detail-row"] {
+    display: grid;
+    grid-template-columns: minmax(56px, auto) minmax(0, 1fr);
+    column-gap: 10px;
+    align-items: baseline;
+
+    dt {
+      font-size: 12px;
+      line-height: var(--line-height-compact);
+      letter-spacing: 0.05px;
+      color: var(--v2-text-text-faint);
+    }
+
+    dd {
+      margin: 0;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-size: 12px;
+      line-height: var(--line-height-compact);
+      letter-spacing: 0.05px;
+      font-variant-numeric: tabular-nums;
+      color: var(--v2-text-text-muted);
+    }
+  }
+
+  [data-slot="agent-graph-detail-section"] {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  [data-slot="agent-graph-detail-section-title"] {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 530;
+    line-height: var(--line-height-compact);
+    letter-spacing: 0.1px;
+    text-transform: uppercase;
+    color: var(--v2-text-text-faint);
+  }
+
+  [data-slot="agent-graph-usage"] {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    line-height: var(--line-height-compact);
+    letter-spacing: 0.05px;
+    font-variant-numeric: tabular-nums;
+
+    th,
+    td {
+      padding: 2px 6px;
+      text-align: end;
+      font-weight: 440;
+      color: var(--v2-text-text-muted);
+    }
+
+    th {
+      color: var(--v2-text-text-faint);
+    }
+
+    th[scope="row"] {
+      text-align: start;
+      max-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    thead th[scope="col"]:first-child {
+      text-align: start;
+    }
+  }
+
+  [data-slot="agent-graph-detail-subtree"] {
+    margin: 0;
+    font-size: 12px;
+    line-height: var(--line-height-compact);
+    letter-spacing: 0.05px;
+    font-variant-numeric: tabular-nums;
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="agent-graph-logs-state"] {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 12px;
+    line-height: var(--line-height-compact);
+    letter-spacing: 0.05px;
+    color: var(--v2-text-text-faint);
+  }
+
+  [data-slot="agent-graph-logs-error"] {
+    margin: 0;
+    font-size: 12px;
+    line-height: var(--line-height-compact);
+    color: var(--v2-state-fg-danger);
+  }
+
+  [data-slot="agent-graph-logs-list"] {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    max-height: 180px;
+    overflow-y: auto;
+  }
+
+  [data-slot="agent-graph-log-entry"] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 10px;
+    align-items: baseline;
+  }
+
+  [data-slot="agent-graph-log-type"] {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-family: var(--v2-font-family-code);
+    font-size: 13px;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+    color: var(--v2-text-text-base);
+  }
+
+  [data-slot="agent-graph-log-time"] {
+    font-size: 12px;
+    line-height: var(--line-height-compact);
+    font-variant-numeric: tabular-nums;
+    color: var(--v2-text-text-faint);
+  }
+}

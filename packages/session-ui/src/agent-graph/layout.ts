@@ -23,6 +23,8 @@ export type MessageEdgeLayout = {
   from: string
   to: string
   kind: TunnelMessageKind
+  /** Tunnel messages the arc aggregates, for labels and selection. */
+  count: number
   /** Quadratic bezier arc between the node borders, bowed off the straight path. */
   path: string
 }
@@ -77,7 +79,9 @@ export function agentGraphLayout(graph: AgentGraph, options: AgentGraphLayoutOpt
 
     if (edge.type === "spawn") return [{ type: "spawn", from: edge.from, to: edge.to, path: spawnPath(from, to) }]
 
-    return [{ type: "message", from: edge.from, to: edge.to, kind: edge.kind, path: messagePath(from, to, size) }]
+    return [
+      { type: "message", from: edge.from, to: edge.to, kind: edge.kind, count: edge.count, path: messagePath(from, to, size) },
+    ]
   })
 
   // Parallel arcs between the same pair bow apart by index so their kinds stay distinguishable.
