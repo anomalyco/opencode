@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test"
-import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
+import type { OpenCodeEvent, SessionMessageInfo, VcsBase } from "@opencode/client/promise"
 import { Permission } from "@opencode/schema/permission"
 import { artifactKind, artifactMime } from "@opencode/util/artifact"
 import { Model } from "@opencode/schema/model"
@@ -88,12 +88,13 @@ export interface MockServerConfig {
     cursor?: string
   }
   vcs?: { current: string; default: string } | ((directory: string) => { current: string; default: string })
+  vcsBase?: VcsBase | null
   branches?: (input: { directory: string; search?: string; limit?: number }) => string[] | Promise<string[]>
   // Initializes the mock project's VCS; without a handler this mutation answers 501.
   onVcsInit?: (input: { directory: string; provider?: string }) => void
   // `directory` is the requested `location[directory]`, such as an untracked folder the review opened.
   /** `context` is the patch's lines of context, sent when the review asks for a large file's full patch. */
-  vcsDiff?: unknown[] | ((input: { mode?: string; directory: string; context?: string }) => unknown[])
+  vcsDiff?: unknown[] | ((input: { mode?: string; base?: string; directory: string; context?: string }) => unknown[])
   beforeMessagesResponse?: (input: { sessionID: string; before?: string }) => Promise<void>
   beforeAgentsResponse?: () => Promise<void>
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
@@ -1015,6 +1016,13 @@ function mockHandlers(
             ])
           }).pipe(Effect.andThen(noContent))
         },
+        vcsBase: (ctx) =>
+          config.vcsBase === undefined
+            ? Effect.fail(new MockServiceUnavailable({ message: "Choose a review base" }))
+            : Effect.succeed({
+                location: location(config, requestDirectory(config, ctx.request)),
+                data: config.vcsBase,
+              }),
         vcsStatus: () => Effect.succeed({ location: location(config), data: [] }),
         vcsBranches: (ctx) => {
           const query = new URL(ctx.request.url, "http://localhost").searchParams
@@ -1042,6 +1050,7 @@ function mockHandlers(
             data: Predicate.isFunction(config.vcsDiff)
               ? config.vcsDiff({
                   mode: ctx.query.mode,
+                  base: ctx.query.base,
                   directory: requestDirectory(config, ctx.request),
                   context: ctx.query.context,
                 })

@@ -39,6 +39,7 @@ const Query = Schema.Struct({
   query: Schema.optional(Schema.String),
   type: Schema.optional(Schema.String),
   mode: Schema.optional(Schema.String),
+  base: Schema.optional(Schema.String),
   context: Schema.optional(Schema.String),
 })
 
@@ -271,6 +272,12 @@ const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.get("formRequests", "/api/form", { success: Json }))
   .add(HttpApiEndpoint.get("vcs", "/api/vcs", { success: Json }))
   .add(HttpApiEndpoint.post("vcsInit", "/api/vcs/init", { success: NoContent, error: Unsupported }))
+  .add(
+    HttpApiEndpoint.get("vcsBase", "/api/vcs/base", {
+      success: Json,
+      error: MockServiceUnavailable.pipe(HttpApiSchema.status(503)),
+    }),
+  )
   .add(HttpApiEndpoint.get("vcsStatus", "/api/vcs/status", { success: Json }))
   .add(HttpApiEndpoint.get("vcsBranches", "/api/vcs/branch", { success: Json }))
   .add(HttpApiEndpoint.get("vcsDiff", "/api/vcs/diff", { query: Query, success: Json }))
