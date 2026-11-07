@@ -6,6 +6,8 @@ use regex::Regex;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
+use super::entities::ENTITIES;
+
 pub const LABEL_PADDING_X: i32 = 1;
 
 /// The terminal width of `value` (TS `string-width`).
@@ -133,7 +135,106 @@ pub fn strip_quotes(value: &str) -> String {
     decode(trimmed)
 }
 
-/// HTML character references (`entities.decodeHTMLStrict`).
+/// HTML character references (`entities.decodeHTMLStrict`): `&name;`, `&#digits;` and `&#xhex;`, each with its
+/// semicolon. Anything else stays as written.
 pub fn decode(value: &str) -> String {
-    html_escape::decode_html_entities(value).into_owned()
+    let mut out = String::with_capacity(value.len());
+    let mut rest = value;
+    while let Some(at) = rest.find('&') {
+        out.push_str(&rest[..at]);
+        rest = &rest[at + 1..];
+        match reference(rest) {
+            Some((decoded, length)) => {
+                out.push_str(&decoded);
+                rest = &rest[length..];
+            }
+            None => out.push('&'),
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The reference at the start of `text` (just after `&`) and the bytes it takes, its `;` included.
+fn reference(text: &str) -> Option<(String, usize)> {
+    if let Some(number) = text.strip_prefix('#') {
+        let (radix, digits, skip) = match number.strip_prefix(['x', 'X']) {
+            Some(hex) => (16, hex, 2),
+            None => (10, number, 1),
+        };
+        let length = digits.find(|char: char| !char.is_digit(radix)).unwrap_or(digits.len());
+        if length == 0 || digits.as_bytes().get(length) != Some(&b';') {
+            return None;
+        }
+        // Past the last code point the value only needs to stay out of range.
+        let code = digits[..length]
+            .chars()
+            .fold(0u32, |code, digit| code.saturating_mul(radix).saturating_add(digit.to_digit(radix).unwrap()));
+        return Some((code_point(code).to_string(), skip + length + 1));
+    }
+    let length = text.find(|char: char| !char.is_ascii_alphanumeric()).unwrap_or(text.len());
+    if text.as_bytes().get(length) != Some(&b';') {
+        return None;
+    }
+    let index = ENTITIES.binary_search_by(|(name, _)| name.cmp(&&text[..length])).ok()?;
+    Some((ENTITIES[index].1.to_owned(), length + 1))
+}
+
+/// `replaceCodePoint`: surrogates and values past U+10FFFF become U+FFFD, and NUL and the C1 controls that
+/// Windows-1252 assigns become what the HTML standard maps them to.
+fn code_point(code: u32) -> char {
+    let mapped = match code {
+        0 => 0xfffd,
+        0x80 => 0x20ac,
+        0x82 => 0x201a,
+        0x83 => 0x0192,
+        0x84 => 0x201e,
+        0x85 => 0x2026,
+        0x86 => 0x2020,
+        0x87 => 0x2021,
+        0x88 => 0x02c6,
+        0x89 => 0x2030,
+        0x8a => 0x0160,
+        0x8b => 0x2039,
+        0x8c => 0x0152,
+        0x8e => 0x017d,
+        0x91 => 0x2018,
+        0x92 => 0x2019,
+        0x93 => 0x201c,
+        0x94 => 0x201d,
+        0x95 => 0x2022,
+        0x96 => 0x2013,
+        0x97 => 0x2014,
+        0x98 => 0x02dc,
+        0x99 => 0x2122,
+        0x9a => 0x0161,
+        0x9b => 0x203a,
+        0x9c => 0x0153,
+        0x9e => 0x017e,
+        0x9f => 0x0178,
+        _ => code,
+    };
+    char::from_u32(mapped).unwrap_or('\u{fffd}')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::entities::{CASES, ENTITIES};
+    use super::decode;
+
+    #[test]
+    fn decodes_every_entity_of_the_table() {
+        assert!(ENTITIES.is_sorted_by(|a, b| a.0 < b.0));
+        for (name, value) in ENTITIES {
+            assert_eq!(decode(&format!("<&{name};>")), format!("<{value}>"), "{name}");
+            assert_eq!(decode(&format!("&{name}")), format!("&{name}"), "{name}");
+        }
+    }
+
+    #[test]
+    fn decodes_as_decode_html_strict() {
+        for (input, expected) in CASES {
+            assert_eq!(decode(input), *expected, "{input:?}");
+        }
+    }
 }
