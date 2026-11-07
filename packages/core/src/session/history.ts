@@ -135,10 +135,11 @@ export const decodePartRowSync = (row: typeof SessionPartTable.$inferSelect) =>
 
 export const decodeMessageRowSync = (row: typeof SessionMessageTable.$inferSelect) => decodeSync(rowInput(row))
 
-const decodeError = (row: typeof SessionMessageTable.$inferSelect) => () =>
+const decodeError = (row: typeof SessionMessageTable.$inferSelect) => (error: Schema.SchemaError) =>
   new MessageDecodeError({
     sessionID: row.session_id,
     messageID: row.id,
+    detail: error.message,
   })
 
 export const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
