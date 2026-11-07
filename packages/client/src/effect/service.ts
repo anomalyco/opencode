@@ -50,6 +50,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
   const timing = ensureTiming(options)
   const pool = contenderPool(timing)
   let timeouts: { readonly info: Info; readonly count: number } | undefined
+  let recruited = false
   let announced = false
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) =>
     Effect.sync(() => {
@@ -90,7 +91,17 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     if (service !== undefined) {
       pool.serviceAnswered()
       const decision = decide(service, options)
-      if (decision._tag === "fail") return yield* Effect.fail(decision.error)
+      if (decision._tag === "fail") {
+        // A boot failure this call started is reported once. A failure left registered by an earlier
+        // run must be replaced here, or every later start fails until someone runs `opencode service
+        // stop` (#62326).
+        if (service.state !== "failed" || recruited) return yield* Effect.fail(decision.error)
+        yield* announce("missing")
+        yield* Effect.logWarning("Replacing a background service that failed to start")
+        yield* stop({ file: options.file, pty: "clear" }).pipe(Effect.ignore)
+        pool.evict(service.info.pid)
+        return Option.none()
+      }
       if (decision._tag === "reuse") {
         yield* Effect.tryPromise(() => PtyHandoff.complete(options.file ?? fallback(), service.info))
         return Option.some(service)
@@ -110,6 +121,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     if (pool.shouldRecruit(info !== undefined)) {
       yield* announce("missing")
       pool.add(yield* spawnContender)
+      recruited = true
     }
     return Option.none()
   }).pipe(

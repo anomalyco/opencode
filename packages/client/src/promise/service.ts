@@ -30,6 +30,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const deadline = Date.now() + timing.promiseTimeout
   const pool = contenderPool(timing)
   let timeouts: { readonly info: Info; readonly count: number } | undefined
+  let recruited = false
   let announced = false
 
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) => {
@@ -72,7 +73,16 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
         pool.serviceAnswered()
         const service = registration.service
         const decision = decide(service, options)
-        if (decision._tag === "fail") throw decision.error
+        if (decision._tag === "fail") {
+          // A boot failure this call started is reported once. A failure left registered by an earlier
+          // run must be replaced here, or every later start fails until someone runs `opencode service
+          // stop` (#62326).
+          if (service.state !== "failed" || recruited) throw decision.error
+          announce("missing")
+          console.warn("Replacing a background service that failed to start")
+          await stop({ file: options.file, pty: "clear" }).catch(() => undefined)
+          pool.evict(service.info.pid)
+        }
         if (decision._tag === "reuse") {
           await PtyHandoff.complete(options.file ?? fallback(), service.info)
           return service.endpoint
@@ -90,6 +100,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
         if (pool.shouldRecruit(registration.info !== undefined)) {
           announce("missing")
           pool.add(await spawnContender())
+          recruited = true
         }
       }
       await delay(timing.pollInterval)
