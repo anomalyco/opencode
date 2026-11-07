@@ -19,6 +19,7 @@ const npm = Npm.Service.of({
   check: () => Effect.succeed(false),
   update: (name) => Effect.succeed({ directory: "", name }),
   which: () => Effect.undefined,
+  pin: () => Effect.void,
 })
 
 const addPlugin = Effect.fn(function* () {

@@ -57,6 +57,7 @@ const npmLayer = Layer.succeed(
     check: () => Effect.succeed(false),
     update: (name) => Effect.succeed({ directory: "", name }),
     which: () => Effect.undefined,
+    pin: () => Effect.void,
   }),
 )
 
