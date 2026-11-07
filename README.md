@@ -63,7 +63,13 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+<a href="https://opencode.ai">
+  <picture>
+    <source srcset=".github/assets/products-dark.png" media="(prefers-color-scheme: dark)">
+    <source srcset=".github/assets/products-light.png" media="(prefers-color-scheme: light)">
+    <img src=".github/assets/products-light.png" alt="OpenCode on desktop, in the terminal, on mobile and from the SDK">
+  </picture>
+</a>
 
 Start with free models or bring any of 200+ providers. OpenCode works on your machine, and you can use it from your desktop, the terminal, your phone or your own code.
 
