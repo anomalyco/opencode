@@ -27,7 +27,14 @@ export const reload = Effect.fn("LocationServiceMap.reload")(function* () {
   // Boot every replacement now and let all builds settle even if one fails.
   const results = yield* Effect.forEach(
     refs,
-    (ref) => Effect.scoped(locations.contextEffect(ref)).pipe(Effect.asVoid, Effect.exit),
+    (ref) =>
+      Effect.scoped(locations.contextEffect(ref)).pipe(
+        Effect.asVoid,
+        Effect.catchTag("FileSystem.DirectoryNotFoundError", (error) =>
+          Effect.logWarning("skipping missing location during reload", { directory: ref.directory, error }),
+        ),
+        Effect.exit,
+      ),
     { concurrency: "unbounded" },
   )
   const failure = results.find(Exit.isFailure)
