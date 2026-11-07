@@ -8,7 +8,6 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use anyhow::Context as _;
 use opencode_api::client::Client;
 use opencode_api::generated::V2Event;
 use opencode_local::cli_config::{CliConfig, MiniWorkSpinner, NewLocation, ThemeMode as ConfigMode, Visibility};
@@ -16,6 +15,7 @@ use opencode_local::model_pref::ModelPreferences;
 use opencode_store::target::{self, Prepared, SessionTarget, TargetError};
 use opencode_ui::motion::{Spinner, SpinnerColor};
 use opencode_ui::theme::ThemeMode;
+use opencode_util::error::{self, Context as _};
 use opentui::native::{KittyKeyboard, MouseTracking};
 use opentui::prelude::*;
 use opentui::split::{Scrollback, SplitFooter};
@@ -44,7 +44,7 @@ const NOTICE: Duration = Duration::from_secs(3);
 /// `session.shell.ended` event.
 const SHELL_OUTPUT_GRACE: Duration = Duration::from_millis(1500);
 
-pub fn run(input: Input) -> anyhow::Result<()> {
+pub fn run(input: Input) -> error::Result<()> {
     let settings = MiniSettings::resolve(input.config.mini.as_ref());
     let mut options =
         AppOptions { exit_on_ctrl_c: false, light_theme: None, palette_size: 256, ..AppOptions::default() };
@@ -260,7 +260,7 @@ struct Mini {
     height_pending: Cell<bool>,
     size: Cell<(u16, u16)>,
     exit_splash: Cell<bool>,
-    failure: RefCell<Option<anyhow::Error>>,
+    failure: RefCell<Option<error::Error>>,
 }
 
 /// The running work spinner and what it was built for: the color, the motion, and mono, and when the work started.
@@ -409,12 +409,12 @@ impl Mini {
             move |cx, result| match result {
                 Ok(target) => mini.opened(cx, target),
                 Err(TargetError::SessionNotFound) => mini.fail(cx, InputError("Session not found".into()).into()),
-                Err(error) => mini.fail(cx, anyhow::Error::new(error)),
+                Err(error) => mini.fail(cx, error::Error::new(error)),
             },
         );
     }
 
-    fn fail(&self, cx: &mut Cx<'_>, error: anyhow::Error) {
+    fn fail(&self, cx: &mut Cx<'_>, error: error::Error) {
         *self.failure.borrow_mut() = Some(error);
         self.close(cx);
     }

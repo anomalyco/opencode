@@ -10,6 +10,7 @@ use opencode_api::transport::{Reqwest, Transport};
 use opencode_local::paths::Paths;
 use opencode_service::connect::{self, Connection, Env, Options};
 use opencode_service::probe::Endpoint;
+use opencode_util::error;
 use serde_json::Value;
 
 use super::Context;
@@ -17,7 +18,7 @@ use super::Context;
 pub use opencode_api::js::locale_compare;
 
 /// Runs `future` to completion on a runtime of its own; handlers are synchronous.
-pub fn block_on<F: Future>(future: F) -> anyhow::Result<F::Output> {
+pub fn block_on<F: Future>(future: F) -> error::Result<F::Output> {
     Ok(tokio::runtime::Builder::new_current_thread().enable_all().build()?.block_on(future))
 }
 
@@ -37,19 +38,19 @@ impl Connected {
 
 /// `ServerConnection.resolve()` with the command's `--server` and `--standalone`, and a client for it.
 /// Keep the result for as long as the command talks to the server.
-pub async fn connect(context: &Context) -> anyhow::Result<Connected> {
+pub async fn connect(context: &Context) -> error::Result<Connected> {
     connect_in(context, &Paths::from_env()?, &Env::from_env(), false, false, Arc::new(Reqwest::default())).await
 }
 
 /// [`connect`] for a long-lived command (`mini`): a managed service's client follows the service when it
 /// restarts on a new port or password (`service.reconnect`).
-pub async fn connect_following(context: &Context) -> anyhow::Result<Connected> {
+pub async fn connect_following(context: &Context) -> error::Result<Connected> {
     connect_in(context, &Paths::from_env()?, &Env::from_env(), false, true, Arc::new(Reqwest::default())).await
 }
 
 /// `ServerConnection.resolve({ autostart: false })` (`run`): a running service, else a standalone server, so a
 /// one-off command never leaves a new service running.
-pub async fn connect_without_autostart(context: &Context) -> anyhow::Result<Connected> {
+pub async fn connect_without_autostart(context: &Context) -> error::Result<Connected> {
     connect_in(context, &Paths::from_env()?, &Env::from_env(), true, false, Arc::new(Reqwest::default())).await
 }
 
@@ -67,7 +68,7 @@ async fn connect_in(
     standalone_fallback: bool,
     follow: bool,
     transport: Arc<dyn Transport>,
-) -> anyhow::Result<Connected> {
+) -> error::Result<Connected> {
     let connection = connect::resolve(
         transport.clone(),
         paths,
@@ -91,12 +92,12 @@ async fn connect_in(
 }
 
 /// `{ location: { directory: process.cwd() } }`, the location every read command sends.
-pub fn here() -> anyhow::Result<LocationQueryInput> {
+pub fn here() -> error::Result<LocationQueryInput> {
     Ok(LocationQueryInput { directory: Some(std::env::current_dir()?.to_string_lossy().into_owned()) })
 }
 
 /// `JSON.stringify(value, null, 2)` plus a newline.
-pub fn pretty(value: &Value) -> anyhow::Result<String> {
+pub fn pretty(value: &Value) -> error::Result<String> {
     Ok(serde_json::to_string_pretty(value)? + "\n")
 }
 

@@ -1,6 +1,7 @@
 //! `session`: list, delete, export, and import sessions
 //! (`packages/cli/src/commands/handlers/session/*.ts`).
 
+use opencode_util::{bail, err, error, time::Zone};
 use std::io::{IsTerminal, Write};
 use std::process::{Command, Stdio};
 
@@ -10,7 +11,6 @@ use opencode_api::generated::types::{
     AbsolutePath, ExperimentalSessionExportInput, LocationGetInput, LocationQueryInput, ProjectID, SessionListInput,
     SessionListInputOrder, SessionRemoveInput,
 };
-use opencode_util::time::Zone;
 use serde_json::{Map, Value};
 
 use super::Context;
@@ -22,7 +22,7 @@ use crate::args::{
 use crate::output::{Exit, print};
 use crate::prompt::{self, Choice, Output};
 
-pub fn run(context: &Context, args: &SessionArgs) -> anyhow::Result<()> {
+pub fn run(context: &Context, args: &SessionArgs) -> error::Result<()> {
     match &args.command {
         None => crate::help::print(&["session"]),
         Some(SessionCommand::List(args)) => caught(list(context, args)),
@@ -34,7 +34,7 @@ pub fn run(context: &Context, args: &SessionArgs) -> anyhow::Result<()> {
 
 // `list`, `delete`, and `export` catch every failure and print its bare message with exit 1, as their
 // `Effect.catch` does with `errorMessage`. `import` lets failures escape (C40-handler-errors).
-fn caught(result: anyhow::Result<()>) -> anyhow::Result<()> {
+fn caught(result: error::Result<()>) -> error::Result<()> {
     let Err(error) = result else { return Ok(()) };
     if error.is::<Exit>() {
         return Err(error);
@@ -43,7 +43,7 @@ fn caught(result: anyhow::Result<()>) -> anyhow::Result<()> {
     Err(Exit(1).into())
 }
 
-fn list(context: &Context, args: &SessionListArgs) -> anyhow::Result<()> {
+fn list(context: &Context, args: &SessionListArgs) -> error::Result<()> {
     let sessions = block_on(async {
         let server = connect(context).await?;
         let location = location(&server.client, &cwd()?).await?;
@@ -54,7 +54,7 @@ fn list(context: &Context, args: &SessionListArgs) -> anyhow::Result<()> {
             project: location["project"]["id"].as_str().map(ProjectID::from),
             ..Default::default()
         };
-        anyhow::Ok(data(server.client.json(Client::session_list_call(&input)?).await?))
+        Ok::<_, error::Error>(data(server.client.json(Client::session_list_call(&input)?).await?))
     })??;
     if args.format == SessionListFormat::Table && sessions.is_empty() {
         return Ok(());
@@ -70,7 +70,7 @@ fn list(context: &Context, args: &SessionListArgs) -> anyhow::Result<()> {
 }
 
 // `less -R -S` reads the list on stdin and draws on the terminal; without `less`, the list is printed.
-fn page(output: &str) -> anyhow::Result<()> {
+fn page(output: &str) -> error::Result<()> {
     let Ok(mut pager) = Command::new("less").args(["-R", "-S"]).stdin(Stdio::piped()).spawn() else {
         return print(output);
     };
@@ -114,19 +114,19 @@ fn table(sessions: &[Value]) -> String {
         .join("\n")
 }
 
-fn delete(context: &Context, args: &SessionDeleteArgs) -> anyhow::Result<()> {
+fn delete(context: &Context, args: &SessionDeleteArgs) -> error::Result<()> {
     block_on(async {
         let server = connect(context).await?;
-        anyhow::Ok(
+        Ok::<_, error::Error>(
             server.client.session_remove(&SessionRemoveInput { session_id: args.session_id.clone().into() }).await?,
         )
     })??;
     print(&format!("Session {} deleted\n", args.session_id))
 }
 
-fn export(context: &Context, args: &SessionExportArgs) -> anyhow::Result<()> {
+fn export(context: &Context, args: &SessionExportArgs) -> error::Result<()> {
     if args.session.is_none() && !std::io::stdin().is_terminal() {
-        anyhow::bail!("Pass a session ID when running without an interactive terminal");
+        bail!("Pass a session ID when running without an interactive terminal");
     }
     let data = block_on(async {
         let server = connect(context).await?;
@@ -134,12 +134,12 @@ fn export(context: &Context, args: &SessionExportArgs) -> anyhow::Result<()> {
             Some(session) => session.clone(),
             None => match pick(&server.client).await? {
                 Some(session) => session,
-                None => return anyhow::Ok(None),
+                None => return Ok::<_, error::Error>(None),
             },
         };
         let input = ExperimentalSessionExportInput { session_id: session.into(), sanitize: Some(args.sanitize) };
         let mut response: Value = server.client.json(Client::experimental_session_export_call(&input)?).await?;
-        anyhow::Ok(Some(response["data"].take()))
+        Ok::<_, error::Error>(Some(response["data"].take()))
     })??;
     match data {
         Some(data) => print(&pretty(&data)?),
@@ -149,7 +149,7 @@ fn export(context: &Context, args: &SessionExportArgs) -> anyhow::Result<()> {
 
 // The picker of the 50 newest top-level sessions in this directory, drawn on stderr. `None` ends the
 // command quietly: no sessions, or no option matched the search.
-async fn pick(client: &Client) -> anyhow::Result<Option<String>> {
+async fn pick(client: &Client) -> error::Result<Option<String>> {
     let output = Output::Stderr;
     output.intro("Export session");
     let location = location(client, &cwd()?).await?;
@@ -189,11 +189,10 @@ async fn pick(client: &Client) -> anyhow::Result<Option<String>> {
     Ok(selected)
 }
 
-fn import(context: &Context, args: &SessionImportArgs) -> anyhow::Result<()> {
-    let text =
-        block_on(read(&args.file))?.map_err(|error| anyhow::anyhow!("Failed to read session data: {error:#}"))?;
+fn import(context: &Context, args: &SessionImportArgs) -> error::Result<()> {
+    let text = block_on(read(&args.file))?.map_err(|error| err!("Failed to read session data: {error:#}"))?;
     let Value::Object(mut body) = serde_json::from_str::<Value>(&text)? else {
-        anyhow::bail!("Expected an object, got {}", text.trim());
+        bail!("Expected an object, got {}", text.trim());
     };
     let directory = match &args.directory {
         Some(directory) if std::path::Path::new(directory).is_absolute() => super::debug::normalize(directory, false),
@@ -210,7 +209,7 @@ fn import(context: &Context, args: &SessionImportArgs) -> anyhow::Result<()> {
         call.json(&body)?;
         // TS reads the raw response, so a declared error prints its status text, as an undeclared one does.
         let status = match server.client.json::<Value>(call).await {
-            Ok(response) => return anyhow::Ok(Some(text_of(&response["data"]["id"])?)),
+            Ok(response) => return Ok::<_, error::Error>(Some(text_of(&response["data"]["id"])?)),
             Err(ApiError::UnexpectedStatus { status }) => status,
             Err(ApiError::Declared(error)) => error.status,
             Err(error) => return Err(error.into()),
@@ -218,7 +217,7 @@ fn import(context: &Context, args: &SessionImportArgs) -> anyhow::Result<()> {
         if status == 409 {
             return Ok(None);
         }
-        anyhow::bail!(
+        bail!(
             "Failed to import session: {}",
             reqwest::StatusCode::from_u16(status).ok().and_then(|status| status.canonical_reason()).unwrap_or_default()
         )
@@ -232,31 +231,28 @@ fn import(context: &Context, args: &SessionImportArgs) -> anyhow::Result<()> {
     }
 }
 
-async fn read(file: &str) -> anyhow::Result<String> {
+async fn read(file: &str) -> error::Result<String> {
     if !file.starts_with("http://") && !file.starts_with("https://") {
         // Bun's wording for the common failures; others keep the OS message.
         return std::fs::read_to_string(file).map_err(|error| match error.kind() {
             std::io::ErrorKind::NotFound => {
-                anyhow::anyhow!("ENOENT: no such file or directory, open '{file}'")
+                err!("ENOENT: no such file or directory, open '{file}'")
             }
             std::io::ErrorKind::PermissionDenied => {
-                anyhow::anyhow!("EACCES: permission denied, open '{file}'")
+                err!("EACCES: permission denied, open '{file}'")
             }
             _ => error.into(),
         });
     }
     let response = opencode_api::transport::http_client().get(file).send().await?;
     if !response.status().is_success() {
-        anyhow::bail!("Failed to fetch session data: {}", response.status().canonical_reason().unwrap_or_default());
+        bail!("Failed to fetch session data: {}", response.status().canonical_reason().unwrap_or_default());
     }
     Ok(response.text().await?)
 }
 
-fn text_of(value: &Value) -> anyhow::Result<String> {
-    value
-        .as_str()
-        .map(str::to_owned)
-        .ok_or_else(|| anyhow::anyhow!("The server answered the import without a session ID"))
+fn text_of(value: &Value) -> error::Result<String> {
+    value.as_str().map(str::to_owned).ok_or_else(|| err!("The server answered the import without a session ID"))
 }
 
 async fn location(client: &Client, directory: &str) -> Result<Value, ApiError> {
@@ -271,12 +267,12 @@ fn data(mut response: Value) -> Vec<Value> {
     }
 }
 
-fn cwd() -> anyhow::Result<String> {
+fn cwd() -> error::Result<String> {
     Ok(std::env::current_dir()?.to_string_lossy().into_owned())
 }
 
 // `errorMessage`: a declared error's message, else the `ClientError` message (`reason: detail`).
-fn message(error: &anyhow::Error) -> String {
+fn message(error: &error::Error) -> String {
     match error.downcast_ref::<ApiError>().and_then(ApiError::declared) {
         Some(declared) => declared.message.clone().unwrap_or_default(),
         None => format!("{error:#}"),

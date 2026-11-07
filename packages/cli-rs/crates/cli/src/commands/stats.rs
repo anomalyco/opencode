@@ -13,6 +13,7 @@ use opencode_api::generated::types::{
 };
 use opencode_ui::activity_calendar::{activity_calendar, time_zone};
 use opencode_util::time::{self, Date, Zone};
+use opencode_util::{bail, err, error};
 use serde_json::Value;
 
 use super::Context;
@@ -20,7 +21,7 @@ use super::client::{block_on, connect, here, pretty};
 use crate::args::StatsArgs;
 use crate::output::{Exit, print};
 
-pub fn run(context: &Context, args: &StatsArgs) -> anyhow::Result<()> {
+pub fn run(context: &Context, args: &StatsArgs) -> error::Result<()> {
     // The handler catches every failure and prints its bare message with exit 1.
     let Err(error) = stats(context, args) else {
         return Ok(());
@@ -29,9 +30,9 @@ pub fn run(context: &Context, args: &StatsArgs) -> anyhow::Result<()> {
     Err(Exit(1).into())
 }
 
-fn stats(context: &Context, args: &StatsArgs) -> anyhow::Result<()> {
+fn stats(context: &Context, args: &StatsArgs) -> error::Result<()> {
     if [args.days.is_some(), args.year.is_some(), args.all].iter().filter(|set| **set).count() > 1 {
-        anyhow::bail!("--days, --year, and --all cannot be combined");
+        bail!("--days, --year, and --all cannot be combined");
     }
     let range = Range::new(args, Zone::Local, time::now_ms());
     let details = args.models || args.tools || args.cost || args.full;
@@ -71,7 +72,7 @@ fn stats(context: &Context, args: &StatsArgs) -> anyhow::Result<()> {
         return print(&pretty(data)?);
     }
     let info: SessionStatsInfo =
-        serde_json::from_value(data.clone()).map_err(|error| anyhow::anyhow!("MalformedResponse: {error}"))?;
+        serde_json::from_value(data.clone()).map_err(|error| err!("MalformedResponse: {error}"))?;
     let scope = match args.project.as_deref() {
         None => "all projects",
         Some(".") => "current project",
@@ -93,8 +94,8 @@ fn stats(context: &Context, args: &StatsArgs) -> anyhow::Result<()> {
 }
 
 // `request`: each call gets 30 seconds, and a call that cannot reach the server names it.
-async fn request<T>(url: &str, call: impl Future<Output = anyhow::Result<T>>) -> anyhow::Result<T> {
-    let unreachable = || anyhow::anyhow!("Could not reach server at {url}");
+async fn request<T>(url: &str, call: impl Future<Output = error::Result<T>>) -> error::Result<T> {
+    let unreachable = || err!("Could not reach server at {url}");
     match tokio::time::timeout(Duration::from_secs(30), call).await {
         Err(_) => Err(unreachable()),
         Ok(Err(error)) if matches!(error.downcast_ref::<ApiError>(), Some(ApiError::Transport(_))) => {
@@ -105,7 +106,7 @@ async fn request<T>(url: &str, call: impl Future<Output = anyhow::Result<T>>) ->
 }
 
 // `errorMessage`: a declared error's message, else the error's own text.
-fn message(error: &anyhow::Error) -> String {
+fn message(error: &error::Error) -> String {
     match error.downcast_ref::<ApiError>().and_then(ApiError::declared) {
         Some(declared) => declared.message.clone().unwrap_or_default(),
         None => format!("{error:#}"),

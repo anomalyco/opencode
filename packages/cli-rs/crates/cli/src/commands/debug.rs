@@ -9,6 +9,7 @@ use opencode_local::paths::Paths;
 use opencode_service::connect::{self, Env, Options};
 use opencode_service::discover;
 use opencode_service::probe::Endpoint;
+use opencode_util::{bail, err, error};
 use regex::Regex;
 use serde_json::Value;
 use std::path::Path;
@@ -19,7 +20,7 @@ use super::client::{block_on, connect, here, locale_compare, pretty};
 use crate::args::{DebugArgs, DebugCommand, HeapDumpArgs, PathName, PathsArgs};
 use crate::output::{Exit, print};
 
-pub fn run(context: &Context, args: &DebugArgs) -> anyhow::Result<()> {
+pub fn run(context: &Context, args: &DebugArgs) -> error::Result<()> {
     match &args.command {
         None => crate::help::print(&["debug"]),
         Some(DebugCommand::Agents) => agents(context),
@@ -29,22 +30,22 @@ pub fn run(context: &Context, args: &DebugArgs) -> anyhow::Result<()> {
     }
 }
 
-fn agents(context: &Context) -> anyhow::Result<()> {
+fn agents(context: &Context) -> error::Result<()> {
     let response = block_on(async {
         let server = connect(context).await?;
         let input = AgentListInput { location: Some(here()?) };
-        anyhow::Ok(server.client.json::<Value>(Client::agent_list_call(&input)?).await?)
+        Ok::<_, error::Error>(server.client.json::<Value>(Client::agent_list_call(&input)?).await?)
     })??;
     let mut agents = super::models::data(&response).to_vec();
     agents.sort_by(|a, b| locale_compare(a["id"].as_str().unwrap_or_default(), b["id"].as_str().unwrap_or_default()));
     print(&pretty(&Value::Array(agents))?)
 }
 
-fn config(context: &Context) -> anyhow::Result<()> {
+fn config(context: &Context) -> error::Result<()> {
     let entries = block_on(async {
         let server = connect(context).await?;
         let input = ConfigGetInput { location: Some(here()?) };
-        anyhow::Ok(server.client.json::<Value>(Client::config_get_call(&input)?).await?)
+        Ok::<_, error::Error>(server.client.json::<Value>(Client::config_get_call(&input)?).await?)
     })??;
     print(&pretty(&redact(&entries, false))?)
 }
@@ -90,7 +91,7 @@ fn redact_entry(key: &str, item: &Value, headers: bool) -> Value {
 
 // Every failure goes to stderr as its bare message with exit 1, as the TS handler's `Effect.catch`
 // does.
-fn heap_dump(context: &Context, args: &HeapDumpArgs) -> anyhow::Result<()> {
+fn heap_dump(context: &Context, args: &HeapDumpArgs) -> error::Result<()> {
     match block_on(capture(context, args))? {
         Ok(()) => Ok(()),
         Err(error) => {
@@ -100,7 +101,7 @@ fn heap_dump(context: &Context, args: &HeapDumpArgs) -> anyhow::Result<()> {
     }
 }
 
-async fn capture(context: &Context, args: &HeapDumpArgs) -> anyhow::Result<()> {
+async fn capture(context: &Context, args: &HeapDumpArgs) -> error::Result<()> {
     let transport: Arc<dyn Transport> = Arc::new(Reqwest::default());
     let endpoint = running(transport.clone(), context.server.server.clone()).await?;
     let client = endpoint.client(transport)?;
@@ -113,10 +114,9 @@ async fn capture(context: &Context, args: &HeapDumpArgs) -> anyhow::Result<()> {
     };
     let snapshot = client.debug_heap_dump(&DebugHeapDumpInput { directory: directory.clone() }).await.map_err(
         |error| match error {
-            ApiError::UnexpectedStatus { status: 404 } => anyhow::anyhow!(
-                "The server at {} does not support heap dumps. Update and restart it first.",
-                endpoint.url
-            ),
+            ApiError::UnexpectedStatus { status: 404 } => {
+                err!("The server at {} does not support heap dumps. Update and restart it first.", endpoint.url)
+            }
             error => error.into(),
         },
     )?;
@@ -132,7 +132,7 @@ async fn capture(context: &Context, args: &HeapDumpArgs) -> anyhow::Result<()> {
 
 // A fresh server has nothing worth capturing, so only an already-running one is used: never
 // start, replace, or restart the background service.
-async fn running(transport: Arc<dyn Transport>, server: Option<String>) -> anyhow::Result<Endpoint> {
+async fn running(transport: Arc<dyn Transport>, server: Option<String>) -> error::Result<Endpoint> {
     let paths = Paths::from_env()?;
     let env = Env::from_env();
     if server.is_some() {
@@ -147,9 +147,9 @@ async fn running(transport: Arc<dyn Transport>, server: Option<String>) -> anyho
     }
     match discover::discover(transport.as_ref(), &paths, env.channel.as_deref()).await {
         Ok(found) => Ok(found.service.endpoint),
-        Err(_) => anyhow::bail!(
-            "No background server is running. Pass --server <url> to capture a server started another way."
-        ),
+        Err(_) => {
+            bail!("No background server is running. Pass --server <url> to capture a server started another way.")
+        }
     }
 }
 
@@ -197,7 +197,7 @@ pub(super) fn normalize(path: &str, windows: bool) -> String {
     format!("{prefix}{root}{body}")
 }
 
-fn paths(args: &PathsArgs) -> anyhow::Result<()> {
+fn paths(args: &PathsArgs) -> error::Result<()> {
     let mut paths = Paths::from_env()?;
     // The TS `Global` layer creates the directories and resolves tmp before any command runs.
     for directory in [&paths.data, &paths.config, &paths.state, &paths.log, &paths.bin, &paths.repos, &paths.tmp] {

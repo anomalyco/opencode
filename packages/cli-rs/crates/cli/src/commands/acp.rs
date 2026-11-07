@@ -1,6 +1,7 @@
 //! `acp`: the Agent Client Protocol server (`packages/cli/src/commands/handlers/acp.ts`).
 
 use opencode_service::ts_command::TsCommand;
+use opencode_util::error;
 
 use super::Context;
 use crate::args::{AcpArgs, AuthArgs, AuthCommand, AuthLoginArgs, Cli, Command};
@@ -18,7 +19,7 @@ pub fn before_logger(cli: &Cli) {
     }
 }
 
-pub fn run(context: &Context, args: &AcpArgs) -> anyhow::Result<()> {
+pub fn run(context: &Context, args: &AcpArgs) -> error::Result<()> {
     if args.login {
         // TS runs the `auth login` handler with no target, method, or answers.
         let login = AuthLoginArgs { target: None, method: None, answer: Vec::new() };

@@ -88,7 +88,11 @@ where
 
 /// `opencode acp`: starts the private server with `server_command` (`TsCommand::standalone`), serves
 /// stdio, and returns the failure to report, if any. The caller exits 1 when there is one.
-pub fn run(server_command: &[OsString], print_logs: bool, version: &str) -> anyhow::Result<Option<String>> {
+pub fn run(
+    server_command: &[OsString],
+    print_logs: bool,
+    version: &str,
+) -> opencode_util::error::Result<Option<String>> {
     let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build()?;
     let cwd = std::env::current_dir()?;
     let result = runtime.block_on(serve_stdio(server_command, &cwd, print_logs, version));
@@ -102,7 +106,7 @@ async fn serve_stdio(
     cwd: &Path,
     print_logs: bool,
     version: &str,
-) -> anyhow::Result<Option<String>> {
+) -> opencode_util::error::Result<Option<String>> {
     let mut server = opencode_service::standalone::start(server_command, cwd, print_logs).await?;
     let client = server.endpoint.client(Arc::new(Reqwest::default()))?;
     let served = serve(client, tokio::io::stdin(), tokio::io::stdout(), Options::new(version));

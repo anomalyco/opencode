@@ -11,6 +11,7 @@ use opencode_local::service_config::Info;
 use opencode_service::delegate;
 use opencode_service::ts_command::TsCommand;
 use opencode_ui::qr;
+use opencode_util::{bail, err, error};
 
 use super::Context;
 use super::client::block_on;
@@ -23,14 +24,14 @@ const NOT_ENABLED: &str = "Remote access was not enabled. To pair locally, run `
 
 pub const REMOTE_WARNING: &str = "This will expose your OpenCode server to the internet.\nTraffic is end-to-end encrypted, and access requires your server password.\nTo pair locally instead, run `opencode pair` without the --remote flag.";
 
-pub fn run(_context: &Context, args: &PairArgs) -> anyhow::Result<()> {
+pub fn run(_context: &Context, args: &PairArgs) -> error::Result<()> {
     let local = Local::from_env()?;
     let config = local.config().read()?;
     if config.disabled == Some(true) {
-        anyhow::bail!("Pairing requires the background service; run `opencode service unset disabled` first");
+        bail!("Pairing requires the background service; run `opencode service unset disabled` first");
     }
     if args.remote && args.url.is_some() {
-        anyhow::bail!("--remote cannot be combined with --url");
+        bail!("--remote cannot be combined with --url");
     }
     if args.remote && config.remote.is_none() {
         if !consent(&local, &config, args.yes)? {
@@ -46,7 +47,7 @@ pub fn run(_context: &Context, args: &PairArgs) -> anyhow::Result<()> {
     block_on(pair(&local, args))?
 }
 
-async fn pair(local: &Local, args: &PairArgs) -> anyhow::Result<()> {
+async fn pair(local: &Local, args: &PairArgs) -> error::Result<()> {
     let found = local.ensure().await?;
     let endpoint = found.service.endpoint;
     let client = endpoint.client(local.transport())?;
@@ -141,7 +142,7 @@ fn js_round(value: f64) -> f64 {
 
 /// `remoteConsent`: remote access is explained and accepted only the first time it is turned on. Returns
 /// whether it may be enabled; a refusal without a terminal or a cancel ends the command with its exit code.
-fn consent(local: &Local, config: &Info, yes: bool) -> anyhow::Result<bool> {
+fn consent(local: &Local, config: &Info, yes: bool) -> error::Result<bool> {
     if config.remote.is_some() || config.remote_accepted {
         return Ok(true);
     }
@@ -170,7 +171,7 @@ fn consent(local: &Local, config: &Info, yes: bool) -> anyhow::Result<bool> {
 /// The tunnel URL of the service, once the tunnel is attached: the service attaches it in the
 /// background, so poll `/api/info` every second for up to 3 minutes. The route is read from this
 /// client's channel (parity/deviations/C41-pair-remote-channel.md).
-async fn remote_url(local: &Local, client: &Client) -> anyhow::Result<String> {
+async fn remote_url(local: &Local, client: &Client) -> error::Result<String> {
     let attempt = async || -> Option<String> {
         let route = local.config().read().ok()?.remote?.route;
         let hostname = delegate::tunnel_hostname(&local.paths, &route).ok()??;
@@ -190,7 +191,7 @@ async fn remote_url(local: &Local, client: &Client) -> anyhow::Result<String> {
     tokio::time::timeout(Duration::from_secs(180), poll)
         .await
         .map_err(|_| {
-            anyhow::anyhow!(
+            err!(
                 "Timed out waiting for the remote tunnel; run `opencode pair --remote` again to retry.\nBehind an HTTP proxy, give the background service its address with `opencode service set env HTTPS_PROXY <url>` (and `NO_PROXY` for hosts to reach directly)."
             )
         })
