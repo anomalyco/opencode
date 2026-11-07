@@ -61,7 +61,7 @@ export const CacheWarming = Schema.Union([
     interval: Schema.Union([Schema.Literal("auto"), Schema.String])
       .pipe(optional)
       .annotate({
-        description: 'Duration such as "4 minutes", or "auto" for 90% of the cache lifetime the request was sent with',
+        description: 'Duration such as "4 minutes", or "auto" for 90% of the cache lifetime',
       }),
     duration: Schema.String.pipe(optional).annotate({ description: 'Duration such as "30 minutes"' }),
     idle: Schema.String.pipe(optional).annotate({ description: 'Duration such as "15 minutes"' }),

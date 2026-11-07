@@ -1,4 +1,4 @@
-export { keepAlive } from "./cache-policy.js"
+export { keepAlive, placesMarkers } from "./cache-policy.js"
 export { isContextOverflow, isContextOverflowFailure, isRetryable } from "./provider-error.js"
 export {
   ProtocolID,
@@ -13,8 +13,7 @@ export {
   ProviderMetadata,
   HttpTimeout,
   RequestEncoding,
-  GenerationOptions,
-  LanguageModelDefaults,
+  GENERATION_KEYS,
   ReasoningEfforts,
   ReasoningEffort,
   LanguageModelCompatibility,
@@ -94,8 +93,8 @@ export type {
   BaseRequest,
   ContentPartInput,
   GenerationOptionsFields,
-  GenerationOptionsInput,
   HttpOptions,
+  RequestOptions,
   LanguageModelInput,
   LanguageModelProviderOptions,
   LLMRequest,

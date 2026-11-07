@@ -93,7 +93,6 @@ describe("settings schema", () => {
         timelineDetail: timelinePresets[2].value,
         showCustomAgents: false,
         showTurnDiffs: false,
-        newMessagesDivider: true,
         backgroundActivity: "left",
         timelineWidth: "comfortable",
         newIcons: false,

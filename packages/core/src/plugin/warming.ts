@@ -1,6 +1,6 @@
 export * as WarmingPlugin from "./warming.js"
 
-import { LLMClient, keepAlive } from "@opencode/ai/effect"
+import { LLMClient, keepAlive, placesMarkers } from "@opencode/ai/effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { Session } from "@opencode/schema/session"
@@ -13,6 +13,7 @@ import { resolveModel } from "./optimize.js"
 const decodeWarming = Schema.decodeUnknownOption(ConfigWarming.Warming)
 
 const defaults = {
+  prompt: "This is a keep-alive request. Do not perform any work or use tools. Reply with exactly: OK",
   interval: "auto" as Duration.Duration | "auto",
   duration: Duration.minutes(30),
   // Once a turn ends, the chance that the next prompt arrives within one more interval falls below what a refresh
@@ -20,7 +21,12 @@ const defaults = {
   idle: Duration.minutes(15),
 }
 
-type Settings = typeof defaults
+type Settings = typeof defaults & {
+  /** Whether the model's or provider's own `cache.warming` turned warming on, rather than the top-level setting. */
+  readonly forModel: boolean
+  /** The model's `cache.ttl` in milliseconds, which times "auto" when no cache entry gives a lifetime. */
+  readonly lifetime: number | undefined
+}
 
 interface Entry {
   settings: Settings
@@ -30,6 +36,8 @@ interface Entry {
   expires: number
 }
 
+// What "auto" uses when neither the request nor the model gives a cache lifetime.
+const UNKNOWN_LIFETIME_INTERVAL = Duration.minutes(4)
 // A refresh that reaches the provider this close to expiry may find the entry gone and rewrite the whole prompt.
 const EXPIRY_MARGIN = Duration.seconds(10)
 // How often to look again while a model request runs. The interval comes from the request the step sends, which is
@@ -53,10 +61,13 @@ export const Plugin = define({
         })
       const global = Config.latest(yield* config.entries(), "warming")
       if (!(local ?? global)) return
+      // The keep-alive prompt is only set at the top level; a model's setting changes timing.
       const settings: Settings = {
         ...defaults,
         ...(typeof global === "object" ? global : {}),
         ...(typeof local === "object" ? local : {}),
+        forModel: local !== undefined,
+        lifetime: parseTTL(cache?.ttl),
       }
       const valid =
         Duration.isFinite(settings.duration) &&
@@ -69,15 +80,15 @@ export const Plugin = define({
       if (valid) return settings
       yield* Effect.logWarning(
         "warming interval must be positive and shorter than a finite duration, and idle must be finite",
-        settings,
+        { interval: settings.interval, duration: settings.duration, idle: settings.idle },
       )
     })
 
     const sessions = new Map<Session.ID, Entry>()
     // One loop per Session. Each step request restarts it, so it always times from that request's cache lifetime.
     const loops = yield* FiberMap.make<Session.ID>()
-    // A refresh during a model request would compete with the request it keeps warm.
-    // A request counts from its context hook, because `session.step.started` waits for the first response chunk.
+    // A keep-alive during a model request would compete with the request it keeps warm, which stalls single-slot local
+    // models. A request counts from its context hook, because `session.step.started` waits for the first response chunk.
     const requesting = new Set<Session.ID>()
 
     /** Ends warming from inside the Session's loop, which returns afterwards. */
@@ -133,25 +144,42 @@ export const Plugin = define({
       }
 
       const sent = yield* warmup.latest(sessionID)
-      const refresh = sent && keepAlive(sent.request)
-      const ttl = refresh && parseTTL(refresh.ttl)
-      // Routes that cache implicitly, or whose thinking budget follows the output limit, aren't refreshed.
-      if (!sent || !refresh || ttl === undefined) return yield* settle(sessionID)
-      const interval = current.settings.interval === "auto" ? ttl * 0.9 : Duration.toMillis(current.settings.interval)
+      // The top-level setting only warms caches written at explicit markers. An implicit cache (OpenAI, Gemini) charges
+      // no premium to rebuild and often outlives the pause, so a keep-alive there rarely pays for itself. A model's own
+      // `cache.warming` still warms it, for example to keep a local model loaded.
+      if (!sent || (!current.settings.forModel && !placesMarkers(sent.request))) return yield* settle(sessionID)
+      // Resending the step's request reads exactly the entry it wrote. Where that can't work (an implicit cache, or a
+      // thinking budget tied to the output limit), the keep-alive prompt is sent instead.
+      const refresh = keepAlive(sent.request)
+      const lifetime = refresh ? parseTTL(refresh.ttl) : current.settings.lifetime
+      const interval =
+        current.settings.interval !== "auto"
+          ? Duration.toMillis(current.settings.interval)
+          : lifetime === undefined
+            ? Duration.toMillis(UNKNOWN_LIFETIME_INTERVAL)
+            : lifetime * 0.9
       const due = current.touched + interval
       if (now < due) {
         yield* Effect.sleep(Duration.millis(Math.min(due, current.expires) - now))
         return yield* loop(sessionID)
       }
-      if (now >= current.touched + ttl - Duration.toMillis(EXPIRY_MARGIN))
+      if (!refresh) {
+        current.touched = now
+        yield* Effect.logInfo("warming session", { sessionID })
+        yield* ctx.session
+          .generate({ sessionID, prompt: current.settings.prompt })
+          .pipe(Effect.catchCause((cause) => Effect.logWarning("failed to warm session", { sessionID, cause })))
+        return yield* loop(sessionID)
+      }
+      if (lifetime !== undefined && now >= current.touched + lifetime - Duration.toMillis(EXPIRY_MARGIN))
         return yield* settle(sessionID, "the cache entry has expired")
 
       current.touched = now
-      yield* Effect.logInfo("warming session", { sessionID })
+      yield* Effect.logInfo("refreshing session cache", { sessionID })
       const usage = yield* llm.generate(refresh.request, sent.options).pipe(
         Effect.map((response) => response.usage),
         Effect.catchCause((cause) =>
-          Effect.logWarning("failed to warm session", { sessionID, cause }).pipe(Effect.as(undefined)),
+          Effect.logWarning("failed to refresh session cache", { sessionID, cause }).pipe(Effect.as(undefined)),
         ),
       )
       if (!usage) return yield* settle(sessionID, "the refresh failed")
@@ -170,6 +198,7 @@ export const Plugin = define({
         const settings = yield* loadSettings(event)
         if (!settings) return yield* stop(event.sessionID)
 
+        // Before the runner records this step's request.
         yield* warmup.watch(event.sessionID)
         const now = yield* Clock.currentTimeMillis
         const expires = now + Duration.toMillis(settings.duration)
@@ -193,7 +222,7 @@ export const Plugin = define({
 const units = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000, d: 86_400_000 }
 
 /** Milliseconds in a cache lifetime such as "5m". */
-function parseTTL(ttl: string) {
-  const match = ttl.match(/^(\d+)(ms|s|m|h|d)$/)
+function parseTTL(ttl: string | undefined) {
+  const match = ttl?.match(/^([\d.]+)(ms|s|m|h|d)$/)
   if (match) return Number(match[1]) * units[match[2] as keyof typeof units]
 }

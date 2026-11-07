@@ -52,7 +52,8 @@ const request = ai.request({
   // This fixture predates the `cache: "auto"` default; pin the policy off so
   // existing wire-shape assertions only see the manual hint on the system part.
   cache: "none",
-  generation: { maxTokens: 20, temperature: 0 },
+  maxTokens: 20,
+  temperature: 0,
 })
 
 type AnthropicToolResult = Extract<
@@ -147,12 +148,12 @@ describe("Anthropic Messages route", () => {
     Effect.gen(function* () {
       const enabled = yield* compileRequest({
         ...request,
-        generation: { maxTokens: 4_096 },
+        maxTokens: 4_096,
         providerOptions: { thinking: { type: "enabled", budgetTokens: 1_024 } },
       })
       const legacy = yield* compileRequest({
         ...request,
-        generation: { maxTokens: 4_096 },
+        maxTokens: 4_096,
         providerOptions: { thinking: { type: "enabled", budget_tokens: 2_048 } },
       })
       const disabled = yield* compileRequest({ ...request, providerOptions: { thinking: { type: "disabled" } } })
@@ -168,7 +169,7 @@ describe("Anthropic Messages route", () => {
       const thinking = (maxTokens: number) =>
         compileRequest({
           ...request,
-          generation: { maxTokens },
+          maxTokens,
           providerOptions: { thinking: { type: "enabled", budgetTokens: 31_999 } },
         }).pipe(Effect.map((prepared) => prepared.body.thinking))
 

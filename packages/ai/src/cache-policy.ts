@@ -10,13 +10,7 @@
 //
 // Manual `cache: CacheHint` placements on individual parts are preserved and
 // count against the four-breakpoint budget; auto only fills remaining slots.
-import {
-  CacheHint,
-  GenerationOptions,
-  type CachePolicy,
-  type CachePolicyObject,
-  type CacheTTL,
-} from "./schema/options.js"
+import { CacheHint, type CachePolicy, type CachePolicyObject, type CacheTTL } from "./schema/options.js"
 import {
   AssistantMessage,
   type LLMRequest,
@@ -246,16 +240,15 @@ const DEFAULT_MARKER_TTL: CacheTTL = "5m"
  * A request that refreshes `request`'s prompt cache entry without new work: the same prompt with a one-token output
  * limit, and the lifetime of the entry it refreshes.
  *
- * Undefined when a refresh can't pay or can't hit:
- * - routes without inline markers cache implicitly, so a miss costs no write premium, and some keep a prefix for longer
- *   than the idle gaps a refresh would bridge;
+ * Undefined when resending can't refresh an entry:
+ * - routes without inline markers cache implicitly, so there is no entry with a known lifetime;
  * - a thinking budget fitted below the output limit would shrink with it, and changed thinking parameters invalidate
  *   the cached messages.
  */
 export const keepAlive = (request: LLMRequest) => {
   if (!placesMarkers(request) || fitsThinkingBudget(request.providerOptions)) return
   return {
-    request: { ...request, generation: new GenerationOptions({ ...request.generation, maxTokens: 1 }) },
+    request: { ...request, maxTokens: 1 },
     ttl: requestTTL(request) ?? DEFAULT_MARKER_TTL,
   }
 }

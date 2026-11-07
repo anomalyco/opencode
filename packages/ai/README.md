@@ -37,7 +37,7 @@ const program = Effect.gen(function* () {
     model: openai.responses("gpt-4o-mini"), // `.chat(...)` selects the Chat Completions API instead
     system: "You are concise.",
     prompt: "Say hello in one short sentence.",
-    generation: { maxTokens: 40 },
+    maxTokens: 40,
   })
   console.log(response.text)
 })
@@ -409,7 +409,7 @@ shared host; the entry above follows the base URL table. Dedicated hosts can be 
   Replay complete `response.message` values to retain `reasoning_content` separately from answer text.
   Qwen 3.8 defaults to preserving thinking; older models have different defaults.
   Additional options include `toolStream`, `parallelToolCalls`, `repetitionPenalty`, `responseFormat`,
-  `enableSearch`, and native `searchOptions`. `generation.topK` lowers to `top_k`.
+  `enableSearch`, and native `searchOptions`. `topK` lowers to `top_k`.
   `clearThinking` is a hosted GLM control, and `thinking.type` is available for hosted MiniMax models.
 - **Messages:** `effort` → `output_config.effort`. `thinking.type` accepts enabled/disabled with an
   optional `budgetTokens` (or native `budget_tokens`). `outputConfig.format` accepts a JSON schema.
@@ -578,7 +578,7 @@ const request = ai.request({
   model: minimax.model("MiniMax-M3"), // also minimax.messages("MiniMax-M3")
   prompt: "What is 173 multiplied by 219?",
   providerOptions: { thinking: { type: "adaptive" } },
-  generation: { maxTokens: 1536 },
+  maxTokens: 1536,
 })
 
 const response = await Effect.runPromise(ai.generate(request).pipe(Effect.provide(AIClient.layer)))
@@ -616,7 +616,7 @@ const request = ai.request({
   model: meta.responses("muse-spark-1.3"), // meta.model(...) also selects Responses
   prompt: "What is 173 multiplied by 219? Reply with the integer.",
   providerOptions: { reasoningEffort: "low" },
-  generation: { maxTokens: 1024 },
+  maxTokens: 1024,
 })
 ```
 
@@ -638,7 +638,7 @@ Responses and Chat support only `toolChoice: "auto"` (the default). Messages als
 its documented forced `"any"` choice currently returns HTTP 400. Messages defaults to adaptive thinking
 with `display: "omitted"`, preserving encrypted `redacted_thinking` in `response.message`. Use
 `providerOptions: { effort: "low" }` for depth or `thinking: { type: "enabled", budgetTokens: 1024 }`
-for budget compatibility (with `generation.maxTokens > 1024`).
+for budget compatibility (with `maxTokens > 1024`).
 
 Add `tools: [Meta.webSearch()]` to a Spark Responses or Messages request for hosted web search.
 Responses exposes hosted results and URL citations in text-part `providerMetadata.meta.annotations`.
@@ -1620,7 +1620,7 @@ Additional provider entrypoints include:
 
 Request options in order of stability:
 
-1. **`generation`** — portable knobs (`maxTokens`, `temperature`, `topP`, `topK`, penalties, seed, stop).
+1. **Portable knobs** — `maxTokens`, `temperature`, `topP`, `topK`, `frequencyPenalty`, `presencePenalty`, `seed` and `stop`, at the top level of a text request. `GENERATION_KEYS` lists them.
 2. **`promptCacheKey`** — stable cache affinity lowered by every protocol that supports it.
 3. **`providerOptions: { ... }`** — flat options inferred from the selected model (OpenAI `store`, Anthropic `thinking`, Gemini `thinkingConfig`, OpenRouter routing).
 4. **`http: { body, headers, query }`** — last-resort serializable overlays merged into the final HTTP request. Reach for this only when a stable typed path doesn't yet exist.

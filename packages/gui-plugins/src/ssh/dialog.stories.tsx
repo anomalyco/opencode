@@ -245,7 +245,7 @@ function AuthenticationHome() {
         recentlyClosed={[]}
         selection={{ server: ServerConnection.key(server) }}
         homedir="/home/user"
-        serverHealth={() => ({ healthy: ssh.servers[0]?.stage === "ready" })}
+        serverHealth={() => (ssh.servers[0]?.stage === "ready" ? { type: "healthy" } : { type: "unreachable" })}
         serverLabel={(server) => server.displayName ?? server.http.url}
         projectsForServer={() => projects}
         collapsed={() => false}

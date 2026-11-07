@@ -4,7 +4,7 @@ import {
   ai,
   AssistantMessage,
   type ContentPart,
-  GenerationOptions,
+  GENERATION_KEYS,
   type GenerationOptionsFields,
   LanguageModel,
   type LLM,
@@ -50,7 +50,6 @@ const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
 const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
 const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
-const GENERATION_KEYS = new Set(Object.keys(GenerationOptions.fields))
 // Used when the catalog has no output limit for the model.
 const OUTPUT_TOKEN_FALLBACK = 32_000
 // No reply needs more, however much the model allows.
@@ -331,7 +330,7 @@ export const layer = Layer.effect(
         messages: boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model.provider)),
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
         toolChoice: input.toolChoice,
-        generation: Object.keys(generation).length === 0 ? undefined : generation,
+        ...generation,
         providerOptions: Object.keys(providerOptions).length === 0 ? undefined : providerOptions,
       })
 

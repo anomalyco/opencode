@@ -95,7 +95,7 @@ function OwnServerPlugins(props: { plugins: readonly PluginInfo[] }) {
   })
 
   // Why the window entry or main's entry failed; either fails the plugin.
-  const errorOf = (id: string, kind: "builtin" | "config") => host.state.failures[id]?.error ?? itemOf(id, kind)?.error
+  const errorOf = (id: string, kind: "builtin" | "config") => host.failure(id)?.error ?? itemOf(id, kind)?.error
 
   const failedBuiltins = createMemo(() =>
     host
@@ -107,7 +107,7 @@ function OwnServerPlugins(props: { plugins: readonly PluginInfo[] }) {
 
   // The switch already shows whether a plugin runs; only the states it cannot show get a label.
   const status = (id: string, kind: "builtin" | "config") => {
-    const value = host.state.status[id] ?? "loading"
+    const value = host.status(id) ?? "loading"
 
     if (value === "failed" || (value === "active" && itemOf(id, kind)?.error))
       return language.t("settings.plugins.status.failed")

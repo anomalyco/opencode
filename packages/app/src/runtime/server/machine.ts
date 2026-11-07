@@ -1,3 +1,4 @@
+import type { ServerProbeResult } from "./health-machine"
 import type { ServerConnection } from "./registry"
 
 /** What a server's controller is bound to, as plain values read from its listed connection. */
@@ -59,8 +60,7 @@ export type ServerControllersEvent<T> =
       readonly type: "health.reported"
       readonly key: ServerConnection.Key
       readonly auth: string
-      readonly healthy: boolean
-      readonly unauthorized: boolean
+      readonly result: ServerProbeResult
     }
   | { readonly type: "disposed" }
 
@@ -94,12 +94,12 @@ export function endpointCredentials(http: ServerConnection.HttpBase) {
 }
 
 export function serverCredentials(conn: ServerConnection.Any): ServerCredentials {
+  if (conn.type === "plugin")
+    return { controller: "", auth: conn.status.type === "ready" ? endpointCredentials(conn.status.http) : undefined }
+
   const endpoint = endpointCredentials(conn.http)
 
-  return {
-    controller: conn.type === "http" ? endpoint : "",
-    auth: conn.type === "plugin" && conn.state !== "ready" ? undefined : endpoint,
-  }
+  return { controller: conn.type === "http" ? endpoint : "", auth: endpoint }
 }
 
 export function createServerControllersState<T>(): ServerControllersState<T> {
@@ -220,13 +220,14 @@ function reported<T>(
 
   // A server that accepts the rejected credentials again, such as after its password was restored, gets a controller.
   if (state.type === "unauthorized") {
-    if (event.healthy && event.auth === state.credentials.auth) return start(state, state.conn, state.credentials, [])
+    if (event.result.type === "healthy" && event.auth === state.credentials.auth)
+      return start(state, state.conn, state.credentials, [])
 
     return { state, effects: [] }
   }
 
   // A probe of credentials the server has since replaced says nothing about the current ones.
-  if (!event.unauthorized || event.auth !== state.credentials.auth) return { state, effects: [] }
+  if (event.result.type !== "unauthorized" || event.auth !== state.credentials.auth) return { state, effects: [] }
 
   return {
     state: {

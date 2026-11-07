@@ -13,7 +13,6 @@
   ],
   "exports": {
     "./vite-host": "./dev/host.js",
-    "./run": "./src/run/index.ts",
     "./server-process": "./src/server-process.ts"
   },
   "scripts": {

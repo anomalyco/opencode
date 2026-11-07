@@ -14,7 +14,6 @@ const root = path.resolve(import.meta.dir, "..")
 const changelogExclusions = [
   ":(exclude)packages/console",
   ":(exclude)packages/function",
-  ":(exclude)packages/posts",
   ":(exclude)packages/stats",
   ":(exclude)packages/web",
   ":(exclude)services",

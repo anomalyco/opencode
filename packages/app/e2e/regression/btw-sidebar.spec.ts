@@ -66,7 +66,7 @@ test("keeps separate one-shot /btw answers and restores them after reload", asyn
   expect(prompts).toEqual([])
 })
 
-test("isolates concurrent side questions and makes an interrupted reload retryable", async ({ page }) => {
+test("isolates concurrent side questions and makes interrupted and blank answers retryable", async ({ page }) => {
   const held = Promise.withResolvers<void>()
   const attempts: string[] = []
   const prompts: unknown[] = []
@@ -81,6 +81,14 @@ test("isolates concurrent side questions and makes an interrupted reload retryab
         await held.promise
 
         return { text: "Abandoned answer" }
+      }
+
+      // A reply with only a tool call or reasoning reaches the panel as blank text.
+      if (input.prompt.includes("blank question")) {
+        return {
+          text:
+            attempts.filter((item) => item.includes("blank question")).length === 1 ? "   \n  " : "Recovered answer",
+        }
       }
 
       return { text: input.prompt.includes("fast question") ? "Fast answer" : "Retried answer" }
@@ -114,6 +122,17 @@ test("isolates concurrent side questions and makes an interrupted reload retryab
   await expect(panel.getByText("Retried answer", { exact: true })).toBeVisible()
   await expect(panel.getByText("Abandoned answer", { exact: true })).toHaveCount(0)
   await expect(panel.getByRole("textbox")).toHaveCount(0)
+
+  await editor.fill("/btw blank question")
+  await editor.press("Enter")
+  await expect(page.getByRole("tab", { name: "blank question", exact: true })).toHaveAttribute("data-selected", "")
+  await expect(panel.getByText("Couldn’t answer that question", { exact: true })).toBeVisible()
+  await expect(panel.getByText("The model replied without any text.", { exact: true })).toBeVisible()
+  await expect(panel.getByRole("status")).toHaveCount(0)
+  await panel.getByRole("button", { name: "Retry", exact: true }).click()
+  await expect(panel.getByText("Recovered answer", { exact: true })).toBeVisible()
+  await expect(panel.getByText("Couldn’t answer that question", { exact: true })).toHaveCount(0)
+  expect(attempts.filter((item) => item.includes("blank question"))).toHaveLength(2)
   expect(prompts).toEqual([])
 })
 
@@ -206,7 +225,7 @@ test("answers /btw in the side panel without admitting a prompt", async ({ page 
   await expect(panel.getByText("exponential backoff", { exact: false })).toBeVisible()
   await expect(panel.getByText("const delay = 2 ** attempt", { exact: true })).toBeVisible()
   await expect(panel.getByRole("button", { name: "Copy message", exact: true })).toHaveCount(1)
-  await expect(panel.getByRole("button", { name: "Rewind to here", exact: true })).toHaveCount(0)
+  await expect(panel.getByRole("button", { name: "Revert to here", exact: true })).toHaveCount(0)
   await expect(panel.getByRole("button", { name: "Copy answer", exact: true })).toHaveCount(1)
   await expect(panel.locator('[data-slot="text-part-meta"]')).toContainText(/\d+s/)
   await panel.locator('[data-component="user-message"]').hover()

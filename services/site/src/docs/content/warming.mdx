@@ -1,0 +1,170 @@
+---
+title: "Warming"
+---
+
+Session warming keeps a session's prompt cache alive while you pause between
+prompts. Just before the provider's cache entry expires, OpenCode resends the
+session's last model request with a one-token output limit, so the provider
+reads the cached prompt again and restarts its lifetime. Warming is disabled by
+default.
+
+Enable warming in any [OpenCode configuration file](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+With this configuration, OpenCode refreshes a session's cache at 90% of its
+lifetime: every 4.5 minutes for a five-minute cache. It keeps doing so for up to
+30 minutes after the latest model request while a turn runs, and for up to 15
+minutes after the turn ends.
+
+## Which models are warmed
+
+The top-level `warming` setting warms only models whose provider caches
+prompts at explicit markers, such as Anthropic models and Anthropic-compatible
+endpoints. Their cache entries expire after a few minutes and cost extra to
+write again.
+
+Providers that cache implicitly, such as OpenAI and Gemini, are not warmed.
+They charge nothing extra to rebuild a cache and often keep it through the
+pause, so a keep-alive request rarely pays for itself.
+
+To warm another model, for example to keep a local model loaded, set
+`cache.warming` on the model or its provider. It takes the same values as
+`warming` and overrides it for that model:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "lmstudio": { "settings": { "cache": { "warming": true } } },
+  },
+}
+```
+
+Subagent sessions are never warmed. Their parent stays warm while it waits on
+them.
+
+## Requests
+
+OpenCode keeps a session warm in one of two ways.
+
+**Resending the last request.** For a cache written at explicit markers,
+OpenCode resends the session's last model request unchanged: the same
+instructions, tools, messages, and provider options, with the output limited
+to one token. The provider reads exactly the entry that request wrote.
+
+**The keep-alive prompt.** Where a one-token resend can't work, OpenCode sends
+the session's current context with a transient keep-alive prompt appended, and
+discards the response. This applies to:
+
+- models with an implicit cache that are warmed by their own `cache.warming`
+- requests whose thinking budget is tied to the output limit, because lowering
+  the limit would change the thinking settings and with them the cached prompt
+
+Neither kind admits input, adds messages to history, runs tools, or mutates
+durable session state.
+
+## Options
+
+Use the object form to change the timing or the keep-alive prompt:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "interval": "auto",
+    "duration": "1 hour",
+    "idle": "10 minutes",
+  },
+}
+```
+
+| Field | Default | Purpose |
+| --- | --- | --- |
+| `interval` | `"auto"` | Time from a model request to its keep-alive. `"auto"` uses 90% of the cache lifetime. |
+| `duration` | `"30 minutes"` | How long after the latest model request to keep warming while the turn runs, for example while a long tool call or subagent works. |
+| `idle` | `"15 minutes"` | How long after a turn ends to keep warming. |
+| `prompt` | Keep-alive instruction | The transient user message for keep-alive prompts. The default asks the model to do no work, use no tools, and reply with `OK`. |
+
+Omitted fields keep their defaults. `interval`, `duration` and `idle` accept
+duration strings and must be greater than zero. A fixed `interval` must be
+shorter than `duration`; otherwise OpenCode skips warming and logs a warning.
+
+## Cache lifetime
+
+`"auto"` takes the cache lifetime from the first of these that is known:
+
+1. the lifetime the last request was sent with, when it is resent
+2. the model's [`cache.ttl`](/config) setting
+3. otherwise, a fixed four minutes
+
+A resent request without a `cache.ttl` has the provider's default lifetime of
+five minutes. A one-hour cache outlives the default windows, so it isn't
+refreshed unless you raise `duration` and `idle` past 54 minutes.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": { "duration": "2 hours", "idle": "2 hours" },
+  "providers": {
+    "anthropic": { "settings": { "cache": { "ttl": "1h" } } },
+  },
+}
+```
+
+## Timing
+
+A cache entry's lifetime starts when the provider reads the prompt, so the
+interval counts from when each request was sent, not from when its response
+finished.
+
+```text
+00:00    model request sent
+00:02    response finishes; the turn ends
+04:30    refresh
+09:00    refresh
+13:30    refresh
+15:02    idle window ends; warming stops
+```
+
+Any new model request restarts the interval and both windows. OpenCode doesn't
+warm while a model request is running. If a response streams for so long that
+the cache entry has expired by the time it ends, OpenCode doesn't resend the
+request: the next one writes a new entry anyway.
+
+## When warming stops
+
+Besides the windows above, OpenCode stops warming a session when:
+
+- a resent request reads nothing from the cache or writes to it. The entry was
+  already gone, and every further refresh would rewrite the whole prompt.
+- a resent request fails.
+- the session is compacted, because the next request sends a different prompt.
+
+The next model request starts warming again. A failed keep-alive prompt is
+logged and tried again at the next interval.
+
+## Costs
+
+Keep-alive requests are real provider requests. A resent request bills a cache
+read of the whole prompt and one output token, and counts against rate limits.
+
+- A refresh pays for itself only if you come back before the next one is due
+  often enough. That chance falls the longer a session sits idle, which is why
+  the idle window is shorter than the active one.
+- With the defaults, an idle session gets at most three refreshes: at 4.5, 9 and
+  13.5 minutes.
+
+## Disabling
+
+Set `warming` to `false` to disable it explicitly. Omitting the field also
+leaves warming disabled.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```

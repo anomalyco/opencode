@@ -24,7 +24,7 @@ it.effect("Meta selects Messages and lowers native search alongside ordinary fun
           ToolDefinition.make({ name: "lookup", description: "Lookup", inputSchema: { type: "object" } }),
         ],
         providerOptions: { effort: "low" },
-        generation: { maxTokens: 1024 },
+        maxTokens: 1024,
       }),
     )
     expect(compiled.body).toMatchObject({

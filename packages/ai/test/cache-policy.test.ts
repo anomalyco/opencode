@@ -581,7 +581,8 @@ describe("keepAlive", () => {
   const conversation = {
     system: "You are concise.",
     messages: [Message.user("list the files"), Message.assistant("README.md"), Message.user("and the tests?")],
-    generation: { maxTokens: 32_000, temperature: 0.2 },
+    maxTokens: 32_000,
+    temperature: 0.2,
   }
 
   it.effect("resends the same prompt with a one-token output limit", () =>

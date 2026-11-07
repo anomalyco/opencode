@@ -20,6 +20,7 @@ import {
   isComposerAttachment,
   isPristine,
   mergePrompt,
+  QUEUE_MUTATION_TIMEOUT_MS,
   queuedPromptText,
   transitionQueue,
   viewQueue,
@@ -27,6 +28,7 @@ import {
   type EditOperation,
   type QueueEffect,
   type QueueEvent,
+  type QueueMutationStage,
   type QueuedPrompt,
 } from "./queue-machine"
 
@@ -53,6 +55,9 @@ export function createSessionQueue(input: {
   const view = createMemo(() => viewQueue(state(), { working: input.working(), behavior: input.behavior() }))
   // OS handles for the machine's expiry timers, keyed by its expiry IDs.
   const timers = new Map<number, ReturnType<typeof setTimeout>>()
+  // The bound on the operation in flight, and each running operation's progress, keyed by attempt.
+  let mutationTimer: ReturnType<typeof setTimeout> | undefined
+  const runs = new Map<number, MutationProgress>()
 
   // Effects read and write the composer, so neither the transition nor its effects subscribe the caller.
   const dispatch = (event: QueueEvent) =>
@@ -80,7 +85,7 @@ export function createSessionQueue(input: {
           : effect.stash.prompt
 
       const cursor = prompt === effect.stash.prompt ? effect.stash.cursor : promptLength(prompt)
-      // Mode first, then prompt, then retry: mode and prompt writes both clear the retry marker.
+      // The stashed retry fingerprints its own payload, so a merged prompt sends under a new ID.
       input.draft.mode.set(effect.stash.mode)
       input.draft.set(prompt, cursor)
 
@@ -109,7 +114,8 @@ export function createSessionQueue(input: {
       const prompt = mergePrompt(input.draft.current(), effect.prompt)
       input.draft.set(prompt, promptLength(prompt))
       effect.context.forEach((item) => input.draft.context.add(item))
-      input.restoreFocus(promptLength(prompt))
+
+      if (effect.focus !== false) input.restoreFocus(promptLength(prompt))
 
       return
     }
@@ -133,7 +139,38 @@ export function createSessionQueue(input: {
       return
     }
 
-    if (effect.type === "mutation.run") return void run(effect.operation)
+    if (effect.type === "mutation.run") {
+      const attempt = effect.operation.attempt
+      const progress: MutationProgress = { controller: new AbortController(), hidden: [], stage: "running" }
+      runs.set(attempt, progress)
+
+      return void run(effect.operation, progress).finally(() => runs.delete(attempt))
+    }
+
+    if (effect.type === "mutation.abort") return runs.get(effect.attempt)?.controller.abort()
+
+    if (effect.type === "mutation.timer.start") {
+      clearTimeout(mutationTimer)
+      mutationTimer = setTimeout(() => {
+        const progress = runs.get(effect.attempt)
+
+        dispatch({
+          type: "mutation.timed-out",
+          attempt: effect.attempt,
+          hidden: progress ? [...progress.hidden] : [],
+          stage: progress?.stage ?? "running",
+        })
+      }, QUEUE_MUTATION_TIMEOUT_MS)
+
+      return
+    }
+
+    if (effect.type === "mutation.timer.clear") {
+      clearTimeout(mutationTimer)
+      mutationTimer = undefined
+
+      return
+    }
 
     if (effect.type === "timer.start") {
       timers.set(
@@ -157,6 +194,8 @@ export function createSessionQueue(input: {
     if (effect.type === "timer.clearAll") {
       timers.forEach(clearTimeout)
       timers.clear()
+      clearTimeout(mutationTimer)
+      mutationTimer = undefined
 
       return
     }
@@ -166,7 +205,7 @@ export function createSessionQueue(input: {
 
   // Runs the operation in flight and reports its progress. Each report carries the operation's attempt, so the machine
   // ignores one that arrives after the operation stopped being current.
-  const run = async (operation: ActiveOperation) => {
+  const run = async (operation: ActiveOperation, progress: MutationProgress) => {
     const attempt = operation.attempt
 
     // SSE retracts and updates materialized timeline messages for a steer or removal, so neither re-syncs the queue.
@@ -200,8 +239,12 @@ export function createSessionQueue(input: {
           attachmentName: language.t("common.attachment"),
           sessionTitle: (id) => data.session.get(id)?.title,
         }),
-        cancelInboxItem: () =>
-          server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: operation.item.id }),
+        signal: progress.controller.signal,
+        cancelInboxItem: () => {
+          progress.stage = "committed"
+
+          return server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: operation.item.id })
+        },
       }).then(
         (prompt) =>
           dispatch({ type: "mutation.undone", attempt, prompt, context: [...context.comments, ...context.files] }),
@@ -212,23 +255,26 @@ export function createSessionQueue(input: {
       return
     }
 
-    // IDs the operation withdrew or cancelled before a failure, which the strip hides until the server's events land.
-    const hidden: string[] = []
-
     const settled = await (
-      operation.type === "reorder" ? rewrite(attempt, hidden, [...operation.inboxIDs]) : sendEdit(operation, hidden)
+      operation.type === "reorder" ? rewrite(attempt, progress, [...operation.inboxIDs]) : sendEdit(operation, progress)
     ).then(
       () => true,
       () => false,
     )
 
+    if (settled) progress.stage = "settled"
+
     if (operation.type === "reorder") data.session.pending.invalidate(input.sessionID)
     // The rows keep their optimistic state until the server's queue has caught up.
     await data.session.pending.sync(input.sessionID).catch(() => undefined)
-    dispatch(settled ? { type: "mutation.succeeded", attempt } : { type: "mutation.failed", attempt, hidden })
+    dispatch(
+      settled ? { type: "mutation.succeeded", attempt } : { type: "mutation.failed", attempt, hidden: progress.hidden },
+    )
   }
 
-  const sendEdit = async (operation: EditOperation & { attempt: number }, hidden: string[]) => {
+  const sendEdit = async (operation: EditOperation & { attempt: number }, progress: MutationProgress) => {
+    const signal = progress.controller.signal
+
     const replacement = await editedPromptInput(
       input.sessionID,
       location().directory,
@@ -242,18 +288,23 @@ export function createSessionQueue(input: {
     const admission = { ...replacement, id: operation.moved[operation.original], delivery: operation.delivery }
 
     if (operation.delivery === "queue")
-      return rewrite(operation.attempt, hidden, undefined, {
+      return rewrite(operation.attempt, progress, undefined, {
         original: operation.original,
         admission: { ...admission, resume: false },
         moved: operation.moved,
       })
 
+    signal.throwIfAborted()
     // Like a queued edit, an original the server delivered meanwhile keeps the edit draft instead of sending twice.
     const pending = await server.api.session.inbox.list({ sessionID: input.sessionID })
 
     if (!pending.some((item) => item.id === operation.original && item.type === "user" && item.delivery === "queue"))
       throw new Error("Queued prompt was delivered before the edit")
+    signal.throwIfAborted()
     const background = input.background()
+    // A steered replacement can be delivered before a withdrawal reaches it, so the bound waits for the admission and
+    // the edit returns to the composer only if it really did not go out.
+    progress.stage = "committed"
     await data.session.prompt(admission)
     void background?.move()
     dispatch({ type: "mutation.admitted", attempt: operation.attempt })
@@ -266,7 +317,7 @@ export function createSessionQueue(input: {
   // Without `inboxIDs` the server's current order is kept.
   const rewrite = async (
     attempt: number,
-    hidden: string[],
+    progress: MutationProgress,
     inboxIDs: string[] | undefined,
     replace?: {
       original: string
@@ -274,7 +325,10 @@ export function createSessionQueue(input: {
       moved: Readonly<Record<string, string>>
     },
   ) => {
+    const signal = progress.controller.signal
+    signal.throwIfAborted()
     const pending = await server.api.session.inbox.list({ sessionID: input.sessionID })
+    signal.throwIfAborted()
 
     if (pending.some((item) => item.delivery === "queue" && item.type !== "user"))
       throw new Error("Queued control items block reordering")
@@ -292,6 +346,23 @@ export function createSessionQueue(input: {
     // can fail (its file may be gone), so withdraw the ones already sent to keep the queue intact.
     // Each ID is recorded before sending: the server can admit a prompt whose response then fails.
     const replacements: string[] = []
+
+    const withdraw = () =>
+      Promise.all(
+        replacements.map((inboxID) =>
+          server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID }).then(
+            () => void progress.hidden.push(inboxID),
+            () => undefined,
+          ),
+        ),
+      )
+
+    // A rewrite stopped by its bound withdraws what it sent, as a failed one does.
+    const stopped = async () => {
+      if (!signal.aborted) return
+      await withdraw()
+      signal.throwIfAborted()
+    }
 
     // An edit's pending rows follow the queue as the server has it now, keeping the IDs minted at confirm.
     const moved = Object.fromEntries(
@@ -323,19 +394,17 @@ export function createSessionQueue(input: {
 
       const id = admission.id ?? SessionMessage.ID.create()
 
+      await stopped()
       replacements.push(id)
       await data.session.prompt({ ...admission, id }).catch(async (error) => {
-        await Promise.all(
-          replacements.map((inboxID) =>
-            server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID }).then(
-              () => void hidden.push(inboxID),
-              () => undefined,
-            ),
-          ),
-        )
+        await withdraw()
         throw error
       })
     }
+
+    await stopped()
+    // Every copy is in, so the originals must go, however long that takes, or the queue holds both.
+    progress.stage = "committed"
 
     if (replace) dispatch({ type: "mutation.admitted", attempt })
 
@@ -345,7 +414,7 @@ export function createSessionQueue(input: {
 
     for (const item of replace ? replaced.reverse() : replaced) {
       await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: item.id })
-      hidden.push(item.id)
+      progress.hidden.push(item.id)
     }
   }
 
@@ -398,6 +467,7 @@ export function createSessionQueue(input: {
       return edit(first.id)
     },
     rows: () => view().rows,
+    moved: () => view().moved,
     busy: () => view().busy,
     undoing: () => view().undoing,
     working: input.working,
@@ -411,19 +481,26 @@ export function createSessionQueue(input: {
 
 export type SessionQueue = ReturnType<typeof createSessionQueue>
 
-// The slice of the queue the panel renders and drives.
+// What a running operation has done so far: the IDs it withdrew or cancelled, and how far it got.
+type MutationProgress = { controller: AbortController; hidden: string[]; stage: QueueMutationStage }
+
+// The slice of the queue the panel renders and drives. Without `moved`, a replaced row closes and its replacement opens.
 export type SessionQueueView = Pick<
   SessionQueue,
   "rows" | "editing" | "working" | "busy" | "steer" | "remove" | "undo" | "edit" | "reorder"
->
+> &
+  Partial<Pick<SessionQueue, "moved">>
 
 // Pin `media:<hash>` attachments before cancelling: the cancel releases the item's blob refs and sweeps blobs
 // nothing else references, so a pin that fails leaves the item queued.
+// An undo stopped while its media loads leaves the item queued.
 export async function undoQueuedPrompt<A>(input: {
   prompt: Prompt
+  signal?: AbortSignal
   cancelInboxItem: () => Promise<A>
 }): Promise<Prompt> {
   const pinned = await pinPromptMedia(input.prompt)
+  input.signal?.throwIfAborted()
   await input.cancelInboxItem()
 
   return pinned

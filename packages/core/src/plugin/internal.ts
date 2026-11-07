@@ -9,12 +9,12 @@ import { AppProcess } from "@opencode/util/process"
 import { Context, Effect, Scope } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/http"
 import { Agent } from "../agent.js"
+import { App } from "../app.js"
 import { Artifact } from "../artifact.js"
 import { Model } from "../model.js"
 import { Provider } from "../provider.js"
 import { Command } from "../command.js"
 import { Config } from "../config.js"
-import { ConsoleAccess } from "../console-access.js"
 import { Credential } from "../credential.js"
 import { llmClient } from "../effect/app-node-platform.js"
 import { ConfigAgentPlugin } from "../config/plugin/agent.js"
@@ -120,8 +120,9 @@ import { WellKnownPlugin } from "../wellknown/plugin.js"
 
 const services = [
   Agent.Service,
+  // Activation clears the ambient context, so built-ins see the configured build channel only through this.
+  App.Metadata,
   FetchHttpClient.Fetch,
-  ConsoleAccess.Options,
   Artifact.Service,
   AppProcess.Service,
   Provider.Service,
@@ -181,7 +182,7 @@ export type Requirements = Context.Service.Identifier<(typeof services)[number]>
 
 export const requirements = LayerNode.group([
   Agent.node,
-  ConsoleAccess.node,
+  App.node,
   Artifact.node,
   AppProcess.node,
   Provider.node,

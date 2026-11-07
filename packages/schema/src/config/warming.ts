@@ -5,14 +5,13 @@ import { optional } from "../schema.js"
 
 export class Info extends Schema.Class<Info>("Config.Warming")({
   prompt: Schema.String.pipe(optional).annotate({
-    description:
-      "Deprecated and ignored: keep-alive requests resend the session's last request instead of a prompt. Removed in the next minor.",
+    description: "Prompt for keep-alive requests to models that can't be kept warm by resending their last request",
   }),
   interval: Schema.Union([Schema.Literal("auto"), Schema.DurationFromString])
     .pipe(optional)
     .annotate({
       description:
-        'Time from a model request to the keep-alive that refreshes its cache (default: "auto", 90% of the cache lifetime the request was sent with, so 4.5 minutes for a 5-minute cache)',
+        'Time from a model request to its keep-alive (default: "auto"). "auto" uses 90% of the cache lifetime: the one the request was sent with, else the model\'s cache.ttl, else 4 minutes.',
     }),
   duration: Schema.DurationFromString.pipe(optional).annotate({
     description:

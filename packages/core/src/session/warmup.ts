@@ -13,13 +13,15 @@ export interface Sent {
 }
 
 /**
- * The latest step request of each watched Session. A request holds the whole conversation, so only Sessions that
- * warming has armed are recorded, and only until warming forgets them.
+ * Tells session warming about the step requests the runner sends. A request holds the whole conversation, so only
+ * Sessions that warming watches are recorded, and only until it forgets them.
  */
 export interface Interface {
   readonly watch: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   readonly forget: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  /** Called by the runner with each step request it sends. */
   readonly record: (sessionID: SessionSchema.ID, request: LLMRequest, options: StreamOptions) => Effect.Effect<void>
+  /** The Session's latest step request; undefined until one is recorded. */
   readonly latest: (sessionID: SessionSchema.ID) => Effect.Effect<Sent | undefined>
 }
 
