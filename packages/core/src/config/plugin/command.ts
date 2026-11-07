@@ -3,10 +3,9 @@ export * as ConfigCommandPlugin from "./command.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { Entry } from "@opencode/schema/config"
 import { ConfigCommand } from "@opencode/schema/config/command"
-import { ConfigModel } from "@opencode/schema/config/model"
 import { AppProcess } from "@opencode/util/process"
 import path from "path"
-import { Effect, Option, Schema } from "effect"
+import { Effect, Result, SchemaIssue, SchemaParser } from "effect"
 import { ChildProcess } from "effect/process"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
@@ -18,8 +17,8 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { ConfigMarkdown } from "../markdown.js"
 import { ConfigEntryObserver } from "./entry-observer.js"
 
-const decodeCommand = Schema.decodeUnknownOption(ConfigCommand.Info)
-const decodeModel = Schema.decodeUnknownOption(ConfigModel.Selection)
+const decodeCommand = SchemaParser.decodeUnknownResult(ConfigCommand.Info)
+const formatIssue = SchemaIssue.makeFormatterDefault()
 
 export const Plugin = define({
   id: "opencode.config.command",
@@ -140,22 +139,26 @@ function loadDirectory(fs: FSUtil.Interface, directory: string) {
 
 const decode = Effect.fnUntraced(function* (directory: string, filepath: string, content: string) {
   const markdown = ConfigMarkdown.parseOption(content)
-  if (!markdown) return
-  const data = { ...markdown.data, template: markdown.content.trim() }
-  // An unsupported model, such as Claude's `opus`, should not drop the whole command.
-  if ("model" in data && Option.isNone(decodeModel(data.model))) {
-    yield* Effect.logWarning("ignored invalid command model", { path: filepath, model: data.model })
-    delete data.model
+  if (!markdown) {
+    yield* Effect.logWarning("command file skipped", { filepath, reason: "markdown" })
+    return
   }
-  const info = Option.getOrUndefined(decodeCommand(data))
-  if (!info) return
+  const info = decodeCommand({ ...markdown.data, template: markdown.content.trim() })
+  if (Result.isFailure(info)) {
+    yield* Effect.logWarning("command file skipped", {
+      filepath,
+      reason: "frontmatter",
+      issue: formatIssue(info.failure),
+    })
+    return
+  }
   return {
     name: path
       .relative(directory, filepath)
       .replaceAll("\\", "/")
       .replace(/^(command|commands)\//, "")
       .replace(/\.md$/, ""),
-    info,
+    info: info.success,
   }
 })
 
