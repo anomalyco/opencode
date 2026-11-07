@@ -1,6 +1,6 @@
 [package]
 name = "opencode-util"
-description = "Small shared modules on libc alone: civil time and local offsets."
+description = "Small shared modules on libc alone: civil time and local offsets, shared libraries."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
