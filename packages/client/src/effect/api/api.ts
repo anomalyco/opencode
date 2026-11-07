@@ -1458,6 +1458,7 @@ export type MessageListInput = {
 export type MessageListOutput = {
   readonly data: ReadonlyArray<SessionMessage.Info>
   readonly cursor: { readonly previous?: string | undefined; readonly next?: string | undefined }
+  readonly experimental?: { readonly seq?: Event.Seq | undefined } | undefined
 }
 export type MessageListOperation<E = never> = (input: MessageListInput) => Effect.Effect<MessageListOutput, E>
 

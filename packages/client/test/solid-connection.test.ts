@@ -91,6 +91,27 @@ test("a stream that goes silent past the idle timeout is replaced", async () => 
   }
 })
 
+test("a stalled stream is replaced even while another subscriber shares it", async () => {
+  const fake = server()
+  // Another consumer of the same client, such as a plugin's RPC events, holds the shared stream open.
+  const other = fake.api.event.subscribe()[Symbol.asyncIterator]()
+  void other.next()
+  const ctx = setup(fake, 60)
+  try {
+    await until(() => fake.streams.length === 1)
+    fake.streams[0].write(`data: ${JSON.stringify(connected)}\n\n`)
+    await until(() => ctx.connection.status() === "connected")
+
+    await until(() => fake.streams.length === 2)
+    expect(fake.streams[0].aborted).toBe(true)
+    fake.streams[1].write(`data: ${JSON.stringify({ ...connected, id: "evt_connected_2" })}\n\n`)
+    await until(() => ctx.connection.status() === "connected" && ctx.events.length === 2)
+  } finally {
+    await other.return?.()
+    ctx.dispose()
+  }
+})
+
 test("keepalive comments hold a quiet stream open", async () => {
   const fake = server()
   const ctx = setup(fake, 60)

@@ -9,12 +9,7 @@ import {
 type SessionStore<T> = {
   get: (id: string) => T | undefined
   sync: (id: string, options?: { children?: boolean }) => Promise<void>
-  message: {
-    sync: (id: string) => Promise<void>
-  }
-  pending: {
-    sync: (id: string) => Promise<void>
-  }
+  hydrate: (id: string, options?: { signal?: AbortSignal }) => Promise<void>
 }
 
 // Drives the session route's resolution machine (resolution-machine.ts) from the data store.
@@ -34,6 +29,10 @@ export function createSessionResolution<T, P = never>(
   // Without a live connection or child sessions to load, cached metadata is already complete.
   const refresh = !!options?.children || !!options?.connected
   let timer: ReturnType<typeof setTimeout> | undefined
+
+  // The transcript load retries on its own until it lands; a newer target or load replaces it.
+  let hydration: AbortController | undefined
+  onCleanup(() => hydration?.abort())
 
   const run = (effect: SessionResolutionEffect<SessionStore<T>>) => {
     if (effect.type === "timer.clear") {
@@ -57,8 +56,10 @@ export function createSessionResolution<T, P = never>(
     const id = effect.target.sessionID
 
     if (effect.type === "sync.transcript") {
-      void store.message.sync(id).catch(() => undefined)
-      void store.pending.sync(id).catch(() => undefined)
+      hydration?.abort()
+      hydration = new AbortController()
+      // The timeline shows its own load state; a load that gives up waits for the next reconnect.
+      void store.hydrate(id, { signal: hydration.signal }).catch(() => undefined)
 
       return
     }
@@ -90,6 +91,8 @@ export function createSessionResolution<T, P = never>(
   // `ready` in the same pure phase that removed it, before the session subtree's render effects run.
   createComputed(
     on([sessionID, sessions] as const, ([id, store]) => {
+      hydration?.abort()
+
       if (!id) {
         dispatch({ type: "target.changed", target: undefined, cached: undefined, connected: false, refresh })
 

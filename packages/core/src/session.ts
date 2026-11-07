@@ -152,6 +152,14 @@ export interface Interface {
   readonly messagesWithRefs: (
     input: SessionStore.MessagesInput,
   ) => Effect.Effect<SessionMessage.MediaInfo[], NotFoundError | MessageDecodeError>
+  /** {@link Interface.messages} with the durable sequence the page reflects, read atomically with it. */
+  readonly messagesSnapshot: (
+    input: SessionStore.MessagesInput,
+  ) => Effect.Effect<SessionStore.MessagesSnapshot<SessionMessage.Info>, NotFoundError | MessageDecodeError>
+  /** Experimental: {@link Interface.messagesSnapshot} with media refs, like {@link Interface.messagesWithRefs}. */
+  readonly messagesSnapshotWithRefs: (
+    input: SessionStore.MessagesInput,
+  ) => Effect.Effect<SessionStore.MessagesSnapshot<SessionMessage.MediaInfo>, NotFoundError | MessageDecodeError>
   /** Experimental: {@link Interface.message} with files stored in `blob` left as `media:` refs when the session's location enables `experimental.media_blob`. */
   readonly messageWithRefs: (input: {
     sessionID: SessionSchema.ID
@@ -435,6 +443,15 @@ const layer = Layer.effect(
         const session = yield* result.get(input.sessionID)
         if (!(yield* mediaBlob(session))) return yield* store.messages(input)
         return yield* store.messagesWithRefs(input)
+      }),
+      messagesSnapshot: Effect.fn("Session.messagesSnapshot")(function* (input) {
+        yield* result.get(input.sessionID)
+        return yield* store.messagesSnapshot(input)
+      }),
+      messagesSnapshotWithRefs: Effect.fn("Session.messagesSnapshotWithRefs")(function* (input) {
+        const session = yield* result.get(input.sessionID)
+        if (!(yield* mediaBlob(session))) return yield* store.messagesSnapshot(input)
+        return yield* store.messagesSnapshotWithRefs(input)
       }),
       messageWithRefs: Effect.fn("Session.messageWithRefs")(function* (input) {
         const session = yield* result.get(input.sessionID).pipe(Effect.option)
