@@ -60,3 +60,16 @@ test.each<Route>([{ type: "home" }, { type: "session", sessionID: "parent" }])(
     expect(harness.navigated).toEqual([{ type: "session", sessionID: "other" }])
   },
 )
+
+test("an unknown toast variant falls back to info instead of reaching the themed lookup", () => {
+  const harness = setup({ type: "home" })
+  // Plugins run as plain JS, so an unrecognized variant arrives here untyped.
+  harness.toast.show({ message: "done", variant: "warn" as never })
+  expect(harness.shown).toEqual([{ title: undefined, message: "done", variant: "info", duration: undefined }])
+})
+
+test("a valid toast variant still passes through", () => {
+  const harness = setup({ type: "home" })
+  harness.toast.show({ message: "done", variant: "warning" })
+  expect(harness.shown).toEqual([{ title: undefined, message: "done", variant: "warning", duration: undefined }])
+})
