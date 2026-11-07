@@ -16,7 +16,3 @@ ring = ["dep:ring"]
 [dependencies]
 libc.workspace = true
 ring = { workspace = true, optional = true }
-
-[dev-dependencies]
-# Only the differential test of `time` (deps-plan C7); it does not ship.
-chrono.workspace = true
