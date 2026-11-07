@@ -3864,8 +3864,8 @@ describe("SessionRunnerLLM", () => {
 
     expect(s.requests).toHaveLength(2)
     expect(userTexts(s.requests[0]).at(-1)).toContain("## Objective")
-    // The summary may use the whole 30k reserve of a 200k window.
-    expect(s.requests[0]?.maxTokens).toBe(30_000)
+    // The shortened summary leaves room for the model's full output limit.
+    expect(s.requests[0]?.maxTokens).toBe(32_000)
     expect(s.requests[1]?.maxTokens).toBe(32_000)
   })
 

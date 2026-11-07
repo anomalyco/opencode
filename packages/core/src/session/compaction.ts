@@ -488,13 +488,21 @@ export const layer = Layer.effect(
       // A hook can still make this request larger than that count; the provider then rejects it and it is resent as
       // text. An overflow already proved the count low, so it keeps the character estimate.
       const measured = trigger.reason === "overflow" ? undefined : measuredPrompt({ ...context, messages })
+      const defaultBudgetLimit = SessionModelRequest.outputLimit(context.model.limit, {
+        measured: budget,
+        estimated: 0,
+      })
 
       // Hooks saw the request without the summary prompt, so it is appended here. A reply that ignores the
       // template gets one reminder before it counts as a failure.
       const send = (request: LLMRequest, size?: Estimate) =>
         Effect.gen(function* () {
+          const shortened =
+            request !== prepared.request && request.maxTokens === defaultBudgetLimit
+              ? { ...request, maxTokens: SessionModelRequest.outputLimit(context.model.limit) }
+              : request
           const prompted = fitOutput(
-            { ...request, messages: [...request.messages, Message.user(prompt)] },
+            { ...shortened, messages: [...shortened.messages, Message.user(prompt)] },
             context.model.limit,
             size && { ...size, estimated: size.estimated + Token.estimate(prompt) },
           )

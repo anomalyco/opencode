@@ -894,6 +894,97 @@ it.effect("compaction keeps the output limit for a request that fits its target"
   }),
 )
 
+it.effect("compaction sizes output limit to room left by a shortened request", () =>
+  Effect.gen(function* () {
+    requests = []
+    const session = yield* insertSession(Session.ID.make("ses_shortened_compaction"))
+    const compaction = yield* SessionCompaction.Service
+    // A 256k window with a 5% buffer leaves 13,107 tokens as the trigger buffer.
+    const bigModel = {
+      ...resolved,
+      limit: { context: 262_144, output: 32_000 },
+    }
+    yield* compaction.transform((editor) => editor.configure({ auto: true, buffer: "5%" }))
+
+    // Older message exceeds the ~249k ceiling, while the latest message is short (~3k tokens).
+    const messages = [
+      SessionMessage.User.make({
+        id: SessionMessage.ID.create(),
+        type: "user",
+        text: "older ".repeat(200_000),
+        time: { created: DateTime.makeUnsafe(0) },
+      }),
+      SessionMessage.User.make({
+        id: SessionMessage.ID.create(),
+        type: "user",
+        text: "latest question",
+        time: { created: DateTime.makeUnsafe(1) },
+      }),
+    ]
+
+    const context = { ...loaded(session, messages), model: bigModel }
+    expect(
+      yield* compaction.compact({
+        reason: "auto",
+        context,
+        estimate: { measured: 250_000, estimated: 0 },
+      }),
+    ).toEqual({ status: "completed" })
+
+    expect(requests).toHaveLength(1)
+    // The shortened request (older exchange dropped) leaves plenty of room, so output is not
+    // clamped to the 13,107 buffer.
+    expect(requests[0]?.maxTokens).toBe(32_000)
+  }),
+)
+
+it.effect("compaction preserves a hook's output limit when a request is shortened", () =>
+  Effect.gen(function* () {
+    requests = []
+    const session = yield* insertSession(Session.ID.make("ses_shortened_hook_limit"))
+    const compaction = yield* SessionCompaction.Service
+    const hooks = yield* PluginHooks.Service
+    const bigModel = {
+      ...resolved,
+      limit: { context: 262_144, output: 32_000 },
+    }
+    yield* compaction.transform((editor) => editor.configure({ auto: true, buffer: "5%" }))
+    yield* hooks.register("session", "compaction", (event) =>
+      Effect.sync(() => {
+        event.options.maxTokens = 500
+      }),
+    )
+
+    const messages = [
+      SessionMessage.User.make({
+        id: SessionMessage.ID.create(),
+        type: "user",
+        text: "older ".repeat(200_000),
+        time: { created: DateTime.makeUnsafe(0) },
+      }),
+      SessionMessage.User.make({
+        id: SessionMessage.ID.create(),
+        type: "user",
+        text: "latest question",
+        time: { created: DateTime.makeUnsafe(1) },
+      }),
+    ]
+
+    const context = { ...loaded(session, messages), model: bigModel }
+    expect(
+      yield* compaction.compact({
+        reason: "auto",
+        context,
+        estimate: { measured: 250_000, estimated: 0 },
+      }),
+    ).toEqual({ status: "completed" })
+
+    expect(requests).toHaveLength(1)
+    // The hook's custom output limit is preserved rather than overwritten by the catalog limit.
+    expect(requests[0]?.maxTokens).toBe(500)
+  }),
+)
+
 it.effect("compaction hooks can supply the summary instead of the model", () =>
   Effect.gen(function* () {
     requests = []
