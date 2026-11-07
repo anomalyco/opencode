@@ -1,4 +1,4 @@
-import type { FileDiffInfo } from "@opencode/client/promise"
+import type { FileDiffInfo, VcsDiffInput } from "@opencode/client/promise"
 import type { SessionReviewLineComment } from "@opencode/session-ui/session-review"
 import { previewSelectedLines } from "@opencode/session-ui/pierre/selection-bridge"
 import { artifactMime } from "@opencode/util/artifact"
@@ -321,6 +321,24 @@ export function createReviewModel(input: {
     }
   }
 
+  // Lists, folder expansions, and full patches must all use the branch's local or stacked base.
+  const vcsDiff = async (input: VcsDiffInput, signal: AbortSignal) => {
+    const client = view().server.client
+
+    const base =
+      input.mode === "branch"
+        ? await client.vcs.base({ location: input.location }, { signal }).then(
+            (result) => result.data?.ref,
+            // Some branches have no creation hint; keep the existing default-branch fallback in that case.
+            () => undefined,
+          )
+        : undefined
+
+    signal.throwIfAborted()
+
+    return client.vcs.diff({ ...input, base }, { signal })
+  }
+
   const changes = createDiffSlice({
     key: (target) =>
       target.kind === "turn"
@@ -331,16 +349,14 @@ export function createReviewModel(input: {
 
       if (target.kind === "turn") return client.session.diff({ sessionID: target.sessionID }, { signal })
 
-      return client.vcs
-        .diff(
-          {
-            location: { directory: target.directory },
-            mode: target.mode === "git" ? "working" : target.mode,
-            untracked: "folders",
-          },
-          { signal },
-        )
-        .then((result) => result.data)
+      return vcsDiff(
+        {
+          location: { directory: target.directory },
+          mode: target.mode === "git" ? "working" : target.mode,
+          untracked: "folders",
+        },
+        signal,
+      ).then((result) => result.data)
     },
   })
 
@@ -485,27 +501,25 @@ export function createReviewModel(input: {
         controller.abort()
         dispatchFolders({ type: "fetch.timed-out", folder: effect.folder, attempt })
       }, REVIEW_DIFF_TIMEOUT_MS)
-      void view()
-        .server.client.vcs.diff(
-          {
-            location: { directory: reviewFolderDirectory(effect.source.root, effect.folder) },
-            mode: effect.source.mode === "branch" ? "branch" : "working",
-            untracked: "folders",
-          },
-          { signal: AbortSignal.any([ctx.signal, controller.signal]) },
-        )
-        .then(
-          (result) => {
-            if (!folderRequests.delete(attempt)) return
-            clearTimeout(request.timer)
-            dispatchFolders({ type: "fetch.succeeded", folder: effect.folder, attempt, entries: result.data })
-          },
-          () => {
-            if (!folderRequests.delete(attempt)) return
-            clearTimeout(request.timer)
-            dispatchFolders({ type: "fetch.failed", folder: effect.folder, attempt })
-          },
-        )
+      void vcsDiff(
+        {
+          location: { directory: reviewFolderDirectory(effect.source.root, effect.folder) },
+          mode: effect.source.mode === "branch" ? "branch" : "working",
+          untracked: "folders",
+        },
+        AbortSignal.any([ctx.signal, controller.signal]),
+      ).then(
+        (result) => {
+          if (!folderRequests.delete(attempt)) return
+          clearTimeout(request.timer)
+          dispatchFolders({ type: "fetch.succeeded", folder: effect.folder, attempt, entries: result.data })
+        },
+        () => {
+          if (!folderRequests.delete(attempt)) return
+          clearTimeout(request.timer)
+          dispatchFolders({ type: "fetch.failed", folder: effect.folder, attempt })
+        },
+      )
     }, effect.delay)
   }
 
@@ -761,17 +775,15 @@ export function createReviewModel(input: {
       const rows =
         target.kind === "turn"
           ? server.client.session.diff({ sessionID: target.sessionID, context: 3 }, { signal: both })
-          : server.client.vcs
-              .diff(
-                {
-                  location: { directory: stage === "scoped" ? target.scoped : target.root },
-                  mode: target.mode === "git" ? "working" : target.mode,
-                  context: stage === "bounded" ? 3 : undefined,
-                  untracked: "folders",
-                },
-                { signal: both },
-              )
-              .then((result) => result.data)
+          : vcsDiff(
+              {
+                location: { directory: stage === "scoped" ? target.scoped : target.root },
+                mode: target.mode === "git" ? "working" : target.mode,
+                context: stage === "bounded" ? 3 : undefined,
+                untracked: "folders",
+              },
+              both,
+            ).then((result) => result.data)
 
       return rows.then((list) => {
         queryClient.setQueryData(detailKey(target, stage), list)

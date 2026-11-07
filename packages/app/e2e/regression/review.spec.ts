@@ -1673,6 +1673,35 @@ test("review file navigation focuses the arrow for the keyboard direction", asyn
   await expect(home).toBeFocused()
 })
 
+test("branch review uses the local base for its list, full patches, and expanded folders", async ({ page }) => {
+  await openSession(page, {
+    name: "ReviewBranchBase",
+    vcs: { current: "feature", default: "main" },
+    vcsBase: { name: "main", ref: "refs/heads/main", source: "reflog" },
+    vcsDiff: (input) => {
+      if (input.mode !== "branch") return []
+
+      // Comparing with the remote default includes an unpushed commit already present on local main.
+      if (input.base !== "refs/heads/main") return [fileDiff("inherited.ts")]
+
+      if (input.directory.endsWith("/untracked")) return [fileDiff("untracked/notes.ts", { status: "added" })]
+
+      return [fileDiff("src/big.ts", { loaded: input.context === "3" }), fileDiff("untracked/", { status: "added" })]
+    },
+  })
+  const panel = page.locator("#review-panel")
+
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  await openReviewLauncher(panel)
+  await panel.getByRole("button", { name: "Git changes", exact: true }).click()
+  await page.getByRole("option", { name: "Branch changes", exact: true }).click()
+  await expect(panel.getByRole("treeitem", { name: "big.ts", exact: true })).toBeVisible()
+  await expect(panel.getByRole("treeitem", { name: "inherited.ts", exact: true })).toHaveCount(0)
+  await expect(panel.locator("diffs-container")).toContainText("export const value = 'after'")
+  await panel.getByRole("treeitem", { name: "untracked", exact: true }).click()
+  await expect(panel.getByRole("treeitem", { name: "notes.ts", exact: true })).toBeVisible()
+})
+
 test("restores review state and the side-panel tab per session", async ({ page }) => {
   const sessions = [
     { id: "ses_review_state_a", title: "Alpha review state" },
