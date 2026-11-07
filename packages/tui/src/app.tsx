@@ -29,6 +29,7 @@ import {
   createMemo,
   ErrorBoundary,
   createSignal,
+  on,
   onMount,
   onCleanup,
   batch,
@@ -515,6 +516,54 @@ function App() {
   const plugins = usePlugin()
   const clipboard = useClipboard()
   const terminalEnvironment = useTuiTerminalEnvironment()
+  // Autoaccept belongs to the client, not the selected session view: a background
+  // tab (including its subagents) must not wait for navigation to resume.
+  const autoacceptSessions = createMemo(() => {
+    if (local.permission.mode !== "autoaccept") return ""
+    const current = route.data.type === "session" && route.data.sessionID !== "dummy" ? route.data.sessionID : undefined
+    const tabs = sessionTabs.enabled() ? sessionTabs.tabs().map((tab) => tab.sessionID) : []
+    return Array.from(
+      new Set(
+        (current ? [...tabs, current] : tabs).flatMap((sessionID) => [
+          sessionID,
+          ...data.session.family(sessionID).filter((id) => {
+            let parent = data.session.get(id)?.parentID
+            while (parent) {
+              if (parent === sessionID) return true
+              parent = data.session.get(parent)?.parentID
+            }
+            return false
+          }),
+        ]),
+      ),
+    )
+      .sort()
+      .join("\n")
+  })
+  createEffect(
+    on([autoacceptSessions, () => client.connection.status()], ([sessions, status]) => {
+      if (!sessions || status !== "connected") return
+      // Include requests that were already pending before this client connected.
+      void Promise.allSettled(sessions.split("\n").map((sessionID) => data.session.permission.sync(sessionID)))
+    }),
+  )
+  const autoApproved = new Set<string>()
+  createEffect(() => {
+    if (local.permission.mode !== "autoaccept" || client.connection.status() !== "connected") return
+    if (!autoacceptSessions()) return
+    autoacceptSessions().split("\n").forEach((sessionID) => {
+      data.session.permission.list(sessionID)?.forEach((request) => {
+        if (autoApproved.has(request.id)) return
+        autoApproved.add(request.id)
+        void data.session.permission
+          .reply({ sessionID: request.sessionID, decision: "once", requestID: request.id })
+          .catch((error) => {
+            autoApproved.delete(request.id)
+            toast.error(error)
+          })
+      })
+    })
+  })
   let paletteTimer: ReturnType<typeof setTimeout> | undefined
   const afterFrame = () => {
     // The native writer can still be flushing the frame when FRAME fires. Keep OSC probes behind visible app output.
