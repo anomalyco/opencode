@@ -269,6 +269,7 @@ async function run(input: {
   active?: () => SessionActiveOutput
   terminalDelay?: number
   signal?: AbortSignal
+  events?: (push: (event: V2Event) => void) => void
 }) {
   const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
   const values: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
@@ -290,6 +291,12 @@ async function run(input: {
       yield value
     }
   })()
+  const push = (...events: V2Event[]) => {
+    values.push(...events)
+    wake?.()
+    wake = undefined
+  }
+  input.events?.(push)
   spyOn(sdk.event, "subscribe").mockImplementation((() => stream) as typeof sdk.event.subscribe)
   spyOn(sdk.permission, "list").mockImplementation(() => ok([]) as never)
   spyOn(sdk.session.form, "list").mockImplementation(
@@ -325,9 +332,7 @@ async function run(input: {
   spyOn(sdk.session, "prompt").mockImplementation((request) => {
     const messageID = request.id ?? "msg_prompt"
     promptID = messageID
-    values.push(...input.turn(messageID))
-    wake?.()
-    wake = undefined
+    push(...input.turn(messageID))
     return ok({ id: messageID, sessionID: "ses_1", time: { created: 1 } }) as never
   })
   await runNonInteractivePrompt({
@@ -789,6 +794,35 @@ describe("runNonInteractivePrompt", () => {
       ],
     })
     expect(output.stdout).toContain("Shell finished.")
+  })
+
+  test("stops waiting when a child session that is not a job ends after the Session goes idle", async () => {
+    let push: (event: V2Event) => void = () => {}
+    let child: "running" | "ending" | "done" = "running"
+    const output = await capture({
+      events: (next) => {
+        push = next
+      },
+      active: (): SessionActiveOutput => {
+        if (child === "done") return {}
+        if (child === "running") {
+          child = "ending"
+          setTimeout(() => {
+            child = "done"
+            push({
+              id: "evt_child_done",
+              created: 2,
+              type: "session.execution.succeeded",
+              durable: { aggregateID: "ses_child", seq: 1, version: 1 },
+              data: { sessionID: "ses_child" },
+            })
+          }, 10)
+        }
+        return { ses_child: { type: "running" } }
+      },
+      turn: (id) => [prompted(id), settled()],
+    })
+    expect(output.exitCode).toBe(0)
   })
 
   test("fails the run when a background state read fails instead of treating it as done", async () => {

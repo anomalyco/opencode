@@ -139,6 +139,11 @@ export async function runNonInteractivePrompt(input: Input) {
       }
   }
 
+  const wake = () => {
+    state.ended.resolve()
+    state.ended = deferred()
+  }
+
   const consume = async () => {
     while (true) {
       const next = await stream.next().catch((error) => {
@@ -164,10 +169,9 @@ export async function runNonInteractivePrompt(input: Input) {
       if (state.jobSessions.has(sessionID)) {
         if (event.type === "session.execution.started" && state.phase === "cancelling")
           void input.client.session.interrupt({ sessionID }).catch(() => {})
-        if (terminal) {
-          state.ended.resolve()
-          state.ended = deferred()
-        }
+        if (terminal) wake()
+      } else if (terminal) {
+        void ownsSession(sessionID).then((owned) => owned && wake())
       }
       if (sessionID !== input.sessionID) continue
       if (event.type === "session.inbox.delivered" && event.data.inboxID === messageID) state.promoted = true
