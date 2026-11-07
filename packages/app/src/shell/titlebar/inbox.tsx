@@ -56,10 +56,22 @@ export function SidebarInbox() {
 
   const [announcement, setAnnouncement] = createStore({ text: "" })
 
-  createEffect((previous: { at: number; statuses: Map<string, InboxStatus> } | undefined) => {
+  createEffect((previous: { underway: Map<string, number>; statuses: Map<string, InboxStatus> } | undefined) => {
     if (inbox.loading()) return
 
     const entries = inbox.entries()
+
+    // Runs the server's index shows as started at the first paint, keyed by their start. The running-session snapshot
+    // can land after that paint and move them into Working; they had already started, so they are not announced.
+    const underway =
+      previous?.underway ??
+      new Map(
+        entries.flatMap((entry) => {
+          const since = workingSince(entry.session)
+
+          return since === undefined ? [] : [[entry.key, since] as const]
+        }),
+      )
 
     if (previous) {
       const text = entries
@@ -68,8 +80,9 @@ export function SidebarInbox() {
 
           if (status === undefined || status === entry.status || entry.status === "ready") return []
 
-          // The running-session snapshot can land after the first paint; a run it reveals had already started.
-          if (entry.status === "working" && (workingSince(entry.session) ?? Infinity) <= previous.at) return []
+          const since = workingSince(entry.session)
+
+          if (entry.status === "working" && since !== undefined && underway.get(entry.key) === since) return []
 
           return [
             language.t(`sidebar.inbox.announce.${entry.status}`, {
@@ -82,7 +95,7 @@ export function SidebarInbox() {
       if (text) setAnnouncement("text", text)
     }
 
-    return { at: previous?.at ?? Date.now(), statuses: new Map(entries.map((entry) => [entry.key, entry.status])) }
+    return { underway, statuses: new Map(entries.map((entry) => [entry.key, entry.status])) }
   })
 
   const sections = createMemo(() => {
