@@ -31,7 +31,7 @@ import type { LocalProject } from "@/shell/state/layout"
 import { sessionTabTitle } from "./tab-title"
 import { sessionTitle } from "@/session/title"
 import { createSessionInbox, inboxArchived, type InboxEntry, type InboxStatus } from "./inbox-model"
-import { compareWorking } from "./inbox-working"
+import { compareWorking, workingSince } from "./inbox-working"
 
 const RECENT_LIMIT = 10
 
@@ -56,7 +56,7 @@ export function SidebarInbox() {
 
   const [announcement, setAnnouncement] = createStore({ text: "" })
 
-  createEffect((previous: Map<string, InboxStatus> | undefined) => {
+  createEffect((previous: { at: number; statuses: Map<string, InboxStatus> } | undefined) => {
     if (inbox.loading()) return
 
     const entries = inbox.entries()
@@ -64,8 +64,12 @@ export function SidebarInbox() {
     if (previous) {
       const text = entries
         .flatMap((entry) => {
-          if (!previous.has(entry.key) || previous.get(entry.key) === entry.status || entry.status === "ready")
-            return []
+          const status = previous.statuses.get(entry.key)
+
+          if (status === undefined || status === entry.status || entry.status === "ready") return []
+
+          // The running-session snapshot can land after the first paint; a run it reveals had already started.
+          if (entry.status === "working" && (workingSince(entry.session) ?? Infinity) <= previous.at) return []
 
           return [
             language.t(`sidebar.inbox.announce.${entry.status}`, {
@@ -78,7 +82,7 @@ export function SidebarInbox() {
       if (text) setAnnouncement("text", text)
     }
 
-    return new Map(entries.map((entry) => [entry.key, entry.status]))
+    return { at: previous?.at ?? Date.now(), statuses: new Map(entries.map((entry) => [entry.key, entry.status])) }
   })
 
   const sections = createMemo(() => {

@@ -1079,6 +1079,7 @@ test("inactive tabs stay busy while work waits in their inbox, and pulse on a ne
   // An inactive tab reads its inbox after a delay. The mock's inbox never gains pushed items, so a prompt pushed
   // before that read starts would be replaced by the older snapshot.
   const inboxC = page.waitForResponse(new RegExp(`/api/session/${c.id}/inbox(\\?|$)`))
+
   const workspace = await openSession(page, {
     name: "TabInbox",
     sessions: [a, b, c],
@@ -2104,7 +2105,8 @@ test("the inbox waits for initial requests and orders attention by waiting age r
   })
 
   const pending = await holdRoute(page, /\/api\/session\/ses_waiting_old\/permission(?:\?|$)/)
-  // Running sessions join Working only once this snapshot loads, so the inbox must not show them as idle before it.
+  // Running sessions join Working only once this snapshot loads, which can be after the inbox shows; runs it reveals
+  // had already started, so they are not announced.
   const running = await holdRoute(page, /\/api\/session\/active(?:\?|$)/)
 
   await page.goto("/")

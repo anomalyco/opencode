@@ -322,7 +322,6 @@ export function createData(config: CreateDataInput) {
   const stored = (message: SessionMessageInfo) => (config.omitToolFileData ? omitMessageFileData(message) : message)
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
-  const [activeSettled, setActiveSettled] = createSignal(false)
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
@@ -719,10 +718,7 @@ export function createData(config: CreateDataInput) {
                 snapshot.set(id, status)
               })
               activeUpdates = undefined
-              batch(() => {
-                setStore("session", "active", reconcile(Object.fromEntries(snapshot)))
-                setActiveSettled(true)
-              })
+              setStore("session", "active", reconcile(Object.fromEntries(snapshot)))
               // Sessions created before this connection (while disconnected, or before the client started)
               // never delivered `session.created`; without their info a running child never joins its root's family.
               snapshot.forEach((status, id) => {
@@ -730,9 +726,7 @@ export function createData(config: CreateDataInput) {
               })
             })
             .catch(() => {
-              if (activeUpdates !== updates) return
-              activeUpdates = undefined
-              setActiveSettled(true)
+              if (activeUpdates === updates) activeUpdates = undefined
             }),
         )
         refresh(() =>
@@ -1558,10 +1552,6 @@ export function createData(config: CreateDataInput) {
         return Object.entries(store.session.active).flatMap(([sessionID, status]) =>
           status === "running" ? [sessionID] : [],
         )
-      },
-      /** Whether the first running-session snapshot has loaded or failed. Before it, `status` misses runs already underway. */
-      activeSettled() {
-        return activeSettled()
       },
       // Inputs are the pending user and synthetic items; compactions are control items.
       input: {

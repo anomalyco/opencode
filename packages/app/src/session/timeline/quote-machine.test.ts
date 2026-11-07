@@ -103,6 +103,7 @@ describe("quote machine", () => {
       SELECTION_CHANGED_QUOTE_EVENT,
       SELECTION_CHANGED_QUOTE_EVENT,
     ])
+
     // The selection waits for the release.
     expect(result.effects).toEqual([{ type: "press.watch" }])
 
@@ -157,6 +158,7 @@ describe("quote machine", () => {
       collapsed: false,
       clearRange: selected.range,
     }).state
+
     const clear = pressed.status === "shown" ? pressed.clear! : undefined
 
     expect(transitionQuote(pressed, { type: "clear.ready", attempt: clear!.attempt }).effects).toEqual([
@@ -239,6 +241,7 @@ describe("quote machine", () => {
       ],
       dismissed,
     ).state
+
     const read = transitionQuote(released, { type: "settle.ready", attempt: settleOf(released) })
     expect(read.effects).toEqual([{ type: "quote.read" }])
 
