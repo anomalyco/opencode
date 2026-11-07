@@ -4,13 +4,13 @@
 use std::io::{IsTerminal, Write};
 use std::process::{Command, Stdio};
 
-use chrono::{Local, TimeZone};
 use opencode_api::client::Client;
 use opencode_api::error::Error as ApiError;
 use opencode_api::generated::types::{
     AbsolutePath, ExperimentalSessionExportInput, LocationGetInput, LocationQueryInput, ProjectID, SessionListInput,
     SessionListInputOrder, SessionRemoveInput,
 };
+use opencode_util::time::Zone;
 use serde_json::{Map, Value};
 
 use super::Context;
@@ -295,10 +295,10 @@ fn text(value: &Value) -> String {
 /// `new Date(ms).toLocaleString()` as Bun writes it: `en-US` in the local time zone, whatever `LANG`
 /// says, for example `11/4/2025, 4:04:05 PM`.
 fn locale_string(value: &Value) -> String {
-    let Some(time) = value.as_f64().and_then(|ms| Local.timestamp_millis_opt(ms as i64).single()) else {
+    let Some(time) = value.as_f64().and_then(|ms| Zone::Local.at(ms as i64)) else {
         return "Invalid Date".to_owned();
     };
-    time.format("%-m/%-d/%Y, %-I:%M:%S %p").to_string()
+    time.locale_string()
 }
 
 #[cfg(test)]
