@@ -3,8 +3,8 @@
 // a burst stalls probes and user actions inside the browser where nothing can observe it.
 export const REQUEST_QUEUE_LIMIT = 4
 
-// Endpoints that shell out to git or walk the filesystem take seconds on a large repository. They
-// may hold at most this many slots, so a session mount's small reads never queue behind them.
+// Git, filesystem and MCP discovery endpoints can take seconds. They may hold at most this
+// many slots, so a session mount's small reads never queue behind them.
 export const REQUEST_QUEUE_SLOW_LIMIT = 2
 
 // A mount legitimately fires a dozen requests at once; only a request that has waited this long
@@ -13,7 +13,7 @@ export const REQUEST_STALL_MS = 2_000
 
 export const REQUEST_STALL_COOLDOWN_MS = 10_000
 
-const slowRequestPaths = ["/api/vcs", "/api/worktree"]
+const slowRequestPaths = ["/api/vcs", "/api/worktree", "/api/command", "/api/mcp"]
 
 export type RequestQueueConfig = {
   readonly limit: number
