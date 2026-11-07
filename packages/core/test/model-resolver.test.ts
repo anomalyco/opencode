@@ -423,6 +423,21 @@ describe("ModelResolver", () => {
             expect(headers["x-goog-api-key"]).toBeUndefined()
           }),
         )
+
+        const gateway = yield* resolver.resolveModel(
+          model("@opencode/ai/providers/cloudflare-ai-gateway", {
+            providerID: Provider.ID.make("gateway"),
+            settings: { baseURL: "https://gateway.example.com/v1/compat", gatewayApiKey: "gateway-fixture" },
+          }),
+        )
+        const headers = yield* gateway.model.route.auth.apply({
+          request: ai.request({ model: gateway.model, prompt: "Hello" }),
+          method: "POST",
+          url: gateway.model.route.endpoint.baseURL ?? "",
+          body: "{}",
+          headers: Headers.fromInput(gateway.model.options?.headers),
+        })
+        expect(headers.authorization).toBe("Bearer gateway-fixture")
       }).pipe(Effect.provide(layer)),
     )
   })
