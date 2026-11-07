@@ -4,6 +4,7 @@ import { define } from "@opencode/plugin/effect/plugin"
 import { SessionMedia } from "@opencode/schema/session-media"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { DateTime, Effect } from "effect"
+import { Flag } from "../flag.js"
 import { Session } from "../session.js"
 import { SessionSchema } from "../session/schema.js"
 import { collect } from "./media/collect.js"
@@ -12,12 +13,13 @@ import { collect } from "./media/collect.js"
 export const DEFAULT_LIMIT = 200
 
 /**
- * The Media panel's server half: it reads a session's history a page at a time and
+ * The Media panel's server half, behind the `session_media` flag: it reads a session's history a page at a time and
  * returns the images, videos and links in it, so the app lists a whole session without loading its messages.
  */
 export const Plugin = define({
   id: "opencode.media",
   effect: Effect.fn(function* (ctx) {
+    if (!(yield* Flag.enabled("session_media"))) return
     const session = yield* Session.Service
 
     yield* ctx.rpc
