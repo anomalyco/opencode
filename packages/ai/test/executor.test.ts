@@ -38,6 +38,43 @@ const expectAIError = (error: unknown) => {
 const largeProviderMessage = `Upstream request failed: ${"validation failed; ".repeat(1_000)}`
 
 describe("RequestExecutor", () => {
+  it.live("preserves explicit traceparent headers without overriding native propagation", () =>
+    Effect.gen(function* () {
+      const received = new Map<string, Record<string, string>>()
+      const server = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bun.serve({
+            hostname: "127.0.0.1",
+            port: 0,
+            fetch(request) {
+              received.set(new URL(request.url).pathname, Object.fromEntries(request.headers))
+              return new Response("ok")
+            },
+          }),
+        ),
+        (server) => Effect.promise(() => server.stop(true)),
+      )
+      const executor = yield* RequestExecutor.Service
+      const parent = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+      const send = (path: string, headers: Record<string, string> = {}, middleware?: HttpMiddleware) =>
+        executor
+          .execute(HttpClientRequest.post(new URL(path, server.url).href, { headers }), middleware)
+          .pipe(Effect.flatMap((response) => response.text))
+
+      yield* send("/direct", { TraceParent: parent })
+      yield* send("/middleware", {}, (input, next) =>
+        next(HttpClientRequest.setHeader(input, "traceparent", parent)),
+      )
+      yield* send("/native")
+
+      expect(received.get("/direct")?.traceparent).toBe(parent)
+      expect(received.get("/direct")?.b3).toBeUndefined()
+      expect(received.get("/middleware")?.traceparent).toBe(parent)
+      expect(received.get("/middleware")?.b3).toBeUndefined()
+      expect(received.get("/native")?.traceparent).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/)
+    }).pipe(Effect.provide(RequestExecutor.fetchLayer)),
+  )
+
   it.effect("preserves externally captured HTTP errors without inventing response context", () =>
     Effect.sync(() => {
       const cause = new Error("upstream request failed")
