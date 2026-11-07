@@ -306,14 +306,14 @@ test("resolves transparent colors", () => {
   expect(theme.background.formfield.base.toInts()).toEqual([0, 0, 0, 0])
 })
 
-test("reports theme decoding failures as native errors", () => {
+test("reports the failing token in theme decoding failures", () => {
   expect(() =>
     resolveSource(
       complete("light", { text: { ...light.text, base: "opaque" } }) as never,
       "light",
       "custom",
     ),
-  ).toThrow('Invalid theme: custom "opaque" is an invalid value')
+  ).toThrow("Invalid theme: custom: base.text.base:")
 })
 
 test("surface overrides rewire references and reset action states from their base", () => {
