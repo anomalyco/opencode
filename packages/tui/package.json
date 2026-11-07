@@ -72,6 +72,8 @@
     "strip-ansi": "7.1.2"
   },
   "devDependencies": {
+    "opentui-core-test": "npm:@opentui/core@0.6.6",
+    "opentui-solid-test": "npm:@opentui/solid@0.6.6",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native": "catalog:"
