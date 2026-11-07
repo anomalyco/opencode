@@ -1,6 +1,7 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
+import { keypadKeyName } from "../../util/keypad"
 import { createMemo, createSignal, Show } from "solid-js"
 import { Spinner } from "../../component/spinner"
 import { useConfig } from "../../config"
@@ -114,13 +115,14 @@ export function Answer(props: {
   }))
 
   useKeyboard((event) => {
+    const name = keypadKeyName(event.name)
     if (!scroll) return
-    if (event.name === "up" || event.name === "k") return scroll.scrollBy(-1)
-    if (event.name === "down" || event.name === "j") return scroll.scrollBy(1)
-    if (event.name === "pageup") return scroll.scrollBy(-maxHeight())
-    if (event.name === "pagedown") return scroll.scrollBy(maxHeight())
-    if (event.name === "home") return scroll.scrollTo(0)
-    if (event.name === "end") return scroll.scrollTo(scroll.scrollHeight)
+    if (name === "up" || name === "k") return scroll.scrollBy(-1)
+    if (name === "down" || name === "j") return scroll.scrollBy(1)
+    if (name === "pageup") return scroll.scrollBy(-maxHeight())
+    if (name === "pagedown") return scroll.scrollBy(maxHeight())
+    if (name === "home") return scroll.scrollTo(0)
+    if (name === "end") return scroll.scrollTo(scroll.scrollHeight)
   })
 
   return (
