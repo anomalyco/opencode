@@ -30,3 +30,9 @@ test("truncates text in the middle without overflowing small widths", () => {
   expect(Locale.truncateMiddle("abcd", 10)).toBe("abcd")
   expect(Locale.truncateMiddle("a", 1)).toBe("a")
 })
+
+test("keeps sub-minute durations below the minute boundary", () => {
+  expect(Locale.duration(59949)).toBe("59.9s")
+  expect(Locale.duration(59999)).toBe("59.9s")
+  expect(Locale.duration(60000)).toBe("1m 0s")
+})
