@@ -171,9 +171,13 @@ const make = Effect.gen(function* () {
     return values.findLast((value) => value !== undefined) ?? "notify"
   })
 
-  const exec = Effect.fnUntraced(function* (command: string[], timeout: Duration.Input = "30 seconds") {
+  const exec = Effect.fnUntraced(function* (
+    command: string[],
+    timeout: Duration.Input = "30 seconds",
+    options?: { cwd?: string; env?: Record<string, string>; extendEnv?: boolean },
+  ) {
     return yield* appProcess
-      .run(ChildProcess.make(command[0], command.slice(1)), {
+      .run(ChildProcess.make(command[0], command.slice(1), options), {
         timeout,
         maxOutputBytes: 100_000,
         maxErrorBytes: 100_000,
@@ -211,6 +215,12 @@ const make = Effect.gen(function* () {
     )
   })
 
+  // corepack shims auto-pin `packageManager` into the nearest package.json when they start
+  // inside a project (#62246). Every package-manager command disables that. Install and
+  // removal commands keep the project cwd so project-level .npmrc/.yarnrc/bunfig.toml
+  // still resolve; the read-only detection probes need no project context and run from tmp.
+  const noAutoPin = { env: { COREPACK_ENABLE_AUTO_PIN: "0" }, extendEnv: true }
+
   const method = Effect.fnUntraced(function* () {
     if (executable === curlBinary) return "curl"
     if (installedFormula) return "brew"
@@ -229,7 +239,7 @@ const make = Effect.gen(function* () {
     const results = yield* Effect.forEach(
       checks,
       (check) =>
-        exec(check.command).pipe(
+        exec(check.command, "30 seconds", { ...noAutoPin, cwd: global.tmp }).pipe(
           Effect.orElseSucceed(() => ({ code: 1, stdout: "", stderr: "" })),
           Effect.map((result) => ({ check, result })),
         ),
@@ -264,7 +274,7 @@ const make = Effect.gen(function* () {
       command,
       run: retaining(
         method,
-        exec(command, "5 minutes").pipe(
+        exec(command, "5 minutes", noAutoPin).pipe(
           Effect.flatMap((result) => (result.code === 0 ? Effect.void : Effect.fail(new Error(resultDetail(result))))),
         ),
         global.tmp,
@@ -405,7 +415,7 @@ const make = Effect.gen(function* () {
         },
         cause === undefined ? undefined : { cause },
       )
-    return exec(input.command, "5 minutes").pipe(
+    return exec(input.command, "5 minutes", noAutoPin).pipe(
       Effect.flatMap((result) =>
         result.code === 0 ? Effect.succeed(result) : Effect.fail(failure(resultDetail(result))),
       ),

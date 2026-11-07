@@ -83,6 +83,7 @@ function fixture(
       yield* fs.writeFileString(bash, "bash")
     }
     const commands: string[][] = []
+    const probes: Array<{ cwd?: string; autoPin?: unknown; extendEnv?: boolean }> = []
     const updater = yield* Updater.Service.pipe(
       Effect.provide(Updater.layer),
       Effect.provide(
@@ -115,7 +116,14 @@ function fixture(
               if (command._tag !== "StandardCommand") return Effect.die("Unexpected piped install command")
               const args = command.args.map(String)
               const lookup = command.command === "git" && args[0] === "--exec-path"
-              if (!lookup) commands.push([command.command, ...args])
+              if (!lookup) {
+                commands.push([command.command, ...args])
+                probes.push({
+                  cwd: command.options?.cwd,
+                  autoPin: command.options?.env?.COREPACK_ENABLE_AUTO_PIN,
+                  extendEnv: command.options?.extendEnv,
+                })
+              }
               const result = lookup
                 ? { stdout: Buffer.from(`${path.join(git, "mingw64", "libexec", "git-core")}\n`) }
                 : respond({ command: command.command, args })
@@ -134,7 +142,7 @@ function fixture(
         }),
       ),
     )
-    return { updater, commands, requests, global, fs, executable, bash }
+    return { updater, commands, probes, requests, global, fs, executable, bash }
   })
 }
 
@@ -294,6 +302,40 @@ it.live("install failures expose stderr and process errors do not report success
     }),
   )
 })
+
+it.live("method detection keeps global package probes out of the project directory", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture()
+    yield* test.updater.method()
+    expect(test.probes).toHaveLength(5)
+    for (const probe of test.probes) {
+      expect(probe.cwd).toBe(test.global.tmp)
+      expect(probe.extendEnv).toBe(true)
+      expect(probe.autoPin).toBe("0")
+    }
+  }),
+)
+
+it.live("upgrade and removal commands disable corepack auto-pin", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture()
+    yield* test.updater.upgrade("pnpm", "v2.3.4-beta.1")
+    const removal = test.updater.removal("pnpm")
+    if (!removal) return yield* Effect.die("Expected pnpm removal command")
+    yield* removal.run
+    expect(test.commands).toEqual([
+      ["pnpm", "add", "--global", "--allow-build=@opencode/cli", "@opencode/cli@2.3.4-beta.1"],
+      ["pnpm", "remove", "--global", "@opencode/cli"],
+    ])
+    expect(test.probes).toHaveLength(2)
+    for (const probe of test.probes) {
+      expect(probe.autoPin).toBe("0")
+      expect(probe.extendEnv).toBe(true)
+      // Installs keep the project cwd so .npmrc/.yarnrc/bunfig.toml still resolve.
+      expect(probe.cwd).toBeUndefined()
+    }
+  }),
+)
 
 it.live("method detection tolerates unavailable package managers", () =>
   Effect.gen(function* () {
