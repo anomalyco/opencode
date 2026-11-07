@@ -1,10 +1,12 @@
 import { describe, expect } from "bun:test"
 import { ToolDefinition } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
+import { RequestExecutor } from "@opencode/ai/route"
 import { Agent } from "@opencode/schema/agent"
 import { Money } from "@opencode/schema/money"
 import { Session } from "@opencode/schema/session"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
+import { LayerNodePlatform } from "@opencode/core/effect/app-node-platform"
 import { Location } from "@opencode/core/location"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Project } from "@opencode/core/project"
@@ -12,8 +14,8 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
-import { DateTime, Effect, Option, Schema, Stream } from "effect"
-import { FetchHttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+import { Context, DateTime, Effect, Layer, Stream } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
 
@@ -129,8 +131,19 @@ describe("SessionModelRequest HTTP hooks", () => {
     }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
   )
 
-  it.effect("carries a hook-returned request's redirect mode to the transport", () =>
-    Effect.gen(function* () {
+  it.live("carries a hook-returned request's redirect mode to fetch", () => {
+    // Every reading below is taken where `FetchHttpClient` reads it: the fetch options in the request's context.
+    const sent: Array<RequestInit | undefined> = []
+    const httpTransport = HttpClient.make((request, _url, _signal, fiber) => {
+      sent.push(Context.getOrUndefined(fiber.context, FetchHttpClient.RequestInit))
+      return Effect.succeed(HttpClientResponse.fromWeb(request, new Response('{"ok":true}', { status: 200 })))
+    })
+    // The same two real layers the executor node wires together, with only the transport beneath them replaced.
+    const executor = RequestExecutor.layer.pipe(
+      Layer.provide(LayerNodePlatform.withoutBunTimeout),
+      Layer.provide(Layer.succeed(HttpClient.HttpClient, httpTransport)),
+    )
+    return Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
       let redirect: RequestInit["redirect"] | undefined
       yield* hooks.register("session", "http.request", (event) =>
@@ -147,37 +160,36 @@ describe("SessionModelRequest HTTP hooks", () => {
         system: [],
         messages: [],
       })
-      const http = prepared.options.http
-      if (!http) throw new Error("Expected HTTP middleware")
-      const original = HttpClientRequest.post("https://example.test/v1/chat/completions").pipe(
-        HttpClientRequest.bodyText('{"messages":[]}', "application/json"),
-      )
-      // Read the fetch options the middleware would send with, the way FetchHttpClient consumes them.
+      const middleware = prepared.options.http
+      if (!middleware) throw new Error("Expected HTTP middleware")
+      const service = yield* RequestExecutor.Service
       const send = () =>
-        http(original, (request) =>
-          Effect.map(Effect.serviceOption(FetchHttpClient.RequestInit), (options) =>
-            HttpClientResponse.fromWeb(
-              request,
-              new Response(JSON.stringify({ sent: Option.isSome(options) ? options.value : null }), { status: 200 }),
-            ),
+        service.execute(
+          HttpClientRequest.post("https://example.test/v1/chat/completions").pipe(
+            HttpClientRequest.bodyText('{"messages":[]}', "application/json"),
           ),
-        ).pipe(
-          Effect.flatMap((response) =>
-            HttpClientResponse.schemaBodyJson(
-              Schema.Struct({ sent: Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown)) }),
-            )(response),
-          ),
+          middleware,
         )
 
-      // A hook that leaves the default alone keeps the transport's own options untouched.
-      expect(yield* send()).toEqual({ sent: null })
+      yield* send()
+      expect(sent).toHaveLength(1)
+      // Bun's idle timeout is off for provider requests.
+      expect((sent[0] as BunFetchRequestInit | undefined)?.timeout).toBe(false)
+      // A hook that leaves the default alone sets no redirect mode, so fetch keeps its own.
+      expect(sent[0]?.redirect).toBeUndefined()
 
       for (const mode of ["manual", "error"] as const) {
         redirect = mode
-        expect((yield* send()).sent?.redirect).toBe(mode)
+        yield* send()
+        expect(sent.at(-1)?.redirect).toBe(mode)
+        // The timeout the platform layer adds must merge with the hook's options, never replace them.
+        expect((sent.at(-1) as BunFetchRequestInit | undefined)?.timeout).toBe(false)
       }
-    }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
-  )
+    }).pipe(
+      Effect.provide(executor, { local: true }),
+      Effect.provideService(SessionModelTransport.Service, transport),
+    )
+  })
 
   it.effect("keeps hook edits to a tool schema out of later requests", () =>
     Effect.gen(function* () {
