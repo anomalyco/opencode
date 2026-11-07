@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { areaPath, extent, includeZero, linear, linePath, ticks } from "./scale"
+import { axisDomain, linear, linePath, ticks } from "./scale"
 
 describe("linear", () => {
   test("maps a domain onto a range", () => {
@@ -20,15 +20,24 @@ describe("linear", () => {
   })
 })
 
-describe("extent", () => {
-  test("adds air to a flat series", () => {
-    const [min, max] = extent([2, 2, 2])
-    expect(min).toBeLessThan(2)
-    expect(max).toBeGreaterThan(2)
+describe("axisDomain", () => {
+  test("keeps a log axis only over a positive domain", () => {
+    expect(axisDomain([1, 10, 100], { log: true }).log).toBe(true)
+    expect(axisDomain([0, 10], { log: true }).log).toBe(false)
+    expect(axisDomain([-5, -1], { log: true })).toEqual({ domain: [-5, 1], log: false })
+    expect(axisDomain([1, 10], { declared: [0, 10], log: true })).toEqual({ domain: [0, 10], log: false })
   })
 
-  test("falls back for no values", () => {
-    expect(extent([], [3, 7])).toEqual([3, 7])
+  test("keeps a declared positive log domain", () => {
+    expect(axisDomain([1, 10], { declared: [1, 100], log: true })).toEqual({ domain: [1, 100], log: true })
+  })
+
+  test("normalizes a reversed declared domain", () => {
+    expect(axisDomain([1, 10], { declared: [100, 1] }).domain).toEqual([1, 100])
+  })
+
+  test("falls back to a linear domain without values", () => {
+    expect(axisDomain([], { log: true })).toEqual({ domain: [0, 1], log: false })
   })
 })
 
@@ -45,26 +54,8 @@ describe("ticks", () => {
   })
 })
 
-describe("paths", () => {
-  test("linePath returns an empty string for no points", () => {
+describe("linePath", () => {
+  test("returns an empty string for no points", () => {
     expect(linePath([])).toBe("")
   })
-
-  test("areaPath closes to the baseline", () => {
-    const path = areaPath(
-      [
-        [0, 10],
-        [10, 20],
-      ],
-      30,
-    )
-
-    expect(path.endsWith("Z")).toBe(true)
-    expect(path).toContain("L10,30")
-  })
-})
-
-test("includeZero expands the domain", () => {
-  expect(includeZero([2, 8])).toEqual([0, 8])
-  expect(includeZero([-4, -2])).toEqual([-4, 0])
 })

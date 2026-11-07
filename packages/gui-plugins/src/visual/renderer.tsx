@@ -1,25 +1,23 @@
+import { Show } from "solid-js"
 import { CodeBlock, Style, type Plugin } from "@opencode/plugin/gui"
 import type Visual from "./index"
 import visualCSS from "./core/visual.css?inline"
-import { parseVisual } from "./core/spec"
 import { VisualView } from "./core/view"
 
 const setup: Plugin.Setup<typeof Visual> = (ctx) => {
   ctx.add(Style, visualCSS)
 
   ctx.add(CodeBlock, {
-    languages: ["visual", "genui"],
+    languages: ["visual"],
     render: (props) => {
-      if (ctx.appearance.visualDisplay() === "off") return undefined
-
-      const parsed = parseVisual(props.code)
-
-      if (!parsed.ok) return undefined
+      const source = () => <ctx.ui.Code content={props.code} language={props.language} />
 
       return (
-        <div class="vz-inline">
-          <VisualView code={props.code} context="inline" />
-        </div>
+        <Show when={ctx.appearance.visualDisplay() !== "off"} fallback={source()}>
+          <div class="vz-inline">
+            <VisualView code={props.code} fallback={source()} />
+          </div>
+        </Show>
       )
     },
   })

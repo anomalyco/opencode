@@ -1,8 +1,9 @@
 /* oxlint-disable anti-slop/require-safety-comment-for-type-assertion -- the spec parser and the read function above clamp every numeric field; these assertions only pick the branch the data already selected. */
 import { createMemo, For, Show } from "solid-js"
+import { usePlugin } from "@opencode/plugin/gui"
 import { object, objects, pair, pairs, str } from "../json"
 import { fmt, short } from "../format"
-import { includeZero, linear, linePath, ticks, tickLabel } from "../scale"
+import { axisDomain, linear, linePath, ticks, tickLabel } from "../scale"
 import { VisualFrame } from "../frame"
 import type { VisualSpec } from "../spec"
 
@@ -20,6 +21,7 @@ interface Series {
 }
 
 export function PlotVisual(props: { spec: VisualSpec }) {
+  const ctx = usePlugin()
   const data = () => object(props.spec.data) ?? {}
 
   const series = createMemo<Series[]>(() => {
@@ -42,32 +44,24 @@ export function PlotVisual(props: { spec: VisualSpec }) {
   const yMeta = () => object(data().y) ?? {}
   const all = () => series().flatMap((item) => item.points)
 
-  const xLog = () => str(xMeta().scale, "linear") === "log"
-  const yLog = () => str(yMeta().scale, "linear") === "log"
+  const xAxis = createMemo(() =>
+    axisDomain(
+      all().map((point) => point[0]),
+      { declared: pairs(xMeta().domain)[0], log: str(xMeta().scale, "linear") === "log" },
+    ),
+  )
 
-  const xDomain = () => {
-    const declared = pairs(xMeta().domain)[0]
+  const yAxis = createMemo(() =>
+    axisDomain(
+      all().map((point) => point[1]),
+      { declared: pairs(yMeta().domain)[0], log: str(yMeta().scale, "linear") === "log" },
+    ),
+  )
 
-    if (declared) return declared
-    const values = all().map((point) => point[0])
-    const positive = values.filter((value) => value > 0)
-
-    if (xLog()) return [Math.min(...positive) / 1.15, Math.max(...positive) * 1.15] as [number, number]
-
-    return [Math.min(...values, 0), Math.max(...values, 1)] as [number, number]
-  }
-
-  const yDomain = () => {
-    const declared = pairs(yMeta().domain)[0]
-
-    if (declared) return declared
-    const values = all().map((point) => point[1])
-    const positive = values.filter((value) => value > 0)
-
-    if (yLog()) return [Math.min(...positive) / 1.15, Math.max(...positive) * 1.15] as [number, number]
-
-    return includeZero([Math.min(...values, 0), Math.max(...values, 1)] as [number, number])
-  }
+  const xDomain = () => xAxis().domain
+  const yDomain = () => yAxis().domain
+  const xLog = () => xAxis().log
+  const yLog = () => yAxis().log
 
   const xScale = () => {
     const domain = xDomain()
@@ -247,7 +241,7 @@ export function PlotVisual(props: { spec: VisualSpec }) {
       readouts={
         <Show when={props.spec.unit}>
           <span class="vz-readout">
-            <span>Units</span>
+            <span>{ctx.t("plot.units")}</span>
             <b>{props.spec.unit}</b>
           </span>
         </Show>

@@ -1,5 +1,3 @@
-import { clamp } from "./json"
-
 export interface Scale {
   readonly domain: readonly [number, number]
   readonly range: readonly [number, number]
@@ -23,26 +21,38 @@ export function linear(domain: readonly [number, number], range: readonly [numbe
   )
 }
 
-/** Extends a domain to include every value, with a little air. */
-export function extent(values: readonly number[], fallback: readonly [number, number] = [0, 1]): [number, number] {
-  const finite = values.filter((value) => Number.isFinite(value))
-
-  if (finite.length === 0) return [fallback[0], fallback[1]]
-  let min = Math.min(...finite)
-  let max = Math.max(...finite)
-
-  if (min === max) {
-    const pad = Math.abs(min) * 0.1 || 1
-    min -= pad
-    max += pad
-  }
-
-  return [min, max]
+/** A resolved axis: the domain the scale maps and whether it uses a log scale. */
+export type AxisDomain = {
+  readonly domain: [number, number]
+  readonly log: boolean
 }
 
-/** A domain that includes zero, for bars and areas. */
-export function includeZero(domain: readonly [number, number]): [number, number] {
-  return [Math.min(0, domain[0]), Math.max(0, domain[1])]
+/**
+ * A domain from declared bounds or the values. A log axis keeps only positive values and falls back to a linear
+ * domain when the declared bounds are not positive or no positive value remains.
+ */
+export function axisDomain(
+  values: readonly number[],
+  options: { readonly declared?: readonly [number, number]; readonly log?: boolean } = {},
+): AxisDomain {
+  const finite = values.filter((value) => Number.isFinite(value))
+  const declared = options.declared
+  const logSafe = finite.every((value) => value > 0)
+
+  if (declared && Number.isFinite(declared[0]) && Number.isFinite(declared[1])) {
+    const low = Math.min(declared[0], declared[1])
+    const high = Math.max(declared[0], declared[1])
+
+    return { domain: [low, high], log: options.log === true && logSafe && low > 0 && high > 0 }
+  }
+
+  const positive = finite.filter((value) => value > 0)
+
+  if (options.log === true && logSafe && positive.length > 0) {
+    return { domain: [Math.min(...positive) / 1.15, Math.max(...positive) * 1.15], log: true }
+  }
+
+  return { domain: [Math.min(...finite, 0), Math.max(...finite, 1)], log: false }
 }
 
 /** Rounded tick values at 1, 2 or 5 times a power of ten. */
@@ -79,42 +89,6 @@ export function linePath(points: ReadonlyArray<readonly [number, number]>): stri
   return points.map(([x, y], index) => `${index === 0 ? "M" : "L"}${round2(x)},${round2(y)}`).join(" ")
 }
 
-/** SVG path closed to a baseline, for area fills. */
-export function areaPath(points: ReadonlyArray<readonly [number, number]>, baseline: number): string {
-  if (points.length === 0) return ""
-  const first = points[0]
-  const last = points[points.length - 1]
-
-  return `${linePath(points)} L${round2(last[0])},${round2(baseline)} L${round2(first[0])},${round2(baseline)} Z`
-}
-
-/** A smooth cubic path through points (Catmull-Rom converted to Béziers). */
-export function smoothPath(points: ReadonlyArray<readonly [number, number]>): string {
-  if (points.length < 2) return linePath(points)
-  let path = `M${round2(points[0][0])},${round2(points[0][1])}`
-
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const p0 = points[Math.max(0, index - 1)]
-    const p1 = points[index]
-    const p2 = points[index + 1]
-    const p3 = points[Math.min(points.length - 1, index + 2)]
-    const c1x = p1[0] + (p2[0] - p0[0]) / 6
-    const c1y = p1[1] + (p2[1] - p0[1]) / 6
-    const c2x = p2[0] - (p3[0] - p1[0]) / 6
-    const c2y = p2[1] - (p3[1] - p1[1]) / 6
-    path += ` C${round2(c1x)},${round2(c1y)} ${round2(c2x)},${round2(c2y)} ${round2(p2[0])},${round2(p2[1])}`
-  }
-
-  return path
-}
-
-/** Maps a value into a 0–1 progress, clamped. */
-export function progress(value: number, min: number, max: number): number {
-  if (max === min) return 0
-
-  return clamp((value - min) / (max - min), 0, 1)
-}
-
-function round2(value: number): number {
+function round2(value: number) {
   return Math.round(value * 100) / 100
 }

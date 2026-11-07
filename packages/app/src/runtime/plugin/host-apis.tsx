@@ -116,7 +116,7 @@ type Attached = {
   notify: (plugin: string, options: NotifyOptions) => Promise<NotifyResult>
   font: Accessor<string>
   mode: Accessor<"light" | "dark">
-  visualDisplay: Accessor<"off" | "inline" | "panel">
+  visualDisplay: Accessor<"off" | "inline">
   routing: Accessor<boolean>
   path: Accessor<string>
   keybind: (command: string) => readonly string[]

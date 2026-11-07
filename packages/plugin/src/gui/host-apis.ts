@@ -1196,13 +1196,12 @@ export interface Appearance {
    * Where generative visuals render. Reactive.
    * - `off`: nowhere; the fenced block keeps its code.
    * - `inline`: in the conversation, at the fenced block.
-   * - `panel`: in the session's visual workbench, with a link in the conversation.
    * @example
    * ```ts
    * const inline = ctx.appearance.visualDisplay() === "inline"
    * ```
    */
-  visualDisplay(): "off" | "inline" | "panel"
+  visualDisplay(): "off" | "inline"
 }
 
 /** The app's route. */
