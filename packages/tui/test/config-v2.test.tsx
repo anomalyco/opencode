@@ -43,6 +43,10 @@ test("validates the session tabs setting", () => {
   expect(decode({ prompt: { image_preview: true } })).toEqual({ prompt: { image_preview: true } })
   expect(decode({ session: { image_preview: true } })).toEqual({ session: { image_preview: true } })
   expect(decode({ session: { tps: false } })).toEqual({ session: { tps: false } })
+  expect(decode({ session: { timestamps: true } })).toEqual({ session: { timestamps: true } })
+  expect(decode({ session: { date_format: "dd-mon-yyyy" } })).toEqual({ session: { date_format: "dd-mon-yyyy" } })
+  expect(decode({ session: { date_format: "friendly" } })).toEqual({ session: { date_format: "friendly" } })
+  expect(() => decode({ session: { date_format: "yyyy-mm-dd" } })).toThrow()
   expect(decode({ session: { new_location: "inherit" } })).toEqual({ session: { new_location: "inherit" } })
   expect(() => decode({ session: { new_location: "current" } })).toThrow()
 })
@@ -73,6 +77,8 @@ test("resolves nested config and keybind defaults", () => {
   })
   expect(config.session.new_location).toBe("launch")
   expect(config.session.tps).toBe(true)
+  expect(config.session.timestamps).toBe(false)
+  expect(config.session.date_format).toBe("locale")
   expect(config.cursor).toEqual({ style: "block", blinking: true })
   expect(resolve({ cursor: { style: "line" } }, { terminalSuspend: true }).cursor).toEqual({
     style: "line",
@@ -121,6 +127,20 @@ test("shows the TPS default in session settings", () => {
   const setting = settings.find((setting) => setting.path.join(".") === "session.tps")
   expect(setting?.category).toBe("Session")
   expect(setting?.default).toBe(true)
+})
+
+test("shows the reply timestamp default in session settings", () => {
+  const setting = settings.find((setting) => setting.path.join(".") === "session.timestamps")
+  expect(setting?.category).toBe("Session")
+  expect(setting?.default).toBe(false)
+})
+
+test("shows the reply date format in session settings", () => {
+  expect(settings.find((setting) => setting.path.join(".") === "session.date_format")).toMatchObject({
+    category: "Session",
+    default: "locale",
+    values: ["locale", "friendly", "dd-mon-yyyy", "iso"],
+  })
 })
 
 test("shows transcript verbosity in session settings", () => {
