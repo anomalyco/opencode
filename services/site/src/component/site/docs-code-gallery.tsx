@@ -112,7 +112,7 @@ export function DocsCodeGallery(props: { reference?: boolean }) {
             "",
             "  Open a link to connect. Links work once and expire in 5 minutes.",
             "",
-            "  http://127.0.0.1:49374/auth/connect/...",
+            "  http://127.0.0.1:28894/auth/connect/...",
           ]}
           copy="opencode pair"
         />

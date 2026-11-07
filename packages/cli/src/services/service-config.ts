@@ -43,13 +43,14 @@ export function filename(channel = OPENCODE_CHANNEL) {
   return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
-export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platform) {
+export function defaultPort(channel = OPENCODE_CHANNEL, _platform = process.platform) {
   const port = channelPort(channel)
-  // Windows hands out 0xC000-0xFFFF for outgoing connections, Hyper-V and WinNAT reserve blocks of that range at boot,
-  // and WSL mirrored networking reserves a 4096-port block that usually covers 44620-48715. A reserved port fails as in
-  // use while nothing listens on it. Moving into the 0x7000 block, below 32768, avoids all of them and keeps the low
-  // 12 bits: 0xC0DE becomes 0x70DE.
-  if (platform === "win32" && port >= 0x8000) return 0x7000 | (port & 0xfff)
+  // WSL2 with default NAT forwards localhost ports from a Windows browser through the
+  // host's port-exclusion range, which can cover the old 49374 default (0xC0DE) and
+  // leave the printed pair link unreachable. Moving into the 0x7000 block below 32768
+  // keeps the low 12 bits (0xC0DE becomes 0x70DE) and stays reachable from Windows,
+  // WSL2 NAT, and every other platform.
+  if (port >= 0x8000) return 0x7000 | (port & 0xfff)
   return port
 }
 

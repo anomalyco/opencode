@@ -160,7 +160,7 @@ export const docsIntro = {
     lead: ["Access the OpenCode web interface with the ", { code: "opencode pair" }, " command."] satisfies RichText,
     command: "opencode pair",
     output: "  Open a link to connect. Links work once and expire in 5 minutes.",
-    url: "http://127.0.0.1:49374/auth/connect/...",
+    url: "http://127.0.0.1:28894/auth/connect/...",
   },
   docker: [
     "Docker images use versioned tags, for example ",

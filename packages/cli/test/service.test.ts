@@ -21,17 +21,17 @@ import { testEffect } from "../../core/test/lib/effect"
 const it = testEffect(NodeFileSystem.layer)
 
 test("managed service ports are stable per installation channel", () => {
-  expect(ServiceConfig.defaultPort("latest", "linux")).toBe(0xc0de)
-  expect(ServiceConfig.defaultPort("dev", "linux")).toBe(0xc0de)
-  expect(ServiceConfig.defaultPort("beta", "linux")).toBe(0xc0de)
-  expect(ServiceConfig.defaultPort("next", "linux")).toBe(0xc0de)
-  expect(ServiceConfig.defaultPort("local", "linux")).toBe(0xc0df)
-  expect(ServiceConfig.defaultPort("latest", "darwin")).toBe(0xc0de)
+  expect(ServiceConfig.defaultPort("latest", "linux")).toBe(0x70de)
+  expect(ServiceConfig.defaultPort("dev", "linux")).toBe(0x70de)
+  expect(ServiceConfig.defaultPort("beta", "linux")).toBe(0x70de)
+  expect(ServiceConfig.defaultPort("next", "linux")).toBe(0x70de)
+  expect(ServiceConfig.defaultPort("local", "linux")).toBe(0x70df)
+  expect(ServiceConfig.defaultPort("latest", "darwin")).toBe(0x70de)
   expect(ServiceConfig.defaultPort("preview-a", "linux")).toBe(ServiceConfig.defaultPort("preview-a", "linux"))
   expect(ServiceConfig.defaultPort("preview-a", "linux")).not.toBe(ServiceConfig.defaultPort("preview-b", "linux"))
 })
 
-test("managed service ports on Windows stay below the ranges Windows and WSL reserve", () => {
+test("managed service ports stay below the ranges Windows and WSL reserve on every platform", () => {
   expect(ServiceConfig.defaultPort("latest", "win32")).toBe(0x70de)
   expect(ServiceConfig.defaultPort("dev", "win32")).toBe(0x70de)
   expect(ServiceConfig.defaultPort("local", "win32")).toBe(0x70df)
@@ -39,9 +39,9 @@ test("managed service ports on Windows stay below the ranges Windows and WSL res
     windows: ServiceConfig.defaultPort(`preview-${index}`, "win32"),
     linux: ServiceConfig.defaultPort(`preview-${index}`, "linux"),
   }))
-  expect(ports.some((port) => port.linux >= 0x8000)).toBe(true)
+  expect(ports.every((port) => port.linux >= 10_000 && port.linux < 0x8000)).toBe(true)
   expect(ports.every((port) => port.windows >= 10_000 && port.windows < 0x8000)).toBe(true)
-  expect(ports.filter((port) => port.linux < 0x8000 && port.windows !== port.linux)).toEqual([])
+  expect(ports.every((port) => port.windows === port.linux)).toBe(true)
 })
 
 test("service disabled accepts only booleans without changing configuration on invalid input", async () => {
