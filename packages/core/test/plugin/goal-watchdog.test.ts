@@ -38,7 +38,10 @@ const run = Effect.fnUntraced(function* (
   seed?: Goal.State,
   extra?: Record<string, Schema.Json>,
   shared?: Map<string, Schema.Json>,
+  /** The 1-based `set` call that fails, so a test can make one beat fail and the next succeed. */
+  failSetAt?: number,
 ) {
+  let sets = 0
   const stored = shared ?? new Map<string, Schema.Json>([
     ...(seed ? ([[`session:${sessionID}`, seed]] as const) : []),
     ...Object.entries(extra ?? {}),
@@ -67,7 +70,12 @@ const run = Effect.fnUntraced(function* (
       session,
       storage: {
         get: (key) => Effect.sync(() => stored.get(key)),
-        set: (key, value) => Effect.sync(() => void stored.set(key, value)),
+        set: (key, value) =>
+          Effect.sync(() => {
+            sets++
+            if (sets === failSetAt) throw new Error("storage hiccup")
+            stored.set(key, value)
+          }),
         remove: (key) => Effect.sync(() => void stored.delete(key)),
         scan: (options) =>
           Effect.sync(() => ({
@@ -246,6 +254,22 @@ describe("goal plugin waiting", () => {
 
       yield* TestClock.adjust(GoalPlugin.HEARTBEAT_INTERVAL)
       expect(plugin.stored.get(key!)).toMatchObject({ at: Duration.toMillis(GoalPlugin.HEARTBEAT_INTERVAL) })
+    }),
+  )
+
+  it.effect("keeps beating after one failed beat", () =>
+    Effect.gen(function* () {
+      // A transient storage failure must not end the heartbeat loop: the process still drives its goals, and
+      // another server would pause them once the record went stale.
+      const plugin = yield* run(undefined, undefined, undefined, 2)
+      const key = [...plugin.stored.keys()].find((key) => key.startsWith("process:"))!
+      expect(plugin.stored.get(key)).toMatchObject({ at: 0 })
+
+      // The first periodic beat fails; the next one must still land.
+      yield* TestClock.adjust(Duration.times(GoalPlugin.HEARTBEAT_INTERVAL, 2))
+      expect(plugin.stored.get(key)).toMatchObject({
+        at: Duration.toMillis(Duration.times(GoalPlugin.HEARTBEAT_INTERVAL, 2)),
+      })
     }),
   )
 

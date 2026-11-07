@@ -384,10 +384,13 @@ export const Plugin = define({
     })
     yield* beat
     yield* sweep.pipe(Effect.forkScoped({ startImmediately: true }))
-    yield* Effect.forever(Effect.andThen(Effect.sleep(HEARTBEAT_INTERVAL), Effect.andThen(beat, sweep))).pipe(
-      Effect.catchCause((cause) => Effect.logWarning("failed to refresh the goal heartbeat", { cause })),
-      Effect.forkScoped({ startImmediately: true }),
-    )
+    // The catch sits inside the loop: a failed beat must not end it, or this process would stop heartbeating after
+    // one storage hiccup and another server would pause its still-running goals once the TTL passes.
+    yield* Effect.forever(
+      Effect.andThen(Effect.sleep(HEARTBEAT_INTERVAL), Effect.andThen(beat, sweep)).pipe(
+        Effect.catchCause((cause) => Effect.logWarning("failed to refresh the goal heartbeat", { cause })),
+      ),
+    ).pipe(Effect.forkScoped({ startImmediately: true }))
 
     // A clean shutdown removes this process's heartbeat right away, so a server that restarts inside the TTL reads
     // its predecessor as dead and sweeps its goals instead of skipping them while the record is still fresh. A
