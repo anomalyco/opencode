@@ -153,7 +153,8 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
   const input = () => form.draft(form.tab()).customText
   const on = () => form.draft(form.tab()).customSelected
   const multi = createMemo(() => question()?.multiple === true)
-  const count = createMemo(() => options().length + 1)
+  const custom = createMemo(() => question()?.custom === true)
+  const count = createMemo(() => options().length + (custom() ? 1 : 0))
 
   const summary = createMemo(() => {
     if (total() === 1) return language.t("session.question.title")
@@ -639,78 +640,80 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
             )}
           </For>
 
-          <div
-            data-slot="question-option"
-            data-custom="true"
-            data-picked={on()}
-            data-editing={store.editing}
-            data-disabled={sending()}
-            onClick={(event) => {
-              if (event.target !== event.currentTarget || sending()) return
-              setStore("focus", options().length)
-              form.selectCustom()
-              setStore("editing", true)
-              customInput?.focus()
-            }}
-          >
-            <button
-              type="button"
-              ref={customRef}
-              data-slot="question-custom-toggle"
-              role={multi() ? "checkbox" : "radio"}
-              aria-checked={on()}
-              aria-label={customLabel()}
-              aria-keyshortcuts={count() <= 9 ? String(count()) : undefined}
-              disabled={sending()}
-              onFocus={() => setStore("focus", options().length)}
-              onClick={customToggle}
-            >
-              <Mark multi={multi()} picked={on()} />
-            </button>
-            <TextInput
-              ref={(el) => (customInput = el)}
-              class="question-custom-field"
-              dir="auto"
-              aria-label={customLabel()}
-              placeholder={customLabel()}
-              value={input()}
-              disabled={sending()}
-              onFocus={() => {
-                if (focusFrame !== undefined) cancelAnimationFrame(focusFrame)
-                focusFrame = undefined
+          <Show when={custom()}>
+            <div
+              data-slot="question-option"
+              data-custom="true"
+              data-picked={on()}
+              data-editing={store.editing}
+              data-disabled={sending()}
+              onClick={(event) => {
+                if (event.target !== event.currentTarget || sending()) return
                 setStore("focus", options().length)
+                form.selectCustom()
                 setStore("editing", true)
+                customInput?.focus()
               }}
-              onClick={() => form.selectCustom()}
-              onBlur={() => setStore("editing", false)}
-              onKeyDown={(e) => {
-                if (e.isComposing || e.keyCode === 229) return
+            >
+              <button
+                type="button"
+                ref={customRef}
+                data-slot="question-custom-toggle"
+                role={multi() ? "checkbox" : "radio"}
+                aria-checked={on()}
+                aria-label={customLabel()}
+                aria-keyshortcuts={count() <= 9 ? String(count()) : undefined}
+                disabled={sending()}
+                onFocus={() => setStore("focus", options().length)}
+                onClick={customToggle}
+              >
+                <Mark multi={multi()} picked={on()} />
+              </button>
+              <TextInput
+                ref={(el) => (customInput = el)}
+                class="question-custom-field"
+                dir="auto"
+                aria-label={customLabel()}
+                placeholder={customLabel()}
+                value={input()}
+                disabled={sending()}
+                onFocus={() => {
+                  if (focusFrame !== undefined) cancelAnimationFrame(focusFrame)
+                  focusFrame = undefined
+                  setStore("focus", options().length)
+                  setStore("editing", true)
+                }}
+                onClick={() => form.selectCustom()}
+                onBlur={() => setStore("editing", false)}
+                onKeyDown={(e) => {
+                  if (e.isComposing || e.keyCode === 229) return
 
-                if (e.key === "Escape") {
+                  if (e.key === "Escape") {
+                    e.preventDefault()
+                    setStore("editing", false)
+                    focus(options().length)
+
+                    return
+                  }
+
+                  if ((e.metaKey || e.ctrlKey) && !e.altKey) return
+
+                  if (e.key !== "Enter") return
                   e.preventDefault()
-                  setStore("editing", false)
-                  focus(options().length)
-
-                  return
-                }
-
-                if ((e.metaKey || e.ctrlKey) && !e.altKey) return
-
-                if (e.key !== "Enter") return
-                e.preventDefault()
-                commitCustom()
-              }}
-              onInput={(e) => form.input(e.currentTarget.value)}
-            />
-            <Show when={count() <= 9}>
-              <Keybind
-                keys={[String(count())]}
-                variant={on() ? "outline" : "neutral"}
-                data-slot="question-option-shortcut"
-                aria-hidden="true"
+                  commitCustom()
+                }}
+                onInput={(e) => form.input(e.currentTarget.value)}
               />
-            </Show>
-          </div>
+              <Show when={count() <= 9}>
+                <Keybind
+                  keys={[String(count())]}
+                  variant={on() ? "outline" : "neutral"}
+                  data-slot="question-option-shortcut"
+                  aria-hidden="true"
+                />
+              </Show>
+            </div>
+          </Show>
         </div>
       </DockPrompt>
     </div>

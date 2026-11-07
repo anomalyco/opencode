@@ -145,6 +145,7 @@ export const LongList = {
           fields: [
             {
               key: "details",
+              custom: true,
               type: "multiselect",
               title: "Details",
               description: "Which should the builder add next? Pick any.",
@@ -347,6 +348,29 @@ export const LongPrompt = {
               ],
               custom: true,
             },
+          ],
+        },
+      }}
+    />
+  ),
+}
+
+// Closed choices followed by free text, to exercise the field-specific custom policy.
+export const ClosedChoices = {
+  render: () => (
+    <SessionPreview
+      title="Choose from the available answers"
+      description="opencode · closed-choice questions"
+      document={questionPendingDocument}
+      request={{
+        type: "question",
+        value: {
+          ...activeQuestionRequest,
+          fields: [
+            { ...activeQuestionRequest.fields[0], custom: false },
+            { ...activeQuestionRequest.fields[1], custom: false },
+            { ...activeQuestionRequest.fields[0], key: "default", custom: undefined },
+            { key: "notes", type: "string", title: "Notes", description: "Any other notes?" },
           ],
         },
       }}
