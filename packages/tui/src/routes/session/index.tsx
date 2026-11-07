@@ -2029,28 +2029,37 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const turn = () => ({ index: ctx.messageIndex(props.message.id), legacy: ctx.legacyTurns() })
   const duration = createMemo(() => SessionTurn.duration(messages(), props.message, turn()))
   const tokensPerSecond = createMemo(() => SessionTurn.tokensPerSecond(messages(), props.message, turn()))
-  const timestamp = createMemo(() => {
-    const completed = props.message.time.completed
-    if (completed === undefined) return
-    const time = Locale.time(completed)
-    const date = Locale.date(completed, config.data.session.date_format)
-
-    // Mirror the footer parts that precede the timestamp so it drops whole pieces instead of wrapping.
+  const interrupted = createMemo(() => props.message.error?.message === "Step interrupted")
+  // The scrollbox reserves its scrollbar track and viewport gutter before the footer's left padding.
+  const availableWidth = createMemo(() => ctx.width - 3 - (config.data.session.scrollbar ? 3 : 0))
+  const baseWidth = createMemo(() => {
     let used = stringWidth(Locale.titlecase(props.message.agent))
     if (ctx.terminal.width >= 28) used += stringWidth(` · ${model()}`)
     const elapsed = duration()
     if (elapsed && (ctx.terminal.width < 28 || ctx.terminal.width >= 36))
       used += stringWidth(` · ${Locale.duration(elapsed)}`)
+    if (interrupted()) used += stringWidth(" · interrupted")
+    return used
+  })
+  const showTokensPerSecond = createMemo(() => {
     const tps = tokensPerSecond()
-    if (config.data.session.tps && tps) used += stringWidth(` · ${tps.toFixed(1)} tok/s`)
-    if (props.message.error?.message === "Step interrupted") used += stringWidth(" · interrupted")
+    if (!config.data.session.tps || !tps) return
+    if (baseWidth() + stringWidth(` · ${tps.toFixed(1)} tok/s`) > availableWidth()) return
+    return tps
+  })
+  const timestamp = createMemo(() => {
+    const completed = props.message.time.completed
+    if (completed === undefined) return
+    const time = Locale.time(completed)
+    const date = Locale.date(completed, config.data.session.date_format)
+    const tps = tokensPerSecond()
+    // Count the tokens/sec metric even when it is hidden, so the timestamp never reappears as the line narrows.
+    const used = baseWidth() + (config.data.session.tps && tps ? stringWidth(` · ${tps.toFixed(1)} tok/s`) : 0)
 
     // Drop the whole date first, then the whole time, as the terminal narrows.
-    const available = ctx.width - 3
-    if (used + stringWidth(` · ${time} · ${date}`) <= available) return `${time} · ${date}`
-    if (used + stringWidth(` · ${time}`) <= available) return time
+    if (used + stringWidth(` · ${time} · ${date}`) <= availableWidth()) return `${time} · ${date}`
+    if (used + stringWidth(` · ${time}`) <= availableWidth()) return time
   })
-  const interrupted = createMemo(() => props.message.error?.message === "Step interrupted")
   const freeLimit = createMemo(() => props.message.error?.type === "provider.free-limit")
   const limitNotice = useLimitNotice(() => props.message)
   return (
@@ -2081,7 +2090,7 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
           <Show when={duration() && (ctx.terminal.width < 28 || ctx.terminal.width >= 36)}>
             <span style={{ fg: theme.text.muted }}> · {Locale.duration(duration())}</span>
           </Show>
-          <Show when={config.data.session.tps && tokensPerSecond()}>
+          <Show when={showTokensPerSecond()}>
             {(value) => <span style={{ fg: theme.text.muted }}> · {value().toFixed(1)} tok/s</span>}
           </Show>
           <Show when={config.data.session.timestamps && timestamp()}>

@@ -7,6 +7,7 @@ import * as Open from "@opencode/util/open"
 import { waitForGoUpsellConnect } from "../src/component/dialog-go-upsell"
 import { GoUpsellArtRenderable } from "../src/component/go-upsell-art"
 import { Locale } from "../src/util/locale"
+import { stringWidth } from "../src/util/string-width"
 import { SimulationRenderer } from "@opencode/simulation/frontend/renderer"
 import path from "node:path"
 import { Writable } from "node:stream"
@@ -883,7 +884,7 @@ test("drops assistant footer timestamp parts as the terminal narrows", async () 
     config: {
       animations: false,
       tabs: { mode: "off" },
-      session: { sidebar: "hide", tps: true, timestamps: true, date_format: "dd-mon-yyyy" },
+      session: { sidebar: "hide", scrollbar: true, tps: true, timestamps: true, date_format: "dd-mon-yyyy" },
     },
     args: { sessionID: session.id },
     fetch: (url) => {
@@ -901,22 +902,27 @@ test("drops assistant footer timestamp parts as the terminal narrows", async () 
   const wide = await setup.waitForFrame((frame) => frame.includes("Footer width answer"))
   expect(wide).toContain(Locale.datetime(completed, "dd-mon-yyyy"))
 
-  setup.resize(66, 40)
+  const footer = wide.split("\n").find((line) => line.includes("Build ·"))!
+  const bar = footer.lastIndexOf("█")
+  const full = footer.slice(footer.indexOf("Build"), bar === -1 ? undefined : bar).trimEnd()
+  const exact = stringWidth(full) + 10
+
+  setup.resize(exact, 40)
   await setup.flush()
-  const medium = await setup.waitForFrame(
-    (frame) =>
-      frame.includes("Footer width answer") &&
-      frame.includes(Locale.time(completed)) &&
-      !frame.includes(Locale.date(completed, "dd-mon-yyyy")),
-  )
-  expect(medium).not.toContain("Nov")
-  expect(medium).not.toContain("2026")
+  expect(setup.captureCharFrame()).toContain(full)
+
+  // One column narrower, the whole date drops instead of its last word wrapping.
+  setup.resize(exact - 1, 40)
+  await setup.flush()
+  const boundary = setup.captureCharFrame()
+  expect(boundary).toContain(Locale.time(completed))
+  expect(boundary).not.toContain("Nov")
+  expect(boundary).not.toContain("2026")
 
   setup.resize(48, 40)
   await setup.flush()
-  const narrow = await setup.waitForFrame(
-    (frame) => frame.includes("Footer width answer") && !frame.includes(Locale.time(completed)),
-  )
+  const narrow = setup.captureCharFrame()
+  expect(narrow).not.toContain(Locale.time(completed))
   expect(narrow).not.toContain("Nov")
   expect(narrow).not.toContain("2026")
 })
