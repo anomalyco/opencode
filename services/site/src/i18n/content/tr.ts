@@ -390,7 +390,7 @@ export const content = {
         },
       },
       install:
-        "Önce Chrome uzantısını yükleyin. Kalan adımlarda size yol gösterir. CLI'yi doğrudan yüklemek için bunlardan birini kullanın.",
+        "Önce [Chrome uzantısını] yükleyin. Kalan adımlarda size yol gösterir. CLI'yi doğrudan yüklemek için (buna ihtiyacınız olmamalı) bunlardan birini kullanın.",
     },
   },
   apps: {

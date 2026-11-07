@@ -269,7 +269,7 @@ export const content = {
         allowlists: { title: "Hvidlister", body: "Begræns en sessions faner til de sites, du angiver." },
       },
       install:
-        "Installer Chrome-udvidelsen først. Den guider dig gennem resten af trinene. Vil du installere CLI'en direkte, så brug en af disse.",
+        "Installer [Chrome-udvidelsen] først. Den guider dig gennem resten af trinene. Vil du installere CLI'en direkte (det burde du ikke have brug for), så brug en af disse.",
     },
   },
   apps: {

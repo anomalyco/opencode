@@ -51,10 +51,10 @@ export const extensionPages: readonly Extension[] = [
       { title: "Allowlists", body: "Limit a session's tabs to the sites you name." },
     ],
     install: {
-      lead: "Install the Chrome extension first. It walks you through the rest of the steps. To install the CLI directly, use any of these.",
+      lead: "Install the [Chrome extension] first. It walks you through the rest of the steps. To install the CLI directly (you should not need to do this), use any of these.",
       commands: [
         { method: "curl", command: "curl -fsSL https://opencode.ai/browse/install | bash" },
-        { method: "powershell", command: "irm https://opencode.ai/browse/install.ps1 | iex" },
+        { method: "pwsh", command: "irm https://opencode.ai/browse/install.ps1 | iex" },
         { method: "npm", command: "npm install -g @opencode/browse && browse install" },
         { method: "bun", command: "bun add -g @opencode/browse && browse install" },
       ],

@@ -365,7 +365,7 @@ export const content = {
         },
       },
       install:
-        "Installez d'abord l'extension Chrome. Elle vous guide pour le reste des étapes. Pour installer la CLI directement, utilisez l'une de ces commandes.",
+        "Installez d'abord l'[extension Chrome]. Elle vous guide pour le reste des étapes. Pour installer la CLI directement (vous ne devriez pas en avoir besoin), utilisez l'une de ces commandes.",
     },
   },
   apps: {

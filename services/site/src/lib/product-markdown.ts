@@ -150,7 +150,9 @@ export function extensionMarkdown(slug: ExtensionSlug) {
       extension.features.map((feature) => `- **${feature.title}:** ${feature.body}`).join("\n"),
       "## Install",
       extension.store && `Add to Chrome from the ${link("Chrome Web Store", extension.store)}.`,
-      extension.install.lead,
+      extension.store
+        ? extension.install.lead.replace(/\[([^\]]+)\]/g, (_, text) => link(text, extension.store!))
+        : extension.install.lead.replace(/\[([^\]]+)\]/g, "$1"),
       extension.install.command && codeFence("bash", extension.install.command),
       extension.install.commands && codeFence("bash", extension.install.commands.map((item) => item.command).join("\n")),
       `Source: ${link(extension.source.replace("https://", ""), extension.source)}`,

@@ -302,7 +302,7 @@ export const content = {
         allowlists: { title: "Allowlists", body: "Beschränke die Tabs einer Session auf die Websites, die du nennst." },
       },
       install:
-        "Installiere zuerst die Chrome-Extension. Sie führt dich durch die restlichen Schritte. Um die CLI direkt zu installieren, nimm einen dieser Befehle.",
+        "Installiere zuerst die [Chrome-Extension]. Sie führt dich durch die restlichen Schritte. Um die CLI direkt zu installieren (das solltest du nicht brauchen), nimm einen dieser Befehle.",
     },
   },
   apps: {
