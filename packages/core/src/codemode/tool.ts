@@ -12,6 +12,7 @@ import type {
   Result,
 } from "@opencode/schema/tool"
 import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
+import { Flag } from "../flag.js"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { Permission } from "../permission.js"
@@ -118,7 +119,7 @@ export const create = (
               yield* Effect.sleep(wait).pipe(Effect.andThen(lock.withPermit(publish)), Effect.forkIn(scope))
             }),
           )
-        const result = yield* runtime(inventory)
+        const result = yield* runtime(inventory, (yield* Flag.enabled("codemode_vm")) ? "vm" : "legacy")
           .execute(code)
           .pipe(
             Effect.provideService(Run, {
@@ -225,7 +226,8 @@ export const catalog = (inventory: Inventory) => {
   )
   const root: CatalogNode = { children: new Map() }
   for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
-  for (const tool of runtime(inventory).catalog)
+  // Either engine's runtime has the same catalog; reuse whichever exists rather than preparing the tools again.
+  for (const tool of (runtimes.legacy.get(inventory) ?? runtimes.vm.get(inventory) ?? runtime(inventory)).catalog)
     getNode(root, tool.path).tool = {
       type: "tool",
       name: tool.path.split(".").at(-1) ?? tool.path,
@@ -261,19 +263,23 @@ function renderCatalog(root: CatalogNode): ReadonlyArray<CodeModeCatalog.Tool | 
 }
 
 // Inventories are immutable snapshots, so tool definitions, schemas, and the search index are built
-// once per inventory and shared by its catalog and every execution.
-const runtimes = new WeakMap<Inventory, CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service>>()
+// once per inventory and engine, and shared by its catalog and every execution.
+const runtimes = {
+  legacy: new WeakMap<Inventory, CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service>>(),
+  vm: new WeakMap<Inventory, CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service>>(),
+}
 
-function runtime(inventory: Inventory) {
-  const cached = runtimes.get(inventory)
+function runtime(inventory: Inventory, engine: "legacy" | "vm" = "legacy") {
+  const cached = runtimes[engine].get(inventory)
   if (cached) return cached
   const tools = inventoryTools(inventory)
   const created = CodeMode.make<typeof tools, [typeof CodeModeFetch.extension]>({
     tools,
     extensions: [CodeModeFetch.extension],
     hooks: runHooks,
+    engine,
   })
-  runtimes.set(inventory, created)
+  runtimes[engine].set(inventory, created)
   return created
 }
 
@@ -287,14 +293,20 @@ export const check = (
   limits: CodeMode.ExecutionLimits,
   executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<Result, Error>,
 ) =>
-  CodeMode.make({ tools: inventoryTools(inventory), hooks: runHooks, limits })
-    .execute(code, bindings)
-    .pipe(
-      Effect.provideService(Run, {
-        executeTool: (name, tool, input) => executeTool(name, tool, input).pipe(Effect.map(resultValue)),
-        hooks: {},
-      }),
-    )
+  Flag.enabled("codemode_vm").pipe(
+    Effect.flatMap((vm) =>
+      CodeMode.make({
+        tools: inventoryTools(inventory),
+        hooks: runHooks,
+        limits,
+        engine: vm ? "vm" : "legacy",
+      }).execute(code, bindings),
+    ),
+    Effect.provideService(Run, {
+      executeTool: (name, tool, input) => executeTool(name, tool, input).pipe(Effect.map(resultValue)),
+      hooks: {},
+    }),
+  )
 
 function inventoryTools(inventory: Inventory) {
   // A path may carry namespace metadata, a callable tool, child tools, or all three.

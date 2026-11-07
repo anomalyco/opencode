@@ -1,0 +1,178 @@
+/* The small-screen menu (phone-menu.tsx): the menu button and the sheet it opens. Shared by the
+   site's top bar (site.tsx) and the 404 arcade (arcade/chrome.tsx), which renders without site.css. */
+[data-site] {
+  [data-component="site-menu-sheet"] {
+    display: none;
+  }
+
+  @media (max-width: 60rem) {
+    /* Two lines that turn into an X. The lines end on the page edge; the button extends past it
+       so the tap target is 44px square. */
+    [data-component="menu-toggle"] {
+      position: relative;
+      width: 2.75rem;
+      height: 2.75rem;
+      margin-inline-end: -0.75rem;
+
+      [data-slot="line"] {
+        position: absolute;
+        inset-inline-start: 0.75rem;
+        inset-inline-end: 0.75rem;
+        top: calc(50% - 0.5px);
+        height: 1px;
+        background: var(--text-strong);
+        transition: transform 200ms var(--ease-out);
+
+        &:first-child {
+          transform: translateY(-4.5px);
+        }
+
+        &:last-child {
+          transform: translateY(4.5px);
+        }
+      }
+
+      &[aria-expanded="true"] [data-slot="line"] {
+        &:first-child {
+          transform: rotate(45deg);
+        }
+
+        &:last-child {
+          transform: rotate(-45deg);
+        }
+      }
+    }
+
+    /* Covers the page under the header. It appears at once, as one surface with the bar, and its
+       rows rise in with a short stagger: each fades in and moves up 6px over 200ms on the strong
+       ease-out, 25ms after the one before, the delay capped at 100ms so the reveal ends by 300ms.
+       Closing is a quicker 120ms fade without stagger. Closed, it stays in place but hidden, and
+       every value is a transition, so a tap mid-reveal turns it around from where it is. */
+    [data-component="site-menu-sheet"] {
+      --menu-close: 120ms;
+
+      position: fixed;
+      inset: calc(var(--topbar-height) + env(safe-area-inset-top, 0px)) 0 0;
+      z-index: 9;
+      display: block;
+      visibility: hidden;
+      transition: visibility 0s linear var(--menu-close);
+
+      [data-slot="backdrop"] {
+        position: absolute;
+        inset: 0;
+        background: var(--bg);
+        opacity: 0;
+        transition: opacity var(--menu-close) var(--ease-out);
+      }
+
+      [data-slot="panel"] {
+        position: relative;
+        max-height: 100%;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        /* The "[n]" column centres on the top bar's logo mark above it: the mark's box starts at
+           --edge and is --phone-logo-height × 4/5 wide, and "[n]" is three mono characters (3ch)
+           wide, so the list starts half of each before the mark's centre. The labels keep their
+           gap after the numbers, so they share one column too. Mirrored right to left. */
+        --menu-start: calc(var(--edge) + var(--phone-logo-height, 30px) * 2 / 5 - 1.5ch);
+        padding: 0.5rem calc(var(--edge) + env(safe-area-inset-right, 0px))
+          calc(1.5rem + env(safe-area-inset-bottom, 0px)) calc(var(--menu-start) + env(safe-area-inset-left, 0px));
+        font-family: var(--font-mono);
+        /* The sheet's one job is this list: a step above the body copy, like a native menu. */
+        font-size: var(--fs-large);
+        line-height: 24px;
+
+        &:dir(rtl) {
+          padding-left: calc(var(--edge) + env(safe-area-inset-left, 0px));
+          padding-right: calc(var(--menu-start) + env(safe-area-inset-right, 0px));
+        }
+      }
+
+      [data-slot="panel"] > ul > li {
+        opacity: 0;
+        translate: 0 6px;
+        transition:
+          opacity var(--menu-close) var(--ease-out),
+          translate var(--menu-close) var(--ease-out);
+      }
+
+      a {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        min-height: 3.25rem;
+        color: var(--text);
+        transition: color 150ms ease;
+
+        &[aria-current="page"] {
+          color: var(--text-strong);
+        }
+
+        &:active {
+          color: var(--text-strong);
+        }
+      }
+
+      /* --text-muted, not --text-faint: 4.5:1 at this size. */
+      [data-slot="index"] {
+        color: var(--text-muted);
+      }
+
+      a[aria-current="page"] [data-slot="index"] {
+        color: var(--text-strong);
+      }
+
+      /* Touch has no hover to reveal the arrow, so it always shows, 6px after the label. */
+      [data-slot="external"] {
+        flex-shrink: 0;
+        margin-inline-start: calc(6px - 0.625rem);
+        translate: 0 -2px;
+      }
+
+      &[data-open] {
+        visibility: visible;
+        transition: visibility 0s;
+
+        [data-slot="backdrop"] {
+          opacity: 1;
+          transition: none;
+        }
+
+        [data-slot="panel"] > ul > li {
+          --row: 4;
+
+          opacity: 1;
+          translate: none;
+          transition-duration: 200ms;
+          transition-delay: calc(var(--row) * 25ms);
+
+          &:nth-child(1) {
+            --row: 0;
+          }
+
+          &:nth-child(2) {
+            --row: 1;
+          }
+
+          &:nth-child(3) {
+            --row: 2;
+          }
+
+          &:nth-child(4) {
+            --row: 3;
+          }
+        }
+      }
+
+      /* Reduced motion: the rows appear with a short fade, all at once and without moving. */
+      @media (prefers-reduced-motion: reduce) {
+        [data-slot="panel"] > ul > li,
+        &[data-open] [data-slot="panel"] > ul > li {
+          translate: none;
+          transition: opacity var(--menu-close) ease;
+        }
+      }
+    }
+  }
+}

@@ -2125,6 +2125,22 @@ test.each(["Build", "Plan"])("working marker matches the %s label and prompt rai
   }
 })
 
+test("configured agent color paints the label, prompt rail, and working marker", async () => {
+  const app = await renderFooter({
+    agents: [{ id: "build", name: "Build", mode: "primary", hidden: false, color: "#ff79c6" }],
+    state: { phase: "running" },
+  })
+  try {
+    await app.renderOnce()
+    const spans = app.captureSpans().lines.flatMap((line) => line.spans)
+    for (const text of ["Build", "\u2503", "\u25aa"]) {
+      expect(spans.find((span) => span.text.includes(text))?.fg.toInts()).toEqual([255, 121, 198, 255])
+    }
+  } finally {
+    app.cleanup()
+  }
+})
+
 test("spinner repaints keep the prompt instance, cursor state, and footer height stable", async () => {
   const app = await renderFooter({
     tuiConfig: createTuiResolvedConfig({ animations: true }),

@@ -2,7 +2,6 @@ import { getFilename } from "@opencode/util/path"
 import type { Project } from "@/runtime/server/types"
 import type { SessionInfo } from "@opencode/client/promise"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { useQueryClient } from "@tanstack/solid-query"
 import { createMemo, createSignal, onCleanup, untrack, type Accessor } from "solid-js"
 import { commandPaletteOptions, useCommand, type CommandOption } from "@/shell/commands/command"
 import { useFile } from "@/workspaces/files/model"
@@ -20,7 +19,6 @@ import { usePluginAttachment } from "@/runtime/plugin/host-apis"
 import { looksLikeSessionID } from "@/session/search"
 import { createSettingsPaletteEntries } from "@/settings/palette"
 import type { SettingsSearchResult } from "@/settings/search-results"
-import { matchesCommandPaletteEntry } from "./search"
 import {
   INITIAL_PALETTE_HIGHLIGHT_STATE,
   transitionPaletteHighlight,
@@ -434,33 +432,29 @@ export function createServerSessionEntries(props: {
     search,
     items(text: string) {
       const search = text.trim()
-      const all = entries(known(), search)
 
-      if (!search) return all.slice(0, props.recentLimit ?? ENTRY_LIMIT)
+      if (!search) return entries(known().slice(0, props.recentLimit ?? ENTRY_LIMIT), search)
 
-      return all.filter((entry) => matchesCommandPaletteEntry(entry, search)).slice(0, 50)
+      // The server matches titles, so narrow the loaded sessions before building entries for them. Building an entry
+      // per known session on every keystroke is what made search slow once the loaded index grew.
+      const value = search.toLowerCase()
+
+      const matched = known()
+        .filter((session) => (session.title || props.untitled()).toLowerCase().includes(value))
+        .slice(0, ENTRY_LIMIT * 10)
+
+      return entries(matched, search)
     },
   })
 }
 
+/** Sessions this client already has in its data store; the local list search narrows while the server answers. */
 export function createKnownServerSessions(context: Accessor<ServerCtx | undefined>) {
-  const queryClient = useQueryClient()
-
   return () => {
     const server = context()
 
     if (!server) return []
 
-    // Reuse the Home index already loaded before opening the palette; do not fetch an index for search.
-    const cached =
-      queryClient.getQueryData<SessionInfo[]>(["home-sessions", server.sdk.server]) ??
-      queryClient.getQueryData<SessionInfo[]>(["home-sessions", ServerConnection.key(server.sdk.server)]) ??
-      []
-
-    const merged = new Map([...cached, ...server.data.session.list()].map((session) => [session.id, session] as const))
-
-    return server.data.session.apply(
-      [...merged.values()].filter((session) => !session.parentID && !session.time.archived),
-    )
+    return server.data.session.list().filter((session) => !session.parentID && !session.time.archived)
   }
 }

@@ -1,0 +1,378 @@
+/* "Get started" on the home page (index.tsx): the title in column 1, the lead and one treatment in
+   the body, laid out like "Bring your own subs" and "Bring your own tools" below it. Settings › Get
+   started style shows one treatment through the section's data-style. */
+[data-page="home"][data-site] [data-component="block"][data-section="getStarted"] {
+  :is([data-slot="steps"], [data-slot="ladder"], [data-slot="sentence"], [data-slot="terminal"], [data-slot="cards"]) {
+    display: none;
+  }
+
+  h3 {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--title-size);
+    font-weight: 400;
+    color: var(--text-strong);
+  }
+
+  /* The steps' secondary actions are the blocks' neutral "more" buttons (site.css), with a chevron. */
+  [data-slot="more"] {
+    gap: 0.375rem;
+
+    /* The site button's size up to 60rem (site.css raises it to 44px and 16px there; the blocks'
+       "more" rule outranks that), so every button in the section is one size. */
+    @media (max-width: 60rem) {
+      height: 2.75rem;
+      font-size: var(--fs-ui);
+    }
+  }
+
+  [data-slot="chevron-right"] {
+    flex-shrink: 0;
+    color: var(--text-weak);
+    transition: translate 150ms var(--ease-out);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    a:hover [data-slot="chevron-right"] {
+      translate: calc(2px * var(--x-dir, 1)) 0;
+    }
+  }
+
+  /* "steps": a row per step, the number, its text, then its action; lines between them. */
+  /* One grid for the rows (each a subgrid), no lines between them. The two last columns hold the
+     actions: the neutral buttons share the last one, as wide as the longer of them, and the split
+     download button spans both, so the action area is as wide as the widest button. Every row's
+     text ends 40px before that area. */
+  &[data-style="steps"] [data-slot="steps"] {
+    display: grid;
+    grid-template-columns: 2.5rem minmax(0, 1fr) auto auto;
+    column-gap: 1rem;
+    row-gap: 2rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    li {
+      display: grid;
+      grid-column: 1 / -1;
+      grid-template-columns: subgrid;
+      align-items: center;
+      row-gap: 0.75rem;
+    }
+
+    [data-slot="number"] {
+      align-self: start;
+      padding-top: 0.125rem;
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      color: var(--text-weak);
+    }
+
+    [data-slot="text"] {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      margin-inline-end: 1.5rem;
+
+      p {
+        margin: 0;
+        color: var(--text);
+      }
+    }
+
+    [data-slot="action"] {
+      display: flex;
+      grid-column: 4;
+
+      &:has([data-component="site-split"]) {
+        grid-column: 3 / 5;
+        justify-content: flex-end;
+      }
+
+      /* The neutral buttons: the label on the left, the chevron at the right edge. */
+      > [data-slot="more"] {
+        flex: 1;
+        justify-content: space-between;
+      }
+    }
+
+    /* Phones: the action goes under the text, at the start; the neutral buttons share a column as
+       wide as the longer of them, the text spans it and the rest. */
+    @media (max-width: 40rem) {
+      grid-template-columns: 2rem auto minmax(0, 1fr);
+
+      li:has([data-component="site-split"]) {
+        grid-template-columns: 2rem minmax(0, 1fr);
+        column-gap: 1rem;
+      }
+
+      [data-slot="text"] {
+        grid-column: 2 / -1;
+        margin-inline-end: 0;
+      }
+
+      [data-slot="action"],
+      [data-slot="action"]:has([data-component="site-split"]) {
+        grid-column: 2;
+        justify-content: flex-start;
+      }
+
+      /* The split's column is the row's width (minmax), so it can be the container: under 260px
+         (a 320px screen) "Download for macOS" with its chevron would run off the screen, so it drops
+         the OS, as the narrow product cards do. */
+      [data-slot="action"]:has([data-component="site-split"]) {
+        container-type: inline-size;
+      }
+
+      @container (max-width: 260px) {
+        [data-component="site-split"] [data-slot="for-os"] {
+          display: none;
+        }
+      }
+    }
+  }
+
+  /* "ladder": three rungs like a price list, free first with a quiet marker. */
+  &[data-style="ladder"] [data-slot="ladder"] {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--border);
+
+    a {
+      display: grid;
+      grid-template-columns: minmax(0, 11rem) minmax(0, 1fr) auto auto;
+      align-items: center;
+      gap: 0.25rem 1.25rem;
+      min-height: 4.5rem;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+      text-decoration: none;
+      transition: background-color 150ms ease;
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          background: var(--menu-hover);
+        }
+      }
+
+      &:active {
+        background: var(--menu-hover);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--link);
+        outline-offset: -2px;
+      }
+    }
+
+    [data-slot="rung"] {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      font-family: var(--font-mono);
+      font-size: var(--title-size);
+      color: var(--text-strong);
+    }
+
+    [data-slot="marker"] {
+      font-size: var(--fs-micro);
+      letter-spacing: 0.04em;
+      color: var(--text-weak);
+    }
+
+    [data-slot="detail"] {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      font-size: var(--fs-body);
+    }
+
+    [data-slot="logos"] {
+      display: inline-flex;
+      gap: 0.375rem;
+      flex-shrink: 0;
+    }
+
+    [data-slot="logo"] {
+      width: 18px;
+      height: 18px;
+      background: var(--text-strong);
+      mask-size: contain;
+      mask-repeat: no-repeat;
+      mask-position: center;
+    }
+
+    [data-slot="price"] {
+      font-family: var(--font-sans);
+      font-size: var(--fs-lead);
+      font-weight: 500;
+      color: var(--text-strong);
+      white-space: nowrap;
+    }
+
+    /* Narrow: the rung and price on one line, the detail under them. */
+    @media (max-width: 40rem) {
+      a {
+        grid-template-columns: minmax(0, 1fr) auto auto;
+      }
+
+      [data-slot="detail"] {
+        grid-row: 2;
+        grid-column: 1 / -1;
+      }
+    }
+  }
+
+  /* "sentence": the path as one sentence at display size, the download button under it. */
+  &[data-style="sentence"] [data-slot="sentence"] {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1.5rem;
+
+    p {
+      margin: 0;
+      font-size: clamp(1.5rem, 2.2vw, 2rem);
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+      color: var(--text-strong);
+      text-wrap: pretty;
+    }
+  }
+
+  /* "terminal": a short transcript in a code panel, its copy button in the corner, a caption. */
+  &[data-style="terminal"] [data-slot="terminal"] {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+
+    [data-slot="window"] {
+      position: relative;
+      background: var(--bg-weak);
+    }
+
+    pre {
+      margin: 0;
+      padding: 1.25rem;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: var(--fs-small);
+      line-height: 1.6;
+    }
+
+    [data-slot="input"] {
+      color: var(--text-strong);
+    }
+
+    :is([data-slot="output"], [data-slot="option"]) {
+      color: var(--text-weak);
+    }
+
+    [data-slot="selected"] {
+      background: var(--bg-strong);
+      color: var(--text-inverted);
+    }
+
+    [data-slot="copy"] {
+      position: absolute;
+      top: 0.75rem;
+      inset-inline-end: 0.75rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.25rem 0.5rem;
+      background: var(--bg-weak);
+      font-family: var(--font-mono);
+      font-size: var(--fs-meta);
+      color: var(--text-weak);
+      cursor: pointer;
+      transition: color 150ms ease;
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--text-strong);
+        }
+      }
+
+      &:active {
+        color: var(--text-strong);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--link);
+        outline-offset: 2px;
+      }
+    }
+
+    [data-slot="caption"] {
+      margin: 0;
+      color: var(--text);
+    }
+  }
+
+  /* "cards": two cells, two columns each, in the tools grid's borders (index.css). */
+  &[data-style="cards"] [data-slot="cards"] {
+    display: grid;
+
+    li {
+      grid-column: span 2;
+      height: auto;
+      padding: 0;
+      align-items: stretch;
+    }
+
+    a {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      width: 100%;
+      padding: 1.25rem;
+      color: var(--text);
+      text-decoration: none;
+      transition: background-color 150ms ease;
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          background: var(--menu-hover);
+        }
+      }
+
+      &:active {
+        background: var(--menu-hover);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--link);
+        outline-offset: -2px;
+      }
+    }
+
+    h3 {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+
+    p {
+      margin: 0;
+      font-family: var(--font-sans);
+      font-size: var(--fs-body);
+      line-height: 1.45;
+    }
+  }
+}
+
+/* Tablet portrait (641 to 960px): the steps take the same two-card width as the lead and the logo
+   grids in the sections below, so the buttons end on the grids' right edge (spanning the grids'
+   last two columns cramped the step text to 160px). */
+@media (min-width: 40.0625rem) and (max-width: 60rem) {
+  [data-page="home"][data-site]
+    [data-component="block"][data-section="getStarted"][data-style="steps"]
+    [data-slot="steps"][data-slot="steps"] {
+    max-width: var(--two-cards);
+  }
+}

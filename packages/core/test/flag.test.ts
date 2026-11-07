@@ -32,6 +32,12 @@ describe("Flag.resolve", () => {
     })
   })
 
+  test("every registered flag, including codemode_vm, is off in a latest release build", () => {
+    expect(Flag.resolve({ entries: [], channel: "latest" })).toEqual(every({ enabled: false, source: "default" }))
+    expect(Flag.resolve({ entries: [], channel: "latest" }).codemode_vm.enabled).toBe(false)
+    expect(Flag.resolve({ entries: [], channel: "dev" }).codemode_vm.enabled).toBe(true)
+  })
+
   test("config overrides the default and OPENCODE_FLAGS overrides config", () => {
     const entries = [document({ todo: true, schedules: false })]
     const flags = Flag.resolve({ entries, channel: "dev", overrides: " media_blob , -todo,unknown_flag" })

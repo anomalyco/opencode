@@ -93,12 +93,7 @@ const setup = (experimental: ConfigExperimental.Info | undefined) =>
       },
       session: { prompt: (input) => Effect.sync(() => prompts.push(input)).pipe(Effect.as(undefined as never)) },
     }).pipe(
-      Effect.provide(
-        Layer.mock(Config.Service)({
-          entries: () => Effect.succeed([document(experimental)]),
-          snapshot: () => [document(experimental)],
-        }),
-      ),
+      Effect.provide(Layer.mock(Config.Service)({ entries: () => Effect.succeed([document(experimental)]) })),
       Effect.provide(Layer.succeed(Schedule.Service, schedules.service)),
       Effect.provide(permissionLayer({ assert: () => Effect.void })),
     )
