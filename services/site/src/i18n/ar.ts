@@ -282,6 +282,7 @@ export const dict = {
   "changelog.media.pause": "إيقاف مؤقت",
   "changelog.media.play": "تشغيل الفيديو",
   "changelog.list.more": "{{count}} أخرى",
+  "changelog.highlights.all": "كل أبرز ما في {{tag}}",
   "site.newTab": "{{label}} (يفتح في علامة تبويب جديدة)",
   "site.products.label": "المنتجات",
   "site.products.gridLabel": "منتجات OpenCode",

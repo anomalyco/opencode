@@ -285,6 +285,7 @@ export const dict = {
   "changelog.media.pause": "동영상 일시정지",
   "changelog.media.play": "동영상 재생",
   "changelog.list.more": "{{count}}개 더 보기",
+  "changelog.highlights.all": "{{tag}}의 하이라이트 모두 보기",
   "site.newTab": "{{label}} (새 탭에서 열림)",
   "site.products.label": "제품",
   "site.products.gridLabel": "OpenCode 제품",

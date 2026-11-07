@@ -285,6 +285,7 @@ export const dict = {
   "changelog.media.pause": "Durdur",
   "changelog.media.play": "Oynat",
   "changelog.list.more": "{{count}} tane daha",
+  "changelog.highlights.all": "{{tag}} sürümünün tüm öne çıkanlarını gör",
   "site.newTab": "{{label}} (yeni sekmede açılır)",
   "site.products.label": "Ürünler",
   "site.products.gridLabel": "OpenCode ürünleri",

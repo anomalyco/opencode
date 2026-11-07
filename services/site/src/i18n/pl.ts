@@ -285,6 +285,7 @@ export const dict = {
   "changelog.media.pause": "Wstrzymaj",
   "changelog.media.play": "Odtwórz",
   "changelog.list.more": "Jeszcze {{count}}",
+  "changelog.highlights.all": "Zobacz wszystkie najważniejsze zmiany w {{tag}}",
   "site.newTab": "{{label}} (otwiera się w nowej karcie)",
   "site.products.label": "Produkty",
   "site.products.gridLabel": "Produkty OpenCode",
