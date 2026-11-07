@@ -156,7 +156,7 @@ fn ide_mentions_insert_file_parts_with_their_lines() {
 #[test]
 fn lock_files_name_the_server_and_its_token() {
     let ide = Ide::start();
-    let home = tempfile::tempdir().unwrap();
+    let home = opencode_util::temp::tempdir().unwrap();
     let locks = home.path().join(".claude/ide");
     std::fs::create_dir_all(&locks).unwrap();
     std::fs::write(
@@ -171,9 +171,10 @@ fn lock_files_name_the_server_and_its_token() {
 
 #[test]
 fn zed_selection_is_read_from_its_database() {
-    let root = tempfile::tempdir().unwrap();
+    let root = opencode_util::temp::tempdir().unwrap();
     let db = root.path().join("db.sqlite");
-    let file = root.path().join("index.ts");
+    let file = root.path().join("src/index.ts");
+    std::fs::create_dir(root.path().join("src")).unwrap();
     std::fs::write(&file, "const a = 1\nconst b = 2\n").unwrap();
     zed_database(&db, &file, (6, 17));
     let setup = Setup::new(Source {
@@ -182,11 +183,10 @@ fn zed_selection_is_read_from_its_database() {
         ..Source::default()
     });
     // `index.*` names its directory too; bytes 6..17 run from line 1 into line 2.
-    let directory = root.path().file_name().unwrap().to_string_lossy().into_owned();
-    setup.wait_for(&format!("{directory}/index.ts#1-2"));
+    setup.wait_for("src/index.ts#1-2");
     // The next poll sees a new selection.
     zed::exec(&db, "update editor_selections set start = 12, end = 17").unwrap();
-    setup.wait_for(&format!("{directory}/index.ts#2"));
+    setup.wait_for("src/index.ts#2");
     let selection = setup.tui.prompt.editor.selection().unwrap();
     assert_eq!(selection.ranges[0].text, "const");
 }

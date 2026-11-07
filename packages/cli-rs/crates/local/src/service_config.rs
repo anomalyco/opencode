@@ -562,7 +562,7 @@ mod tests {
 
     #[test]
     fn writes_keep_typescript_key_order() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let config = config(dir.path(), "latest");
         assert_eq!(config.get(None, None).unwrap(), "{}");
         config.apply(&Edit::Password("p".into())).unwrap();
@@ -597,7 +597,7 @@ mod tests {
 
     #[test]
     fn password_and_remote() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let config = config(dir.path(), "latest");
         let password = config.get(Some("password"), None).unwrap();
         assert_eq!(password.len(), 43);
@@ -615,7 +615,7 @@ mod tests {
 
     #[test]
     fn repairs_legacy_remote_and_migrates_legacy_names() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let config = config(dir.path(), "latest");
         fs::create_dir_all(config.file.parent().unwrap()).unwrap();
         fs::write(&config.file, r#"{"remote":true,"port":5}"#).unwrap();

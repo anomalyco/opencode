@@ -72,14 +72,14 @@ fn messages(text: &str) -> Value {
 struct Plugins {
     harness: Harness,
     plugin: std::path::PathBuf,
-    _root: tempfile::TempDir,
+    _root: opencode_util::temp::TempDir,
 }
 
 deref_harness!(Plugins);
 
 /// The TUI on `route` with the sample's `build` in `<config>/plugins/sample`.
 fn open(route: Route, text: &str, build: &[u8]) -> Plugins {
-    let root = tempfile::tempdir().unwrap();
+    let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
     let plugin = config.join("plugins/sample");
     std::fs::create_dir_all(&plugin).unwrap();

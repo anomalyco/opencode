@@ -511,9 +511,9 @@ fn cli_config_files_match_typescript() {
         },
     ];
     for scenario in scenarios {
-        let ts_home = tempfile::tempdir().unwrap();
-        let rs_home = tempfile::tempdir().unwrap();
-        let mixed_home = tempfile::tempdir().unwrap();
+        let ts_home = opencode_util::temp::tempdir().unwrap();
+        let rs_home = opencode_util::temp::tempdir().unwrap();
+        let mixed_home = opencode_util::temp::tempdir().unwrap();
         for home in [&ts_home, &rs_home, &mixed_home] {
             seed(home.path(), &scenario.files);
         }
@@ -567,8 +567,8 @@ fn model_and_storage_files_match_typescript() {
         {},
     ]);
     let seed = "{\"x\":1,\"recent\":[{\"providerID\":\"z\",\"modelID\":\"y\",\"extra\":1},5],\"variant\":{\"\":\"a\"}}";
-    let ts = tempfile::tempdir().unwrap();
-    let mixed = tempfile::tempdir().unwrap();
+    let ts = opencode_util::temp::tempdir().unwrap();
+    let mixed = opencode_util::temp::tempdir().unwrap();
     for dir in [&ts, &mixed] {
         fs::write(dir.path().join("model.json"), seed).unwrap();
     }
@@ -611,8 +611,8 @@ fn model_and_storage_files_match_typescript() {
         json!({"sort": 1.5}),
     ];
     let storage_op = |set: &Value| json!({"key": "session-list", "initial": initial, "set": set});
-    let ts_state = tempfile::tempdir().unwrap();
-    let mixed_state = tempfile::tempdir().unwrap();
+    let ts_state = opencode_util::temp::tempdir().unwrap();
+    let mixed_state = opencode_util::temp::tempdir().unwrap();
     let all: Vec<Value> = sets.iter().map(storage_op).collect();
     oracle(&["storage", ts_state.path().to_str().unwrap(), "dev"], None, &Value::Array(all));
     let storage = Storage::new(mixed_state.path(), "dev").unwrap();
@@ -645,7 +645,7 @@ fn typescript_waits_for_the_rust_locks() {
     if !available() {
         return;
     }
-    let home = tempfile::tempdir().unwrap();
+    let home = opencode_util::temp::tempdir().unwrap();
     let paths = paths(home.path());
     let config = CliConfig::with_content(&paths, None);
     let storage = Storage::new(&paths.state, "dev").unwrap();

@@ -102,4 +102,3 @@ grammars-all = [
 
 [dev-dependencies]
 opencode-parity.workspace = true
-tempfile.workspace = true

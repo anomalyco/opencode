@@ -110,7 +110,7 @@ struct Harness {
     opened: Opened,
     state: PathBuf,
     next: std::cell::Cell<i64>,
-    _home: tempfile::TempDir,
+    _home: opencode_util::temp::TempDir,
 }
 
 fn mount() -> Harness {
@@ -158,7 +158,7 @@ fn mount_family() -> Harness {
 }
 
 fn mount_routes(endpoint: Option<Endpoint>, routes: Vec<MemoryRoute>) -> Harness {
-    let home = tempfile::tempdir().unwrap();
+    let home = opencode_util::temp::tempdir().unwrap();
     let paths = support::home_paths(home.path());
     let state = paths.state.clone();
     let memory = Memory::new(routes);

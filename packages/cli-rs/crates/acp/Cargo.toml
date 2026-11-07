@@ -26,4 +26,3 @@ url.workspace = true
 
 [dev-dependencies]
 bytes.workspace = true
-tempfile.workspace = true

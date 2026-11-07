@@ -263,7 +263,7 @@ fn patch(lines: &[&str]) -> String {
 
 #[tokio::test]
 async fn previews_added_files_as_new_and_deleted_files_as_empty() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = opencode_util::temp::tempdir().unwrap();
     let root = dir.path().to_str().unwrap().to_owned();
     for (name, content) in [
         ("file.ts", "one\r\ntwo\r\n"),

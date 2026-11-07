@@ -138,7 +138,7 @@ struct Kit {
     status: Arc<Mutex<Value>>,
     log: Log,
     opened: Rc<RefCell<Vec<String>>>,
-    _home: tempfile::TempDir,
+    _home: opencode_util::temp::TempDir,
 }
 
 deref_harness!(Kit);
@@ -149,7 +149,7 @@ impl Kit {
     }
 
     fn with(integrations: Value, mode: &'static str) -> Self {
-        let home = tempfile::tempdir().unwrap();
+        let home = opencode_util::temp::tempdir().unwrap();
         let status = Arc::new(Mutex::new(pending()));
         let fake = fake(integrations, status.clone(), mode);
         let log = fake.log();

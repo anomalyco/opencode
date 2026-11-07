@@ -50,14 +50,14 @@ fn session(id: &str) -> Value {
 struct Setup {
     harness: Harness,
     seen: Log,
-    home: tempfile::TempDir,
+    home: opencode_util::temp::TempDir,
 }
 
 deref_harness!(Setup);
 
 impl Setup {
     fn new(route: Route, pinned: &[&str]) -> Self {
-        let home = tempfile::tempdir().unwrap();
+        let home = opencode_util::temp::tempdir().unwrap();
         let state = home.path().join("state");
         std::fs::create_dir_all(&state).unwrap();
         std::fs::write(state.join("session.json"), json!({ "pinned": pinned }).to_string()).unwrap();

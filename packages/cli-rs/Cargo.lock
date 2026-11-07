@@ -161,12 +161,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fastrand"
-version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
-
-[[package]]
 name = "find-msvc-tools"
 version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -627,7 +621,6 @@ dependencies = [
  "percent-encoding",
  "regex",
  "serde_json",
- "tempfile",
  "tokio",
  "tokio-util",
  "url",
@@ -693,7 +686,6 @@ dependencies = [
  "rustix",
  "serde",
  "serde_json",
- "tempfile",
  "tokio",
  "unicode-width",
  "url",
@@ -703,10 +695,10 @@ dependencies = [
 name = "opencode-drive"
 version = "0.1.0"
 dependencies = [
+ "opencode-util",
  "opentui",
  "serde",
  "serde_json",
- "tempfile",
  "tokio-tungstenite",
  "url",
 ]
@@ -737,7 +729,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha1",
- "tempfile",
  "thiserror",
  "url",
 ]
@@ -774,7 +765,6 @@ dependencies = [
  "rustix",
  "serde",
  "serde_json",
- "tempfile",
  "tokio",
  "unicode-width",
 ]
@@ -800,7 +790,6 @@ dependencies = [
  "opentui",
  "serde",
  "serde_json",
- "tempfile",
  "unicode-width",
 ]
 
@@ -822,11 +811,11 @@ dependencies = [
  "log",
  "opencode-api",
  "opencode-local",
+ "opencode-util",
  "rand",
  "reqwest",
  "rustix",
  "serde_json",
- "tempfile",
  "thiserror",
  "tokio",
  "url",
@@ -843,9 +832,9 @@ dependencies = [
  "opencode-api",
  "opencode-local",
  "opencode-service",
+ "opencode-util",
  "serde",
  "serde_json",
- "tempfile",
  "tokio",
  "tokio-util",
 ]
@@ -874,7 +863,6 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "tempfile",
  "tokio",
  "tokio-tungstenite",
  "unicode-width",
@@ -895,7 +883,6 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "tempfile",
  "tree-sitter-agda",
  "tree-sitter-bash",
  "tree-sitter-c",
@@ -1404,19 +1391,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
 dependencies = [
  "futures-core",
-]
-
-[[package]]
-name = "tempfile"
-version = "3.27.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
-dependencies = [
- "fastrand",
- "getrandom 0.4.3",
- "once_cell",
- "rustix",
- "windows-sys 0.61.2",
 ]
 
 [[package]]

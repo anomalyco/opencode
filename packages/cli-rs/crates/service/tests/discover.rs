@@ -66,7 +66,7 @@ fn sleep_binary() -> PathBuf {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn prefers_the_service_of_the_typescript_binary_over_a_newer_one() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = opencode_util::temp::tempdir().unwrap();
     let state = dir.path().join("state");
     std::fs::create_dir_all(dir.path().join("install")).unwrap();
     let sleep = sleep_binary();

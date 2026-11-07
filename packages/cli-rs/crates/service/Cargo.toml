@@ -26,6 +26,6 @@ rustix.workspace = true
 
 [dev-dependencies]
 bytes.workspace = true
+opencode-util.workspace = true
 reqwest.workspace = true
-tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }

@@ -88,7 +88,7 @@ struct Kit {
     harness: Harness,
     servers: Arc<Mutex<Value>>,
     log: Log,
-    _home: tempfile::TempDir,
+    _home: opencode_util::temp::TempDir,
 }
 
 deref_harness!(Kit);
@@ -99,7 +99,7 @@ impl Kit {
     }
 
     fn with(servers: Value, skills: Option<Value>) -> Self {
-        let home = tempfile::tempdir().unwrap();
+        let home = opencode_util::temp::tempdir().unwrap();
         let servers = Arc::new(Mutex::new(servers));
         let fake = fake(servers.clone(), skills);
         let log = fake.log();

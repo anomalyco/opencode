@@ -17,12 +17,12 @@ exit "${DELEGATE_EXIT:-0}"
 "#;
 
 struct Fake {
-    dir: tempfile::TempDir,
+    dir: opencode_util::temp::TempDir,
 }
 
 impl Fake {
     fn new() -> Self {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let bin = dir.path().join("opencode");
         write_script(&bin, FAKE);
         Self { dir }
@@ -100,7 +100,7 @@ fn usage_errors_and_bare_plugin_never_start_the_binary() {
 
 #[test]
 fn a_missing_binary_says_how_to_fix_it() {
-    let data = tempfile::tempdir().unwrap();
+    let data = opencode_util::temp::tempdir().unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_opencode-rs"))
         .args(["uninstall", "--dry-run"])
         .env("OPENCODE_TS_BIN", "/nonexistent/opencode")
@@ -121,7 +121,7 @@ fn a_missing_binary_says_how_to_fix_it() {
 #[test]
 fn an_interrupt_waits_for_the_remote_access_command() {
     use std::os::unix::process::CommandExt;
-    let dir = tempfile::tempdir().unwrap();
+    let dir = opencode_util::temp::tempdir().unwrap();
     let bin = dir.path().join("opencode");
     write_script(
         &bin,

@@ -37,7 +37,7 @@ await rename(registration + ".tmp", registration)
 "#;
 
 struct Sandbox {
-    root: tempfile::TempDir,
+    root: opencode_util::temp::TempDir,
 }
 
 impl Sandbox {
@@ -46,7 +46,7 @@ impl Sandbox {
             eprintln!("skipped: bun is not on PATH");
             return None;
         }
-        let sandbox = Self { root: tempfile::tempdir().unwrap() };
+        let sandbox = Self { root: opencode_util::temp::tempdir().unwrap() };
         for dir in ["home", "state/opencode", "config/opencode", "data", "cache", "work"] {
             std::fs::create_dir_all(sandbox.path(dir)).unwrap();
         }

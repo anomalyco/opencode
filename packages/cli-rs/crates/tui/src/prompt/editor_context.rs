@@ -1196,7 +1196,7 @@ mod tests {
 
     #[test]
     fn lock_files_pick_the_closest_workspace() {
-        let root = tempfile::tempdir().unwrap();
+        let root = opencode_util::temp::tempdir().unwrap();
         let write = |name: &str, value: Value| {
             std::fs::write(root.path().join(name), value.to_string()).unwrap();
         };
@@ -1218,7 +1218,7 @@ mod tests {
 
     #[test]
     fn zed_byte_offsets_become_utf16_positions() {
-        let root = tempfile::tempdir().unwrap();
+        let root = opencode_util::temp::tempdir().unwrap();
         let db = root.path().join("db.sqlite");
         zed::exec(
             &db,
@@ -1249,7 +1249,7 @@ mod tests {
 
     #[test]
     fn zed_without_the_sqlite_library_is_unavailable() {
-        let root = tempfile::tempdir().unwrap();
+        let root = opencode_util::temp::tempdir().unwrap();
         let db = root.path().join("db.sqlite");
         zed::exec(
             &db,

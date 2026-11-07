@@ -120,7 +120,7 @@ mod tests {
 
     #[test]
     fn load_update_and_reject_bad_keys() {
-        let state = tempfile::tempdir().unwrap();
+        let state = opencode_util::temp::tempdir().unwrap();
         let storage = Storage::new(state.path(), "dev").unwrap();
         let initial = json!({"open": true});
         assert_eq!(storage.load("view", &initial).unwrap(), initial);

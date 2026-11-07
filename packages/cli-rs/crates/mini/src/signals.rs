@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn a_trace_writes_latest_and_records() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let trace = Trace::start(dir.path(), 42, "/work", &["mini".into()]).unwrap();
         trace.write("send.prompt", json!({ "sessionID": "ses_1" }));
         trace.write("ui.idle", Value::Null);

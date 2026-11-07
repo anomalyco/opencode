@@ -114,27 +114,27 @@ struct Setup {
     seen: Seen,
     /// Lets the agent and model reads answer.
     catalog: Arc<AtomicBool>,
-    _home: tempfile::TempDir,
+    _home: opencode_util::temp::TempDir,
 }
 
 deref_harness!(Setup);
 
 impl Setup {
     fn new(route: Route) -> Self {
-        let home = tempfile::tempdir().unwrap();
+        let home = opencode_util::temp::tempdir().unwrap();
         Self::with_home(route, home)
     }
 
     /// The agent and model reads wait for `catalog` to be set.
     fn held(route: Route) -> Self {
-        Self::build(route, tempfile::tempdir().unwrap(), false)
+        Self::build(route, opencode_util::temp::tempdir().unwrap(), false)
     }
 
-    fn with_home(route: Route, home: tempfile::TempDir) -> Self {
+    fn with_home(route: Route, home: opencode_util::temp::TempDir) -> Self {
         Self::build(route, home, true)
     }
 
-    fn build(route: Route, home: tempfile::TempDir, catalog: bool) -> Self {
+    fn build(route: Route, home: opencode_util::temp::TempDir, catalog: bool) -> Self {
         let seen = Seen::default();
         let catalog = Arc::new(AtomicBool::new(catalog));
         let fixture = Fixture { seen: seen.clone(), created: Arc::default(), catalog: catalog.clone() };
@@ -518,7 +518,7 @@ fn history_file_is_shared_with_typescript() {
     // TypeScript's load rewrites every entry as it serializes them: the Rust lines survive unchanged.
     assert_eq!(typescript, format!("{rust}{}\n", entry));
 
-    let home = tempfile::TempDir::new().unwrap();
+    let home = opencode_util::temp::TempDir::new().unwrap();
     std::fs::create_dir_all(home.path().join("state")).unwrap();
     std::fs::copy(state.join("prompt-history.jsonl"), home.path().join("state/prompt-history.jsonl")).unwrap();
     let again = Setup::with_home(session_route(), home);

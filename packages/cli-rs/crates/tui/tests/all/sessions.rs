@@ -155,7 +155,7 @@ struct Kit {
     harness: Harness,
     log: Log,
     state: std::path::PathBuf,
-    _home: tempfile::TempDir,
+    _home: opencode_util::temp::TempDir,
 }
 
 deref_harness!(Kit);
@@ -166,7 +166,7 @@ impl Kit {
     }
 
     fn with(mode: Mode, delete_status: u16) -> Self {
-        let home = tempfile::tempdir().unwrap();
+        let home = opencode_util::temp::tempdir().unwrap();
         let paths = support::home_paths(home.path());
         std::fs::create_dir_all(&paths.state).unwrap();
         std::fs::write(paths.state.join("session.json"), r#"{"pinned":["ses_b"]}"#).unwrap();

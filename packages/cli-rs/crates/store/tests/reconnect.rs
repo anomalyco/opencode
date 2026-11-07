@@ -90,7 +90,7 @@ fn reply(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn the_event_stream_follows_a_service_that_crashed_and_was_replaced() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = opencode_util::temp::tempdir().unwrap();
     let paths = Paths::from_vars(|name| match name {
         "HOME" => Some(OsString::from(dir.path())),
         "XDG_STATE_HOME" => Some(dir.path().join("state").into()),
