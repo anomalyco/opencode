@@ -1,4 +1,4 @@
-// Gateway-sized catalog shared by the settings keeper and its benchmark.
+// Gateway-sized catalog for the model settings keeper.
 export function modelCatalog() {
   const all = ["a", "b", "c"].map((gateway) => ({
     id: `gateway-${gateway}`,

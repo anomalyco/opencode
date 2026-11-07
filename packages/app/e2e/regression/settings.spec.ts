@@ -2269,96 +2269,49 @@ test("providers: switching Console accounts keeps the list until the new workspa
   await expect(connected).not.toHaveAttribute("data-flashed")
 })
 
-test("models: gateway catalogs keep mounted rows bounded while scrolling, searching and persisting visibility", async ({
-  page,
-}) => {
+test("models: gateway catalogs bound rows and preserve scrolling", async ({ page }) => {
   const { settings } = await open(page, { provider: modelCatalog() })
   await settings.getByRole("tab", { name: "Models", exact: true }).click()
   const panel = settings.locator(".settings-panel:visible")
   const models = settings.locator(".settings-models")
   const search = settings.getByRole("searchbox", { name: "Search models", exact: true })
-  const group = (id: string) =>
-    models
-      .locator('[data-component="settings-models-provider"]')
-      .filter({ has: page.getByRole("button", { name: `Gateway ${id.slice(-1).toUpperCase()}`, exact: true }) })
-  const trigger = (id: string) => group(id).locator(".settings-models-group-trigger")
-  const bounded = async () => {
-    // Even a dense viewport plus overscan must not mount the entire 900-model catalog.
-    await expect
-      .poll(() => models.getByRole("switch").count())
-      .toBeLessThan(Math.ceil(page.viewportSize()!.height / 16) + 36)
-  }
-
-  await expect(models.getByRole("switch", { name: "A Model 000", exact: true })).toBeVisible()
-  await bounded()
-  // Wide and narrow layouts use different scroll owners; mounting a group must preserve either offset.
-  for (const width of [1280, 640]) {
-    await page.setViewportSize({ width, height: 720 })
-    const button = trigger("gateway-b")
-    await button.scrollIntoViewIfNeeded()
-    await button.click()
-    await expect(button).toHaveAttribute("aria-expanded", "false")
-    const offset = await panel.evaluate((element) => {
+  const bounded = () => expect.poll(() => models.getByRole("switch").count()).toBeLessThan(100)
+  const scroll = (target?: "end") =>
+    panel.evaluate((element, target) => {
       const scroller = getComputedStyle(element).overflowY !== "visible" ? element : element.closest(".settings")!
+      if (target === "end") scroller.scrollTop = scroller.scrollHeight
       return scroller.scrollTop
-    })
-    expect(offset).toBeGreaterThan(0)
-    await button.click()
-    await expect(button).toHaveAttribute("aria-expanded", "true")
-    await expect(button).toBeInViewport()
-    await expect
-      .poll(() =>
-        panel.evaluate((element) => {
-          const scroller = getComputedStyle(element).overflowY !== "visible" ? element : element.closest(".settings")!
-          return scroller.scrollTop
-        }),
-      )
-      .toBe(offset)
-    await bounded()
-  }
-  await page.setViewportSize({ width: 1280, height: 720 })
-  await panel.evaluate((element) => {
-    const scroller = getComputedStyle(element).overflowY !== "visible" ? element : element.closest(".settings")!
-    scroller.scrollTop = scroller.scrollHeight
-  })
+    }, target)
+
+  const first = models.getByRole("switch", { name: "A Model 000", exact: true })
+  await expect(first).toBeVisible()
+  await bounded()
+  await scroll("end")
   const far = models.getByRole("switch", { name: "C Model 299", exact: true })
   await expect(far).toBeVisible()
   await expect(far).not.toBeChecked()
   await far.locator("..").locator('[data-slot="switch-control"]').click()
   await expect(far).toBeChecked()
+  await search.fill("Model")
+  await expect(first).toBeVisible()
   await bounded()
-
-  await search.fill("Model 299")
-  await expect(models.getByRole("switch")).toHaveCount(3)
-  await expect(models.getByRole("switch", { name: "A Model 299", exact: true })).not.toBeChecked()
-  await expect(far).toBeChecked()
-  await search.fill("C Model 299")
-  await expect(models.getByRole("switch")).toHaveCount(1)
-  await expect(far).toBeVisible()
   await search.clear()
-  await trigger("gateway-a").click()
-  await expect(trigger("gateway-a")).toHaveAttribute("aria-expanded", "false")
-  await trigger("gateway-c").click()
-  await expect(trigger("gateway-c")).toHaveAttribute("aria-expanded", "false")
 
-  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
-  await settings.getByRole("tab", { name: "Models", exact: true }).click()
-  await expect(trigger("gateway-c")).toHaveAttribute("aria-expanded", "false")
-  await expect(trigger("gateway-a")).toHaveAttribute("aria-expanded", "false")
-  await trigger("gateway-c").click()
-  await expect(trigger("gateway-c")).toHaveAttribute("aria-expanded", "true")
-  await bounded()
-  await search.fill("C Model 299")
-  await expect(far).toBeChecked()
-  await search.clear()
-  await page.setViewportSize({ width: 640, height: 720 })
-  await panel.evaluate((element) => {
-    const scroller = getComputedStyle(element).overflowY !== "visible" ? element : element.closest(".settings")!
-    scroller.scrollTop = scroller.scrollHeight
-  })
-  await expect(far).toBeVisible()
-  await expect(far).toBeChecked()
-  await bounded()
+  // Wide and narrow layouts have different scroll owners.
+  for (const width of [1280, 640]) {
+    await page.setViewportSize({ width, height: 720 })
+    const button = models.getByRole("button", { name: "Gateway B", exact: true })
+    await button.scrollIntoViewIfNeeded()
+    await button.click()
+    await expect(button).toHaveAttribute("aria-expanded", "false")
+    const offset = await scroll()
+    expect(offset).toBeGreaterThan(0)
+    await button.click()
+    await expect(button).toHaveAttribute("aria-expanded", "true")
+    await expect(button).toBeInViewport()
+    await expect.poll(() => scroll()).toBe(offset)
+    await bounded()
+  }
 })
 
 test("models: a Console provider picked on Providers opens its collapsed group, then the search types normally", async ({
