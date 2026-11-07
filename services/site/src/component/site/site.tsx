@@ -68,9 +68,9 @@ import { Tooltips } from "./tooltip"
 import { SiteSearch } from "./search"
 import { preloadVisibleLinks } from "./preload-visible"
 import { adoptVoice, dropVoice } from "./voice/host"
-// The fan's styles load with the page; its code on first use (loadLogoFan).
+// The logo menu's other styles (Settings › Logo menu: list, cards) and the shared nav menus in the site's colours.
 import "./logo-fan.css"
-import type { LogoFan } from "./logo-fan"
+import "./nav-menus.css"
 import { logoVariantSvgs } from "./logo-variants"
 import { AnomalyLogo, Logo, LogoIcon, Wordmark } from "./marks"
 import {
@@ -105,15 +105,6 @@ export {
 const SettingsPanel = import.meta.env.DEV ? lazy(() => import("./settings-panel")) : undefined
 const DesignMode = import.meta.env.DEV ? lazy(() => import("./design-mode")) : undefined
 const DevicePreview = import.meta.env.DEV ? lazy(() => import("./device-preview")) : undefined
-
-// The logo's fan menu, loaded the first time it may open: a pointer, touch or focus on a logo, or
-// a right-click before any of those.
-const [logoFan, setLogoFan] = createSignal<typeof LogoFan>()
-let logoFanLoad: Promise<void> | undefined
-const loadLogoFan = () => (logoFanLoad ??= import("./logo-fan").then((module) => void setLogoFan(() => module.LogoFan)))
-const prefetchLogoFan = () => {
-  if (siteSettings.logoMenu === "fan") void loadLogoFan().catch(() => (logoFanLoad = undefined))
-}
 
 // A nav item as the nav renders it: a known one (links.ts) or a custom link (nav-order.tsx).
 type NavItemView = { id: string; label: string; href: string; arrow: boolean; external: boolean; company: boolean }
@@ -244,10 +235,13 @@ export function Site(props: {
   const [logoMenu, setLogoMenu] = createSignal<{ owner: "sidebar" | "topbar"; x: number; y: number; origin?: number }>()
   const [menu, setMenu] = createSignal(false)
   const [sectionNav, setSectionNav] = createSignal(false)
+  // The shared nav menus (packages/nav-menus), once their code has loaded (onMount).
+  let navMenus: { close: () => void; stop: () => void } | undefined
   onCloseMenus(() => {
     setMenu(false)
     setSectionNav(false)
     setLogoMenu(undefined)
+    navMenus?.close()
   })
   const [markdown, setMarkdown] = createSignal(false)
   // The Markdown view's code, loaded the first time it is wanted: its shortcut's "m", a pointer or
@@ -776,8 +770,30 @@ export function Site(props: {
     document.addEventListener("pointerover", focusHoveredRow)
     wide.addEventListener("change", closeMenus)
     const stopMenuLinks = closeMenusOnLinks()
+    // Settings › Logo menu › fan (the default) is the shared nav menus' logo menu (packages/nav-menus), as on the
+    // docs, Data, the Console and the status page; the home, Brand and Press links stay in the visitor's language.
+    // Opening it closes the site's own menus. Its code (with the inlined brand files) loads after the page, so it stays
+    // out of every page's first JavaScript (script/check-client-bundle.ts).
+    let unmounted = false
+    void import("@opencode/nav-menus").then((module) => {
+      if (unmounted) return
+      const stop = module.installNavMenus({
+        link: (path) => (["/", "/brand", "/press"].includes(path) ? language.route(path) : path),
+      })
+      navMenus = { close: () => module.closeNavMenus(), stop }
+    })
+    const closeSiteMenus = () => {
+      setMenu(false)
+      setSectionNav(false)
+      setLogoMenu(undefined)
+    }
+    document.addEventListener("opencode-nav-menu-open", closeSiteMenus)
 
     onCleanup(() => {
+      unmounted = true
+      navMenus?.stop()
+      navMenus = undefined
+      document.removeEventListener("opencode-nav-menu-open", closeSiteMenus)
       stopMenuLinks()
       stopPreloads()
       for (const type of ["pointerover", "focusin", "touchstart", "click"])
@@ -860,13 +876,7 @@ export function Site(props: {
     event.preventDefault()
     const logo = event.currentTarget
     // The menu key or Shift+F10 report no pointer position.
-    const keyboard = event.button === 0 && event.clientX === 0 && event.clientY === 0
-    if (siteSettings.logoMenu === "fan" && !logoFan())
-      return void loadLogoFan().then(
-        () => showLogoMenu(logo, owner, keyboard),
-        () => (logoFanLoad = undefined),
-      )
-    showLogoMenu(logo, owner, keyboard)
+    showLogoMenu(logo, owner, event.button === 0 && event.clientX === 0 && event.clientY === 0)
   }
 
   const showLogoMenu = (logo: HTMLElement, owner: "sidebar" | "topbar", keyboard: boolean) => {
@@ -998,20 +1008,7 @@ export function Site(props: {
   )
 
   const logoMenuView = (owner: "sidebar" | "topbar") => (
-    <Show
-      when={siteSettings.logoMenu !== "fan" && logoMenu()?.owner === owner && logoMenu()}
-      fallback={
-        <Show when={siteSettings.logoMenu === "fan" && logoFan()}>
-          {(fan) => (
-            <Dynamic
-              component={fan()}
-              position={logoMenu()?.owner === owner ? logoMenu() : undefined}
-              onSelect={() => setLogoMenu(undefined)}
-            />
-          )}
-        </Show>
-      }
-    >
+    <Show when={siteSettings.logoMenu !== "fan" && logoMenu()?.owner === owner && logoMenu()}>
       {(position) => (
         <Show when={siteSettings.logoMenu === "list"} fallback={assetCards(position())}>
           <div
@@ -1074,11 +1071,12 @@ export function Site(props: {
       data-slot="logo"
       data-variant={logoVariant()}
       data-design="logoScale logoMenu logoMenuItem logoMenuHover pressIcon"
-      aria-label={i18n.t("nav.logoAlt")}
-      title={i18n.t("nav.home")}
-      onContextMenu={(event) => openLogoMenu(event, owner)}
-      onPointerEnter={prefetchLogoFan}
-      onFocus={prefetchLogoFan}
+      aria-label={i18n.t("nav.logoHome")}
+      title={i18n.t("nav.logoHome")}
+      data-nav-logo={siteSettings.logoMenu === "fan" ? "" : undefined}
+      aria-haspopup={siteSettings.logoMenu === "fan" ? "menu" : undefined}
+      aria-expanded={siteSettings.logoMenu === "fan" ? "false" : undefined}
+      onContextMenu={(event) => siteSettings.logoMenu !== "fan" && openLogoMenu(event, owner)}
       onClick={() => {
         setMenu(false)
         setLogoMenu(undefined)

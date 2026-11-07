@@ -68,7 +68,16 @@ export function DocsLayout(props: {
   const links = siteLinks(i18n.t, (path) => path)
   const nav = navDefaults.flatMap((entry) => (entry.visible ? links.nav.filter((item) => item.id === entry.id) : []))
   const logo = () => (
-    <a href="/" data-slot="logo" data-variant="icon" aria-label={i18n.t("nav.logoAlt")} title={i18n.t("nav.home")}>
+    <a
+      href="/"
+      data-slot="logo"
+      data-variant="icon"
+      data-nav-logo
+      aria-haspopup="menu"
+      aria-expanded="false"
+      aria-label={i18n.t("nav.logoHome")}
+      title={i18n.t("nav.logoHome")}
+    >
       <LogoIcon />
     </a>
   )

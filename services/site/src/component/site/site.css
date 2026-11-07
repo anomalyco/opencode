@@ -1601,20 +1601,23 @@ html:has([data-site][data-theme="dark"]) {
     --menu-hint: var(--link);
   }
 
-  /* In blue, a hovered current row (or one whose submenu is open) is treated like any other: its
-     active bar turns the hover bar's blue. */
-  &[data-menu-color="blue"][data-menu-active="bar"]
+  /* A hovered, focused or pressed current row (or one whose submenu is open) turns its whole active
+     bar the link blue, in either Menu color, so the current row still answers the pointer: about 5:1
+     on the light pop-up and 5.8:1 on the dark one. */
+  &[data-menu-active="bar"]
     :is(
       [data-component="language-picker"] [data-slot="item"][data-selected="true"],
       [data-component="docs-lockup"] [role="menuitem"][aria-current="page"]
     ):is(
       :hover:not(:is([data-slot="menu"], [data-slot="dropdown"]):has(:focus-visible:not(:hover)) *),
+      :focus-visible,
+      :active,
       [data-open]:not(
           [data-slot="menu"]:has(:is([role="menuitem"]:hover, :focus-visible):not([data-slot="parent"] *)) *
         )
         > *
     )::before {
-    background: var(--menu-hint);
+    background: var(--link);
   }
 
   /* Every menu's rows span it edge to edge, with a square tint on hover. */

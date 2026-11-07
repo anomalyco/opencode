@@ -294,6 +294,10 @@ function Dropdown(props: {
               data-slot="word"
               data-design="docsNav sectionMenuStyle menuActive menuColor menuAlign docsSubmenu"
               href={props.items[currentIndex()].href}
+              data-nav-product="docs"
+              data-nav-product-chevron="none"
+              aria-haspopup="menu"
+              aria-expanded="false"
               aria-label={`${props.trigger(props.items[currentIndex()].id)} home`}
               onClick={(event) => {
                 close()
