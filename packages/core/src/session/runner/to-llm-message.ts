@@ -67,7 +67,11 @@ const attachmentContent = (file: FileAttachment): Array<TextPart | MediaPart> =>
     const location = attachmentLocation(file)
     return [...(location === undefined ? [] : [Message.text(`Attached file: ${location}`)]), media(file)]
   }
-  return []
+  return [
+    Message.text(
+      `ERROR: Cannot read ${JSON.stringify(attachmentLocation(file) ?? file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment"))} (unsupported attachment format: ${file.mime}). Inform the user.`,
+    ),
+  ]
 }
 
 const userAttachmentContent = (files: readonly FileAttachment[]) => {
