@@ -13,7 +13,7 @@ import { HttpServer } from "effect/http"
 import { NetAddress } from "effect/net"
 import { Env } from "./env"
 import { PortOwner } from "./services/port-owner"
-import { ServiceConfig } from "./services/service-config"
+import { ServiceConfig, normalizeLoopback } from "./services/service-config"
 import { RetainedImage } from "./services/retained-image"
 import { ServiceRegistration } from "./services/service-registration"
 import { RemoteTunnel } from "./services/remote-tunnel"
@@ -188,12 +188,11 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       )
       if (server === undefined) return
       if (serviceOptions !== undefined && config.remote !== undefined && NetAddress.isInetAddress(server.address)) {
-        const bound = NetAddress.formatIp(server.address.address)
-        // A wildcard bind also listens on loopback, which is all the tunnel needs to reach.
-        const target =
-          bound === "0.0.0.0" || bound === "::"
-            ? `127.0.0.1:${server.address.port}`
-            : NetAddress.formatInet(server.address)
+        const rawIp = NetAddress.formatIp(server.address.address)
+        // The tunnel only needs loopback reachability; prefer IPv4 for wildcard binds
+        // so the target is always 127.0.0.1 regardless of whether the service bound to 0.0.0.0 or ::.
+        const bound = (rawIp === "0.0.0.0" || rawIp === "::") ? "127.0.0.1" : normalizeLoopback(rawIp)
+        const target = `${bound.includes(":") ? `[${bound}]` : bound}:${server.address.port}`
         yield* Effect.forkScoped(
           RemoteTunnel.run({
             route: config.remote.route,
@@ -217,7 +216,8 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
 })
 
 function serviceURL(hostname: string, port: number) {
-  return `http://${hostname.includes(":") ? `[${hostname}]` : hostname}:${port}`
+  const resolved = normalizeLoopback(hostname)
+  return `http://${resolved.includes(":") ? `[${resolved}]` : resolved}:${port}`
 }
 
 function truthy(value?: string) {
