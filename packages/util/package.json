@@ -24,6 +24,13 @@
       "workerd": "./src/global-roots.workerd.ts",
       "default": "./src/global-roots.ts"
     },
+    "#undici-fetch": {
+      "types": "./src/undici-fetch.node.ts",
+      "workerd": "./src/undici-fetch.noop.ts",
+      "bun": "./src/undici-fetch.noop.ts",
+      "node": "./src/undici-fetch.node.ts",
+      "default": "./src/undici-fetch.noop.ts"
+    },
     "#runtime-import": {
       "workerd": "./src/runtime/import.workerd.ts",
       "bun": "./src/runtime/import.bun.ts",
@@ -61,7 +68,8 @@
     "minimatch": "10.2.5",
     "npm-package-arg": "13.0.2",
     "open": "11.0.4",
-    "pacote": "21.5.1"
+    "pacote": "21.5.1",
+    "undici": "8.12.3"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",

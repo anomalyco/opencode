@@ -859,6 +859,7 @@
         "npm-package-arg": "13.0.2",
         "open": "11.0.4",
         "pacote": "21.5.1",
+        "undici": "8.12.3",
       },
       "devDependencies": {
         "@tsconfig/bun": "catalog:",
