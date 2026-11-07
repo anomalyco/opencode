@@ -1229,6 +1229,26 @@ describe("Schedule", () => {
         ).toMatchObject({ _tag: "Schedule.InvalidError" })
       }),
     )
+
+    it.effect("counts only a changes predicate that is turned on", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        const create = (check: NonNullable<Parameters<typeof schedules.create>[0]["if"]>) =>
+          schedules.create({
+            sessionID,
+            when: { type: "every", every: "15 seconds" },
+            if: check,
+            action: { type: "prompt", prompt: "x" },
+          })
+        // `changes: false` opts out, so it does not compete with another predicate.
+        expect(yield* create({ type: "shell", run: "echo hi", is: "hi", changes: false })).toMatchObject({
+          if: { type: "shell", run: "echo hi", is: "hi", changes: false },
+        })
+        expect(
+          yield* Effect.flip(create({ type: "shell", run: "echo hi", is: "hi", changes: true })),
+        ).toMatchObject({ reason: "Choose at most one of is, matches or changes" })
+      }),
+    )
   })
 
   describe("code checks", () => {
