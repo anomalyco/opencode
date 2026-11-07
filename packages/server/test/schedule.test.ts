@@ -25,6 +25,7 @@ it.live("manages schedules through the experimental API when enabled and honors 
     const disabled = path.join(dir, "disabled")
     yield* Effect.promise(async () => {
       await Promise.all([global, enabled, disabled].map((item) => fs.mkdir(item, { recursive: true })))
+      await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ experimental: { schedules: true } }))
       await fs.writeFile(path.join(enabled, "opencode.json"), JSON.stringify({ experimental: { schedules: true } }))
       await fs.writeFile(path.join(disabled, "opencode.json"), JSON.stringify({ experimental: { schedules: false } }))
     })
@@ -70,6 +71,39 @@ it.live("manages schedules through the experimental API when enabled and honors 
       await expect(api.experimental.schedule.get({ scheduleID: created.id })).rejects.toMatchObject({
         _tag: "ScheduleNotFoundError",
       })
+
+      // No Session: the command stands on its own, follows the global flag, and stores a null session_id.
+      const standalone = await api.experimental.schedule.create({
+        when: { in: "5 minutes" },
+        run: "echo hi",
+        timeout: "1 minute",
+      })
+      expect(standalone.sessionID).toBeUndefined()
+      expect(standalone).toMatchObject({
+        action: { type: "shell", run: "echo hi", timeout: "1 minute" },
+        status: "active",
+      })
+      expect(standalone.nextDueAt).toBeDefined()
+      // A session-less row follows the global flag and reads without a Session.
+      expect(await api.experimental.schedule.get({ scheduleID: standalone.id })).toMatchObject({ id: standalone.id })
+      expect(await api.experimental.schedule.list()).toMatchObject([{ id: standalone.id }])
+      expect(await api.experimental.schedule.list({ sessionID: session.id })).toEqual([])
+      expect(await api.experimental.schedule.pause({ scheduleID: standalone.id })).toMatchObject({ status: "paused" })
+      expect(await api.experimental.schedule.resume({ scheduleID: standalone.id })).toMatchObject({ status: "active" })
+      await api.experimental.schedule.delete({ scheduleID: standalone.id })
+      await expect(api.experimental.schedule.get({ scheduleID: standalone.id })).rejects.toMatchObject({
+        _tag: "ScheduleNotFoundError",
+      })
+      await expect(
+        api.experimental.schedule.create({ when: { in: "5 minutes" }, run: "echo hi", prompt: "ping" }),
+      ).rejects.toMatchObject({ _tag: "InvalidRequestError" })
+      await expect(api.experimental.schedule.create({ when: { in: "5 minutes" } })).rejects.toMatchObject({
+        _tag: "InvalidRequestError",
+      })
+      // A prompt needs a Session to wake until session-less prompt firing lands.
+      await expect(
+        api.experimental.schedule.create({ when: { in: "5 minutes" }, prompt: "ping" }),
+      ).rejects.toMatchObject({ _tag: "InvalidRequestError" })
 
       await expect(
         api.experimental.schedule.create({ sessionID: session.id, when: { every: "soon" }, prompt: "ping" }),
@@ -142,6 +176,168 @@ it.live("manages schedules through the experimental API when enabled and honors 
         prompt: "ping",
       })
       expect(mixed.status).toBe(400)
+    })
+  }).pipe(Effect.scoped),
+)
+
+it.live("session-less schedule reads follow the global flag", () =>
+  Effect.gen(function* () {
+    const dir = (yield* tmpdirScoped("opencode-schedule-global-")).path
+    const global = path.join(dir, "global")
+    const enabled = path.join(dir, "enabled")
+    const dbPath = path.join(dir, "opencode.db")
+    yield* Effect.promise(async () => {
+      await Promise.all([global, enabled].map((item) => fs.mkdir(item, { recursive: true })))
+      await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ experimental: { schedules: true } }))
+      await fs.writeFile(path.join(enabled, "opencode.json"), JSON.stringify({ experimental: { schedules: true } }))
+    })
+
+    // Seeded while the global flag is on; both schedules are an hour out so neither instance fires them.
+    const ids = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const handler = yield* ServerFetch.make({
+          app: { version: "test" },
+          database: { path: dbPath },
+          config: { directory: global, project: true, claude: false },
+          models: { fetch: false },
+          fs: { filewatcher: false },
+        })
+        const api = client(handler)
+        return yield* Effect.promise(async () => {
+          const session = await api.session.create({ location: { directory: enabled } })
+          const standalone = await api.experimental.schedule.create({ when: { in: "1 hour" }, run: "true" })
+          const created = await api.experimental.schedule.create({
+            sessionID: session.id,
+            when: { in: "1 hour" },
+            prompt: "still here",
+          })
+          return { sessionID: session.id, standaloneID: standalone.id, createdID: created.id }
+        })
+      }),
+    )
+
+    yield* Effect.promise(() =>
+      fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ experimental: { schedules: false } })),
+    )
+
+    // A second ServerFetch reads the rewritten global config instead of the first instance's cached copy.
+    const handler = yield* ServerFetch.make({
+      app: { version: "test" },
+      database: { path: dbPath },
+      config: { directory: global, project: true, claude: false },
+      models: { fetch: false },
+      fs: { filewatcher: false },
+    })
+    const api = client(handler)
+    yield* Effect.promise(async () => {
+      await expect(api.experimental.schedule.get({ scheduleID: ids.standaloneID })).rejects.toMatchObject({
+        _tag: "ForbiddenError",
+      })
+      await expect(api.experimental.schedule.pause({ scheduleID: ids.standaloneID })).rejects.toMatchObject({
+        _tag: "ForbiddenError",
+      })
+      await expect(api.experimental.schedule.delete({ scheduleID: ids.standaloneID })).rejects.toMatchObject({
+        _tag: "ForbiddenError",
+      })
+      await expect(api.experimental.schedule.list()).rejects.toMatchObject({ _tag: "ForbiddenError" })
+
+      // A schedule with a Session still follows the flag where that Session lives.
+      expect(await api.experimental.schedule.list({ sessionID: ids.sessionID })).toMatchObject([{ id: ids.createdID }])
+      expect(await api.experimental.schedule.get({ scheduleID: ids.createdID })).toMatchObject({ id: ids.createdID })
+    })
+  }).pipe(Effect.scoped),
+)
+
+it.live("filters a session-less list by each Session's location flag", () =>
+  Effect.gen(function* () {
+    const dir = (yield* tmpdirScoped("opencode-schedule-list-")).path
+    const global = path.join(dir, "global")
+    const on = path.join(dir, "on")
+    const off = path.join(dir, "off")
+    const dbPath = path.join(dir, "opencode.db")
+    yield* Effect.promise(async () => {
+      await Promise.all([global, on, off].map((item) => fs.mkdir(item, { recursive: true })))
+      await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ experimental: { schedules: true } }))
+      await fs.writeFile(path.join(on, "opencode.json"), JSON.stringify({ experimental: { schedules: true } }))
+      await fs.writeFile(path.join(off, "opencode.json"), JSON.stringify({ experimental: { schedules: true } }))
+    })
+
+    // Seeded while every location has the flag on, so the off rows exist before its flag turns off.
+    const ids = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const handler = yield* ServerFetch.make({
+          app: { version: "test" },
+          database: { path: dbPath },
+          config: { directory: global, project: true, claude: false },
+          models: { fetch: false },
+          fs: { filewatcher: false },
+        })
+        const api = client(handler)
+        return yield* Effect.promise(async () => {
+          const session = await api.session.create({ location: { directory: on } })
+          const offSession = await api.session.create({ location: { directory: off } })
+          const goneSession = await api.session.create({ location: { directory: on } })
+          const standalone = await api.experimental.schedule.create({ when: { in: "1 hour" }, run: "true" })
+          const kept = await api.experimental.schedule.create({
+            sessionID: session.id,
+            when: { in: "1 hour" },
+            prompt: "kept",
+          })
+          const offFirst = await api.experimental.schedule.create({
+            sessionID: offSession.id,
+            when: { in: "1 hour" },
+            prompt: "off",
+          })
+          const offSecond = await api.experimental.schedule.create({
+            sessionID: offSession.id,
+            when: { in: "1 hour" },
+            prompt: "off too",
+          })
+          const orphan = await api.experimental.schedule.create({
+            sessionID: goneSession.id,
+            when: { in: "1 hour" },
+            prompt: "orphan",
+          })
+          // The schedule stays behind, so a gone Session must hide it rather than fail the whole list.
+          await api.session.remove({ sessionID: goneSession.id })
+          return {
+            sessionID: session.id,
+            offSessionID: offSession.id,
+            standaloneID: standalone.id,
+            keptID: kept.id,
+            offIDs: [offFirst.id, offSecond.id],
+            orphanID: orphan.id,
+          }
+        })
+      }),
+    )
+
+    yield* Effect.promise(() =>
+      fs.writeFile(path.join(off, "opencode.json"), JSON.stringify({ experimental: { schedules: false } })),
+    )
+
+    const handler = yield* ServerFetch.make({
+      app: { version: "test" },
+      database: { path: dbPath },
+      config: { directory: global, project: true, claude: false },
+      models: { fetch: false },
+      fs: { filewatcher: false },
+    })
+    const api = client(handler)
+    yield* Effect.promise(async () => {
+      // The global flag is still on, so the session-less list works, keeps the session-less row, and hides the rows
+      // whose Session lives where the flag is off or whose Session is gone.
+      const listed = await api.experimental.schedule.list()
+      expect(listed.map((row) => row.id).sort()).toEqual([ids.keptID, ids.standaloneID].sort())
+      expect(listed.map((row) => row.id)).not.toContain(ids.offIDs[0])
+      expect(listed.map((row) => row.id)).not.toContain(ids.offIDs[1])
+      expect(listed.map((row) => row.id)).not.toContain(ids.orphanID)
+
+      // An explicit session list is unchanged: still 403 where that Session's location is off.
+      await expect(api.experimental.schedule.list({ sessionID: ids.offSessionID })).rejects.toMatchObject({
+        _tag: "ForbiddenError",
+      })
+      expect(await api.experimental.schedule.list({ sessionID: ids.sessionID })).toMatchObject([{ id: ids.keptID }])
     })
   }).pipe(Effect.scoped),
 )

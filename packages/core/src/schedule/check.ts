@@ -21,7 +21,7 @@ import { Tool } from "../tool.js"
 import { McpTool } from "../tool/mcp.js"
 
 export const TIMEOUT_MS = 30_000
-const MAX_OUTPUT_BYTES = 32 * 1024
+export const MAX_OUTPUT_BYTES = 32 * 1024
 const CODE_LIMITS: CodeMode.ExecutionLimits = {
   timeoutMs: TIMEOUT_MS,
   maxToolCalls: 20,
@@ -129,9 +129,13 @@ export const authorize = Effect.fnUntraced(function* (
   }
 })
 
-/** Runs one check in the Session's Location under narrow unattended permissions and a 30s wall-clock cap. */
+/**
+ * Runs one check under narrow unattended permissions and a 30s wall-clock cap, in the Session's Location or, without a
+ * Session, in the global config Location where its default agent's rules allow or deny the command. A code check needs
+ * a Session.
+ */
 export const evaluate = Effect.fnUntraced(function* (
-  session: SessionSchema.Info,
+  session: SessionSchema.Info | undefined,
   check: ScheduleSchema.StoredCheck,
   prevState: Schema.Json,
   context: RunContext,
@@ -142,16 +146,19 @@ export const evaluate = Effect.fnUntraced(function* (
       case "shell":
         return yield* runShell(session, check.condition, prevState)
       case "code":
+        // A code check runs with the Session's agent, permissions and tool context, which a session-less schedule lacks.
+        if (session === undefined) return { ok: false as const, error: "A code check needs a Session", invalid: true }
         return yield* runCode(session, check.condition, prevState, context)
     }
   })
   return yield* run.pipe(
     Effect.timeoutOption(TIMEOUT_MS),
-    Effect.map((result): Outcome =>
-      Option.match(result, {
-        onNone: () => ({ ok: false, error: `Check timed out after ${TIMEOUT_MS}ms` }),
-        onSome: (outcome) => outcome,
-      }),
+    Effect.map(
+      (result): Outcome =>
+        Option.match(result, {
+          onNone: () => ({ ok: false, error: `Check timed out after ${TIMEOUT_MS}ms` }),
+          onSome: (outcome) => outcome,
+        }),
     ),
   )
 })
@@ -335,17 +342,18 @@ const runCode = Effect.fnUntraced(function* (
   return wakeOutcome(decoded.success.wake, state, message)
 })
 
-const scanShell = Effect.fnUntraced(function* (command: string) {
+export const scanShell = Effect.fnUntraced(function* (command: string, cwd?: string) {
   const location = yield* Location.Service
   const access = yield* FileAccess.Service
   const shellSelect = yield* ShellSelect.Service
   const target = yield* access
-    .resolve({ path: location.directory, kind: "directory" })
+    .resolve({
+      path: cwd === undefined ? location.directory : FileAccess.resolvePath(location.directory, cwd),
+      kind: "directory",
+    })
     .pipe(Effect.mapError((error) => error.message))
   const shell = yield* shellSelect.resolve({ priority: "compat" })
-  const parsed = yield* ShellParse.scan(command, shell, target.absolute).pipe(
-    Effect.mapError((error) => error.message),
-  )
+  const parsed = yield* ShellParse.scan(command, shell, target.absolute).pipe(Effect.mapError((error) => error.message))
   const directories = yield* Effect.forEach(parsed.directories, (directory) =>
     access
       .resolve({ path: FileAccess.resolvePath(target.absolute, directory), kind: "directory" })
@@ -358,11 +366,17 @@ const scanShell = Effect.fnUntraced(function* (command: string) {
   return { shell, cwd: target.absolute, workspaceID: location.workspaceID, external, commands }
 })
 
-const assertShellPermissions = Effect.fnUntraced(function* (
-  session: SessionSchema.Info,
+/**
+ * Asks once for the shell and `external_directory` permissions a shell check or action needs. Without a Session nothing
+ * is asked, because there is no sessionID to attach a request to: the global default agent's rules decide, and anything
+ * they do not allow is denied.
+ */
+export const assertShellPermissions = Effect.fnUntraced(function* (
+  session: SessionSchema.Info | undefined,
   scanned: { readonly external: ReadonlyArray<string>; readonly commands: ReadonlyArray<string> },
   metadata?: Record<string, unknown>,
 ) {
+  if (session === undefined) return yield* assertGlobalShellPermissions(scanned)
   const permission = yield* Permission.Service
   const agents = yield* Agent.Service
   const agent = yield* agents.select(session.agent)
@@ -386,6 +400,35 @@ const assertShellPermissions = Effect.fnUntraced(function* (
   }
 })
 
+/** Rules for a location with no global default agent: everything is denied. */
+const denyAll: Permission.Ruleset = [{ action: "*", resource: "*", effect: "deny" }]
+
+/**
+ * Holds a session-less run to the global config Location's rules, from its default agent. A run without a Session runs
+ * inside that Location, so `agents.select(undefined)` reads the agent the config there would pick. The pure
+ * `Permission.evaluate` is used instead of `Permission.assert`, because nobody is present and a request that would ask
+ * has no sessionID to belong to: anything other than an allow is denied.
+ */
+const assertGlobalShellPermissions = Effect.fnUntraced(function* (scanned: {
+  readonly external: ReadonlyArray<string>
+  readonly commands: ReadonlyArray<string>
+}) {
+  const agents = yield* Agent.Service
+  const agent = yield* agents.select(undefined)
+  const rules = agent.info?.permissions ?? denyAll
+  for (const action of ["external_directory", "shell"] as const) {
+    const resources = action === "external_directory" ? scanned.external : scanned.commands
+    const blocked = resources.filter((resource) => Permission.evaluate(action, resource, rules).effect !== "allow")
+    if (blocked.length === 0) continue
+    return yield* new Permission.BlockedError({
+      rules,
+      permission: action,
+      resources: blocked,
+      reason: `Permission ${action} (${blocked.join(", ")}) is not allowed by the global config, and nobody is present to ask`,
+    })
+  }
+})
+
 const authorizeShell = Effect.fnUntraced(function* (
   session: SessionSchema.Info,
   name: string | undefined,
@@ -404,7 +447,7 @@ const authorizeShell = Effect.fnUntraced(function* (
 })
 
 const runShell = Effect.fnUntraced(function* (
-  session: SessionSchema.Info,
+  session: SessionSchema.Info | undefined,
   condition: ScheduleSchema.ShellCondition,
   prevState: Schema.Json,
 ) {
@@ -458,8 +501,7 @@ const runShell = Effect.fnUntraced(function* (
   const output = executed.success
   const trimmed = output.stdout.trim()
   const message = trimmed === "" ? undefined : trimmed
-  const hasPredicate =
-    condition.is !== undefined || condition.matches !== undefined || condition.changes === true
+  const hasPredicate = condition.is !== undefined || condition.matches !== undefined || condition.changes === true
 
   if (!hasPredicate) {
     return wakeOutcome(output.exitCode === 0, null, message)
@@ -485,7 +527,7 @@ const runShell = Effect.fnUntraced(function* (
   return wakeOutcome(prevStdout !== null && output.stdout !== prevStdout, { stdout: output.stdout }, message)
 })
 
-function utf8Decode(bytes: Uint8Array): string {
+export function utf8Decode(bytes: Uint8Array): string {
   const text = new TextDecoder("utf-8").decode(bytes)
   return text.endsWith("\uFFFD") ? text.slice(0, -1) : text
 }
