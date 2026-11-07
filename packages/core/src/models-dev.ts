@@ -563,7 +563,8 @@ export const layer = (options?: Options) =>
             updatedAt: cached.value.updatedAt,
             digest: cached.value.digest,
           }
-        if (value === undefined) return
+        // A body that is missing or unreadable leaves no meta behind either: the next
+        // refresh would match the old ETag or digest and never write the catalog again.
         yield* kv.remove(key)
         yield* kv.remove(metaKey)
       })
