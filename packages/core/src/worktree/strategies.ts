@@ -14,6 +14,8 @@ import { FSUtil } from "@opencode/util/fs-util"
 
 export interface Strategy {
   readonly id: Worktree.StrategyID
+  // Allow dropping an absent directory's inventory row without calling remove.
+  readonly canForgetMissingDirectory?: boolean
   readonly create: (input: {
     sourceDirectory: AbsolutePath
     directory: AbsolutePath
