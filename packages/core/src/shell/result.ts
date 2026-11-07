@@ -2,6 +2,7 @@ export * as ShellResult from "./result.js"
 
 import os from "os"
 import type { Shell } from "@opencode/schema/shell"
+import { formatShellReport } from "@opencode/util/shell-report"
 
 export type Result = {
   info: Shell.Info
@@ -35,11 +36,11 @@ function notice(output: Pick<Output, "exit" | "signal" | "timeout">) {
 }
 
 export function report(output: Output, timeout?: number) {
-  return [
-    `Exit code: ${exitCode(output)}`,
-    ...(output.timeout ? [`Command timed out${timeout ? ` after ${timeout / 1_000}s` : ""}`] : []),
-    `Output:\n${output.output || "(no output)"}`,
-  ].join("\n")
+  return formatShellReport({
+    exitCode: exitCode(output),
+    status: output.timeout ? [`Command timed out${timeout ? ` after ${timeout / 1_000}s` : ""}`] : [],
+    output: output.output,
+  })
 }
 
 // A signal reads as the shell's 128 + signal number convention.

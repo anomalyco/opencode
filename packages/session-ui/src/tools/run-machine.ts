@@ -1,3 +1,4 @@
+import { shellReportOutput } from "@opencode/util/shell-report"
 import { stripAnsi } from "./ansi"
 
 /** A shell tool call as the renderer decoded it: tool state, input and metadata. */
@@ -29,20 +30,11 @@ export function shellRunProps(tool: ShellTool, shellRunning: (id: string) => boo
   return {
     status: tool.status,
     command: tool.input.command ?? tool.metadata.command ?? "",
-    output: tool.metadata.status === "completed" ? resultOutput(tool.output ?? "") : (tool.output ?? ""),
+    output: tool.metadata.status === "completed" ? shellReportOutput(tool.output ?? "") : (tool.output ?? ""),
     shellID,
     saved: tool.metadata.status !== undefined && SAVED_STATUSES.has(tool.metadata.status),
     shellRunning: shellID !== undefined && shellRunning(shellID),
   }
-}
-
-// A completed agent result leads with a model-facing `Exit code: ` header, then `Output:`, then the command output.
-function resultOutput(text: string) {
-  const index = text.indexOf("\nOutput:\n")
-
-  if (index === -1 || !text.startsWith("Exit code: ")) return text
-
-  return text.slice(index + "\nOutput:\n".length)
 }
 
 type ShellRunShared = { readonly command: string; readonly output: string }
