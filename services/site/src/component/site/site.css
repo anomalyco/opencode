@@ -56,6 +56,12 @@ html:has([data-site][data-theme="dark"]) {
   /* The product cards' media backdrop (products.css), which their covers and reels are graded to in
      both themes. */
   --card-media-bg: #161616;
+  /* The document rows' model (doc-list.css, and the product lists in product-list.css): a row's text
+     on the content edge with this padding outside it, so the hover fill and the bar at its start
+     edge bleed past the edge. */
+  --doc-row-pad: 1rem;
+  --doc-row-fill: var(--bg-weak);
+  --doc-row-bar: light-dark(hsl(0, 0%, 50%), hsl(0, 0%, 46%));
   /* The home Console band (routes/index.css), dark in both themes: the panel grey in light, and in
      dark #121212, a muted step above the #0c0c0c page so it reads as a band, not a slab. A registered
      colour, so light-dark() resolves in the page's scheme here and not in the band's own forced-dark
@@ -647,10 +653,15 @@ html:has([data-site][data-theme="dark"]) {
 
   /* A leading icon carries visual weight, so trim the left padding to keep the button optically
      centered. The gap to the label matches the space left of the icon (the artwork sits about
-     1.3px inside its box), so both read as about 13px. */
+     1.3px inside its box), so both read as about 13px. The menus such a button opens set their row
+     icons with the same inset and gap (--icon-inset, --icon-gap; the store rows below), so each row's
+     icon and label start line up with the button's. */
+  --icon-inset: 0.75rem;
+  --icon-gap: 0.75rem;
+
   [data-component="site-button"]:has(> [data-slot="platform-icon"]:first-child) {
-    padding-inline-start: 0.75rem;
-    gap: 0.75rem;
+    padding-inline-start: var(--icon-inset);
+    gap: var(--icon-gap);
   }
 
   /* A trailing chevron sits midway between the label and the button's right edge: the gap and the
@@ -851,9 +862,12 @@ html:has([data-site][data-theme="dark"]) {
       }
     }
 
+    /* Rows with a platform icon: the menu starts at the button's edge, so the button's icon inset
+       and gap (above) put each row's icon and label exactly under the button's. */
     [data-slot="menu"] [data-slot="store"] {
       grid-template-columns: 14px auto auto;
-      column-gap: 0.625rem;
+      column-gap: var(--icon-gap);
+      padding-inline-start: var(--icon-inset);
       color: var(--text-strong);
 
       [data-slot="platform-icon"] {
