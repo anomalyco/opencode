@@ -395,17 +395,19 @@ const layer = () =>
               // The process exits even after a timeout kill, so this fiber always publishes the outcome.
               runFork(
                 Effect.gen(function* () {
-                  yield* handle.exitCode.pipe(
-                    Effect.flatMap((code) => end({ status: "exited", exit: code })),
+                  const exited = yield* handle.exitCode.pipe(
+                    Effect.map((code) => ({ exit: code, signal: undefined })),
                     Effect.catch((error) =>
-                      end({
-                        status: "exited",
+                      Effect.succeed({
+                        exit: undefined,
                         signal:
                           error.cause instanceof CrossSpawnSpawner.KilledBySignal ? error.cause.signal : undefined,
                       }),
                     ),
                   )
-                  const outcome = yield* Deferred.await(ended)
+                  yield* end({ status: "exited", ...exited })
+                  // A timeout keeps its status but still records how the killed process exited.
+                  const outcome = { ...(yield* Deferred.await(ended)), ...exited }
                   // Report the terminal status only once captured output is complete, so a reader that
                   // sees it never reads a partial file.
                   yield* outputDone.await

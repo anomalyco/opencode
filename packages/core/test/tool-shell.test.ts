@@ -34,6 +34,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Shell } from "@opencode/core/shell"
 import { ShellSelect } from "@opencode/core/shell/select"
+import { ShellResult } from "@opencode/core/shell/result"
 import { ID } from "@opencode/schema/shell"
 import { ShellTool } from "@opencode/core/tool/plugin/shell"
 import { ToolOutput } from "@opencode/core/tool-output"
@@ -188,6 +189,11 @@ const mixedOutputCommand = isWindows
   ? "[Console]::Out.Write('stdout'); Start-Sleep -Milliseconds 50; [Console]::Error.Write('stderr'); Start-Sleep -Milliseconds 100"
   : "printf stdout; sleep 0.05; printf stderr >&2"
 const idleCommand = isWindows ? "Start-Sleep -Seconds 60" : "sleep 60"
+const startingCommand = isWindows
+  ? "[Console]::Out.Write('server starting'); Start-Sleep -Seconds 60"
+  : "printf 'server starting'; sleep 60"
+// A timeout kills the process group with SIGTERM, which the result reports as 128 + 15.
+const timedOutExit = isWindows ? "\\S+" : "143"
 const bodyExitCommand = isWindows
   ? "[Console]::Out.Write('body'); Start-Sleep -Milliseconds 100; exit 7"
   : "printf body && exit 7"
@@ -431,7 +437,7 @@ describe("ShellTool scanner permissions", () => {
             value: {
               status: "completed",
               metadata: { exit: 0 },
-              content: [{ type: "text", text: `${fixture.outside}\n` }],
+              content: [{ type: "text", text: `Exit code: 0\nOutput:\n${fixture.outside}\n` }],
             },
           })
           expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("reached")
@@ -465,7 +471,7 @@ describe("ShellTool scanner permissions", () => {
           value: {
             status: "completed",
             metadata: { exit: 0 },
-            content: [{ type: "text", text: `${fixture.outside}\n` }],
+            content: [{ type: "text", text: `Exit code: 0\nOutput:\n${fixture.outside}\n` }],
           },
         })
         expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("reached")
@@ -618,7 +624,7 @@ describe("ShellTool compound syntax approval compatibility", () => {
               value: {
                 status: "completed",
                 metadata: { exit: 0 },
-                content: [{ type: "text", text: fixture.output }],
+                content: [{ type: "text", text: `Exit code: 0\nOutput:\n${fixture.output}` }],
               },
             })
           }),
@@ -683,7 +689,7 @@ describe("ShellTool ordinary shell syntax", () => {
                 value: {
                   status: "completed",
                   metadata: { exit: 0 },
-                  content: [{ type: "text", text: fixture.output }],
+                  content: [{ type: "text", text: `Exit code: 0\nOutput:\n${fixture.output}` }],
                 },
               })
             }),
@@ -751,7 +757,9 @@ describe("ShellTool ordinary shell syntax", () => {
               value: { status: "completed", metadata: { exit: 0 } },
             })
             if (Exit.isSuccess(result.exit))
-              expect(result.exit.value.content?.[0]).toEqual(Expected.text(isWindows ? "hello\r\n" : "hello\n"))
+              expect(result.exit.value.content?.[0]).toEqual(
+                Expected.text(isWindows ? "Exit code: 0\nOutput:\nhello\r\n" : "Exit code: 0\nOutput:\nhello\n"),
+              )
           }),
         pwsh ?? "pwsh",
       ))
@@ -849,7 +857,7 @@ describe("ShellTool", () => {
             const settled = yield* executeTool(registry, call({ command: helloCommand }))
             expect(settled.status).toBe("completed")
             expect(settled.metadata).toMatchObject({ exit: 0, truncated: false })
-            expect(settled.content).toEqual([{ type: "text", text: "hello" }])
+            expect(settled.content).toEqual([{ type: "text", text: "Exit code: 0\nOutput:\nhello" }])
             expect(assertions).toMatchObject([
               {
                 sessionID,
@@ -887,7 +895,7 @@ describe("ShellTool", () => {
             const settled = yield* executeTool(registry, call({ command }))
 
             expect(settled.status).toBe("completed")
-            expect(settled.content?.[0]).toEqual({ type: "text", text: "from-session" })
+            expect(settled.content?.[0]).toEqual({ type: "text", text: "Exit code: 0\nOutput:\nfrom-session" })
           }),
         )
       }),
@@ -912,7 +920,10 @@ describe("ShellTool", () => {
             const settled = yield* executeTool(registry, call({ command }))
 
             expect(settled.status).toBe("completed")
-            expect(settled.content?.[0]).toEqual({ type: "text", text: `1|1|opencode|${sessionID}` })
+            expect(settled.content?.[0]).toEqual({
+              type: "text",
+              text: `Exit code: 0\nOutput:\n1|1|opencode|${sessionID}`,
+            })
           }),
         )
       }),
@@ -932,7 +943,7 @@ describe("ShellTool", () => {
             const settled = yield* executeTool(registry, call({ command }))
 
             expect(settled.status).toBe("completed")
-            expect(settled.content?.[0]).toEqual({ type: "text", text: "outer-agent" })
+            expect(settled.content?.[0]).toEqual({ type: "text", text: "Exit code: 0\nOutput:\nouter-agent" })
           }),
         )
       }),
@@ -1009,7 +1020,7 @@ describe("ShellTool", () => {
           Effect.gen(function* () {
             const stderr = yield* executeTool(registry, call({ command: stderrCommand }, "call-stderr"))
             expect(stderr.metadata).toMatchObject({ exit: 0, truncated: false })
-            expect(stderr.content?.[0]).toEqual({ type: "text", text: "stderr only" })
+            expect(stderr.content?.[0]).toEqual({ type: "text", text: "Exit code: 0\nOutput:\nstderr only" })
 
             const mixed = yield* executeTool(registry, call({ command: mixedOutputCommand }, "call-mixed"))
             expect(mixed.metadata).toMatchObject({ exit: 0, truncated: false })
@@ -1226,7 +1237,7 @@ describe("ShellTool", () => {
                   const settled = yield* executeTool(registry, call({ command }, `call-parity-${command}`))
                   expect(settled.status).toBe("completed")
                   expect(settled.metadata).toMatchObject({ exit: 0 })
-                  expect(settled.content?.[0]).toMatchObject({ type: "text", text: output })
+                  expect(settled.content?.[0]).toMatchObject({ type: "text", text: `Exit code: 0\nOutput:\n${output}` })
                 }
               }),
             )
@@ -1251,12 +1262,67 @@ describe("ShellTool", () => {
           Effect.sync(() => {
             expect(settled.status).toBe("completed")
             expect(settled.metadata).toMatchObject({ exit: 7, truncated: false })
-            expect(settled.content?.[0]).toEqual({ type: "text", text: "body" })
-            expect(settled.content?.[1]).toMatchObject(Expected.text(expect.stringContaining("Exited with code 7")))
+            expect(settled.content).toEqual([{ type: "text", text: "Exit code: 7\nOutput:\nbody" }])
           }),
         ),
       )
     }),
+  )
+
+  it.live(
+    "leads with the exit status when overflowing output is truncated",
+    () =>
+      withTempDir((tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          executeTool(
+            registry,
+            call(
+              { command: `${overflowCommand(ToolOutput.MAX_BYTES + 1024)}${isWindows ? "; exit 3" : " && exit 3"}` },
+              "call-overflow-nonzero",
+            ),
+          ),
+        ).pipe(
+          Effect.andThen((settled) =>
+            Effect.sync(() => {
+              expect(settled.metadata).toMatchObject({ exit: 3, truncated: true })
+              expect(settled.content).toEqual([
+                Expected.text(expect.stringMatching(/^Exit code: 3\nOutput:\n[^]*full output saved to /)),
+              ])
+            }),
+          ),
+        )
+      }),
+    { timeout: 15_000 },
+  )
+
+  it.live(
+    "reports the exit code and the timeout with partial output when a foreground command times out",
+    () =>
+      withTempDir((tmp) => {
+        reset()
+        // Long enough for the command to print before it is killed.
+        const timeout = isWindows ? 5_000 : 500
+        return withSession(tmp.path, (registry) =>
+          executeTool(registry, call({ command: startingCommand, timeout }, "call-foreground-timeout")),
+        ).pipe(
+          Effect.andThen((settled) =>
+            Effect.sync(() => {
+              expect(settled.metadata).toMatchObject({ timeout: true })
+              expect(settled.content).toEqual([
+                Expected.text(
+                  expect.stringMatching(
+                    new RegExp(
+                      `^Exit code: ${timedOutExit}\\nCommand timed out after ${timeout / 1_000}s\\nOutput:\\nserver starting$`,
+                    ),
+                  ),
+                ),
+              ])
+            }),
+          ),
+        )
+      }),
+    { timeout: 15_000 },
   )
 
   it.live(
@@ -1273,6 +1339,7 @@ describe("ShellTool", () => {
               expect(settled.metadata).toMatchObject({ exit: 0, truncated: true })
               const content = settled.content?.[0]
               if (!content || content.type !== "text") throw new Error("Expected text content")
+              expect(content.text).toStartWith("Exit code: 0\nOutput:\n")
               expect(content.text.includes("output-start")).toBe(false)
               expect(content.text.includes("output-end")).toBe(true)
               expect(content).toMatchObject(Expected.text(expect.stringContaining("full output saved to ")))
@@ -1301,7 +1368,7 @@ describe("ShellTool", () => {
         if (!content || content.type !== "text") throw new Error("Expected text content")
         expect(content.text).not.toContain("one")
         // Windows shells emit CRLF; the assertion targets line limits, not line endings.
-        expect(content.text.replaceAll("\r\n", "\n")).toStartWith("two\nthree")
+        expect(content.text.replaceAll("\r\n", "\n")).toStartWith("Exit code: 0\nOutput:\ntwo\nthree")
         expect(content.text).toContain("full output saved to ")
       })
     }),
@@ -1385,9 +1452,17 @@ describe("ShellTool", () => {
             },
           ])
           expect((yield* shell.list()).map((info) => info.id)).toContain(id)
-          expect((yield* shell.wait(id)).status).toBe("timeout")
+          const timedOut = yield* shell.wait(id)
+          expect(timedOut.status).toBe("timeout")
+          // The timeout keeps its status but still records how the killed process exited.
+          expect(timedOut.exit !== undefined || timedOut.signal !== undefined).toBe(true)
+          if (!isWindows) expect(timedOut).toMatchObject({ signal: "SIGTERM" })
           expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
-            text: expect.stringContaining("Timed out before completion"),
+            text: expect.stringMatching(
+              new RegExp(
+                `\\nExit code: ${timedOutExit}\\nCommand timed out after 0\\.05s\\nOutput:\\n\\(no output\\)\\n</shell>$`,
+              ),
+            ),
             description: idleCommand,
             metadata: {
               source: "shell",
@@ -1420,7 +1495,7 @@ describe("ShellTool", () => {
           const shellID = settled.metadata?.shellID
           expect(typeof shellID).toBe("string")
           expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
-            text: expect.stringContaining("Exited with code 7"),
+            text: expect.stringContaining("\nExit code: 7\nOutput:\nbody\n</shell>"),
             description: bodyExitCommand,
             metadata: {
               source: "shell",
@@ -1466,7 +1541,7 @@ describe("ShellTool", () => {
             {
               id: settled.metadata?.shellID,
               status: "completed",
-              output: "(no output)\n\nExited with code 7",
+              output: "Exit code: 7\nOutput:\n(no output)",
             },
           ])
         }),
@@ -1541,7 +1616,10 @@ describe("ShellTool", () => {
                   yield* Deferred.await(ready).pipe(Effect.timeout("5 seconds"))
                   yield* shell.timeout(info.id, 1)
                   // Completion must reap the process, not only mark the command as timed out.
-                  expect((yield* shell.wait(info.id).pipe(Effect.timeout("10 seconds"))).status).toBe("timeout")
+                  expect(yield* shell.wait(info.id).pipe(Effect.timeout("10 seconds"))).toMatchObject({
+                    status: "timeout",
+                    signal: "SIGKILL",
+                  })
                   const pid = info.pid
                   if (pid === undefined) throw new Error("Expected shell PID")
                   expect(() => process.kill(pid, 0)).toThrow()
@@ -1558,6 +1636,29 @@ describe("ShellTool", () => {
         )
       }),
     { timeout: 30_000 },
+  )
+
+  it.live("leads every result with its exit code and an Output line", () =>
+    Effect.sync(() => {
+      expect(ShellResult.report({ output: "ok\n", truncated: false, exit: 0 })).toBe("Exit code: 0\nOutput:\nok\n")
+      expect(ShellResult.report({ output: "bad", truncated: false, exit: 7 })).toBe("Exit code: 7\nOutput:\nbad")
+      expect(ShellResult.report({ output: "", truncated: false, signal: "SIGTERM" })).toBe(
+        "Exit code: 143\nOutput:\n(no output)",
+      )
+      expect(ShellResult.report({ output: "", truncated: false, signal: "SIGKILL" })).toBe(
+        "Exit code: 137\nOutput:\n(no output)",
+      )
+      expect(ShellResult.report({ output: "", truncated: false, signal: "SIGNOPE" })).toBe(
+        "Exit code: unknown\nOutput:\n(no output)",
+      )
+      expect(ShellResult.report({ output: "", truncated: false })).toBe("Exit code: unknown\nOutput:\n(no output)")
+      expect(
+        ShellResult.report({ output: "server starting", truncated: false, signal: "SIGTERM", timeout: true }, 120_000),
+      ).toBe("Exit code: 143\nCommand timed out after 120s\nOutput:\nserver starting")
+      expect(ShellResult.report({ output: "partial", truncated: false, timeout: true })).toBe(
+        "Exit code: unknown\nCommand timed out\nOutput:\npartial",
+      )
+    }),
   )
 
   if (!isWindows) {

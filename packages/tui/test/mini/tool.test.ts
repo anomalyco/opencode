@@ -17,6 +17,30 @@ describe("Mini tool presentation", () => {
         { type: "text", text: "Command exited with code 0." },
       ]),
     ).toBe("")
+
+    expect(toolOutputText("shell", [{ type: "text", text: "Exit code: 0\nOutput:\nmini-output\n" }])).toBe(
+      "mini-output\n",
+    )
+    expect(
+      toolOutputText("shell", [{ type: "text", text: "Exit code: 7\nOutput:\nbuild failed\nOutput:\nagain\n" }]),
+    ).toBe("build failed\nOutput:\nagain\n")
+    expect(
+      toolOutputText("shell", [
+        { type: "text", text: "Exit code: 143\nCommand timed out after 120s\nOutput:\nserver starting" },
+      ]),
+    ).toBe("server starting")
+    expect(toolOutputText("shell", [{ type: "text", text: "Exit code: 143\nOutput:\n(no output)" }])).toBe(
+      "(no output)",
+    )
+    expect(
+      toolOutputText("shell", [
+        { type: "text", text: "Command moved to the background (shell ID: sh_1).\nOutput is streaming to: /tmp/out" },
+        { type: "text", text: "You will be notified automatically when the command finishes." },
+      ]),
+    ).toBe("Command moved to the background (shell ID: sh_1).\nOutput is streaming to: /tmp/out")
+    expect(toolOutputText("shell", [{ type: "text", text: "line one\nline two\nOutput:\nnot a header" }])).toBe(
+      "line one\nline two\nOutput:\nnot a header",
+    )
   })
 
   test("normalizes only persisted tool aliases into current fields", () => {

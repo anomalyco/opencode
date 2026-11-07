@@ -61,6 +61,13 @@ export function toolDisplayContent(state: SessionMessageAssistantTool["state"]) 
   return state.content ?? []
 }
 
+// A completed shell result leads with a model-facing `Exit code: ` header, then `Output:`, then the command output.
+export function shellOutputText(text: string) {
+  const index = text.indexOf("\nOutput:\n")
+  if (index === -1 || !text.startsWith("Exit code: ")) return text
+  return text.slice(index + "\nOutput:\n".length)
+}
+
 export function nonEmptyToolContent<T>(content: ReadonlyArray<T> | undefined): [T, ...T[]] | undefined {
   if (!content) return undefined
   const [first, ...rest] = content
