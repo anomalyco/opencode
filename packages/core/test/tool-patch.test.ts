@@ -102,6 +102,7 @@ const withTool = <A, E, R>(
   directory: string,
   body: (registry: Tool.Interface) => Effect.Effect<A, E, R>,
   projectDirectory = directory,
+  formatting: LayerNode.Replacements = [Formatter.node.replace(formatter)],
 ) => {
   const activeLocation = Layer.succeed(
     Location.Service,
@@ -113,31 +114,36 @@ const withTool = <A, E, R>(
     return yield* body(yield* Tool.Service)
   }).pipe(
     Effect.provide(
-      AppNodeBuilder.build(LayerNode.group([Tool.node, FileAccess.node, FileMutation.node, patchToolNode]), [
-        Environment.node.replace(
-          transformEnvironmentFiles((files) => ({
-            read: (target, range) =>
-              Effect.sync(() => {
-                if (!editApproved) readsBeforeEditApproval++
-              }).pipe(Effect.andThen(files.read(target, range))),
-            remove: (target) => {
-              if (failRemoveTarget && path.basename(target) === failRemoveTarget)
-                return Effect.die("forced remove failure")
-              if (failRemoveErrorTarget && path.basename(target) === failRemoveErrorTarget)
-                return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced remove failure") }))
-              return files.remove(target)
-            },
-            write: (target, content) => {
-              if (failWriteTarget && path.basename(target) === failWriteTarget)
-                return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced write failure") }))
-              return files.write(target, content)
-            },
-          })),
-        ),
-        Location.node.replace(activeLocation),
-        Formatter.node.replace(formatter),
-        Permission.node.replace(permission),
-      ]),
+      AppNodeBuilder.build(
+        LayerNode.group([Tool.node, FileAccess.node, FileMutation.node, Formatter.node, patchToolNode]),
+        [
+          Environment.node.replace(
+            transformEnvironmentFiles((files) => ({
+              read: (target, range) =>
+                Effect.sync(() => {
+                  if (!editApproved) readsBeforeEditApproval++
+                }).pipe(Effect.andThen(files.read(target, range))),
+              remove: (target) => {
+                if (failRemoveTarget && path.basename(target) === failRemoveTarget)
+                  return Effect.die("forced remove failure")
+                if (failRemoveErrorTarget && path.basename(target) === failRemoveErrorTarget)
+                  return Effect.fail(
+                    new Environment.Failed({ path: target, cause: new Error("forced remove failure") }),
+                  )
+                return files.remove(target)
+              },
+              write: (target, content) => {
+                if (failWriteTarget && path.basename(target) === failWriteTarget)
+                  return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced write failure") }))
+                return files.write(target, content)
+              },
+            })),
+          ),
+          Location.node.replace(activeLocation),
+          ...formatting,
+          Permission.node.replace(permission),
+        ],
+      ),
     ),
   )
 }
@@ -370,6 +376,43 @@ describe("PatchTool", () => {
         expect(settled.metadata?.files?.[0]?.patch).toContain("+FORMATTED")
         expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("FORMATTED\n")
       })
+    }),
+  )
+
+  it.live("keeps final diffs and BOM when a formatter writes corrections then exits unsuccessfully", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withTool(
+        tmp.path,
+        (registry) =>
+          Effect.gen(function* () {
+            const target = path.join(tmp.path, "partial.txt")
+            yield* Effect.promise(() => fs.writeFile(target, "\uFEFFbefore\n"))
+            const formatter = yield* Formatter.Service
+            yield* formatter.transform((editor) =>
+              editor.set({
+                name: "partial-correction",
+                extensions: [".txt"],
+                enabled: Effect.succeed([
+                  process.execPath,
+                  "-e",
+                  "require('fs').writeFileSync(process.argv.at(-1), 'FORMATTED\\n'); process.exit(1)",
+                  "$FILE",
+                ]),
+              }),
+            )
+            const result = yield* executeTool(
+              registry,
+              call("*** Begin Patch\n*** Update File: partial.txt\n@@\n-before\n+created\n*** End Patch"),
+            )
+            expect(result.status).toBe("completed")
+            expect(result.output.files[0]?.patch).toContain("+FORMATTED")
+            expect(result.metadata?.files).toEqual(result.output.files)
+            expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("\uFEFFFORMATTED\n")
+          }),
+        tmp.path,
+        [],
+      )
     }),
   )
 
