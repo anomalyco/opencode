@@ -337,14 +337,15 @@
     color: var(--text-strong);
   }
 
-  /* 5px either side of the 10px chevron, and 2px after the word. */
+  /* 5px either side of the 10px chevron, and 2px after the word: the shared chevron tokens (packages/nav-menus), so
+     the product chevron on Data, the Console and the status page matches it. */
   [data-slot="toggle"] {
-    width: 20px;
-    margin-inline-start: 2px;
+    width: var(--nav-chevron-width);
+    margin-inline-start: var(--nav-chevron-gap);
 
     [data-slot="chevron"] {
-      width: 10px;
-      height: 10px;
+      width: var(--nav-chevron-glyph);
+      height: var(--nav-chevron-glyph);
     }
 
     &[aria-expanded="true"] [data-slot="chevron"] {
@@ -365,9 +366,12 @@
   }
 }
 
-/* The chevron rests muted; no specificity, so the shared states below win. */
+/* The chevron rests muted, and fills as the product chevrons do (packages/nav-menus); no specificity, so the shared
+   states below win. */
 :where([data-site] [data-component="docs-lockup"] [data-slot="toggle"]) {
-  color: var(--text-weak);
+  --lockup-hover: var(--nav-chevron-hover);
+  --lockup-press: var(--nav-chevron-press);
+  color: var(--nav-chevron-ink);
 }
 
 /* Every interactive segment of the lockup (the section word, its chevron, the combined trigger and
