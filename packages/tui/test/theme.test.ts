@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { RGBA } from "@opentui/core"
 import type { TerminalColors } from "@opentui/core"
 import { allThemes, hasTheme, getOpenCodeTheme, parseTheme, resolveTheme } from "../src/theme"
+import { tint } from "../src/theme/color"
 import { discoverThemes } from "../src/theme/discovery"
 import { configDirectories } from "../src/util/config-directories"
 import { terminalMode } from "../src/theme/system"
@@ -112,6 +114,26 @@ function terminalColors(defaultBackground: string | null, palette: Array<string 
     highlightForeground: null,
   }
 }
+
+test("tint keeps a solid base solid under a translucent overlay", () => {
+  const base = RGBA.fromInts(26, 26, 26, 255)
+  const overlay = RGBA.fromInts(42, 26, 21, 153)
+  const mixed = tint(base, overlay, 153 / 255)
+  expect(mixed.a).toBe(1)
+})
+
+test("tint preserves transparent alpha instead of forcing opaque", () => {
+  const transparent = RGBA.fromInts(0, 0, 0, 0)
+  const mixed = tint(transparent, transparent, 0.5)
+  expect(mixed.a).toBe(0)
+})
+
+test("tint keeps opaque colors opaque", () => {
+  const black = RGBA.fromInts(0, 0, 0, 255)
+  const white = RGBA.fromInts(255, 255, 255, 255)
+  const mixed = tint(black, white, 0.5)
+  expect(mixed.a).toBe(1)
+})
 
 test("terminalMode derives mode from refreshed background", () => {
   expect(terminalMode(terminalColors("#fbf1c7"))).toBe("light")
