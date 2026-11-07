@@ -675,6 +675,7 @@ export function createData(config: CreateDataInput) {
     activeUpdates?.set(sessionID, undefined)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
+    messageLoads.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
     sync.invalidate(`session.family:${sessionID}`)
     sync.invalidate(`session.pending:${sessionID}`)
@@ -1890,6 +1891,7 @@ export function createData(config: CreateDataInput) {
           const cursor = store.session.messageCursor[sessionID]
           if (!cursor || signal?.aborted) return
           setStore("session", "messageLoading", sessionID, true)
+          const current = () => messageLoads.get(sessionID) === request
           const request = (async () => {
             const fetched: SessionMessageInfo[] = []
             let next: string | undefined = cursor
@@ -1903,6 +1905,7 @@ export function createData(config: CreateDataInput) {
                 { signal },
               )
               if (signal?.aborted) return
+              if (!current() || store.session.messageCursor[sessionID] !== cursor) return
               fetched.push(...response.data.map(stored))
               next = response.cursor.next ?? undefined
               if (!options?.all) break
@@ -1922,7 +1925,9 @@ export function createData(config: CreateDataInput) {
             .catch((error) => {
               if (!signal?.aborted) throw error
             })
-            .finally(() => setStore("session", "messageLoading", sessionID, false))
+            .finally(() => {
+              if (current()) setStore("session", "messageLoading", sessionID, false)
+            })
           track(messageLoads, sessionID, request)
           await request
         },
