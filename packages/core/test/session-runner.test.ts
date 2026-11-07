@@ -2029,6 +2029,56 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests.slice(-1).flatMap(systemTexts).join("\n")).not.toContain("Changed target")
   })
 
+  scenario("retires surviving notices after instructions return to their initial value", function* (s) {
+    yield* s.runPrompt("First")
+    s.systemBaseline = "Changed context"
+    const second = yield* s.runPrompt("Second")
+    s.systemBaseline = "Initial context"
+    yield* s.runPrompt("Third")
+
+    yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: second.id })
+    yield* s.runPrompt("Fourth")
+
+    const request = s.requests.at(-1)
+    if (!request) throw new Error("Expected continuation request")
+    expect(userTexts(request).at(-1)).toBe("Fourth")
+    expect(request.system.map((part) => part.text)).toContain("Initial context")
+    expect(systemTexts(request)).toEqual([])
+  })
+
+  scenario("retires surviving notices when reverting past a native checkpoint", function* (s) {
+    yield* s.runPrompt("First")
+    s.systemBaseline = "Changed context"
+    const second = yield* s.runPrompt("Second")
+    s.systemBaseline = "Latest context"
+    yield* s.runPrompt("Third")
+    const replacement = [
+      Message.assistant(CompactionPart.make({ provider: s.currentModel.provider, encrypted: "checkpoint" })),
+    ]
+    yield* s.bus.publish(SessionEvent.Compaction.Ended, {
+      sessionID,
+      reason: "manual",
+      model: Model.Ref.make({
+        id: Model.ID.make(s.currentModel.id),
+        providerID: Provider.ID.make(s.currentModel.provider),
+      }),
+      text: "",
+      native: { messages: JSON.parse(JSON.stringify(replacement)) },
+    })
+
+    yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: second.id })
+    yield* s.runPrompt("Fourth")
+
+    const request = s.requests.at(-1)
+    if (!request) throw new Error("Expected continuation request")
+    expect(userTexts(request).at(-1)).toBe("Fourth")
+    expect(request.system.map((part) => part.text)).toContain("Latest context")
+    expect(systemTexts(request)).toEqual([])
+    expect(request.messages.flatMap((message) => [...message.content]).some((part) => part.type === "compaction")).toBe(
+      false,
+    )
+  })
+
   scenario("uses the selected model family prompt when the agent does not override it", function* (s) {
     s.currentModel = LanguageModel.make({ id: "gpt-5", provider: "openai", route: OpenAIChat.route })
     yield* s.admit("First")
