@@ -2,10 +2,23 @@ diff --git a/node_modules/pacote/.bun-tag-eb0e1d32c8fdffa0 b/.bun-tag-eb0e1d32c8
 new file mode 100644
 index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
 diff --git a/lib/git.js b/lib/git.js
-index 8faf125c6e5e572e980cfc8aaf4e6c9a21d740cf..b1ae3c8cdfa9cbdbd7573be7fa74197d158e6bcb 100644
+index 8faf125..3a6d71e 100644
 --- a/lib/git.js
 +++ b/lib/git.js
-@@ -247,15 +247,20 @@ class GitFetcher extends Fetcher {
+@@ -171,6 +171,12 @@ class GitFetcher extends Fetcher {
+         return
+       }
+ 
++      // honor ignoreScripts: spawning `npm install` here would run lifecycle
++      // scripts from the cloned repo, defeating the caller's explicit opt-out
++      if (this.opts.ignoreScripts) {
++        return
++      }
++
+       // to avoid cases where we have an cycle of git deps that depend
+       // on one another, we only ever do preparation for one instance
+       // of a given git dep along the chain of installations.
+@@ -247,15 +253,20 @@ class GitFetcher extends Fetcher {
        // if we're resolved, and have a tarball url, shell out to RemoteFetcher
        if (tarballOk) {
          const nameat = this.spec.name ? `${this.spec.name}@` : ''

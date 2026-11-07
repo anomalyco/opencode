@@ -248,6 +248,34 @@ describe("Npm.add", () => {
     expect(entries.added.directory).toContain("node_modules")
   })
 
+  test("skips Git package preparation when scripts are ignored", async () => {
+    await using tmp = await tmpdir()
+    const repository = path.join(tmp.path, "repository")
+    await fs.mkdir(repository, { recursive: true })
+    await writePackage(repository, {
+      name: "fixture-git-plugin-with-scripts",
+      exports: "./index.js",
+      scripts: { postinstall: "bun postinstall.js" },
+    })
+    await Bun.write(path.join(repository, "index.js"), "export default { root: true }\n")
+    await Bun.write(
+      path.join(repository, "postinstall.js"),
+      "require('fs').writeFileSync('prepared.txt', 'prepared')\n",
+    )
+    await Bun.$`git init -q -b fixture-branch ${repository}`
+    await Bun.$`git -C ${repository} add .`
+    await Bun.$`git -C ${repository} -c user.name=fixture -c user.email=fixture@example.com commit -qm fixture`
+    const commit = await Bun.$`git -C ${repository} rev-parse HEAD`.text().then((value) => value.trim())
+    const spec = `git+file://${repository}#${commit}`
+
+    const added = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add(spec)
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
+
+    expect(await Bun.file(path.join(added.directory, "prepared.txt")).exists()).toBeFalse()
+  }, 30_000)
+
   test.each(["commit", "branch"])("installs a Git package from an npm ::path: subdirectory at a %s", async (ref) => {
     await using tmp = await tmpdir()
     const fixture = await createGitFixture(tmp.path)
