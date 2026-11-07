@@ -4,6 +4,7 @@ import { DateTime, Effect, Option, Stream, Types } from "effect"
 import type { SessionContext } from "@opencode/plugin/effect/session"
 import type { ToolHooks } from "@opencode/plugin/effect/tool"
 import { Agent } from "@opencode/core/agent"
+import { Bus } from "@opencode/core/bus"
 import { Environment } from "@opencode/core/environment/index"
 import { Event } from "@opencode/schema/event"
 import { Model } from "@opencode/core/model"
@@ -37,6 +38,7 @@ const agentSelected = (agent: Agent.ID, previous: Agent.ID): SessionEvent.AgentS
 /** Runs the plan plugin against stubbed domains, capturing persisted reminders and the context hook. */
 const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.AgentSelected> = []) {
   const persisted = new Array<string>()
+  const published = new Array<string>()
   let contextHook: ((input: SessionContext) => Effect.Effect<void>) | undefined
   let toolHook: ((input: ToolHooks["execute.after"]) => Effect.Effect<void>) | undefined
   const defaults = Agent.Info.default(plan)
@@ -106,10 +108,21 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
       Environment.Service,
       Environment.Service.of({ files: Environment.makeFiles(driver), spawner: driver.spawner }),
     ),
+    Effect.provideService(
+      Bus.Service,
+      // Only publish is exercised by the plan plugin's context reconciliation.
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+      Bus.Service.of({
+        publish: (_definition: Event.Definition, data: { text?: string }) => {
+          if (typeof data.text === "string") published.push(data.text)
+          return Effect.succeed(data)
+        },
+      } as unknown as Bus.Interface),
+    ),
   )
   if (!contextHook) return yield* Effect.die("plan plugin did not register a context hook")
   if (!toolHook) return yield* Effect.die("plan plugin did not register a tool hook")
-  return { persisted, contextHook, toolHook, files: Environment.makeFiles(driver), planAgent }
+  return { persisted, published, contextHook, toolHook, files: Environment.makeFiles(driver), planAgent }
 })
 
 const request = (agent: Agent.ID, messages: Array<Message>): SessionContext => ({
@@ -150,8 +163,8 @@ const reminders = Effect.gen(function* () {
   const planRun = yield* run()
   yield* planRun.contextHook(request(plan, []))
   const buildRun = yield* run()
-  yield* buildRun.contextHook(request(build, [Message.user(planRun.persisted[0]!)]))
-  return { enter: planRun.persisted[0]!, leave: buildRun.persisted[0]! }
+  yield* buildRun.contextHook(request(build, [Message.user(planRun.published[0]!)]))
+  return { enter: planRun.published[0]!, leave: buildRun.published[0]! }
 })
 
 describe("plan plugin reminders", () => {
@@ -169,38 +182,41 @@ describe("plan plugin reminders", () => {
 
   it.effect("reconciles a missing enter reminder into the request and persists it", () =>
     Effect.gen(function* () {
-      const { persisted, contextHook } = yield* run()
+      const { persisted, published, contextHook } = yield* run()
       const messages = [Message.user("what agent are you?")]
       yield* contextHook(request(plan, messages))
       expect(messages).toHaveLength(2)
       // Inserted before the user's prompt, matching where agent-switch reminders land.
       const first = messages[0]?.content[0]
       expect(first?.type === "text" && first.text).toContain("You are in Plan mode")
-      expect(persisted).toHaveLength(1)
+      // Recorded straight into the durable log, not admitted as a pending inbox item that a
+      // later boundary would promote into another turn answering the reminder (#62628).
+      expect(published).toHaveLength(1)
+      expect(persisted).toHaveLength(0)
     }),
   )
 
   it.effect("does nothing when the transcript already has a live enter reminder", () =>
     Effect.gen(function* () {
       const { enter } = yield* reminders
-      const { persisted, contextHook } = yield* run()
+      const { published, contextHook } = yield* run()
       const messages = [Message.user(enter), Message.user("hello")]
       yield* contextHook(request(plan, messages))
       expect(messages).toHaveLength(2)
-      expect(persisted).toHaveLength(0)
+      expect(published).toHaveLength(0)
     }),
   )
 
   it.effect("reconciles a stale enter reminder with a leave reminder", () =>
     Effect.gen(function* () {
       const { enter } = yield* reminders
-      const { persisted, contextHook } = yield* run()
+      const { published, contextHook } = yield* run()
       const messages = [Message.user(enter), Message.user("ok implement it")]
       yield* contextHook(request(build, messages))
       expect(messages).toHaveLength(3)
       const middle = messages[1]?.content[0]
       expect(middle?.type === "text" && middle.text).toContain("NO LONGER in Plan mode")
-      expect(persisted).toHaveLength(1)
+      expect(published).toHaveLength(1)
     }),
   )
 
@@ -217,23 +233,23 @@ describe("plan plugin reminders", () => {
   it.effect("does nothing when a leave reminder already follows the enter reminder", () =>
     Effect.gen(function* () {
       const { enter, leave } = yield* reminders
-      const { persisted, contextHook } = yield* run()
+      const { published, contextHook } = yield* run()
       const messages = [Message.user(enter), Message.user(leave), Message.user("continue")]
       yield* contextHook(request(build, messages))
       expect(messages).toHaveLength(3)
-      expect(persisted).toHaveLength(0)
+      expect(published).toHaveLength(0)
     }),
   )
 
   it.effect("treats reminder text quoted inside a larger message as not live", () =>
     Effect.gen(function* () {
       const { enter } = yield* reminders
-      const { persisted, contextHook } = yield* run()
+      const { published, contextHook } = yield* run()
       // Mirrors a compaction checkpoint quoting the reminder inside <recent-context>.
       const messages = [Message.user(`<conversation-checkpoint>\n${enter}\n</conversation-checkpoint>`)]
       yield* contextHook(request(plan, messages))
       expect(messages).toHaveLength(2)
-      expect(persisted).toHaveLength(1)
+      expect(published).toHaveLength(1)
     }),
   )
 })
