@@ -5,7 +5,7 @@ import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { Provider } from "@opencode/schema/provider"
 import type { Session } from "@opencode/schema/session"
 import { ConfigWarming } from "@opencode/schema/config/warming"
-import { Clock, Duration, Effect, Option, Schema, Scope, Stream } from "effect"
+import { Clock, Duration, Effect, FiberMap, Option, Schema, Stream } from "effect"
 import { Config } from "../config.js"
 import { resolveModel } from "./optimize.js"
 
@@ -53,11 +53,19 @@ export const Plugin = define({
       })
     })
 
-    const scope = yield* Scope.Scope
-    const sessions = new Map<Session.ID, { last: number; expires: number; settings: typeof defaults }>()
     // A ping during a model request would compete with the request it keeps warm, which stalls single-slot local models.
     // A request counts from its context hook, because `session.step.started` waits for the first response chunk.
-    const requesting = new Set<Session.ID>()
+    const sessions = new Map<
+      Session.ID,
+      {
+        readonly status: "scheduled" | "requesting"
+        readonly last: number
+        readonly expires: number
+        readonly settings: typeof defaults
+      }
+    >()
+    // Each Session owns at most one loop: scheduling a Session again interrupts its previous loop.
+    const loops = yield* FiberMap.make<Session.ID>()
     // A turn always ends with an execution event, so a step that ends without its own event can't stay in flight.
     yield* ctx.event
       .subscribe({
@@ -72,20 +80,20 @@ export const Plugin = define({
       .pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
-            requesting.delete(event.data.sessionID)
-            // Count the next interval from the end of the response, not from when a long request started.
+            const now = yield* Clock.currentTimeMillis
             const current = sessions.get(event.data.sessionID)
-            if (current) current.last = yield* Clock.currentTimeMillis
+            // Count the next interval from the end of the response, not from when a long request started.
+            if (current) sessions.set(event.data.sessionID, { ...current, status: "scheduled", last: now })
           }),
         ),
         Effect.forkScoped({ startImmediately: true }),
       )
     const loop: (sessionID: Session.ID) => Effect.Effect<void> = Effect.fn("WarmingPlugin.loop")(
       function* (sessionID) {
+        const now = yield* Clock.currentTimeMillis
         const current = sessions.get(sessionID)
         if (!current) return
 
-        const now = yield* Clock.currentTimeMillis
         const next = Math.min(current.last + Duration.toMillis(current.settings.interval), current.expires)
         if (now < next) {
           yield* Effect.sleep(Duration.millis(next - now))
@@ -95,7 +103,7 @@ export const Plugin = define({
           sessions.delete(sessionID)
           return
         }
-        if (requesting.has(sessionID)) {
+        if (current.status === "requesting") {
           yield* Effect.sleep(current.settings.interval)
           return yield* loop(sessionID)
         }
@@ -105,24 +113,27 @@ export const Plugin = define({
         yield* ctx.session
           .generate({ sessionID, prompt: current.settings.prompt })
           .pipe(Effect.catchCause((cause) => Effect.logWarning("failed to warm session", { sessionID, cause })))
+        const finished = yield* Clock.currentTimeMillis
         const latest = sessions.get(sessionID)
-        if (latest === current && latest.last === last) latest.last = yield* Clock.currentTimeMillis
+        if (latest?.last === last) sessions.set(sessionID, { ...latest, last: finished })
         return yield* loop(sessionID)
       },
     )
 
-    const hook = (event: SessionHooks["context"]) =>
+    const hook = (status: "scheduled" | "requesting") => (event: SessionHooks["context"]) =>
       Effect.gen(function* () {
         const session = yield* ctx.session.get({ sessionID: event.sessionID }).pipe(Effect.orDie)
         if (session.parentID) return
 
-        const active = sessions.get(event.sessionID)
         const settings = yield* loadSettings(event)
+        // A loop whose Session is gone stops when it next wakes, or is replaced if the Session is scheduled again first.
         if (!settings) {
           sessions.delete(event.sessionID)
           return
         }
 
+        const now = yield* Clock.currentTimeMillis
+        const active = sessions.get(event.sessionID)
         // Once generate exposes request metadata to context hooks, tag warm requests instead of matching the prompt.
         const message = event.messages.at(-1)
         if (
@@ -131,36 +142,39 @@ export const Plugin = define({
           message.content[0]?.type === "text" &&
           (message.content[0].text === active?.settings.prompt || message.content[0].text === settings.prompt)
         ) {
-          if (active) active.settings = settings
+          if (active) sessions.set(event.sessionID, { ...active, settings })
           return
         }
 
-        const now = yield* Clock.currentTimeMillis
-        const duration = Duration.toMillis(settings.duration)
+        const expires = now + Duration.toMillis(settings.duration)
         if (active) {
-          active.last = now
-          active.expires = now + duration
-          active.settings = settings
+          sessions.set(event.sessionID, { ...active, last: now, expires, settings })
           return
         }
-        sessions.set(event.sessionID, { last: now, expires: now + duration, settings })
+        sessions.set(event.sessionID, { status, last: now, expires, settings })
         yield* Effect.logInfo("scheduled session warming", {
           sessionID: event.sessionID,
           interval: settings.interval,
-          expires: now + duration,
+          expires,
         })
-        yield* loop(event.sessionID).pipe(
-          Effect.catchCause((cause) =>
-            Effect.logError("session warming loop failed", { sessionID: event.sessionID, cause }),
+        yield* FiberMap.run(
+          loops,
+          event.sessionID,
+          loop(event.sessionID).pipe(
+            Effect.catchCause((cause) =>
+              Effect.logError("session warming loop failed", { sessionID: event.sessionID, cause }),
+            ),
           ),
-          Effect.forkIn(scope),
         )
       })
     yield* ctx.session.hook("context", (event) =>
-      Effect.sync(() => requesting.add(event.sessionID)).pipe(Effect.andThen(hook(event))),
+      Effect.sync(() => {
+        const current = sessions.get(event.sessionID)
+        if (current) sessions.set(event.sessionID, { ...current, status: "requesting" })
+      }).pipe(Effect.andThen(hook("requesting")(event))),
     )
-    yield* ctx.session.hook("compaction", hook)
-    yield* ctx.session.hook("generate", hook)
+    yield* ctx.session.hook("compaction", hook("scheduled"))
+    yield* ctx.session.hook("generate", hook("scheduled"))
   }),
 })
 
