@@ -185,7 +185,19 @@ export function normalize(input: unknown): Result {
   const legacyPlugins = decodeList(input.plugin, ConfigPluginV1.Spec, ["plugin"], diagnostics, decodeValue).map(
     (plugin) => (typeof plugin === "string" ? plugin : { package: plugin[0], options: plugin[1] }),
   )
-  const nativePlugins = decodeList(input.plugins, ConfigPlugin.Plugin, ["plugins"], diagnostics, decodeEncoded)
+  // `plugins` also accepts the v1 `[name, options]` tuple. Only that exact tuple converts; arrays of any other length
+  // stay arrays so the schema rejects them, just like v1 does.
+  const nativePlugins = decodeList(
+    Array.isArray(input.plugins)
+      ? input.plugins.map((plugin) =>
+          Array.isArray(plugin) && plugin.length === 2 ? { package: plugin[0], options: plugin[1] } : plugin,
+        )
+      : input.plugins,
+    ConfigPlugin.Plugin,
+    ["plugins"],
+    diagnostics,
+    decodeEncoded,
+  )
   if (legacyPlugins.length || nativePlugins.length || Array.isArray(input.plugin) || Array.isArray(input.plugins))
     encoded.plugins = [...legacyPlugins, ...nativePlugins]
 
