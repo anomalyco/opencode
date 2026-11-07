@@ -383,6 +383,7 @@ export interface ParserState {
 interface LoweringOptions {
   readonly cacheControl?: (cache: CacheHint | undefined) => OpenAIChatCacheControl | undefined
   readonly toolCallID?: (id: string) => string
+  readonly replayToolName?: (name: string) => string
   /** Project provider-specific fields from the exact source, even when other messages are dropped during lowering. */
   readonly assistant?: (source: AssistantMessage, message: OpenAIChatMessage) => OpenAIChatMessage
 }
@@ -449,7 +450,7 @@ const lowerToolCall = (part: ToolCallPart, options: MessageLoweringOptions): Ope
     id: options.toolCallID?.(part.id) ?? part.id,
     type: "function",
     function: {
-      name: part.name,
+      name: options.replayToolName?.(part.name) ?? part.name,
       arguments: ProviderShared.encodeJson(part.input === undefined ? {} : part.input),
     },
     extra_content: decodeExtraContent(part.providerMetadata?.[options.providerMetadataKey]?.extraContent),
@@ -647,8 +648,10 @@ const lowerMessages = Effect.fnUntraced(function* (
       modelID.includes("deepseek"))
   const reasoningField = request.model.compatibility?.reasoningField
   const mistral = ["mistral", "devstral", "codestral", "pixtral", "mixtral"].some((family) => modelID.includes(family))
+  const toolNames = new Set(ProviderShared.flattenTools(request.tools).map((tool) => tool.name))
   const lowering = {
     ...options,
+    replayToolName: (name: string) => ProviderShared.openAIReplayToolName(name, toolNames),
     providerMetadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
     toolCallID: (id: string) => {
       if (mistral)
