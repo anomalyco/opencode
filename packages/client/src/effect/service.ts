@@ -107,7 +107,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
 
     const failed = pool.reap()
     if (failed !== undefined) return yield* Effect.fail(failed)
-    if (pool.shouldRecruit(info !== undefined)) {
+    if (pool.shouldRecruit(info?.pid)) {
       yield* announce("missing")
       pool.add(yield* spawnContender)
     }

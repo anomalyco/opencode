@@ -87,7 +87,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       } else {
         const failed = pool.reap()
         if (failed !== undefined) throw failed
-        if (pool.shouldRecruit(registration.info !== undefined)) {
+        if (pool.shouldRecruit(registration.info?.pid)) {
           announce("missing")
           pool.add(await spawnContender())
         }
