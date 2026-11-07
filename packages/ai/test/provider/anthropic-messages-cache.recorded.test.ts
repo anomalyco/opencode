@@ -55,6 +55,9 @@ const longToolTurnRequest = ai.request({
   system: LARGE_CACHEABLE_SYSTEM,
   messages: longToolTurn,
   tools: [lookup],
+  // The cassette was recorded with a single tail breakpoint, before auto also marked Anthropic's previous tail.
+  // Re-record with `RECORD=true` and an Anthropic key to cover the current default instead.
+  cache: { tools: true, system: true, messages: { tail: 1 } },
   maxTokens: 16,
   temperature: 0,
 })
