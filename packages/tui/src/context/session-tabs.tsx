@@ -7,7 +7,7 @@ import { useClient } from "./client"
 import { locationKey, useData } from "./data"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { useEvent } from "./event"
-import { useRoute } from "./route"
+import { isPendingSession, useRoute } from "./route"
 import { useConfig } from "../config"
 import { useLocation } from "./location"
 import { useStorage } from "./storage"
@@ -140,7 +140,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     createSessionRetention({
       session: data.session,
       current: () =>
-        route.data.type === "session" && route.data.sessionID !== "dummy" ? route.data.sessionID : undefined,
+        route.data.type === "session" && !isPendingSession(route.data.sessionID) ? route.data.sessionID : undefined,
       keep: () => (enabled() ? state().tabs.map((tab) => tab.sessionID) : []),
       limit: 3,
     })
@@ -180,7 +180,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     createProgramStatus({
       renderer,
       sessions: () => {
-        const viewed = route.data.type === "session" && route.data.sessionID !== "dummy" ? current() : undefined
+        const viewed = route.data.type === "session" && !isPendingSession(route.data.sessionID) ? current() : undefined
         const tabs = enabled() ? state().tabs.map((tab) => tab.sessionID) : []
         return Array.from(new Set(viewed ? [...tabs, viewed] : tabs)).flatMap((sessionID): PendingSession[] => {
           const session = status(sessionID)
@@ -208,7 +208,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           () => config.tabs.scope,
         ],
         ([routed]) => {
-          if (!routed || routed === "dummy") return
+          if (!routed || isPendingSession(routed)) return
           const sessionID = root(routed)
           cancelledTabs.delete(sessionID)
           history = recordSessionTabHistory(history, sessionID)
@@ -236,7 +236,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     createEffect(() => {
       viewRetry()
       if (focused() !== true) return
-      if (route.data.type !== "session" || route.data.sessionID === "dummy") return
+      if (route.data.type !== "session" || isPendingSession(route.data.sessionID)) return
       const sessionID = root(route.data.sessionID)
       const idle = data.session.get(sessionID)?.time.idle
       if (idle === undefined || !isUnread(sessionID) || acknowledged.get(sessionID) === idle) return

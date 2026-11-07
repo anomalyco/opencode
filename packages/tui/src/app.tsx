@@ -21,7 +21,7 @@ import {
   type CliRendererConfig,
   type ThemeMode,
 } from "@opentui/core"
-import { RouteProvider, useRoute } from "./context/route"
+import { RouteProvider, useRoute, PENDING_SESSION_ID, isPendingSession } from "./context/route"
 import {
   Switch,
   Match,
@@ -397,7 +397,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                               input.args.continue
                                                 ? {
                                                     type: "session",
-                                                    sessionID: "dummy",
+                                                    sessionID: PENDING_SESSION_ID,
                                                   }
                                                 : undefined
                                             }
@@ -700,7 +700,12 @@ function App() {
       })
       .then((response) => {
         const match = response.data[0]?.id
-        if (!match) return
+        // Nothing to continue in this location. Leave the pending route behind instead of
+        // rendering a session the server does not have.
+        if (!match) {
+          route.navigate({ type: "home" })
+          return
+        }
         if (!args.fork) {
           route.navigate({ type: "session", sessionID: match, prompt: startupPrompt })
           return
@@ -708,9 +713,15 @@ function App() {
         void client.api.session
           .fork({ sessionID: match })
           .then((result) => route.navigate({ type: "session", sessionID: result.id, prompt: startupPrompt }))
-          .catch(toast.error)
+          .catch((error) => {
+            route.navigate({ type: "home" })
+            toast.error(error)
+          })
       })
-      .catch(toast.error)
+      .catch((error) => {
+        route.navigate({ type: "home" })
+        toast.error(error)
+      })
   })
 
   // Handle --session with --fork once.
@@ -1446,10 +1457,14 @@ function App() {
                 <Match when={route.data.type === "session"}>
                   <Show when={route.data.type === "session" ? route.data.sessionID : undefined} keyed>
                     {(sessionID) => (
-                      <SessionFrame
-                        sessionID={sessionID}
-                        verticalTabsWidth={verticalTabsVisible() ? tabsResize.size() : 0}
-                      />
+                      // `--continue` resolves the session after mount; session views would query the
+                      // server for the placeholder id and get a schema error instead.
+                      <Show when={!isPendingSession(sessionID)}>
+                        <SessionFrame
+                          sessionID={sessionID}
+                          verticalTabsWidth={verticalTabsVisible() ? tabsResize.size() : 0}
+                        />
+                      </Show>
                     )}
                   </Show>
                 </Match>

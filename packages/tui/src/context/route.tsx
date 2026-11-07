@@ -17,6 +17,17 @@ export type SessionRoute = {
   prompt?: PromptInfo
 }
 
+/**
+ * `--continue` has to ask the server which session to resume, so the TUI starts on a session
+ * route carrying this id until the answer arrives. It is not a session id: real ids start with
+ * `ses`, and anything that queries the server for this one is rejected, so session views wait.
+ */
+export const PENDING_SESSION_ID = "pending"
+
+export function isPendingSession(sessionID: string) {
+  return sessionID === PENDING_SESSION_ID
+}
+
 export type PluginRoute = {
   type: "plugin"
   id: string
