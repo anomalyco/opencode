@@ -8,10 +8,10 @@ export type ProtocolID = Schema.Schema.Type<typeof ProtocolID>
 export const RouteID = Schema.String
 export type RouteID = Schema.Schema.Type<typeof RouteID>
 
-export const ModelID = Schema.String.pipe(Schema.brand("AI.ModelID"))
+export const ModelID = Schema.String
 export type ModelID = typeof ModelID.Type
 
-export const ProviderID = Schema.String.pipe(Schema.brand("AI.ProviderID"))
+export const ProviderID = Schema.String
 export type ProviderID = typeof ProviderID.Type
 
 export const ResponseID = Schema.String

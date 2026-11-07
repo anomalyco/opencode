@@ -60,6 +60,7 @@ const fromRequest = Effect.fn("MetaMessages.fromRequest")(function* (request: LL
 
 export const protocol = Protocol.make({
   id: "meta-messages",
+  api: "messages",
   body: { schema: Body, from: fromRequest },
   stream: AnthropicMessages.protocol.stream,
 })

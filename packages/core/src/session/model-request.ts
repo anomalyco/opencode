@@ -6,7 +6,6 @@ import {
   type ContentPart,
   GENERATION_KEYS,
   type GenerationOptionsFields,
-  LanguageModel,
   type LLM,
   type LLMRequest,
   type Media,
@@ -17,7 +16,7 @@ import {
   type ToolResultPart,
   UserMessage,
 } from "@opencode/ai/effect"
-import type { StreamOptions } from "@opencode/ai/route"
+import { Route, type StreamOptions } from "@opencode/ai/route"
 import type {
   SessionCompaction,
   SessionContext,
@@ -109,7 +108,7 @@ export const baseTranscript = (input: {
   readonly initial: ReadonlyArray<Instructions.Rendered>
   readonly messages: ReadonlyArray<SessionMessage.Info>
 }) => {
-  const providerMetadataKey = input.model.model.route.providerMetadataKey ?? input.model.model.provider
+  const providerMetadataKey = Route.of(input.model.model)?.providerMetadataKey ?? input.model.model.provider
   return {
     providerMetadataKey,
     system: [
@@ -334,19 +333,18 @@ export const layer = Layer.effect(
         providerOptions: Object.keys(providerOptions).length === 0 ? undefined : providerOptions,
       })
 
-      const baseURL = base.model.route.endpoint.baseURL
+      const baseURL = base.model.baseURL
       const modelHook = yield* hooks.trigger("session", "model.request", {
         ...scope,
         baseURL,
         headers: { ...base.headers },
       })
-      const route =
-        modelHook.baseURL !== undefined && modelHook.baseURL !== baseURL
-          ? base.model.route.with({ endpoint: { baseURL: modelHook.baseURL } })
-          : base.model.route
       const request = {
         ...base,
-        model: route === base.model.route ? base.model : LanguageModel.update(base.model, { route }),
+        model:
+          modelHook.baseURL !== undefined && modelHook.baseURL !== baseURL
+            ? { ...base.model, baseURL: modelHook.baseURL }
+            : base.model,
         headers: Object.keys(modelHook.headers).length === 0 ? undefined : modelHook.headers,
       }
       const hasHttpHooks =

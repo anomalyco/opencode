@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, type DecisionModel, type DecisionOptions } from "../../src/effect.js"
+import { ai, type DecisionOptions, Model } from "../../src/effect.js"
 import {
   Baseten,
   CloudflareAIGateway,
@@ -170,7 +170,7 @@ describe("Decision recorded", () => {
 })
 
 const assertDecision = <Options extends DecisionOptions>(
-  model: DecisionModel<Options>,
+  model: Model<"decision", Options>,
   input: Parameters<typeof ai.decision.generate>[0]["input"] = [{ type: "text", text: ticket }],
 ) =>
   Effect.gen(function* () {

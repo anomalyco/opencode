@@ -5,7 +5,6 @@ import {
   ai,
   AIError,
   HttpContext,
-  LanguageModel,
   LLMEvent,
   Media,
   Message,
@@ -15,6 +14,7 @@ import {
   ToolResultPart,
   TransportError,
   Usage,
+  Model,
 } from "../../src/effect.js"
 import {
   Auth,
@@ -23,6 +23,7 @@ import {
   WebSocketTransport,
   type ChannelCreate,
   type ChannelObservation,
+  Route,
 } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as Azure from "../../src/providers/azure.js"
@@ -39,9 +40,11 @@ import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
-const model = OpenAIResponses.route
-  .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-  .model({ id: "gpt-4.1-mini" })
+const route = OpenAIResponses.route.with({
+  endpoint: { baseURL: "https://api.openai.test/v1/" },
+  auth: Auth.bearer("test"),
+})
+const model = route.model({ id: "gpt-4.1-mini" })
 
 const xaiModel = XAI.configure({ apiKey: "test", baseURL: "https://api.x.ai/v1" }).responses("grok-4.5")
 
@@ -1485,9 +1488,7 @@ describe("OpenAI Responses route", () => {
     Effect.gen(function* () {
       yield* LLMClient.generate({
         ...request,
-        model: LanguageModel.update(model, {
-          route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }),
-        }),
+        model: route.with({ endpoint: { query: { "api-version": "v1" } } }).model({ id: model.id }),
       }).pipe(
         Effect.provide(
           dynamicResponse((input) =>
@@ -2233,7 +2234,7 @@ describe("OpenAI Responses route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { capabilities: { promptCacheKey: false } }),
+          model: { ...model, capabilities: { promptCacheKey: false } },
           prompt: "Hello",
           promptCacheKey: "request_cache",
         }),

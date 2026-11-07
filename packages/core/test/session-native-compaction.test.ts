@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { LLMClient, LanguageModel, Message, ToolDefinition } from "@opencode/ai/effect"
+import { LLMClient, Message, ToolDefinition } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 import { Agent } from "@opencode/core/agent"
 import { Bus } from "@opencode/core/bus"
@@ -26,6 +26,7 @@ import { SessionStore } from "@opencode/core/session/store"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { DateTime, Deferred, Effect, Fiber, Schema } from "effect"
 import { testEffect } from "./lib/effect"
+import { Route } from "@opencode/ai/route"
 
 const decode = (checkpoint: { readonly native: { readonly messages: unknown } }) =>
   Schema.decodeUnknownSync(SessionHistory.NativeWindow)(checkpoint.native.messages)
@@ -142,9 +143,7 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
   const native = OpenAI.configure({ apiKey: "fixture", baseURL: server.url.toString() }).responses("gpt-5.4-mini")
   const model = SessionRunnerModel.resolved(
     endpoint
-      ? LanguageModel.update(native, {
-          route: native.route.with({ compact: { endpoint: native.route.compact.endpoint } }),
-        })
+      ? Route.model(Route.of(native)!.with({ compact: { endpoint: Route.of(native)!.compact!.endpoint } }), native)
       : native,
     {
       capabilities: { tools: true, input: ["text", "image"], output: ["text"] },

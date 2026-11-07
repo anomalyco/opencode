@@ -28,6 +28,7 @@ import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { fakeSelectorSdk } from "../fixture/selector"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
+import { Route } from "@opencode/ai/route"
 
 const it = testEffect(PluginTestLayer)
 
@@ -515,8 +516,8 @@ describe("GithubCopilotPlugin", () => {
         loadPackage: () => Effect.die("Copilot must not load a native provider package"),
         loadAISDK: (model) => aisdk.model(model),
       })
-      expect(resolved.route.id).toBe("ai-sdk:@ai-sdk/github-copilot")
-      expect(resolved.route.providerMetadataKey).toBe("copilot")
+      expect(Route.of(resolved)?.id).toBe("ai-sdk:@ai-sdk/github-copilot")
+      expect(Route.of(resolved)?.providerMetadataKey).toBe("copilot")
     }),
   )
 

@@ -733,6 +733,7 @@ const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
 
 export const protocol = Protocol.make({
   id: ADAPTER,
+  api: "chat-completions",
   body: { schema: MistralBody, from: fromRequest },
   stream: {
     event: MistralStreamEvent,

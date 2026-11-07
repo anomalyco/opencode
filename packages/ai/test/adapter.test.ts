@@ -3,11 +3,8 @@ import { Effect, Schema, Stream } from "effect"
 import { ai, LLMResponse } from "../src/effect.js"
 import { Route, Endpoint, LLMClient, Protocol, type Framing } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
-import { LanguageModel } from "../src/schema/index.js"
 import { testEffect } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
-
-const updateModel = (model: LanguageModel, patch: Partial<LanguageModel.Input>) => LanguageModel.update(model, patch)
 
 const Json = Schema.fromJsonString(Schema.Unknown)
 const encodeJson = Schema.encodeSync(Json)
@@ -86,11 +83,7 @@ const configuredGemini = gemini.with({ endpoint: { baseURL: "https://fake.local"
 
 const request = ai.request({
   id: "req_1",
-  model: LanguageModel.make({
-    id: "fake-model",
-    provider: "fake-provider",
-    route: configuredFake,
-  }),
+  model: Route.model(configuredFake, { id: "fake-model", provider: "fake-provider" }),
   prompt: "hello",
 })
 
@@ -142,7 +135,7 @@ describe("llm route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest({
         ...request,
-        model: updateModel(request.model, { route: configuredGemini }),
+        model: Route.model(configuredGemini, { id: request.model.id, provider: request.model.provider }),
       })
 
       expect(prepared.route).toBe("gemini-fake")
@@ -172,7 +165,10 @@ describe("llm route", () => {
         framing: fakeFraming,
       })
 
-      const prepared = yield* compileRequest({ ...request, model: updateModel(request.model, { route: duplicate }) })
+      const prepared = yield* compileRequest({
+        ...request,
+        model: Route.model(duplicate, { id: request.model.id, provider: request.model.provider }),
+      })
 
       expect(prepared.body).toEqual({ body: "late-default" })
     }),

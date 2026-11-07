@@ -6,6 +6,7 @@ import { JsonObject, optionalNull, ProviderShared } from "./shared.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
 import { ResponsesCompaction } from "./utils/responses-compaction.js"
 import { OpenAIFreeform } from "./openai-freeform.js"
+import { routeOf } from "../schema/model.js"
 
 const ADAPTER = "xai-responses"
 const NAME = "xAI Responses"
@@ -61,7 +62,7 @@ const fromRequest = Effect.fn("XAIResponses.fromRequest")(function* (request: LL
     return yield* ProviderShared.unsupportedOperation({
       operation: "in-band-compaction",
       provider: request.model.provider,
-      route: request.model.route.id,
+      route: routeOf(request.model).id,
       message: "xAI requires explicit compaction through ai.compact; automatic context management is not supported",
     })
   const options = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(request.providerOptions ?? {})
@@ -86,6 +87,7 @@ const HOSTED_TOOLS = {
 
 export const protocol = Protocol.make({
   id: ADAPTER,
+  api: "responses",
   body: {
     schema: Body,
     from: fromRequest,

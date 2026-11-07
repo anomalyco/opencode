@@ -12,6 +12,7 @@ import {
   WebSocketTransport,
   type ChannelCheckpoint,
   type WebSocketChannelDriver,
+  Route,
 } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
@@ -58,7 +59,7 @@ describe("xAI Responses route", () => {
       const prepared = yield* compileRequest(ai.request({ model, prompt: "Hello" }))
       expect(prepared.route).toBe("xai-responses")
       expect(prepared.protocol).toBe("xai-responses")
-      expect(prepared.model.route.providerMetadataKey).toBe("xai")
+      expect(Route.of(prepared.model)?.providerMetadataKey).toBe("xai")
       expect(prepared.body.store).toBe(false)
       expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
     }),
@@ -334,6 +335,6 @@ it.effect("names the xAI Chat route separately from its OpenAI Chat protocol", (
     )
     expect(prepared.route).toBe("xai-chat")
     expect(prepared.protocol).toBe("openai-chat")
-    expect(prepared.model.route.providerMetadataKey).toBe("xai")
+    expect(Route.of(prepared.model)?.providerMetadataKey).toBe("xai")
   }),
 )

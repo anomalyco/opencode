@@ -2,14 +2,15 @@ import { Effect } from "effect"
 import {
   ai,
   CompactionPart,
-  LanguageModel,
   LLMClient,
   LLMEvent,
   type LLMRequest,
   Message,
   ProviderID,
+  Model,
 } from "../../src/effect.js"
 import { OpenAI, Azure, XAI, Anthropic, OpenAICompatibleResponses } from "../../src/providers.js"
+import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
 
 const openai = OpenAI.configure({
   apiKey: "test",
@@ -24,9 +25,9 @@ for (const model of [
   OpenAI.model("fixture", {}),
   Azure.responsesModel("fixture", { resourceName: "test" }),
   XAI.model("fixture", {}),
-  openai.route.with({ headers: { "x-test": "test" } }).model({ id: "fixture" }),
-  LanguageModel.update(openai, { options: { maxTokens: 100 } }),
-  LanguageModel.make(LanguageModel.input(openai)),
+  OpenAIResponses.route.with({ headers: { "x-test": "test" } }).model({ id: "fixture" }),
+  { ...openai, options: { maxTokens: 100 } },
+  Model.make(openai),
 ]) {
   ai.compact(ai.request({ model, prompt: "hello" }))
 }
@@ -63,15 +64,8 @@ const switched = { ...request, model: Anthropic.configure().model("fixture") }
 // @ts-expect-error Switching models replaces, rather than inherits, the capability.
 ai.compact(switched)
 ai.compact({ ...switched, model: openai })
-ai.compact(
-  // @ts-expect-error Replacing the route also replaces compaction capability.
-  ai.request({
-    model: LanguageModel.update(openai, { route: Anthropic.configure().model("fixture").route }),
-    prompt: "Hello",
-  }),
-)
 
-declare const dynamicModel: LanguageModel
+declare const dynamicModel: Model<"chat">
 declare const dynamicPatch: Partial<LLMRequest>
 const dynamicRequest = ai.request({ model: dynamicModel, prompt: "hello" })
 // @ts-expect-error A dynamically selected model must be narrowed first.

@@ -1,9 +1,9 @@
 import { Duration, Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
-import { ImageModel, ImageResponse, type ImageRequest } from "../image.js"
+import { ImageResponse, type ImageRequest, imageModel } from "../image.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { mergeJsonRecords } from "../schema/index.js"
+import { mergeJsonRecords, type Model } from "../schema/index.js"
 import { JsonObject, ProviderShared, lenient } from "./shared.js"
 import { ImageSizing } from "./utils/image-sizing.js"
 
@@ -27,7 +27,7 @@ export type AlibabaImageOptions = {
   readonly enableSequential?: boolean
 } & Record<string, unknown>
 
-export type Request = ImageRequest<ImageModel<AlibabaImageOptions>>
+export type Request = ImageRequest<Model<"image", AlibabaImageOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Response schema
@@ -117,8 +117,7 @@ export const protocol = MediaProtocol.inline<Request, ImageResponse>(route, {
   response: { decode: decodeResponse },
 })
 
-export const model = (input: MediaRoute.ModelInput) =>
-  ImageModel.fromRoute<AlibabaImageOptions>({ protocol, path: PATH }, input)
+export const model = (input: MediaRoute.ModelInput) => imageModel<AlibabaImageOptions>({ protocol, path: PATH }, input)
 
 export const AlibabaImages = {
   protocol,

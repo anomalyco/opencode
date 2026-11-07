@@ -1,13 +1,13 @@
 import {
   ai,
   type AssistantMessage,
-  type LanguageModel,
   Media,
   Message,
   ToolCallPart,
   ToolDefinition,
   ToolResultPart,
   type UserMessage,
+  Model,
 } from "../src/effect.js"
 
 export const basicContinuation = ["system", "user-text", "assistant-text", "user-follow-up"] as const
@@ -50,7 +50,7 @@ export const continuationTool = ToolDefinition.make({
 
 export function continuationRequest(input: {
   readonly id: string
-  readonly model: LanguageModel
+  readonly model: Model<"chat">
   readonly features: ReadonlyArray<ContinuationFeature>
   readonly image?: string
 }) {

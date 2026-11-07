@@ -28,6 +28,7 @@ export type Settings<Options = OpenAIProviderOptionsInput> = ProviderPackage.Set
 
 export const protocol = Protocol.make({
   id: "digitalocean-chat",
+  api: "chat-completions",
   body: {
     schema: OpenAIChat.protocol.body.schema,
     from: (request) => OpenAIChat.fromRequest(request, { cacheControl: cacheControl() }),

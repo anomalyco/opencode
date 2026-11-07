@@ -1,16 +1,16 @@
 import { Effect, Schema, SchemaGetter } from "effect"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { mergeJsonRecords, type OpenString } from "../schema/index.js"
+import { mergeJsonRecords, type OpenString, type Model } from "../schema/index.js"
 import {
   TranscriptionFinishEvent,
-  TranscriptionModel,
   TranscriptionSegmentEvent,
   TranscriptionTextDeltaEvent,
   type TranscriptionRequest,
   type TranscriptionSegment,
   type TranscriptionWord,
   type TranscriptionEvent,
+  transcriptionModel,
 } from "../transcription.js"
 import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
 
@@ -33,7 +33,7 @@ export type GoogleTranscriptionOptions = {
   }
 } & Record<string, unknown>
 
-export type Request = TranscriptionRequest<TranscriptionModel<GoogleTranscriptionOptions>>
+export type Request = TranscriptionRequest<Model<"transcription", GoogleTranscriptionOptions>>
 
 // ---------------------------------------------------------------------------
 // 3. Streaming event schema
@@ -191,7 +191,7 @@ export const protocol = MediaProtocol.stream<Request, TranscriptionEvent, string
 })
 
 export const model = (input: MediaRoute.ModelInput) =>
-  TranscriptionModel.fromRoute<GoogleTranscriptionOptions, string, State>(
+  transcriptionModel<GoogleTranscriptionOptions, string, State>(
     {
       protocol,
       baseURL: DEFAULT_BASE_URL,

@@ -1,5 +1,4 @@
 import { describe, expect } from "bun:test"
-import { LanguageModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Effect, Fiber, Layer, Ref, Stream } from "effect"
 import { Integration } from "@opencode/core/integration"
@@ -16,6 +15,7 @@ import { Money } from "@opencode/schema/money"
 import { withEnv } from "./fixture/env"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
+import { Route } from "@opencode/ai/route"
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected value")
@@ -60,8 +60,7 @@ describe("Provider and Model", () => {
               ? Credential.Key.make({ type: "key", key: "fixture-key", metadata: { tenant: "fixture" } })
               : undefined,
             {
-              loadAISDK: () =>
-                Effect.succeed(LanguageModel.make({ id: modelID, provider: providerID, route: OpenAIChat.route })),
+              loadAISDK: () => Effect.succeed(Route.model(OpenAIChat.route, { id: modelID, provider: providerID })),
             },
           )
 

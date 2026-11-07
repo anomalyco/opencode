@@ -1,5 +1,12 @@
 import { Schema, type Effect } from "effect"
-import type { AIError, LanguageModelSanitizerCompatibility, LLMEvent, LLMRequest, ProtocolID } from "../schema/index.js"
+import type {
+  AIError,
+  Api,
+  LanguageModelSanitizerCompatibility,
+  LLMEvent,
+  LLMRequest,
+  ProtocolID,
+} from "../schema/index.js"
 
 /**
  * The semantic API contract of one model server family.
@@ -37,6 +44,8 @@ import type { AIError, LanguageModelSanitizerCompatibility, LLMEvent, LLMRequest
 export interface Protocol<Body, Frame, Event, State> {
   /** Stable id for the wire protocol implementation. */
   readonly id: ProtocolID
+  /** The models.dev v2 API this protocol speaks, such as `"chat-completions"`; dialects name the API they extend. */
+  readonly api: Api
   /** Request side: schema for the provider-native body and how to build it. */
   readonly body: ProtocolBody<Body>
   /** Response side: streaming state machine. */

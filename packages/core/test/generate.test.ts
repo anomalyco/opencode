@@ -4,14 +4,13 @@ import {
   AuthenticationError,
   HttpContext,
   InvalidRequestError,
-  LanguageModel,
   LLMClient,
   ProviderInternalError,
   QuotaExceededError,
   RateLimitError,
   TransportError,
 } from "@opencode/ai/effect"
-import { RequestExecutor } from "@opencode/ai/route"
+import { RequestExecutor, Route } from "@opencode/ai/route"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import { AISDK } from "@opencode/core/aisdk"
@@ -35,7 +34,7 @@ const selected = Info.make({
   ...Info.default(Provider.ID.make("test-provider"), ID.make("gemini")),
   package: Provider.aisdk("@ai-sdk/perplexity"),
 })
-const runtime = LanguageModel.make({ id: "gemini", provider: "test-provider", route: OpenAIChat.route })
+const runtime = Route.model(OpenAIChat.route, { id: "gemini", provider: "test-provider" })
 const reference = Ref.make({ providerID: selected.providerID, id: selected.id })
 
 const providers = Layer.mock(Provider.Service, {

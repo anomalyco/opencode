@@ -235,7 +235,8 @@ const trace = [
 export async function session(snapshots: "on" | "off", ttft: number) {
   // Loaded here, not at the top: the snapshot cases then load at git refs whose session and model
   // APIs differ, and the first session call (a warmup run) pays for the import.
-  const { ai, LanguageModel } = await import("@opencode/ai/effect")
+  const { ai } = await import("@opencode/ai/effect")
+  const { Route } = await import("@opencode/ai/route")
   const { OpenAIChat } = await import("@opencode/ai/protocols/openai-chat")
   const { TestLLM } = await import("@opencode/ai/testing")
   const { LayerNode } = await import("@opencode/util/effect/layer-node")
@@ -253,20 +254,17 @@ export async function session(snapshots: "on" | "off", ttft: number) {
   const { SessionTable } = await import("../src/session/sql")
   const { ToolOutput } = await import("../src/tool-output")
 
-  const model = SessionRunnerModel.resolved(
-    LanguageModel.make({ id: "bench-model", provider: "test", route: OpenAIChat.route }),
-    {
-      capabilities: { tools: true, input: ["text"], output: ["text"] },
-      limit: { context: 100_000, output: 1_000 },
-      cost: [
-        {
-          input: Money.USDPerMillionTokens.make(1),
-          output: Money.USDPerMillionTokens.make(2),
-          cache: { read: Money.USDPerMillionTokens.make(0.1), write: Money.USDPerMillionTokens.make(0.5) },
-        },
-      ],
-    },
-  )
+  const model = SessionRunnerModel.resolved(Route.model(OpenAIChat.route, { id: "bench-model", provider: "test" }), {
+    capabilities: { tools: true, input: ["text"], output: ["text"] },
+    limit: { context: 100_000, output: 1_000 },
+    cost: [
+      {
+        input: Money.USDPerMillionTokens.make(1),
+        output: Money.USDPerMillionTokens.make(2),
+        cache: { read: Money.USDPerMillionTokens.make(0.1), write: Money.USDPerMillionTokens.make(0.5) },
+      },
+    ],
+  })
 
   const before = spawns
   const layer = snapshots === "on" ? snapshotLayer(state.data, state.dir) : Snapshot.noopLayer

@@ -2,11 +2,11 @@ import { Effect } from "effect"
 import {
   ai,
   ImageClient,
-  ImageModel,
-  type ImageModelOptions,
+  type ModelProviderOptions,
   type ImageOptions,
   type ImageRequest,
   Media,
+  Model,
 } from "../src/effect.js"
 import type { Service } from "../src/image-client.js"
 import { Anthropic, Google, OpenAI, XAI, ZAI } from "../src/providers.js"
@@ -20,9 +20,9 @@ type GoogleLikeOptions = {
   readonly thinkingLevel?: "LOW" | "HIGH"
 } & Record<string, unknown>
 
-declare const google: ImageModel<GoogleLikeOptions>
+declare const google: Model<"image", GoogleLikeOptions>
 // @ts-expect-error Extracted model options retain known provider fields.
-const invalidGoogleOptions: ImageModelOptions<typeof google> = { imageSize: "8K" }
+const invalidGoogleOptions: ModelProviderOptions<typeof google> = { imageSize: "8K" }
 void invalidGoogleOptions
 
 ai.image.generate({
@@ -71,7 +71,7 @@ ai.image.generate({ model: googleProvider, prompt: "A lighthouse", providerOptio
 const openai = OpenAI.image("gpt-image-2")
 // @ts-expect-error Image generation options are request-scoped, not provider configuration.
 OpenAI.configure({ image: { providerOptions: { quality: "medium" } } })
-const futureOpenAIOptions: ImageModelOptions<typeof openai> = { quality: "future-quality" }
+const futureOpenAIOptions: ModelProviderOptions<typeof openai> = { quality: "future-quality" }
 void futureOpenAIOptions
 ai.image.generate({
   model: openai,
@@ -150,8 +150,8 @@ ai.image.generate({ model: zai, prompt: "A lighthouse", providerOptions: { quali
 // @ts-expect-error Known Z.ai user IDs retain their value kind.
 ai.image.generate({ model: zai, prompt: "A lighthouse", providerOptions: { userID: 1 } })
 
-declare const generic: ImageModel<ImageOptions>
-const widenImage = <Options extends ImageOptions>(model: ImageModel<Options>): ImageModel => model
+declare const generic: Model<"image", ImageOptions>
+const widenImage = <Options extends ImageOptions>(model: Model<"image", Options>): Model<"image"> => model
 void widenImage
 ai.image.generate({ model: generic, prompt: "A lighthouse", providerOptions: { arbitrary: true } })
 const explicitAsset: Media.Asset = Media.url("https://example.com/image.png")
@@ -172,7 +172,7 @@ const request = ai.image.request({
   prompt: "A lighthouse",
   providerOptions: { imageSize: "1K", futureOption: true },
 })
-const typedRequest: ImageRequest<ImageModel<GoogleLikeOptions>> = request
+const typedRequest: ImageRequest<Model<"image", GoogleLikeOptions>> = request
 void typedRequest
 const generated = ImageClient.generate(request)
 type GenerateRequirements = Assert<Equal<Requirements<typeof generated>, Service>>

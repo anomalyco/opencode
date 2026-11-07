@@ -10,13 +10,14 @@ import { Endpoint } from "../../src/route/endpoint.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
+import { Route } from "../../src/route.js"
 
 it.effect("Moonshot composes shared protocols with explicit endpoints and bearer authentication", () =>
   Effect.gen(function* () {
     const moonshot = Moonshot.configure()
     expect(moonshot.model).toBe(moonshot.chat)
-    expect(moonshot.messages("kimi-k3").route.body).toBe(AnthropicMessages.protocol.body)
-    expect(moonshot.responses("kimi-k3").route.body).toBe(OpenResponses.protocol.body)
+    expect(Route.of(moonshot.messages("kimi-k3"))?.body).toBe(AnthropicMessages.protocol.body)
+    expect(Route.of(moonshot.responses("kimi-k3"))?.body).toBe(OpenResponses.protocol.body)
     for (const item of [
       { model: moonshot.chat("kimi-k3"), path: "/v1/chat/completions" },
       { model: moonshot.messages("kimi-k3"), path: "/anthropic/v1/messages" },
@@ -24,11 +25,11 @@ it.effect("Moonshot composes shared protocols with explicit endpoints and bearer
     ]) {
       const request = ai.request({ model: item.model, prompt: "Hello" })
       const compiled = yield* compileRequest(request)
-      const url = Endpoint.render(item.model.route.endpoint, { request, body: compiled.body }).toString()
+      const url = Endpoint.render(Route.of(item.model)?.endpoint, { request, body: compiled.body }).toString()
       expect(url).toBe(`https://api.moonshot.ai${item.path}`)
       expect(item.model.provider).toBe("moonshotai")
-      expect(item.model.route.providerMetadataKey).toBe("moonshot")
-      const headers = yield* item.model.route.auth.apply({
+      expect(Route.of(item.model)?.providerMetadataKey).toBe("moonshot")
+      const headers = yield* item.model.auth.apply({
         request,
         method: "POST",
         url,
@@ -61,8 +62,8 @@ it.effect("Moonshot preserves default reasoning across model IDs on custom endpo
       expect(compiled.body.store).toBeUndefined()
       expect(compiled.body.thinking).toBeUndefined()
       expect(compiled.body.reasoning_effort).toBeUndefined()
-      expect(model.route.endpoint.baseURL).toBe("https://gateway.example/v1")
-      const headers = yield* model.route.auth.apply({
+      expect(model.baseURL).toBe("https://gateway.example/v1")
+      const headers = yield* model.auth.apply({
         request,
         method: "POST",
         url: "https://gateway.example/v1/chat/completions",
@@ -135,10 +136,8 @@ it.effect("Moonshot lowers API-specific reasoning options without adding unrelat
 
 it.effect("Moonshot validates native Chat thinking options", () =>
   Effect.gen(function* () {
-    const invalid = Moonshot.configure({ apiKey: "fixture" })
-      .chat("kimi-k2.6")
-      .route.with({ providerOptions: { thinking: { type: "enabled", keep: 42 } } })
-      .model({ id: "kimi-k2.6" })
+    const chat = Moonshot.configure({ apiKey: "fixture" }).chat("kimi-k2.6")
+    const invalid = { ...chat, options: { providerOptions: { thinking: { type: "enabled", keep: 42 } } } }
     const failure = yield* compileRequest(ai.request({ model: invalid, prompt: "Hello" })).pipe(Effect.flip)
     expect(failure.reason._tag).toBe("InvalidRequest")
     expect(failure.message).toContain("keep")

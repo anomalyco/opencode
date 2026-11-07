@@ -1,4 +1,5 @@
 import { Option, Schema } from "effect"
+import type { Model, ModelProviderOptions } from "./model.js"
 import { withStatics } from "@opencode/schema/schema"
 import { Tool } from "@opencode/schema/tool"
 import {
@@ -6,8 +7,6 @@ import {
   CacheHint,
   type CachePolicy,
   JsonSchema,
-  type LanguageModel,
-  type LanguageModelProviderOptions,
   ProviderMetadata,
   ReasoningEffort,
   type GenerationOptionsFields,
@@ -486,8 +485,8 @@ export namespace ToolChoice {
  * A normalized text request, the plain object `ai.request(...)` returns. Edit it with a spread, such as
  * `{ ...request, messages: [...request.messages, next] }`, or pass the edited object back to `ai.request`.
  */
-export interface LLMRequest<Model extends LanguageModel = LanguageModel>
-  extends BaseRequest<Model, LanguageModelProviderOptions<Model>>,
+export interface LLMRequest<SelectedModel extends Model<"chat"> = Model<"chat">>
+  extends BaseRequest<SelectedModel, ModelProviderOptions<SelectedModel>>,
     GenerationOptionsFields {
   readonly id?: string
   readonly system: ReadonlyArray<SystemPart>

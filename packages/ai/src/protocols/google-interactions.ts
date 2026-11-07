@@ -23,6 +23,7 @@ import { Lifecycle } from "./utils/lifecycle.js"
 import { MediaInput } from "./utils/media-input.js"
 import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
 import { ToolStream } from "./utils/tool-stream.js"
+import { routeOf } from "../schema/model.js"
 
 const ADAPTER = "google-interactions"
 const SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
@@ -253,7 +254,7 @@ const signature = (metadata: ProviderMetadata | undefined, key: string) => {
 
 const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
   const steps: InputStep[] = []
-  const key = request.model.route.providerMetadataKey ?? request.model.provider
+  const key = routeOf(request.model).providerMetadataKey ?? request.model.provider
   for (const message of request.messages) {
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("Google Interactions", message)
@@ -597,13 +598,14 @@ const step = Effect.fnUntraced(function* (state: ParserState, event: Event) {
 // =============================================================================
 export const protocol = Protocol.make({
   id: ADAPTER,
+  api: "interactions",
   sanitizer: "gemini",
   body: { schema: Body, from: fromRequest },
   stream: {
     event: Protocol.jsonEvent(Event),
     initial: (request): ParserState => ({
-      route: `${request.model.provider}/${request.model.route.id}`,
-      metadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
+      route: `${request.model.provider}/${routeOf(request.model).id}`,
+      metadataKey: routeOf(request.model).providerMetadataKey ?? request.model.provider,
       lifecycle: Lifecycle.initial(),
       steps: {},
       tools: ToolStream.empty<number>(),

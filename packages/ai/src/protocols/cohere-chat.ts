@@ -334,6 +334,7 @@ const step = Effect.fnUntraced(function* (state: State, event: Event) {
 
 export const protocol = Protocol.make({
   id: ADAPTER,
+  api: "cohere-chat",
   body: { schema: Body, from: fromRequest },
   stream: {
     event: Protocol.jsonEvent(Event),
