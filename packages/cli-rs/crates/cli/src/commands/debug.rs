@@ -22,8 +22,8 @@ use crate::output::{Exit, print};
 pub fn run(context: &Context, args: &DebugArgs) -> anyhow::Result<()> {
     match &args.command {
         None => crate::help::print(&["debug"]),
-        Some(DebugCommand::Agents(_)) => agents(context),
-        Some(DebugCommand::Config(_)) => config(context),
+        Some(DebugCommand::Agents) => agents(context),
+        Some(DebugCommand::Config) => config(context),
         Some(DebugCommand::HeapDump(args)) => heap_dump(context, args),
         Some(DebugCommand::Paths(args)) => paths(args),
     }

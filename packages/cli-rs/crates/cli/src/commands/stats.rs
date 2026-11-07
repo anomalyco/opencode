@@ -687,7 +687,6 @@ mod tests {
             full: false,
             limit: 5,
             json: false,
-            server: Default::default(),
         };
         let range = |args: StatsArgs| Range::new(&args, zone, now);
         let want = |from: Option<i64>, to: i64, label: &str| Range { from, to, label: label.to_owned() };

@@ -30,6 +30,5 @@ and the requests of those cases, not stderr.
 `--wizard` (G15) parses each param after its prompts. A value that fails (`session list --wizard` with a
 max count of 0) escapes in TS as `~effect/cli/CliError/InvalidValue: Invalid value for flag --max-count: "0".
 Expected: Schema validation failed: Expected a value greater than or equal to 1` with a stack trace, exit 1.
-Rust prints `Error: Invalid value for flag --max-count: "0". Expected: 0 is not in 1..=4294967295` (the
-reason is clap's), exit 1. P-PTY compares the screens before the error and the exit code
-(`C.15/invalid`).
+Rust prints the same message after `Error: `, without the stack trace, exit 1. P-PTY compares the screens
+before the error and the exit code (`C.15/invalid`).
