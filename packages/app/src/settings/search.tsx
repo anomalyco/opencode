@@ -6,7 +6,7 @@ import { Icon } from "@opencode/ui/icon"
 import { SearchHighlight, SearchList, type SearchListHandle } from "@opencode/ui/search-list"
 import { Slash } from "@opencode/ui/slash"
 import { TextInput } from "@opencode/ui/text-input"
-import { useLanguage } from "@/runtime/i18n/language"
+import { useLanguage, sourceText } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ProjectIcon } from "@/shell/layout/project-icon"
@@ -277,6 +277,7 @@ export function createSettingsSearchCatalog() {
       browser: platform.platform === "desktop",
       mobile: mobile(),
       translate: language.t,
+      source: sourceText,
       plugins: surface.plugins.items(),
     }),
   )

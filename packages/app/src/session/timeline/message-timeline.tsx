@@ -259,6 +259,7 @@ function MessageTimelineView(
             id: "session.rename",
             category: language.t("command.category.session"),
             title: language.t("command.session.rename"),
+            titleKey: "command.session.rename",
             keybind: "ctrl+r",
             disabled: !sessionID() || !!parentID() || title().editing,
             skip: (event) => pluginScoped(event.target),
@@ -268,6 +269,7 @@ function MessageTimelineView(
             id: "session.delete",
             category: language.t("command.category.session"),
             title: language.t("command.session.delete"),
+            titleKey: "command.session.delete",
             disabled: !sessionID() || !!parentID(),
             onSelect: () => {
               const id = sessionID()

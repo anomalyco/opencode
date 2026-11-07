@@ -71,7 +71,7 @@ const setup: Plugin.Setup<typeof Debug> = (ctx) => {
       id: "toggle",
       title: ctx.t("command.toggle"),
       group: ctx.t("command.category.view"),
-      keywords: "dev bar developer tools diagnostics",
+      keywords: "toggle debug bar dev developer tools diagnostics",
       // Running diagnostics keep the bar open.
       enabled: barView().togglable,
       run: toggle,

@@ -103,6 +103,7 @@ function DetailsPopover(props: DetailsProps) {
           id: "toggle",
           title: ctx.t("command.toggle"),
           group: ctx.t("command.category.view"),
+          keywords: "toggle session details popover info usage",
           section: "session",
           bind: "mod+shift+y",
           // A detached timeline can stay active, so the shortcut toggles the popover whose trigger is on screen.

@@ -293,6 +293,7 @@ const setup: Plugin.Setup<typeof Review> = (ctx) => {
       id: "open",
       title: ctx.t("command.open"),
       group: ctx.t("command.category.view"),
+      keywords: "open review changes diff",
       bind: mac ? "ctrl+meta+r" : "ctrl+alt+r",
       editable: true,
       enabled: !!sessions.current()?.project && !layout.narrow(),

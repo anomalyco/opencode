@@ -18,9 +18,17 @@ export function matchesCommandPaletteEntry(entry: CommandPaletteEntry, query: st
   // The server matches sessions by title, so their "Session" group name must not match every one of them here.
   const category = entry.type === "session" ? undefined : entry.category
 
-  return [entry.title, entry.description, category, entry.keywords, entry.path, entry.sessionID].some((text) =>
-    text?.toLowerCase().includes(value),
-  )
+  return [
+    entry.title,
+    entry.description,
+    category,
+    entry.keywords,
+    entry.path,
+    entry.sessionID,
+    entry.sourceTitle,
+    entry.sourceDescription,
+    entry.sourceCategory,
+  ].some((text) => text?.toLowerCase().includes(value))
 }
 
 const typeOrder = { command: 0, session: 1, setting: 2, file: 3 }

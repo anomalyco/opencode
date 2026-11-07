@@ -147,12 +147,14 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
     {
       ...goBackCommand,
       title: language.t("common.goBack"),
+      titleKey: "common.goBack",
       category: language.t("command.category.view"),
       onSelect: history.back,
     },
     {
       ...goForwardCommand,
       title: language.t("common.goForward"),
+      titleKey: "common.goForward",
       category: language.t("command.category.view"),
       onSelect: history.forward,
     },
@@ -430,6 +432,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               {
                 id: "sessions.search",
                 title: language.t("command.session.search"),
+                titleKey: "command.session.search",
                 category: language.t("command.category.session"),
                 keybind: "mod+shift+f",
                 onSelect: async () => {
@@ -470,6 +473,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   id: "tab.reopenClosed",
                   category: language.t("command.category.file"),
                   title: language.t("command.tab.reopenClosed"),
+                  titleKey: "command.tab.reopenClosed",
                   keybind: "mod+shift+t",
                   onSelect: () => tabsStoreActions.reopenClosedTab(),
                 },
@@ -482,6 +486,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               {
                 ...projectSearchCommand,
                 title: language.t("session.new.project.search"),
+                titleKey: "session.new.project.search",
                 category: language.t("command.category.project"),
                 onSelect: () => {
                   const draftID = uuid()

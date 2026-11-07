@@ -8,6 +8,9 @@ export type SettingsSearchResult = {
   title: string
   keywords: string
   description: string
+  /** The English source text of `title` and `description`; matched beside them so settings stay findable in English in any locale. */
+  sourceTitle?: string
+  sourceDescription?: string
   owner: string
   page: string
   server?: string
@@ -36,8 +39,9 @@ export function rankSettings(query: string, items: SettingsSearchResult[]) {
       if (!query) return []
       const tokens = query.split(" ")
       const title = normalize(item.title)
-      const primary = normalize(`${title} ${item.keywords}`)
-      const description = normalize(item.description)
+      // The English source title ranks with keywords; its description stays a tier below, as the localized one does.
+      const primary = normalize(`${title} ${item.keywords} ${item.sourceTitle ?? ""}`)
+      const description = normalize(`${item.description} ${item.sourceDescription ?? ""}`)
       const context = normalize(`${item.owner} ${item.entity ? "" : item.page}`)
       const fuzzy = fuzzysort.single(query, title)?.score ?? 0
 

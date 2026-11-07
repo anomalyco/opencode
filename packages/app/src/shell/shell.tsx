@@ -157,6 +157,7 @@ export default function Layout(props: ParentProps) {
           {
             ...sidebarToggleCommand,
             title: language.t("command.sidebar.toggle"),
+            titleKey: "command.sidebar.toggle",
             category: language.t("command.category.view"),
             onSelect: toggleSidebar,
           },
@@ -195,6 +196,7 @@ export default function Layout(props: ParentProps) {
     {
       id: COMMAND_SEARCH_ID,
       title: language.t("command.commands.search"),
+      titleKey: "command.commands.search",
       category: language.t("command.category.view"),
       onSelect: async () => {
         const { DialogCommandSearch } = await import("@/shell/commands/command-search")

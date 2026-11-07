@@ -86,6 +86,7 @@ export function NewSessionBranch(props: { workspace: NewSessionWorkspaceControll
     {
       id: "session.branch.choose",
       title: language.t("command.session.branch.choose"),
+      titleKey: "command.session.branch.choose",
       category: language.t("command.category.workspace"),
       keybind: "mod+alt+b",
       disabled: !creating() || !props.workspace.bar.branch(),

@@ -501,6 +501,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
       id: "browse",
       title: ctx.t("command.open"),
       group: ctx.t("command.category.view"),
+      keywords: "open file tree files browse explorer",
       bind: mac ? "ctrl+meta+p" : "ctrl+alt+p",
       editable: true,
       enabled: !!sessions.current(),
