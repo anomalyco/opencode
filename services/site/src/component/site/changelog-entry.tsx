@@ -19,7 +19,7 @@ import {
 import { CarouselArrows } from "./carousel-arrows"
 import { Chevron, ExternalArrow, NewTab } from "./icons"
 import { Inline, ReleaseItem } from "./release"
-import { prefersReducedMotion } from "./products"
+import { prefersReducedMotion } from "./media"
 import {
   changelogCarousels,
   changelogFilters,

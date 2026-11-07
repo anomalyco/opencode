@@ -151,27 +151,6 @@ function heroThemes(slug: PageSlug) {
   }
 }
 
-/**
- * A hero with a still per theme and no video yet, framed like the themed heroes above: Browse's
- * (product-videos/heroes/browse-landscape-*.webp) is an HTML scene of OpenCode driving an agent tab,
- * rendered with Playwright.
- */
-export function heroStills(slug: string) {
-  const file = (theme: string) => `/product-videos/heroes/${slug}-landscape-${theme}.webp`
-  return { poster: file("light"), themes: { light: { poster: file("light") }, dark: { poster: file("dark") } } }
-}
-
-/**
- * The page's colour scheme on the client: the site's theme (the site root's data-theme, which the
- * pre-paint script sets from the saved choice), else the system's. Server: undefined.
- */
-export function pageScheme(): "light" | "dark" | undefined {
-  if (typeof document === "undefined") return
-  const theme = document.querySelector<HTMLElement>("[data-site]")?.dataset.theme
-  if (theme === "light" || theme === "dark") return theme
-  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
-}
-
 /** The default product video set: locked-off real UI shots joined by hard cuts (public/product-videos/locked). */
 const defaultSet = "locked"
 

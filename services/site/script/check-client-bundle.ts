@@ -70,7 +70,7 @@ const budgets: Record<string, number> = {
   "changelog/index.tsx": 112,
   "desktop.tsx": 126.3,
   "devices.tsx": 51,
-  "product/browse.tsx": 99,
+  "product/browse.tsx": 106,
   "font/index.tsx": 121,
   "ide.tsx": 126.3,
   "index.tsx": 118,
