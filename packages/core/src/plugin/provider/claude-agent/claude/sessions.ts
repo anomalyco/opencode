@@ -9,6 +9,7 @@ import type {
 } from "@ai-sdk/provider"
 import { Effect, Fiber, Semaphore } from "effect"
 import { ClaudeIO } from "./io.js"
+import { ClaudeProbe } from "./probe.js"
 import type { ClaudeStatus } from "./status.js"
 import { ClaudeQueryOptions } from "./query-options.js"
 import { ClaudeSession } from "./session.js"
@@ -58,6 +59,7 @@ interface Entry {
   readonly lock: Semaphore.Semaphore
   process?: LiveProcess
   record?: SessionRecord.Record
+  configDir?: string
   idle?: Fiber.Fiber<void, never>
   active?: Fiber.Fiber<unknown, unknown>
 }
@@ -74,6 +76,8 @@ const launch = (request: Request) =>
 const toError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)))
 const attempt = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catch: toError })
 const attemptSync = <A>(run: () => A) => Effect.try({ try: run, catch: toError })
+
+export type Registry = ReturnType<typeof registry>
 
 export function registry() {
   const entries = new Map<string, Entry>()
@@ -197,7 +201,15 @@ export function registry() {
       )
       const process = opened.process
       // A new process reports its version, login and models, which keeps the model list current without a separate check.
-      if (starting) yield* input.status.report({ type: "ready", probe: opened.probe })
+      if (starting) {
+        const configDir = request.connection?.CLAUDE_CONFIG_DIR
+        yield* input.status.report({ type: "ready", probe: opened.probe, configDir })
+        // Fail before sending the prompt, because Claude Code's own error does not say which folder needs a login.
+        if (!ClaudeProbe.isLoggedIn(opened.probe.account)) {
+          yield* stop(entry)
+          return yield* Effect.fail(new Error(ClaudeProbe.loginMessage(configDir)))
+        }
+      }
       // Apply controls before sending input or releasing parked tool results.
       if (process.model !== request.model) {
         yield* attempt(() => process.session.setModel(request.model))
@@ -316,7 +328,7 @@ export function registry() {
               })
             : undefined
         entry.record = { claudeSessionID: session.id, history, interrupted: interrupted && !completed }
-        yield* records.set(request.sessionID, entry.record)
+        yield* records.set(request.sessionID, entry.record, request.connection?.CLAUDE_CONFIG_DIR)
       })
 
       yield* step.pipe(
@@ -336,7 +348,9 @@ export function registry() {
         yield* stop(entry).pipe(Effect.catch((error) => Effect.logWarning(error)))
         const sessionID = entry.record?.claudeSessionID
         if (sessionID)
-          yield* attempt(() => input.io.remove(sessionID)).pipe(Effect.catch((error) => Effect.logWarning(error)))
+          yield* attempt(() => input.io.remove(sessionID, request.connection?.CLAUDE_CONFIG_DIR)).pipe(
+            Effect.catch((error) => Effect.logWarning(error)),
+          )
         temporary.delete(entry)
         return
       }
@@ -355,7 +369,9 @@ export function registry() {
       if (!source || !boundary) return 0
       // Validate catch-up input before creating a forked transcript on disk.
       yield* attemptSync(() => CatchUp.content(request.prompt, boundary.start))
-      const fork = yield* attempt(() => input.io.fork(source.claudeSessionID, boundary.messageID))
+      const fork = yield* attempt(() =>
+        input.io.fork(source.claudeSessionID, boundary.messageID, request.connection?.CLAUDE_CONFIG_DIR),
+      )
       if (!fork) return 0
       const history = boundary.history.map((checkpoint) => ({
         hash: checkpoint.hash,
@@ -370,7 +386,9 @@ export function registry() {
       if (!sourceID) return 0
       const source = entries.get(sourceID)
       const copy = Effect.gen(function* () {
-        const record = source?.record ?? (yield* records.get(sourceID))
+        const configDir = request.connection?.CLAUDE_CONFIG_DIR
+        const record =
+          source?.record && source.configDir === configDir ? source.record : yield* records.get(sourceID, configDir)
         return yield* branch(entry, request, record)
       })
       // Hold the source only while copying its settled prefix, never during side-call inference.
@@ -393,7 +411,10 @@ export function registry() {
         return { start, continuation: undefined }
       }
 
-      if (!entry.record) entry.record = yield* records.get(request.sessionID)
+      const configDir = request.connection?.CLAUDE_CONFIG_DIR
+      if (entry.configDir !== configDir) entry.record = undefined
+      entry.configDir = configDir
+      if (!entry.record) entry.record = yield* records.get(request.sessionID, configDir)
       const decision = SyncDecision.decide(request.prompt, entry.record)
       const start = yield* Effect.gen(function* () {
         if (decision.kind === "fresh" || decision.kind === "changed") {
@@ -406,7 +427,7 @@ export function registry() {
         }
         if (entry.process || !entry.record) return decision.start
         const sessionID = entry.record.claudeSessionID
-        const exists = yield* attempt(() => input.io.sessionExists(sessionID))
+        const exists = yield* attempt(() => input.io.sessionExists(sessionID, configDir))
         if (exists) return decision.start
         entry.record = undefined
         return 0
