@@ -1,13 +1,15 @@
 import {
+  AssistantMessage,
   Media,
   Message,
   ReasoningEfforts,
   ToolCallPart,
   ToolResultPart,
-  type AssistantMessage,
   type MediaPart,
   type ProviderMetadata,
   type TextPart,
+  type ToolResultValue,
+  ToolMessage,
 } from "@opencode/ai/effect"
 import type { Model } from "@opencode/schema/model"
 import { Option, Schema } from "effect"
@@ -298,4 +300,74 @@ export const toLLMMessages = (
   messages: readonly SessionMessage.Info[],
   model: Model.Ref,
   providerMetadataKey: string = model.providerID,
-) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey))
+  prune = false,
+) => {
+  const result = messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey))
+  return prune ? pruneTranscript(result) : result
+}
+
+const REPLAY_STUB = "[older tool output was cleared to save context; run the tool again if it is still needed]"
+// Below this size a stub costs about as much as it saves.
+const REPLAY_STUB_MIN = 800
+
+const resultSize = (result: ToolResultValue) => {
+  if (result.type === "content")
+    return result.value.reduce((sum, item) => sum + (item.type === "text" ? item.text.length : item.uri.length), 0)
+  return typeof result.value === "string" ? result.value.length : (JSON.stringify(result.value)?.length ?? 0)
+}
+
+const stubResult = (part: ToolResultPart) => {
+  // providerMetadata is model-scoped replay proof; rewriting those parts breaks the provider's own checks
+  if (part.providerMetadata !== undefined || resultSize(part.result) < REPLAY_STUB_MIN) return part
+  return {
+    ...part,
+    result: { type: part.result.type === "error" ? ("error" as const) : ("text" as const), value: REPLAY_STUB },
+  }
+}
+
+const gcMessage = (message: Message): Message => {
+  switch (message.role) {
+    case "system":
+    case "user":
+      return message
+    case "tool": {
+      const content = message.content.map(stubResult)
+      return content.every((part, i) => part === message.content[i])
+        ? message
+        : new ToolMessage({ ...message, content })
+    }
+    case "assistant": {
+      const content = message.content.flatMap((part): Array<AssistantMessage["content"][number]> => {
+        // readable reasoning is dead weight once the turn it produced is over;
+        // signed/native blocks stay, the provider still needs them
+        if (part.type === "reasoning")
+          return part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0 ? [part] : []
+        return [part.type === "tool-result" ? stubResult(part) : part]
+      })
+      // an empty assistant message is worse than a kept reasoning block
+      if (content.length === 0) return message
+      return content.every((part, i) => part === message.content[i])
+        ? message
+        : new AssistantMessage({ ...message, content })
+    }
+  }
+}
+
+/**
+ * Reclaim space from turns that are already over. Everything before the last
+ * user/system message is settled history: readable reasoning there can never be
+ * re-entered, and large tool outputs are almost never re-read. The current turn
+ * is left alone so in-flight tool calls keep their full context.
+ */
+export const pruneTranscript = (messages: ReadonlyArray<Message>): Message[] => {
+  const boundary = messages.findLastIndex((m) => m.role === "user" || m.role === "system")
+  if (boundary <= 0) return messages.slice()
+  let changed = false
+  const next = messages.map((message, index) => {
+    if (index >= boundary) return message
+    const pruned = gcMessage(message)
+    if (pruned !== message) changed = true
+    return pruned
+  })
+  return changed ? next : messages.slice()
+}
