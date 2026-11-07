@@ -137,6 +137,10 @@ export function displayInputDirectory(path: string, home: string) {
   return displayed.endsWith(separator) ? displayed : displayed + separator
 }
 
+export function pickerDisplaySeparator(displayed: string) {
+  return displayed.includes("\\") ? "\\" : "/"
+}
+
 // `abort(key)` and `clear()` abort the task's signal and resolve its promise with undefined at once, so a task that
 // never settles cannot keep its slot. The queue order lives in `PriorityQueueState`; this map holds only the I/O.
 export function createPriorityTaskQueue<T>(concurrency: number) {
