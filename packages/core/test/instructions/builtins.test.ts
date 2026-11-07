@@ -3,6 +3,7 @@ import os from "os"
 import { Effect, Layer } from "effect"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { App } from "@opencode/core/app"
 import { Location } from "@opencode/core/location"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
@@ -30,6 +31,7 @@ const it = testEffect(
   AppNodeBuilder.build(InstructionBuiltIns.node, [
     Location.node.replace(locationLayer),
     Global.node.replace(Global.layerWith({ config: temporary, tmp: temporary })),
+    App.node.replace(App.layer({ version: "1.2.3", channel: "stable" })),
   ]),
 )
 
@@ -50,6 +52,7 @@ describe("InstructionBuiltIns", () => {
           `  Workspace root folder: ${projectDirectory}`,
           "  Is directory a git repo: yes",
           `  Platform: ${process.platform}`,
+          "  OpenCode version: 1.2.3",
           `  Prefer ${temporary} over generic system temporary directories such as /tmp; it is pre-created and approved for external access.`,
           "</env>",
         ].join("\n"),
