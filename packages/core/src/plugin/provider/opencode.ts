@@ -1,8 +1,17 @@
-import { Duration, Effect, Equal, FiberHandle, Option, Schema, Scope, Semaphore } from "effect"
+import { isDeepStrictEqual } from "node:util"
+import { Duration, Effect, Equal, FiberHandle, Option, Schema, Scope, Semaphore, Stream } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHttpResponse } from "@opencode/plugin/effect/session"
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+import {
+  FetchHttpClient,
+  HttpBody,
+  HttpClient,
+  HttpClientError,
+  HttpClientRequest,
+  HttpClientResponse,
+  HttpMethod,
+} from "effect/http"
 import { App } from "../../app.js"
 import { Bus } from "../../bus.js"
 import { Config } from "../../config.js"
@@ -50,21 +59,18 @@ const SsoRequired = Schema.Struct({
 const InvalidGrant = Schema.Struct({ error: Schema.Literal("invalid_grant") })
 // Console's 401 when the session behind the access token was revoked or expired.
 const Unauthorized = Schema.Struct({ _tag: Schema.Literal("Unauthorized") })
-// The workspace Library: instructions arrive whole, skills as versions whose files download separately.
-const Library = Schema.Struct({
-  instructions: Schema.Array(Schema.Struct({ id: Schema.String, content: Schema.String })).pipe(Schema.optional),
-  skills: Schema.Array(Schema.Struct({ slug: Schema.String, version: Schema.String })).pipe(Schema.optional),
+// The workspace's instructions arrive whole, its skills as versions whose files download separately.
+const ConsoleInstructions = Schema.Struct({
+  instructions: Schema.Array(Schema.Struct({ id: Schema.String, content: Schema.String })),
 })
-// `library` decodes where it's used, so a malformed one can't fail the config and drop its policies.
-const ConsoleConfig = Schema.Struct({
-  ...ConfigIntegration.Remote.fields,
-  library: Schema.Unknown.pipe(Schema.optional),
+const ConsoleSkills = Schema.Struct({
+  skills: Schema.Array(Schema.Struct({ slug: Schema.String, version: Schema.String })),
 })
 const SkillBundle = Schema.Struct({
   slug: Schema.String,
   files: Schema.Array(Schema.Struct({ path: Schema.String, content: Schema.String })),
 })
-type LibrarySkill = { readonly skill: Skill.Info; readonly files: Record<string, string> }
+type ConsoleSkill = { readonly skill: Skill.Info; readonly files: Record<string, string> }
 const signedOutMessage = "Reconnect OpenCode Console to continue"
 const ssoMessage = (organization: string | undefined) =>
   `Sign in with SSO again to use ${organization ?? "your OpenCode Console organization"}`
@@ -189,13 +195,13 @@ export const OpencodePlugin = define<
     type ActiveConnection = Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
     let snapshot: {
       // The Console's regular OpenCode config, merged as an integration config layer.
-      remote: typeof ConsoleConfig.Type | undefined
+      remote: Effect.Success<ReturnType<typeof fetchConfig>>
       connection: ActiveConnection
       organization: string | undefined
     } = { remote: undefined, connection: undefined, organization: undefined }
     let instructions: InstructionDiscovery.File[] = []
     // Tagged with the account and workspace they were downloaded for, so a switch hides them right away.
-    let librarySkills: { owner: string; items: LibrarySkill[] } = { owner: "", items: [] }
+    let consoleSkills: { owner: string; items: ConsoleSkill[] } = { owner: "", items: [] }
     const owner = (from: typeof snapshot) =>
       `${IntegrationConnection.key(from.connection) ?? ""}:${from.organization ?? ""}`
     // A newer config's skill download replaces one still in flight.
@@ -282,31 +288,33 @@ export const OpencodePlugin = define<
               ? { ...next.connection, id: Credential.ID.make(next.connection.id) }
               : next.connection,
           organization: next.organization,
-          // `make` keeps only the standard config keys, so `library` stays here.
+          // `make` keeps only the standard config keys, so instructions and skills stay here.
           info: next.remote,
         })
       yield* integrate(document)
-      // Managed `integration.use: deny` makes config layer a policies-only copy, which withholds the Library too.
-      yield* syncLibrary(next, document !== undefined && (!config.integration || integrated === document))
+      // Managed `integration.use: deny` makes config layer a policies-only copy, which withholds instructions and
+      // skills too. Config keeps the document it holds when handed a deep-equal one, so compare by content.
+      yield* syncInstructionsAndSkills(
+        next,
+        document !== undefined && (!config.integration || isDeepStrictEqual(integrated, document)),
+      )
     })
-    const syncLibrary = (next: typeof snapshot, allowed: boolean) => {
-      const library = allowed
-        ? Option.getOrUndefined(Schema.decodeUnknownOption(Library)(next.remote?.library))
-        : undefined
-      instructions = (library?.instructions ?? []).map(
+    const syncInstructionsAndSkills = (next: typeof snapshot, allowed: boolean) => {
+      const remote = allowed ? next.remote : undefined
+      instructions = (remote?.instructions ?? []).map(
         (item) =>
           new InstructionDiscovery.File({ path: `OpenCode Console instruction ${item.id}`, content: item.content }),
       )
-      if (!allowed) librarySkills = { owner: "", items: [] }
+      if (!allowed) consoleSkills = { owner: "", items: [] }
       // Skills download in the background, so startup and config changes never wait on them. The current ones stay
       // until the download replaces them.
       return FiberHandle.run(
         skillDownload,
-        loadSkills(next.connection, library?.skills ?? []).pipe(
+        loadSkills(next.connection, remote?.skills ?? []).pipe(
           Effect.flatMap((loaded) => {
             // A failed load keeps the skills already shown.
             if (!loaded) return Effect.void
-            librarySkills = { owner: owner(next), items: loaded }
+            consoleSkills = { owner: owner(next), items: loaded }
             return skills.reload()
           }),
         ),
@@ -375,17 +383,14 @@ export const OpencodePlugin = define<
               providerID,
             }),
           )
-          const response = yield* HttpClient.withScope(HttpClient.filterStatusOk(http))
-            .execute(request)
-            .pipe(
-              Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
-              Effect.flatMap(HttpClientResponse.schemaBodyJson(WebSearch.Response)),
-              Effect.scoped,
-              Effect.timeoutOrElse({
-                duration: Duration.seconds(25),
-                orElse: () => Effect.fail(new Error("OpenCode web search request timed out")),
-              }),
-            )
+          const response = yield* follow(http, request).pipe(
+            Effect.flatMap(HttpClientResponse.schemaBodyJson(WebSearch.Response)),
+            Effect.scoped,
+            Effect.timeoutOrElse({
+              duration: Duration.seconds(25),
+              orElse: () => Effect.fail(new Error("OpenCode web search request timed out")),
+            }),
+          )
           if (response.providerID !== providerID) {
             return yield* Effect.fail(
               new Error(`OpenCode web search returned provider ${response.providerID} instead of ${providerID}`),
@@ -445,8 +450,8 @@ export const OpencodePlugin = define<
     })
     yield* discovery.transform((editor) => instructions.forEach((file) => editor.add(file)))
     yield* skills.transform((editor) => {
-      if (librarySkills.owner !== owner(snapshot)) return
-      librarySkills.items.forEach((item) => editor.add(item.skill, item.files))
+      if (consoleSkills.owner !== owner(snapshot)) return
+      consoleSkills.items.forEach((item) => editor.add(item.skill, item.files))
     })
 
     const apply = Effect.fn("OpencodePlugin.apply")(function* (next: typeof snapshot) {
@@ -539,10 +544,42 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
               })
           }
           const body = yield* HttpClientResponse.filterStatusOk(response).pipe(Effect.flatMap((ok) => ok.json))
-          return yield* Schema.decodeUnknownEffect(ConsoleConfig)(body)
+          const remote = yield* Schema.decodeUnknownEffect(ConfigIntegration.Remote)(body)
+          // Instructions and skills have their own endpoints. A 404 (none in the workspace) or a 403 other than SSO
+          // (the sign-in may not read them) counts as empty; any other error fails the load, which keeps the last lists.
+          const list = <A>(path: string, schema: Schema.Decoder<A>) =>
+            HttpClient.withScope(http)
+              .execute(
+                HttpClientRequest.get(`${ConsoleAccess.server(value)}${path}`).pipe(
+                  HttpClientRequest.acceptJson,
+                  HttpClientRequest.setHeaders(ConsoleAccess.headers(value)),
+                ),
+              )
+              .pipe(
+                Effect.flatMap((response) =>
+                  Effect.gen(function* () {
+                    if (response.status === 404) return undefined
+                    if (
+                      response.status === 403 &&
+                      Option.isNone(yield* HttpClientResponse.schemaBodyJson(SsoRequired)(response).pipe(Effect.option))
+                    )
+                      return undefined
+                    const ok = yield* HttpClientResponse.filterStatusOk(response)
+                    return yield* HttpClientResponse.schemaBodyJson(schema)(ok).pipe(
+                      Effect.orElseSucceed(() => undefined),
+                    )
+                  }),
+                ),
+              )
+          const instructions = yield* list("/api/v2/instructions", ConsoleInstructions)
+          const skills = yield* list("/api/v2/skills", ConsoleSkills)
+          return { ...remote, instructions: instructions?.instructions ?? [], skills: skills?.skills ?? [] }
         }),
       ),
       Effect.scoped,
+      // A Console that accepts the connection but never answers would otherwise hold the load, including the one at
+      // startup, indefinitely. A timeout is a transient failure, which `SharedCache` retries.
+      Effect.timeout(Duration.seconds(5)),
     )
 }
 
@@ -587,23 +624,79 @@ function organizationName(credential: Credential.Value) {
   return typeof credential.metadata?.orgName === "string" ? credential.metadata.orgName : undefined
 }
 
+const MAX_REDIRECTS = 5
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
+// Headers that name or authenticate the caller. They stay with the Console's origin when a redirect leaves it.
+const CREDENTIAL_HEADERS = new Set(["authorization", "cookie", "proxy-authorization", "x-org-id"])
+
+// The Console answers skill downloads with a presigned-storage redirect and web search through a gateway that may
+// redirect too, so a redirect is a normal answer. Following it here, instead of letting fetch follow it, bounds the
+// hops and keeps the connection's credentials from crossing an origin boundary.
+function follow(
+  http: HttpClient.HttpClient,
+  request: HttpClientRequest.HttpClientRequest,
+  redirects = 0,
+): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError | Error, Scope.Scope> {
+  // Scoped per hop so a caller's timeout or interruption aborts the request in flight.
+  return HttpClient.withScope(http)
+    .execute(request)
+    .pipe(
+      Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+      Effect.flatMap((response) => {
+        const location = response.headers.location
+        if (!REDIRECT_STATUSES.has(response.status) || !location) return HttpClientResponse.filterStatusOk(response)
+        if (redirects >= MAX_REDIRECTS) return Effect.fail(new Error(`Too many redirects (more than ${MAX_REDIRECTS})`))
+        return Effect.flatMap(redirectTarget(request, location), (target) =>
+          // Release this hop's connection before the next request instead of holding it until the download ends.
+          HttpClientResponse.stream(Effect.succeed(response)).pipe(
+            Stream.runDrain,
+            // The redirect's own body is irrelevant, so failing to read it must not fail the download.
+            Effect.ignore,
+            Effect.andThen(follow(http, redirected(request, target, response.status), redirects + 1)),
+          ),
+        )
+      }),
+    )
+}
+
+function redirectTarget(request: HttpClientRequest.HttpClientRequest, location: string) {
+  return Effect.try({
+    try: () => {
+      const target = new URL(location, request.url)
+      if (target.protocol !== "http:" && target.protocol !== "https:")
+        throw new Error(`redirect to unsupported protocol ${target.protocol}`)
+      return target
+    },
+    catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+  })
+}
+
+function redirected(request: HttpClientRequest.HttpClientRequest, target: URL, status: number) {
+  // A 303 always, and a 301 or 302 after a POST, become a bodyless GET, as fetch would send them.
+  const get = status === 303 || ((status === 301 || status === 302) && request.method === "POST")
+  const headers =
+    target.origin === new URL(request.url).origin
+      ? request.headers
+      : Object.fromEntries(Object.entries(request.headers).filter(([name]) => !CREDENTIAL_HEADERS.has(name)))
+  // `HttpClientRequest.method` is typed `string`, while `make` only accepts a known method.
+  // The `href` string keeps the location's query exactly as sent: a `URL` would decode and re-encode it,
+  // which breaks a presigned archive download whose signature covers the encoding.
+  return HttpClientRequest.make(get ? "GET" : (request.method as HttpMethod.HttpMethod))(target.href, {
+    headers,
+    body: get ? HttpBody.empty : request.body,
+  })
+}
+
 function downloadSkill(http: HttpClient.HttpClient, server: string, slug: string, headers: Record<string, string>) {
   return Effect.gen(function* () {
     if (!SkillDiscovery.isSafeSegment(slug)) return yield* Effect.fail(new Error(`unsafe skill slug: ${slug}`))
-    const bundle = yield* HttpClient.withScope(HttpClient.filterStatusOk(http))
-      .execute(
-        HttpClientRequest.get(`${server}/api/v2/library/skills/${encodeURIComponent(slug)}`).pipe(
-          HttpClientRequest.acceptJson,
-          HttpClientRequest.setHeaders(headers),
-        ),
-      )
-      .pipe(
-        // The connection's credentials must not follow a redirect to another server.
-        Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
-        Effect.flatMap(HttpClientResponse.schemaBodyJson(SkillBundle)),
-        Effect.scoped,
-        Effect.timeout("30 seconds"),
-      )
+    const bundle = yield* follow(
+      http,
+      HttpClientRequest.get(`${server}/api/v2/skills/${encodeURIComponent(slug)}`).pipe(
+        HttpClientRequest.acceptJson,
+        HttpClientRequest.setHeaders(headers),
+      ),
+    ).pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(SkillBundle)), Effect.scoped, Effect.timeout("30 seconds"))
     if (bundle.slug !== slug) return yield* Effect.fail(new Error(`expected skill ${slug}, received ${bundle.slug}`))
     const unsafe = bundle.files.find((file) => !SkillDiscovery.isSafeRelativePath(file.path))
     if (unsafe) return yield* Effect.fail(new Error(`unsafe skill file path: ${unsafe.path}`))
@@ -616,7 +709,7 @@ function downloadSkill(http: HttpClient.HttpClient, server: string, slug: string
       files: Object.fromEntries(
         bundle.files.filter((file) => file.path !== "SKILL.md").map((file) => [file.path, file.content]),
       ),
-    } satisfies LibrarySkill
+    } satisfies ConsoleSkill
   })
 }
 

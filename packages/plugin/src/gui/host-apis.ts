@@ -1234,7 +1234,8 @@ export interface Servers {
    * stay in the main process. The same ref for the same id; read its `client` each time you call it. Reactive.
    *
    * @param id - The server's id, as `list()` returns it.
-   * @returns Undefined while the app does not list the server, and before the app interface mounts.
+   * @returns Undefined while the app does not list the server, before the app interface mounts, and while a server
+   * that rejects the app's credentials has not connected in this window yet.
    *
    * @example
    * ```ts

@@ -1,8 +1,9 @@
 import { Button } from "@opencode/ui/button"
-import { createEffect, createMemo, For } from "solid-js"
+import { createEffect, createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { InboxSessionCard, InboxSessionList } from "./inbox"
 import type { InboxStatus } from "./inbox-model"
+import { useLanguage } from "@/runtime/i18n/language"
 
 const now = Date.UTC(2026, 10, 3, 12)
 
@@ -18,6 +19,7 @@ const titles = [
 function SessionListStory(props: {
   currentCount: number
   needsCount: number
+  unreadCount: number
   recentCount: number
   workingCount: number
   archived: boolean
@@ -25,20 +27,25 @@ function SessionListStory(props: {
   selectedSession: string
   width: number
   height: number
+  currentArchived: boolean
+  neverRun: boolean
 }) {
+  const language = useLanguage()
+
   const [state, setState] = createStore({
     selected: props.selectedSession,
     expanded: props.workingExpanded,
     archived: props.archived,
     removed: new Array<string>(),
     action: "",
+    recentExpanded: false,
   })
 
   createEffect(() => setState("selected", props.selectedSession))
   createEffect(() => setState("expanded", props.workingExpanded))
   createEffect(() => setState("archived", props.archived))
 
-  const sessions = (section: "current" | "needs" | "recent" | "working", count: number) =>
+  const sessions = (section: "current" | "needs" | "unread" | "recent" | "working", count: number) =>
     Array.from({ length: count }, (_, index) => {
       const status = (): InboxStatus => {
         if (section === "current") return "ready"
@@ -47,12 +54,20 @@ function SessionListStory(props: {
 
         if (section === "needs") return index % 2 === 0 ? "approval" : "input"
 
-        if (index % 3 === 0) return "done"
+        if (section === "unread") return index % 2 === 0 ? "done" : "failed"
 
-        return index % 3 === 1 ? "ready" : "failed"
+        return "ready"
       }
 
-      return { id: `${section}-${index}`, index, status: status(), title: titles[index % titles.length] ?? "" }
+      return {
+        id: `${section}-${index}`,
+        index,
+        status: status(),
+        title:
+          props.neverRun && section === "recent" && index === 0
+            ? "New session — never run"
+            : (titles[index % titles.length] ?? ""),
+      }
     }).filter((session) => !state.removed.includes(session.id))
 
   const current = createMemo(() => sessions("current", props.currentCount))
@@ -60,6 +75,10 @@ function SessionListStory(props: {
   const needs = createMemo(() => sessions("needs", props.needsCount))
 
   const recent = createMemo(() => sessions("recent", props.recentCount))
+
+  const unread = createMemo(() => sessions("unread", props.unreadCount))
+
+  const visibleRecent = createMemo(() => (state.recentExpanded ? recent() : recent().slice(0, 10)))
 
   const working = createMemo(() => sessions("working", props.workingCount))
 
@@ -82,7 +101,7 @@ function SessionListStory(props: {
           title={session.title}
           status={session.status}
           selected={state.selected === session.id}
-          archived={false}
+          archived={props.currentArchived && session.id.startsWith("current-")}
           server={session.index % 3 === 2 ? "Build server · build.example.internal" : undefined}
           branch={session.index % 4 === 3 ? undefined : "dev"}
           worktree={session.index % 2 === 0}
@@ -93,12 +112,58 @@ function SessionListStory(props: {
             remove(session.id, `Archived ${session.title}`)
             setState("archived", true)
           }}
-          onUnarchive={() => {}}
+          onUnarchive={() => setState("action", `Unarchived ${session.title}`)}
           onDelete={() => remove(session.id, `Deleted ${session.title}`)}
         />
       )}
     </For>
   )
+
+  const sections = [
+    {
+      id: "needs",
+      get label() {
+        return language.t("sidebar.inbox.section.needsAttention")
+      },
+      get count() {
+        return needs().length
+      },
+      rows: () => rows(needs),
+    },
+    {
+      id: "unread",
+      get label() {
+        return language.t("sidebar.inbox.section.unread")
+      },
+      get count() {
+        return unread().length
+      },
+      rows: () => rows(unread),
+    },
+    {
+      id: "recent",
+      get label() {
+        return language.t("sidebar.inbox.section.recent")
+      },
+      get count() {
+        return visibleRecent().length
+      },
+      rows: () => rows(visibleRecent),
+      more: () => (
+        <Show when={recent().length > 10}>
+          <Button
+            variant="ghost-muted"
+            size="normal"
+            class="w-full justify-start px-2"
+            aria-expanded={state.recentExpanded}
+            onClick={() => setState("recentExpanded", !state.recentExpanded)}
+          >
+            {language.t(state.recentExpanded ? "sidebar.inbox.showLess" : "sidebar.inbox.showMore")}
+          </Button>
+        </Show>
+      ),
+    },
+  ]
 
   return (
     <div class="flex flex-col gap-3">
@@ -107,18 +172,25 @@ function SessionListStory(props: {
         style={{ width: `${props.width}px`, height: `${props.height}px` }}
       >
         <InboxSessionList
-          currentCount={current().length}
-          needsCount={needs().length}
-          recentCount={recent().length}
-          workingCount={working().length}
+          current={{
+            get count() {
+              return current().length
+            },
+            rows: () => rows(current),
+          }}
+          sections={sections}
           archived={state.archived}
-          workingExpanded={state.expanded}
-          onToggleWorking={() => setState("expanded", !state.expanded)}
+          working={{
+            get count() {
+              return working().length
+            },
+            rows: () => rows(working),
+            get expanded() {
+              return state.expanded
+            },
+            onToggle: () => setState("expanded", !state.expanded),
+          }}
           onArchived={() => setState("action", "Archived sessions requested (local story only)")}
-          current={rows(current)}
-          needs={rows(needs)}
-          recent={rows(recent)}
-          working={rows(working)}
         />
       </div>
       <div class="flex items-center gap-3 text-[12px] leading-4 text-v2-text-text-muted">
@@ -132,6 +204,7 @@ function SessionListStory(props: {
               archived: props.archived,
               removed: [],
               action: "",
+              recentExpanded: false,
             })
           }
         >
@@ -153,6 +226,7 @@ export default {
   args: {
     currentCount: 0,
     needsCount: 2,
+    unreadCount: 2,
     recentCount: 6,
     workingCount: 2,
     archived: true,
@@ -160,11 +234,14 @@ export default {
     selectedSession: "recent-1",
     width: 280,
     height: 640,
+    currentArchived: false,
+    neverRun: false,
   },
   argTypes: {
     currentCount: { control: { type: "range", min: 0, max: 1, step: 1 } },
     needsCount: { control: { type: "range", min: 0, max: 12, step: 1 } },
-    recentCount: { control: { type: "range", min: 0, max: 10, step: 1 } },
+    unreadCount: { control: { type: "range", min: 0, max: 20, step: 1 } },
+    recentCount: { control: { type: "range", min: 0, max: 20, step: 1 } },
     workingCount: { control: { type: "range", min: 0, max: 12, step: 1 } },
     selectedSession: {
       control: "select",
@@ -191,6 +268,7 @@ export const CurrentOnly = {
   args: {
     currentCount: 1,
     needsCount: 0,
+    unreadCount: 0,
     recentCount: 0,
     workingCount: 0,
     selectedSession: "current-0",
@@ -198,17 +276,36 @@ export const CurrentOnly = {
   },
 }
 
-export const RecentOnly = { args: { needsCount: 0, workingCount: 0 } }
+export const RecentOnly = { args: { needsCount: 0, unreadCount: 0, workingCount: 0 } }
 
-export const NeedsAttention = { args: { needsCount: 4, recentCount: 0, workingCount: 0, archived: false } }
+export const NeedsAttention = {
+  args: { needsCount: 4, unreadCount: 0, recentCount: 0, workingCount: 0, archived: false },
+}
 
 export const WorkingOnly = {
-  args: { needsCount: 0, recentCount: 0, workingCount: 3, selectedSession: "working-0", archived: false },
+  args: {
+    needsCount: 0,
+    unreadCount: 0,
+    recentCount: 0,
+    workingCount: 3,
+    selectedSession: "working-0",
+    archived: false,
+  },
 }
 
 export const WorkingCollapsed = { args: { workingExpanded: false, selectedSession: "working-0" } }
 
-export const Empty = { args: { needsCount: 0, recentCount: 0, workingCount: 0, archived: false } }
+export const Empty = { args: { needsCount: 0, unreadCount: 0, recentCount: 0, workingCount: 0, archived: false } }
+
+export const ManyUnread = { args: { unreadCount: 14 } }
+
+export const NeverRun = { args: { neverRun: true } }
+
+export const CurrentPastLimit = { args: { currentCount: 1, recentCount: 10, selectedSession: "current-0" } }
+
+export const ArchivedCurrent = { args: { currentCount: 1, currentArchived: true, selectedSession: "current-0" } }
+
+export const MoreRecent = { args: { recentCount: 16 } }
 
 export const Dense = { args: { needsCount: 4, recentCount: 10, workingCount: 5 } }
 

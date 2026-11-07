@@ -12,6 +12,7 @@ import {
 } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Icon } from "@opencode/ui/icon"
+import { MenuScroll } from "../../components/menu-scroll"
 import { TextInput } from "../text-input/text-input"
 import { createTypeahead } from "../typeahead/controller"
 import { searchListMove, searchListTarget } from "./navigation"
@@ -307,10 +308,9 @@ export function SearchList<T>(props: {
           {(custom) => custom()(field)}
         </Show>
         <div data-slot="search-list-body" hidden={!open()}>
-          <div
+          <MenuScroll
             data-slot="search-list-scroll"
-            data-scrollable
-            ref={(element) => (viewport = element)}
+            viewportRef={(element) => (viewport = element)}
             onScroll={(event) => {
               edges()
               props.onScroll?.(event.currentTarget.scrollTop)
@@ -364,7 +364,7 @@ export function SearchList<T>(props: {
             <Show when={rows().length === 0}>
               <div data-slot="search-list-empty">{props.empty}</div>
             </Show>
-          </div>
+          </MenuScroll>
           <Show when={props.footer}>
             <div data-slot="search-list-footer">{props.footer}</div>
           </Show>

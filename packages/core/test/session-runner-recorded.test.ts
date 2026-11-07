@@ -61,9 +61,10 @@ const model = OpenAIChat.route
   .with({
     endpoint: { baseURL: "https://api.openai.com/v1" },
     auth: Auth.bearer(process.env.OPENAI_API_KEY ?? "fixture"),
-    generation: { maxTokens: 20, temperature: 0 },
+    maxTokens: 20,
+    temperature: 0,
   })
-  .model({ id: "gpt-4o-mini", compatibility: { supportsPromptCacheKey: true } })
+  .model({ id: "gpt-4o-mini", capabilities: { promptCacheKey: true } })
 const models = Layer.mock(SessionRunnerModel.Service)({
   resolve: () =>
     Effect.succeed(

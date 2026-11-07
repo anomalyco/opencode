@@ -1,6 +1,8 @@
 import {
+  type Accessor,
   createContext,
   createEffect,
+  createMemo,
   createRoot,
   createSignal,
   getOwner,
@@ -8,6 +10,7 @@ import {
   type Owner,
   type ParentProps,
   runWithOwner,
+  untrack,
   useContext,
   type JSX,
   startTransition,
@@ -15,23 +18,32 @@ import {
 } from "solid-js"
 import { Dialog as Kobalte } from "@kobalte/core/dialog"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { uuid } from "@opencode/util/uuid"
+import {
+  createDialogStackState,
+  selectLayerClosing,
+  selectLayerIndex,
+  selectLayerModal,
+  selectTopDialog,
+  transitionDialogStack,
+  type DialogStackEffect,
+  type DialogStackEvent,
+} from "./dialog-machine"
 
 type DialogElement = () => JSX.Element
 
-type FocusReturn = { element: HTMLElement; visible: boolean; range?: Range }
+export type FocusReturn = { element: HTMLElement; visible: boolean; range?: Range }
 
-type Active = {
-  id: string
+/** What an open mounts: its content, the owner it renders under, and who hears that it closed. */
+type DialogRequest = { element: DialogElement; owner: Owner; onClose?: () => void }
+
+type Layer = {
+  attempt: number
   node: JSX.Element
-  dispose: () => void
   owner: Owner
   onClose?: () => void
-  setClosing: (closing: boolean) => void
-  /** How long the dialog stays mounted once it starts closing, so its exit animation can finish. */
-  exit: () => number
-  /** Where focus was before this dialog opened, or before the dialogs it replaced opened. */
-  focus?: FocusReturn
-  returnFocus: () => void
+  dispose: () => void
+  ref: () => HTMLDivElement | undefined
 }
 
 const Context = createContext<ReturnType<typeof init>>()
@@ -39,6 +51,11 @@ const Context = createContext<ReturnType<typeof init>>()
 // Lets the dialog rendered in a layer opt out of closing on a backdrop click, or ask for a longer exit animation. A
 // contained layer also says which element holds it, so presses outside that element leave the dialog open.
 const LayerContext = createContext<{
+  readonly id: string
+  /** This layer's mount, which a `close()` from inside it targets. */
+  readonly attempt: number
+  /** True from the moment this dialog starts closing, through its exit animation. */
+  readonly closing: Accessor<boolean>
   setBackdropDismiss: (value: boolean) => void
   setExitDuration: (ms: number) => void
   container?: HTMLElement
@@ -49,154 +66,136 @@ export function useDialogLayer() {
 }
 
 function init(container: () => HTMLElement | undefined) {
-  const [stack, setStack] = createSignal<Active[]>([])
-  // A dialog is closing from the moment its close starts until its exit animation ends and it is disposed.
-  const closing = new Map<string, ReturnType<typeof setTimeout> | undefined>()
-  // The same ids, reactive, so the top dialog that stays open owns the focus trap during an exit animation.
-  const [exiting, setExiting] = createSignal<ReadonlySet<string>>(new Set())
-  // The top dialog that stays open. A dialog without an exit animation leaves the DOM as soon as it starts closing, so
-  // it stops being the active dialog then, not when it is disposed.
-  const top = () => stack().findLast((item) => !exiting().has(item.id))
-  const lock = { value: false }
-  const state = { disposed: false }
+  const [machine, setMachine] = createSignal(createDialogStackState<FocusReturn>())
+  const [layers, setLayers] = createSignal<Layer[]>([])
+  const timers = new Map<number, ReturnType<typeof setTimeout>>()
+  // Events an effect raises synchronously (a dialog closing as it renders or disposes) wait behind it.
+  const queue: DialogStackEvent<FocusReturn, DialogRequest>[] = []
 
-  // Detach the stack before disposing, so cleanups that close dialogs find nothing to admit. Every dialog is
-  // drained even when one throws. A replaced dialog that was not already closing still hears onClose.
-  const disposeAll = (notify: boolean) => {
-    const items = stack()
-    const exited = new Set(closing.keys())
-    setStack([])
-    closing.forEach((timer) => clearTimeout(timer))
-    closing.clear()
-    setExiting(new Set<string>())
-    items.forEach((item) => {
-      if (notify && !exited.has(item.id)) isolate(() => item.onClose?.())
-      isolate(item.dispose)
-    })
+  const dispatch = (event: DialogStackEvent<FocusReturn, DialogRequest>) => {
+    queue.push(event)
+
+    if (queue.length === 1) untrack(drain)
   }
 
-  onCleanup(() => {
-    state.disposed = true
-    disposeAll(false)
-  })
+  const drain = () => {
+    const event = queue[0]
 
-  const finish = (current: Active) => {
-    // Scheduled first, so the dialog still goes away when a callback throws.
-    closing.set(
-      current.id,
-      setTimeout(() => {
-        closing.delete(current.id)
+    if (!event) return
 
-        if (closing.size === 0) lock.value = false
-        setExiting((ids) => new Set([...ids].filter((id) => id !== current.id)))
-        setStack((items) => items.filter((item) => item.id !== current.id))
-        current.dispose()
-      }, current.exit()),
-    )
-    setExiting((ids) => new Set([...ids, current.id]))
-    isolate(() => current.onClose?.())
-    current.setClosing(true)
+    try {
+      const prev = machine()
+      const next = transitionDialogStack(prev, event)
 
-    // Only the top open dialog holds focus. It returns before close() does, as a native dialog's does, so an
-    // action that runs after closing, such as a palette command that opens the terminal, can move it on.
-    if (stack().findLast((item) => item === current || !closing.has(item.id)) === current) current.returnFocus()
+      // Committed before the effects, so a closing layer's Kobalte dialog has closed by the time focus returns. A reader
+      // of the state or an effect that throws must not stop the queue or skip the other effects.
+      if (next.state !== prev) isolate(() => setMachine(next.state))
+      next.effects.forEach((effect) => isolate(() => run(effect)))
+    } finally {
+      queue.shift()
+      drain()
+    }
   }
 
-  /** Programmatic close. Without an id it closes the top dialog, one at a time; with an id it never waits. */
-  const close = (id?: string) => {
-    const current = id ? stack().find((item) => item.id === id) : stack().at(-1)
+  const run = (effect: DialogStackEffect<FocusReturn, DialogRequest>) => {
+    if (effect.type === "mount") return mount(effect)
 
-    if (!current || closing.has(current.id) || (!id && lock.value)) return
-    closing.set(current.id, undefined)
-    lock.value = true
-    finish(current)
+    if (effect.type === "discard") return void (effect.notify && effect.request.onClose?.())
+
+    if (effect.type === "timer.start") {
+      clearTimeout(timers.get(effect.attempt))
+      timers.set(
+        effect.attempt,
+        setTimeout(() => dispatch({ type: "exit.completed", attempt: effect.attempt }), effect.delayMs),
+      )
+
+      return
+    }
+
+    if (effect.type === "timer.stop") {
+      clearTimeout(timers.get(effect.attempt))
+      timers.delete(effect.attempt)
+
+      return
+    }
+
+    const layer = layers().find((item) => item.attempt === effect.attempt)
+
+    if (effect.type === "notify.close") return layer?.onClose?.()
+
+    if (effect.type === "focus.return") {
+      const ref = layer?.ref()
+
+      // A close inside a reactive update unmounts the dialog, and its focus trap, only when the update ends.
+      if (ref?.contains(document.activeElement)) return queueMicrotask(() => returnFocus(effect.focus, ref))
+
+      return returnFocus(effect.focus, ref)
+    }
+
+    timers.delete(effect.attempt)
+    setLayers((items) => items.filter((item) => item.attempt !== effect.attempt))
+
+    if (effect.notify) isolate(() => layer?.onClose?.())
+    layer?.dispose()
   }
 
-  /** Escape, a backdrop click, or Kobalte dismissing: only the top dialog, and one per exit animation. */
-  const dismiss = (id?: string) => {
-    const current = stack().at(-1)
+  onCleanup(() => dispatch({ type: "disposed" }))
 
-    if (!current || (id && current.id !== id) || closing.has(current.id) || lock.value) return
-    closing.set(current.id, undefined)
-    lock.value = true
-    finish(current)
+  // Escape is captured only while a dialog is open, not while the last one plays its exit animation.
+  const open = createMemo(() => !!selectTopDialog(machine()))
+
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key !== "Escape") return
+
+    // Escape in the page around a contained stack belongs to the page.
+    const within = container()
+
+    if (within && event.target instanceof Node && !within.contains(event.target)) return
+
+    // A control that cancels its own edit on Escape, such as an inline rename, keeps the dialog open.
+    if (event.target instanceof Element && event.target.closest("[data-owns-escape]")) return
+    dispatch({ type: "dismiss" })
+    event.preventDefault()
+    event.stopPropagation()
   }
 
   createEffect(() => {
-    if (stack().length === 0) return
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return
-
-      // Escape in the page around a contained stack belongs to the page.
-      const within = container()
-
-      if (within && event.target instanceof Node && !within.contains(event.target)) return
-
-      // A control that cancels its own edit on Escape, such as an inline rename, keeps the dialog open.
-      if (event.target instanceof Element && event.target.closest("[data-owns-escape]")) return
-      dismiss()
-      event.preventDefault()
-      event.stopPropagation()
-    }
+    if (!open()) return
 
     makeEventListener(window, "keydown", onKeyDown, { capture: true })
   })
 
-  const mount = (
-    element: DialogElement,
-    owner: Owner,
-    onClose: (() => void) | undefined,
-    key: string | undefined,
-    focus: FocusReturn | undefined,
-  ) => {
-    // A deferred open (e.g. from a focus callback) must not mount after the provider is gone.
-    if (state.disposed) return
-    const id = key ?? Math.random().toString(36).slice(2)
-
-    // The layer follows the dialog's current place in the stack, so a new top dialog always renders above.
-    const layer = () =>
-      Math.max(
-        0,
-        stack().findIndex((item) => item.id === id),
-      )
-
-    const zIndex = () => String(50 + layer() * 10)
+  const mount = (effect: Extract<DialogStackEffect<FocusReturn, DialogRequest>, { type: "mount" }>) => {
+    const attempt = effect.attempt
+    const zIndex = () => String(50 + selectLayerIndex(machine(), attempt) * 10)
     // A function, not an inline `&&`: the compiler wraps an inline condition in a memo on every read of the prop, and
     // Kobalte reads it outside any owner, from outside-pointer handlers and while the closing dialog unmounts.
-    const modal = () => !container() && top()?.id === id
-    let dispose: (() => void) | undefined
-    let setClosing: ((closing: boolean) => void) | undefined
-    let layerRef: HTMLDivElement | undefined
-    let exit = 100
+    const modal = () => selectLayerModal(machine(), attempt, !!container())
+    let ref: HTMLDivElement | undefined
+    let dispose = () => {}
 
-    // Stacked dialogs render as sibling portals, so only the top layer may own the focus trap.
-    const node = runWithOwner(owner, () =>
+    const node = runWithOwner(effect.request.owner, () =>
       createRoot((d: () => void) => {
         dispose = d
-        const [closing, setClosingSignal] = createSignal(false)
-        const [backdropDismiss, setBackdropDismiss] = createSignal(true)
-        setClosing = setClosingSignal
+        const closing = createMemo(() => selectLayerClosing(machine(), attempt))
 
         return (
           <Kobalte
             modal={modal()}
             open={!closing()}
             onOpenChange={(open: boolean) => {
-              if (!open) dismiss(id)
+              if (!open) dispatch({ type: "layer.dismiss", attempt })
             }}
           >
             <Kobalte.Portal mount={container()}>
               <Kobalte.Overlay
                 data-component="dialog-overlay"
                 style={{ "z-index": zIndex() }}
-                onClick={() => {
-                  if (backdropDismiss()) dismiss(id)
-                }}
+                onClick={() => dispatch({ type: "backdrop.click", attempt })}
               />
               <div
-                ref={layerRef}
-                data-dialog-layer={layer()}
+                ref={ref}
+                data-dialog-layer={selectLayerIndex(machine(), attempt)}
                 style={{
                   position: "fixed",
                   inset: "0",
@@ -208,9 +207,16 @@ function init(container: () => HTMLElement | undefined) {
                 }}
               >
                 <LayerContext.Provider
-                  value={{ setBackdropDismiss, setExitDuration: (ms) => (exit = ms), container: container() }}
+                  value={{
+                    id: effect.id,
+                    attempt,
+                    closing,
+                    setBackdropDismiss: (enabled) => dispatch({ type: "layer.backdrop-dismiss", attempt, enabled }),
+                    setExitDuration: (exitMs) => dispatch({ type: "layer.exit-duration", attempt, exitMs }),
+                    container: container(),
+                  }}
                 >
-                  {element()}
+                  {effect.request.element()}
                 </LayerContext.Provider>
               </div>
             </Kobalte.Portal>
@@ -219,56 +225,33 @@ function init(container: () => HTMLElement | undefined) {
       }),
     )
 
-    if (!dispose || !setClosing) return
-
-    const active: Active = {
-      id,
-      node,
-      dispose,
-      owner,
-      onClose,
-      setClosing,
-      exit: () => exit,
-      focus,
-      returnFocus: () => {
-        // A close inside a reactive update unmounts the dialog, and its focus trap, only when the update ends.
-        if (layerRef?.contains(document.activeElement)) return queueMicrotask(() => returnFocus(focus, layerRef))
-        returnFocus(focus, layerRef)
+    setLayers((items) => [
+      ...items,
+      {
+        attempt,
+        node,
+        owner: effect.request.owner,
+        onClose: effect.request.onClose,
+        dispose,
+        ref: () => ref,
       },
-    }
-
-    setStack((items) => [...items, active])
-  }
-
-  const push = (element: DialogElement, owner: Owner, onClose?: () => void, id?: string) => {
-    lock.value = false
-    mount(element, owner, onClose, id, captureFocus())
-  }
-
-  const show = (element: DialogElement, owner: Owner, onClose?: () => void, id?: string) => {
-    // A replacement returns focus to where the dialogs it replaces would have, not to their now-removed content.
-    const focus = stack().length > 0 ? stack()[0].focus : captureFocus()
-    disposeAll(true)
-    lock.value = false
-    mount(element, owner, onClose, id, focus)
+    ])
   }
 
   return {
-    stack,
-    top,
-    close,
-    show,
-    push,
+    dispatch,
+    active: () => selectTopDialog(machine()),
+    /** Stacked dialogs render under the owner of the dialog below, so they see the same context. */
+    base: () => layers().at(-1)?.owner,
+    open: (mode: "show" | "push", request: DialogRequest, id: string | undefined, aborted: boolean) =>
+      dispatch({ type: "open", mode, id: id ?? uuid(), aborted, focus: captureFocus(), request }),
+    layers,
   }
 }
 
 /** Runs a dialog callback so its throw is reported without stopping the caller's cleanup. */
 function isolate(fn: () => void) {
-  try {
-    fn()
-  } catch (error) {
-    console.error("[dialog]", error)
-  }
+  void Promise.try(fn).catch((cause: unknown) => console.error("[dialog]", cause))
 }
 
 /** Remembers the focused element and, in editable content, the caret, which focusing alone does not restore. */
@@ -314,7 +297,7 @@ export function DialogProvider(props: ParentProps<{ container?: HTMLElement }>) 
     <Context.Provider value={ctx}>
       {props.children}
       <div data-component="dialog-stack">
-        <For each={ctx.stack()}>{(item) => item.node}</For>
+        <For each={ctx.layers()}>{(item) => item.node}</For>
       </div>
     </Context.Provider>
   )
@@ -322,6 +305,7 @@ export function DialogProvider(props: ParentProps<{ container?: HTMLElement }>) 
 
 export function useDialog() {
   const ctx = useContext(Context)
+  const layer = useContext(LayerContext)
   const owner = getOwner()
 
   if (!owner) {
@@ -335,30 +319,37 @@ export function useDialog() {
   return {
     /** The top dialog that is open. One that has started closing no longer counts, though it waits to be disposed. */
     get active() {
-      return ctx.top()
+      return ctx.active()
+    },
+    /** Inside a dialog, true from the moment that dialog starts closing; outside every dialog, false. */
+    get closing() {
+      return layer?.closing() ?? false
     },
     /**
      * id lets the caller close this dialog later rather than whichever is on top. Opening is deferred; once
      * signal aborts, the open neither mounts nor replaces anything and onClose runs as for a replaced dialog.
      */
     show(element: DialogElement, onClose?: () => void, id?: string, signal?: AbortSignal) {
-      const base = ctx.stack().at(-1)?.owner ?? owner
+      const base = ctx.base() ?? owner
 
-      return startTransition(() => {
-        if (signal?.aborted) return isolate(() => onClose?.())
-        ctx.show(element, base, onClose, id)
-      })
+      return startTransition(() => ctx.open("show", { element, owner: base, onClose }, id, !!signal?.aborted))
     },
     push(element: DialogElement, onClose?: () => void, id?: string, signal?: AbortSignal) {
-      const base = ctx.stack().at(-1)?.owner ?? owner
+      const base = ctx.base() ?? owner
 
-      return startTransition(() => {
-        if (signal?.aborted) return isolate(() => onClose?.())
-        ctx.push(element, base, onClose, id)
-      })
+      return startTransition(() => ctx.open("push", { element, owner: base, onClose }, id, !!signal?.aborted))
     },
+    /**
+     * Programmatic close. With an id it closes that dialog at once. Without one, called inside a dialog, it closes that
+     * dialog, or the dialog that replaced it through `show`, and nothing once it is gone; outside every dialog it closes
+     * the top one. Either way one at a time, so a double click closes one dialog.
+     */
     close(id?: string) {
-      ctx.close(id)
+      ctx.dispatch({ type: "close", id, layer: layer?.attempt })
+    },
+    /** Dismisses the top open dialog, as Escape does; with an id, only while that dialog is on top. */
+    dismiss(id?: string) {
+      ctx.dispatch({ type: "dismiss", id })
     },
   }
 }

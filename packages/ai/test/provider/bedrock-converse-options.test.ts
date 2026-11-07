@@ -11,7 +11,7 @@ const bedrock = (id: string, settings: Omit<Parameters<typeof AmazonBedrock.mode
   AmazonBedrock.model(id, { baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer", ...settings })
 
 const request = (model: ReturnType<typeof bedrock>) =>
-  ai.request({ model, prompt: "Say hello.", cache: "none", generation: { maxTokens: 64 } })
+  ai.request({ model, prompt: "Say hello.", cache: "none", maxTokens: 64 })
 
 const body = (model: ReturnType<typeof bedrock>) =>
   compileRequest(request(model)).pipe(Effect.map((prepared) => prepared.body))

@@ -236,8 +236,8 @@ describe("ConfigProviderPlugin.Plugin", () => {
       })
       expect(configured.compatibility).toEqual({ supportsPromptCacheKey: true, requireFinishReason: false })
       // The OpenAI chat package enables the key by default; provider config overrides it on the runtime model.
-      expect((yield* ModelResolver.fromCatalogModel(catalog)).compatibility?.supportsPromptCacheKey).toBe(false)
-      expect((yield* ModelResolver.fromCatalogModel(configured)).compatibility?.supportsPromptCacheKey).toBe(true)
+      expect((yield* ModelResolver.fromCatalogModel(catalog)).capabilities?.promptCacheKey).toBe(false)
+      expect((yield* ModelResolver.fromCatalogModel(configured)).capabilities?.promptCacheKey).toBe(true)
     }),
   )
 
@@ -262,7 +262,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
 
       const catalog = required(yield* models.get(providerID, Model.ID.make("catalog")))
       expect(catalog.compatibility).toEqual({ streamUsage: false })
-      expect((yield* ModelResolver.fromCatalogModel(catalog)).compatibility?.streamUsage).toBe(false)
+      expect((yield* ModelResolver.fromCatalogModel(catalog)).capabilities?.streamUsage).toBe(false)
     }),
   )
 
@@ -453,9 +453,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
 
       expect(yield* models.available()).toEqual([])
       expect((yield* models.available(["image"])).map((model) => model.id)).toEqual([retypedID])
-      expect((yield* models.available(["decision"])).map((model) => [model.id, model.name])).toEqual([
-        [keptID, "Kept"],
-      ])
+      expect((yield* models.available(["decision"])).map((model) => [model.id, model.name])).toEqual([[keptID, "Kept"]])
     }),
   )
 
@@ -695,6 +693,11 @@ describe("ConfigProviderPlugin.Plugin", () => {
       name: "zero costs and omitted cache costs",
       legacy: { models: { chat: { cost: { input: 0, output: 0 } } } },
       native: { models: { chat: { cost: { input: 0, output: 0 } } } },
+    },
+    {
+      name: "context-only limits",
+      legacy: { models: { chat: { limit: { context: 1000000 } } } },
+      native: { models: { chat: { limit: { context: 1000000 } } } },
     },
   ]) {
     it.effect(`matches native configuration for migrated ${scenario.name}`, () =>

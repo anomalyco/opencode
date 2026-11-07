@@ -5,11 +5,11 @@ import { OpenResponses } from "../protocols/open-responses.js"
 import { SystemOne } from "../protocols/system-one.js"
 import { cacheControl } from "../protocols/utils/cache.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
 import { Protocol } from "../route/protocol.js"
-import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
+import { ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 import { bearerRouteDefaults } from "./settings.js"
@@ -17,7 +17,7 @@ import { bearerRouteDefaults } from "./settings.js"
 export const id = ProviderID.make("digitalocean")
 const baseURL = "https://inference.do-ai.run/v1"
 
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: OpenAIProviderOptionsInput | OpenResponsesProviderOptionsInput
@@ -51,7 +51,7 @@ const responsesRoute = Route.make({
   protocol: OpenResponses.protocol,
   endpoint: Endpoint.path("/responses", { baseURL }),
   transport: OpenResponses.httpTransport,
-  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
 export const routes = [route, responsesRoute]
@@ -81,9 +81,7 @@ export const configure = (input: Config = {}) => {
   const chat = (modelID: string | ModelID) =>
     configured.model<OpenAIProviderOptionsInput>({
       id: modelID,
-      compatibility: {
-        supportsPromptCacheKey: true,
-      },
+      capabilities: { promptCacheKey: true },
     })
   return {
     id,

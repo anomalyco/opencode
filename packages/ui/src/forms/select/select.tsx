@@ -10,7 +10,19 @@ import {
   Trigger,
   Value,
 } from "@kobalte/core/select"
-import { Show, createMemo, onCleanup, splitProps, type ComponentProps, type JSX } from "solid-js"
+import {
+  Show,
+  createComputed,
+  createMemo,
+  on,
+  onCleanup,
+  splitProps,
+  untrack,
+  type ComponentProps,
+  type JSX,
+} from "solid-js"
+import { MenuScroll } from "../../components/menu-scroll"
+import { createSelectHighlightState, transitionSelectHighlight, type SelectHighlightEvent } from "./machine"
 import "./select.css"
 
 function groupOptions<T>(options: T[], groupBy?: (x: T) => string): { category: string; options: T[] }[] {
@@ -79,8 +91,6 @@ export type SelectProps<T> = Omit<
   contentClass?: string
 }
 
-type HighlightState = { key?: string; cleanup?: void | (() => void) }
-
 export function Select<T>(props: SelectProps<T>) {
   const [local, others] = splitProps(props, [
     "class",
@@ -110,34 +120,46 @@ export function Select<T>(props: SelectProps<T>) {
     "fitViewport",
   ])
 
-  const state: HighlightState = {}
+  let highlight = createSelectHighlightState(untrack(() => others.open ?? others.defaultOpen ?? false))
+  // The highlighted item and the undo its preview returned; the machine decides when each runs.
+  let highlighted: T | undefined
+  let revert: void | (() => void)
 
-  const stop = () => {
-    state.cleanup?.()
-    state.cleanup = undefined
-    state.key = undefined
+  let scroller: HTMLDivElement | undefined
+
+  const dispatch = (event: SelectHighlightEvent) => {
+    const next = transitionSelectHighlight(highlight, event)
+    highlight = next.state
+    next.effects.forEach((effect) => {
+      if (effect.type === "preview.revert") {
+        const undo = revert
+        revert = undefined
+
+        return undo?.()
+      }
+
+      revert = highlighted === undefined ? undefined : local.onHighlight?.(highlighted)
+    })
   }
 
   const keyFor = (item: T) => (local.value ? local.value(item) : String(item))
 
-  const move = (item: T | undefined) => {
-    if (!local.onHighlight) return
-
-    if (!item) {
-      stop()
-
-      return
-    }
-
-    const key = keyFor(item)
-
-    if (state.key === key) return
-    state.cleanup?.()
-    state.cleanup = local.onHighlight(item)
-    state.key = key
+  const move = (item: T) => {
+    highlighted = item
+    dispatch({ type: "highlight.changed", key: keyFor(item), previewable: !!local.onHighlight })
   }
 
-  onCleanup(stop)
+  // A controlled menu closed by its owner does not call onOpenChange.
+  createComputed(
+    on(
+      () => others.open,
+      (open) => {
+        if (open !== undefined) dispatch({ type: "open.changed", open })
+      },
+    ),
+  )
+
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   const grouped = createMemo(() => groupOptions(local.options, local.groupBy))
 
@@ -189,13 +211,16 @@ export function Select<T>(props: SelectProps<T>) {
       )}
       onChange={(next) => {
         const v = next == null ? null : Array.isArray(next) ? (next[0] ?? null) : next
+        dispatch({
+          type: "option.selected",
+          key: v === null ? undefined : keyFor(v),
+          closing: others.closeOnSelection ?? true,
+        })
         local.onSelect?.(v)
-        stop()
       }}
       onOpenChange={(open) => {
+        if (others.open === undefined) dispatch({ type: "open.changed", open })
         local.onOpenChange?.(open)
-
-        if (!open) stop()
       }}
     >
       <Trigger
@@ -231,7 +256,9 @@ export function Select<T>(props: SelectProps<T>) {
       </Trigger>
       <Portal>
         <Content class={local.contentClass} data-component="menu-v2-content" data-slot="select-v2-content">
-          <Listbox data-slot="select-v2-listbox" />
+          <MenuScroll viewportRef={(element) => (scroller = element)}>
+            <Listbox data-slot="select-v2-listbox" scrollRef={() => scroller} />
+          </MenuScroll>
         </Content>
       </Portal>
     </Root>

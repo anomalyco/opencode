@@ -2,7 +2,6 @@ import { domain } from "./stage"
 
 const GITHUB_APP_ID = new sst.Secret("GITHUB_APP_ID")
 const GITHUB_APP_PRIVATE_KEY = new sst.Secret("GITHUB_APP_PRIVATE_KEY")
-export const EMAILOCTOPUS_API_KEY = new sst.Secret("EMAILOCTOPUS_API_KEY")
 const ADMIN_SECRET = new sst.Secret("ADMIN_SECRET")
 
 export const api = new sst.cloudflare.Worker("Api", {
@@ -17,6 +16,8 @@ export const api = new sst.cloudflare.Worker("Api", {
   },
 })
 
+// The V1 docs, at docs.opencode.ai/docs. opencode.ai/docs is the V2 docs (services/site), which sends paths
+// without a V2 page here.
 new sst.cloudflare.x.Astro("Web", {
   domain: "docs." + domain,
   path: "packages/web",
