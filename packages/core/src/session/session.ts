@@ -1,7 +1,7 @@
 export * as Session from "./session.js"
 
 import { DateTime, Effect, Fiber, Scope } from "effect"
-import type { Agent } from "@opencode/schema/agent"
+import { Agent } from "../agent.js"
 import type { Model } from "@opencode/schema/model"
 import type { Permission } from "@opencode/schema/permission"
 import { Event } from "@opencode/schema/event"
@@ -141,10 +141,33 @@ export const make = Effect.fn("Session.make")(function* () {
     (sessionID: SessionSchema.ID, inboxID: SessionMessage.ID) => mutatePending(sessionID, inboxID, admission.cancel),
     Effect.uninterruptible,
   )
+  // The agent a session effectively runs: the stored selection, or the configured
+  // default for sessions that never persisted one.
+  const effectiveAgent = Effect.fn("Session.effectiveAgent")(function* (session: SessionSchema.Info) {
+    if (session.agent !== undefined) return session.agent
+    const agents = yield* Agent.Service
+    const selected = yield* agents.select()
+    return selected.id
+  })
   const steerInbox = Effect.fn("Session.steerInbox")(function* (
     sessionID: SessionSchema.ID,
     inboxID: SessionMessage.ID,
   ) {
+    const session = yield* get(sessionID)
+    const pending = yield* admission.list(sessionID)
+    const item = pending.find((entry) => entry.id === inboxID)
+    // An agent-changing prompt must stay queued: steering it would promote the
+    // selection mid-turn and reconfigure the running turn. Fail like any other
+    // unsteerable item so clients can undo an optimistic move.
+    if (item?.type === "user" && item.payload.agent !== undefined) {
+      const effective = yield* (session.agent !== undefined
+        ? Effect.succeed(session.agent)
+        : effectiveAgent(session).pipe(
+            instances.provide(session),
+            Effect.orDie,
+          ))
+      if (item.payload.agent !== effective) return yield* new InboxConflictError({ sessionID, inboxID })
+    }
     yield* mutatePending(sessionID, inboxID, admission.steer)
     yield* execution.wake(sessionID)
   }, Effect.uninterruptible)
@@ -168,7 +191,17 @@ export const make = Effect.fn("Session.make")(function* () {
           // Preparation, the staged revert commit and admission share one acquisition of the session's location
           // services, so projections see its config whoever called prompt.
           return yield* Effect.gen(function* () {
-            const item = yield* restore(SessionPrompt.prepare({ session, messageID, input }))
+            // A prompt that selects a different agent must never deliver mid-turn: an agent
+            // change reconfigures permissions and tools, which is only safe at a turn boundary.
+            // Queueing it defers the selection to the idle boundary where promotion applies it.
+            // Sessions without a stored agent compare against the configured default, so SDK
+            // sessions still steer prompts carrying that default.
+            const effective = yield* effectiveAgent(session)
+            const request =
+              input.agent !== undefined && input.agent !== effective
+                ? { ...input, delivery: "queue" as const }
+                : input
+            const item = yield* restore(SessionPrompt.prepare({ session, messageID, input: request }))
             // Commit a staged revert only after preparation succeeds, before admitting new work.
             if (session.revert) yield* SessionRevert.commit(bus, session)
             return yield* admission.admit({

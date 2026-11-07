@@ -148,10 +148,16 @@ const settle = (persisted: ReadonlyArray<string>, expected: number, remaining = 
 /** The exact reminder texts, derived from plugin behavior rather than duplicated here. */
 const reminders = Effect.gen(function* () {
   const planRun = yield* run()
-  yield* planRun.contextHook(request(plan, []))
+  const planMessages: Array<Message> = []
+  yield* planRun.contextHook(request(plan, planMessages))
+  const first = planMessages[0]?.content[0]
+  const enter = first?.type === "text" ? first.text : ""
   const buildRun = yield* run()
-  yield* buildRun.contextHook(request(build, [Message.user(planRun.persisted[0]!)]))
-  return { enter: planRun.persisted[0]!, leave: buildRun.persisted[0]! }
+  const buildMessages = [Message.user(enter), Message.user("implement it")]
+  yield* buildRun.contextHook(request(build, buildMessages))
+  const middle = buildMessages[1]?.content[0]
+  const leave = middle?.type === "text" ? middle.text : ""
+  return { enter, leave }
 })
 
 describe("plan plugin reminders", () => {
@@ -167,7 +173,29 @@ describe("plan plugin reminders", () => {
     }),
   )
 
-  it.effect("reconciles a missing enter reminder into the request and persists it", () =>
+  it.effect("lets the context hook own the reminder for a delivery-time switch", () =>
+    Effect.gen(function* () {
+      const base = agentSelected(build, plan)
+      const delivery = { ...base, data: { ...base.data, source: "delivery" as const } }
+      const { persisted, contextHook } = yield* run([delivery])
+      yield* Effect.promise(() => Bun.sleep(10))
+      // The switch lands at a turn boundary; the subscriber must stay silent or a
+      // second reminder would race the context hook and steer an extra request.
+      expect(persisted).toEqual([])
+
+      const { enter } = yield* reminders
+      const messages = [Message.user(enter), Message.user("implement it")]
+      yield* contextHook(request(build, messages))
+      // The hook reconciles in memory only: a persisted reminder here would sit
+      // pending when the turn ends and start an extra step for it.
+      expect(messages).toHaveLength(3)
+      const middle = messages[1]?.content[0]
+      expect(middle?.type === "text" && middle.text).toContain("NO LONGER in Plan mode")
+      expect(persisted).toEqual([])
+    }),
+  )
+
+  it.effect("reconciles a missing enter reminder into the request without persisting it", () =>
     Effect.gen(function* () {
       const { persisted, contextHook } = yield* run()
       const messages = [Message.user("what agent are you?")]
@@ -176,7 +204,7 @@ describe("plan plugin reminders", () => {
       // Inserted before the user's prompt, matching where agent-switch reminders land.
       const first = messages[0]?.content[0]
       expect(first?.type === "text" && first.text).toContain("You are in Plan mode")
-      expect(persisted).toHaveLength(1)
+      expect(persisted).toHaveLength(0)
     }),
   )
 
@@ -200,7 +228,7 @@ describe("plan plugin reminders", () => {
       expect(messages).toHaveLength(3)
       const middle = messages[1]?.content[0]
       expect(middle?.type === "text" && middle.text).toContain("NO LONGER in Plan mode")
-      expect(persisted).toHaveLength(1)
+      expect(persisted).toHaveLength(0)
     }),
   )
 
@@ -233,7 +261,7 @@ describe("plan plugin reminders", () => {
       const messages = [Message.user(`<conversation-checkpoint>\n${enter}\n</conversation-checkpoint>`)]
       yield* contextHook(request(plan, messages))
       expect(messages).toHaveLength(2)
-      expect(persisted).toHaveLength(1)
+      expect(persisted).toHaveLength(0)
     }),
   )
 })

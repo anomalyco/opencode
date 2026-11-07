@@ -1,6 +1,7 @@
 export * as SessionInbox from "./session-inbox.js"
 
 import { Schema } from "effect"
+import { Agent } from "./agent.js"
 import { Location } from "./location.js"
 import { Project } from "./project.js"
 import { Attachment, Prompt } from "./prompt.js"
@@ -14,6 +15,8 @@ export type Delivery = typeof Delivery.Type
 export interface UserPayload extends Schema.Schema.Type<typeof UserPayload> {}
 export const UserPayload = Schema.Struct({
   ...Prompt.fields,
+  /** Agent selection admitted with this prompt; applied by the projector when the item is promoted. */
+  agent: Agent.ID.pipe(optional),
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
 }).annotate({ identifier: "Session.Inbox.UserPayload" })
 
