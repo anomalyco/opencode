@@ -3,9 +3,11 @@ import { OpenCodeEvent, type OpenCodeEventEncoded } from "@opencode/protocol/gro
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Schema } from "effect"
+import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { ACPReplay } from "../../src/acp/replay"
 import { ACPTranslate } from "../../src/acp/translate"
+import { tmpdir } from "../fixture/tmpdir"
 import {
   assistantMessage,
   childCreated,
@@ -230,7 +232,7 @@ const rows: Row[] = [
           sessionUpdate: "tool_call_update",
           status: "in_progress",
           title: "printf done",
-          locations: [{ path: path.resolve("/workspace", "sub") }],
+          locations: [],
           rawInput: { command: "printf done", workdir: "sub" },
         },
         { sessionUpdate: "tool_call_update", status: "in_progress" },
@@ -598,6 +600,56 @@ const rows: Row[] = [
 describe("acp turn translation", () => {
   test.each(rows)("$name", (row) => {
     expect(translate(row)).toMatchObject(row.expected)
+  })
+
+  test("locates files but not directories", async () => {
+    await using dir = await tmpdir()
+    await mkdir(path.join(dir.path, "src"))
+    await Bun.write(path.join(dir.path, "src", "a.ts"), "a")
+    const calls = [
+      ["call_shell", "shell", { command: "ls", workdir: "src" }],
+      ["call_glob", "glob", { pattern: "*.ts", path: "src" }],
+      ["call_grep_dir", "grep", { pattern: "a", path: "src" }],
+      ["call_read_dir", "read", { path: "src" }],
+      ["call_grep_file", "grep", { pattern: "a", path: "src/a.ts" }],
+      ["call_read_file", "read", { path: "src/a.ts" }],
+    ] as const
+    const result = run(
+      live(
+        ...calls.flatMap(([id, name, input]) => [
+          toolStarted(root, id, name),
+          toolCalled(root, id, input),
+          toolSucceeded(root, id, {}, "done"),
+        ]),
+      ),
+      { ...ctx, cwd: dir.path },
+    )
+
+    expect(
+      Object.fromEntries(
+        calls.map(([id]) => [
+          id,
+          updates(result.outputs)
+            .filter((update) => "toolCallId" in update && update.toolCallId === id)
+            .map((update) => ("locations" in update ? update.locations : undefined)),
+        ]),
+      ),
+    ).toEqual({
+      call_shell: [[], [], []],
+      call_glob: [[], [], []],
+      call_grep_dir: [[], [], []],
+      call_read_dir: [[], [], []],
+      call_grep_file: [
+        [],
+        [{ path: path.join(dir.path, "src", "a.ts") }],
+        [{ path: path.join(dir.path, "src", "a.ts") }],
+      ],
+      call_read_file: [
+        [],
+        [{ path: path.join(dir.path, "src", "a.ts") }],
+        [{ path: path.join(dir.path, "src", "a.ts") }],
+      ],
+    })
   })
 })
 
