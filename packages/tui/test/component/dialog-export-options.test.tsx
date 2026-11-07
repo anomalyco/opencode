@@ -55,7 +55,7 @@ test("tab and shift+tab move a visible focus through the export options", async 
     expect(span("Include thinking")?.fg.equals(field())).toBe(true)
     expect(span("Copy")?.bg.equals(focusedButton())).toBe(false)
 
-    for (const _ of [1, 2, 3, 4]) app.mockInput.pressTab()
+    for (const _ of [1, 2, 3, 4, 5, 6]) app.mockInput.pressTab()
     await app.waitForFrame(() => span("Copy")?.bg.equals(focusedButton()) === true)
     expect(span("Include tools")?.fg.equals(field())).toBe(true)
 

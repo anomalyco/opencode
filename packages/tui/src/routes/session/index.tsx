@@ -13,7 +13,7 @@ import {
   type Accessor,
 } from "solid-js"
 import path from "node:path"
-import { EOL } from "node:os"
+import { EOL, tmpdir } from "node:os"
 import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "../../context/route"
 import { createStore } from "solid-js/store"
@@ -1376,7 +1376,7 @@ export function Session(props: {
           }
 
           const filepath = path.join(
-            paths.cwd,
+            options.location === "project" ? paths.cwd : tmpdir(),
             `session-${crypto.randomUUID()}.${options.format === "markdown" ? "md" : "json"}`,
           )
           await writeExport(filepath, content)

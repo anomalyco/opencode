@@ -7,12 +7,14 @@ import { createStore } from "solid-js/store"
 import { createMemo, createSignal, For, Show } from "solid-js"
 
 export type ExportFormat = "markdown" | "json"
+export type ExportLocation = "project" | "temp"
 
 export type DialogExportOptionsProps = {
   defaultThinking: boolean
   onConfirm?: (options: {
     action: "copy" | "export"
     format: ExportFormat
+    location: ExportLocation
     thinking: boolean
     tools: boolean
     sanitize: boolean
@@ -20,7 +22,7 @@ export type DialogExportOptionsProps = {
   onCancel?: () => void
 }
 
-type Active = ExportFormat | "thinking" | "tools" | "sanitize" | "copy" | "export"
+type Active = ExportFormat | ExportLocation | "thinking" | "tools" | "sanitize" | "copy" | "export"
 
 export function DialogExportOptions(props: DialogExportOptionsProps) {
   const newDesigns = useNewDesigns()
@@ -31,12 +33,13 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
   )
 }
 
-type Row = "format" | "thinking" | "tools" | "sanitize"
+type Row = "format" | "location" | "thinking" | "tools" | "sanitize"
 
 /** Export options as a list of values, under the "new-designs" experiment: ↑/↓ moves, ←/→ or space changes. */
 function DialogExportOptionsList(props: DialogExportOptionsProps) {
   const [store, setStore] = createStore({
     format: "markdown" as ExportFormat,
+    location: "project" as ExportLocation,
     thinking: props.defaultThinking,
     tools: true,
     sanitize: false,
@@ -47,6 +50,7 @@ function DialogExportOptionsList(props: DialogExportOptionsProps) {
     props.onConfirm?.({
       action,
       format: store.format,
+      location: store.location,
       thinking: store.thinking,
       tools: store.tools,
       sanitize: store.sanitize,
@@ -54,6 +58,7 @@ function DialogExportOptionsList(props: DialogExportOptionsProps) {
 
   const change = (row: Row) => {
     if (row === "format") return setStore("format", store.format === "markdown" ? "json" : "markdown")
+    if (row === "location") return setStore("location", store.location === "project" ? "temp" : "project")
     setStore(row, !store[row])
   }
 
@@ -65,6 +70,13 @@ function DialogExportOptionsList(props: DialogExportOptionsProps) {
       onSelect: () => change("format"),
       footerOverhang: 2,
       footer: <DialogSelectChoice value={store.format} active={selected() === "format"} />,
+    },
+    {
+      title: "Location",
+      value: "location" as Row,
+      onSelect: () => change("location"),
+      footerOverhang: 2,
+      footer: <DialogSelectChoice value={store.location} active={selected() === "location"} />,
     },
     ...(store.format === "markdown"
       ? [
@@ -134,6 +146,7 @@ function LegacyDialogExportOptions(props: DialogExportOptionsProps) {
   const labelColor = (active: boolean) => (active ? theme.text.formfield.focused : theme.text.formfield.base)
   const [store, setStore] = createStore({
     format: "markdown" as ExportFormat,
+    location: "project" as ExportLocation,
     thinking: props.defaultThinking,
     tools: true,
     sanitize: false,
@@ -144,6 +157,7 @@ function LegacyDialogExportOptions(props: DialogExportOptionsProps) {
     props.onConfirm?.({
       action,
       format: store.format,
+      location: store.location,
       thinking: store.thinking,
       tools: store.tools,
       sanitize: store.sanitize,
@@ -154,6 +168,10 @@ function LegacyDialogExportOptions(props: DialogExportOptionsProps) {
       setStore("format", store.active)
       return
     }
+    if (store.active === "project" || store.active === "temp") {
+      setStore("location", store.active)
+      return
+    }
     if (store.active === "thinking") setStore("thinking", !store.thinking)
     if (store.active === "tools") setStore("tools", !store.tools)
     if (store.active === "sanitize") setStore("sanitize", !store.sanitize)
@@ -162,7 +180,9 @@ function LegacyDialogExportOptions(props: DialogExportOptionsProps) {
 
   const move = (offset: number) => {
     const options: Active[] =
-      store.format === "markdown" ? ["markdown", "json", "thinking", "tools"] : ["markdown", "json", "sanitize"]
+      store.format === "markdown"
+        ? ["markdown", "json", "project", "temp", "thinking", "tools"]
+        : ["markdown", "json", "project", "temp", "sanitize"]
     const order: Active[] = [...options, "copy", "export"]
     setStore("active", order[(order.indexOf(store.active) + offset + order.length) % order.length])
   }
@@ -184,6 +204,11 @@ function LegacyDialogExportOptions(props: DialogExportOptionsProps) {
   const selectFormat = (format: ExportFormat) => {
     setStore("format", format)
     setStore("active", format)
+  }
+
+  const selectLocation = (location: ExportLocation) => {
+    setStore("location", location)
+    setStore("active", location)
   }
 
   return (
@@ -240,6 +265,29 @@ function LegacyDialogExportOptions(props: DialogExportOptionsProps) {
             </For>
           </box>
         </box>
+        <box flexDirection="row" gap={1}>
+          <text fg={theme.text.base} width={10}>
+            Save to:
+          </text>
+          <box flexDirection="row" gap={1}>
+            <For each={["project", "temp"] as const}>
+              {(location) => (
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  paddingLeft={1}
+                  paddingRight={1}
+                  onMouseUp={() => selectLocation(location)}
+                >
+                  <text fg={markColor(store.active === location, store.location === location)}>
+                    {store.location === location ? "◉" : "○"}
+                  </text>
+                  <text fg={labelColor(store.active === location)}>{location === "project" ? "Project" : "Temp"}</text>
+                </box>
+              )}
+            </For>
+          </box>
+        </box>
         <Show when={store.format === "markdown"}>
           <box
             flexDirection="row"
@@ -286,6 +334,7 @@ DialogExportOptions.show = (dialog: DialogContext, defaultThinking: boolean) => 
   return new Promise<{
     action: "copy" | "export"
     format: ExportFormat
+    location: ExportLocation
     thinking: boolean
     tools: boolean
     sanitize: boolean
