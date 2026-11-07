@@ -1,8 +1,78 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { parse } from "../src/highlights"
+import { embed, parse } from "../src/highlights"
 
 describe("highlights", () => {
+  test("embeds only shared highlights from v2.2.5 for the TUI", async () => {
+    const changelog = await Bun.file(path.resolve(import.meta.dir, "../../../CHANGELOG.md")).text()
+    const notes = changelog.split(/^## v2\.2\.5 .*$/m)[1].split(/^## /m)[0]
+
+    expect(parse(notes).items).toHaveLength(3)
+    expect(JSON.parse(embed(notes) ?? "null")).toEqual([
+      {
+        title: "Percentage Compaction Buffer",
+        body:
+          'Set `"compaction": { "buffer": "20%" }` in `opencode.json` to keep a share of each model\'s context window free, ' +
+          "so one setting fits models with small and large windows. Token counts still work.",
+      },
+    ])
+  })
+
+  test("keeps shared and unclassified highlights when embedding for the TUI", () => {
+    const link = (id: number) => `https://github.com/anomalyco/opencode/pull/${id}`
+    const notes = [
+      "### Highlights",
+      `- **Desktop Only**: Open the desktop popup. ([#1](${link(1)}))`,
+      `- **Shared**: Available in both clients. ([#2](${link(2)}))`,
+      `- **Mixed**: Desktop and core changes. ([#1](${link(1)}), [#3](${link(3)}))`,
+      `- **Unknown**: Not classified in the details. ([#4](${link(4)}))`,
+      "- **Unlinked**: No source link.",
+      "### Desktop",
+      `- Popup. ([#1](${link(1)}))`,
+      `- Shared change. ([#2](${link(2)}))`,
+      "### TUI",
+      "- Shared change. ([#2](https://github.com/anomalyco/opencode/issues/2))",
+      "```md",
+      `- An example, not a TUI change. ([#1](${link(1)}))`,
+      "```",
+      "### Core",
+      `- Core change. ([#3](${link(3)}))`,
+    ].join("\r\n")
+
+    expect(JSON.parse(embed(notes) ?? "null")).toEqual([
+      { title: "Shared", body: "Available in both clients." },
+      { title: "Mixed", body: "Desktop and core changes." },
+      { title: "Unknown", body: "Not classified in the details." },
+      { title: "Unlinked", body: "No source link." },
+    ])
+  })
+
+  test("filters desktop highlights before applying the item limit", () => {
+    const notes = [
+      "### Highlights",
+      ...Array.from(
+        { length: 5 },
+        (_, index) => `- **Desktop ${index}**: A desktop change. ([#1](https://github.com/anomalyco/opencode/pull/1))`,
+      ),
+      "- **Core**: A shared change. ([#2](https://github.com/anomalyco/opencode/pull/2))",
+      "### Desktop",
+      "- Desktop change. ([#1](https://github.com/anomalyco/opencode/pull/1))",
+      "### Core",
+      "- Shared change. ([#2](https://github.com/anomalyco/opencode/pull/2))",
+    ].join("\n")
+
+    expect(embed(notes)).toBe(JSON.stringify([{ title: "Core", body: "A shared change." }]))
+  })
+
+  test("does not embed a release with only desktop highlights", () => {
+    expect(
+      embed(
+        "### Highlights\n- **Desktop**: A desktop change. ([#1](https://github.com/anomalyco/opencode/pull/1))\n" +
+          "### Desktop\n- A change. ([#1](https://github.com/anomalyco/opencode/pull/1))",
+      ),
+    ).toBeUndefined()
+  })
+
   test("parses the v2.0.27 release notes", async () => {
     const changelog = await Bun.file(path.resolve(import.meta.dir, "../../../CHANGELOG.md")).text()
     const notes = changelog.split(/^## v2\.0\.27 .*$/m)[1].split(/^## /m)[0]
