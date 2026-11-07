@@ -1387,6 +1387,61 @@ test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => 
   expect(setup.renderer.isDestroyed).toBe(false)
 })
 
+test.each([
+  ["submits a prompt ending in a path", "list files in /tmp", true],
+  ["keeps a mistyped leading command blocked", "/zzzz", false],
+] as const)(
+  "enter %s when no slash command matches",
+  async (_, text, submits) => {
+    const location = { directory, project: { id: "project", directory, canonical: directory } }
+    const submitted = Promise.withResolvers<unknown>()
+    let session: unknown
+    await using setup = await createAppFixture({
+      config: { animations: false, tabs: { mode: "off" } },
+      fetch: async (url, request) => {
+        if (url.pathname === "/api/location") return json(location)
+        if (url.pathname === "/api/agent")
+          return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+        if (url.pathname === "/api/model")
+          return json({ location, data: [{ id: "model", providerID: "provider", name: "Remote Model", variants: [] }] })
+        if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
+        if (url.pathname === "/api/session" && request.method === "POST") {
+          session = {
+            ...(await request.json()),
+            projectID: "project",
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: 0, updated: 0 },
+          }
+          return json({ data: session })
+        }
+        if (/^\/api\/session\/[^/]+\/prompt$/.test(url.pathname)) {
+          submitted.resolve(await request.json())
+          return json({ data: {} })
+        }
+        if (/^\/api\/session\/[^/]+\/(message|inbox|permission)$/.test(url.pathname))
+          return json({ data: [], cursor: {} })
+        if (session && /^\/api\/session\/[^/]+$/.test(url.pathname)) return json({ data: session })
+        return undefined
+      },
+    })
+
+    await setup.ready
+    await setup.waitForFrame((frame) => frame.includes("Build · Remote Model Provider"))
+    await setup.mockInput.typeText(text)
+    await setup.waitForFrame((frame) => frame.includes("No matching commands"))
+    setup.mockInput.pressEnter()
+    const result = await Promise.race([submitted.promise, Bun.sleep(2_000).then(() => undefined)])
+    if (!submits) {
+      expect(result).toBeUndefined()
+      expect(setup.captureCharFrame()).toContain("No matching commands")
+      return
+    }
+    expect(result).toMatchObject({ text })
+  },
+  10_000,
+)
+
 test.skipIf(process.platform === "win32").each(["manual", "select"] as const)(
   "selection copy and pane management respect %s mode in the prompt and terminal pane",
     async (copy) => {
