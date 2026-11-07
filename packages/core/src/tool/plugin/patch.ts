@@ -210,7 +210,7 @@ export const Plugin = {
               ])
               yield* permission.assert({
                 action: "edit",
-                resources: [...new Set(targets.map((target) => target.resource))],
+                resources: [...new Set(targets.flatMap((target) => target.ruleResources))],
                 save: ["*"],
                 metadata: {
                   filepath: targets.map((target) => target.resource).join(", "),
