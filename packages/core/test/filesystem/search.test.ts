@@ -34,7 +34,7 @@ const ripgrepStub = (entry: string, onFind: (input: Ripgrep.FindInput) => void) 
   )
 
 const fakeFff = () => {
-  const state = { scanning: true, files: [] as string[], created: 0, destroyed: 0 }
+  const state = { scanning: true, files: [] as string[], directories: [] as string[], created: 0, destroyed: 0 }
   const create: Parameters<typeof FileSystemSearch.makeFffLayer>[0] = () => {
     state.created++
     const search = () => ({
@@ -50,7 +50,13 @@ const fakeFff = () => {
         destroy: () => void state.destroyed++,
         isScanning: () => state.scanning,
         fileSearch: search,
-        directorySearch: () => ({ ok: true, value: { items: [], scores: [] } }),
+        directorySearch: (_query: string, options: { pageSize: number }) => {
+          const page = state.directories.slice(0, options.pageSize)
+          return {
+            ok: true,
+            value: { items: page.map((relativePath) => ({ relativePath })), scores: page.map(() => ({ total: 1 })) },
+          }
+        },
         mixedSearch: () => ({ ok: true, value: { items: [], scores: [] } }),
       },
     }
@@ -230,6 +236,49 @@ describe("FileSystemSearch", () => {
         const entries = yield* search.find({ query: "ts", type: "file" })
         expect(observed?.cwd).toBe(directory)
         expect(entries.map((entry) => entry.path)).toEqual([RelativePath.make("remote.ts")])
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  it.effect("offers the location root for `/` even when fff ranks it past the page", () =>
+    Effect.gen(function* () {
+      const fff = fakeFff()
+      fff.state.scanning = false
+      fff.state.directories = Array.from({ length: 30 }, (_, index) => `dir${index}/`)
+      const { scope, search } = yield* buildSearch(fff.layer)
+
+      const entries = yield* search.find({ query: "/", type: "directory", limit: 20 })
+      expect(entries[0]).toEqual(FileSystem.Entry.make({ path: RelativePath.make(path.sep), type: "directory" }))
+      expect(entries).toHaveLength(20)
+      expect((yield* search.find({ query: "dir", type: "directory", limit: 20 }))[0]?.path).toBe(
+        RelativePath.make(`dir0${path.sep}`),
+      )
+
+      yield* Scope.close(scope, Exit.void)
+    }),
+  )
+
+  it.live("offers the location root for `/` from the ripgrep index", () =>
+    Effect.gen(function* () {
+      const layer = AppNodeBuilder.build(FileSystemSearch.node, [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(
+              location({ directory: AbsolutePath.make(path.join(os.tmpdir(), "opencode-root-search")) }),
+            ),
+          ),
+        ),
+        Ripgrep.node.replace(ripgrepStub("README.md", () => {})),
+      ])
+      yield* Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        expect((yield* search.find({ query: "/", type: "directory" })).map((entry) => entry.path)).toEqual([
+          RelativePath.make(path.sep),
+        ])
+        expect(yield* search.find({ query: "/", type: "file" })).not.toContainEqual(
+          FileSystem.Entry.make({ path: RelativePath.make(path.sep), type: "directory" }),
+        )
       }).pipe(Effect.provide(layer))
     }),
   )
