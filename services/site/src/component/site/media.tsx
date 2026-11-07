@@ -19,9 +19,10 @@ type Manifest = {
 }
 type MediaKey = "hi" | "phone"
 
-const manifest: Manifest = Object.values(
-  import.meta.glob<Manifest>("./media-manifest.json", { eager: true, import: "default" }),
-)[0] ?? { video: {}, image: {} }
+// Only the stills' half: the pages offer the original videos alone (videoSources), so the video
+// copies' rows stay out of the bundle.
+const images: Manifest["image"] =
+  Object.values(import.meta.glob<Manifest["image"]>("./media-manifest.json", { eager: true, import: "image" }))[0] ?? {}
 
 const base = (src: string) => `/media/${src.replace(/^\/(product-videos\/)?/, "").replace(/\.\w+$/, "")}`
 
@@ -37,7 +38,7 @@ export function videoSources(src: string): VideoSource[] {
 
 /** A still's AVIF and WebP srcsets (if it has copies), and the file for `src`: the smallest WebP. */
 export function imageSources(src: string) {
-  const entry = manifest.image[src]
+  const entry = images[src]
   const file = (format: "avif" | "webp", [width, hash]: [number, string]) => `${base(src)}.${width}.${hash}.${format}`
   const set = (format: "avif" | "webp") =>
     entry?.[format]?.map((item) => `${file(format, item)} ${item[0]}w`).join(", ")
@@ -116,4 +117,30 @@ export function Still(props: JSX.ImgHTMLAttributes<HTMLImageElement> & { src: st
       <img {...props} src={sources().src} srcset={sources().webp} sizes={sources().webp ? props.sizes : undefined} />
     </picture>
   )
+}
+
+/**
+ * Loads a video again once it is on the page. A client-rendered video gets its src while it still
+ * belongs to Solid's template document, and while the router holds a new page off screen for its
+ * data, Chromium tries the load there and rejects the URL ("URL safety check"). Joining the page
+ * does not retry it. A video that has already picked its source is left alone.
+ */
+export function rescueMedia(video: HTMLVideoElement | undefined) {
+  if (video && (video.getAttribute("src") || video.querySelector("source[src]")) && !video.currentSrc) video.load()
+}
+
+/** True when the user asks for reduced motion. Always false during SSR. */
+export function prefersReducedMotion() {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+}
+
+/**
+ * The page's colour scheme on the client: the site's theme (the site root's data-theme, which the
+ * pre-paint script sets from the saved choice), else the system's. Server: undefined.
+ */
+export function pageScheme(): "light" | "dark" | undefined {
+  if (typeof document === "undefined") return
+  const theme = document.querySelector<HTMLElement>("[data-site]")?.dataset.theme
+  if (theme === "light" || theme === "dark") return theme
+  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
 }

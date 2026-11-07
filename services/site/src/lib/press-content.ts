@@ -1,7 +1,7 @@
 import { productDetails, products, type ProductSlug } from "~/component/site/product-data"
 import { config } from "~/config"
 import type { Translate } from "~/i18n"
-import { brandAssets } from "~/lib/brand-content"
+import { brandAssets } from "~/lib/media"
 import { pressEmail } from "~/lib/contact"
 import type { ChangelogRelease } from "~/lib/changelog"
 import pressMedia from "../../public/press-media/manifest.json"
@@ -28,7 +28,7 @@ export function pressContent(t: Translate, route: (path: string) => string) {
       projects: [
         {
           name: "OpenCode",
-          body: "The open source coding agent, with apps for desktop, mobile and the terminal, and an SDK. MIT licensed, 220,000+ GitHub stars.",
+          body: "The open source coding agent, with apps for desktop, the terminal and mobile, and an SDK. MIT licensed, 220,000+ GitHub stars.",
           href: "https://opencode.ai",
         },
         {
@@ -63,11 +63,11 @@ export function pressContent(t: Translate, route: (path: string) => string) {
     about: {
       title: "About OpenCode",
       // Both versions name the products in the site's order (products in product-data.ts): desktop,
-      // mobile, terminal, SDK.
+      // terminal, mobile, SDK.
       boilerplate: {
-        long: `OpenCode is an open source coding agent. It comes as a desktop app, a mobile app, a terminal UI and an SDK, and it works with models from any provider, including Claude, GPT and Gemini. OpenCode is MIT licensed and made by Anomaly. It has over ${config.github.starsFormatted.full} GitHub stars and more than ${config.stats.contributors.replace("+", "")} contributors, and over ${config.stats.monthlyUsers.replace("M", " million")} developers use it every month.`,
+        long: `OpenCode is an open source coding agent. It comes as a desktop app, a terminal UI, a mobile app and an SDK, and it works with models from any provider, including Claude, GPT and Gemini. OpenCode is MIT licensed and made by Anomaly. It has over ${config.github.starsFormatted.full} GitHub stars and more than ${config.stats.contributors.replace("+", "")} contributors, and over ${config.stats.monthlyUsers.replace("M", " million")} developers use it every month.`,
         short:
-          "OpenCode is an open source coding agent by Anomaly, with apps for desktop, mobile and the terminal, and an SDK.",
+          "OpenCode is an open source coding agent by Anomaly, with apps for desktop, the terminal and mobile, and an SDK.",
       },
       // More products, checked on 2026-11-04 against the live opencode.ai/console, /console/go and /data pages,
       // the Console docs (/docs/go, /docs/zen and the Console section's SSO, SCIM and Budgets pages)
@@ -316,15 +316,15 @@ export function pressReleases(releases: ChangelogRelease[], route: (path: string
 
 // Longer than the carousel copy in product-data.ts, and tuned to wrap to exactly three lines at
 // 1280 and 1440 wide (378 and 330px columns); re-measure after changing it. Sources: productDetails in product-data.ts
-// (desktop tabs, diffs and built-in browser; mobile voice calls and approvals; terminal shells,
-// remote servers and permissions; SDK typed client, sessions, prompts and event stream).
+// (desktop tabs, diffs and built-in browser; terminal shells, remote servers and permissions; mobile
+// voice calls and approvals; SDK typed client, sessions, prompts and event stream).
 const productPress: Record<ProductSlug, string> = {
   desktop:
     "Run several agents at once, each in its own tab, on macOS, Windows and Linux. Review every change as a diff and preview it.",
-  mobile:
-    "The newest OpenCode app. Call a session to talk to the agent, then review and approve its changes from your phone, anywhere.",
   terminal:
     "A terminal UI that works in any shell, editor or remote server. See each edit as a diff and choose which commands run on their own.",
+  mobile:
+    "The newest OpenCode app. Call a session to talk to the agent, then review and approve its changes from your phone, anywhere.",
   sdk: "A typed TypeScript client for scripts, CI jobs and your own tools. Create sessions, send prompts and stream every event as it lands.",
 }
 

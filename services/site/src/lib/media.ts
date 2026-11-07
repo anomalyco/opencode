@@ -14,3 +14,6 @@ export function mediaUrl(path: string) {
   if (!path.startsWith("/") || path.startsWith(mediaBase) || !mediaFile.test(path.split(/[?#]/)[0])) return path
   return `${mediaBase}${path}`
 }
+
+/** Every logo and wordmark in one zip (the site's menus, the Brand and Press pages). */
+export const brandAssets = mediaUrl("/opencode-brand-assets.zip")

@@ -54,11 +54,15 @@ export function LanguageSheet() {
                   event.preventDefault()
                   const next = href(locale)
                   active?.close()
-                  // Switch once the language's text has arrived, so the page doesn't show English first.
-                  void loadLanguage(locale).finally(() => {
-                    language.setLocale(locale)
-                    if (next !== `${location.pathname}${location.search}${location.hash}`) navigate(next)
-                  })
+                  // Switch once the language's text has arrived, so the page doesn't show English first;
+                  // if it can't arrive, load the page in that language instead.
+                  void loadLanguage(locale).then(
+                    () => {
+                      language.setLocale(locale)
+                      if (next !== `${location.pathname}${location.search}${location.hash}`) navigate(next)
+                    },
+                    () => window.location.assign(next),
+                  )
                 }}
               >
                 <span data-slot="native" lang={tag(locale)} dir={language.dir(locale)}>

@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+// Every language, as the Worker registers them at startup.
+import "../src/i18n/server"
 import path from "node:path"
 import { i18n } from "../src/i18n"
 import { LOCALES } from "../src/lib/language"

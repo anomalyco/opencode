@@ -1,6 +1,7 @@
 import { Rich } from "~/component/site/rich-text"
 import { rich } from "~/i18n/rich"
 import { Marked } from "~/component/site/marked"
+import "~/component/site/doc-list.css"
 import "./index.css"
 import { Title, Meta } from "@solidjs/meta"
 import { createAsync } from "@solidjs/router"
@@ -21,19 +22,23 @@ import {
   siteSettings,
   toggles,
 } from "~/component/site/settings"
-import { useMarkdown } from "~/component/site/use-markdown"
+import { useMarkdown, useMarkdownSource } from "~/component/site/use-markdown"
 import { Faq } from "~/component/faq"
 import { ContentsMenu, OnThisPage, SectionHeading, slug } from "~/component/site/on-this-page"
 import { AgentRulesButton } from "~/component/site/agent-rules-button"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { englishText, localize } from "~/i18n/content"
-import { source } from "~/i18n/content/source"
+import { pressSource } from "~/i18n/content/areas/press"
 import { changelog } from "~/lib/changelog"
 import { brandContent, brandMarkdown } from "~/lib/brand-content"
 import { pressContent, pressMarkdown, pressReleases } from "~/lib/press-content"
 import { MediaGallery } from "./media-gallery"
 import { PageTitle } from "~/component/site/sticky-title"
+import { ExternalArrow } from "~/component/site/icons"
+// The product list styles (product-list.css). This page used to get them only once the product
+// page's code had loaded in the background; pages now load other pages' code on intent.
+import "~/component/site/product-list.css"
 
 // One-line Anomaly projects for Settings › Press Anomaly projects "list".
 const projectLines: Record<string, string> = {
@@ -50,7 +55,7 @@ export default function Press() {
   const language = useLanguage()
   const content = createMemo(() => localize(language.locale(), "press", pressContent(i18n.t, language.route)))
   // Heading ids stay English in every locale, so links to /press#contact keep working.
-  const english = createMemo(() => englishText(content(), source.press))
+  const english = createMemo(() => englishText(content(), pressSource))
   const anchor = (text: string) => slug(english().get(text) ?? text)
   const data = createAsync(() => changelog())
   const releases = createMemo(() => pressReleases(data() ?? [], language.route, language.tag(language.locale())))
@@ -75,7 +80,7 @@ export default function Press() {
     onCleanup(() => window.removeEventListener("hashchange", reveal))
   })
   // "Copy rules for your agent" copies the Brand page's own Markdown, so the two never drift.
-  const brandRules = useMarkdown("/brand", brandMarkdown)
+  const brandRules = useMarkdownSource("/brand", brandMarkdown)
   const rulesLabel = createMemo(() => localize(language.locale(), "brand", brandContent(i18n.t)).hero.copy)
 
   // The sections in page order, for "Contents". Hidden sections leave the list too.
@@ -401,7 +406,7 @@ export default function Press() {
             {content().brand.all.text}
             <DownloadIcon />
           </a>
-          <AgentRulesButton label={rulesLabel().text} copied={rulesLabel().copied} source={brandRules.source} />
+          <AgentRulesButton label={rulesLabel().text} copied={rulesLabel().copied} source={brandRules} />
         </div>
       </Section>
 
@@ -446,7 +451,14 @@ export default function Press() {
             <Rich value={rich(content().company.more, content().company.links)} />
           </p>
         </div>
-        <ul data-component="product-list" data-variant="cards" data-style={siteSettings.pressCompany}>
+        {/* The legal index's list (doc-list.css): the same rows, type, spacing and hover. */}
+        <ul
+          data-component="legal-list"
+          data-style="rows"
+          data-hover={siteSettings.legalRowHover}
+          data-slot="projects"
+          data-design="pressCompany legalRowHover"
+        >
           <For each={content().company.projects}>
             {(project) => {
               // OpenCode is this site; the other projects open in a new tab.
@@ -457,21 +469,17 @@ export default function Press() {
                     href={project.href}
                     target={external ? "_blank" : undefined}
                     rel={external ? "noopener" : undefined}
-                    data-slot="row-link"
                     aria-label={external ? i18n.t("site.newTab", { label: project.name }) : project.name}
                     aria-describedby={`project-${slug(project.name)}`}
                   >
-                    <strong>
+                    <span data-slot="title">
                       {project.name}
-                      {/* The site's new-tab arrow, after the name. */}
+                      {/* The nav's new-tab arrow, 6px after the name. */}
                       <Show when={external}>
-                        <span data-slot="external" aria-hidden="true">
-                          {" "}
-                          ↗
-                        </span>
+                        <ExternalArrow />
                       </Show>
-                    </strong>
-                    <span id={`project-${slug(project.name)}`}>
+                    </span>
+                    <span data-slot="description" id={`project-${slug(project.name)}`}>
                       {siteSettings.pressCompany === "list" ? projectLines[project.name] : project.body}
                     </span>
                   </a>

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { LOCALE_HEADER, pageLocale, route } from "../src/lib/language"
+import { LOCALE_HEADER, localized, pageLocale, route } from "../src/lib/language"
 
 describe("language.route", () => {
   test("keeps the changelog unprefixed for every locale", () => {
@@ -9,6 +9,17 @@ describe("language.route", () => {
 
   test("prefixes other marketing pages", () => {
     expect(route("de", "/download")).toBe("/de/download")
+  })
+
+  test("never prefixes the docs, the Console or the English-only pages", () => {
+    for (const path of ["/docs", "/docs/agents/", "/v2", "/v1/docs/ide/", "/console/go", "/font", "/changelog.xml"]) {
+      expect(route("ja", path)).toBe(path)
+      expect(route("ja", `/ja${path}`)).toBe(path)
+      expect(localized(path)).toBe(false)
+    }
+    expect(route("ar", "/docs/agents/?x=1#y")).toBe("/docs/agents/?x=1#y")
+    expect(localized("/docsx")).toBe(true)
+    expect(localized("/data")).toBe(true)
   })
 })
 
@@ -24,6 +35,10 @@ describe("pageLocale", () => {
 
   test("uses the locale in the URL", () => {
     expect(pageLocale(request("/", { [LOCALE_HEADER]: "de" }))).toBe("de")
-    expect(pageLocale(request("/docs/de/agents/"))).toBe("de")
+    expect(pageLocale(request("/de/desktop"))).toBe("de")
+  })
+
+  test("leaves the English-only docs in English, even at a V1 docs language path", () => {
+    expect(pageLocale(request("/docs/de/agents/"))).toBe("en")
   })
 })

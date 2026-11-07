@@ -106,6 +106,11 @@
 [data-site] {
   --section-gap: 72px;
   --heading-gap: 24px;
+
+  /* Phones: 2px more under each title (David, 6 Nov), like the home sections (site.css). */
+  @media (max-width: 40rem) {
+    --heading-gap: 26px;
+  }
 }
 
 [data-site] :is(h2, h3)[data-component="section-heading"][id] {
@@ -134,13 +139,12 @@
 /* "Contents" on phones: a disclosure above the first section, in place of the hidden aside. It sticks
    under the top bar, or under the lowest sticky bar the page has above it (--contents-top: the legal
    pages' --anchor-top, less its 1rem, is the bottom of their breadcrumb band and Document / History
-   tabs), in the page colour, so the sections scroll behind it. Only its top rule shows at rest (the
-   next section's own divider closes it); while it is stuck the top rule gives way to a hairline at
-   its bottom edge (the bar above has its own).
+   tabs), in the page colour, so the sections scroll behind it. Its row is as tall as an accordion
+   row (--row-height, site.css), with one edge-to-edge line above and one below.
    Open, the list drops over the page instead of pushing it down, and scrolls when it is longer than
    the window. Sticky positioning only, so nothing moves when it pins. */
 [data-site] {
-  --contents-height: 2.75rem;
+  --contents-height: var(--row-height);
   --contents-top: calc(var(--anchor-top, calc(var(--topbar-height) + env(safe-area-inset-top, 0px) + 1rem)) - 1rem);
 }
 
@@ -163,10 +167,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    position: relative;
+    z-index: 1;
     min-height: var(--contents-height);
-    /* A rule above and a hairline below, at rest and pinned. */
-    border-top: 1px solid var(--border);
-    box-shadow: 0 1px 0 var(--border);
     font-family: var(--font-mono);
     font-size: var(--fs-small);
     color: var(--text-strong);
@@ -177,13 +180,27 @@
       display: none;
     }
 
+    /* 16px, like the icons on the menu button's column. It points to the inline end while closed
+       (right, or left in right-to-left pages) and turns to point down when open. */
     [data-slot="chevron"] {
-      transition: scale 200ms var(--ease-out);
+      width: 16px;
+      height: 16px;
+      rotate: -90deg;
+      transition: rotate 180ms var(--ease-out);
+
+      html[dir="rtl"] & {
+        rotate: 90deg;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+      }
     }
   }
 
-  &[open] summary [data-slot="chevron"] {
-    scale: 1 -1;
+  &[open] summary [data-slot="chevron"],
+  html[dir="rtl"] &[open] summary [data-slot="chevron"] {
+    rotate: 0deg;
   }
 
   summary [data-slot="label"] {
@@ -217,14 +234,52 @@
     z-index: 8;
     display: block;
     background: var(--bg);
-    container-type: scroll-state;
 
-    /* Stuck, the bar above already has its own bottom edge, so the top rule gives way to one at the
-       bottom. */
-    @container scroll-state(stuck: top) {
-      summary {
-        border-top-color: transparent;
-        box-shadow: 0 1px 0 var(--border);
+    /* At rest the bar has no lines. Pinned (data-stuck, from ContentsMenu), a line fades in above
+       and below it, each across the whole screen. The top line sits on the row above the bar, where
+       the bar above (the top bar's hairline, or the legal tabs' divider) already draws its own and
+       paints over it, so there's only ever one line there. Nothing moves when they show; the bar's
+       background stays a hard cut. */
+    summary::before,
+    summary::after {
+      content: "";
+      position: absolute;
+      inset-inline: calc(-1 * var(--edge));
+      height: 1px;
+      background: var(--border);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 150ms ease;
+
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+      }
+    }
+
+    &[data-stuck] summary::before,
+    &[data-stuck] summary::after {
+      opacity: 1;
+    }
+
+    summary::before {
+      top: -1px;
+    }
+
+    summary::after {
+      top: 100%;
+    }
+
+    /* The bar follows the page's direction, even inside an English-only document on a right-to-left
+       page (legal), so its chevron stays on the menu button's side. */
+    html[dir="rtl"] & {
+      direction: rtl;
+    }
+
+    /* Phones: the chevron is centred under the menu button in the top bar (34px in from the screen
+       edge), like the accordions' plus. */
+    @media (max-width: 40rem) {
+      summary [data-slot="chevron"] {
+        margin-inline-end: calc(34px - var(--edge) - 8px);
       }
     }
 
@@ -245,8 +300,9 @@
       padding-inline: var(--edge);
     }
 
+    /* Each row of the open list is as tall as the bar (--row-height). */
     a {
-      --rail-pad: 11px;
+      --rail-pad: calc((var(--contents-height) - 1lh) / 2);
       padding-inline-start: 0;
       font-size: var(--body-size);
 

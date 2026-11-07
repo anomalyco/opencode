@@ -1,7 +1,11 @@
 import { createContext } from "solid-js"
 import type { Key } from "~/i18n"
 
-export type I18n = { t(key: Key, params?: Record<string, string | number>): string }
+export type I18n = {
+  t(key: Key, params?: Record<string, string | number>): string
+  /** False while the page's language still shows the English for `key`. */
+  translated(key: Key): boolean
+}
 
 /**
  * The I18n context on its own, with no runtime imports: when a translator edits a dict, the dev

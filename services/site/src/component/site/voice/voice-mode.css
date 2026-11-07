@@ -737,17 +737,15 @@
     display: none;
   }
 
-  /* Hex's tile, as in the product list (product-list.css): square, black on the light page, a lifted
-     grey with a hairline on the dark one, and the flat white mark at the same share of the tile. */
+  /* Hex's tile: the brand's black square in both themes (on the dark panel and sheet, #1a1a1a, it
+     still reads as its own square), with the flat white mark centred. */
   [data-slot="hex-tile"] {
     grid-row: span 2;
     display: grid;
     place-items: center;
     width: 28px;
     height: 28px;
-    background: light-dark(#000, hsl(0, 0%, 15%));
-    outline: 1px solid light-dark(transparent, hsl(0, 0%, 26%));
-    outline-offset: -1px;
+    background: #000;
     color: #fff;
 
     svg {
@@ -767,10 +765,80 @@
     }
   }
 
-  /* The phone sheet holds just the section. */
+  /* The phone sheet holds just the section, at the phone menu's scale: the title one step under the
+     menu items (19px), the body at the phone body size (17px), and the site's 48px sheet buttons
+     side by side under both, Get Hex filled and Maybe later grey. */
   [data-component="sheet"][data-sheet="hex"] [data-slot="hex-sell"] {
-    padding: 0.5rem 1.25rem calc(1rem + env(safe-area-inset-bottom, 0px));
-    font-size: var(--fs-small);
+    column-gap: 0.875rem;
+    padding: 0.5rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+    font-size: var(--fs-body);
+
+    /* The square's top on the title's cap height, not its line box: Inter's cap top sits 0.2646 of
+       the 19px title below the line's top at this line height (measured), Arabic's ink top 0.2778. */
+    [data-slot="hex-tile"] {
+      width: 2.75rem;
+      height: 2.75rem;
+      margin-top: calc(1.1875rem * 0.2646);
+
+      &:lang(ar) {
+        margin-top: calc(1.1875rem * 0.2778);
+      }
+
+      svg {
+        width: 1.5rem;
+        height: 1.5rem;
+      }
+    }
+
+    [data-slot="hex-title"] {
+      font-size: 1.1875rem;
+      line-height: 1.3;
+    }
+
+    [data-slot="hex-body"] {
+      font-size: var(--fs-body);
+      line-height: 1.45;
+    }
+
+    [data-slot="hex-actions"] {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      margin-top: 1.25rem;
+    }
+
+    :is([data-slot="hex-get"], [data-slot="hex-later"]) {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 3rem;
+      padding: 0 1rem;
+      font-family: var(--font-sans);
+      font-size: var(--fs-ui);
+      font-weight: 500;
+      line-height: 1.2;
+    }
+
+    [data-slot="hex-get"] {
+      background: var(--bg-strong);
+      color: var(--text-inverted) !important;
+
+      &:active {
+        background: var(--bg-strong);
+        opacity: 0.85;
+      }
+    }
+
+    [data-slot="hex-later"] {
+      background: var(--bg-weaker);
+      color: var(--text-strong);
+
+      &:active {
+        background: var(--border);
+        color: var(--text-strong);
+      }
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {

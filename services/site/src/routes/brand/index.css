@@ -63,15 +63,27 @@
       display: grid;
       place-items: center;
 
+      /* Each tile keeps the background its files are made for, whatever the page's theme: fixed
+         colours, and "only" so a browser's automatic dark mode (Chrome's forced dark, which some device
+         previews turn on) can't darken the light tile or invert its artwork. */
+      /* Inline artwork (the partner lockups) takes the tile's own logo colours as plain values, not
+         the page's light-dark() tokens, which some browsers (older iOS Safari) resolve against the page
+         theme instead of the tile's. */
       &[data-tone="light"] {
-        color-scheme: light;
-        background: var(--bg-weak);
+        color-scheme: only light;
+        background: #f5f5f5;
+        --logo-code: #1f1f1f;
+        --logo-open: #626262;
+        --logo-inner: #d2d2d2;
       }
 
       &[data-tone="dark"] {
-        color-scheme: dark;
+        color-scheme: only dark;
         background: #0a0a0a;
         box-shadow: inset 0 0 0 1px var(--border);
+        --logo-code: #eeeeee;
+        --logo-open: #aeaeae;
+        --logo-inner: #4b4b4b;
       }
 
       img {
@@ -187,7 +199,8 @@
       }
     }
 
-    /* As wide as its button and lined up with its left edge; a long label ends in "…". Rows as in
+    /* As wide as its button and lined up with its left edge (placeMenu opens it where it fits, and
+       on phones as wide as the screen less 16px a side); a long label ends in "…". Rows as in
        the logo menu (site.css), but OpenTUI Mono at 14px rather than its 12px (David found 12px too small);
        0.5rem × 0.875rem padding, 14px icons, the popover
        background and shadow, and the grey menu states (a tint and a mid-grey bar on hover and
@@ -440,10 +453,12 @@
       min-width: 0;
     }
 
+    /* The exact colour, which a browser's automatic dark mode must not alter. */
     [data-slot="swatch"] {
       display: block;
       height: 6rem;
       margin-bottom: 0.75rem;
+      color-scheme: only light;
     }
 
     [data-slot="title-row"] {
@@ -525,6 +540,18 @@
         flex-shrink: 0;
         width: 14px;
         height: 14px;
+      }
+    }
+
+    /* Phones: the copy icon 4px larger (18px) and each value row a 44px tall target. */
+    @media (max-width: 40rem) {
+      [data-slot="format"] {
+        min-height: 44px;
+      }
+
+      [data-slot="value"] svg {
+        width: 18px;
+        height: 18px;
       }
     }
 
@@ -1191,14 +1218,14 @@
       aspect-ratio: 2;
 
       &[data-tone="light"] {
-        color-scheme: light;
+        color-scheme: only light;
         background: #f4f4f4;
         --size-muted: #6b6b6b;
         --size-strong: #1f1f1f;
       }
 
       &[data-tone="dark"] {
-        color-scheme: dark;
+        color-scheme: only dark;
         background: #0a0a0a;
         box-shadow: inset 0 0 0 1px var(--border);
         --size-muted: #8f8f8f;
@@ -1281,19 +1308,21 @@
       opacity: 1;
     }
 
+    /* Touch: always shown, set further in from the corner and lower, and each size a real 44px tall
+       target (the whole box, inside the tile) with 8px between neighbours. */
     @media (hover: none), (pointer: coarse) {
       [data-slot="sizes"] {
+        top: 0;
+        inset-inline-start: 0.75rem;
+        gap: 0.5rem;
         opacity: 1;
 
-        /* An invisible band above and below makes each size a 44px tall target. */
         button {
-          position: relative;
-
-          &::after {
-            content: "";
-            position: absolute;
-            inset: -12px 0;
-          }
+          display: inline-flex;
+          align-items: center;
+          min-width: 44px;
+          min-height: 44px;
+          padding: 0 0.625rem;
         }
       }
     }
@@ -1561,6 +1590,17 @@
     [data-component="usage"] [data-slot="pixels"] [data-slot="sizes"] {
       grid-template-columns: minmax(0, 1fr);
     }
+  }
+}
+
+/* Brand only: a tighter gap under each section title (12px; 14px on phones, keeping their +2px), so the
+   title groups with its text while the 72px above it stays clearly larger. The shared 24px
+   (on-this-page.css) stays for Press, legal and the product pages. */
+[data-site][data-page="brand"] {
+  --heading-gap: 12px;
+
+  @media (max-width: 40rem) {
+    --heading-gap: 14px;
   }
 }
 

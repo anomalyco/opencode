@@ -102,7 +102,7 @@ function run(script: string, saved: unknown, theme?: string, stored: Record<stri
 
 /** A saved value different from the default for every enum setting, from the schema itself. */
 function changedSettings() {
-  const shape = siteSettingsSchema.shape as Record<string, z.ZodType>
+  const shape = siteSettingsSchema().shape as Record<string, z.ZodType>
   const defaults = siteSettingsDefaults as Record<string, unknown>
   return Object.fromEntries(
     Object.entries(shape).flatMap(([key, field]) => {

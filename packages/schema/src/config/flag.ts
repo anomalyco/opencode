@@ -17,5 +17,6 @@ export const registry = {
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
   session_media:
     "Show a Media panel in the desktop and web app that lists the images, videos and links shared in a session, by you or the agent.",
+  codemode_vm: "Run the Code Mode execute tool on the experimental bytecode VM instead of the legacy interpreter.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry

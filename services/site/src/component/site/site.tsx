@@ -21,8 +21,8 @@ import {
   Suspense,
 } from "solid-js"
 import { Dynamic, isServer } from "solid-js/web"
-import interLatin from "../../asset/fonts/inter-latin.woff2"
-import interRest from "../../asset/fonts/inter-rest.woff2"
+import { interFaces, interLatin } from "./inter-fonts"
+import { AgentIcon, Bracket, PersonIcon, ThemeCycle } from "./site-controls"
 import logoLight from "../../asset/brand/opencode-logo-light.svg"
 import logoDark from "../../asset/brand/opencode-logo-dark.svg"
 import wordmarkLight from "../../asset/brand/opencode-wordmark-light.svg"
@@ -33,11 +33,15 @@ import { useI18n } from "~/context/i18n"
 import type { Key } from "~/i18n"
 import { useLanguage } from "~/context/language"
 import { strip } from "~/lib/language"
-import { brandAssets } from "~/lib/brand-content"
+import { brandAssets } from "~/lib/media"
 import { status, type ServiceStatus } from "~/lib/status"
 import { useViewportCover } from "~/lib/viewport"
+import { loadMarkdownPages, markdownKey, markdownPagesLoaded } from "./use-markdown"
+import type { MarkdownPages } from "./markdown-pages"
 import { LiveMeta } from "~/component/head-meta"
-import { Chevron, ChevronRight, ExternalArrow, GitHubMark, NewTab, ThemeIcon, themes } from "./icons"
+import { Chevron, ChevronRight, ExternalArrow, NewTab, ThemeIcon, themes } from "./icons"
+import { GitHubLink } from "./github-link"
+import { MenuSheet, MenuToggle } from "./phone-menu"
 import { siteLinks } from "./links"
 import {
   navEditing,
@@ -51,7 +55,8 @@ import {
   removeNavItem,
   sortableNav,
 } from "./nav-order"
-import { MarkdownView } from "./markdown-view"
+// The Markdown view's styles load with the page: they also hide the page while the view loads.
+import "./markdown-view.css"
 import { monoFontChoice, monoFontLatin } from "./mono-fonts"
 import { NavVersions } from "./nav-versions"
 import { closeAllMenus, closeMenusOnLinks, onCloseMenus, takeMenuNavigation } from "./menu-open"
@@ -61,10 +66,12 @@ import { bannerThemeColorScript, bannerTopColor, bannerVisible, SiteBanner } fro
 import { bannerDismissScript } from "./site-banner-script"
 import { Tooltips } from "./tooltip"
 import { SiteSearch } from "./search"
+import { preloadVisibleLinks } from "./preload-visible"
 import { adoptVoice, dropVoice } from "./voice/host"
-import { LogoFan } from "./logo-fan"
+// The fan's styles load with the page; its code on first use (loadLogoFan).
+import "./logo-fan.css"
+import type { LogoFan } from "./logo-fan"
 import { logoVariantSvgs } from "./logo-variants"
-import { domMarkdown } from "~/lib/dom-markdown"
 import { AnomalyLogo, Logo, LogoIcon, Wordmark } from "./marks"
 import {
   navGroups,
@@ -80,6 +87,7 @@ import {
 } from "./settings"
 
 export { Chevron, ExternalArrow, NewTab, PlatformIcon } from "./icons"
+export { Bracket } from "./site-controls"
 export {
   applyCarouselPreset,
   carouselBreakpoints,
@@ -98,41 +106,51 @@ const SettingsPanel = import.meta.env.DEV ? lazy(() => import("./settings-panel"
 const DesignMode = import.meta.env.DEV ? lazy(() => import("./design-mode")) : undefined
 const DevicePreview = import.meta.env.DEV ? lazy(() => import("./device-preview")) : undefined
 
-// Inter as WOFF2, split so most pages only fetch the Latin file (about 95 KB instead of the 870 KB
-// TTF). The other file has the Greek, Cyrillic, Vietnamese and symbol glyphs. The ranges must not
-// overlap: a character in both that Inter lacks would fetch the second file only to fall back. The
-// Latin file keeps both axes (weight, optical size) but only the OpenType features the site uses
-// (pyftsubset --layout-features="calt,case,ccmp,locl,tnum,pnum,kern,mark,mkmk,cpsp,liga"): no
-// character variants or stylistic sets.
-const interFaces = [
-  [
-    interRest,
-    "U+0180-0191, U+0193-0217, U+021C-0236, U+0238-02BA, U+02BD-02C5, U+02C8, U+02CA-02D7, U+02DE-02FF, U+0309, U+030D-0325, U+032A-058F, U+0E3F, U+1D00-1E9D, U+1E9F-1FFF, U+2070-20AB, U+20AD-20B8, U+20BA-20BC, U+20BE-2112, U+2114-2115, U+2117-2121, U+2123-2125, U+2127-212D, U+212F-218F, U+2200-2211, U+2213-2214, U+2216-2218, U+221A-221D, U+221F-2247, U+2249-225F, U+2261-2263, U+2266-2302, U+2304-2317, U+2319-2324, U+2326-232A, U+232C-238A, U+238C-23CD, U+23CF-259F, U+2600-2712, U+2714, U+2716-2E7F, U+A640-A9FF, U+E000-F8FF",
-  ],
-  [
-    interLatin,
-    "U+0000-017F, U+0192, U+0218-021B, U+0237, U+02BB-02BC, U+02C6-02C7, U+02C9, U+02D8-02DD, U+0300-0308, U+030A-030C, U+0326-0329, U+1E9E, U+2000-206F, U+20AC, U+20B9, U+20BD, U+2113, U+2116, U+2122, U+2126, U+212E, U+2190-21FF, U+2212, U+2215, U+2219, U+221E, U+2248, U+2260, U+2264-2265, U+2303, U+2318, U+2325, U+232B, U+238B, U+23CE, U+25A0-25FF, U+2713, U+2715, U+FB01-FB02, U+FEFF, U+FFFD",
-  ],
-]
-  .map(
-    ([url, range]) =>
-      `@font-face { font-family: "Inter"; src: local("Inter"), local("Inter Variable"), url(${url}) format("woff2"); font-weight: 100 900; font-display: optional; unicode-range: ${range}; }`,
-  )
-  .join("\n")
-
-const markdownKey = "opencode-markdown-view"
+// The logo's fan menu, loaded the first time it may open: a pointer, touch or focus on a logo, or
+// a right-click before any of those.
+const [logoFan, setLogoFan] = createSignal<typeof LogoFan>()
+let logoFanLoad: Promise<void> | undefined
+const loadLogoFan = () => (logoFanLoad ??= import("./logo-fan").then((module) => void setLogoFan(() => module.LogoFan)))
+const prefetchLogoFan = () => {
+  if (siteSettings.logoMenu === "fan") void loadLogoFan().catch(() => (logoFanLoad = undefined))
+}
 
 // A nav item as the nav renders it: a known one (links.ts) or a custom link (nav-order.tsx).
 type NavItemView = { id: string; label: string; href: string; arrow: boolean; external: boolean; company: boolean }
 
-// Pages of this site that render client-side; everything else keeps a full page load.
-// Of the docs, only the Intro (/docs) is a page of this app; the other docs pages are served
-// separately, so links to them take a full page load.
-const clientPages =
-  /^\/(?:desktop|mobile|terminal|sdk|download|changelog(?:\/v\d[\w.+-]*)?|brand|press|legal(?:\/.*)?|docs)?\/?$/
+// Pages of this site that render client-side; everything else keeps a full page load. The docs
+// (/docs) are served separately, and /download redirects on the server.
+const clientPages = /^\/(?:desktop|mobile|terminal|sdk|changelog(?:\/v\d[\w.+-]*)?|brand|press|legal(?:\/.*)?)?\/?$/
 function clientPage(pathname: string) {
   return clientPages.test(strip(pathname))
 }
+// The full page loads a link here can lead to on this domain (this site's other pages, in any
+// language, the docs and Stats), fetched once the pointer rests on the link so the page opens sooner.
+// Only addresses that are safe to request ahead of time: never the Console or a download, and never a
+// language link (hreflang), whose page sets the language cookie. Browsers without Speculation Rules
+// ignore it.
+const speculationRules = JSON.stringify({
+  prefetch: [
+    {
+      source: "document",
+      eagerness: "moderate",
+      where: {
+        and: [
+          {
+            href_matches: [
+              "{/:locale}?/:page(product|ide|mini|font)",
+              "{/:locale}?/product/*",
+              "{/:locale}?/extensions/*",
+              "/docs{/*}?",
+              "/data{/*}?",
+            ],
+          },
+          { not: { selector_matches: "[hreflang]" } },
+        ],
+      },
+    },
+  ],
+})
 
 // Labels and headlines match status.opencode.ai.
 const statusLabel = {
@@ -185,7 +203,7 @@ export function Site(props: {
    * The page as Markdown: `href` serves it to agents, `source` renders it in place of the page
    * when the reader turns on the Markdown view.
    */
-  markdown?: { href: string; source: () => string }
+  markdown?: { href: string; source: (pages: MarkdownPages) => string }
   /**
    * Fixed docs component options (data-docs-variants) instead of the reader's Settings › docsVariants,
    * for a reference page that must always show the locked set (/dev/docs).
@@ -209,10 +227,12 @@ export function Site(props: {
   const [theme, setTheme] = createSignal<(typeof themes)[number]>(
     isServer ? "system" : (themes.find((item) => item === localStorage.getItem("opencode-theme")) ?? "system"),
   )
-  // The colour at the top of the screen: the open banner's blue while it covers it, else the page's
-  // background in the scheme the tag's media query stands for (or the chosen theme's).
+  // The browser bar colour: the open banner's blue while it covers the top of the screen, the letters
+  // bar's while it fills the bottom, else the page's background in the scheme the tag's media query
+  // stands for (or the chosen theme's).
   const themeColor = (scheme: "light" | "dark") =>
     bannerTopColor() ??
+    lettersBlue() ??
     ((theme() === "system" ? scheme : theme()) === "dark" ? "#0c0c0c" : siteSettings.lightBackground)
   const colorScheme = () => (theme() === "system" ? "light dark" : theme())
   const [dark, setDark] = createSignal(false)
@@ -231,6 +251,11 @@ export function Site(props: {
     setLogoMenu(undefined)
   })
   const [markdown, setMarkdown] = createSignal(false)
+  // The Markdown view's code, loaded the first time it is wanted: its shortcut's "m", a pointer or
+  // focus on its switch, or a reload in the view.
+  const [markdownPages, setMarkdownPages] = createSignal(markdownPagesLoaded())
+  const loadMarkdown = () => loadMarkdownPages().then((pages) => setMarkdownPages(pages))
+  const prefetchMarkdown = () => void loadMarkdown().catch(() => undefined)
   let page!: HTMLDivElement
   let sidebarNav: HTMLElement | undefined
   let footerNav: HTMLElement | undefined
@@ -253,11 +278,38 @@ export function Site(props: {
     const highlight = i18n.t("footer.wordmark.font")
     return label.startsWith(highlight) ? label.slice(highlight.length).trim() : label
   }
+  // Whether the whole open bar is on screen (the page is scrolled to its end), so it fills the bottom
+  // of the screen.
+  const [lettersBarAtEnd, setLettersBarAtEnd] = createSignal(false)
   const watchLettersBar = (element: HTMLDivElement) => {
-    const observer = new IntersectionObserver(([entry]) => setLettersBarInView(entry.isIntersecting))
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setLettersBarInView(entry.isIntersecting)
+        setLettersBarAtEnd(entry.intersectionRatio >= 0.98)
+      },
+      { threshold: [0, 0.98] },
+    )
     observer.observe(element)
     onCleanup(() => observer.disconnect())
   }
+  // While the open bar fills the bottom of the screen, its blue runs on to the screen's bottom edge:
+  // the page behind the site (what shows past the end, and what iOS Safari tints its bottom toolbar
+  // area from) and the browser bar colour take the bar's blue as painted, and a fixed strip under the
+  // home indicator (site.css) gives Safari a blue element touching the bottom edge.
+  const lettersBottom = () => lettersBarShown() && lettersBarAtEnd()
+  const [lettersBlue, setLettersBlue] = createSignal<string>()
+  createEffect(
+    on(lettersBottom, (bottom) => {
+      const link = document.querySelector<HTMLElement>('[data-component="letters-bar"] a')
+      const blue = bottom && link ? getComputedStyle(link).backgroundColor : undefined
+      setLettersBlue(blue)
+      if (blue) document.documentElement.style.backgroundColor = blue
+      else document.documentElement.style.removeProperty("background-color")
+    }),
+  )
+  onCleanup(() => {
+    if (!isServer) document.documentElement.style.removeProperty("background-color")
+  })
   // The bar grows at the very end of the page. Someone at the bottom stays at the bottom while it
   // grows, so the page visibly moves up with it.
   createEffect(
@@ -474,6 +526,11 @@ export function Site(props: {
   // shows the same controls the Markdown view pins in that spot, so they stay put under the pointer.
   const toggleMarkdown = (fromFooter = false) => {
     const next = !markdown()
+    if (next && !markdownPages())
+      return void loadMarkdown().then(
+        () => !markdown() && toggleMarkdown(fromFooter),
+        () => undefined,
+      )
     setSwapped(true)
     setMarkdown(next)
     if (next) sessionStorage.setItem(markdownKey, "1")
@@ -570,7 +627,8 @@ export function Site(props: {
     // The app's router only handles links marked with a `link` attribute (explicitLinks), so the
     // older console pages and proxied paths like /docs keep full page loads. Links between pages
     // of this site get the attribute as soon as a pointer, focus or click reaches them, so the
-    // router swaps the page in place and preloads it on hover.
+    // router swaps the page in place and preloads it on intent: hover, focus or touch. Touch screens,
+    // which have no hover, also preload the pages their links lead to as the links come into view.
     const markLink = (event: Event) => {
       const anchor = (event.target as Element | null)?.closest?.("a[href]")
       if (!(anchor instanceof HTMLAnchorElement) || anchor.hasAttribute("link") || anchor.target) return
@@ -579,14 +637,12 @@ export function Site(props: {
     }
     for (const type of ["pointerover", "focusin", "touchstart", "click"])
       document.addEventListener(type, markLink, true)
-
-    // Once the page is idle, load the code for the main pages so the first click is instant too.
-    const idle = window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 1500))
-    idle(() =>
-      ["/", "/product", "/desktop", "/mobile", "/terminal", "/sdk", "/docs", "/changelog"].forEach((path) =>
-        preloadRoute(language.route(path), { preloadData: false }),
-      ),
+    const stopPreloads = preloadVisibleLinks(
+      (link) => link.hasAttribute("link") || clientPage(new URL(link.href).pathname),
+      (path) => preloadRoute(path, { preloadData: false }),
     )
+
+    const idle = window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 1500))
     // window.opencode and its greeting for developers who open DevTools (Settings › Other › Console API).
     createEffect(() => {
       if (siteSettings.consoleApi === "off") return void delete (window as { opencode?: unknown }).opencode
@@ -639,15 +695,38 @@ export function Site(props: {
       if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return
       if ((event.target as HTMLElement).closest("input, textarea, select, [contenteditable]")) return
       const key = event.key.toLowerCase()
+      if (key === "m") prefetchMarkdown()
       const quick = lastKey.key === "m" && event.timeStamp - lastKey.time < 600
       lastKey = { key, time: event.timeStamp }
       if (key !== "d" || !quick) return
       lastKey = { key: "", time: 0 }
+      // The funnel's queue (lib/funnel.ts), as the switch reports its own clicks.
+      window.__ocFunnel?.push({
+        event: {
+          name: "ui.clicked",
+          action: "clicked",
+          target: `markdown-view:${markdown() ? "off" : "on"}`,
+          properties: { via: "shortcut" },
+        },
+        at: performance.now(),
+      })
       toggleMarkdown()
     }
-    if (sessionStorage.getItem(markdownKey) === "1") setMarkdown(true)
-    // The pre-paint script hid the page while it waited for the Markdown view.
-    delete document.querySelector<HTMLElement>("[data-site]")?.dataset.markdownBoot
+    // The pre-paint script hid the page while it waited for the Markdown view, whose code it started
+    // loading (entry-server.tsx).
+    const booted = () => delete document.querySelector<HTMLElement>("[data-site]")?.dataset.markdownBoot
+    const restore = sessionStorage.getItem(markdownKey) === "1"
+    if (!restore || markdownPages()) {
+      setMarkdown(restore)
+      booted()
+    }
+    if (restore && !markdownPages())
+      loadMarkdown()
+        .then(
+          () => setMarkdown(true),
+          () => undefined,
+        )
+        .finally(booted)
 
     document.addEventListener("keydown", navigateWithNumber)
     document.addEventListener("keydown", markdownShortcut)
@@ -660,6 +739,7 @@ export function Site(props: {
 
     onCleanup(() => {
       stopMenuLinks()
+      stopPreloads()
       for (const type of ["pointerover", "focusin", "touchstart", "click"])
         document.removeEventListener(type, markLink, true)
       media.removeEventListener("change", syncDark)
@@ -738,15 +818,26 @@ export function Site(props: {
 
   const openLogoMenu = (event: MouseEvent & { currentTarget: HTMLElement }, owner: "sidebar" | "topbar") => {
     event.preventDefault()
+    const logo = event.currentTarget
+    // The menu key or Shift+F10 report no pointer position.
+    const keyboard = event.button === 0 && event.clientX === 0 && event.clientY === 0
+    if (siteSettings.logoMenu === "fan" && !logoFan())
+      return void loadLogoFan().then(
+        () => showLogoMenu(logo, owner, keyboard),
+        () => (logoFanLoad = undefined),
+      )
+    showLogoMenu(logo, owner, keyboard)
+  }
+
+  const showLogoMenu = (logo: HTMLElement, owner: "sidebar" | "topbar", keyboard: boolean) => {
     // Always open directly under the logo, wherever the click landed. The menu sits in the same
     // header as the logo, so it stays attached when that header scrolls or sticks.
-    const logo = event.currentTarget
     setMenu(false)
     setLogoMenu({ owner, x: logo.offsetLeft, y: logo.offsetTop + logo.offsetHeight + 8 })
     alignLogoMenu(logo)
-    // Move focus into the menu when it was opened from the keyboard (the menu key or Shift+F10
-    // report no pointer position); a right-click leaves focus where it was.
-    if (event.button === 0 && event.clientX === 0 && event.clientY === 0)
+    // Move focus into the menu when it was opened from the keyboard; a right-click leaves focus
+    // where it was.
+    if (keyboard)
       document
         .querySelector<HTMLElement>(
           ':is([data-component="logo-menu"], [data-component="asset-menu"], [data-component="logo-fan"]) [role="menuitem"]',
@@ -870,11 +961,14 @@ export function Site(props: {
     <Show
       when={siteSettings.logoMenu !== "fan" && logoMenu()?.owner === owner && logoMenu()}
       fallback={
-        <Show when={siteSettings.logoMenu === "fan"}>
-          <LogoFan
-            position={logoMenu()?.owner === owner ? logoMenu() : undefined}
-            onSelect={() => setLogoMenu(undefined)}
-          />
+        <Show when={siteSettings.logoMenu === "fan" && logoFan()}>
+          {(fan) => (
+            <Dynamic
+              component={fan()}
+              position={logoMenu()?.owner === owner ? logoMenu() : undefined}
+              onSelect={() => setLogoMenu(undefined)}
+            />
+          )}
         </Show>
       }
     >
@@ -932,18 +1026,8 @@ export function Site(props: {
 
   // The repo, as a GitHub mark: fixed in the top-right corner beside the sidebar (and at every
   // width on bare pages), in the top bar on small screens.
-  const githubLink = (owner: "corner" | "topbar") => (
-    <a
-      href={links().github.href}
-      target="_blank"
-      rel="noopener"
-      data-component="github-link"
-      data-owner={owner}
-      aria-label={i18n.t("site.githubLabel")}
-    >
-      <GitHubMark />
-    </a>
-  )
+  const githubLink = (owner: "corner" | "topbar") => <GitHubLink owner={owner} />
+
   const logoLink = (owner: "sidebar" | "topbar") => (
     <A
       href={language.route("/")}
@@ -953,6 +1037,8 @@ export function Site(props: {
       aria-label={i18n.t("nav.logoAlt")}
       title={i18n.t("nav.home")}
       onContextMenu={(event) => openLogoMenu(event, owner)}
+      onPointerEnter={prefetchLogoFan}
+      onFocus={prefetchLogoFan}
       onClick={() => {
         setMenu(false)
         setLogoMenu(undefined)
@@ -996,6 +1082,9 @@ export function Site(props: {
                 type="button"
                 aria-label={markdown() ? i18n.t("site.view.person") : i18n.t("site.view.markdown")}
                 aria-pressed={markdown() ? "true" : "false"}
+                data-funnel={markdown() ? "markdown-view:off" : "markdown-view:on"}
+                onPointerEnter={prefetchMarkdown}
+                onFocus={prefetchMarkdown}
                 onClick={(event) => toggleMarkdown(!!event.currentTarget.closest('[data-component="site-footer"]'))}
               >
                 {/* In the Markdown view the button offers the way back: a person instead of the robot. */}
@@ -1011,6 +1100,9 @@ export function Site(props: {
                 href={href()}
                 aria-label={markdown() ? i18n.t("site.view.person") : i18n.t("site.view.markdown")}
                 data-active={markdown() ? "" : undefined}
+                data-funnel={markdown() ? "markdown-view:off" : "markdown-view:on"}
+                onPointerEnter={prefetchMarkdown}
+                onFocus={prefetchMarkdown}
                 onClick={(event) => {
                   if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
                   event.preventDefault()
@@ -1083,6 +1175,7 @@ export function Site(props: {
       data-theme={theme()}
       data-popover={popoverTheme()}
       data-letters-bar={lettersBarShown() && lettersBarInView() ? "" : undefined}
+      data-letters-end={lettersBottom() ? "" : undefined}
       data-spacer={props.page === "home" || props.page === "product" ? siteSettings.spacer : undefined}
       data-logo={logoVariant()}
       data-hero-install={props.page === "home" ? siteSettings.heroInstall : undefined}
@@ -1130,7 +1223,7 @@ export function Site(props: {
           ones one step more specific until the store takes over. */}
       <style
         innerHTML={
-          spacerGradientRule(siteSettings, "") +
+          (siteSettings.spacer === "dot gradient" ? spacerGradientRule(siteSettings, "") : "") +
           (siteSettings.spacer === "dither gradient" ? ditherGradientRule(siteSettings, "") : "")
         }
       />
@@ -1174,6 +1267,7 @@ export function Site(props: {
       <script
         innerHTML={`if(!document.posterLoads){document.posterLoads=1;document.addEventListener("load",(e)=>{const t=e.target;if(t instanceof HTMLImageElement&&t.hasAttribute("data-poster"))t.setAttribute("data-loaded","")},true);const scan=()=>{document.querySelectorAll("img[data-poster]:not([data-seen])").forEach((i)=>{i.setAttribute("data-seen","");if(i.complete&&i.naturalWidth){i.setAttribute("data-instant","");i.setAttribute("data-loaded","")}});if(document.readyState!=="complete")requestAnimationFrame(scan)};requestAnimationFrame(scan)}`}
       />
+      <script type="speculationrules" innerHTML={speculationRules} />
       <Show when={props.markdown?.href}>{(href) => <Link rel="alternate" type="text/markdown" href={href()} />}</Show>
       {/* Hidden until it has keyboard focus. It moves focus itself, before the router sees the click.
           First in the page, before the banner's link, so it is the first Tab stop. */}
@@ -1209,37 +1303,19 @@ export function Site(props: {
         <header data-component="topbar">
           {logoLink("topbar")}
           {githubLink("topbar")}
-          <button
-            ref={menuToggle}
-            type="button"
-            data-component="menu-toggle"
-            aria-expanded={menu() ? "true" : "false"}
-            aria-controls="site-menu"
-            aria-label={menu() ? i18n.t("site.closeMenu") : i18n.t("nav.openMenu")}
-            onClick={() => {
+          <MenuToggle
+            ref={(element) => (menuToggle = element)}
+            open={menu()}
+            onToggle={() => {
               setLogoMenu(undefined)
               setMenu(!menu())
             }}
-          >
-            <span data-slot="line" />
-            <span data-slot="line" />
-          </button>
+          />
           {logoMenuView("topbar")}
         </header>
-        <div data-component="site-menu-sheet" id="site-menu" data-open={menu() ? "" : undefined}>
-          <div data-slot="backdrop" onClick={() => setMenu(false)} />
-          <nav
-            data-slot="panel"
-            aria-label={i18n.t("site.landmark.primary")}
-            onClick={(event) => {
-              if ((event.target as Element).closest("a")) setMenu(false)
-            }}
-          >
-            <ul ref={sortableNav} data-sortable={designMode() ? "" : undefined}>
-              <For each={navAll()}>{(item, index) => navItem(item, index)}</For>
-            </ul>
-          </nav>
-        </div>
+        <MenuSheet open={menu()} onClose={() => setMenu(false)} listRef={sortableNav} sortable={designMode()}>
+          <For each={navAll()}>{(item, index) => navItem(item, index)}</For>
+        </MenuSheet>
       </Show>
       <LanguageSheet />
 
@@ -1312,16 +1388,19 @@ export function Site(props: {
             {props.children}
           </div>
           {/* Pages without a hand-written Markdown version show their own content converted. */}
-          <Show when={markdown()}>
-            <MarkdownView
-              source={props.markdown?.source() ?? domMarkdown(page)}
-              file={
-                props.markdown?.href.split("/").pop() ?? `${strip(location.pathname).split("/").pop() || "index"}.md`
-              }
-              href={props.markdown?.href}
-              home={language.route("/")}
-              onHome={() => markdown() && toggleMarkdown()}
-            />
+          <Show when={markdown() && markdownPages()}>
+            {(pages) => (
+              <Dynamic
+                component={pages().MarkdownView}
+                source={props.markdown?.source(pages()) ?? pages().domMarkdown(page)}
+                file={
+                  props.markdown?.href.split("/").pop() ?? `${strip(location.pathname).split("/").pop() || "index"}.md`
+                }
+                href={props.markdown?.href}
+                home={language.route("/")}
+                onHome={() => markdown() && toggleMarkdown()}
+              />
+            )}
           </Show>
         </main>
 
@@ -1594,15 +1673,6 @@ function MenuIcon(props: { name: "wordmark" | "brand" | "press" }) {
   )
 }
 
-/** "[ ]" with a dash that appears on hover or for the current item, as in the footer list. */
-export function Bracket() {
-  return (
-    <span data-slot="box" aria-hidden="true">
-      [<span data-slot="fill" />]
-    </span>
-  )
-}
-
 function ThemeToggle(props: { theme: (typeof themes)[number]; onChange: (theme: (typeof themes)[number]) => void }) {
   const i18n = useI18n()
   return (
@@ -1652,71 +1722,4 @@ function snapToPixels(el: HTMLElement) {
     observer.disconnect()
     cancelAnimationFrame(frame)
   })
-}
-
-/** One button showing the current theme; each click moves to the next (system, light, dark). */
-function ThemeCycle(props: { theme: (typeof themes)[number]; onChange: (theme: (typeof themes)[number]) => void }) {
-  const i18n = useI18n()
-  const next = () => themes[(themes.indexOf(props.theme) + 1) % themes.length]
-  return (
-    <button
-      type="button"
-      data-slot="cycle"
-      aria-label={i18n.t("site.theme.cycle", {
-        theme: i18n.t(`site.theme.${props.theme}`),
-        next: i18n.t(`site.theme.${next()}`),
-      })}
-      onClick={() => props.onChange(next())}
-    >
-      {/* All three icons stay in place so the change can cross-fade. */}
-      <For each={themes}>
-        {(item) => (
-          <span data-slot="icon" data-current={props.theme === item ? "" : undefined}>
-            <ThemeIcon theme={item} />
-          </span>
-        )}
-      </For>
-    </button>
-  )
-}
-
-// A face (eyes and a smile, no outline) on the 16px icon grid, shown in the Markdown view.
-function PersonIcon() {
-  // Drawn about 2px larger than the 16px grid in the same 14px box, to match the robot's ink (the
-  // face alone is smaller than the robot's head and ears); the stroke is thinned to stay 1.1px.
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="1.45 1.3 13.1 13.1"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.02"
-      aria-hidden="true"
-    >
-      <rect x="4.5" y="3.5" width="2" height="4" fill="currentColor" stroke="none" />
-      <rect x="9.5" y="3.5" width="2" height="4" fill="currentColor" stroke="none" />
-      <path d="M3.25 9.25Q8 14 12.75 9.25" />
-    </svg>
-  )
-}
-
-// A robot face on the 16px icon grid, drawn like the theme icons.
-function AgentIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.25"
-      aria-hidden="true"
-    >
-      <rect x="2.125" y="2.125" width="11.75" height="11.75" />
-      <path d="M0.875 6V10M15.125 6V10" />
-      <rect x="4.875" y="5.75" width="2" height="4.5" fill="currentColor" stroke="none" />
-      <rect x="9.125" y="5.75" width="2" height="4.5" fill="currentColor" stroke="none" />
-    </svg>
-  )
 }

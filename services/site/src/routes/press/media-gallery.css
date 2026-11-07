@@ -98,6 +98,7 @@
 
     [data-slot="zip-size"] {
       display: none;
+      align-self: end;
       margin-top: -0.25rem;
       font-size: var(--fs-meta);
       color: var(--text-weak);
@@ -139,8 +140,9 @@
     }
 
     /* Never wider than its column; the label truncates before it overflows. */
+    /* Under its tile, at the inline end (the right, or the left in right-to-left text), as on /brand. */
     [data-slot="product-download"] {
-      align-self: start;
+      align-self: end;
       max-width: 100%;
       min-width: 0;
       overflow: hidden;
@@ -302,6 +304,7 @@
     display: flex;
     flex: none;
     align-items: center;
+    justify-content: flex-end;
     gap: 0.5rem;
   }
 
@@ -554,6 +557,13 @@
 
     [data-slot="tile-meta"] {
       flex-direction: column;
+    }
+
+    /* Stacked under the caption, the downloads keep to the inline end. */
+    [data-slot="tile-actions"] {
+      align-self: end;
+      flex-wrap: wrap;
+      justify-content: flex-end;
     }
 
     [data-slot="count"] {

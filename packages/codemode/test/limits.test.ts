@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Fiber } from "effect"
-import { CodeMode } from "../src/index.js"
+import { CodeMode } from "./lib/index.js"
 import { MAX_ARRAY_LENGTH, MAX_PENDING_PROMISES, MAX_STRING_LENGTH } from "../src/interpreter/limits.js"
 
 const runtime = CodeMode.make({ tools: {} })

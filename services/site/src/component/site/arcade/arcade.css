@@ -657,6 +657,11 @@
     }
   }
 
+  /* A phone shows the logo and ARCADE only: its message follows, not the game menu. */
+  &[data-phone] [data-slot="start"] .arcade-press {
+    display: none;
+  }
+
   [data-slot="menu"] {
     position: absolute;
     inset: 0;

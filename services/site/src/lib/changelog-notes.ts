@@ -36,6 +36,8 @@ export type ChangelogEntry = {
   improved: ChangelogNote[]
   fixed: ChangelogNote[]
   media: ChangelogMedia[]
+  /** The release's highlights an area filter left out; the entry links to its page for them. */
+  hiddenFeatures: number
 }
 
 /** An area the notes are filed under: its key in `?area=`, and its label. */
@@ -58,6 +60,8 @@ export type ChangelogView = {
   /** For one entry: the newer and older entries next to it. */
   newer?: { tag: string; title: string }
   older?: { tag: string; title: string }
+  /** The releases are a stand-in (the build snapshot or the last good list) because GitHub failed just now. */
+  stale?: boolean
 }
 
 /** Entries per changelog page. */
@@ -181,11 +185,15 @@ export function parseReleaseNotes(body: string): ReleaseNotes {
 export function changelogTimeline(releases: ChangelogRelease[], areas?: string[]) {
   const units = releases
     .filter((release) => /^v\d/.test(release.tag))
-    .map((release) => ({
-      date: release.date.slice(0, 10),
-      releases: [{ tag: release.tag, url: release.url }],
-      notes: areas ? onlyAreas(release.notes, areas) : release.notes,
-    }))
+    .map((release) => {
+      const notes = areas ? onlyAreas(release.notes, areas) : release.notes
+      return {
+        date: release.date.slice(0, 10),
+        releases: [{ tag: release.tag, url: release.url }],
+        notes,
+        hiddenFeatures: release.notes.features.length - notes.features.length,
+      }
+    })
     .filter((unit) => noteCount(unit.notes) > 0)
   const days = units.reduce<(typeof units)[]>((acc, unit) => {
     const last = acc.at(-1)
@@ -303,7 +311,7 @@ export function changelogView(
 }
 
 /** The entry that includes the release `tag` (merged entries answer to each of their tags), with its neighbours. */
-export function changelogEntryView(releases: ChangelogRelease[], tag: string): ChangelogView {
+export function changelogEntryView(releases: ChangelogRelease[], tag: string, stale?: boolean): ChangelogView {
   const entries = changelogTimeline(releases)
   const index = entries.findIndex((item) => item.releases.some((release) => release.tag === tag))
   const link = (item?: ChangelogEntry) => item && { tag: item.releases[0].tag, title: item.title }
@@ -317,7 +325,18 @@ export function changelogEntryView(releases: ChangelogRelease[], tag: string): C
     filter: [],
     newer: index > 0 ? link(entries[index - 1]) : undefined,
     older: index >= 0 ? link(entries[index + 1]) : undefined,
+    stale,
   }
+}
+
+/**
+ * The HTTP status of one release's page and JSON. A tag missing from GitHub's own list is a 404; one
+ * missing from a stand-in list, or with no list at all, is a 503, because it may be a release the
+ * stand-in doesn't have.
+ */
+export function entryStatus(view: ChangelogView) {
+  if (view.entries.length) return 200
+  return view.ok && !view.stale ? 404 : 503
 }
 
 /** The `?page=…&area=…` query for a changelog view, without the defaults. */
@@ -361,9 +380,11 @@ export function bodyBlocks(body: string) {
     .blocks.filter((block) => block.type !== "p" || block.text)
 }
 
-function entry(unit: { date: string; releases: { tag: string; url: string }[]; notes: ReleaseNotes }): ChangelogEntry {
+type Unit = { date: string; releases: { tag: string; url: string }[]; notes: ReleaseNotes; hiddenFeatures: number }
+
+function entry(unit: Unit): ChangelogEntry {
   const notes = unit.notes
-  const base = { date: unit.date, releases: unit.releases, ...notes }
+  const base = { date: unit.date, releases: unit.releases, hiddenFeatures: unit.hiddenFeatures, ...notes }
   const lead = notes.features[0]
   if (lead)
     return {
@@ -521,13 +542,11 @@ function tiny(notes: ReleaseNotes) {
   return notes.features.length === 0 && notes.breaking.length === 0 && notes.improved.length + notes.fixed.length <= 3
 }
 
-function merge(
-  a: { date: string; releases: { tag: string; url: string }[]; notes: ReleaseNotes },
-  b: { date: string; releases: { tag: string; url: string }[]; notes: ReleaseNotes },
-) {
+function merge(a: Unit, b: Unit) {
   return {
     date: a.date,
     releases: [...a.releases, ...b.releases],
+    hiddenFeatures: a.hiddenFeatures + b.hiddenFeatures,
     notes: {
       media: [...a.notes.media, ...b.notes.media],
       features: [...a.notes.features, ...b.notes.features],

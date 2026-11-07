@@ -1,21 +1,25 @@
 import { joinSentences } from "~/i18n/rich"
 import { config } from "~/config"
 import type { Translate } from "~/i18n"
-import { localize, siteContent } from "~/i18n/content"
+import { localize } from "~/i18n/content"
+import { extensionsSource } from "~/i18n/content/areas/extensions"
+import { productDetailsSource } from "~/i18n/content/areas/product-details"
+import { productsSource } from "~/i18n/content/areas/products"
 import type { Locale } from "~/lib/language"
-import { brandAssets, brandContent, brandMarkdown } from "~/lib/brand-content"
+import { brandContent, brandMarkdown } from "~/lib/brand-content"
+import { brandAssets } from "~/lib/media"
 import type { ChangelogRelease } from "~/lib/changelog"
 import { changelogTimeline } from "~/lib/changelog-notes"
-import { docsConfigure, docsIntro, docsPages, docsProducts, docsToc } from "~/lib/docs-content"
+import { docsHref, docsSections } from "~/docs/lib/navigation"
+import { v1DocsUrl } from "~/lib/docs"
+import { docsIntro, docsToc } from "~/lib/docs-content"
 import { downloadContent } from "~/lib/download-content"
 import { fontContent } from "~/lib/font-content"
 import { homeContent } from "~/lib/home-content"
-import { published, type LegalDocumentContent, type LegalNode } from "~/lib/legal"
-import { privacyPolicy } from "~/lib/legal/privacy-policy"
-import { termsOfService } from "~/lib/legal/terms-of-service"
 import { markdownDocument, type RichText } from "~/lib/markdown"
 import { pressContent } from "~/lib/press-content"
 import { extensionPages } from "./extension-data"
+import legalSearch from "./legal-search.json"
 import { deviceOrder, productPages } from "./product-data"
 
 // The ⌘K search's index and ranking, loaded with a dynamic import the first time the search opens.
@@ -59,7 +63,11 @@ export function buildSearchIndex(
   const download = localize(locale, "download", downloadContent(t, route))
   const press = localize(locale, "press", pressContent(t, route))
   const brand = localize(locale, "brand", brandContent(t))
-  const content = siteContent(locale)
+  const content = {
+    products: localize(locale, "products", productsSource),
+    productDetails: localize(locale, "productDetails", productDetailsSource),
+    extensions: localize(locale, "extensions", extensionsSource),
+  }
   const names = {
     home: t("nav.home"),
     product: t("site.nav.product"),
@@ -76,19 +84,6 @@ export function buildSearchIndex(
     href: route(path),
     target: { text: title },
   })
-  const faq = (page: string, path: string) =>
-    home.faq.items.map(
-      (item): SearchItem => ({
-        id: `faq:${path}:${item.question}`,
-        group: "Sections",
-        title: item.question,
-        context: t("site.search.faq", { page }),
-        body: plainRich(item.answer),
-        keywords: "faq question",
-        href: route(path),
-        target: { faq: item.question },
-      }),
-    )
 
   const pages: SearchItem[] = [
     { title: names.home, path: "/", body: joinSentences([home.hero.title, ...home.hero.subtitle]) },
@@ -101,22 +96,29 @@ export function buildSearchIndex(
     ...deviceOrder(productPages).map((product) => ({
       title: content.products[product.slug].name,
       path: `/${product.slug}`,
-      body: `${content.products[product.slug].body} ${content.productDetails[product.slug].intro}`,
+      body:
+        product.slug === "mobile"
+          ? content.productDetails.mobile.description
+          : `${content.products[product.slug].body} ${content.productDetails[product.slug].intro}`,
       keywords: "product",
     })),
     ...extensionPages.map((extension) => ({
       title: content.extensions[extension.slug].name,
-      path: `/extensions/${extension.slug}`,
+      path: extension.product ? `/product/${extension.slug}` : `/extensions/${extension.slug}`,
       body: `${content.extensions[extension.slug].body} ${content.extensions[extension.slug].intro}`,
-      keywords: "extension",
+      keywords: extension.product ? "product" : "extension",
     })),
     { title: t("nav.changelog"), path: "/changelog", keywords: "releases versions what's new" },
     { title: names.brand, path: "/brand", body: brand.hero.body, keywords: "logo wordmark assets" },
     { title: names.press, path: "/press", body: press.hero.body, keywords: "press kit media" },
     { title: "Font", path: "/font", body: fontContent.description, keywords: "typeface type otf letters download" },
     { title: t("site.footer.legal"), path: "/legal" },
-    { title: privacyPolicy.title, path: privacyPolicy.path, body: privacyPolicy.description, keywords: "legal" },
-    { title: termsOfService.title, path: termsOfService.path, body: termsOfService.description, keywords: "legal" },
+    ...legalSearch.map((document) => ({
+      title: document.title,
+      path: document.path,
+      body: document.description,
+      keywords: "legal",
+    })),
   ].map(
     (page): SearchItem => ({
       id: `page:${page.path}`,
@@ -146,8 +148,6 @@ export function buildSearchIndex(
       home.tools.items.map((i) => i.name).join(" "),
     ),
     section(names.home, "/", home.openSource.title, stripTags(home.openSource.lead)),
-    section(names.home, "/", home.privacy.title, plainRich(home.privacy.body)),
-    section(names.home, "/", home.faq.title, undefined, "questions"),
     section(names.home, "/", home.console.title, `${home.console.headline} ${home.console.body}`),
   ]
   const productSections = productPages.flatMap((product) => [
@@ -167,16 +167,16 @@ export function buildSearchIndex(
       download.desktop.builds.map((b) => b.label).join(" "),
     ),
     section(
+      content.products.terminal.name,
+      "/terminal#install",
+      t("download.action.install"),
+      download.terminal.installs.map((i) => i.command).join(" "),
+    ),
+    section(
       content.products.mobile.name,
       "/mobile#download",
       t("download.action.download"),
       "iOS iPhone TestFlight beta Android Google Play",
-    ),
-    section(
-      content.products.terminal.name,
-      "/terminal#download",
-      t("download.action.download"),
-      download.terminal.installs.map((i) => i.command).join(" "),
     ),
     section(
       names.product,
@@ -184,7 +184,6 @@ export function buildSearchIndex(
       download.extensions.title,
       download.extensions.items.map((i) => i.label).join(" "),
     ),
-    section(names.product, "/product#download", download.integrations.title, "GitHub GitLab"),
   ]
   const pressSections = [press.company, press.about, press.brand, press.product, press.contact].map((part) =>
     section(names.press, "/press", part.title, "lead" in part ? part.lead : undefined),
@@ -204,23 +203,22 @@ export function buildSearchIndex(
       brand.donts.examples.map((e) => e.caption).join(" "),
     ),
   ]
-  const legalSections = [privacyPolicy, termsOfService].flatMap(legalHeadings).map(
-    (heading): SearchItem => ({
-      id: `legal:${heading.path}#${heading.id}`,
-      group: "Sections",
-      title: heading.title,
-      context: heading.document,
-      body: heading.body,
-      href: `${route(heading.path)}#${heading.id}`,
-      target: { id: heading.id },
-    }),
-  )
+  const legalSections = legalSearch
+    .flatMap((document) => document.headings)
+    .map(
+      (heading): SearchItem => ({
+        id: `legal:${heading.path}#${heading.id}`,
+        group: "Sections",
+        title: heading.title,
+        context: heading.document,
+        body: heading.body,
+        href: `${route(heading.path)}#${heading.id}`,
+        target: { id: heading.id },
+      }),
+    )
 
-  const docsPath = (href: string) => new URL(href, "https://opencode.ai").pathname
-  // Only the docs Intro is a page of this site (routes/docs); the other docs pages are the live
-  // v2 docs, served at the same paths on opencode.ai. Linking them absolutely makes them a full
-  // page load there and a new tab from a preview or local build, where those paths don't exist.
-  const liveDocs = (href: string) => (href === docsPages[0].href ? route(href) : `${config.baseUrl}${href}`)
+  // Every docs page (src/docs/lib/navigation.ts), served by this Worker at /docs, so they open in
+  // place on any deployment. The docs are English, so their links never take a locale prefix.
   const docs: SearchItem[] = [
     ...docsToc.map((entry) => ({
       id: `docs:intro#${entry.id}`,
@@ -228,27 +226,30 @@ export function buildSearchIndex(
       title: entry.label,
       context: "Docs › Intro",
       body: docsBody(entry.id),
-      href: `${route(docsPages[0].href)}#${entry.id}`,
+      href: `${docsHref("index")}#${entry.id}`,
       target: { id: entry.id },
     })),
-    ...[...docsPages, ...docsConfigure].map((page) => ({
-      id: `docs:${page.href}`,
+    ...docsSections.flatMap((section) =>
+      section.groups.flatMap((group) =>
+        group.items.map((item) => ({
+          id: `docs:${item.slug}`,
+          group: "Docs" as const,
+          // A section's first page is its intro: "CLI docs" rather than a second "Intro".
+          title: item.slug === section.landingSlug && section.key !== "docs" ? `${section.title} docs` : item.title,
+          context: docsHref(item.slug),
+          body: item.slug === "index" ? docsIntro.lead : undefined,
+          href: docsHref(item.slug),
+        })),
+      ),
+    ),
+    {
+      id: "docs:v1",
       group: "Docs" as const,
-      title: page.label,
-      context: docsPath(page.href),
-      body: page.label === "Intro" ? docsIntro.lead : undefined,
-      href: liveDocs(page.href),
-    })),
-    ...docsProducts
-      .filter((product) => product.label !== "Docs")
-      .map((product) => ({
-        id: `docs:${product.href}`,
-        group: "Docs" as const,
-        title: product.label === "V1" ? "V1 docs" : `${product.label} docs`,
-        context: docsPath(product.href),
-        keywords: product.label === "V1" ? "v1 legacy old docs" : undefined,
-        href: product.href.startsWith("/") ? liveDocs(product.href) : product.href,
-      })),
+      title: "V1 docs",
+      context: v1DocsUrl(),
+      keywords: "v1 legacy old docs",
+      href: v1DocsUrl(),
+    },
   ]
 
   const actions: SearchItem[] = [
@@ -299,7 +300,6 @@ export function buildSearchIndex(
     ...homeSections,
     ...productSections,
     ...downloadSections,
-    ...faq(names.home, "/"),
     ...pressSections,
     ...brandSections,
     ...legalSections,
@@ -440,25 +440,4 @@ function docsBody(id: string) {
     learn: plainRich(docsIntro.learn),
   }
   return bodies[id]
-}
-
-function legalText(node: LegalNode): string {
-  if (typeof node === "string") return node
-  const [, , ...children] = node
-  return children.filter(published).map(legalText).join("")
-}
-
-/** Each h2 and h3 of a legal document, with the text up to the next heading. */
-function legalHeadings(document: LegalDocumentContent) {
-  return document.body
-    .filter(published)
-    .reduce<{ id: string; title: string; body: string; path: string; document: string }[]>((acc, node) => {
-      if (typeof node !== "string" && (node[0] === "h2" || node[0] === "h3") && node[1].id) {
-        acc.push({ id: node[1].id, title: legalText(node), body: "", path: document.path, document: document.title })
-        return acc
-      }
-      const last = acc.at(-1)
-      if (last && last.body.length < 600) last.body = `${last.body} ${legalText(node)}`.slice(0, 600)
-      return acc
-    }, [])
 }

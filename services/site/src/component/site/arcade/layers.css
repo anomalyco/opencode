@@ -61,5 +61,18 @@
     height: auto;
     aspect-ratio: 2752 / 1536;
     translate: -50% -50%;
+
+    /* Portrait (arcade.tsx's height > 1.1 × width): the camera's sceneTall framing, the 710 px around the
+       cabinet's centre line (geometry.ts › cabinetCentre, 1355 px), so hydrating does not move the room. */
+    @media (max-aspect-ratio: 10 / 11) {
+      width: max(100% * 2752 / 710, var(--arcade-frame-height, 100svh) * 2752 / 1536);
+      translate: calc(-1355 / 2752 * 100%) -50%;
+    }
+
+    /* Landscape phones (phone.ts): sceneCentred, the room's left edge to as far right of the cabinet. */
+    @media (hover: none) and (pointer: coarse) and (max-height: 37.4375rem) and (min-aspect-ratio: 10 / 11) {
+      width: max(100% * 2752 / 2710, var(--arcade-frame-height, 100svh) * 2752 / 1536);
+      translate: calc(-1355 / 2752 * 100%) -50%;
+    }
   }
 }

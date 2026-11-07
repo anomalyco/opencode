@@ -1,38 +1,14 @@
 import { useI18n } from "~/context/i18n"
-import "./logo-fan.css"
 import { A } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js"
 import { useLanguage } from "~/context/language"
-import { brandAssets } from "~/lib/brand-content"
+import { brandAssets } from "~/lib/media"
 import { logoVariantSvgs } from "./logo-variants"
 import { pressIcons } from "./press-icons"
+import { fanMotion } from "./fan-motion"
 import { siteSettings } from "./settings"
 
 type Position = { x: number; y: number }
-
-// Each item drops a little further than the one above it (12px, then 6px more per item, up to
-// 42px), so the column cascades without any item travelling far. Items also start a touch small
-// and turned, and settle square.
-const drop = (index: number) => Math.min(12 + index * 6, 42)
-const start = (index: number) => `translateY(-${drop(index)}px) rotate(-1deg) scale(0.97)`
-const rest = "translateY(0px) rotate(0deg) scale(1)"
-const stagger = 32
-
-// A tight damped spring (about 7% overshoot, no visible second settle), sampled for linear().
-const spring = `linear(${Array.from({ length: 48 }, (_, index) => {
-  const t = index / 47
-  const damping = 0.65
-  const frequency = 11
-  const damped = frequency * Math.sqrt(1 - damping * damping)
-  const value =
-    1 -
-    Math.exp(-damping * frequency * t) *
-      (Math.cos(damped * t) + ((damping * frequency) / damped) * Math.sin(damped * t))
-  return index === 47 ? "1" : value.toFixed(4)
-}).join(", ")})`
-
-// The fan's motion, shared with the section menus' fan style (docs-lockup.tsx).
-export const fanMotion = { start, rest, stagger, spring }
 
 /**
  * The logo menu's fan option: like a Dock stack in Fan view, each brand asset springs out of the
@@ -90,11 +66,11 @@ export function LogoFan(props: { position?: Position; onSelect: () => void }) {
           rows().forEach((item, index) => {
             const fade = [...(rebound ? [] : [{ opacity: 0 }]), { opacity: 1 }]
             if (still()) return item.animate(fade, { duration: 150, easing: "ease-out" })
-            const timing = { delay: index * stagger, fill: "backwards" as const }
-            item.animate([...(rebound ? [] : [{ transform: start(index) }]), { transform: rest }], {
+            const timing = { delay: index * fanMotion.stagger, fill: "backwards" as const }
+            item.animate([...(rebound ? [] : [{ transform: fanMotion.start(index) }]), { transform: fanMotion.rest }], {
               ...timing,
               duration: 450,
-              easing: spring,
+              easing: fanMotion.spring,
             })
             item.animate(fade, { ...timing, duration: 140, easing: "ease-out" })
             // A lifted shadow while the item drops, settling as it lands.
@@ -112,7 +88,7 @@ export function LogoFan(props: { position?: Position; onSelect: () => void }) {
             // A small dip before the items lift and fold back up, bottom item first.
             item.toggleAttribute("data-lift", true)
             return [
-              item.animate([{ transform: start(index) }], {
+              item.animate([{ transform: fanMotion.start(index) }], {
                 delay,
                 duration: 220,
                 easing: "cubic-bezier(0.5, -0.5, 0.8, 0.3)",

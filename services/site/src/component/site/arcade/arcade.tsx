@@ -26,7 +26,7 @@ import {
   type Point,
   type Rect,
 } from "./geometry"
-import { ArcadeChrome } from "./chrome"
+import { ArcadeChrome, arcadeMenu } from "./chrome"
 import type { CoinLayer } from "./coin3d"
 import { dropOutcome, escapeAction, powerDownDuration, type ArcadeMoment } from "./flow"
 import { sendKey } from "./games"
@@ -89,7 +89,7 @@ const roomClip = percent(roomOutline)
 const outlinePath = (points: number[][]) => `M${points.map(([x, y]) => `${x.toFixed(3)} ${y.toFixed(3)}`).join("L")}Z`
 const roomPath = outlinePath(roomOutline)
 const platePath = outlinePath(plateOutline)
-// Before hydration the room shot covers the stage (object-fit: cover) with an empty painted glass:
+// Before hydration the room shot covers the stage (layers.css; portrait screens centre the cabinet) with an empty painted glass:
 // this runs as the page is parsed and pins the server-rendered screen ("404 / INSERT COIN") onto it
 // with the same mapping the live page uses, so the first paint already shows the screen, in the
 // same place and size as once the page is live (no empty flash, no jump).
@@ -97,11 +97,12 @@ const firstPaintScript = `(() => {
   const screen = document.currentScript.previousElementSibling
   const stage = screen && screen.closest('[data-slot="stage"]')
   if (!stage) return
-  const scene = ${JSON.stringify(scene)}
   const quad = ${JSON.stringify(sceneGlass.map((point) => [point.x, point.y]))}
   const width = stage.clientWidth, height = stage.clientHeight
-  const scale = Math.max(width / scene.w, height / scene.h)
-  const cx = scene.x + scene.w / 2, cy = scene.y + scene.h / 2
+  const phone = matchMedia("(hover: none) and (pointer: coarse)").matches && Math.min(innerWidth, innerHeight) < 600
+  const frame = height > width * 1.1 ? ${JSON.stringify(framing.sceneTall)} : phone ? ${JSON.stringify(framing.sceneCentred)} : ${JSON.stringify(scene)}
+  const scale = Math.max(width / frame.w, height / frame.h)
+  const cx = frame.x + frame.w / 2, cy = frame.y + frame.h / 2
   const [p0, p1, p2, p3] = quad.map(([x, y]) => [(x - cx) * scale + width / 2, (y - cy) * scale + height / 2])
   Object.assign(screen.style, { display: "block", position: "absolute", left: "0", top: "0", zIndex: "5", transformOrigin: "0 0", clipPath: ${JSON.stringify(roomClip)} })
   const w = screen.offsetWidth, h = screen.offsetHeight
@@ -204,10 +205,18 @@ export function Arcade404(props: { mode?: "image" | "hybrid" | "layers" }) {
   let last = 0
   const timers: ReturnType<typeof setTimeout>[] = []
   const later = (ms: number, run: () => void) => timers.push(setTimeout(run, ms))
-  // Short tweens of the coin's pose, advanced by the camera loop.
-  let tweens: { from: Coin; to: Partial<Coin>; start: number; duration: number; ease: (t: number) => number }[] = []
+  // Short tweens of the coin's pose, advanced by the camera loop. With `via` the coin travels on a curve through it.
+  let tweens: {
+    from: Coin
+    to: Partial<Coin>
+    start: number
+    duration: number
+    ease: (t: number) => number
+    via?: Point
+  }[] = []
 
-  // Framings for the current viewport. Portrait phones frame the cabinet. Once the screen faces the
+  // Framings for the current viewport. Portrait screens frame the cabinet, and phones centre it in
+  // landscape too (geometry.ts › sceneTall, sceneCentred). Once the screen faces the
   // viewer it fills the view below the tools (select), the framing games play in too; on a touch
   // screen the game moves to the top half, over the control panel.
   const views = () => {
@@ -218,7 +227,11 @@ export function Arcade404(props: { mode?: "image" | "hybrid" | "layers" }) {
       h: viewport.height - 96,
     })
     return {
-      floor: portrait() ? fit(framing.sceneTall, viewport, "cover") : fit(framing.sceneWide, viewport, "cover"),
+      floor: fit(
+        portrait() ? framing.sceneTall : phone() ? framing.sceneCentred : framing.sceneWide,
+        viewport,
+        "cover",
+      ),
       door: hybrid ? angledDoor() : fit(zoomed(framing.door, siteSettings.arcadeDoorZoom), viewport),
       select,
       play:
@@ -363,21 +376,29 @@ export function Arcade404(props: { mode?: "image" | "hybrid" | "layers" }) {
       coin.lift > 1 ? 16 : 0,
     )
     coinElement.style.setProperty("--size", `${size}px`)
-    coinElement.style.transform = `translate3d(${at.x}px, ${at.y}px, 0)`
+    // The lean goes after the move: the `rotate` property would turn the move itself about the stage's corner.
+    coinElement.style.transform = `translate3d(${at.x}px, ${at.y}px, 0) rotate(${coin.roll}deg)`
     coinElement.style.setProperty("--tilt", `${coin.tiltX}deg`)
     coinElement.style.setProperty("--turn", `${coin.turnY}deg`)
     coinElement.style.setProperty("--spin", `${coin.spin}deg`)
     coinElement.style.setProperty("--dim", `${coin.dim}`)
     coinElement.style.setProperty("--perspective", `${coinValues.held.perspective}`)
-    coinElement.style.rotate = `${coin.roll}deg`
     coinElement.style.zIndex = coin.layer === "behind" ? "3" : "6"
     coinElement.style.visibility = coin.visible ? "visible" : "hidden"
     // Sliding in, only the part still outside the slit shows: everything on the room side of the
     // slit's line (leaned like the painted slit), so the token vanishes into it, not over the door.
     const clip = hybrid && sinking ? slitClip(view) : undefined
     const box = Math.max(size, 44)
+    // In the button's own (leaned) frame: turned back by the lean about its centre.
+    const back = (-coin.roll * Math.PI) / 180
     coinElement.style.clipPath = clip
-      ? `polygon(${clip.map((point) => `${point.x - at.x + box / 2}px ${point.y - at.y + box / 2}px`).join(", ")})`
+      ? `polygon(${clip
+          .map((point) => {
+            const x = point.x - at.x
+            const y = point.y - at.y
+            return `${x * Math.cos(back) - y * Math.sin(back) + box / 2}px ${x * Math.sin(back) + y * Math.cos(back) + box / 2}px`
+          })
+          .join(", ")})`
       : ""
     if (!coinLayer || !coinCanvas) return
     coinCanvas.style.zIndex = coin.layer === "behind" ? "3" : "6"
@@ -463,8 +484,15 @@ export function Arcade404(props: { mode?: "image" | "hybrid" | "layers" }) {
         const target = tween.to[name]
         if (target !== undefined) coin[name] = mix(tween.from[name], target, e)
       }
-      if (tween.to.at)
-        coin.at = { x: mix(tween.from.at.x, tween.to.at.x, e), y: mix(tween.from.at.y, tween.to.at.y, e) }
+      const to = tween.to.at
+      if (to) {
+        // A quadratic curve through `via` (a straight line without one).
+        const via = tween.via ?? { x: mix(tween.from.at.x, to.x, 0.5), y: mix(tween.from.at.y, to.y, 0.5) }
+        coin.at = {
+          x: mix(mix(tween.from.at.x, via.x, e), mix(via.x, to.x, e), e),
+          y: mix(mix(tween.from.at.y, via.y, e), mix(via.y, to.y, e), e),
+        }
+      }
       return t < 1
     })
     if (phase() === "drag" && pointer) {
@@ -493,13 +521,13 @@ export function Arcade404(props: { mode?: "image" | "hybrid" | "layers" }) {
     if (!frameRequest) frameRequest = requestAnimationFrame(tick)
   }
 
-  const tween = (to: Partial<Coin>, duration: number, ease = (t: number) => 1 - Math.pow(1 - t, 3)) => {
+  const tween = (to: Partial<Coin>, duration: number, ease = (t: number) => 1 - Math.pow(1 - t, 3), via?: Point) => {
     if (reduced()) {
       Object.assign(coin, to)
       render()
       return
     }
-    tweens.push({ from: { ...coin, at: { ...coin.at } }, to, start: performance.now(), duration, ease })
+    tweens.push({ from: { ...coin, at: { ...coin.at } }, to, start: performance.now(), duration, ease, via })
     wake()
   }
 
@@ -541,12 +569,13 @@ export function Arcade404(props: { mode?: "image" | "hybrid" | "layers" }) {
 
   const pickUp = (event: PointerEvent) => {
     if (phase() !== "floor" || coinPreview()) return
-    if (reduced()) return
+    // Recorded with reduced motion too: there a tap still puts the token in, only the drag is off.
     if (phone() && !press) {
       press = { id: event.pointerId, at: clientPoint(event) }
       return
     }
     press = undefined
+    if (reduced()) return
     event.preventDefault()
     unlockAudio()
     loadFront()
@@ -591,7 +620,10 @@ export function Arcade404(props: { mode?: "image" | "hybrid" | "layers" }) {
   }
 
   const drop = (event: PointerEvent) => {
+    // On a phone a tap on the token (it never lifted) puts it in, like a drop on the cabinet.
+    const tapped = !!press && phase() === "floor"
     press = undefined
+    if (tapped && phone()) return phoneInsert()
     if (phase() !== "drag") return
     pointer = clientPoint(event)
     const view = camera.view
@@ -600,7 +632,7 @@ export function Arcade404(props: { mode?: "image" | "hybrid" | "layers" }) {
     if (slotGlow) slotGlow.style.opacity = ""
     // On a phone anywhere on the cabinet takes the token: the slot is a few pixels across there.
     const over = phone() ? inside(cabinetZone, coin.at) : camera.target.scale >= views().door.scale * 0.9
-    if (dropOutcome(over) === "insert") return insert()
+    if (dropOutcome(over) === "insert") return phone() ? phoneInsert() : insert()
     // Let go away from the machine: it settles back where it lay.
     setPhase("floor")
     tween({ at: coinHome, lift: 1, tiltX: 74, spin: -18, turnY: 0, roll: 0 }, 450, bounce)
@@ -685,30 +717,89 @@ export function Arcade404(props: { mode?: "image" | "hybrid" | "layers" }) {
     })
   }
 
+  /**
+   * A phone's token goes in on the room shot, from wherever it is (on the floor after a tap, under
+   * the finger after a drag), in about 860 ms: it lifts off the floor, travels to the painted slit on
+   * a slight arc while it shrinks to its true size there, turns edge-on over the last stretch, then
+   * slides into the slit (clipped by it) on a short ease-in as the slot lamp answers and the screen
+   * flickers. Reduced motion fades the token out and goes straight to the screen.
+   */
+  const phoneInsert = () => {
+    setPhase("inserting")
+    unlockAudio()
+    if (reduced()) {
+      coinElement?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: "ease" })
+      later(150, () => {
+        coin.visible = false
+        render()
+        credit()
+      })
+      return
+    }
+    const timing = coinValues.slot
+    const lean = (timing.lean * Math.PI) / 180
+    const along = (distance: number) => ({
+      x: slot.x + Math.cos(lean) * distance,
+      y: slot.y + Math.sin(lean) * distance,
+    })
+    const depth = tokenSize * 0.55
+    // Lined up just outside the slit, then all the way through it.
+    const mouth = along(depth * 0.3)
+    const seat = 1 / phoneCoin
+    // From the floor it first rises off it; from the finger it is already up.
+    const rise = coin.lift > 1.1 ? 0 : 120
+    if (rise) tween({ lift: 1.18, tiltX: 40 }, rise)
+    later(rise, () => {
+      const flight = 480
+      const from = coin.at
+      // The arc bows up by a fifth of the trip, at least 24 screen px.
+      const bow = Math.max(Math.hypot(mouth.x - from.x, mouth.y - from.y) * 0.2, 24 / camera.view.scale)
+      const via = { x: (from.x + mouth.x) / 2, y: Math.min(from.y, mouth.y) - bow }
+      const inOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
+      tween({ at: mouth, lift: seat, tiltX: timing.tilt, spin: timing.spin }, flight, inOut, via)
+      // Edge-on over the last 40%, as if turned to fit the slit.
+      later(flight * 0.6, () => tween({ turnY: timing.turn, roll: timing.lean }, flight * 0.4, inOut))
+      later(flight, () => {
+        const slide = 260
+        play("coin-insert")
+        sinking = true
+        slotGlow?.animate([{ opacity: 0 }, { opacity: 1, offset: 0.35 }, { opacity: 0 }], {
+          duration: slide + 400,
+          easing: "ease-out",
+        })
+        screenElement?.animate([{ opacity: 1 }, { opacity: 0.72, offset: 0.4 }, { opacity: 1 }], {
+          duration: 220,
+          delay: slide - 40,
+          easing: "ease-out",
+        })
+        tween({ at: along(-depth), lift: seat * 0.94, dim: 0.5 }, slide, (t) => t * t)
+        later(slide, () => {
+          coin.visible = false
+          sinking = false
+          navigator.vibrate?.([14, 50, 22])
+          credit()
+        })
+      })
+    })
+  }
+
   // ——— After the credit ———
 
   // The credit wakes the machine: the stage fades to black and comes back up on the screen, straight
   // on in the select framing, reading "404" (the coin is in). The 404 tears and the cabinet boots
   // (it cannot be skipped), then the start screen hands over to the game menu. A phone comes back up
-  // on the painted screen, powering on with its message.
+  // close on the painted screen and runs the same boot and logo reveal, then shows its message
+  // (booted); with reduced motion it goes straight to the still logo.
   const credit = () => {
     play("power-up", 0.25)
     setAnnounce(i18n.t("site.arcade.credit"))
     setPhase("climb")
     const shown = fadeThrough(() => {
-      if (phone()) {
-        camera.jump(phoneScreen())
-        setScreenState("mobile")
-        setPhase("select")
-        play("start")
-        const copy = mobileCopy[siteSettings.arcadeMobileCopy]
-        setAnnounce(`${copy.title} ${copy.lines.join(". ")}.`)
-        return
-      }
+      if (phone()) return camera.jump(phoneScreen())
       facing = true
       camera.jump(views().select)
     })
-    if (phone()) return
+    if (phone() && reduced()) return later(shown, booted)
     if (reduced()) return later(shown, () => setScreenState("boot"))
     later(shown + coinValues.fade.still, () => {
       setScreenState("glitch")
@@ -721,6 +812,8 @@ export function Arcade404(props: { mode?: "image" | "hybrid" | "layers" }) {
     setScreenState("start")
     setPhase("select")
     play("start")
+    // A phone's start screen is only the logo: the message follows on the desktop's start delay.
+    if (phone()) return later(reduced() ? 1500 : siteSettings.arcadeStartDelay || 3200, startMenu)
     setAnnounce(i18n.t("site.arcade.pressStart"))
     // The start screen waits for a press, and moves on by itself after a few seconds.
     if (siteSettings.arcadeStartDelay > 0)
@@ -729,6 +822,11 @@ export function Arcade404(props: { mode?: "image" | "hybrid" | "layers" }) {
 
   const startMenu = () => {
     if (screenState() !== "start") return
+    if (phone()) {
+      setScreenState("mobile")
+      const copy = mobileCopy[siteSettings.arcadeMobileCopy]
+      return setAnnounce(`${copy.title} ${copy.lines.join(". ")}.`)
+    }
     setScreenState("select")
     setAnnounce(i18n.t("site.arcade.selectGame"))
   }
@@ -857,6 +955,18 @@ export function Arcade404(props: { mode?: "image" | "hybrid" | "layers" }) {
     ),
   )
 
+  // Under the open menu sheet the room goes quiet; a game keeps its ambience ducked after it.
+  createEffect(
+    on(
+      arcadeMenu,
+      (open) => {
+        duckAmbience(open || phase() === "play")
+        press = undefined
+      },
+      { defer: true },
+    ),
+  )
+
   // Zoom settings apply at once to where the camera is.
   createEffect(
     on(
@@ -915,6 +1025,8 @@ export function Arcade404(props: { mode?: "image" | "hybrid" | "layers" }) {
       loadCoin()
     })
     const keys = (event: KeyboardEvent) => {
+      // The menu sheet (chrome.tsx) has the keys while it is open: its Escape closes it.
+      if (arcadeMenu()) return
       if (event.key === "Escape" && !event.defaultPrevented) {
         const action = escapeAction(phase())
         if (action) event.preventDefault()
@@ -985,7 +1097,14 @@ export function Arcade404(props: { mode?: "image" | "hybrid" | "layers" }) {
         "--glitch-duration": `${siteSettings.arcadeGlitch}ms`,
       }}
     >
-      <div ref={stage} data-slot="stage" onPointerMove={dragMove} onPointerUp={drop} onPointerCancel={drop}>
+      <div
+        ref={stage}
+        data-slot="stage"
+        inert={arcadeMenu()}
+        onPointerMove={dragMove}
+        onPointerUp={drop}
+        onPointerCancel={drop}
+      >
         <Show
           when={props.mode === "layers"}
           fallback={
@@ -1088,8 +1207,13 @@ export function Arcade404(props: { mode?: "image" | "hybrid" | "layers" }) {
           ref={coinElement}
           type="button"
           data-slot="coin"
-          aria-label={i18n.t("site.arcade.token")}
+          // A phone has no Insert coin button: the token is that button.
+          aria-label={phone() ? i18n.t("site.arcade.insertCoin") : i18n.t("site.arcade.token")}
           onPointerDown={pickUp}
+          // Screen readers activate it with a click of their own (no pointer press, detail 0).
+          onClick={(event) => {
+            if (phone() && event.detail === 0 && phase() === "floor") phoneInsert()
+          }}
           onKeyDown={(event) => {
             if ((event.key === "Enter" || event.key === " ") && phase() === "floor") {
               event.preventDefault()
@@ -1115,8 +1239,9 @@ export function Arcade404(props: { mode?: "image" | "hybrid" | "layers" }) {
         <div ref={fade} data-slot="fade" aria-hidden="true" />
       </div>
 
-      <div data-slot="tools">
-        <Show when={(reduced() || touch()) && phase() === "floor"}>
+      <div data-slot="tools" inert={arcadeMenu()}>
+        {/* Phones tap the token itself, and leave the powered-up machine by the logo or the menu. */}
+        <Show when={(reduced() || touch()) && !phone() && phase() === "floor"}>
           <button type="button" data-slot="insert" onClick={keyboardInsert}>
             {i18n.t("site.arcade.insertCoin")}
           </button>
@@ -1126,7 +1251,7 @@ export function Arcade404(props: { mode?: "image" | "hybrid" | "layers" }) {
             {i18n.t("site.arcade.exit")} <kbd>Esc</kbd>
           </button>
         </Show>
-        <Show when={touch() && escapeAction(phase()) === "power-down"}>
+        <Show when={touch() && !phone() && escapeAction(phase()) === "power-down"}>
           <button type="button" data-slot="power-down" onClick={powerDown}>
             {i18n.t("site.arcade.back")} <kbd>Esc</kbd>
           </button>
@@ -1169,21 +1294,16 @@ export function Arcade404(props: { mode?: "image" | "hybrid" | "layers" }) {
     </div>
   )
 
-  // Keyboard, reduced motion and the touch "Insert coin" button: the camera flies the coin in.
+  // Keyboard, reduced motion and the touch "Insert coin" button: the camera flies the coin in. A
+  // phone stays on the room shot, where the token goes in as it does from a tap.
   function keyboardInsert() {
+    if (phone()) return phoneInsert()
     unlockAudio()
     loadFront()
     loadCoin()
     if (reduced()) return insert()
     setPhase("inserting")
     coin.layer = "front"
-    // A phone stays on the room shot: the token flies straight to the slot.
-    if (phone()) {
-      tween({ lift: 1.3, tiltX: 10, spin: 0 }, 300)
-      later(300, () => tween({ at: slot, lift: 1, turnY: 60 }, 600))
-      later(950, insert)
-      return
-    }
     tween({ lift: 1.6, tiltX: 10, spin: 0 }, 300)
     go(views().door, 2.6)
     later(900, () => tween({ at: slot, lift: 1, turnY: 60 }, 500))
