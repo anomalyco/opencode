@@ -660,18 +660,20 @@
 
 /* Shrinking back with the card off screen: no card to shrink into, so the hero fades with the page. */
 ::view-transition-old(product-hero):only-child {
-  animation: calc(var(--card-page-fade, 200ms) * 0.6) cubic-bezier(0.23, 1, 0.32, 1) both card-grow-out;
+  animation: var(--card-page-fade, 200ms) cubic-bezier(0.23, 1, 0.32, 1) var(--card-page-delay, 40ms) both card-grow-out;
 }
 
-/* The rest of the page swaps without a long double exposure: the home page fades out quickly and
-   the product page fades in just behind it, so only the growing card reads as moving. The old
-   page takes a little over half the new page's fade. */
+/* The new page fades in over the old one, which stays solid underneath, so whatever is the same on
+   both pages (the sidebar, the GitHub link, the background) never changes. Fading both pages
+   showed the dark background through them and dimmed the whole screen for a few frames. */
 ::view-transition-old(root) {
-  animation: calc(var(--card-page-fade, 200ms) * 0.6) cubic-bezier(0.23, 1, 0.32, 1) both card-grow-out;
+  animation: none;
+  mix-blend-mode: normal;
 }
 
 ::view-transition-new(root) {
   animation: var(--card-page-fade, 200ms) cubic-bezier(0.23, 1, 0.32, 1) var(--card-page-delay, 40ms) both card-grow-in;
+  mix-blend-mode: normal;
 }
 
 @keyframes card-grow-out {
