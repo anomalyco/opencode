@@ -623,8 +623,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI をインストールできませんでした: {{error}}",
   "command.project.copyID": "プロジェクト ID をコピー",
   "command.session.copyID": "セッション ID をコピー",
-  "server.row.incompatible":
-    "このサーバーでは、このアプリと互換性のない OpenCode {{version}} が実行されています。続行するには OpenCode V2 にアップグレードしてください。",
   "toast.session.copyID.failed.title": "セッション ID をコピーできませんでした",
   "toast.session.copyID.failed.description": "セッション ID のコピー中にエラーが発生しました",
   "toast.project.copyID.failed.title": "プロジェクト ID をコピーできませんでした",
@@ -633,8 +631,6 @@ export const dict = {
   "error.page.description.status": "サーバーから HTTP {{status}} レスポンスが返されました。",
   "error.page.action.reload": "再読み込み",
   "session.error.incompatible": "このサーバーバージョンはサポートされていません",
-  "session.error.incompatible.description":
-    "{{server}} では、このアプリと互換性のない OpenCode {{version}} が実行されています。続行するには、サーバーを OpenCode V2 にアップグレードしてください。",
   "session.background.moveInline": "{{keybind}} を押して実行中の作業をバックグラウンドに移動",
   "dialog.server.menu.hide": "プロジェクト一覧に表示しない",
   "dialog.server.menu.show": "プロジェクト一覧に表示",

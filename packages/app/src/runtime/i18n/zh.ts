@@ -670,7 +670,6 @@ export const dict = {
   "desktop.cli.failed.message": "安装 CLI 失败：{{error}}",
   "command.project.copyID": "复制项目 ID",
   "command.session.copyID": "复制会话 ID",
-  "server.row.incompatible": "此服务器正在运行 OpenCode {{version}}，与此应用不兼容。请升级到 OpenCode V2 以继续。",
   "toast.session.copyID.failed.title": "复制会话 ID 失败",
   "toast.session.copyID.failed.description": "复制会话 ID 时出错",
   "toast.project.copyID.failed.title": "复制项目 ID 失败",
@@ -679,8 +678,6 @@ export const dict = {
   "error.page.description.status": "服务器返回了 HTTP {{status}} 响应。",
   "error.page.action.reload": "重新加载",
   "session.error.incompatible": "不支持此服务器版本",
-  "session.error.incompatible.description":
-    "{{server}} 正在运行 OpenCode {{version}}，与此应用不兼容。请将服务器升级到 OpenCode V2 以继续。",
   "session.background.moveInline": "按 {{keybind}} 将正在运行的任务移至后台",
   "dialog.server.menu.hide": "从项目列表中隐藏",
   "dialog.server.menu.show": "在项目列表中显示",

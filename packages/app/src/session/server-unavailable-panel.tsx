@@ -23,7 +23,7 @@ export function ServerUnavailablePanel(props: { reason: "incompatible" | "unreac
           </div>
           <div class="text-13-regular text-text-weak max-w-md">
             {props.reason === "incompatible"
-              ? language.t("session.error.incompatible.description.unknown", { server: servers.label(server.conn) })
+              ? language.t("session.error.incompatible.description", { server: servers.label(server.conn) })
               : language.t("session.error.unreachable.description", { server: servers.label(server.conn) })}
           </div>
         </div>

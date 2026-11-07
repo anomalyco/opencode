@@ -609,8 +609,6 @@ export const dict = {
   "desktop.cli.failed.message": "ຕິດຕັ້ງ CLI ບໍ່ສຳເລັດ: {{error}}",
   "command.project.copyID": "ສຳເນົາ ID ໂຄງການ",
   "command.session.copyID": "ສຳເນົາ ID ເຊດຊັນ",
-  "server.row.incompatible":
-    "ເຊີບເວີນີ້ກຳລັງໃຊ້ OpenCode {{version}} ທີ່ບໍ່ເຂົ້າກັນກັບແອັບນີ້. ອັບເກຣດເປັນ OpenCode V2 ເພື່ອສືບຕໍ່.",
   "toast.session.copyID.failed.title": "ສຳເນົາ ID ເຊດຊັນບໍ່ສຳເລັດ",
   "toast.session.copyID.failed.description": "ເກີດຂໍ້ຜິດພາດຂະນະສຳເນົາ ID ເຊດຊັນ",
   "toast.project.copyID.failed.title": "ສຳເນົາ ID ໂຄງການບໍ່ສຳເລັດ",
@@ -619,8 +617,6 @@ export const dict = {
   "error.page.description.status": "ເຊີບເວີສົ່ງຄຳຕອບ HTTP {{status}} ກັບຄືນມາ.",
   "error.page.action.reload": "ໂຫຼດຄືນໃໝ່",
   "session.error.incompatible": "ບໍ່ຮອງຮັບເຊີບເວີລຸ້ນນີ້",
-  "session.error.incompatible.description":
-    "{{server}} ກຳລັງໃຊ້ OpenCode {{version}} ທີ່ບໍ່ເຂົ້າກັນກັບແອັບນີ້. ອັບເກຣດເຊີບເວີເປັນ OpenCode V2 ເພື່ອສືບຕໍ່.",
   "session.background.moveInline": "ກົດ {{keybind}} ເພື່ອຍ້າຍວຽກທີ່ກຳລັງເຮັດໄປເບື້ອງຫຼັງ",
   "dialog.server.menu.hide": "ເຊື່ອງຈາກລາຍຊື່ໂຄງການ",
   "dialog.server.menu.show": "ສະແດງໃນລາຍຊື່ໂຄງການ",

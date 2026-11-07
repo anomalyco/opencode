@@ -404,7 +404,7 @@ function HomeServerRow(props: {
       value={
         authentication()
           ? props.language.t("server.status.authentication")
-          : props.language.t("server.row.incompatible.unknown")
+          : props.language.t("server.row.incompatible")
       }
     >
       <div
