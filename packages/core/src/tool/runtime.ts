@@ -167,10 +167,53 @@ const outputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema 
 }
 
 const standardJsonSchema = (schema: StandardSchemaV1<any, any>, io: "input" | "output"): JsonSchema.JsonSchema => {
-  if (isStandardJSONSchema(schema)) return schema["~standard"].jsonSchema[io]({ target: "draft-2020-12" })
-  if (schema instanceof $ZodType) return toJSONSchema(schema, { target: "draft-2020-12", io })
+  if (isStandardJSONSchema(schema)) {
+    if (schema instanceof $ZodType)
+      return withHiddenZodParents(schema, () => schema["~standard"].jsonSchema[io]({ target: "draft-2020-12" }))
+    return schema["~standard"].jsonSchema[io]({ target: "draft-2020-12" })
+  }
+  if (schema instanceof $ZodType) return zodJsonSchema(schema, io)
   throw new Error(`Schema vendor "${schema["~standard"].vendor}" does not support JSON Schema conversion`)
 }
+
+// A plugin-defined `_zod.toJSONSchema` override replaces the default processor, which also skips
+// processing `_zod.parent`; Zod's finalizer still walks that parent and crashes on schemas cloned
+// by `.describe()`. Hide only the parents that the override strands for the duration of conversion,
+// then restore them. An override runs while its parent is hidden, so it must not read `_zod.parent`.
+const withHiddenZodParents = <T>(schema: $ZodType, convert: () => T): T => {
+  const restore: Array<() => void> = []
+  const seen = new Set<object>()
+  const hideStrandedParents = (value: unknown) => {
+    if (typeof value !== "object" || value === null || seen.has(value)) return
+    seen.add(value)
+    const zod = (value as { _zod?: { def?: object; parent?: unknown; toJSONSchema?: unknown } })._zod
+    if (zod === undefined) {
+      for (const child of Object.values(value)) hideStrandedParents(child)
+      return
+    }
+    // `.describe()` and other clones point `_zod.parent` at the schema they derive from, so an
+    // argument can inherit an override through that link without carrying it itself. Follow
+    // parents as well as definitions so the overridden ancestor is found either way.
+    const parent = zod.parent
+    hideStrandedParents(parent)
+    hideStrandedParents(zod.def)
+    if (zod.toJSONSchema !== undefined && parent !== undefined) {
+      zod.parent = undefined
+      restore.push(() => {
+        zod.parent = parent
+      })
+    }
+  }
+  try {
+    hideStrandedParents(schema)
+    return convert()
+  } finally {
+    for (const restoreParent of restore.reverse()) restoreParent()
+  }
+}
+
+const zodJsonSchema = (schema: $ZodType, io: "input" | "output"): JsonSchema.JsonSchema =>
+  withHiddenZodParents(schema, () => ({ ...toJSONSchema(schema, { target: "draft-2020-12", io }) }))
 
 const toJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
   const document = Schema.toJsonSchemaDocument(schema, { onExcessProperty: "error" })

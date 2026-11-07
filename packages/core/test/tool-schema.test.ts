@@ -327,6 +327,121 @@ test("Zod schemas validate, transform, and describe typed tools", async () => {
   )
 })
 
+test("legacy Zod schemas with JSON Schema overrides still convert", () => {
+  const path = z.string().describe("File path")
+  path._zod.toJSONSchema = () => ({ type: "string", description: "File path" })
+  const input = z.object({ args: z.object({ path }) })
+  // Zod versions before 4.2 do not expose `~standard.jsonSchema`, which is what routes plugin
+  // schemas from older bundles through the core JSON Schema conversion.
+  Object.defineProperty(input, "~standard", {
+    value: { validate: (value: unknown) => ({ value }), vendor: "zod", version: 1 },
+  })
+  const tool: Info = {
+    name: "legacy-zod",
+    description: "Legacy Zod tool",
+    input,
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+
+  expect(definition(tool).inputSchema).toEqual({
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    type: "object",
+    properties: {
+      args: {
+        type: "object",
+        properties: { path: { type: "string", description: "File path" } },
+        required: ["path"],
+      },
+    },
+    required: ["args"],
+  })
+})
+
+test("legacy Zod schemas cloned from an overridden parent still convert", () => {
+  const base = z.string().describe("Base")
+  const baseParent = base._zod.parent
+  let parentDuringOverride: unknown
+  base._zod.toJSONSchema = () => {
+    // The converter must hide the stranded parent before running the override. Older Zod
+    // implementations do not crash on the shape, so this also guards the behavior where the
+    // runtime is too old to reproduce the `seen.ref` failure.
+    parentDuringOverride = base._zod.parent
+    return { type: "string", description: "Base" }
+  }
+  // `describe()` clones point at the overridden schema without carrying the override themselves.
+  const path = base.describe("File path")
+  const input = z.object({ args: z.object({ path }) })
+  Object.defineProperty(input, "~standard", {
+    value: { validate: (value: unknown) => ({ value }), vendor: "zod", version: 1 },
+  })
+  const tool: Info = {
+    name: "legacy-zod-clone",
+    description: "Legacy Zod tool with an overridden parent",
+    input,
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+
+  expect(definition(tool).inputSchema).toEqual({
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    type: "object",
+    properties: {
+      args: {
+        type: "object",
+        properties: { path: { type: "string", description: "File path" } },
+        required: ["path"],
+      },
+    },
+    required: ["args"],
+  })
+  expect(parentDuringOverride).toBeUndefined()
+  expect(base._zod.parent).toBe(baseParent)
+  expect(path._zod.parent).toBe(base)
+})
+
+test("current Zod schemas with JSON Schema overrides use guarded conversion", () => {
+  const base = z.string().describe("Base")
+  const baseParent = base._zod.parent
+  let parentDuringOverride: unknown
+  base._zod.toJSONSchema = () => {
+    parentDuringOverride = base._zod.parent
+    return { type: "string", description: "Base" }
+  }
+  const path = base.describe("File path")
+  const input = z.object({ args: z.object({ path }) })
+  const tool: Info = {
+    name: "current-zod",
+    description: "Current Zod tool",
+    input,
+    output: input,
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+
+  const result = definition(tool)
+  const expected = {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    type: "object",
+    properties: {
+      args: {
+        type: "object",
+        properties: { path: { type: "string", description: "File path" } },
+        required: ["path"],
+      },
+    },
+    required: ["args"],
+  }
+  expect(result.inputSchema).toEqual(expected)
+  expect(result.outputSchema).toEqual({
+    ...expected,
+    additionalProperties: false,
+    properties: {
+      args: { ...expected.properties.args, additionalProperties: false },
+    },
+  })
+  expect(parentDuringOverride).toBeUndefined()
+  expect(base._zod.parent).toBe(baseParent)
+  expect(path._zod.parent).toBe(base)
+})
+
 test("portable schema failures become tool failures", async () => {
   const input = {
     "~standard": {
