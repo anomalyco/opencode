@@ -373,8 +373,6 @@ export function Prompt(props: PromptProps) {
     interrupt: 0,
   })
   let disposed = false
-  let editorOpen = false
-  let nativeSubmitVersion = 0
   let pasteQueue = Promise.resolve()
 
   function enqueuePaste(run: (changed: () => boolean) => Promise<void>) {
@@ -558,41 +556,33 @@ export function Prompt(props: PromptProps) {
         name: "prompt.editor",
         slash: { name: "editor" },
         run: async () => {
-          if (editorOpen) return
-          editorOpen = true
-          nativeSubmitVersion++
+          // A send still waiting for workspace data must not go out while its draft is in the editor.
+          setPendingSubmit(undefined)
+          dialog.clear()
 
-          try {
-            setPendingSubmit(undefined)
-            dialog.clear()
-            const editorPrompt = expandPromptInputPastedText(store.prompt, store.prompt.pasted, renderer.widthMethod)
-            const value = editorPrompt.text
-            const content = await openEditor({
-              renderer,
-              value,
-              cwd:
-                (data.location.info()?.project.directory === "/"
-                  ? undefined
-                  : data.location.info()?.project.directory) ||
-                data.location.default().directory ||
-                paths.cwd,
-            }).catch((error) => {
-              toast.show({ title: "Failed to open editor", message: errorMessage(error), variant: "error" })
-            })
-            if (!content) return
-            const normalized = normalizePromptContent(content)
+          const editorPrompt = expandPromptInputPastedText(store.prompt, store.prompt.pasted, renderer.widthMethod)
+          const value = editorPrompt.text
+          const content = await openEditor({
+            renderer,
+            value,
+            cwd:
+              (data.location.info()?.project.directory === "/" ? undefined : data.location.info()?.project.directory) ||
+              data.location.default().directory ||
+              paths.cwd,
+          }).catch((error) => {
+            toast.show({ title: "Failed to open editor", message: errorMessage(error), variant: "error" })
+          })
+          if (!content) return
+          const normalized = normalizePromptContent(content)
 
-            input.setText(normalized)
+          input.setText(normalized)
 
-            setStore("prompt", {
-              ...realignPromptInputMentions(normalized, editorPrompt, renderer.widthMethod),
-              pasted: [],
-            })
-            restoreExtmarksFromPrompt(store.prompt)
-            input.cursorOffset = measure(normalized)
-          } finally {
-            editorOpen = false
-          }
+          setStore("prompt", {
+            ...realignPromptInputMentions(normalized, editorPrompt, renderer.widthMethod),
+            pasted: [],
+          })
+          restoreExtmarksFromPrompt(store.prompt)
+          input.cursorOffset = measure(normalized)
         },
       },
       {
@@ -1119,16 +1109,13 @@ export function Prompt(props: PromptProps) {
     delivery: SessionInbox.Delivery
   }>()
   // A waiting send only goes out for the draft, mode, session, and location it was made for.
+  // Opening a dialog cancels it too, so it cannot go out behind the workspace picker, to the
+  // location the user is switching away from.
   createEffect(() => {
-    // Cancel even native Enter callbacks that have not created a pending load yet.
-    const modalOpen = dialog.stack.length > 0
-    if (modalOpen) nativeSubmitVersion++
     const pending = pendingSubmit()
     if (!pending) return
-    // Dialog handlers can clear the modal before navigating. Cancel on open so
-    // closing a workspace picker cannot send against the previous location.
     if (
-      modalOpen ||
+      dialog.stack.length > 0 ||
       disabled() ||
       props.sessionID !== pending.sessionID ||
       store.mode !== pending.mode ||
@@ -1139,7 +1126,7 @@ export function Prompt(props: PromptProps) {
   })
 
   async function submit(delivery: SessionInbox.Delivery = "steer") {
-    if (disabled() || editorOpen) return false
+    if (disabled()) return false
     // Prevent overlapping invocations (e.g. a double-pressed Enter, or the
     // input's native onSubmit racing another dispatch). Without this guard,
     // a second call slips past the empty-input check before the first call
@@ -1199,9 +1186,9 @@ export function Prompt(props: PromptProps) {
     const location = currentLocation.ref ?? data.location.default()
     const slashHead = parseSlashHead(inputText, /\s/)
     // Slash input also needs the commands, or it would be sent as an ordinary prompt.
-    const commands = store.mode === "normal" && slashHead !== undefined
+    const needsCommands = store.mode === "normal" && slashHead !== undefined
     const loaded = () =>
-      local.model.catalogsLoaded(location) && (!commands || data.location.command.list(location) !== undefined)
+      local.catalogsLoaded(location) && (!needsCommands || data.location.command.list(location) !== undefined)
     if (!loaded()) {
       const pending = {
         location: locationKey(location),
@@ -1218,8 +1205,8 @@ export function Prompt(props: PromptProps) {
         async () => {
           if (!waiting()) return
           await Promise.all([
-            local.model.loadMissingCatalogs(location),
-            commands && data.location.command.list(location) === undefined && data.location.command.sync(location),
+            local.loadMissingCatalogs(location),
+            needsCommands && data.location.command.list(location) === undefined && data.location.command.sync(location),
           ])
         },
         { retryIf: (error) => waiting() && !isLocationNotFoundError(error) },
@@ -1241,7 +1228,7 @@ export function Prompt(props: PromptProps) {
     }
     const isCommand =
       slashHead !== undefined &&
-      (data.location.command.list(currentLocation.ref) ?? []).some((command) => command.name === slashHead.name)
+      (data.location.command.list(location) ?? []).some((command) => command.name === slashHead.name)
     const editorSelection = editorContext()
     const pendingEditorSelection = editorSelection && editor.labelState() === "pending" ? editorSelection : undefined
     if (delivery === "queue" && pendingEditorSelection) {
@@ -1636,7 +1623,7 @@ export function Prompt(props: PromptProps) {
       const sessionLocation = props.sessionID ? data.session.get(props.sessionID)?.location : location
       if (!sessionLocation || locationKey(sessionLocation) !== locationKey(location)) return previous
 
-      const loading = !local.model.catalogsLoaded(location)
+      const loading = !local.catalogsLoaded(location)
       const error = currentLocation.error
       const failed = error && locationKey(error.location) === locationKey(location)
       if (loading && !failed) return previous
@@ -1876,18 +1863,10 @@ export function Prompt(props: PromptProps) {
                 }
               }}
               onSubmit={() => {
-                if (disabled() || editorOpen) return
-                const version = nativeSubmitVersion
+                if (disabled()) return
                 // IME: double-defer so the last composed character (e.g. Korean
                 // hangul) is flushed to plainText before we read it for submission.
-                setTimeout(
-                  () =>
-                    setTimeout(() => {
-                      if (disposed || version !== nativeSubmitVersion) return
-                      void submit()
-                    }, 0),
-                  0,
-                )
+                setTimeout(() => setTimeout(() => submit(), 0), 0)
               }}
               onPaste={(event: PasteEvent) => {
                 if (disabled()) {

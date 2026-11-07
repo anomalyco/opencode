@@ -154,7 +154,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         selectionBySessionAgent: {},
       })
 
-      const selectionCatalogs = [data.location.agent, data.location.model, data.location.config]
       const repository = createModelPreferenceRepository(path.join(paths.state, "model.json"))
       const pendingSelectionCommits = new Map<string, { agentID: string; selection: string }>()
       const selectionKey = (value: ModelSelection) =>
@@ -387,16 +386,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         get ready() {
           return preferences.ready
         },
-        // The selection reads the location's agents, models, and configured default model. Until all three
-        // have loaded it can resolve to another agent or default model.
-        catalogsLoaded(ref = location.ref) {
-          return selectionCatalogs.every((catalog) => catalog.list(ref) !== undefined)
-        },
-        loadMissingCatalogs(ref = location.ref) {
-          return Promise.all(
-            selectionCatalogs.filter((catalog) => catalog.list(ref) === undefined).map((catalog) => catalog.sync(ref)),
-          )
-        },
         recent() {
           return preferences.recent
         },
@@ -612,11 +601,23 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const session = createSession()
 
+    // The agent and model selection reads the location's agents, models, and configured default model.
+    // Until all three have loaded it can resolve to another agent or default model.
+    const selectionCatalogs = [data.location.agent, data.location.model, data.location.config]
+
     const result = {
       model,
       agent,
       session,
       permission,
+      catalogsLoaded(ref = location.ref) {
+        return selectionCatalogs.every((catalog) => catalog.list(ref) !== undefined)
+      },
+      loadMissingCatalogs(ref = location.ref) {
+        return Promise.all(
+          selectionCatalogs.filter((catalog) => catalog.list(ref) === undefined).map((catalog) => catalog.sync(ref)),
+        )
+      },
     }
     return result
   },
