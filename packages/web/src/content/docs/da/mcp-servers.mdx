@@ -23,7 +23,7 @@ Visse MCP-servere, som GitHub MCP-servere, har en tendens til at tilføje mange 
 
 ## Aktivering
 
-Du kan definere MCP-servere i din [OpenCode Config](https://opencode.ai/docs/config/) under `mcp`. Tilføj hver MCP med et unikt navn. Du kan henvise til denne MCP ved navn, når du spørger LLM.
+Du kan definere MCP-servere i din [OpenCode Config](/docs/config/) under `mcp`. Tilføj hver MCP med et unikt navn. Du kan henvise til denne MCP ved navn, når du spørger LLM.
 
 ```jsonc title="opencode.jsonc" {6}
 {

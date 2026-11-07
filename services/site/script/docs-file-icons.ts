@@ -1,15 +1,16 @@
 // Writes src/component/site/docs-file-icons.ts: the file-type icons the docs use, cut from the
 // desktop app's sprite (@opencode/ui), so the site bundles a dozen icons instead of 1,089.
-// The names come from the shared mapping (chooseIconName) applied to every code block title in
-// the docs content and the filenames on /dev/docs-components, plus each icon's _light variant.
+// The names come from the shared mapping (chooseIconName) applied to every code block title and
+// every file and folder in a file tree ("├── name" lines) in the docs content, and the filenames on
+// /dev/docs-components, plus each icon's _light variant.
 // Run after adding a new kind of file to the docs: bun script/docs-file-icons.ts
 import { chooseIconName } from "@opencode/ui/icons/file-type-name"
 import { readdirSync } from "node:fs"
 import path from "node:path"
 
 const app = path.resolve(import.meta.dir, "..")
-const content = path.resolve(app, "../../../services/www/src/docs/content")
-const sprite = await Bun.file(path.resolve(app, "../../ui/src/components/file-icons/sprite.svg")).text()
+const content = path.resolve(app, "src/docs/content")
+const sprite = await Bun.file(path.resolve(app, "../../packages/ui/src/components/file-icons/sprite.svg")).text()
 
 const walk = (dir: string): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
@@ -19,13 +20,26 @@ const walk = (dir: string): string[] =>
         ? [path.join(dir, entry.name)]
         : [],
   )
-const titles = (
-  await Promise.all(
-    walk(content).map(async (file) => [...(await Bun.file(file).text()).matchAll(/```\w*\s+title="([^"]+)"/g)]),
-  )
+const sources = await Promise.all(walk(content).map((file) => Bun.file(file).text()))
+const titles = sources.flatMap((text) =>
+  [...text.matchAll(/```\w*\s+title="([^"]+)"/g)].map((match) => match[1].replace(/ \(excerpt\)$/, "")),
 )
-  .flat()
-  .map((match) => match[1])
+// File trees: the name after the "├── " prefix, without the note after it (two spaces or "←").
+const tree = sources
+  .flatMap((text) => [...text.matchAll(/```text\n([\s\S]*?)```/g)].map((match) => match[1]))
+  .filter((block) => /[├└]──/.test(block))
+  .flatMap((block) => block.split("\n"))
+  .map((line) => line.replace(/^[│├└─\s]+/, "").replace(/(\s{2,}|\s+←).*$/, ""))
+  .filter(Boolean)
+  .flatMap((name) =>
+    name
+      .replace(/\/$/, "")
+      .split("/")
+      .map((part, index, parts) => ({
+        name: part,
+        directory: index < parts.length - 1 || name.endsWith("/"),
+      })),
+  )
 // Filenames and folders shown on the site that aren't titles in the docs content.
 const site = [".env", ".github/workflows/opencode.yml", "mise.toml", "install.sh", "count-lines.ts", "release.md"]
 const folders = [".opencode", "agents", "commands", "plugins", "tools", ".github", "workflows"]
@@ -33,6 +47,7 @@ const folders = [".opencode", "agents", "commands", "plugins", "tools", ".github
 const names = new Set([
   ...[...titles, ...site].map((name) => chooseIconName(name, "file", false)),
   ...folders.map((name) => chooseIconName(name, "directory", false)),
+  ...tree.map((entry) => chooseIconName(entry.name, entry.directory ? "directory" : "file", false)),
   // The fallbacks.
   chooseIconName("unknown", "file", false),
   chooseIconName("unknown", "directory", false),

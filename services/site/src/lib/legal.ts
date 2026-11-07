@@ -1,8 +1,6 @@
 import { absoluteUrl, blocks, type MarkdownContext } from "~/lib/markdown"
 import { legalHistory, type LegalVersion } from "~/lib/legal/history"
-import { privacyPolicy } from "~/lib/legal/privacy-policy"
 import { legalSummaries } from "~/lib/legal/summaries"
-import { termsOfService } from "~/lib/legal/terms-of-service"
 
 /**
  * A legal document as a small HTML tree: `[tag, attributes, ...children]` or text. The page renders
@@ -23,15 +21,6 @@ export type LegalDocumentContent = {
   draft?: boolean
   body: LegalNode[]
 }
-
-/** The published legal documents, in the order the legal pages list them. */
-export const legalDocuments: LegalDocumentContent[] = [privacyPolicy, termsOfService]
-
-/**
- * Every document the legal pages list. Drafts pending legal review are kept outside the repository
- * until they are approved (test/legal-drafts.test.ts fails if one comes back).
- */
-export const legalPages: LegalDocumentContent[] = legalDocuments
 
 /** The text versions of a document, newest first (from git, see script/legal-history.ts). */
 export function legalVersions(path: string): LegalVersion[] {
@@ -59,45 +48,6 @@ export function legalDate(date: string) {
     year: "numeric",
     timeZone: "UTC",
   })
-}
-
-/**
- * The legal feed's entries (/legal/feed.xml): one per text version of a published document,
- * newest first.
- */
-export function legalFeedEntries() {
-  return legalDocuments
-    .flatMap((document) => legalVersions(document.path).map((version) => ({ document, version })))
-    .sort((a, b) => b.version.date.localeCompare(a.version.date))
-    .map(({ document, version }) => ({
-      id: `${absoluteUrl(document.path)}#${version.sha}`,
-      date: version.date,
-      page: absoluteUrl(document.path),
-      change: version.first ? version.source : version.diff,
-      title: version.first ? `${document.title} published` : `${document.title} changed`,
-      summary: version.first
-        ? `First version of the ${document.title}${version.effective ? `, effective ${version.effective}` : ""}.`
-        : `${version.addedCount} sentences added and ${version.removedCount} removed on ${legalDate(version.date)}${version.effective ? `. The document states the effective date ${version.effective}` : ""}. Commit: ${version.subject}`,
-    }))
-}
-
-/** The legal index as Markdown: the same documents, descriptions, dates and lines as the page. */
-export function legalHubMarkdown(context: MarkdownContext) {
-  return blocks(
-    "# Legal",
-    "The legal documents for the OpenCode website and hosted services.",
-    legalPages
-      .map(
-        (document) =>
-          `- [${document.title}](${absoluteUrl(context.route(document.path))}): ${document.description} (${legalDatesLine(document)})`,
-      )
-      .join("\n"),
-    [
-      `[Follow changes by RSS](${absoluteUrl("/legal/feed.xml")})`,
-      `[Brand and trademark guidelines](${absoluteUrl(context.route("/brand"))})`,
-      "[Open source license (MIT)](https://github.com/anomalyco/opencode/blob/dev/LICENSE)",
-    ].join(" · "),
-  )
 }
 
 export function legalMarkdown(document: LegalDocumentContent, context: MarkdownContext) {
@@ -194,6 +144,27 @@ function childrenOf(node: LegalElement) {
  */
 export function published(node: LegalNode) {
   return typeof node === "string" || node[1]["data-review"] === undefined
+}
+
+function legalText(node: LegalNode): string {
+  if (typeof node === "string") return node
+  const [, , ...children] = node
+  return children.filter(published).map(legalText).join("")
+}
+
+/** Each h2 and h3 of a legal document, with the text up to the next heading. */
+export function legalHeadings(document: LegalDocumentContent) {
+  return document.body
+    .filter(published)
+    .reduce<{ id: string; title: string; body: string; path: string; document: string }[]>((acc, node) => {
+      if (typeof node !== "string" && (node[0] === "h2" || node[0] === "h3") && node[1].id) {
+        acc.push({ id: node[1].id, title: legalText(node), body: "", path: document.path, document: document.title })
+        return acc
+      }
+      const last = acc.at(-1)
+      if (last && last.body.length < 600) last.body = `${last.body} ${legalText(node)}`.slice(0, 600)
+      return acc
+    }, [])
 }
 
 function elements(node: LegalElement) {

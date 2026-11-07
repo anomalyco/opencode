@@ -6,10 +6,12 @@ import {
   createUniqueId,
   For,
   Match,
+  lazy,
   on,
   onCleanup,
   onMount,
   Show,
+  Suspense,
   Switch,
   type JSX,
 } from "solid-js"
@@ -17,11 +19,12 @@ import { useNavigate, type Navigator } from "@solidjs/router"
 import { Link } from "@solidjs/meta"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
-import { useContent } from "~/i18n/content"
+import { useArea } from "~/i18n/content"
+import { extensionCardSource, productsSource } from "~/i18n/content/areas/products"
 import type { DownloadPlatform } from "~/routes/download/types"
 import {
   desktopBuilds,
-  detectDesktopBuild,
+  detectDesktopDownload,
   detectOS,
   getDownloadHref,
   getDownloadPlatform,
@@ -33,6 +36,7 @@ import { copyOnClick, copySelection } from "~/lib/clipboard"
 import { detectPlatform, isMobile, requestPlatform } from "~/lib/platform"
 import { Chevron, NewTab, PlatformIcon } from "./icons"
 import { onCloseMenus } from "./menu-open"
+import { placeMenu } from "./place-menu"
 import { Sheet, prefersSheet, type SheetControl } from "./sheet"
 import { holdPopstate } from "./popstate"
 import {
@@ -56,6 +60,9 @@ import { imageSources, loadStill, posterFile, Still, stillSizes, VideoSources } 
 import { inlineKey } from "~/lib/direction"
 
 export { installs, products, sdkSnippet, type ProductSlug } from "./product-data"
+
+// Loaded only for a fine pointer once the carousel's cards overflow (ProductCarousel).
+const ProductsArrows = lazy(() => import("./products-arrows"))
 
 /**
  * Loads a video again once it is on the page. A client-rendered video gets its src while it still
@@ -213,7 +220,7 @@ function shrink(slug: PageSlug, page: CardPage, saved: Scroll | undefined, go: (
  * place at the same size (products.css); no script decides any of it.
  */
 export function ProductCarouselSkeleton() {
-  const content = useContent()
+  const productCopy = useArea("products", productsSource)
   return (
     <div data-component="products-skeleton" data-phone-content={siteSettings.phoneCardContent} aria-hidden="true">
       <div data-slot="track">
@@ -222,10 +229,10 @@ export function ProductCarouselSkeleton() {
             <div data-component="product-card">
               <div data-slot="media" />
               <h3>
-                <span>{content().products[product.slug].name}</span>
+                <span>{productCopy()[product.slug].name}</span>
               </h3>
               <p>
-                <span>{designCopy(`card.${product.slug}.body`, content().products[product.slug].body)}</span>
+                <span>{designCopy(`card.${product.slug}.body`, productCopy()[product.slug].body)}</span>
               </p>
               <span data-slot="button" />
             </div>
@@ -239,11 +246,26 @@ export function ProductCarouselSkeleton() {
 export function ProductCarousel(props: { exclude?: ProductSlug; header?: JSX.Element }) {
   const i18n = useI18n()
   const language = useLanguage()
-  const content = useContent()
+  const extensionCardCopy = useArea("extensionCard", extensionCardSource)
+  const productCopy = useArea("products", productsSource)
   const navigate = useNavigate()
   let track: HTMLDivElement | undefined
+  // A mouse wheel can't scroll the cards sideways, so a fine pointer gets arrows, loaded once the
+  // cards overflow (products-arrows.tsx). Touch screens swipe and never load them.
+  const [arrows, setArrows] = createSignal(false)
 
-  onMount(() => trackScroll("/", track))
+  onMount(() => {
+    trackScroll("/", track)
+    const check = () => {
+      if (!track || track.scrollWidth - track.clientWidth < 2 || !matchMedia("(pointer: fine)").matches) return
+      setArrows(true)
+      window.removeEventListener("resize", check)
+    }
+    check()
+    if (arrows()) return
+    window.addEventListener("resize", check)
+    onCleanup(() => window.removeEventListener("resize", check))
+  })
 
   // The visitor's order (Mobile first on a phone or tablet), fixed at the first render.
   const order = deviceOrder(products)
@@ -267,6 +289,7 @@ export function ProductCarousel(props: { exclude?: ProductSlug; header?: JSX.Ele
   return (
     <section
       data-component="products"
+      data-section="products"
       data-layout="carousel"
       data-design="buttonHover cardTone cardInfo phoneCardContent cardVideo cardHover cardHoverEntry productBadges mobileCover mobileOrbShade cardLoopSpeed cardVideoCut cardTransition cardGrowDuration cardShrinkDuration cardEasing extensionsCard"
       data-tone={siteSettings.cardTone}
@@ -312,8 +335,8 @@ export function ProductCarousel(props: { exclude?: ProductSlug; header?: JSX.Ele
                 data-product={product.slug}
                 aria-label={
                   "isNew" in product && product.isNew && siteSettings.productBadges === "show"
-                    ? `${content().products[product.slug].name}, ${i18n.t("home.banner.badge")}`
-                    : content().products[product.slug].name
+                    ? `${productCopy()[product.slug].name}, ${i18n.t("home.banner.badge")}`
+                    : productCopy()[product.slug].name
                 }
                 onClick={(event) => grow(event, navigate, track?.getBoundingClientRect())}
                 onPointerEnter={() => heroPoster(product.slug)}
@@ -339,10 +362,10 @@ export function ProductCarousel(props: { exclude?: ProductSlug; header?: JSX.Ele
                 </Show>
               </a>
               <h3>
-                <a href={language.route(`/${product.slug}`)}>{content().products[product.slug].name}</a>
+                <a href={language.route(`/${product.slug}`)}>{productCopy()[product.slug].name}</a>
               </h3>
               <p data-design-copy={`card.${product.slug}.body`}>
-                {designCopy(`card.${product.slug}.body`, content().products[product.slug].body)}
+                {designCopy(`card.${product.slug}.body`, productCopy()[product.slug].body)}
               </p>
               <ProductAction slug={product.slug} split />
             </article>
@@ -354,24 +377,31 @@ export function ProductCarousel(props: { exclude?: ProductSlug; header?: JSX.Ele
               href={extensions.href}
               target="_blank"
               data-slot="media"
-              aria-label={i18n.t("site.newTab", { label: content().extensionCard.name })}
+              aria-label={i18n.t("site.newTab", { label: extensionCardCopy().name })}
             />
             <h3>
               <a href={extensions.href} target="_blank">
-                {content().extensionCard.name}
+                {extensionCardCopy().name}
                 <NewTab />
               </a>
             </h3>
             <p data-design-copy="card.extensions.body">
-              {designCopy("card.extensions.body", content().extensionCard.body)}
+              {designCopy("card.extensions.body", extensionCardCopy().body)}
             </p>
             <a href={extensions.href} target="_blank" data-component="site-button">
-              {content().extensionCard.action}
+              {extensionCardCopy().action}
               <NewTab />
             </a>
           </article>
         </Show>
       </div>
+      <Show when={arrows() && track}>
+        {(element) => (
+          <Suspense>
+            <ProductsArrows track={element()} />
+          </Suspense>
+        )}
+      </Show>
     </section>
   )
 }
@@ -446,13 +476,14 @@ const cardCopy = (slug: PageSlug) => `card.${slug}.body` as const
 export function ProductGrid() {
   const i18n = useI18n()
   const language = useLanguage()
-  const content = useContent()
+  const productCopy = useArea("products", productsSource)
   const navigate = useNavigate()
   onMount(() => trackScroll("/product"))
 
   return (
     <section
       data-component="products"
+      data-section="products"
       data-layout="grid"
       data-design="buttonHover productButton cardTone cardInfo cardVideo cardHover cardHoverEntry productBadges mobileCover mobileOrbShade cardLoopSpeed cardVideoCut cardTransition cardGrowDuration cardShrinkDuration cardEasing"
       data-tone={siteSettings.cardTone}
@@ -473,8 +504,8 @@ export function ProductGrid() {
                 data-product={product.slug}
                 aria-label={
                   "isNew" in product && product.isNew && siteSettings.productBadges === "show"
-                    ? `${content().products[product.slug].name}, ${i18n.t("home.banner.badge")}`
-                    : content().products[product.slug].name
+                    ? `${productCopy()[product.slug].name}, ${i18n.t("home.banner.badge")}`
+                    : productCopy()[product.slug].name
                 }
                 data-empty={pageMedia(siteSettings.productVideos, product.slug, "portrait") ? undefined : ""}
                 onClick={(event) => grow(event, navigate)}
@@ -517,10 +548,10 @@ export function ProductGrid() {
                 </Show>
               </a>
               <h3>
-                <a href={language.route(`/${product.slug}`)}>{content().products[product.slug].name}</a>
+                <a href={language.route(`/${product.slug}`)}>{productCopy()[product.slug].name}</a>
               </h3>
               <p data-design-copy={cardCopy(product.slug)}>
-                {designCopy(cardCopy(product.slug), content().products[product.slug].body)}
+                {designCopy(cardCopy(product.slug), productCopy()[product.slug].body)}
               </p>
               <ProductAction slug={product.slug} split />
             </article>
@@ -924,13 +955,14 @@ export function useDevicePlatform() {
 export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: boolean }) {
   const language = useLanguage()
   const i18n = useI18n()
-  const content = useContent()
+  const extensionCardCopy = useArea("extensionCard", extensionCardSource)
+  const productCopy = useArea("products", productsSource)
   // The server and hydration read the same platform (requestPlatform), so the button renders
   // "Download for macOS" at its final width instead of growing after load.
   const platform = useDevicePlatform()
   const mobile = () => isMobile(platform())
   const [os, setOS] = createSignal<OS>(requestOS())
-  // The exact build for this computer, once the browser has said (the Mac's chip; detectDesktopBuild).
+  // The build for this computer, once the browser has said (the Mac's chip, Windows or Linux on ARM64; detectDesktopDownload).
   const [build, setBuild] = createSignal<DownloadPlatform>()
   const [open, setOpen] = createSignal(false)
   onCloseMenus(() => setOpen(false))
@@ -970,7 +1002,7 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
   onMount(() => {
     setOS(detectOS())
     setSheet(prefersSheet())
-    if (props.slug === "desktop") void detectDesktopBuild().then(setBuild)
+    if (props.slug === "desktop") void detectDesktopDownload().then(setBuild)
     const close = (event: Event) => {
       if (event instanceof KeyboardEvent && event.key !== "Escape") return
       if (event instanceof MouseEvent && menu?.contains(event.target as Node)) return
@@ -1099,7 +1131,7 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
     if (openSheet()) return
     setOpen(!open())
     const panel = menu?.querySelector<HTMLElement>('[data-slot="menu"]')
-    if (panel) fitMenu(panel)
+    if (panel) placeMenu(panel)
     // From the keyboard, focus moves into the menu.
     if (open() && event.detail === 0)
       menu?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true })
@@ -1254,13 +1286,13 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
         </Match>
         <Match when={props.slug === "sdk"}>
           <a href={language.route(sdkDocs)} data-component="site-button">
-            {content().products.sdk.action}
+            {productCopy().sdk.action}
           </a>
         </Match>
         {/* The VS Code extension; ACP editors are on its page. */}
         <Match when={props.slug === "ide"}>
           <a href={extensions.href} target="_blank" rel="noopener" data-component="site-button">
-            {content().extensionCard.action}
+            {extensionCardCopy().action}
             <NewTab />
           </a>
         </Match>
@@ -1276,7 +1308,7 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
                 if (openSheet()) return
                 setOpen(!open())
                 const panel = menu?.querySelector<HTMLElement>('[data-slot="menu"]')
-                if (panel) fitMenu(panel)
+                if (panel) placeMenu(panel)
               }}
             >
               {props.slug === "mobile" ? i18n.t("download.action.download") : i18n.t("download.action.install")}
@@ -1309,6 +1341,8 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
                         type="button"
                         data-slot="install"
                         data-copied={copied() === item.id ? "" : undefined}
+                        data-funnel-copy="terminal"
+                        data-funnel-method={item.id}
                         onClick={() => copy(item)}
                       >
                         <span data-slot="method">{item.id}</span>
@@ -1371,6 +1405,8 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
                           type="button"
                           data-slot="row"
                           data-copied={copied() === item.id ? "" : undefined}
+                          data-funnel-copy="terminal"
+                          data-funnel-method={item.id}
                           onClick={() => copy(item)}
                         >
                           <span data-slot="method">{item.id}</span>
@@ -1477,6 +1513,7 @@ export function InstallTabs() {
               aria-controls={`${id}-panel`}
               aria-selected={selected() === index() ? "true" : "false"}
               tabIndex={selected() === index() ? 0 : -1}
+              data-funnel={`install-tab:${item.id}`}
               onClick={() => select(index())}
               onKeyDown={(event) => keyDown(event, index())}
             >
@@ -1485,7 +1522,16 @@ export function InstallTabs() {
           )}
         </For>
       </div>
-      <div data-slot="code" id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-tab-${selected()}`}>
+      <div
+        data-slot="code"
+        id={`${id}-panel`}
+        role="tabpanel"
+        aria-labelledby={`${id}-tab-${selected()}`}
+        data-funnel-copy="terminal"
+        data-funnel-method={installs[selected()].id}
+        // A control for the tracker, as a click on the command copies too.
+        data-funnel="copy"
+      >
         <code data-copy-command {...copyOnClick(copy)}>
           {installs[selected()].command}
         </code>
@@ -1515,26 +1561,6 @@ function elementReady(selector: string) {
     observer.observe(document.body, { childList: true, subtree: true })
     const timer = setTimeout(done, 1000)
   })
-}
-
-/**
- * Keeps an open menu inside the carousel's visible area (or the window, outside the carousel),
- * which would otherwise cut it off: no wider than that area and 8px clear of the window's edges
- * (long install commands wrap), and slid sideways just enough.
- */
-function fitMenu(panel: HTMLElement) {
-  const area = panel.closest('[data-slot="track"]')?.getBoundingClientRect() ?? new DOMRect(0, 0, window.innerWidth)
-  // Never closer than 16px to a screen edge; on phones the menu takes that whole width, so the
-  // install commands get as much room as there is (each still one line, cut with an ellipsis).
-  const left = Math.max(area.left, 16)
-  const right = Math.min(area.right, window.innerWidth - 16)
-  panel.style.maxWidth = `${right - left}px`
-  panel.style.width = window.matchMedia("(max-width: 40rem)").matches ? `${right - left}px` : ""
-  // Laid out, not as drawn: the opening animation scales the menu from a corner.
-  const parent = (panel.offsetParent ?? document.body).getBoundingClientRect()
-  const start = parent.left + panel.offsetLeft
-  const shift = Math.max(left - start, Math.min(0, right - (start + panel.offsetWidth)))
-  panel.style.translate = shift ? `${Math.round(shift)}px 0` : ""
 }
 
 // The card transition running now. A newer one (back during a grow) owns the page's markers.

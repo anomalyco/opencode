@@ -24,14 +24,15 @@ export function FileTypeIcon(props: { path: string; directory?: boolean }) {
 /**
  * A file tree from "├── name" lines, each file and folder with its icon; folders end in "/". Each
  * row carries its depth (--depth, one per four prefix characters) and whether it's a folder, so the
- * minimal File tree options can drop the box-drawing prefix and indent or draw guides instead.
+ * minimal File tree options can drop the box-drawing prefix and indent or draw guides instead. A note
+ * after a name (two spaces or "←" on) shows after it, muted.
  */
 export function FileTree(props: { tree: string }) {
   const rows = () =>
     props.tree.split("\n").map((line) => {
       const at = line.search(/[^│├└─\s]/)
-      const name = line.slice(at)
-      return { prefix: line.slice(0, at), name, directory: name.endsWith("/"), depth: Math.round(at / 4) }
+      const [, name, note] = line.slice(at).match(/^(.*?)((?:\s{2,}|\s+←).*)?$/) ?? ["", line, undefined]
+      return { prefix: line.slice(0, at), name, note, directory: name.endsWith("/"), depth: Math.round(at / 4) }
     })
   return (
     <pre data-component="file-tree" aria-label="Files" tabIndex={0}>
@@ -41,6 +42,7 @@ export function FileTree(props: { tree: string }) {
             <span data-slot="tree-prefix">{row.prefix}</span>
             <FileTypeIcon path={row.name.replace(/\/$/, "")} directory={row.directory} />
             <span data-slot="tree-name">{row.name}</span>
+            <Show when={row.note}>{(note) => <span data-slot="tree-note">{note()}</span>}</Show>
             {index() < rows().length - 1 ? "\n" : ""}
           </span>
         )}

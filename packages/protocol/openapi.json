@@ -16673,6 +16673,9 @@
               "artifacts": {
                 "type": "boolean"
               },
+              "codemode_vm": {
+                "type": "boolean"
+              },
               "part_rows": {
                 "type": "boolean"
               },
