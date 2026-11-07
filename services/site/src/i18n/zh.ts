@@ -487,7 +487,6 @@ export const dict = {
   "site.code.failed": "失败",
   "site.code.copied": "已复制到剪贴板",
   "site.code.failedHint": "无法复制，请手动选择代码。",
-  "site.companions.free": "免费",
   "home.openSource.star": "在 GitHub 上加星标",
   "home.openSource.starCount": "，{{count}} 个星标",
   "home.openSource.contribute": "参与贡献",

@@ -10,9 +10,9 @@ import { SectionHeading } from "./on-this-page"
 import { siteSettings } from "./settings"
 
 /**
- * "Works great with OpenCode": Anomaly's apps in one row, like an app store shelf (icon, name,
- * category, Free button), the same on every product page. On phones the row scrolls sideways. The
- * `companionStyle` setting swaps the ruled grid for grey tiles or a ruled list.
+ * "Works great with OpenCode": Anomaly's apps in one row (icon, name and category), the same on
+ * every product page. On phones the row scrolls sideways. The `companionStyle` setting swaps the
+ * ruled grid for grey tiles or a ruled list.
  */
 export function Companions() {
   const i18n = useI18n()
@@ -43,17 +43,6 @@ export function Companions() {
                     </span>
                   </a>
                   <span data-slot="category">{appCopy()[app.id].category}</span>
-                  {/* The same link again, so screen readers and the tab order skip it. */}
-                  <a
-                    data-slot="get"
-                    href={link.href}
-                    target={target}
-                    rel={rel}
-                    tabindex="-1"
-                    aria-hidden="true"
-                  >
-                    {i18n.t("site.companions.free")}
-                  </a>
                 </li>
               )
             }}

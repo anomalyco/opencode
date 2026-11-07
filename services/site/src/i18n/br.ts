@@ -484,7 +484,6 @@ export const dict = {
   "site.code.failed": "Falhou",
   "site.code.copied": "Copiado",
   "site.code.failedHint": "Não foi possível copiar. Selecione o código.",
-  "site.companions.free": "Grátis",
   "site.announcement.label": "Novo. {{message}}",
   "site.announcement.aside": "Novidades do OpenCode",
   "site.announcement.dismiss": "Dispensar aviso",

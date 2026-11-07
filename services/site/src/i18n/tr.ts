@@ -484,7 +484,6 @@ export const dict = {
   "site.code.failed": "Başarısız",
   "site.code.copied": "Panoya kopyalandı",
   "site.code.failedHint": "Kopyalanamadı. Kodu elle seçin.",
-  "site.companions.free": "Ücretsiz",
   "site.announcement.label": "Yeni. {{message}}",
   "site.announcement.aside": "OpenCode'da yeni",
   "site.announcement.dismiss": "Duyuruyu kapat",
