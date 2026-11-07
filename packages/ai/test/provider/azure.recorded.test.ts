@@ -63,7 +63,8 @@ describe("Azure OpenAI recorded", () => {
   recorded.effect("messages streams text", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        ai.request({ model: messagesModel, prompt: "Reply with exactly one word: hola" }),
+        // The Messages recordings predate cache markers on Azure; pin the policy off so they still replay.
+        ai.request({ model: messagesModel, prompt: "Reply with exactly one word: hola", cache: "none" }),
       )
 
       expect(response.text.toLowerCase()).toContain("hola")
@@ -75,6 +76,7 @@ describe("Azure OpenAI recorded", () => {
       const response = yield* LLMClient.generate(
         ai.request({
           model: messagesModel,
+          cache: "none",
           prompt: "What is the weather in Paris? Use the lookup_weather tool.",
           tools: [lookupWeather],
         }),
