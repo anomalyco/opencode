@@ -43,7 +43,8 @@ describe("CodeMode", () => {
             description: "Echo text",
             signature: "tools.echo({\n  text: string,\n}): Promise<string>",
             pinned: true,
-            parameters: ["text"],
+            compactSignature: "tools.echo({ text: string }): Promise<string>",
+            parameters: { required: ["text"], optional: [] },
           },
           {
             type: "namespace",
@@ -79,7 +80,8 @@ describe("CodeMode", () => {
           type: "tool",
           name: "measure",
           description: "Measure",
-          parameters: ["ref", "amount", "sentinel"],
+          parameters: { required: ["ref", "amount", "sentinel"], optional: [] },
+          compactSignature: expect.any(String),
           signature: [
             "tools.measure({",
             "  /** Element ref */",

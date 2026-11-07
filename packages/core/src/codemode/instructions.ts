@@ -13,7 +13,7 @@ const prompt = `# Code Mode
 
 The tools listed below, and \`search\`, cannot be called directly: they only work as JavaScript inside the \`execute\` tool. Every other tool you have is a normal tool call: call it directly, never inside \`execute\`.
 
-Each namespace lists its tools by name with their required parameters, and \`…\` when a tool also takes optional ones; a tool listed without parentheses takes input the list cannot summarize. Pinned tools show their full signature. Before calling a tool whose signature is not shown, get it with the global \`search(...)\` function, for example \`search({ query: "tools.ns.tool_name" })\`, and return the result; one \`execute\` can search for several tools. For a namespace that lists fewer tools than it has, find the rest the same way. Do not guess tool names or arguments. Each result's \`path\` is the complete call expression: write it out as code, for example \`await tools.ns.tool_name({ ... })\`, and call a name that is not a JavaScript identifier with brackets, as in \`tools.ns["tool-name"]({ ... })\`. Do not use a path as a key such as \`tools[path]\`.
+Each namespace lists its tools with as much detail as fits: with their signatures, or by name with their parameters, where \`?\` marks an optional parameter and \`…\` stands for optional ones not shown; a tool listed without parentheses takes input the list cannot summarize. Before calling a tool whose signature is not shown, get it with the global \`search(...)\` function, for example \`search({ query: "tools.ns.tool_name" })\`, and return the result; one \`execute\` can search for several tools. For a namespace that lists fewer tools than it has, find the rest the same way. Do not guess tool names or arguments. Each result's \`path\` is the complete call expression: write it out as code, for example \`await tools.ns.tool_name({ ... })\`, and call a name that is not a JavaScript identifier with brackets, as in \`tools.ns["tool-name"]({ ... })\`. Do not use a path as a key such as \`tools[path]\`.
 
 - ${searchSignature}
 
@@ -66,25 +66,26 @@ ${render(current)}`
 
 // One namespace's change under its new header: marked lines for the tools new, changed or gone, or its whole listing
 // when that is shorter. A namespace too large to list in full can drop a name without losing the tool, so it says
-// "listed" there; a tool that only moved between pinned and listed by name is not gone.
+// "listed" there; a tool that only moved between a signature and a name is not gone.
 function changes(previous: CodeModeCatalog.Section, current: CodeModeCatalog.Section) {
   const names = Instructions.diffByKey(previous.names, current.names, toolName, (before, after) => before !== after)
-  const pinned = Instructions.diffByKey(
-    previous.pinned,
-    current.pinned,
+  const listings = Instructions.diffByKey(
+    previous.listings,
+    current.listings,
     (entry) => entry.path,
     (before, after) => before.line !== after.line,
   )
   const present = new Set([
     ...current.names.map(toolName),
-    ...current.pinned.map((entry) => pinnedName(current, entry)),
+    ...current.listings.map((entry) => listingName(current, entry)),
   ])
-  const gone = [...pinned.removed.map((entry) => pinnedName(previous, entry)), ...names.removed.map(toolName)].filter(
-    (name) => !present.has(name),
-  )
-  const signatures = [...pinned.added, ...pinned.changed.map((change) => change.current)]
+  const gone = [
+    ...listings.removed.map((entry) => listingName(previous, entry)),
+    ...names.removed.map(toolName),
+  ].filter((name) => !present.has(name))
+  const signatures = [...listings.added, ...listings.changed.map((change) => change.current)]
   const listed = [...names.added, ...names.changed.map((change) => change.current)]
-  const capped = current.pinned.length + current.names.length < current.count
+  const capped = current.listings.length + current.names.length < current.count
   const marked = [
     ...(signatures.length === 0 ? [] : ["  - new or changed signatures:", ...signatures.map((entry) => entry.line)]),
     ...(listed.length === 0 ? [] : [`  - new or changed: ${listed.join(", ")}`]),
@@ -103,8 +104,9 @@ function toolName(listing: string) {
   return open === -1 ? listing : listing.slice(0, open)
 }
 
-// The name a pinned tool would have if it were listed by name, so a tool moving between the two is recognized.
-function pinnedName(section: CodeModeCatalog.Section, entry: { readonly path: string }) {
+// The name a tool listed with its signature would have if it were listed by name, so a tool moving between the two
+// is recognized.
+function listingName(section: CodeModeCatalog.Section, entry: { readonly path: string }) {
   return entry.path === section.name ? toolExpression(entry.path) : entry.path.slice(section.name.length + 1)
 }
 

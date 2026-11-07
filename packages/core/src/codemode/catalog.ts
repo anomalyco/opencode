@@ -7,11 +7,13 @@ export type Tool = {
   readonly type: "tool"
   readonly name: string
   readonly description: string
-  /** Read only for pinned tools; listing a tool by name needs no signature. */
+  /** Full signature with doc comments. Read only when a namespace is listed at that detail. */
   readonly signature: string
+  /** Signature on one line, without doc comments. Read only when a namespace is listed at that detail. */
+  readonly compactSignature?: string
   readonly pinned?: boolean
-  /** Required parameter names, then `…` when the tool also takes optional ones. Absent when unknown. */
-  readonly parameters?: ReadonlyArray<string>
+  /** Parameter names. Absent when the input is not a plain object. */
+  readonly parameters?: { readonly required: ReadonlyArray<string>; readonly optional: ReadonlyArray<string> }
 }
 
 export type Namespace = {
@@ -29,15 +31,16 @@ const Listing = Schema.Struct({
   path: Schema.String,
   line: Schema.String,
 })
+type Listing = typeof Listing.Type
 
 /** One namespace's part of the catalog, built from that namespace's tools alone. */
 const Section = Schema.Struct({
   name: Schema.String,
   description: Schema.optionalKey(Schema.String),
   count: Schema.Number,
-  /** Pinned tools, with full signatures. */
-  pinned: Schema.Array(Listing),
-  /** The other tools by name and required parameters, in path order, as many as fit the section budget. */
+  /** Tools listed one per line with a signature: pinned tools, and every tool when the namespace fits that way. */
+  listings: Schema.Array(Listing),
+  /** The other tools on one line, by name and parameters, in path order, as many as fit. */
   names: Schema.Array(Schema.String),
 })
 export type Section = typeof Section.Type
@@ -49,18 +52,24 @@ export const Summary = Schema.Struct({
 export type Summary = typeof Summary.Type
 
 export type Options = {
-  /** Tokens each namespace may spend on names. */
+  /** Tokens each namespace may spend on listing its tools. */
   readonly budget?: number
 }
 
 const DESCRIPTION_LIMIT = 120
 const CHARACTERS_PER_TOKEN = 4
-// Enough for every tool of a typical MCP server; a larger one lists what fits and the rest is found with search.
 const SECTION_BUDGET = 1_500
+// A signature costs at least this many tokens, so a namespace with more tools than budget / this cannot list them
+// all with signatures and is not rendered at that detail.
+const SIGNATURE_FLOOR = 20
 const LISTING_PREFIX = "  - "
 
+type Entry = { readonly path: string; readonly tool: Tool }
+
 // Each namespace's section depends only on its own tools, so a namespace coming, going or changing leaves the
-// others as they were, and a catalog update can restate just the sections that changed.
+// others as they were, and a catalog update can restate just the sections that changed. Each namespace is listed at
+// the most detail that fits its budget whole: full signatures, then one-line signatures, then names with every
+// parameter, then names with required parameters; past that, as many bare names as fit.
 export function summarize(inventory: Inventory, options: Options = {}): Summary {
   const budget = options.budget ?? SECTION_BUDGET
   const flattened = flatten(inventory.tools)
@@ -71,29 +80,49 @@ export function summarize(inventory: Inventory, options: Options = {}): Summary 
       .map(([name, tools]) => {
         const sorted = tools.toSorted((left, right) => compare(left.path, right.path))
         const description = flattened.namespaces.get(name)?.description
+        const pinned = sorted.filter((entry) => entry.tool.pinned).map((entry) => listing(entry, entry.tool.signature))
         return {
           name,
           ...(description === undefined ? {} : { description }),
           count: tools.length,
-          pinned: sorted
-            .filter((entry) => entry.tool.pinned)
-            .map((entry) => ({
-              path: entry.path,
-              line: `${LISTING_PREFIX}${entry.tool.signature}${suffix(entry.tool)}`,
-            })),
-          names: fit(
-            sorted
-              .filter((entry) => !entry.tool.pinned)
-              .map((entry) => {
-                // A tool at the namespace's own path, with no namespace or with child tools, has no shorter name.
-                const short = entry.path === name ? toolExpression(entry.path) : entry.path.slice(name.length + 1)
-                return entry.tool.parameters ? `${short}(${entry.tool.parameters.join(", ")})` : short
-              }),
+          ...detail(
+            name,
+            sorted.filter((entry) => !entry.tool.pinned),
             budget,
+            pinned,
           ),
         }
       }),
   }
+}
+
+function detail(namespace: string, entries: ReadonlyArray<Entry>, budget: number, pinned: ReadonlyArray<Listing>) {
+  const signed = entries.length * SIGNATURE_FLOOR <= budget
+  for (const signature of signed ? [(tool: Tool) => tool.signature, (tool: Tool) => tool.compactSignature] : []) {
+    const listings = entries.map((entry) => listing(entry, signature(entry.tool) ?? entry.tool.signature))
+    if (listings.reduce((total, item) => total + cost(item.line.length), 0) <= budget)
+      return { listings: [...pinned, ...listings], names: [] }
+  }
+  const short = (entry: Entry) =>
+    entry.path === namespace ? toolExpression(entry.path) : entry.path.slice(namespace.length + 1)
+  const all = entries.map((entry) => {
+    const parameters = entry.tool.parameters
+    if (!parameters) return short(entry)
+    return `${short(entry)}(${[...parameters.required, ...parameters.optional.map((name) => `${name}?`)].join(", ")})`
+  })
+  const required = entries.map((entry) => {
+    const parameters = entry.tool.parameters
+    if (!parameters) return short(entry)
+    return `${short(entry)}(${[...parameters.required, ...(parameters.optional.length > 0 ? ["…"] : [])].join(", ")})`
+  })
+  const fits = (names: ReadonlyArray<string>) =>
+    names.reduce((total, name) => total + cost(name.length + 2), 0) <= budget
+  const names = fits(all) ? all : fits(required) ? required : fit(entries.map(short), budget)
+  return { listings: [...pinned], names }
+}
+
+function listing(entry: Entry, signature: string): Listing {
+  return { path: entry.path, line: `${LISTING_PREFIX}${signature}${suffix(entry.tool)}` }
 }
 
 /** The leading names whose cost fits `budget`. */
@@ -137,16 +166,16 @@ function flatten(entries: ReadonlyArray<Tool | Namespace>, path: ReadonlyArray<s
 /** A section's header: its name, how many tools it has and how many it lists, and its description. */
 export function namespaceLine(section: Section) {
   const count = section.count === 1 ? "1 tool" : `${section.count} tools`
-  const listed = section.pinned.length + section.names.length
+  const listed = section.listings.length + section.names.length
   const label = listed === section.count ? count : `${count}, ${listed} listed; search for the rest`
   return `- ${section.name} (${label})${section.description === undefined ? "" : ` // ${section.description}`}`
 }
 
-/** A section as the model reads it: its header, its pinned signatures, then the other tools' names. */
+/** A section as the model reads it: its header, the tools listed with signatures, then the other tools' names. */
 export function renderSection(section: Section) {
   return [
     namespaceLine(section),
-    ...section.pinned.map((entry) => entry.line),
+    ...section.listings.map((entry) => entry.line),
     ...(section.names.length === 0 ? [] : [`${LISTING_PREFIX}${section.names.join(", ")}`]),
   ].join("\n")
 }

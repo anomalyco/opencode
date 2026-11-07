@@ -35,7 +35,7 @@ describe("CodeModeInstructions", () => {
       const added = yield* readUpdate(CodeModeInstructions.make({ tools: [echo] }), initialized)
       expect(added.text).toContain("This catalog supersedes the previous Code Mode tool catalog.")
       expect(added.text).toContain("they only work as JavaScript inside the `execute` tool")
-      expect(added.text).toContain("- notes (1 tool)\n  - echo")
+      expect(added.text).toContain(`- notes (1 tool)\n  - ${echo.signature} // Echo text`)
 
       expect(yield* readUpdate(CodeModeInstructions.make({ tools: [] }), { values: added.values })).toMatchObject({
         text:
@@ -52,11 +52,11 @@ describe("CodeModeInstructions", () => {
         "The tools listed below, and `search`, cannot be called directly: they only work as JavaScript inside the `execute` tool.",
       )
       expect(initialized.text).toContain("## Code Mode tools (call only inside `execute`)")
-      expect(initialized.text).toContain("- notes (1 tool)\n  - echo")
+      expect(initialized.text).toContain(`- notes (1 tool)\n  - ${echo.signature} // Echo text`)
 
       const added = yield* readUpdate(CodeModeInstructions.make({ tools: [echo, lookup] }), initialized)
       expect(added.text).toBe(
-        "The Code Mode tool catalog has changed.\n\nNew tool namespaces are available:\n- orders (1 tool)\n  - lookup",
+        `The Code Mode tool catalog has changed.\n\nNew tool namespaces are available:\n- orders (1 tool)\n  - ${lookup.signature} // Look up an order`,
       )
 
       const removed = yield* readUpdate(CodeModeInstructions.make({ tools: [echo] }), { values: added.values })

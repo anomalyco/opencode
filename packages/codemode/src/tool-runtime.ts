@@ -87,6 +87,8 @@ export type ToolDescription = {
   readonly path: string
   readonly description: string
   readonly signature: string
+  /** The signature on one line, without doc comments, for listings that need to stay short. */
+  readonly compactSignature: string
 }
 
 const defaultSearchLimit = 10
@@ -171,6 +173,7 @@ const flattenTools = <R>(
 
 const describeTool = <R>(visible: VisibleTool<R>): ToolDescription => {
   let signature: string | undefined
+  let compact: string | undefined
   return {
     path: visible.path,
     description: visible.tool.description,
@@ -181,6 +184,13 @@ const describeTool = <R>(visible: VisibleTool<R>): ToolDescription => {
         toolExpression(visible.path),
         isEmptyInput(visible.tool) ? "()" : `(${inputTypeScript(visible.tool, true)})`,
         `: Promise<${outputTypeScript(visible.tool, true)}>`,
+      ].join(""))
+    },
+    get compactSignature() {
+      return (compact ??= [
+        toolExpression(visible.path),
+        isEmptyInput(visible.tool) ? "()" : `(${inputTypeScript(visible.tool)})`,
+        `: Promise<${outputTypeScript(visible.tool)}>`,
       ].join(""))
     },
   }

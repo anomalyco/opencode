@@ -2409,7 +2409,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("First")
     const alpha = yield* section("alpha")
     expect(catalogOf(s.requests.at(-1))).toContain(alpha)
-    expect(alpha).toContain("alpha_0(id, …)")
+    expect(alpha).toContain(
+      "  - tools.alpha.alpha_0({\n  id: string,\n  note?: string,\n}): Promise<string> // alpha tool 0",
+    )
 
     const beta = yield* register("beta", 5)
     yield* s.runPrompt("Second")
@@ -2434,7 +2436,8 @@ describe("SessionRunnerLLM", () => {
     expect(updates(s.requests.at(-1)).at(-1)).toBe(
       "The Code Mode tool catalog has changed.\n\n" +
         `${CHANGED}\n` +
-        "- alpha (13 tools)\n  - new or changed: alpha_12(id, …)",
+        "- alpha (13 tools)\n  - new or changed signatures:\n" +
+        "  - tools.alpha.alpha_12({\n  id: string,\n  note?: string,\n}): Promise<string> // alpha tool 12",
     )
 
     // Compaction restates the stored catalog as the new baseline and has no update to send.
@@ -2479,7 +2482,7 @@ describe("SessionRunnerLLM", () => {
         .find((text) => text.includes("# Code Mode")) ?? ""
     expect(catalog).toContain("- small (3 tools)\n")
     expect(catalog).toMatch(/- huge \(800 tools, \d+ listed; search for the rest\)/)
-    expect(catalog).toContain("small_2_with_a_long_descriptive_name(account, zone, record)")
+    expect(catalog).toContain("  - tools.small.small_2_with_a_long_descriptive_name({")
   })
 
   scenario("rebuilds a consistent Code Mode catalog when a revert removes its update", function* (s) {

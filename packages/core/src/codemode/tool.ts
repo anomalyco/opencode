@@ -238,6 +238,9 @@ export const catalog = (inventory: Inventory) => {
       get signature() {
         return tool.signature
       },
+      get compactSignature() {
+        return tool.compactSignature
+      },
       pinned: pinned.has(tool.path),
       ...(registration === undefined ? {} : { parameters: parameters(described(inventory, registration).inputSchema) }),
     }
@@ -266,7 +269,7 @@ const InputShape = Schema.Struct({
 })
 const decodeInputShape = Schema.decodeUnknownOption(InputShape)
 
-// Required parameter names, then `…` when the tool also takes optional ones. Undefined unless the input is a plain
+// Required and optional parameter names. Undefined unless the input is a plain
 // object, such as a union or a record, whose parameters a list of names would misstate; it is then listed by name.
 function parameters(schema: unknown) {
   const shape = Option.getOrUndefined(decodeInputShape(schema))
@@ -279,8 +282,10 @@ function parameters(schema: unknown) {
   const open = root.additionalProperties !== undefined && root.additionalProperties !== false
   if (composed || (root.properties === undefined && (root.type !== "object" || open))) return undefined
   const names = Object.keys(root.properties ?? {})
-  const required = names.filter((key) => root.required?.includes(key))
-  return required.length < names.length ? [...required, "…"] : required
+  return {
+    required: names.filter((key) => root.required?.includes(key)),
+    optional: names.filter((key) => !root.required?.includes(key)),
+  }
 }
 
 function renderCatalog(root: CatalogNode): ReadonlyArray<CodeModeCatalog.Tool | CodeModeCatalog.Namespace> {

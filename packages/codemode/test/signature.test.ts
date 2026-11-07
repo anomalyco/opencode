@@ -1083,3 +1083,31 @@ describe("non-identifier tool paths", () => {
     expect(value.items[0]?.signature).toContain('tools.context7["resolve-library-id"]({')
   })
 })
+
+describe("compact catalog signature", () => {
+  test("puts the whole signature on one line without doc comments", () => {
+    const runtime = CodeMode.make({
+      tools: {
+        orders: {
+          update: Tool.make({
+            description: "Update an order",
+            input: {
+              type: "object",
+              properties: {
+                id: { type: "string", description: "Order id" },
+                patch: { type: "object", properties: { status: { type: "string", enum: ["open", "closed"] } } },
+              },
+              required: ["id", "patch"],
+            },
+            output: Schema.String,
+            execute: () => Effect.succeed("ok"),
+          }),
+        },
+      },
+    })
+    expect(runtime.catalog[0]?.compactSignature).toBe(
+      'tools.orders.update({ id: string; patch: { status?: "open" | "closed" } }): Promise<string>',
+    )
+    expect(runtime.catalog[0]?.signature).toContain("/** Order id */")
+  })
+})

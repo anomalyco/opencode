@@ -612,6 +612,7 @@ describe("CodeMode schema flexibility", () => {
         path: "adapter.call",
         description: "Call an adapter-described tool",
         signature: "tools.adapter.call({\n  id: string,\n  count?: number,\n}): Promise<void>",
+        compactSignature: expect.any(String),
       },
     ])
 
@@ -695,6 +696,7 @@ describe("CodeMode schema flexibility", () => {
         path: "users.lookup",
         description: "Look up a user",
         signature: "tools.users.lookup({\n  login: string,\n}): Promise<{\n  login: string,\n  id: number,\n}>",
+        compactSignature: expect.any(String),
       },
     ])
 
@@ -768,6 +770,7 @@ describe("CodeMode public contract", () => {
         path: "orders.lookup",
         description: "Look up an order by ID",
         signature: "tools.orders.lookup({\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}>",
+        compactSignature: expect.any(String),
       },
     ])
 
@@ -822,6 +825,7 @@ describe("CodeMode public contract", () => {
         path: "context7.resolve-library-id",
         description: "Resolve a library ID",
         signature: 'tools.context7["resolve-library-id"]({\n  libraryName: string,\n}): Promise<string>',
+        compactSignature: expect.any(String),
       },
     ])
 
