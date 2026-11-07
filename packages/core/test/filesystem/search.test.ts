@@ -1,11 +1,12 @@
 import { describe, expect, spyOn } from "bun:test"
 import fuzzysort from "fuzzysort"
-import { mkdir } from "node:fs/promises"
+import { mkdir, symlink } from "node:fs/promises"
 import os from "os"
 import path from "path"
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Environment } from "@opencode/core/environment/index"
 import { FileSystem } from "@opencode/core/filesystem"
 import { Protected } from "@opencode/core/filesystem/protected"
 import { FileSystemSearch } from "@opencode/core/filesystem/search"
@@ -380,5 +381,114 @@ describe("FileSystemSearch", () => {
         expect(cleanup).toHaveBeenCalledTimes(3)
       }).pipe(Effect.provide(layer))
     }),
+  )
+
+  // Symlink creation needs elevated privileges on Windows.
+  ;(process.platform === "win32" ? it.live.skip : it.live)(
+    "indexes symlinks to files without following symlinked directories",
+    () =>
+      Effect.gen(function* () {
+        const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-search-symlink-"))))
+          .path
+        yield* Effect.promise(async () => {
+          await Bun.write(path.join(directory, ".agents/AGENTS.md"), "rules")
+          await Bun.write(path.join(directory, "app/index.ts"), "app")
+          await Bun.write(path.join(directory, ".ignore"), "ignored.md\n")
+          await symlink(".agents/AGENTS.md", path.join(directory, "AGENTS.md"))
+          await symlink("../.agents/AGENTS.md", path.join(directory, "app/AGENTS.md"))
+          await symlink(".agents/AGENTS.md", path.join(directory, "ignored.md"))
+          await symlink("app", path.join(directory, "linked"))
+          await symlink("missing.md", path.join(directory, "broken.md"))
+          await symlink(".", path.join(directory, "loop"))
+        })
+        const layer = AppNodeBuilder.build(FileSystemSearch.configured({ fff: false }), [
+          Location.node.replace(
+            Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+          ),
+        ])
+        yield* Effect.gen(function* () {
+          const search = yield* FileSystemSearch.Service
+          const find = (query: string, type?: "file" | "directory") =>
+            search.find({ query, type }).pipe(Effect.map((entries) => entries.map((entry) => entry.path).sort()))
+          expect(yield* find("AGENTS", "file")).toEqual([
+            RelativePath.make("AGENTS.md"),
+            RelativePath.make("app/AGENTS.md"),
+          ])
+          expect(yield* find("index", "file")).toEqual([RelativePath.make("app/index.ts")])
+          expect(yield* find("ignored", "file")).toEqual([])
+          expect(yield* find("broken", "file")).toEqual([])
+          expect(yield* find("linked")).toEqual([])
+          expect(yield* find("loop")).toEqual([])
+        }).pipe(Effect.provide(layer))
+      }),
+  )
+
+  // Symlink creation needs elevated privileges on Windows.
+  ;(process.platform === "win32" ? it.effect.skip : it.effect)(
+    "lists only the root, new directories and directories with symlinks on a refresh",
+    () =>
+      Effect.gen(function* () {
+        const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-search-relist-"))))
+          .path
+        yield* Effect.promise(async () => {
+          await Bun.write(path.join(directory, ".agents/AGENTS.md"), "rules")
+          await Bun.write(path.join(directory, "app/sub/index.ts"), "app")
+          await Bun.write(path.join(directory, "lib/index.ts"), "lib")
+          await symlink("../.agents/AGENTS.md", path.join(directory, "lib/AGENTS.md"))
+          // Broken until its target appears later: the directory must stay on the refresh list.
+          await symlink("../../shared/rules.txt", path.join(directory, "app/sub/AGENTS.md"))
+        })
+        const listed: string[] = []
+        const environment = Environment.node.mapLayer((base) =>
+          Layer.effect(
+            Environment.Service,
+            Effect.map(Environment.Service, (environment) =>
+              Environment.Service.of({
+                ...environment,
+                files: {
+                  ...environment.files,
+                  list: (value) => {
+                    listed.push(path.relative(directory, value))
+                    return environment.files.list(value)
+                  },
+                },
+              }),
+            ),
+          ).pipe(Layer.provide(base)),
+        )
+        const layer = AppNodeBuilder.build(FileSystemSearch.configured({ fff: false }), [
+          Location.node.replace(
+            Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+          ),
+          Environment.node.replace(environment),
+        ])
+        yield* Effect.gen(function* () {
+          const search = yield* FileSystemSearch.Service
+          const find = (query: string) =>
+            search
+              .find({ query, type: "file" })
+              .pipe(Effect.map((entries) => entries.map((entry) => entry.path as string).sort()))
+          expect(yield* find("AGENTS")).toEqual(["lib/AGENTS.md"])
+          expect(listed.sort()).toEqual(["", "app", "app/sub", "lib"])
+
+          // Links added to the root, to a directory that already holds links and to a new directory are found,
+          // and so is a broken link once its target exists; the unchanged symlink-free directories are not listed again.
+          yield* Effect.promise(async () => {
+            await Bun.write(path.join(directory, "shared/rules.txt"), "rules")
+            await Bun.write(path.join(directory, "docs/index.ts"), "docs")
+            await symlink(".agents/AGENTS.md", path.join(directory, "AGENTS.md"))
+            await symlink("../.agents/AGENTS.md", path.join(directory, "lib/CLAUDE.md"))
+            await symlink("../.agents/AGENTS.md", path.join(directory, "docs/AGENTS.md"))
+          })
+          listed.length = 0
+          yield* TestClock.adjust("10 seconds")
+          const refreshed = yield* Effect.gen(function* () {
+            yield* Effect.yieldNow
+            return yield* find("md")
+          }).pipe(Effect.repeat({ until: (paths) => paths.length === 5 }))
+          expect(refreshed).toEqual(["AGENTS.md", "app/sub/AGENTS.md", "docs/AGENTS.md", "lib/AGENTS.md", "lib/CLAUDE.md"])
+          expect(listed.sort()).toEqual(["", "app/sub", "docs", "lib", "shared"])
+        }).pipe(Effect.provide(layer))
+      }),
   )
 })
