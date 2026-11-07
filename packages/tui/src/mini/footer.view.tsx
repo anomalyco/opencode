@@ -100,6 +100,7 @@ type RunFooterViewProps = {
   tuiConfig: RunTuiConfig
   mono: boolean
   miniSettings: () => MiniSettings
+  shells?: string[]
   history?: () => RunPrompt[]
   clipboard?: Pick<ClipboardService, "read">
   onSubmit: (input: RunPrompt) => boolean | Promise<boolean>
@@ -904,6 +905,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                           <RunSettingsBody
                             theme={theme}
                             settings={props.miniSettings}
+                            shells={props.shells}
                             onClose={closePanel}
                             onChange={props.onMiniSettingChange}
                             mono={props.mono}

@@ -89,6 +89,7 @@ type RunFooterOptions = {
   tuiConfig: RunTuiConfig
   miniSettings: {
     current: MiniSettings
+    shells?: string[]
     update?: (change: MiniSettingChange) => Promise<MiniSettings>
   }
   onMonoChange?: (mono: boolean) => void
@@ -351,6 +352,7 @@ export class RunFooter implements FooterApi {
                 return footer.miniSettings().mono
               },
               miniSettings: footer.miniSettings,
+              shells: options.miniSettings.shells,
               history: footer.history,
               onSubmit: footer.handlePrompt,
               onPermissionReply: footer.handlePermissionReply,
