@@ -71,6 +71,10 @@ describe("ShellScan adversarial corpus", () => {
     ["nested groups with bracket words", "{ ".repeat(31) + "echo " + "a[] ".repeat(15_000) + "; }".repeat(31)],
     ["continued heredoc lines", "cat <<E\n" + "x\\\n".repeat(20_000) + "E\n"],
     ["heredoc backslash runs", "cat <<E\n" + "\\".repeat(60_000) + "x\nE\n"],
+    ["printf with many operands", "printf " + "a ".repeat(32_000)],
+    ["set with many operands", "set " + "a ".repeat(32_000)],
+    ["declare with many options", "declare " + "-a ".repeat(8_000)],
+    ["chained precommands", "command ".repeat(8_000) + "ls"],
   ])("scans adversarial Bash input in bounded time: %s", (_, input) => {
     const start = performance.now()
     ShellScan.scan(input)
