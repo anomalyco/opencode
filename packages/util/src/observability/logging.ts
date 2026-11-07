@@ -38,11 +38,15 @@ function flatten(
   if (seen.has(input)) return [[prefix, "[Circular]"]]
   seen.add(input)
   const entries = Object.entries(input)
-  if (entries.length === 0 && prefix) return [[prefix, input]]
-  return entries.flatMap(([key, value]) => {
-    const path = prefix ? `${prefix}.${key}` : key
-    return plain(value) ? flatten(value, path, seen) : [[path, value] as const]
-  })
+  const result =
+    entries.length === 0 && prefix
+      ? [[prefix, input] as const]
+      : entries.flatMap(([key, value]) => {
+          const path = prefix ? `${prefix}.${key}` : key
+          return plain(value) ? flatten(value, path, seen) : [[path, value] as const]
+        })
+  seen.delete(input)
+  return result
 }
 
 function plain(input: unknown): input is Record<string, unknown> {
