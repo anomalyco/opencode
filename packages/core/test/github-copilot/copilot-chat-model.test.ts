@@ -80,6 +80,12 @@ const FIXTURES = {
     `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{\\"filePath\\":\\"/package.json\\"}","name":"read_file"},"id":"call_second","index":1,"type":"function"}],"reasoning_opaque":"opaque-second"}}],"created":1791590401,"id":"interleaved","usage":{"completion_tokens":42,"prompt_tokens":1200,"total_tokens":1242},"model":"claude-opus-5.5"}`,
     `data: [DONE]`,
   ],
+
+  cacheWriteUsage: [
+    `data: {"choices":[{"index":0,"delta":{"content":"Hello!","role":"assistant"}}],"created":1769917421,"id":"cache-write","usage":{"completion_tokens":0,"prompt_tokens":0,"prompt_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"total_tokens":0},"model":"claude-haiku-5-5"}`,
+    `data: {"choices":[{"finish_reason":"stop","index":0,"delta":{}}],"created":1769917421,"id":"cache-write","usage":{"completion_tokens":200,"prompt_tokens":150000,"prompt_tokens_details":{"cached_tokens":149700,"cache_write_tokens":300},"total_tokens":150200,"reasoning_tokens":0},"model":"claude-haiku-5-5"}`,
+    `data: [DONE]`,
+  ],
 }
 
 function createMockFetch(chunks: string[]) {
@@ -134,6 +140,26 @@ describe("doStream", () => {
       { type: "text-end", id: "txt-0" },
       { type: "finish", finishReason: { unified: "stop" } },
     ])
+  })
+
+  test("should report cache writes in finish usage", async () => {
+    const mockFetch = createMockFetch(FIXTURES.cacheWriteUsage)
+    const model = createModel(mockFetch)
+
+    const { stream } = await model.doStream({
+      prompt: TEST_PROMPT,
+      includeRawChunks: false,
+    })
+
+    const parts = await convertReadableStreamToArray(stream)
+    const finish = parts.find((p) => p.type === "finish")
+    expect(finish).toMatchObject({
+      type: "finish",
+      usage: {
+        inputTokens: { total: 150000, noCache: 0, cacheRead: 149700, cacheWrite: 300 },
+        outputTokens: { total: 200 },
+      },
+    })
   })
 
   test("should stream reasoning with tool calls and capture reasoning_opaque", async () => {

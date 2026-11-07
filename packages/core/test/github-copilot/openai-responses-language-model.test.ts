@@ -480,6 +480,32 @@ describe("doStream", () => {
       providerMetadata: { copilot: { itemId: "rs_1" } },
     })
   })
+
+  test("reports cache writes in finish usage", async () => {
+    const model = createModel(
+      createStreamFetch([
+        {
+          type: "response.completed",
+          response: {
+            usage: {
+              input_tokens: 150_000,
+              input_tokens_details: { cached_tokens: 149_700, cache_write_tokens: 300 },
+              output_tokens: 200,
+              output_tokens_details: { reasoning_tokens: 0 },
+            },
+          },
+        },
+      ]),
+    )
+    const result = await model.doStream({ prompt: TEST_PROMPT, includeRawChunks: false } as any)
+    const events = await readStream(result.stream)
+    expect(events.find((event) => event.type === "finish")).toMatchObject({
+      usage: {
+        inputTokens: { total: 150_000, noCache: 0, cacheRead: 149_700, cacheWrite: 300 },
+        outputTokens: { total: 200 },
+      },
+    })
+  })
 })
 
 describe("convertToOpenAIResponsesInput", () => {

@@ -20,6 +20,7 @@ import {
   type ResponseHandler,
 } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
+import { ProviderShared } from "@opencode/ai/route"
 import { convertToOpenAICompatibleChatMessages } from "./convert-to-openai-compatible-chat-messages.js"
 import { getResponseMetadata } from "./get-response-metadata.js"
 import { mapOpenAICompatibleFinishReason } from "./map-openai-compatible-finish-reason.js"
@@ -243,6 +244,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
       promptTokens: number | undefined
       promptTokensDetails: {
         cachedTokens: number | undefined
+        cacheWriteTokens: number | undefined
       }
       totalTokens: number | undefined
     } = {
@@ -255,6 +257,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
       promptTokens: undefined,
       promptTokensDetails: {
         cachedTokens: undefined,
+        cacheWriteTokens: undefined,
       },
       totalTokens: undefined,
     }
@@ -317,6 +320,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
                 total_tokens,
                 prompt_tokens_details,
                 completion_tokens_details,
+                cache_created_input_tokens,
               } = value.usage
 
               usage.promptTokens = prompt_tokens ?? undefined
@@ -336,6 +340,8 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
               if (prompt_tokens_details?.cached_tokens != null) {
                 usage.promptTokensDetails.cachedTokens = prompt_tokens_details?.cached_tokens
               }
+              usage.promptTokensDetails.cacheWriteTokens =
+                prompt_tokens_details?.cache_write_tokens ?? cache_created_input_tokens ?? undefined
             }
 
             const choice = value.choices[0]
@@ -577,12 +583,15 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
               usage: {
                 inputTokens: {
                   total: usage.promptTokens,
-                  noCache:
-                    usage.promptTokens != undefined && usage.promptTokensDetails.cachedTokens != undefined
-                      ? usage.promptTokens - usage.promptTokensDetails.cachedTokens
-                      : undefined,
+                  noCache: ProviderShared.subtractTokens(
+                    usage.promptTokens,
+                    ProviderShared.sumTokens(
+                      usage.promptTokensDetails.cachedTokens,
+                      usage.promptTokensDetails.cacheWriteTokens,
+                    ),
+                  ),
                   cacheRead: usage.promptTokensDetails.cachedTokens,
-                  cacheWrite: undefined,
+                  cacheWrite: usage.promptTokensDetails.cacheWriteTokens,
                 },
                 outputTokens: {
                   total: usage.completionTokens,
@@ -611,9 +620,12 @@ const openaiCompatibleTokenUsageSchema = z
     prompt_tokens: z.number().nullish(),
     completion_tokens: z.number().nullish(),
     total_tokens: z.number().nullish(),
+    // Anthropic-style cache writes surface either in prompt_tokens_details or at the top level.
+    cache_created_input_tokens: z.number().nullish(),
     prompt_tokens_details: z
       .object({
         cached_tokens: z.number().nullish(),
+        cache_write_tokens: z.number().nullish(),
       })
       .nullish(),
     completion_tokens_details: z
