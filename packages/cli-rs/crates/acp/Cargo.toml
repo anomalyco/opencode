@@ -21,7 +21,6 @@ opencode-util.workspace = true
 percent-encoding.workspace = true
 regex.workspace = true
 serde_json.workspace = true
-similar.workspace = true
 tokio = { workspace = true, features = ["io-std"] }
 tokio-util.workspace = true
 url.workspace = true
