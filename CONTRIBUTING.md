@@ -22,7 +22,7 @@ New providers should rarely require OpenCode changes. Add the provider to [model
 
 ## Development
 
-OpenCode requires Bun 1.3 or newer. From the repository root:
+OpenCode requires the Bun version pinned in the root `package.json` `packageManager` field, currently 1.4.4. The pre-push hook rejects older versions, so check `bun --version` and upgrade before contributing. From the repository root:
 
 ```bash
 bun install
