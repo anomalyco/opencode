@@ -16673,9 +16673,6 @@
               "artifacts": {
                 "type": "boolean"
               },
-              "session_media": {
-                "type": "boolean"
-              },
               "part_rows": {
                 "type": "boolean"
               },

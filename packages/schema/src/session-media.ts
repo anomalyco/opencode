@@ -80,7 +80,7 @@ export const MAX_LIMIT = 500
 /**
  * Experimental: may change without compatibility guarantees.
  *
- * The Media panel's RPC, behind the `session_media` flag. `list` reads up to `limit` of a session's messages, newest
+ * The Media panel's RPC. `list` reads up to `limit` of a session's messages, newest
  * first, from the newest or from `cursor` (a page's `next`), and returns the images, videos and links they carry. The
  * schemas are Standard Schemas too, so Promise clients can call it.
  */
