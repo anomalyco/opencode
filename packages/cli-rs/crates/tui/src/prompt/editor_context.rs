@@ -977,7 +977,7 @@ mod sqlite {
         column_text: unsafe extern "C" fn(Stmt, c_int) -> *const u8,
         column_bytes: unsafe extern "C" fn(Stmt, c_int) -> c_int,
         finalize: unsafe extern "C" fn(Stmt) -> c_int,
-        _library: libloading::Library,
+        _library: opencode_util::dl::Library,
     }
 
     impl Sqlite {
@@ -989,12 +989,12 @@ mod sqlite {
 
         pub fn load(name: &str) -> Option<Sqlite> {
             // SAFETY: SQLite's initializers have no preconditions.
-            let library = unsafe { libloading::Library::new(name) }.ok()?;
+            let library = unsafe { opencode_util::dl::Library::open(name) }.ok()?;
             // SAFETY: each field's type is the C signature of the symbol it names, and the library outlives the
             // pointers because it is stored with them.
             macro_rules! symbol {
                 ($name:literal) => {
-                    *unsafe { library.get($name) }.ok()?
+                    unsafe { library.symbol($name) }.ok()?
                 };
             }
             Some(Sqlite {

@@ -48,7 +48,6 @@ indexmap
 ipnet
 itoa
 libc build
-libloading
 linux-raw-sys
 log
 memchr

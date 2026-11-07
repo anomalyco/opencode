@@ -45,7 +45,6 @@ futures-util = { version = "0.3", default-features = false, features = ["std", "
 idna_adapter = "=1.0.0"
 indexmap = { version = "2", features = ["serde"] }
 libc = "0.2"
-libloading = "0.9"
 log = { version = "0.4", features = ["std"] }
 memchr = "2"
 notify = "8"

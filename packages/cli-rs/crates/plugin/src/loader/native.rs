@@ -1,5 +1,5 @@
 //! The native backend (decision O-42): plugins are shared libraries on the C ABI of `opencode-plugin-abi`,
-//! loaded with `libloading`. There is no sandbox; it is the user's machine. The host only keeps a plugin's
+//! loaded with `opencode_util::dl`. There is no sandbox; it is the user's machine. The host only keeps a plugin's
 //! panics out of the TUI:
 //!
 //! - the plugin's shims catch its panics, and the host's callbacks catch the host's, so no panic unwinds across
@@ -32,6 +32,7 @@ use opencode_plugin_abi::{
 };
 use opencode_ui::keymap::{Bind, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::theme::Theme;
+use opencode_util::dl;
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
 use opentui::style::Color;
@@ -136,16 +137,16 @@ impl Library {
         let file = dir.join(format!("{}.{}", OPENED.fetch_add(1, Ordering::Relaxed), std::env::consts::DLL_EXTENSION));
         std::fs::write(&file, bytes).map_err(|error| format!("{}: {error}", file.display()))?;
         // SAFETY: loading runs the library's initializers; a plugin is code the user chose to run.
-        let library = unsafe { libloading::Library::new(&file) };
+        let library = unsafe { dl::Library::open(&file) };
         // The mapping stays after the file is gone (where the platform allows removing it).
         let _ = std::fs::remove_file(&file);
         let library = library.map_err(|error| format!("cannot load the library: {error}"))?;
         // SAFETY: `ENTRY` has type `EntryFn` in every plugin of this major version.
-        let entry = unsafe { library.get::<abi::EntryFn>(abi::ENTRY.as_bytes()) }
+        let entry = unsafe { library.symbol::<abi::EntryFn>(abi::ENTRY) }
             .map_err(|_| format!("not an opencode-rs plugin: no `{}` symbol", abi::ENTRY))?;
         // SAFETY: as above; the table it returns lives as long as the library.
         let opened = Self::from_table(unsafe { entry() })?;
-        std::mem::forget(library);
+        library.leak();
         Ok(opened)
     }
 

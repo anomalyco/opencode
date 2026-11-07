@@ -21,7 +21,6 @@ opencode-util.workspace = true
 base64.workspace = true
 futures-util.workspace = true
 indexmap.workspace = true
-libloading.workspace = true
 log.workspace = true
 regex.workspace = true
 serde.workspace = true
