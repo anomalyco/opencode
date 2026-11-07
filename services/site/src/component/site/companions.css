@@ -97,8 +97,9 @@
     -webkit-text-stroke: var(--title-stroke);
   }
 
-  /* A card column is narrow, so the category may wrap to a second line rather than clip. */
-  [data-slot="body"] {
+  /* A card column is narrow, so the category may wrap to a second line rather than clip. Not
+     "body", which the block it sits in lays out as its own column. */
+  [data-slot="category"] {
     grid-column: 2;
     grid-row: 2;
     align-self: start;
@@ -232,7 +233,7 @@
       align-self: center;
     }
 
-    [data-slot="body"] {
+    [data-slot="category"] {
       grid-column: 3;
       grid-row: 1;
       align-self: center;
