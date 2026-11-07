@@ -675,5 +675,43 @@ describe("MCP OAuth", () => {
       expect(url.searchParams.get("client_id")).toBe("registered")
       expect(registrations).toHaveLength(1)
     })
+
+    test("re-registers dynamically when the stored client redirect URI does not match the callback port", async () => {
+      const { server, registrations } = authorizationServer({})
+      const previous = credential({ access: "a", refresh: "r", url: server.url.href })
+      const client = {
+        client_id: "stale-client",
+        redirect_uris: ["http://127.0.0.1:1/callback"],
+        issuer: server.url.origin,
+      }
+      const store = memoryCredentials([
+        new Credential.Info({ ...previous, value: { ...previous.value, metadata: { client } } }),
+      ])
+      const { url } = await Effect.runPromise(Effect.scoped(start(server, undefined, store))).finally(() =>
+        server.stop(true),
+      )
+      expect(url.searchParams.get("client_id")).toBe("registered")
+      expect(registrations).toHaveLength(1)
+    })
+
+    test("preserves and binds the stored client's loopback port when available", async () => {
+      const { server, registrations } = authorizationServer({})
+      const previous = credential({ access: "a", refresh: "r", url: server.url.href })
+      const port = 49281
+      const client = {
+        client_id: "preserved-client",
+        redirect_uris: [`http://127.0.0.1:${port}/callback`],
+        issuer: server.url.origin,
+      }
+      const store = memoryCredentials([
+        new Credential.Info({ ...previous, value: { ...previous.value, metadata: { client } } }),
+      ])
+      const { url } = await Effect.runPromise(Effect.scoped(start(server, undefined, store))).finally(() =>
+        server.stop(true),
+      )
+      expect(url.searchParams.get("client_id")).toBe("preserved-client")
+      expect(registrations).toHaveLength(0)
+      expect(new URL(url.searchParams.get("redirect_uri")!).port).toBe(String(port))
+    })
   })
 })
