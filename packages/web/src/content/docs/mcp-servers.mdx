@@ -510,3 +510,32 @@ Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/)
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 ```
+
+---
+
+### Stivio
+
+Add the [Stivio MCP server](https://stivio.ai/mcp) to turn images into 5-second videos with plain-language motion prompts.
+
+```json title="opencode.json" {4-10}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "stivio": {
+      "type": "remote",
+      "url": "https://stivio.ai/api/mcp",
+      "headers": {
+        "Authorization": "Bearer {env:STIVIO_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+You can get a personal API key from [stivio.ai/mcp](https://stivio.ai/mcp). Here we are assuming that you have the `STIVIO_API_KEY` environment variable set.
+
+Add `use stivio` to your prompts to use the Stivio MCP server.
+
+```txt "use stivio"
+Turn this image into a 5-second video with a slow zoom in. use stivio
+```
