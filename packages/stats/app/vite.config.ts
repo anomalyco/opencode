@@ -44,5 +44,9 @@ export default defineConfig({
   build: {
     minify: "esbuild",
     cssMinify: true,
+    // Browsers with native light-dark(), as services/site targets. For older targets the minifier lowers light-dark()
+    // to --lightningcss-light/--lightningcss-dark variables set only where a rule declares color-scheme, and the shared
+    // nav menus (packages/nav-menus), which set theirs inline, lost every colour.
+    cssTarget: ["chrome123", "edge123", "firefox120", "safari17.5"],
   },
 })
