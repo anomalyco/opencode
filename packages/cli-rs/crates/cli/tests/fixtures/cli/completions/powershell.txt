@@ -1,0 +1,645 @@
+###-begin-opencode-completions-###
+#
+# Static completion script for PowerShell
+#
+# Installation:
+#   opencode --completions powershell > opencode-completion.ps1
+#   then add this line to your $PROFILE (use the full path to the file):
+#   . <PATH>\opencode-completion.ps1
+#
+
+$global:_opencode_Completions = [hashtable]::new([System.StringComparer]::Ordinal)
+$global:_opencode_Completions[''] = @{
+  subcommands = @(
+    @{ name = 'upgrade'; description = 'Upgrade OpenCode to the latest or a specific version' }
+    @{ name = 'update'; description = 'Upgrade OpenCode to the latest or a specific version' }
+    @{ name = 'uninstall'; description = 'Uninstall OpenCode, keeping session data, configuration, and state' }
+    @{ name = 'acp'; description = 'Start an Agent Client Protocol server' }
+    @{ name = 'api'; description = 'Make a request to the running server' }
+    @{ name = 'debug'; description = 'Debugging and troubleshooting tools' }
+    @{ name = 'auth'; description = 'manage integrations and credentials' }
+    @{ name = 'mcp'; description = 'Manage MCP (Model Context Protocol) servers' }
+    @{ name = 'plugin'; description = 'Manage plugins' }
+    @{ name = 'models'; description = 'List all available models' }
+    @{ name = 'stats'; description = 'Show shareable usage statistics' }
+    @{ name = 'mini'; description = 'Start the minimal interactive interface' }
+    @{ name = 'run'; description = 'Run OpenCode with a message' }
+    @{ name = 'session'; description = 'Manage sessions' }
+    @{ name = 'service'; description = 'Manage the background server' }
+    @{ name = 'reload'; description = 'Reload configuration' }
+    @{ name = 'pair'; description = 'Print one-time links to connect a browser or app' }
+    @{ name = 'serve'; description = 'Start the v2 API and web server' }
+  )
+  flags = @(
+    @{ name = 'standalone'; forms = @('--standalone'); takesValue = $false; negation = '--no-standalone'; values = @(); pathType = $null; description = 'Run with a private server instead of the background service' }
+    @{ name = 'server'; forms = @('--server'); takesValue = $true; values = @(); pathType = $null; description = 'Connect to a server URL instead of the background service' }
+    @{ name = 'auto'; forms = @('--auto'); takesValue = $false; negation = '--no-auto'; values = @(); pathType = $null; description = 'Auto-approve permissions that are not explicitly denied' }
+    @{ name = 'continue'; forms = @('--continue', '-c'); takesValue = $false; negation = '--no-continue'; values = @(); pathType = $null; description = 'Continue the last session' }
+    @{ name = 'session'; forms = @('--session', '-s'); takesValue = $true; values = @(); pathType = $null; description = 'Session ID to continue, or to create if it does not exist' }
+    @{ name = 'prompt'; forms = @('--prompt'); takesValue = $true; values = @(); pathType = $null; description = 'Prompt to use' }
+  )
+  arguments = @(
+    @{ name = 'directory'; variadic = $false; values = @(); pathType = $null; description = 'Directory to start OpenCode in' }
+  )
+}
+$global:_opencode_Completions['upgrade'] = @{
+  subcommands = @()
+  flags = @(
+    @{ name = 'method'; forms = @('--method', '-m'); takesValue = $true; values = @('curl', 'npm', 'pnpm', 'bun', 'yarn', 'vp', 'brew', 'winget'); pathType = $null; description = 'Installation method to use' }
+  )
+  arguments = @(
+    @{ name = 'target'; variadic = $false; values = @(); pathType = $null; description = 'Version to upgrade to (with or without a leading v)' }
+  )
+}
+$global:_opencode_Completions['update'] = @{
+  subcommands = @()
+  flags = @(
+    @{ name = 'method'; forms = @('--method', '-m'); takesValue = $true; values = @('curl', 'npm', 'pnpm', 'bun', 'yarn', 'vp', 'brew', 'winget'); pathType = $null; description = 'Installation method to use' }
+  )
+  arguments = @(
+    @{ name = 'target'; variadic = $false; values = @(); pathType = $null; description = 'Version to upgrade to (with or without a leading v)' }
+  )
+}
+$global:_opencode_Completions['uninstall'] = @{
+  subcommands = @()
+  flags = @(
+    @{ name = 'dry-run'; forms = @('--dry-run'); takesValue = $false; negation = '--no-dry-run'; values = @(); pathType = $null; description = 'Show what would be removed without removing' }
+    @{ name = 'force'; forms = @('--force', '-f'); takesValue = $false; negation = '--no-force'; values = @(); pathType = $null; description = 'Skip confirmation prompts' }
+  )
+  arguments = @()
+}
+$global:_opencode_Completions['acp'] = @{
+  subcommands = @()
+  flags = @(
+    @{ name = 'login'; forms = @('--login'); takesValue = $false; negation = '--no-login'; values = @(); pathType = $null; description = 'Run auth login instead of starting the server' }
+  )
+  arguments = @()
+}
+$global:_opencode_Completions['api'] = @{
+  subcommands = @()
+  flags = @(
+    @{ name = 'data'; forms = @('--data', '-d'); takesValue = $true; values = @(); pathType = $null; description = 'Request body' }
+    @{ name = 'header'; forms = @('--header', '-H'); takesValue = $true; values = @(); pathType = $null; description = 'Request header in name:value form' }
+    @{ name = 'param'; forms = @('--param'); takesValue = $true; values = @(); pathType = $null; description = 'OpenAPI path or query parameter' }
+  )
+  arguments = @(
+    @{ name = 'operation | method path'; variadic = $true; values = @(); pathType = $null; description = 'OpenAPI operation ID, or an HTTP method followed by a path' }
+  )
+}
+$global:_opencode_Completions['debug'] = @{
+  subcommands = @(
+    @{ name = 'agents'; description = 'List all agents' }
+    @{ name = 'config'; description = 'List configuration sources' }
+    @{ name = 'heap-dump'; description = 'Write a heap snapshot of the running server and print its path' }
+    @{ name = 'paths'; description = 'Show global paths (data, config, cache, state)' }
+  )
+  flags = @()
+  arguments = @()
+}
+$global:_opencode_Completions['debug agents'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @()
+}
+$global:_opencode_Completions['debug config'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @()
+}
+$global:_opencode_Completions['debug heap-dump'] = @{
+  subcommands = @()
+  flags = @(
+    @{ name = 'directory'; forms = @('--directory'); takesValue = $true; values = @(); pathType = $null; description = 'Directory to write the snapshot into instead of the server''s log directory' }
+  )
+  arguments = @()
+}
+$global:_opencode_Completions['debug paths'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @(
+    @{ name = 'name'; variadic = $false; values = @('db', 'home', 'data', 'config', 'cache', 'state', 'tmp', 'bin', 'log', 'repos'); pathType = $null; description = 'Print only one path: db, home, data, config, cache, state, tmp, bin, log, repos' }
+  )
+}
+$global:_opencode_Completions['auth'] = @{
+  subcommands = @(
+    @{ name = 'list'; description = 'list integrations and credentials' }
+    @{ name = 'login'; description = 'connect an integration' }
+    @{ name = 'logout'; description = 'log out of a saved account' }
+    @{ name = 'export'; description = 'print stored credentials, including secrets, as JSON' }
+    @{ name = 'import'; description = 'import credentials exported by auth export' }
+    @{ name = 'switch'; description = 'switch the active account for an integration' }
+  )
+  flags = @()
+  arguments = @()
+}
+$global:_opencode_Completions['auth list'] = @{
+  subcommands = @()
+  flags = @(
+    @{ name = 'format'; forms = @('--format'); takesValue = $true; values = @('default', 'json'); pathType = $null; description = 'Output format' }
+  )
+  arguments = @()
+}
+$global:_opencode_Completions['auth login'] = @{
+  subcommands = @()
+  flags = @(
+    @{ name = 'method'; forms = @('--method'); takesValue = $true; values = @(); pathType = $null; description = 'Authentication method ID' }
+    @{ name = 'answer'; forms = @('--answer'); takesValue = $true; values = @(); pathType = $null; description = 'Provider form answer (key=value; repeat for multiple fields)' }
+  )
+  arguments = @(
+    @{ name = 'target'; variadic = $false; values = @(); pathType = $null; description = 'Integration ID, name, or well-known provider URL' }
+  )
+}
+$global:_opencode_Completions['auth logout'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @(
+    @{ name = 'target'; variadic = $false; values = @(); pathType = $null; description = 'Integration ID or name' }
+    @{ name = 'credential'; variadic = $false; values = @(); pathType = $null; description = 'Credential ID or label (opens an account picker when omitted)' }
+  )
+}
+$global:_opencode_Completions['auth export'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @(
+    @{ name = 'target'; variadic = $false; values = @(); pathType = $null; description = 'Integration ID or name (exports every integration when omitted)' }
+  )
+}
+$global:_opencode_Completions['auth import'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @(
+    @{ name = 'file'; variadic = $false; values = @(); pathType = $null; description = 'JSON file to import (reads stdin when omitted)' }
+  )
+}
+$global:_opencode_Completions['auth switch'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @(
+    @{ name = 'target'; variadic = $false; values = @(); pathType = $null; description = 'Integration ID or name' }
+    @{ name = 'credential'; variadic = $false; values = @(); pathType = $null; description = 'Credential ID or label (opens an account picker when omitted)' }
+  )
+}
+$global:_opencode_Completions['mcp'] = @{
+  subcommands = @(
+    @{ name = 'list'; description = 'List configured MCP servers and their status' }
+    @{ name = 'add'; description = 'Add an MCP server to your configuration' }
+    @{ name = 'auth'; description = 'Authenticate with an OAuth-capable remote MCP server' }
+    @{ name = 'logout'; description = 'Remove stored OAuth credentials for an MCP server' }
+  )
+  flags = @()
+  arguments = @()
+}
+$global:_opencode_Completions['mcp list'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @()
+}
+$global:_opencode_Completions['mcp add'] = @{
+  subcommands = @()
+  flags = @(
+    @{ name = 'url'; forms = @('--url'); takesValue = $true; values = @(); pathType = $null; description = 'URL for a remote MCP server' }
+    @{ name = 'header'; forms = @('--header'); takesValue = $true; values = @(); pathType = $null; description = 'HTTP header for a remote server, as name=value' }
+    @{ name = 'env'; forms = @('--env'); takesValue = $true; values = @(); pathType = $null; description = 'Environment variable for a local server, as name=value' }
+    @{ name = 'global'; forms = @('--global'); takesValue = $false; negation = '--no-global'; values = @(); pathType = $null; description = 'Write to the global config instead of the project config' }
+  )
+  arguments = @(
+    @{ name = 'name'; variadic = $false; values = @(); pathType = $null; description = 'Name of the MCP server' }
+    @{ name = 'command'; variadic = $true; values = @(); pathType = $null; description = 'Command and arguments for a local server, passed after --' }
+  )
+}
+$global:_opencode_Completions['mcp auth'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @(
+    @{ name = 'name'; variadic = $false; values = @(); pathType = $null; description = 'Name of the MCP server' }
+  )
+}
+$global:_opencode_Completions['mcp logout'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @(
+    @{ name = 'name'; variadic = $false; values = @(); pathType = $null; description = 'Name of the MCP server' }
+  )
+}
+$global:_opencode_Completions['plugin'] = @{
+  subcommands = @(
+    @{ name = 'list'; description = 'List plugins' }
+    @{ name = 'add'; description = 'Install a plugin and add it to the global configuration' }
+    @{ name = 'check'; description = 'Check package plugins for updates' }
+    @{ name = 'update'; description = 'Update package plugins' }
+    @{ name = 'remove'; description = 'Remove a plugin from global configuration' }
+  )
+  flags = @()
+  arguments = @()
+}
+$global:_opencode_Completions['plugin list'] = @{
+  subcommands = @()
+  flags = @(
+    @{ name = 'builtin'; forms = @('--builtin'); takesValue = $false; negation = '--no-builtin'; values = @(); pathType = $null; description = 'Include built-in server plugins' }
+  )
+  arguments = @()
+}
+$global:_opencode_Completions['plugin add'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @(
+    @{ name = 'package'; variadic = $false; values = @(); pathType = $null; description = 'npm registry or Git package specifier' }
+  )
+}
+$global:_opencode_Completions['plugin check'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @(
+    @{ name = 'target'; variadic = $false; values = @(); pathType = $null; description = 'Configured package target' }
+  )
+}
+$global:_opencode_Completions['plugin update'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @(
+    @{ name = 'target'; variadic = $false; values = @(); pathType = $null; description = 'Configured package target; omit to update all outdated plugins' }
+  )
+}
+$global:_opencode_Completions['plugin remove'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @(
+    @{ name = 'package'; variadic = $false; values = @(); pathType = $null; description = 'configured package specifier' }
+  )
+}
+$global:_opencode_Completions['models'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @()
+}
+$global:_opencode_Completions['stats'] = @{
+  subcommands = @()
+  flags = @(
+    @{ name = 'days'; forms = @('--days'); takesValue = $true; values = @(); pathType = $null; description = 'Show the last N days; 0 means today' }
+    @{ name = 'year'; forms = @('--year'); takesValue = $true; values = @(); pathType = $null; description = 'Show a calendar year' }
+    @{ name = 'all'; forms = @('--all'); takesValue = $false; negation = '--no-all'; values = @(); pathType = $null; description = 'Show lifetime statistics' }
+    @{ name = 'project'; forms = @('--project'); takesValue = $true; values = @(); pathType = $null; description = 'Filter by project ID, or use "." for the current project' }
+    @{ name = 'models'; forms = @('--models'); takesValue = $false; negation = '--no-models'; values = @(); pathType = $null; description = 'Show model usage' }
+    @{ name = 'tools'; forms = @('--tools'); takesValue = $false; negation = '--no-tools'; values = @(); pathType = $null; description = 'Show tool reliability' }
+    @{ name = 'cost'; forms = @('--cost'); takesValue = $false; negation = '--no-cost'; values = @(); pathType = $null; description = 'Show cost and token details' }
+    @{ name = 'full'; forms = @('--full'); takesValue = $false; negation = '--no-full'; values = @(); pathType = $null; description = 'Show every detailed section' }
+    @{ name = 'limit'; forms = @('--limit'); takesValue = $true; values = @(); pathType = $null; description = 'Number of rows in detailed sections' }
+    @{ name = 'json'; forms = @('--json'); takesValue = $false; negation = '--no-json'; values = @(); pathType = $null; description = 'Output statistics as JSON' }
+  )
+  arguments = @()
+}
+$global:_opencode_Completions['mini'] = @{
+  subcommands = @()
+  flags = @(
+    @{ name = 'continue'; forms = @('--continue', '-c'); takesValue = $false; negation = '--no-continue'; values = @(); pathType = $null; description = 'Continue the last session' }
+    @{ name = 'session'; forms = @('--session', '-s'); takesValue = $true; values = @(); pathType = $null; description = 'Session ID to continue, or to create if it does not exist' }
+    @{ name = 'fork'; forms = @('--fork'); takesValue = $false; negation = '--no-fork'; values = @(); pathType = $null; description = 'Fork the session when continuing' }
+    @{ name = 'replay'; forms = @('--replay'); takesValue = $false; negation = '--no-replay'; values = @(); pathType = $null; description = 'Restore session history on resume and resize (disable with --no-replay)' }
+    @{ name = 'replay-limit'; forms = @('--replay-limit'); takesValue = $true; values = @(); pathType = $null; description = 'Limit replay to the newest N messages (default: 200)' }
+    @{ name = 'model'; forms = @('--model', '-m'); takesValue = $true; values = @(); pathType = $null; description = 'Model to use in the format provider/model' }
+    @{ name = 'agent'; forms = @('--agent'); takesValue = $true; values = @(); pathType = $null; description = 'Agent to use' }
+    @{ name = 'prompt'; forms = @('--prompt'); takesValue = $true; values = @(); pathType = $null; description = 'Prompt to use' }
+  )
+  arguments = @()
+}
+$global:_opencode_Completions['run'] = @{
+  subcommands = @()
+  flags = @(
+    @{ name = 'continue'; forms = @('--continue', '-c'); takesValue = $false; negation = '--no-continue'; values = @(); pathType = $null; description = 'Continue the last session' }
+    @{ name = 'session'; forms = @('--session', '-s'); takesValue = $true; values = @(); pathType = $null; description = 'Session ID to continue, or to create if it does not exist' }
+    @{ name = 'fork'; forms = @('--fork'); takesValue = $false; negation = '--no-fork'; values = @(); pathType = $null; description = 'Fork the session before continuing' }
+    @{ name = 'worktree'; forms = @('--worktree', '-w'); takesValue = $true; optionalValue = $true; values = @(); pathType = $null; description = 'Start a new session in a new git worktree, optionally with this name' }
+    @{ name = 'model'; forms = @('--model', '-m'); takesValue = $true; values = @(); pathType = $null; description = 'Model to use in the format provider/model#variant' }
+    @{ name = 'agent'; forms = @('--agent'); takesValue = $true; values = @(); pathType = $null; description = 'Agent to use' }
+    @{ name = 'format'; forms = @('--format'); takesValue = $true; values = @('default', 'json'); pathType = $null; description = 'Output format' }
+    @{ name = 'file'; forms = @('--file', '-f'); takesValue = $true; values = @(); pathType = $null; description = 'File to attach to the message' }
+    @{ name = 'title'; forms = @('--title'); takesValue = $true; values = @(); pathType = $null; description = 'Session title' }
+    @{ name = 'archived'; forms = @('--archived'); takesValue = $false; negation = '--no-archived'; values = @(); pathType = $null; description = 'Create the session archived so it stays out of session lists (useful for scripted or CI runs)' }
+    @{ name = 'thinking'; forms = @('--thinking'); takesValue = $false; negation = '--no-thinking'; values = @(); pathType = $null; description = 'Show thinking blocks' }
+    @{ name = 'auto'; forms = @('--auto'); takesValue = $false; negation = '--no-auto'; values = @(); pathType = $null; description = 'Auto-approve permissions that are not explicitly denied' }
+  )
+  arguments = @(
+    @{ name = 'message'; variadic = $true; values = @(); pathType = $null; description = 'Message to send' }
+  )
+}
+$global:_opencode_Completions['session'] = @{
+  subcommands = @(
+    @{ name = 'list'; description = 'List top-level sessions in the current project, newest first' }
+    @{ name = 'delete'; description = 'Delete a session and its child sessions' }
+    @{ name = 'export'; description = 'Export session data as JSON' }
+    @{ name = 'import'; description = 'Import session data from a JSON file or URL' }
+  )
+  flags = @()
+  arguments = @()
+}
+$global:_opencode_Completions['session list'] = @{
+  subcommands = @()
+  flags = @(
+    @{ name = 'max-count'; forms = @('--max-count', '-n'); takesValue = $true; values = @(); pathType = $null; description = 'Limit to N most recent sessions (default: 100)' }
+    @{ name = 'format'; forms = @('--format'); takesValue = $true; values = @('table', 'json'); pathType = $null; description = 'Output format' }
+  )
+  arguments = @()
+}
+$global:_opencode_Completions['session delete'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @(
+    @{ name = 'sessionID'; variadic = $false; values = @(); pathType = $null; description = 'Session ID to delete' }
+  )
+}
+$global:_opencode_Completions['session export'] = @{
+  subcommands = @()
+  flags = @(
+    @{ name = 'sanitize'; forms = @('--sanitize'); takesValue = $false; negation = '--no-sanitize'; values = @(); pathType = $null; description = 'Redact sensitive transcript and file data' }
+  )
+  arguments = @(
+    @{ name = 'session'; variadic = $false; values = @(); pathType = $null; description = 'Session ID to export' }
+  )
+}
+$global:_opencode_Completions['session import'] = @{
+  subcommands = @()
+  flags = @(
+    @{ name = 'directory'; forms = @('--directory'); takesValue = $true; values = @(); pathType = $null; description = 'Directory in which to import the session' }
+  )
+  arguments = @(
+    @{ name = 'file'; variadic = $false; values = @(); pathType = $null; description = 'JSON file or URL to import' }
+  )
+}
+$global:_opencode_Completions['service'] = @{
+  subcommands = @(
+    @{ name = 'start'; description = 'Start the background server' }
+    @{ name = 'restart'; description = 'Restart the background server' }
+    @{ name = 'status'; description = 'Show background server status' }
+    @{ name = 'stop'; description = 'Stop the background server' }
+    @{ name = 'get'; description = 'Get service configuration' }
+    @{ name = 'set'; description = 'Set service configuration' }
+    @{ name = 'unset'; description = 'Unset service configuration' }
+  )
+  flags = @()
+  arguments = @()
+}
+$global:_opencode_Completions['service start'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @()
+}
+$global:_opencode_Completions['service restart'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @()
+}
+$global:_opencode_Completions['service status'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @()
+}
+$global:_opencode_Completions['service stop'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @()
+}
+$global:_opencode_Completions['service get'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @(
+    @{ name = 'key'; variadic = $false; values = @(); pathType = $null; description = 'Service setting or env' }
+    @{ name = 'name'; variadic = $false; values = @(); pathType = $null; description = 'Environment variable name' }
+  )
+}
+$global:_opencode_Completions['service set'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @(
+    @{ name = 'key'; variadic = $false; values = @(); pathType = $null; description = 'Service setting or env' }
+    @{ name = 'value'; variadic = $false; values = @(); pathType = $null; description = 'Setting value or environment variable name' }
+    @{ name = 'env-value'; variadic = $false; values = @(); pathType = $null; description = 'Environment variable value' }
+  )
+}
+$global:_opencode_Completions['service unset'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @(
+    @{ name = 'key'; variadic = $false; values = @(); pathType = $null; description = 'Service setting or env' }
+    @{ name = 'name'; variadic = $false; values = @(); pathType = $null; description = 'Environment variable name' }
+  )
+}
+$global:_opencode_Completions['reload'] = @{
+  subcommands = @()
+  flags = @()
+  arguments = @()
+}
+$global:_opencode_Completions['pair'] = @{
+  subcommands = @()
+  flags = @(
+    @{ name = 'url'; forms = @('--url'); takesValue = $true; values = @(); pathType = $null; description = 'Use an external HTTP(S) server URL in pairing links' }
+    @{ name = 'remote'; forms = @('--remote'); takesValue = $false; negation = '--no-remote'; values = @(); pathType = $null; description = 'Pair through the OpenTunnel remote address, enabling remote access if needed (exposes the server to the internet)' }
+    @{ name = 'yes'; forms = @('--yes', '-y'); takesValue = $false; negation = '--no-yes'; values = @(); pathType = $null; description = 'Accept exposing the server to the internet when --remote enables remote access for the first time (required without an interactive terminal)' }
+  )
+  arguments = @()
+}
+$global:_opencode_Completions['serve'] = @{
+  subcommands = @()
+  flags = @(
+    @{ name = 'hostname'; forms = @('--hostname'); takesValue = $true; values = @(); pathType = $null; description = $null }
+    @{ name = 'port'; forms = @('--port'); takesValue = $true; values = @(); pathType = $null; description = $null }
+    @{ name = 'cors'; forms = @('--cors'); takesValue = $true; values = @(); pathType = $null; description = 'Additional allowed CORS origin (repeat for multiple origins)' }
+    @{ name = 'service'; forms = @('--service'); takesValue = $false; negation = '--no-service'; values = @(); pathType = $null; description = $null }
+    @{ name = 'stdio'; forms = @('--stdio'); takesValue = $false; negation = '--no-stdio'; values = @(); pathType = $null; description = $null }
+  )
+  arguments = @()
+}
+
+Register-ArgumentCompleter -Native -CommandName 'opencode' -ScriptBlock {
+  param($wordToComplete, $commandAst, $cursorPosition)
+
+  $spec = $global:_opencode_Completions
+  $results = [System.Collections.Generic.List[System.Management.Automation.CompletionResult]]::new()
+  $booleanLiterals = @('true', 'yes', 'on', '1', 'y', 'false', 'no', 'off', '0', 'n')
+
+  $index = {
+    param($context)
+    $lookup = [hashtable]::new([System.StringComparer]::Ordinal)
+    foreach ($flag in $context.flags) {
+      foreach ($form in $flag.forms) { $lookup[$form] = $flag }
+    }
+    $lookup
+  }
+
+  $add = {
+    param([string]$value, [string]$type, $tooltip, [string]$typed, [string]$textPrefix)
+    if (-not $value.StartsWith($typed, [System.StringComparison]::OrdinalIgnoreCase)) { return }
+    $text = $value
+    if ($value -notmatch '^[\w./:%+=\\-]+$') { $text = "'" + ($value -replace "['\u2018-\u201b]", '$0$0') + "'" }
+    $text = $textPrefix + $text
+    $label = $value
+    if (-not $label) { $label = $text }
+    if (-not $tooltip) { $tooltip = $label }
+    $results.Add([System.Management.Automation.CompletionResult]::new($text, $label, $type, $tooltip))
+  }
+
+  $addValues = {
+    param($entry, [string]$typed, [string]$textPrefix)
+    foreach ($value in $entry.values) {
+      if ($textPrefix -eq '' -and (& $optionLike $value)) { continue }
+      & $add $value 'ParameterValue' $entry.description $typed $textPrefix
+    }
+    if ($entry.pathType) {
+      foreach ($file in [System.Management.Automation.CompletionCompleters]::CompleteFilename($typed)) {
+        if ($entry.pathType -eq 'directory' -and $file.ResultType -ne 'ProviderContainer') { continue }
+        $results.Add([System.Management.Automation.CompletionResult]::new($textPrefix + $file.CompletionText, $file.ListItemText, $file.ResultType, $file.ToolTip))
+      }
+    }
+  }
+
+  $addFlags = {
+    param([string]$typed)
+    foreach ($flag in $context.flags) {
+      if ($used.ContainsKey($flag.name)) { continue }
+      foreach ($form in $flag.forms) {
+        & $add $form 'ParameterName' $flag.description $typed ''
+      }
+      if ($flag.negation) {
+        $tooltip = $null
+        if ($flag.description) { $tooltip = 'Disable ' + $flag.name }
+        & $add $flag.negation 'ParameterName' $tooltip $typed ''
+      }
+    }
+  }
+
+  # As in the CLI lexer, nothing after '--' is an option, and negative numbers
+  # and a lone '-' are values.
+  $optionLike = {
+    param([string]$word)
+    -not $endOfOptions -and $word -match '^-.' -and $word -notmatch '^-(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$'
+  }
+
+  # A typed value that has no candidates completes to itself, so the engine
+  # does not fall back to listing files.
+  $keepTyped = {
+    if ($results.Count -eq 0 -and $current) {
+      $results.Add([System.Management.Automation.CompletionResult]::new($current, $current, 'ParameterValue', $current))
+    }
+  }
+
+  $path = ''
+  $context = $spec[$path]
+  $lookup = & $index $context
+  $used = [hashtable]::new([System.StringComparer]::Ordinal)
+  $pending = $null
+  $endOfOptions = $false
+  $position = 0
+
+  # The engine strips the quotes from a quoted word.
+  $typed = [string]$wordToComplete
+  if ($typed -match '^([''"])(.*?)\1?$') { $typed = $Matches[2] }
+  $current = $null
+
+  $elements = $commandAst.CommandElements
+  for ($i = 1; $i -lt $elements.Count; $i++) {
+    $element = $elements[$i]
+    $word = $element.Extent.Text
+    if ($element -is [System.Management.Automation.Language.StringConstantExpressionAst]) { $word = $element.Value }
+    if ($element.Extent.EndOffset -ge $cursorPosition) {
+      if ($element -is [System.Management.Automation.Language.ConstantExpressionAst] -and $element.Extent.StartOffset -le $cursorPosition) {
+        $current = $element.Extent.Text
+        if ($element.Extent.EndOffset -eq $cursorPosition) { $typed = $word }
+      }
+      break
+    }
+
+    # A flag takes the next word as its value unless it is an option or '--';
+    # a boolean flag only takes a boolean literal.
+    $isOption = & $optionLike $word
+    if ($null -ne $pending) {
+      $flag = $pending
+      $pending = $null
+      if ($flag.takesValue) {
+        if (-not $isOption) { continue }
+      } elseif ($booleanLiterals -ccontains $word) { continue }
+    }
+    if ($endOfOptions) { $position++; continue }
+    if ($word -ceq '--') { $endOfOptions = $true; continue }
+
+    if ($isOption) {
+      $hasValue = $word.Contains('=')
+      if ($hasValue) {
+        $forms = @($word.Substring(0, $word.IndexOf('=')))
+      } elseif ($word.StartsWith('--')) {
+        $forms = @($word)
+      } else {
+        $forms = @(foreach ($char in $word.Substring(1).ToCharArray()) { '-' + $char })
+      }
+      foreach ($form in $forms) {
+        $pending = $null
+        $flag = $lookup[$form]
+        # As in the CLI parser, a negation wins over an alias but not over a
+        # canonical name.
+        if ($null -eq $flag -or $form -cne ('--' + $flag.name)) {
+          $negated = $null
+          foreach ($candidate in $context.flags) {
+            if ($candidate.negation -ceq $form) { $negated = $candidate }
+          }
+          if ($null -ne $negated) {
+            $used[$negated.name] = $true
+            continue
+          }
+        }
+        if ($null -eq $flag) { continue }
+        $used[$flag.name] = $true
+        # A flag with an optional value only takes a value attached with '='.
+        if (-not $hasValue -and -not $flag.optionalValue) { $pending = $flag }
+      }
+      continue
+    }
+
+    if ($position -eq 0 -and $context.subcommands.name -ccontains $word) {
+      if ($path) { $path = $path + ' ' + $word } else { $path = $word }
+      $context = $spec[$path]
+      $lookup = & $index $context
+      $used = [hashtable]::new([System.StringComparer]::Ordinal)
+      continue
+    }
+    $position++
+  }
+
+  $typedIsOption = & $optionLike $typed
+  if ($null -ne $pending -and $pending.takesValue -and -not $typedIsOption) {
+    & $addValues $pending $typed ''
+    & $keepTyped
+    return $results
+  }
+
+  if ($typedIsOption) {
+    if ($typed -match '^(-[^=]+)=(.*)$') {
+      $form = $Matches[1]
+      $flag = $lookup[$form]
+      if ($null -ne $flag -and $flag.takesValue) {
+        & $addValues $flag $Matches[2] ($form + '=')
+        & $keepTyped
+      }
+    } else {
+      & $addFlags $typed
+    }
+    return $results
+  }
+
+  if (-not $endOfOptions -and $position -eq 0) {
+    foreach ($sub in $context.subcommands) {
+      & $add $sub.name 'Command' $sub.description $typed ''
+    }
+  }
+
+  $arguments = $context.arguments
+  if ($position -lt $arguments.Count) {
+    & $addValues $arguments[$position] $typed ''
+  } elseif ($arguments.Count -gt 0 -and $arguments[-1].variadic) {
+    & $addValues $arguments[-1] $typed ''
+  }
+
+  if (-not $endOfOptions) {
+    & $addFlags $typed
+  }
+  return $results
+}
+
+###-end-opencode-completions-###
