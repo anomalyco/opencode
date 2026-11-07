@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CodeMode, Namespace, Tool } from "./lib/index.js"
+import { ToolRuntime } from "../src/tool-runtime.js"
 
 const echo = (description: string, result: string) =>
   Tool.make({
@@ -39,6 +40,46 @@ describe("dotted tool names", () => {
   test("bracket access with a dotted segment spells the same canonical path", async () => {
     expect(await value(runtime, `return await tools.api["issues.list"]({})`)).toBe("listed")
     expect(await value(runtime, `return await tools["api.issues"].list({})`)).toBe("listed")
+  })
+
+  test("known calls defer discovery until search or missing-tool suggestions need it", async () => {
+    const tool = echo("Read data", "read")
+    const prepared = ToolRuntime.prepare({ "api.read": tool, search: tool })
+    let reads = 0
+    const tools = ToolRuntime.make(
+      {
+        root: prepared.root,
+        get catalog() {
+          return prepared.catalog
+        },
+        get searchIndex() {
+          reads += 1
+          return prepared.searchIndex
+        },
+      },
+      undefined,
+    )
+    for (const path of [["api", "read"], ["api.read"], ["api", "read"], ["search"]]) {
+      expect(await Effect.runPromise(tools.execute(path, [{}]))).toBe("read")
+    }
+    await expect(Effect.runPromise(tools.execute(["api"], [{}]))).rejects.toThrow("Tool 'api' is not callable.")
+    expect(reads).toBe(0)
+    expect(await Effect.runPromise(tools.search([{ query: "api.read" }]))).toMatchObject({
+      items: [{ path: "tools.api.read" }],
+    })
+    expect(reads).toBe(1)
+    const index = prepared.searchIndex
+    for (const path of [["api", "read-data"], ["api.read-data"]]) {
+      await expect(Effect.runPromise(tools.execute(path, [{}]))).rejects.toThrow(
+        "Unknown tool 'api.read-data'. Did you mean tools.api.read?",
+      )
+    }
+    expect(reads).toBe(3)
+    expect(prepared.searchIndex).toBe(index)
+    expect(prepared.catalog[0]).toBe(index[0].description)
+    expect(prepared.catalog).toBe(prepared.catalog)
+    expect(await Effect.runPromise(tools.execute(["api", "read"], [{}]))).toBe("read")
+    expect(reads).toBe(3)
   })
 
   test("intermediate segments enumerate like ordinary namespaces", async () => {
