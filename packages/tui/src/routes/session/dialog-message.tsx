@@ -9,6 +9,7 @@ import { errorMessage } from "../../util/error"
 import { DialogFork } from "./dialog-fork"
 import { usePromptRestore } from "../../prompt/restore"
 import { useNewDesigns } from "../../config"
+import { revertMessage } from "./revert"
 import { appendToSessionPrompt } from "../../component/prompt/draft-stash"
 
 export function DialogMessage(props: { messageID: string; sessionID: string }) {
@@ -41,8 +42,8 @@ export function DialogMessage(props: { messageID: string; sessionID: string }) {
             const { sessionID, messageID } = props
             // The composer changes only once the revert is staged, so a failed revert leaves the draft alone.
             void (async () => {
+              await revertMessage({ client, sessionID, messageID })
               const restored = value?.type === "user" ? await restorePrompt(value) : undefined
-              await client.api.session.revert.stage({ sessionID, messageID })
               if (restored) appendToSessionPrompt(sessionID, restored, renderer.widthMethod)
             })().catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
             dialog.clear()
