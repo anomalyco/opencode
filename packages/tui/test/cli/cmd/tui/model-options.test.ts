@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { go } from "fuzzysort"
-import { prioritizeFavorites, sortModelOptions } from "../../../../src/component/model-options"
+import { prioritizeFavorites, searchModelOptions, sortModelOptions } from "../../../../src/component/model-options"
 
 describe("prioritizeFavorites", () => {
   test("uses the favorite order captured when the dialog opened", () => {
@@ -101,5 +101,44 @@ describe("sortModelOptions", () => {
 
     expect(sortModelOptions(options, false).map((model) => model.title)).toEqual(serverOrder)
     expect(sortModelOptions(options, true).map((model) => model.title)).toEqual(serverOrder)
+  })
+})
+
+describe("searchModelOptions", () => {
+  const category = "OpenRouter"
+  // Titles from a real OpenRouter catalogue.
+  const options = [
+    { title: "inclusionai/ling-3.0-flash", category },
+    { title: "inclusionai/ling-3.0-flash-vl", category },
+    { title: "openai/gpt-5.6-luna", category },
+    { title: "openai/gpt-5.6-luna-pro", category },
+    { title: "poolside/laguna-s-2.1", category },
+    { title: "~openai/gpt-luna-latest", category, free: true },
+  ]
+
+  test("ranks names containing the query above scattered-letter matches", () => {
+    const titles = searchModelOptions("luna", options).map((option) => option.title)
+    // The three names that contain "luna" come first, free one leading; the
+    // scattered-letter matches follow in whatever order the fuzzy scorer gives them.
+    expect(titles[0]).toBe("~openai/gpt-luna-latest")
+    expect(titles.slice(1, 3).toSorted()).toEqual(["openai/gpt-5.6-luna", "openai/gpt-5.6-luna-pro"])
+    expect(titles.slice(3).toSorted()).toEqual([
+      "inclusionai/ling-3.0-flash",
+      "inclusionai/ling-3.0-flash-vl",
+      "poolside/laguna-s-2.1",
+    ])
+  })
+
+  test("keeps free-first and the server's order when every result contains the query", () => {
+    const haiku = [
+      { title: "Claude Haiku 3" },
+      { title: "Claude Haiku 4.5" },
+      { title: "Claude Haiku Free", free: true },
+    ]
+    expect(searchModelOptions("Haiku", haiku).map((option) => option.title)).toEqual([
+      "Claude Haiku Free",
+      "Claude Haiku 3",
+      "Claude Haiku 4.5",
+    ])
   })
 })
