@@ -3,12 +3,19 @@ import { useLocal } from "../context/local"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 
+export function sortAgentOptions<T extends { mode: "subagent" | "primary" | "all"; id: string }>(options: T[]) {
+  return options.toSorted(
+    (a, b) =>
+      Number(b.mode !== "subagent") - Number(a.mode !== "subagent") || a.id.localeCompare(b.id),
+  )
+}
+
 export function DialogAgent() {
   const local = useLocal()
   const dialog = useDialog()
 
   const options = createMemo(() =>
-    local.agent.list().map((item) => {
+    sortAgentOptions(local.agent.list()).map((item) => {
       return {
         value: item.id,
         title: item.id,
