@@ -24,7 +24,8 @@ import { useRoute } from "../../context/route"
 import { usePromptRef } from "../../context/prompt"
 import { useSessionTabs } from "../../context/session-tabs"
 import { useEvent } from "../../context/event"
-import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
+import { useEditorContext } from "../../context/editor"
+import { formatEditorContext, getEditorRangeLabel, hasEditorRangeSelection } from "../../prompt/editor-context"
 import { normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
 import { expandPromptInputPastedText, realignPromptInputMentions } from "../../prompt/mention"
@@ -145,32 +146,6 @@ export function PromptInterruptStatus(props: {
   )
 }
 
-function hasEditorRangeSelection(selection: EditorSelection["ranges"][number]) {
-  return (
-    selection.selection.start.line !== selection.selection.end.line ||
-    selection.selection.start.character !== selection.selection.end.character
-  )
-}
-
-function getEditorRangeLabel(selection: EditorSelection["ranges"][number]) {
-  if (!hasEditorRangeSelection(selection)) return
-  if (selection.selection.start.line === selection.selection.end.line) return `#${selection.selection.start.line}`
-  return `#${selection.selection.start.line}-${selection.selection.end.line}`
-}
-
-function formatEditorContext(selection: EditorSelection) {
-  const selected = selection.ranges.filter(hasEditorRangeSelection)
-  if (selected.length === 0)
-    return `<system-reminder>Note: The user opened the file "${selection.filePath}". This may or may not be relevant to the current task.</system-reminder>\n`
-
-  const ranges = selected.map((range, index) => {
-    const prefix = selected.length > 1 ? `Selection ${index + 1}: ` : ""
-    return `Note: The user selected ${prefix}${getEditorRangeLabel(range)} from "${selection.filePath}". \`\`\`${range.text}\`\`\`\n\n`
-  })
-
-  return `<system-reminder>${ranges.join("\n")} This may or may not be relevant to the current task.</system-reminder>\n`
-}
-
 function argumentSlash(input: string, commands: readonly KeymapCommand[]) {
   const head = parseSlashHead(input, /\s/)
   if (!head) return
@@ -223,13 +198,7 @@ export function Prompt(props: PromptProps) {
   const animationsEnabled = createMemo(() => config.animations ?? true)
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
-  const fileContextEnabled = createMemo(() => config.prompt?.editor ?? true)
-  const [dismissedEditorSelectionKey, setDismissedEditorSelectionKey] = createSignal<string>()
-  const editorContext = createMemo(() => {
-    const selection = fileContextEnabled() ? editor.selection() : undefined
-    if (!selection) return
-    return editorSelectionKey(selection) === dismissedEditorSelectionKey() ? undefined : selection
-  })
+  const editorContext = createMemo(() => editor.attachedSelection())
   const editorPath = createMemo(() => editorContext()?.filePath)
   const editorSelectionLabel = createMemo(() => {
     const ranges = editorContext()?.ranges
@@ -328,8 +297,7 @@ export function Prompt(props: PromptProps) {
   }
 
   function dismissEditorContext() {
-    setDismissedEditorSelectionKey(editorSelectionKey(editorContext()))
-    editor.clearSelection()
+    editor.dismissSelection()
   }
   const fileStyleId = syntax().getStyleId("extmark.file")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
@@ -1156,8 +1124,7 @@ export function Prompt(props: PromptProps) {
     const isCommand =
       slashHead !== undefined &&
       (data.location.command.list(currentLocation.ref) ?? []).some((command) => command.name === slashHead.name)
-    const editorSelection = editorContext()
-    const pendingEditorSelection = editorSelection && editor.labelState() === "pending" ? editorSelection : undefined
+    const pendingEditorSelection = editor.pendingSelection()
     if (delivery === "queue" && pendingEditorSelection) {
       toast.show({ message: "Editor context cannot be queued", variant: "warning" })
       return false

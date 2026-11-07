@@ -5,6 +5,8 @@ import { isRecord } from "../util/record"
 import { useTuiPaths } from "./runtime"
 import { createSimpleContext } from "./helper"
 import { editorIntegration } from "../editor"
+import { useConfig } from "../config"
+import { editorSelectionKey, attachedEditorSelection, pendingEditorSelection } from "../prompt/editor-context"
 
 const MCP_PROTOCOL_VERSION = "2025-11-25"
 
@@ -113,6 +115,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
   name: "EditorContext",
   init: (props: { integration?: EditorIntegration; WebSocketImpl?: typeof WebSocket }) => {
     const paths = useTuiPaths()
+    const config = useConfig()
     const editor = props.integration ?? editorIntegration
     const value = process.env.CLAUDE_CODE_SSE_PORT || process.env.OPENCODE_EDITOR_SSE_PORT
     const parsedPort = value ? Number.parseInt(value, 10) : undefined
@@ -125,11 +128,13 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
       status: "disabled" | "connecting" | "connected"
       selection: EditorSelection | undefined
       selectionSent: boolean
+      dismissed: string | undefined
       server: EditorServerInfo | undefined
     }>({
       status: "disabled",
       selection: undefined,
       selectionSent: false,
+      dismissed: undefined,
       server: undefined,
     })
 
@@ -318,6 +323,12 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
       })
     })
 
+    const clearSelectionState = () => {
+      lastZedSelectionKey = undefined
+      zedSelection = undefined
+      setSelection(undefined)
+    }
+
     return {
       enabled() {
         return Boolean(resolveEditorConnection(directory, port, editor.connection) || (zedTerminal && editor.selection))
@@ -328,10 +339,29 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
       selection() {
         return store.selection
       },
+      /** The selection the composer shows as attached: file context on and not dismissed. */
+      attachedSelection() {
+        return attachedEditorSelection({
+          selection: store.selection,
+          enabled: config.data.prompt?.editor ?? true,
+          dismissed: store.dismissed,
+        })
+      },
+      /** The selection a request should carry: attached and not sent yet. */
+      pendingSelection() {
+        return pendingEditorSelection({
+          selection: store.selection,
+          enabled: config.data.prompt?.editor ?? true,
+          sent: store.selectionSent,
+          dismissed: store.dismissed,
+        })
+      },
+      dismissSelection() {
+        if (store.selection) setStore("dismissed", editorSelectionKey(store.selection))
+        clearSelectionState()
+      },
       clearSelection() {
-        lastZedSelectionKey = undefined
-        zedSelection = undefined
-        setSelection(undefined)
+        clearSelectionState()
       },
       preserveSelectionFromNewSession() {
         preserveSelectionOnReconnect = true
@@ -371,20 +401,6 @@ function resolveEditorConnection(
   }
 
   return discover?.(directory)
-}
-
-export function editorSelectionKey(selection: EditorSelection | undefined) {
-  if (!selection) return ""
-  return [
-    selection.filePath,
-    ...selection.ranges.flatMap((range) => [
-      range.selection.start.line,
-      range.selection.start.character,
-      range.selection.end.line,
-      range.selection.end.character,
-      range.text,
-    ]),
-  ].join("\0")
 }
 
 function openEditorSocket(connection: EditorConnection, WebSocketImpl: typeof WebSocket) {
