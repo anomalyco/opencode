@@ -16,10 +16,10 @@ export const SUSPENDED: unique symbol = Symbol("codemode.suspended")
  * calls the VM queued, as fibers with the caller's services, reporting each outcome back with `vm.complete`.
  * Fibers live only here, by host call id, and never become part of the VM's state.
  *
- * A reconnectable durable tool's call runs as two fibers, `start` then `attach`, so suspending can detach the second
- * and keep the handle `start` gave. A `"rerun"` tool's running fiber is detached and interrupted on suspend, and its
- * call is saved as queued to run again on resume. The VM and tool bridge can be swapped for restored ones between
- * stops (the round-trip test mode does); a fiber's outcome goes to whichever VM is current, by host call id.
+ * A durable tool's call runs as two fibers, `start` then `wait`, so suspending can detach the second and keep the JSON
+ * data `start` gave. An idempotent tool's running fiber is detached and interrupted on suspend, and its call is saved
+ * as queued to run again on resume. The VM and tool bridge can be swapped for restored ones between stops (the
+ * round-trip test mode does); a fiber's outcome goes to whichever VM is current, by host call id.
  */
 export class Driver<R> {
   private readonly fibers = new Map<number, Fiber.Fiber<unknown, unknown>>()
@@ -85,16 +85,17 @@ export class Driver<R> {
   }
 
   /**
-   * The host calls that block a suspend now: every call in progress except a `"rerun"` tool call or a reconnectable
-   * tool call in `started`, plus any queued or synchronous extension call the program is in the middle of, which holds
-   * live host values. A tool call queued but not started starts on resume.
+   * The host calls that block a suspend now: every call in progress except an idempotent tool call or a durable tool
+   * call in `started`, plus any queued or synchronous extension call the program is in the middle of, which holds live
+   * host values. A tool call queued but not started starts on resume.
    */
   blocking(): Array<{ readonly key: string; readonly path: string }> {
     const vm = this.vm
     const calls = vm.calls().filter((call) => {
       if (call.request.kind === "extension") return true
       if (call.status === "queued" || call.status === "started") return false
-      if (call.request.kind === "tool" && this.tools.durable(call.request.path) === "rerun") return false
+      if (call.request.kind === "tool" && this.tools.mode(call.request.path)?._tag === "CodeModeIdempotent")
+        return false
       return true
     })
     const running = calls.map((call) => ({ key: call.key, path: callPath(call) }))
@@ -112,7 +113,7 @@ export class Driver<R> {
 
   /**
    * Stops the run to suspend it, once its state is saved: `run` returns `SUSPENDED` at its next step, and running
-   * durable calls' fibers are detached, so ending them reports nothing.
+   * idempotent or durable calls' fibers are detached, so ending them reports nothing.
    */
   detach(): void {
     this.suspending = true
@@ -120,30 +121,30 @@ export class Driver<R> {
     this.wake?.()
   }
 
-  /** Stops host work still running, waiting for its cleanup; a reconnectable tool's work is cancelled unless detached. */
+  /** Stops host work still running, waiting for its cleanup; a durable tool's work is cancelled unless detached. */
   interrupt(): Effect.Effect<void> {
     const self = this
     return Effect.gen(function* () {
       self.stopping = true
       while (self.fibers.size > 0) yield* Fiber.interruptAll([...self.fibers.values()])
-      // A suspended run's reconnectable work keeps running, to be attached on resume.
+      // A suspended run's durable work keeps running, to be waited on at resume.
       if (self.suspending) return
       for (const call of self.vm.calls()) {
         const request = call.request
         if (call.status !== "started" || request.kind !== "tool") continue
         call.status = "completed"
-        yield* Effect.ignore(self.tools.cancel(request.path, call.handle as Json)).pipe(
+        yield* Effect.ignore(self.tools.cancel(request.path, call.data as Json)).pipe(
           Effect.provideContext(self.services),
         )
       }
     })
   }
 
-  /** Starts tool calls that were queued (including `"rerun"` calls) and attaches reconnectable calls in `started`. */
+  /** Starts tool calls that were queued (including idempotent calls) and waits on durable calls in `started`. */
   resume(): void {
     for (const call of this.vm.calls()) {
       if (call.status === "queued") this.launch(call)
-      else if (call.status === "started") this.attach(call)
+      else if (call.status === "started") this.wait(call)
     }
   }
 
@@ -160,16 +161,15 @@ export class Driver<R> {
     call.status = "running"
     const request = call.request
     if (request.kind === "tool") {
-      const durable = this.tools.durable(request.path)
-      if (typeof durable === "object") {
+      if (this.tools.mode(request.path)?._tag === "CodeModeDurable") {
         const started = this.tools.start(request.path, request.args, call.key, (name) => this.admit(call.id, name))
-        return this.fork(call.id, started, (handle) => {
+        return this.fork(call.id, started, (data) => {
           const current = this.vm.call(call.id)
           if (current === undefined) return
           current.status = "started"
-          current.handle = handle as Json
+          current.data = data as Json
           if (this.stopping || this.detached.has(call.id)) return
-          this.attach(current)
+          this.wait(current)
         })
       }
       return this.fork(
@@ -194,12 +194,12 @@ export class Driver<R> {
     return this.fork(call.id, this.vm.ctx.extensionWork!(request.call) as Effect.Effect<unknown, unknown, R>)
   }
 
-  private attach(call: HostCall): void {
+  private wait(call: HostCall): void {
     const request = call.request
     if (request.kind !== "tool") return
     this.fork(
       call.id,
-      this.tools.attach(request.path, request.args, call.key, call.handle as Json, () => this.suspending),
+      this.tools.wait(request.path, request.args, call.key, call.data as Json, () => this.suspending),
     )
   }
 

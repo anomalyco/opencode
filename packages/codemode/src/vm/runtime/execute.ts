@@ -321,11 +321,11 @@ export class Running<R> {
         running,
       })
     }
-    // Rerun calls in flight are saved as queued so they run again on resume under the same key.
-    const rerun = vm.calls().filter((call) => call.status === "running")
-    for (const call of rerun) call.status = "queued"
-    const restoreRerun = () => {
-      for (const call of rerun) call.status = "running"
+    // Idempotent calls in flight are saved as queued so they run again on resume under the same key.
+    const idempotent = vm.calls().filter((call) => call.status === "running")
+    for (const call of idempotent) call.status = "queued"
+    const restoreRunning = () => {
+      for (const call of idempotent) call.status = "running"
     }
     const limits = this.setup.limits
     const saved = attempt(() =>
@@ -340,7 +340,7 @@ export class Running<R> {
       }),
     )
     if (!saved.ok) {
-      restoreRerun()
+      restoreRunning()
       const error = saved.error
       return new SuspendError({
         message: `The run's state couldn't be saved: ${error instanceof Error ? error.message : String(error)}`,
@@ -351,7 +351,7 @@ export class Running<R> {
     if (maxBytes !== undefined) {
       const size = toBytes(snapshot).byteLength
       if (size > maxBytes) {
-        restoreRerun()
+        restoreRunning()
         return new SuspendError({
           message: `The run's state takes ${size} bytes, more than the ${maxBytes}-byte limit, so it couldn't be suspended.`,
           running: [],

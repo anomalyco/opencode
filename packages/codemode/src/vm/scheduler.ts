@@ -98,12 +98,12 @@ export type ExtensionRequest = {
  */
 export class HostCall {
   /**
-   * Where the call is: `queued` (written ahead, not started), `running` (or in `start` for a reconnectable tool),
-   * `started` (a reconnectable tool whose `start` returned its `handle`, now in `attach`), or `completed`.
+   * Where the call is: `queued` (written ahead, not started), `running` (or in `start` for a durable tool),
+   * `started` (a durable tool whose `start` returned its `data`, now in `wait`), or `completed`.
    */
   status: "queued" | "running" | "started" | "completed" = "queued"
-  /** The handle a reconnectable tool's `start` returned, saved so a resumed run can `attach` to it. */
-  handle: Json | undefined = undefined
+  /** The JSON data a durable tool's `start` returned, saved so a resumed run can call `wait(data)`. */
+  data: Json | undefined = undefined
   /** Whether a tool call has already been counted against `maxToolCalls` and recorded in `toolCalls`. */
   admitted = false
   constructor(

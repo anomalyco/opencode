@@ -12,7 +12,7 @@ import {
   outputTypeScript,
 } from "./tool-schema.js"
 import { isNamespace, type Namespace } from "./namespace.js"
-import { type Durable, type Handle, isTool, type Reconnectable, type Tool, type ToolContext } from "./tool.js"
+import { type Durable, type Idempotent, isTool, type Tool, type ToolContext } from "./tool.js"
 import type { Tools } from "./tools.js"
 
 export const compareText = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0)
@@ -400,29 +400,31 @@ export type ToolRuntime<R = never> = {
     options?: ExecuteCallOptions,
   ) => Effect.Effect<Json | undefined, unknown, R>
   readonly keys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
-  /** How the tool at `path` behaves on suspend (`false` when unknown or not durable). */
-  readonly durable: (path: ReadonlyArray<string>) => Durable<unknown, unknown, R>
-  /** Admits a call to a reconnectable tool, runs `tool.before`, and starts its work under `key`: its handle. */
+  /** How the tool at `path` executes on suspend (`undefined` when unknown or plain). */
+  readonly mode: (
+    path: ReadonlyArray<string>,
+  ) => Idempotent<unknown, unknown, R> | Durable<unknown, unknown, R> | undefined
+  /** Admits a call to a durable tool, runs `tool.before`, and starts its work under `key`: its JSON data. */
   readonly start: (
     path: ReadonlyArray<string>,
     args: Array<Json | undefined>,
     key: string,
     admit?: (name: string) => void,
-  ) => Effect.Effect<Handle, unknown, R>
+  ) => Effect.Effect<Json, unknown, R>
   /**
-   * Connects to a reconnectable tool's running work and waits for its output, as `execute` gives it. `detaching` says
-   * whether an interruption detaches to suspend the run, which `tool.after` doesn't see, or ends the call, which it
-   * sees as interrupted.
+   * Waits for a durable tool's running work: its output, as `execute` gives it. `detaching` says whether an
+   * interruption detaches to suspend the run, which `tool.after` doesn't see, or ends the call, which it sees as
+   * interrupted.
    */
-  readonly attach: (
+  readonly wait: (
     path: ReadonlyArray<string>,
     args: Array<Json | undefined>,
     key: string,
-    handle: Handle,
+    data: Json,
     detaching: () => boolean,
   ) => Effect.Effect<Json | undefined, unknown, R>
-  /** Cancels a reconnectable tool's started work when the run is interrupted. */
-  readonly cancel: (path: ReadonlyArray<string>, handle: Handle) => Effect.Effect<void, unknown, R>
+  /** Cancels a durable tool's started work when the run is interrupted or ends. */
+  readonly cancel: (path: ReadonlyArray<string>, data: Json) => Effect.Effect<void, unknown, R>
 }
 
 /** Per-execution call state over tools prepared once for the runtime. */
@@ -503,20 +505,20 @@ export const make = <R>(
       )
     })
 
-  const reconnectableTool = (
+  const durableTool = (
     path: ReadonlyArray<string>,
   ): {
     readonly name: string
     readonly tool: Tool<R>
-    readonly durable: Reconnectable<unknown, unknown, R>
+    readonly durable: Durable<unknown, unknown, R>
   } => {
     const segments = canonicalSegments(path)
     const name = segments.join(".")
     const tool = lookup(root, segments)?.tool
-    if (tool === undefined || typeof tool.durable !== "object") {
-      throw new TypeError(`Tool '${name}' is not a reconnectable durable tool.`)
+    if (tool?.mode?._tag !== "CodeModeDurable") {
+      throw new TypeError(`Tool '${name}' is not a durable tool.`)
     }
-    return { name, tool, durable: tool.durable }
+    return { name, tool, durable: tool.mode }
   }
 
   return {
@@ -535,14 +537,14 @@ export const make = <R>(
           return executeTool("search", makeSearchTool(prepared.searchIndex), args, options)
         return executeTool(segments.join("."), resolve(root, path, prepared.searchIndex), args, options)
       }),
-    durable: (path) => {
+    mode: (path) => {
       const segments = canonicalSegments(path)
-      if (segments.length === 1 && segments[0] === "search" && lookup(root, segments) === undefined) return false
-      return lookup(root, segments)?.tool?.durable ?? false
+      if (segments.length === 1 && segments[0] === "search" && lookup(root, segments) === undefined) return undefined
+      return lookup(root, segments)?.tool?.mode
     },
     start: (path, args, key, admit) =>
       Effect.suspend(() => {
-        const found = reconnectableTool(path)
+        const found = durableTool(path)
         return Effect.gen(function* () {
           const input = yield* decode(found.name, found.tool, args)
           yield* Effect.sync(() => (admit !== undefined ? admit(found.name) : recordCall({ name: found.name })))
@@ -561,21 +563,22 @@ export const make = <R>(
                 })
           const raw = yield* before === undefined ? observed : Effect.andThen(before(invocation), observed)
           return yield* Effect.try({
-            try: (): Handle => {
+            try: (): Json => {
               const text = JSON.stringify(raw)
               return text === undefined ? null : JSON.parse(text)
             },
             catch: (cause) =>
-              new ToolRuntimeError("InvalidToolOutput", `Invalid handle from tool '${found.name}': ${cause}`),
+              new ToolRuntimeError("InvalidToolOutput", `Invalid start data from tool '${found.name}': ${cause}`),
           })
         })
       }),
-    attach: (path, args, key, handle, detaching) =>
+    wait: (path, args, key, data, detaching) =>
       Effect.suspend(() => {
-        const found = reconnectableTool(path)
+        const found = durableTool(path)
+        const wait = found.durable.wait as (data: Json, context: ToolContext) => Effect.Effect<unknown, unknown, R>
         const after = hooks["tool.after"]
         const run = Effect.gen(function* () {
-          const raw = yield* failure(Effect.suspend(() => found.durable.attach(handle, { key })))
+          const raw = yield* failure(Effect.suspend(() => wait(data, { key })))
           return yield* output(found.name, found.tool, raw)
         })
         if (after === undefined) return run
@@ -601,7 +604,11 @@ export const make = <R>(
           }),
         )
       }),
-    cancel: (path, handle) => Effect.suspend(() => failure(reconnectableTool(path).durable.cancel(handle))),
+    cancel: (path, data) =>
+      Effect.suspend(() => {
+        const cancel = durableTool(path).durable.cancel as (data: Json) => Effect.Effect<void, unknown, R>
+        return failure(cancel(data))
+      }),
   }
 }
 

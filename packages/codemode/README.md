@@ -130,43 +130,66 @@ const outcome = yield * Fiber.join(fiber)
 yield * runtime.resume(CodeMode.toBytes(suspended.state)).run()
 ```
 
-The default runtime has no `program` or `resume`, and ignores `durable` and extension `snapshot` hooks. A program runs
-once: running it again is a defect, so make another with `runtime.program` or `runtime.resume`. `run()` owns the run's
-host calls: interrupting it interrupts the program and every call in progress (and cancels any started reconnectable
-tool work).
+The default runtime has no `program` or `resume`, and ignores `Tool.idempotent`, `Tool.durable`, and extension
+`snapshot` hooks. A program runs once: running it again is a defect, so make another with `runtime.program` or
+`runtime.resume`. `run()` owns the run's host calls: interrupting it interrupts the program and every call in progress
+(and cancels any started durable tool work).
 
-#### Durable tools and safe suspension
+#### Idempotent and durable tools, and safe suspension
 
-Tools declare how they behave when a suspend lands while a call is in flight:
+A tool's `execute` is either a plain function or wrapped with `Tool.idempotent` or `Tool.durable`:
 
 ```ts
+// plain (default): a suspend is refused while it runs
 Tool.make({
   description: "...",
   input: ...,
   output: ...,
-  durable?: false | "rerun" | { start, attach, cancel }, // default false
+  execute: (input, { key }) => compute(input),
+})
+
+// idempotent: safe to run again; interrupted on suspend, rerun on resume with the same key
+Tool.make({
+  description: "...",
+  input: ...,
+  output: ...,
+  execute: Tool.idempotent((input, { key }) => Db.get(input.name)),
+})
+
+// durable: keeps running across a suspend, reconnected through its JSON data on resume
+Tool.make({
+  description: "...",
+  input: ...,
+  output: ...,
+  execute: Tool.durable({
+    start: (input, { key }) => Jobs.submit(input, key).pipe(Effect.map((id) => ({ id }))),
+    wait: ({ id }, { key }) => Jobs.wait(id),
+    cancel: ({ id }) => Jobs.kill(id),
+  }),
 })
 ```
 
-- **`false` (default):** not durable. Suspend is refused while the call is running.
-- **`"rerun"`:** idempotent/read-only work safe to run again. If a suspend lands while the call is running, the VM
-  detaches and interrupts it without firing `tool.after`, saves the call in the snapshot as queued, and re-runs it on
-  resume with the same `key` without double-counting it against `maxToolCalls`.
-- **Reconnectable (`{ start, attach, cancel }`):** work that outlives a suspended run:
-  - `start(input, { key }) => Effect<Handle /* Json */>` begins the work and returns a JSON handle;
-  - `attach(handle, { key }) => Effect<Output>` connects to the running work and waits for its result;
-  - `cancel(handle) => Effect<void>` stops the work when the run is interrupted for real, not when it is suspended.
+- **Plain (`execute: (input, { key }) => ...`):** not durable. Suspend is refused while the call is running.
+- **`Tool.idempotent(execute)`:** idempotent/read-only work safe to run again. If a suspend lands while the call is
+  running, the VM detaches and interrupts it without firing `tool.after`, saves the call in the snapshot as queued, and
+  re-runs it on resume with the same `key` without double-counting it against `maxToolCalls`.
+- **`Tool.durable({ start, wait, cancel })`:** work that outlives a suspended run (when run without a suspend or on the
+  legacy engine, it runs `start` then `wait`):
+  - `start(input, { key }) => Effect<Data /* Json */>` begins the work and returns JSON `data` (inferred into `wait`
+    and `cancel`);
+  - `wait(data, { key }) => Effect<Output>` connects to the running work and waits for its result;
+  - `cancel(data) => Effect<void>` stops the work when the run is interrupted for real or ends, never when it is
+    suspended.
 
-  While `start` is running, the call blocks suspend. Once `start` returns its handle, the call is in the `started`
-  state with its handle saved in the snapshot, and suspend is allowed. `attach` is not tied to the program's JavaScript
-  `await`: the VM calls `attach(handle)` right after `start` returns, and calls `attach(handle)` again for every
-  `started` call right when `resume` starts, whatever the program does with the call's promise (whether it `await`s it
-  immediately, passes it to `Promise.all`, chains `.then`, or keeps the unawaited promise in a variable and awaits it
-  later).
+  While `start` is running, the call blocks suspend. Once `start` returns its JSON data, the call is in the `started`
+  state with its data saved in the snapshot, and suspend is allowed. `wait` is not tied to the program's JavaScript
+  `await`: the VM calls `wait(data)` right after `start` returns, and calls `wait(data)` again for every `started` call
+  right when `resume` starts, whatever the program does with the call's promise (whether it `await`s it immediately,
+  passes it to `Promise.all`, chains `.then`, or keeps the unawaited promise in a variable and awaits it later).
 
 `program.suspend(options?)` saves the run's state and stops it at once, and `run()` returns the same `Suspended`.
-Suspend is allowed only when every in-flight call is queued, `"rerun"`, or reconnectable in `started`. When any other
-host call is in progress — a `durable: false` tool, a reconnectable tool still in `start`, `search`, or an async or
+Suspend is allowed only when every in-flight call is queued, `Tool.idempotent`, or `Tool.durable` in `started`. When
+any other host call is in progress — a plain tool, a durable tool still in `start`, `search`, or an async or
 synchronous extension call — `suspend` fails with a `CodeMode.SuspendError` naming each blocking call in `running` by
 its `key` and `path` (`tools.x.y`, `search`, `fetch`), and the run goes on untouched. Tool calls queued but not started
 don't block: they start on resume. Outcomes already waiting in the inbox are part of the state. A suspend after the run
