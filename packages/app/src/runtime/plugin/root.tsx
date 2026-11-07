@@ -15,9 +15,9 @@ import { createContext, useContext } from "solid-js"
 
 const HostApisContext = createContext<HostApis>()
 
-// Desktop only: a window loads the plugin GUIs main sends.
+// A desktop window loads the plugin GUIs main sends; a web tab, without a bridge, those its own server allows.
 const PluginsContext = createContext<{
-  bridge: Bridge
+  bridge: Bridge | undefined
   set: (plugins: readonly PluginGui[], reserved: readonly string[]) => void
   reserved: () => readonly string[]
 }>()
@@ -54,7 +54,7 @@ export function PluginRoot(props: ParentProps) {
 
   // The GUIs of the plugins on the app's own server, as main sends them, and the plugins whose GUI cannot load because a
   // built-in claims the id, which Extensions › Plugins shows. Settled once the loader first publishes, even empty after
-  // a failure. The web runs built-ins only.
+  // a failure. The web settles at once: its loader mounts only after sign-in, and its plugin GUIs are opt-in.
   const [loaded, setLoaded] = createSignal<{
     settled: boolean
     plugins: readonly PluginGui[]
@@ -76,11 +76,13 @@ export function PluginRoot(props: ParentProps) {
     <HostApisContext.Provider value={apis}>
       <PluginsContext.Provider
         value={
-          bridge && {
-            bridge,
-            set: (plugins, reserved) => setLoaded({ settled: true, plugins, reserved }),
-            reserved: () => loaded().reserved,
-          }
+          bridge || platform.platform === "web"
+            ? {
+                bridge,
+                set: (plugins, reserved) => setLoaded({ settled: true, plugins, reserved }),
+                reserved: () => loaded().reserved,
+              }
+            : undefined
         }
       >
         <PluginHostProvider

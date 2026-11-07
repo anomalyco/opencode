@@ -2,7 +2,7 @@ import { Location } from "@opencode/schema/location"
 import { Plugin } from "@opencode/schema/plugin"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
-import { InvalidRequestError, PluginNotFoundError, ServiceUnavailableError } from "../errors.js"
+import { InvalidRequestError, LocationNotFoundError, PluginNotFoundError, ServiceUnavailableError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 export const PluginGroup = HttpApiGroup.make("server.plugin")
@@ -76,5 +76,23 @@ export const PluginGroup = HttpApiGroup.make("server.plugin")
     OpenApi.annotations({
       title: "plugin",
       description: "Experimental plugin routes.",
+    }),
+  )
+
+/** Lives in the `server.experimental` group (see `groups/experimental.ts`). */
+export const PluginWebEndpoint = HttpApiEndpoint.get("plugin.web", "/api/experimental/plugin/web", {
+  query: LocationQuery,
+  success: Location.response(Schema.Array(Plugin.Info)),
+  error: [LocationNotFoundError, ServiceUnavailableError],
+})
+  .annotateMerge(locationQueryOpenApi)
+  .annotateMerge(
+    OpenApi.annotations({
+      identifier: "experimental.plugin.web",
+      summary: "List plugin GUIs for the web app",
+      description:
+        "List the active plugins whose `./gui-experimental` window setup the web app loads, each read with `plugin.gui`. Empty unless `experimental.plugin_gui_web` is `true` or lists the plugin. Experimental: may change without compatibility guarantees.",
+      // The route shares the `server.experimental` group with the persistent PTY prototype; tag it on its own.
+      transform: (operation) => ({ ...operation, tags: ["experimental"] }),
     }),
   )
