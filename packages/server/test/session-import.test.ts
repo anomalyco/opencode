@@ -130,6 +130,46 @@ it.live("rejects an invalid imported message without creating the session", () =
     expect(yield* request(`/api/session/${id}`, undefined, 404)).toMatchObject({ _tag: "SessionNotFoundError" })
   }).pipe(Effect.scoped),
 )
+
+it.live("maps imported message-ID collisions to 409 without creating the session", () =>
+  Effect.gen(function* () {
+    const request = yield* setup
+    const template = Schema.decodeUnknownSync(SessionResponse)(yield* request("/api/session", {}))
+    const messages = [{ id: "msg_clash", type: "user", text: "Hello", time: { created: 1 } }]
+    const first = Session.ID.create()
+    yield* request("/api/experimental/session/import", {
+      info: { ...template.data, id: first, title: "Original" },
+      messages,
+    })
+    const second = Session.ID.create()
+    const error = yield* request(
+      "/api/experimental/session/import",
+      { info: { ...template.data, id: second, title: "Copy" }, messages },
+      409,
+    )
+    expect(error).toMatchObject({
+      _tag: "ConflictError",
+      resource: second,
+      message: `Session messages already exist: ${second}`,
+    })
+    // The rejected import must not have created the destination session (the
+    // failure mode when the constraint fires mid-publication).
+    expect(yield* request(`/api/session/${second}`, undefined, 404)).toMatchObject({
+      _tag: "SessionNotFoundError",
+      sessionID: second,
+    })
+    const reimport = yield* request(
+      "/api/experimental/session/import",
+      { info: { ...template.data, id: first, title: "Original" }, messages: [] },
+      409,
+    )
+    expect(reimport).toMatchObject({
+      _tag: "ConflictError",
+      resource: first,
+      message: `Session already exists: ${first}`,
+    })
+  }).pipe(Effect.scoped),
+)
 ;["missing", "self"].forEach((parent) => {
   it.live(`rejects a ${parent} parent without creating the imported session`, () =>
     Effect.gen(function* () {
