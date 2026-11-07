@@ -167,16 +167,16 @@ export function buildSearchIndex(
       download.desktop.builds.map((b) => b.label).join(" "),
     ),
     section(
-      content.products.mobile.name,
-      "/mobile#download",
-      t("download.action.download"),
-      "iOS iPhone TestFlight beta Android Google Play",
-    ),
-    section(
       content.products.terminal.name,
       "/terminal#download",
       t("download.action.download"),
       download.terminal.installs.map((i) => i.command).join(" "),
+    ),
+    section(
+      content.products.mobile.name,
+      "/mobile#download",
+      t("download.action.download"),
+      "iOS iPhone TestFlight beta Android Google Play",
     ),
     section(
       names.product,

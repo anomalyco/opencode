@@ -262,7 +262,7 @@ export const fallbackAnswer: VoiceAnswer = {
   id: "fallback",
   asks: [],
   keys: [],
-  text: "I'm not sure about that one. I can tell you what OpenCode is, which models it works with, how to install it, what it costs, and about the desktop, mobile and terminal apps.",
+  text: "I'm not sure about that one. I can tell you what OpenCode is, which models it works with, how to install it, what it costs, and about the desktop, terminal and mobile apps.",
   links: [{ label: "Docs", href: docsUrl("/") }],
 }
 

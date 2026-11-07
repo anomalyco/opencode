@@ -211,7 +211,7 @@ export const content = {
     },
     subscriptions: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } },
     steps: {
-      download: { title: "下载", line: "桌面端、移动端或终端。" },
+      download: { title: "下载", line: "桌面端、终端或移动端。" },
       "use-free-models": { title: "使用免费模型", line: "OpenCode 内置一组免费模型，无需账户。" },
       "add-more-models": {
         title: "添加更多模型",
@@ -386,7 +386,7 @@ export const content = {
       projects: {
         opencode: {
           name: "OpenCode",
-          body: "开源编程代理，提供桌面、移动和终端应用以及 SDK。采用 MIT 许可，GitHub 星标超过 220,000。",
+          body: "开源编程代理，提供桌面、终端和移动应用以及 SDK。采用 MIT 许可，GitHub 星标超过 220,000。",
         },
         sst: {
           name: "SST",
@@ -413,8 +413,8 @@ export const content = {
     about: {
       title: "关于 OpenCode",
       boilerplate: {
-        long: "OpenCode 是一个开源编程代理。它提供桌面应用、移动应用、终端界面和 SDK，并支持任意提供商的模型，包括 Claude、GPT 和 Gemini。OpenCode 采用 MIT 许可，由 Anomaly 打造。它在 GitHub 上拥有超过 220,000 个星标和 1,000 多位贡献者，每月有超过 2200 万开发者使用。",
-        short: "OpenCode 是 Anomaly 推出的开源编程代理，提供桌面、移动和终端应用以及 SDK。",
+        long: "OpenCode 是一个开源编程代理。它提供桌面应用、终端界面、移动应用和 SDK，并支持任意提供商的模型，包括 Claude、GPT 和 Gemini。OpenCode 采用 MIT 许可，由 Anomaly 打造。它在 GitHub 上拥有超过 220,000 个星标和 1,000 多位贡献者，每月有超过 2200 万开发者使用。",
+        short: "OpenCode 是 Anomaly 推出的开源编程代理，提供桌面、终端和移动应用以及 SDK。",
       },
       products: {
         "opencode-console": {

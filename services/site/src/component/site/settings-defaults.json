@@ -110,8 +110,8 @@
   "navVersion": "default",
   "productsOrder": [
     "desktop",
-    "mobile",
     "terminal",
+    "mobile",
     "sdk"
   ],
   "linkBlue": "console",

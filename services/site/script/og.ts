@@ -59,7 +59,7 @@ const cards: Card[] = [
     path: "/",
     title: "OpenCode",
     description: "The open source coding agent. Available on your desktop, phone, the terminal or your own code.",
-    shows: "the home page with the desktop, mobile, terminal and SDK product cards, at an angle",
+    shows: "the home page with the desktop, terminal, mobile and SDK product cards, at an angle",
     shot: angled(`${stills}/home.jpg`, [290, 20, 1150, 860], 470),
   },
   {

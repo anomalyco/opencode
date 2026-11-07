@@ -85,10 +85,10 @@ function alignActions(root: HTMLElement) {
 }
 
 /**
- * The download sections (Desktop, Mobile, Terminal, Extensions, FAQ), at the bottom of
+ * The download sections (Desktop, Terminal, Mobile, Extensions, FAQ), at the bottom of
  * /product. `heading` draws each section's
  * title (an id for anchors, then the title); `columns` marks the blocks for the /product
- * title-in-the-first-column layout. `apps: false` leaves out the Desktop, Mobile and Terminal
+ * title-in-the-first-column layout. `apps: false` leaves out the Desktop, Terminal and Mobile
  * sections (/product has those on its cards); `editors: false` the editor Extensions one. `firstId`
  * replaces the first section's id, so a page's own anchor (/product#download) lands on it.
  * `beforeFaq` goes right above the FAQ.
@@ -123,16 +123,16 @@ export function DownloadSections(props: {
           <DesktopList os={null} state={state} />
         </Section>
 
-        <Section id="download-mobile" title={content().mobile.title}>
-          <MobileList />
-        </Section>
-
         <Section id="download-terminal" title={content().terminal.title}>
           <ul data-component="download-list">
             <For each={content().terminal.installs}>
               {(item) => <CopyRow item={item} method={item.id} copies="terminal" state={state} />}
             </For>
           </ul>
+        </Section>
+
+        <Section id="download-mobile" title={content().mobile.title}>
+          <MobileList />
         </Section>
       </Show>
 

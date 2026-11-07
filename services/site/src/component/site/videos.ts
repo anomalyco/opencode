@@ -136,8 +136,8 @@ const moreMedia: Partial<Record<MoreSlug, true>> = { mini: true }
  */
 const themedHeroes: Partial<Record<PageSlug, true>> = {
   desktop: true,
-  mobile: true,
   terminal: true,
+  mobile: true,
   sdk: true,
   mini: true,
 }
@@ -171,17 +171,17 @@ const defaultSet = "locked"
  * "continue" (the cover's first second, then the same shots); made in product-videos/cinematic next
  * to the checkout (lock.py, angle.py, continue.sh).
  */
-const angledCuts: Partial<Record<ProductSlug, true>> = { desktop: true, mobile: true, terminal: true, sdk: true }
+const angledCuts: Partial<Record<ProductSlug, true>> = { desktop: true, terminal: true, mobile: true, sdk: true }
 
 /** The carousel cards with hover cuts; they replace the set's portrait video, whatever set is chosen. */
-const cardHovers: Partial<Record<ProductSlug, true>> = { desktop: true, mobile: true, terminal: true, sdk: true }
+const cardHovers: Partial<Record<ProductSlug, true>> = { desktop: true, terminal: true, mobile: true, sdk: true }
 
 /**
  * The carousel cards' resting state for every set, in place of the portrait poster: a short
  * seamless loop of the product's key element (`<slug>.mp4`) and its first frame (`<slug>.webp`).
  * They are not frames of the product videos, so the card crossfades between them.
  */
-const cardLoops: Partial<Record<ProductSlug, true>> = { desktop: true, mobile: true, terminal: true, sdk: true }
+const cardLoops: Partial<Record<ProductSlug, true>> = { desktop: true, terminal: true, mobile: true, sdk: true }
 
 /** The focused (essential UI only) clips that exist so far. */
 const focusedClips = [
