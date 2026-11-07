@@ -2180,7 +2180,14 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
           toggle()
         }}
       >
-        <Show when={failed()} fallback={<span data-slot="execute-tool-call-marker">›</span>}>
+        <Show
+          when={failed()}
+          fallback={
+            <span data-slot="execute-tool-call-marker" data-chevron>
+              <Icon name="fill-triangle-down" size="small" />
+            </span>
+          }
+        >
           <span data-slot="execute-tool-call-marker">
             <Icon name="outline-hexagonal-warning" size="small" />
           </span>
@@ -2200,7 +2207,9 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
           )}
         </Show>
         <Show when={props.error}>
-          <span data-slot="execute-tool-call-arrow">›</span>
+          <span data-slot="execute-tool-call-arrow">
+            <Icon name="fill-triangle-down" size="small" />
+          </span>
         </Show>
       </div>
       <Show when={open()}>
