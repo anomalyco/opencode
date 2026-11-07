@@ -362,6 +362,45 @@ describe("run runtime queue", () => {
     expect(admitted).toEqual(["three"])
   })
 
+  test.each([false, true])(
+    "releases follow-ups after a handled prompt failure (admission fails: %s)",
+    async (fails) => {
+      const ui = createFooterApiFixture()
+      const started = Promise.withResolvers<void>()
+      const request = Promise.withResolvers<void>()
+      const admitted: string[] = []
+      const errors: string[] = []
+      const task = runPromptQueue({
+        footer: ui.api,
+        run: async () => {
+          started.resolve()
+          // The interactive runtime displays transport errors and returns without admission.
+          await request.promise.catch((error: Error) => {
+            errors.push(error.message)
+          })
+        },
+        admit: async (prompt) => {
+          admitted.push(prompt.text)
+          if (fails) throw new Error("follow-up failed")
+        },
+        onAdmissionError: (_prompt, error) => {
+          errors.push(error instanceof Error ? error.message : String(error))
+        },
+        settle: async () => ui.api.close(),
+      })
+
+      ui.submit("one")
+      await started.promise
+      ui.submit("two")
+      request.reject(new Error("transport failed"))
+      await task
+
+      expect(admitted).toEqual(["two"])
+      expect(errors).toEqual(fails ? ["transport failed", "follow-up failed"] : ["transport failed"])
+      expect(ui.api.isClosed).toBe(true)
+    },
+  )
+
   test("close aborts an in-flight durable admission", async () => {
     const ui = createFooterApiFixture()
     let admissionHit = false
