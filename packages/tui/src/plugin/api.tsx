@@ -34,6 +34,20 @@ import { useOptionalPanel } from "../context/panel"
 import { useLocal } from "../context/local"
 import { abbreviateHome } from "../util/path-format"
 
+/** Sanitize a string for use as a storage path segment. Scoped npm plugin ids
+ * (`@scope/name`) contain `@` and `/`, which segment() rejects with a TypeError
+ * at runtime — so any storage access from a scoped plugin's TUI crashes. The
+ * plugin cannot work around this: the invalid prefix is composed host-side. */
+export function sanitizeSegment(value: string): string {
+  const cleaned = value
+    .replace(/^@/, "")
+    .replace(/[/]/g, "_")
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+  // segment() also rejects "." and ".." (path traversal) even though the
+  // charset matches, so the sanitizer must not emit them either.
+  return cleaned === "." || cleaned === ".." ? "__" : cleaned
+}
+
 export type Dispose = () => Promise<void>
 
 // Slot inputs erased to their union: the registry stores one render shape
@@ -203,8 +217,8 @@ export function createPluginContext(input: {
       mode: host.keymap.mode,
     },
     storage: {
-      store: (key, options) => host.storage.store(`plugin.${input.id}.${key}`, options),
-      memory: (key, options) => host.storage.memory(`plugin.${input.id}.${key}`, options),
+      store: (key, options) => host.storage.store(`plugin.${sanitizeSegment(input.id)}.${key}`, options),
+      memory: (key, options) => host.storage.memory(`plugin.${sanitizeSegment(input.id)}.${key}`, options),
     },
     ui: {
       dialog: dialogApi,
