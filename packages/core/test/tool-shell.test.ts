@@ -18,10 +18,12 @@ import { Global } from "@opencode/util/global"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { LocationLifecycle } from "@opencode/core/location-lifecycle"
 import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Agent } from "@opencode/core/agent"
+import { Detaching } from "@opencode/core/detaching"
 import { Job } from "@opencode/core/job"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
@@ -36,8 +38,12 @@ import { Shell } from "@opencode/core/shell"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { ID } from "@opencode/schema/shell"
 import { ShellTool } from "@opencode/core/tool/plugin/shell"
+import { PersistentPty } from "@opencode/core/persistent-pty"
+import { disabledPersistentPtyLayer } from "./fixture/persistent-pty"
+import { fakeDaemon } from "./fixture/persistent-pty-daemon"
 import { ToolOutput } from "@opencode/core/tool-output"
 import { Tool } from "@opencode/core/tool"
+import { ToolInterrupted } from "@opencode/core/tool/interrupted"
 import { tmpdir, tmpdirScoped, withTempDir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
@@ -135,16 +141,21 @@ const shellPluginSupervisor = makeLocationNode({
     FileAccess.node,
     Permission.node,
     Session.node,
+    Detaching.node,
     Job.node,
     Shell.node,
+    Shell.daemonNode,
     ShellSelect.node,
     Tool.node,
   ],
 })
 
 const nodes = LayerNode.group([
+  PersistentPty.node,
+  Shell.daemonNode,
   Database.node,
   Bus.node,
+  Detaching.node,
   Job.node,
   Session.node,
   SessionExecution.node,
@@ -153,23 +164,90 @@ const nodes = LayerNode.group([
   FSUtil.node,
   Global.node,
 ])
-const replacements = [
+const daemonReplacements = [
   SessionExecution.node.replace(executionNode),
   Permission.node.replace(permission),
   Global.node.replace(tempGlobalLayer),
   offlineModels,
 ] satisfies LayerNode.Replacements
+// Most suites spawn commands from the server, so CI starts no daemon for them; `parity` runs a subset on both.
+const replacements = [
+  ...daemonReplacements,
+  PersistentPty.node.replace(disabledPersistentPtyLayer),
+] satisfies LayerNode.Replacements
 const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
 const it = testEffect(
   AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(shellPluginSupervisor)]),
 )
+// On the real process daemon (when its binary is compatible; otherwise this falls back to spawning).
+const daemonIt = testEffect(
+  AppNodeBuilder.build(nodes, [...daemonReplacements, PluginSupervisor.node.replace(shellPluginSupervisor)]),
+)
+const parity = {
+  live: (name: string, body: Parameters<typeof it.live>[1], options?: Parameters<typeof it.live>[2]) => {
+    it.live(`${name} (spawned)`, body, options)
+    daemonIt.live(`${name} (daemon)`, body, options)
+  },
+  skip: (name: string, body: Parameters<typeof it.live>[1], options?: Parameters<typeof it.live>[2]) =>
+    it.live.skip(name, body, options),
+}
+// On an in-process fake daemon, so daemon-only behavior is covered without the real binary.
+let fake: Effect.Success<ReturnType<typeof fakeDaemon>> | undefined
+const fakeDaemonIt = testEffect(
+  AppNodeBuilder.build(nodes, [
+    ...daemonReplacements,
+    PluginSupervisor.node.replace(shellPluginSupervisor),
+    PersistentPty.node.replace(
+      makeGlobalNode({
+        service: PersistentPty.Service,
+        layer: Layer.unwrap(
+          fakeDaemon().pipe(
+            Effect.map((daemon) => {
+              fake = daemon
+              return PersistentPty.layerWith(daemon.options)
+            }),
+          ),
+        ),
+        deps: [Bus.node, Global.node, Detaching.node],
+      }),
+    ),
+  ]),
+)
+
 const permissionIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([nodes, PermissionSaved.node]), [
     SessionExecution.node.replace(executionNode),
     Global.node.replace(tempGlobalLayer),
     PluginSupervisor.node.replace(shellPluginSupervisor),
+    PersistentPty.node.replace(disabledPersistentPtyLayer),
     offlineModels,
   ]),
+)
+
+// Stands in for a daemon-backed shell: every command reports that it can outlive the server.
+const detachableShellSupervisor = makeLocationNode({
+  name: "test/shell-plugins-detachable",
+  layer: Layer.effectDiscard(
+    registerToolPlugin(ShellTool.Plugin).pipe(
+      Effect.updateService(Shell.Service, (shell) => Shell.Service.of({ ...shell, detachable: () => true })),
+    ),
+  ),
+  deps: [
+    Config.node,
+    Environment.node,
+    FileAccess.node,
+    Permission.node,
+    Session.node,
+    Detaching.node,
+    Job.node,
+    Shell.node,
+    Shell.daemonNode,
+    ShellSelect.node,
+    Tool.node,
+  ],
+})
+const detachableIt = testEffect(
+  AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(detachableShellSupervisor)]),
 )
 
 const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
@@ -179,6 +257,19 @@ const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
 })
 
 const isWindows = process.platform === "win32"
+
+// The process daemon keeps a finished command's zombie until the command is forgotten.
+const running = (pid: number) => {
+  try {
+    process.kill(pid, 0)
+  } catch {
+    return false
+  }
+  return !Bun.spawnSync(["ps", "-o", "stat=", "-p", String(pid)])
+    .stdout.toString()
+    .trim()
+    .startsWith("Z")
+}
 const cwdCommand = isWindows ? "(Get-Location).Path; Start-Sleep -Milliseconds 100" : "pwd"
 const helloCommand = isWindows ? "[Console]::Out.Write('hello'); Start-Sleep -Milliseconds 100" : "printf hello"
 const stderrCommand = isWindows
@@ -1170,8 +1261,10 @@ describe("ShellTool", () => {
             FileAccess.node,
             Permission.node,
             Session.node,
+            Detaching.node,
             Job.node,
             Shell.node,
+            Shell.daemonNode,
             ShellSelect.node,
             Tool.node,
           ],
@@ -1241,7 +1334,7 @@ describe("ShellTool", () => {
     )
   }
 
-  it.live("keeps non-zero exits useful", () =>
+  parity.live("keeps non-zero exits useful", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
@@ -1283,7 +1376,7 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
-  it.live("uses configured line limits", () =>
+  parity.live("uses configured line limits", () =>
     withTempDir((tmp) => {
       reset()
       return Effect.gen(function* () {
@@ -1354,7 +1447,7 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
-  it.live("returns the shell id for a background command", () =>
+  parity.live("returns the shell id for a background command", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
@@ -1400,6 +1493,114 @@ describe("ShellTool", () => {
         }),
       )
     }),
+  )
+
+  fakeDaemonIt.live("keeps a background daemon command's job across a Location reload and reports how it ended", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        reset()
+        const sessions = yield* Session.Service
+        const jobs = yield* Job.Service
+        const bus = yield* Bus.Service
+        const locations = yield* LocationServiceMap.Service
+        const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
+        yield* sessions.create({ id: sessionID, title: "shell test", location, model: sessionModel })
+        const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+          Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
+          Stream.take(2),
+          Stream.runCollect,
+          Effect.forkScoped({ startImmediately: true }),
+        )
+        const started = yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          yield* plugins.awaitActivation
+          const registry = yield* Tool.Service
+          const shell = yield* Shell.Service
+          const run = (id: string) =>
+            Effect.gen(function* () {
+              const settled = yield* executeTool(registry, call({ command: "work", background: true }, id))
+              return yield* shell.get(ID.make(String(settled.metadata?.shellID)))
+            })
+          return { finishing: yield* run("call-finishing"), cancelled: yield* run("call-cancelled") }
+        }).pipe(Effect.provide(locations.get(location)))
+        const process = (info: { file: string }) => {
+          const found = fake?.processes.find((item) => item.pipe?.output_path === info.file)
+          if (!found) throw new Error("no daemon process for the command")
+          return found.id
+        }
+
+        // A reload closes the Location and boots its replacement, which takes the commands back.
+        yield* locations.invalidate(location)
+        const replacement = yield* Effect.gen(function* () {
+          return yield* Shell.Service
+        }).pipe(Effect.provide(locations.get(location)))
+        expect((yield* replacement.list()).map((info) => info.id).toSorted()).toEqual(
+          [started.finishing.id, started.cancelled.id].toSorted(),
+        )
+        expect((yield* jobs.get(started.finishing.id))?.status).toBe("running")
+
+        // Cancelling the session's job still stops its command.
+        yield* jobs.cancel(started.cancelled.id)
+        while (!fake?.ops.includes("signal")) yield* Effect.promise(() => Bun.sleep(2))
+        expect(fake?.requests).toContainEqual(
+          expect.objectContaining({ op: "signal", id: process(started.cancelled), signal: "SIGTERM" }),
+        )
+
+        fake?.output(process(started.finishing), "done\n")
+        fake?.exit(process(started.finishing), 0)
+        const notices = Array.from(yield* Fiber.join(admitted)).map((event) => event.data.item.payload)
+        expect(notices).toContainEqual(
+          expect.objectContaining({
+            text: expect.stringContaining("done"),
+            metadata: expect.objectContaining({ shellID: started.finishing.id, state: "completed", exit: 0 }),
+          }),
+        )
+        expect(notices).toContainEqual(
+          expect.objectContaining({
+            metadata: expect.objectContaining({ shellID: started.cancelled.id, state: "cancelled" }),
+          }),
+        )
+        expect((yield* jobs.get(started.finishing.id))?.status).toBe("completed")
+        expect((yield* replacement.get(started.finishing.id)).status).toBe("exited")
+        yield* locations.invalidate(location)
+      }),
+    ),
+  )
+
+  it.live("leaves a background job running for the next server, without a notice, on a normal quit", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        reset()
+        const sessions = yield* Session.Service
+        const jobs = yield* Job.Service
+        const bus = yield* Bus.Service
+        const detaching = yield* Detaching.Service
+        const locations = yield* LocationServiceMap.Service
+        const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
+        yield* sessions.create({ id: sessionID, title: "shell test", location, model: sessionModel })
+        const notices: unknown[] = []
+        yield* bus.listen((event) =>
+          Effect.sync(() => {
+            if (event.type === SessionEvent.InboxEnqueued.type) notices.push(event)
+          }),
+        )
+        const shellID = yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          yield* plugins.awaitActivation
+          const registry = yield* Tool.Service
+          const settled = yield* executeTool(registry, call({ command: "sleep 60", background: true }, "call-quit"))
+          return String(settled.metadata?.shellID)
+        }).pipe(Effect.provide(locations.get(location)))
+        // The server quits without a handoff: shutdown starts, then the Location closes.
+        expect(yield* detaching.begin).toBe(false)
+        yield* locations.invalidate(location)
+        // The job's observers are interrupted, not told it was cancelled.
+        expect(Exit.hasInterrupts(yield* jobs.wait({ id: shellID }).pipe(Effect.exit))).toBe(true)
+        yield* Effect.yieldNow
+        expect((yield* jobs.pendingBackground).map((item) => [item.id, item.status])).toEqual([[shellID, "running"]])
+        expect(notices).toEqual([])
+      }),
+    ),
   )
 
   it.live("preserves a background command's non-zero exit", () =>
@@ -1512,7 +1713,8 @@ describe("ShellTool", () => {
   )
 
   const signalTest = isWindows ? it.live.skip : it.live
-  signalTest(
+  const signalParity = isWindows ? parity.skip : parity.live
+  signalParity(
     "escalates a shell timeout when the ready process ignores SIGTERM",
     () =>
       Effect.gen(function* () {
@@ -1544,7 +1746,7 @@ describe("ShellTool", () => {
                   expect((yield* shell.wait(info.id).pipe(Effect.timeout("10 seconds"))).status).toBe("timeout")
                   const pid = info.pid
                   if (pid === undefined) throw new Error("Expected shell PID")
-                  expect(() => process.kill(pid, 0)).toThrow()
+                  expect(running(pid)).toBe(false)
                 }),
               (info) =>
                 Effect.try(() => {
@@ -1558,6 +1760,51 @@ describe("ShellTool", () => {
         )
       }),
     { timeout: 30_000 },
+  )
+
+  signalParity(
+    "stops a timed-out command with SIGTERM first and SIGKILL after the grace period",
+    () =>
+      withTempDir((tmp) =>
+        withSession(tmp.path, () =>
+          Effect.gen(function* () {
+            const shell = yield* Shell.Service
+            const info = yield* shell.create({
+              shell: "/bin/sh",
+              command: "trap 'echo got TERM' TERM; echo ready; while :; do sleep 0.1; done",
+              timeout: 0,
+            })
+            while ((yield* shell.output(info.id, { cursor: Number.MAX_SAFE_INTEGER })).size === 0)
+              yield* Effect.sleep(Duration.millis(10))
+            const start = Date.now()
+            yield* shell.timeout(info.id, 1)
+            const ended = yield* shell.wait(info.id).pipe(Effect.timeout("10 seconds"))
+            expect(ended.status).toBe("timeout")
+            expect(Date.now() - start).toBeGreaterThanOrEqual(2_900)
+            expect((yield* shell.output(info.id)).output).toContain("got TERM")
+          }),
+        ),
+      ),
+    { timeout: 30_000 },
+  )
+
+  signalTest("stops a command without forgetting it", () =>
+    withTempDir((tmp) =>
+      withSession(tmp.path, () =>
+        Effect.gen(function* () {
+          const shell = yield* Shell.Service
+          const info = yield* shell.create({ shell: "/bin/sh", command: "echo kept; sleep 60", timeout: 0 })
+          while ((yield* shell.output(info.id, { cursor: Number.MAX_SAFE_INTEGER })).size === 0)
+            yield* Effect.sleep(Duration.millis(10))
+          yield* shell.stop(info.id, "killed")
+          expect((yield* shell.wait(info.id).pipe(Effect.timeout("5 seconds"))).status).toBe("killed")
+          expect(yield* shell.get(info.id)).toMatchObject({ status: "killed" })
+          expect(yield* Effect.promise(() => fs.readFile(info.file, "utf8"))).toBe("kept\n")
+          // Stopping an ended command changes nothing.
+          expect((yield* shell.stop(info.id, "timeout")).status).toBe("killed")
+        }),
+      ),
+    ),
   )
 
   if (!isWindows) {
@@ -1590,7 +1837,190 @@ describe("ShellTool", () => {
     )
   }
 
-  it.live("backgrounds a foreground command when the session is signaled", () =>
+  // Runs a foreground call the way a session step does, and interrupts it once its output is on disk.
+  const interruptCall = (
+    registry: Tool.Interface,
+    command: string,
+    id: string,
+    onStarted: Effect.Effect<unknown, unknown> = Effect.void,
+    waitForOutput = true,
+  ) =>
+    Effect.gen(function* () {
+      const shell = yield* Shell.Service
+      const slot: ToolInterrupted.Slot = {}
+      const started = yield* Deferred.make<string>()
+      const fiber = yield* executeTool(registry, {
+        ...call({ command }, id),
+        progress: (update) =>
+          typeof update.shellID === "string"
+            ? Deferred.succeed(started, update.shellID).pipe(Effect.asVoid)
+            : Effect.void,
+      }).pipe(Effect.provideService(ToolInterrupted.Slot, slot), Effect.forkChild({ startImmediately: true }))
+      const shellID = ID.make(yield* Deferred.await(started))
+      while (waitForOutput && (yield* shell.output(shellID, { cursor: Number.MAX_SAFE_INTEGER })).size === 0)
+        yield* Effect.sleep(Duration.millis(10))
+      yield* onStarted
+      yield* Fiber.interrupt(fiber)
+      const exit = yield* Fiber.await(fiber)
+      return { shellID, exit, result: slot.result }
+    })
+
+  if (!isWindows) {
+    parity.live("keeps the output of an interrupted call and settles it with the tail, file and shell ID", () =>
+      withTempDir((tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const shell = yield* Shell.Service
+            const jobs = yield* Job.Service
+            const { shellID, exit, result } = yield* interruptCall(
+              registry,
+              "printf 'first\\nsecond\\n'; sleep 60",
+              "call-interrupted",
+            )
+            // The interrupt still reaches the caller; the result travels through ToolInterrupted.
+            expect(Exit.hasInterrupts(exit)).toBe(true)
+            const info = yield* shell.get(shellID)
+            expect(info.status).toBe("killed")
+            expect(yield* Effect.promise(() => fs.readFile(info.file, "utf8"))).toBe("first\nsecond\n")
+            expect(result?.metadata).toMatchObject({ interrupted: true, truncated: false, status: "completed" })
+            // A shell ID marks a background call, whose live output clients show instead of the result.
+            expect(result?.metadata).not.toHaveProperty("shellID")
+            expect(result?.content).toEqual([
+              {
+                type: "text",
+                text: `first\nsecond\n\n[showing lines 1-2 of 2; full output saved to ${info.file}]\n\nCommand interrupted by the user (shell ID: ${shellID}).`,
+              },
+            ])
+            expect((yield* jobs.get(shellID))?.status).not.toBe("running")
+            expect(yield* jobs.pendingBackground).toEqual([])
+          }),
+        )
+      }),
+    )
+
+    parity.live(
+      "settles an interrupted call without waiting for a command that ignores SIGTERM",
+      () =>
+        withTempDir((tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const shell = yield* Shell.Service
+              const started = Date.now()
+              const { shellID, result } = yield* interruptCall(
+                registry,
+                "trap '' TERM; printf 'kept\\n'; while :; do sleep 1; done",
+                "call-interrupted-stubborn",
+              )
+              // Bounded by the interrupt's short wait, not by the 3 s grace before SIGKILL.
+              expect(Date.now() - started).toBeLessThan(2_500)
+              const info = yield* shell.get(shellID)
+              expect(result?.content).toEqual([
+                {
+                  type: "text",
+                  text: `kept\n\n[showing lines 1-1 of 1; full output saved to ${info.file}]\n\nCommand interrupted by the user (shell ID: ${shellID}); it is still being stopped.`,
+                },
+              ])
+              // The stop still ends it.
+              expect((yield* shell.wait(shellID)).status).toBe("killed")
+            }),
+          )
+        }),
+      { timeout: 15_000 },
+    )
+
+    fakeDaemonIt.live("a prepared handoff moves a daemon-run foreground call to the background at shutdown", () =>
+      withTempDir((tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const shell = yield* Shell.Service
+            const jobs = yield* Job.Service
+            const pty = yield* PersistentPty.Service
+            const detaching = yield* Detaching.Service
+            const { shellID, exit, result } = yield* interruptCall(
+              registry,
+              "sleep 60",
+              "call-detaching-daemon",
+              Effect.gen(function* () {
+                expect(yield* pty.handoff()).toMatchObject({ ticket: "next" })
+                expect(yield* detaching.begin).toBe(true)
+              }),
+              false,
+            )
+            expect(shell.detachable(shellID)).toBe(true)
+            expect(Exit.hasInterrupts(exit)).toBe(true)
+            const info = yield* shell.get(shellID)
+            expect(info.status).toBe("running")
+            expect(result?.metadata).toMatchObject({ shellID, status: "running" })
+            const process = fake?.processes.find((item) => item.pipe?.output_path === info.file)
+            expect(process?.lifecycle.status).toBe("running")
+            // Moved to the background: a next server neither waits on it nor times it out.
+            expect(process?.pipe?.metadata).toMatchObject({ id: shellID, foreground: false })
+            expect(process?.pipe?.metadata).not.toHaveProperty("timeoutDeadline")
+            expect(process?.pipe?.metadata).not.toHaveProperty("stopReason")
+            expect(fake?.ops).not.toContain("signal")
+            expect((yield* jobs.pendingBackground).map((item) => item.id)).toEqual([shellID])
+          }),
+        )
+      }),
+    )
+
+    parity.live("leaves a call interrupted, not cancelled by the user, when its Location closes", () =>
+      withTempDir((tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const shell = yield* Shell.Service
+            const lifecycle = yield* LocationLifecycle.Service
+            const { shellID, exit, result } = yield* interruptCall(
+              registry,
+              "printf ready; sleep 60",
+              "call-location-closed",
+              lifecycle.shutdown,
+            )
+            expect(Exit.hasInterrupts(exit)).toBe(true)
+            expect(result).toBeUndefined()
+            expect((yield* shell.get(shellID)).status).toBe("running")
+            yield* shell.remove(shellID)
+          }),
+        )
+      }),
+    )
+
+    for (const handoff of [true, false])
+      it.live(
+        `leaves a spawned command's call interrupted, not cancelled by the user, on ${handoff ? "a planned restart" : "a normal quit"}`,
+        () =>
+          withTempDir((tmp) => {
+            reset()
+            return withSession(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const shell = yield* Shell.Service
+                const detaching = yield* Detaching.Service
+                const { shellID, exit, result } = yield* interruptCall(
+                  registry,
+                  "printf ready; sleep 60",
+                  `call-stopping-spawned-${handoff}`,
+                  Effect.gen(function* () {
+                    if (handoff) yield* detaching.handoffPrepared
+                    yield* detaching.begin
+                  }),
+                )
+                expect(shell.detachable(shellID)).toBe(false)
+                // The step settles it as interrupted; no "interrupted by the user" result, no stop to wait for.
+                expect(Exit.hasInterrupts(exit)).toBe(true)
+                expect(result).toBeUndefined()
+                expect((yield* shell.get(shellID)).status).toBe("running")
+                yield* shell.remove(shellID)
+              }),
+            )
+          }),
+      )
+  }
+
+  parity.live("backgrounds a foreground command when the session is signaled", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
@@ -1633,6 +2063,45 @@ describe("ShellTool", () => {
           expect((yield* shell.get(id)).status).toBe("running")
           expect((yield* shell.list()).map((info) => info.id)).toContain(id)
           yield* shell.remove(id)
+        }),
+      )
+    }),
+  )
+})
+
+describe("ShellTool detaching", () => {
+  detachableIt.live("moves a detachable command to the background when interrupted while detaching", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const shell = yield* Shell.Service
+          const jobs = yield* Job.Service
+          const detaching = yield* Detaching.Service
+          const slot: ToolInterrupted.Slot = {}
+          const started = yield* Deferred.make<string>()
+          const fiber = yield* executeTool(registry, {
+            ...call({ command: idleCommand }, "call-detaching"),
+            progress: (update) =>
+              typeof update.shellID === "string"
+                ? Deferred.succeed(started, update.shellID).pipe(Effect.asVoid)
+                : Effect.void,
+          }).pipe(Effect.provideService(ToolInterrupted.Slot, slot), Effect.forkChild({ startImmediately: true }))
+          const shellID = ID.make(yield* Deferred.await(started))
+          yield* detaching.handoffPrepared
+          expect(yield* detaching.begin).toBe(true)
+          yield* Fiber.interrupt(fiber)
+
+          const info = yield* shell.get(shellID)
+          expect(info.status).toBe("running")
+          expect(slot.result?.content[0]).toEqual({
+            type: "text",
+            text: `Command moved to the background (shell ID: ${shellID}).\nOutput is streaming to: ${info.file}`,
+          })
+          expect(slot.result?.metadata).toMatchObject({ status: "running", shellID })
+          // Backgrounded durably for the next server, without a completion notification of its own.
+          expect(yield* jobs.pendingBackground).toMatchObject([{ id: shellID, status: "running" }])
+          yield* shell.remove(shellID)
         }),
       )
     }),

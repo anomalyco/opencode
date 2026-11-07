@@ -18,10 +18,11 @@ import { SessionStep } from "@opencode/core/session/runner/step"
 import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { Snapshot } from "@opencode/core/snapshot"
 import { ToolOutput } from "@opencode/core/tool-output"
+import { ToolInterrupted } from "@opencode/core/tool/interrupted"
 import { Money } from "@opencode/schema/money"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { asc, eq } from "drizzle-orm"
-import { Effect, Exit, Layer } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
@@ -225,5 +226,87 @@ it.effect("records the cost the endpoint reports instead of the catalog price", 
       .get()
     expect(message?.data).toMatchObject({ finish: "stop", cost: 0 })
     expect(yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get()).toMatchObject({ cost: 0 })
+  }),
+)
+
+it.live("settles an interrupted tool with the result it reports and still ends interrupted", () =>
+  Effect.gen(function* () {
+    const db = (yield* Database.Service).db
+    const llm = yield* TestLLM.Test
+    const sessionID = Session.ID.create()
+    const assistantMessageID = SessionMessage.ID.create()
+    const steps = yield* SessionStep.make.pipe(
+      Effect.provide(
+        Layer.mock(Snapshot.Service)({
+          capture: () => Effect.succeed(undefined),
+          files: () => Effect.succeed([]),
+        }),
+      ),
+    )
+    yield* db
+      .insert(ProjectTable)
+      .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+      .run()
+    yield* db
+      .insert(SessionTable)
+      .values({ id: sessionID, project_id: Project.ID.global, slug: "step", directory: "/project", version: "test" })
+      .run()
+    const model = SessionRunnerModel.resolved(
+      LanguageModel.make({ id: "test-model", provider: "test", route: OpenAIChat.route }),
+      {
+        capabilities: { tools: true, input: ["text"], output: ["text"] },
+        limit: { context: 100_000, output: 1_000 },
+        cost: [],
+      },
+    )
+    yield* llm.push(
+      TestLLM.complete(
+        { reason: { normalized: "tool-calls" }, usage: { inputTokens: 1, outputTokens: 1 } },
+        LLMEvent.toolCall({ id: "call-interrupted", name: "test", input: {} }),
+      ),
+    )
+    const started = yield* Deferred.make<void>()
+    const attempt = yield* steps
+      .attempt({
+        isLocationClosed: () => false,
+        sessionID,
+        assistantMessageID,
+        agent: Agent.defaultID,
+        model,
+        prepared: {
+          retry: () => Effect.void,
+          request: ai.request({ model: model.model, prompt: "Run one tool" }),
+          options: {},
+          // Like the shell tool: finish the work uninterruptibly, then report the result.
+          executeTool: () =>
+            Effect.uninterruptibleMask((restore) =>
+              Effect.gen(function* () {
+                yield* Deferred.succeed(started, undefined)
+                yield* restore(Effect.never).pipe(Effect.exit)
+                const result = { content: [{ type: "text" as const, text: "partial output" }] }
+                yield* ToolInterrupted.report(result)
+                return result
+              }),
+            ),
+        },
+        retry: () => Effect.succeed({ retry: false }),
+        recoverContinuation: true,
+        recoverOverflow: Effect.succeed(false),
+      })
+      .pipe(Effect.forkChild({ startImmediately: true }))
+    yield* Deferred.await(started)
+    yield* Fiber.interrupt(attempt)
+    const exit = yield* Fiber.await(attempt)
+    expect(Exit.hasInterrupts(exit)).toBe(true)
+    expect(yield* llm.requests()).toHaveLength(1)
+    const message = yield* db
+      .select()
+      .from(SessionMessageTable)
+      .where(eq(SessionMessageTable.id, assistantMessageID))
+      .get()
+    expect(message?.data).toMatchObject({
+      error: { type: "aborted", message: "Step interrupted" },
+      content: [{ type: "tool", state: { status: "completed", content: [{ type: "text", text: "partial output" }] } }],
+    })
   }),
 )

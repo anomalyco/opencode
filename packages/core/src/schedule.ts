@@ -2,7 +2,20 @@ export * as Schedule from "./schedule.js"
 
 import { randomUUID } from "node:crypto"
 import { and, asc, eq, gt, isNull, lte, min, or, sql } from "drizzle-orm"
-import { Cause, Clock, Context, Cron, DateTime, Effect, Latch, Layer, Option, Result, Schedule as EffectSchedule, Schema } from "effect"
+import {
+  Cause,
+  Clock,
+  Context,
+  Cron,
+  DateTime,
+  Effect,
+  Latch,
+  Layer,
+  Option,
+  Result,
+  Schedule as EffectSchedule,
+  Schema,
+} from "effect"
 import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import {
@@ -317,15 +330,10 @@ const layer = Layer.effect(
         const note = outcome.invalid
           ? `[Schedule paused after invalid check: ${outcome.error}]`
           : `[Schedule paused after ${strikes} failed checks: ${outcome.error}]`
-        const id = yield* admitWake(
-          row,
-          session.id,
-          run,
-          due,
-          late,
-          `${row.action.prompt}\n\n${note}`,
-          { error: outcome.error, failures: strikes },
-        )
+        const id = yield* admitWake(row, session.id, run, due, late, `${row.action.prompt}\n\n${note}`, {
+          error: outcome.error,
+          failures: strikes,
+        })
         yield* db
           .update(ScheduleTable)
           .set({
@@ -624,12 +632,7 @@ const layer = Layer.effect(
       })
     }
 
-    const firstDue = Effect.fnUntraced(function* (
-      when: When,
-      hasCheck: boolean,
-      zone: DateTime.TimeZone,
-      now: number,
-    ) {
+    const firstDue = Effect.fnUntraced(function* (when: When, hasCheck: boolean, zone: DateTime.TimeZone, now: number) {
       switch (when.type) {
         case "in":
           return now + (yield* duration(when.in))
@@ -688,8 +691,7 @@ const layer = Layer.effect(
         if (!config.enabled) return yield* new DisabledError()
         const check = yield* resolveStoredCheck(input)
         const when = input.when ?? (check?.mode === "until" ? DEFAULT_UNTIL_EVERY : undefined)
-        if (when === undefined)
-          return yield* new InvalidError({ reason: "when is required unless until is set" })
+        if (when === undefined) return yield* new InvalidError({ reason: "when is required unless until is set" })
         const zone = yield* resolveZone(when.tz ?? config.timezone)
         const now = yield* Clock.currentTimeMillis
         const due = yield* firstDue(when, check !== undefined, zone, now)
@@ -724,7 +726,8 @@ const layer = Layer.effect(
                 )
                 if (!init.ok) {
                   // A code check that throws or fails at creation is broken (e.g. wrong MCP response field); fail right away.
-                  if (init.invalid || check.condition.type === "code") return yield* new InvalidError({ reason: init.error })
+                  if (init.invalid || check.condition.type === "code")
+                    return yield* new InvalidError({ reason: init.error })
                   return UNSEEDED
                 }
                 if (check.mode === "until" && init.wake)
