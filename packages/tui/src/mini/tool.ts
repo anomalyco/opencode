@@ -633,10 +633,13 @@ function snapTodo(p: ToolProps): ToolSnapshot {
 
 function snapQuestion(p: ToolProps): ToolSnapshot {
   const answers = list<unknown[]>(p.frame.meta.answers)
+  // Persisted inputs keep stray \r the model emitted; it would hard-break the mini text.
   const items = list<{ question?: string }>(p.frame.input.questions).map((item, i) => {
-    const answer = list<string>(answers[i]).filter((entry) => typeof entry === "string")
+    const answer = list<string>(answers[i])
+      .filter((entry) => typeof entry === "string")
+      .map((entry) => entry.replace(/\r/g, ""))
     return {
-      question: item.question || `Question ${i + 1}`,
+      question: (item.question || `Question ${i + 1}`).replace(/\r/g, ""),
       answer: answer.length > 0 ? answer.join(", ") : "(no answer)",
     }
   })
@@ -836,9 +839,9 @@ function scrollQuestionFinal(p: ToolProps): string {
 
   const rows: string[] = []
   for (const [i, item] of q.slice(0, 4).entries()) {
-    const prompt = item.question
-    const reply = a[i] ?? []
-    rows.push(`? ${prompt || `Question ${i + 1}`}`)
+    const prompt = (item.question || `Question ${i + 1}`).replace(/\r/g, "")
+    const reply = (a[i] ?? []).map((entry) => String(entry).replace(/\r/g, ""))
+    rows.push(`? ${prompt}`)
     rows.push(`  ${reply.length > 0 ? reply.join(", ") : "(no answer)"}`)
   }
 

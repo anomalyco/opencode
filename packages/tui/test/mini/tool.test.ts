@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { normalizeTool, toolInlineInfo, toolOutputText, toolPath, toolScroll } from "../../src/mini/tool"
+import { entryBody } from "../../src/mini/entry.body"
+import type { StreamCommit } from "../../src/mini/types"
 import { canonicalToolPart } from "./fixture/tool-part"
 
 describe("Mini tool presentation", () => {
@@ -130,5 +132,48 @@ describe("Mini tool presentation", () => {
   test("keeps segment-safe contained tool paths relative", () => {
     expect(toolPath("..cache/result.txt", { directory: "/work/project" })).toBe("..cache/result.txt")
     expect(toolPath("../shared/result.txt", { directory: "/work/project" })).toBe("/work/shared/result.txt")
+  })
+
+  test("renders question text without carriage returns", () => {
+    const commit: StreamCommit = {
+      kind: "tool",
+      text: "",
+      phase: "final",
+      source: "tool",
+      tool: "question",
+      part: canonicalToolPart("question", {
+        status: "completed",
+        input: { questions: [{ question: "这\r是\r问\r题\r？", header: "验\r证" }] },
+        metadata: { answers: [["显示\r正常"]] },
+        content: [{ type: "text", text: "" }],
+      }),
+    }
+
+    const body = entryBody(commit)
+    expect(body.type).toBe("structured")
+    if (body.type === "structured" && body.snapshot.kind === "question") {
+      for (const item of body.snapshot.items) {
+        expect(item.question).not.toContain("\r")
+        expect(item.answer).not.toContain("\r")
+      }
+      expect(body.snapshot.items[0]?.question).toBe("这是问题？")
+      expect(body.snapshot.items[0]?.answer).toBe("显示正常")
+    }
+
+    const scroll = toolScroll("final", {
+      directory: "/work/project",
+      raw: "",
+      name: "question",
+      input: { questions: [{ question: "这\r是\r问\r题\r？", header: "验\r证" }] },
+      meta: { answers: [["显示\r正常"]] },
+      state: {},
+      status: "completed",
+      error: "",
+      output: "",
+      time: {},
+    })
+    expect(scroll).toContain("? 这是问题？")
+    expect(scroll).toContain("显示正常")
+    expect(scroll).not.toContain("\r")
   })
 })
