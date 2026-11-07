@@ -37,6 +37,11 @@ export type Hunk =
 export interface UpdateFileChunk {
   readonly oldLines: ReadonlyArray<string>
   readonly newLines: ReadonlyArray<string>
+  /**
+   * Index pairs into `oldLines` and `newLines` of lines written as context, so they keep their source bytes and stay
+   * distinguishable from a changed line whose replacement happens to be identical.
+   */
+  readonly contextIndices?: ReadonlyArray<readonly [old: number, new: number]>
   readonly changeContext?: string
   readonly endOfFile?: boolean
 }
@@ -125,14 +130,19 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
   return Result.succeed(hunks)
 }
 
+/**
+ * Matches chunks against the LF view of the file that Read shows the model, then splices them back so the file keeps
+ * its line endings: untouched and context lines keep their source bytes, and changed or inserted lines take the file's
+ * first line ending.
+ */
 export function derive(path: string, chunks: ReadonlyArray<UpdateFileChunk>, original: string): FileUpdate {
   const source = Bom.split(original)
-  const lines = source.text.split("\n")
-  if (lines.at(-1) === "") lines.pop()
-  const replacements = computeReplacements(lines, path, chunks)
+  const lines = splitLines(source.text)
+  const ending = lines.find((line) => line.ending)?.ending ?? "\n"
+  const replacements = computeReplacements(lines, path, chunks, ending)
   for (const [start, remove, insert] of replacements.reverse()) lines.splice(start, remove, ...insert)
-  if (lines.at(-1) !== "") lines.push("")
-  const next = Bom.split(lines.join("\n"))
+  // Updates always end with a line ending, including a previously unterminated last line.
+  const next = Bom.split(lines.map((line) => line.text + (line.ending || ending)).join(""))
   return { content: next.text, bom: source.bom || next.bom }
 }
 
@@ -175,6 +185,7 @@ function parseUpdate(
   const chunks: Array<{
     oldLines: string[]
     newLines: string[]
+    contextIndices: Array<readonly [number, number]>
     changeContext?: string
     endOfFile?: boolean
   }> = []
@@ -233,20 +244,16 @@ function parseUpdate(
       chunks.push({
         oldLines: [],
         newLines: [],
+        contextIndices: [],
         changeContext: updateLine === "@@" ? undefined : updateLine.slice("@@ ".length),
       })
       index++
       continue
     }
-    if (chunks.length === 0) chunks.push({ oldLines: [], newLines: [] })
+    if (chunks.length === 0) chunks.push({ oldLines: [], newLines: [], contextIndices: [] })
     const chunk = chunks.at(-1)!
-    if (line === "") {
-      chunk.oldLines.push("")
-      chunk.newLines.push("")
-      index++
-      continue
-    }
-    if (line.startsWith(" ")) {
+    if (line === "" || line.startsWith(" ")) {
+      chunk.contextIndices.push([chunk.oldLines.length, chunk.newLines.length])
       chunk.oldLines.push(line.slice(1))
       chunk.newLines.push(line.slice(1))
       index++
@@ -308,26 +315,49 @@ function isBoundary(line: string) {
   )
 }
 
-function computeReplacements(lines: ReadonlyArray<string>, path: string, chunks: ReadonlyArray<UpdateFileChunk>) {
-  const replacements: Array<readonly [start: number, remove: number, insert: ReadonlyArray<string>]> = []
+interface Line {
+  readonly text: string
+  /** "\r\n" or "\n"; empty for an unterminated last line. A lone "\r" stays in the text, as Read shows it. */
+  readonly ending: string
+}
+
+function splitLines(text: string): Line[] {
+  const parts = text.split("\n")
+  const last = parts.pop()!
+  return [
+    ...parts.map((part) =>
+      part.endsWith("\r") ? { text: part.slice(0, -1), ending: "\r\n" } : { text: part, ending: "\n" },
+    ),
+    ...(last === "" ? [] : [{ text: last, ending: "" }]),
+  ]
+}
+
+function computeReplacements(
+  lines: ReadonlyArray<Line>,
+  path: string,
+  chunks: ReadonlyArray<UpdateFileChunk>,
+  ending: string,
+) {
+  const texts = lines.map((line) => line.text)
+  const replacements: Array<readonly [start: number, remove: number, insert: ReadonlyArray<Line>]> = []
   let lineIndex = 0
   for (const chunk of chunks) {
     if (chunk.changeContext) {
-      const context = seek(lines, [chunk.changeContext], lineIndex)
+      const context = seek(texts, [chunk.changeContext], lineIndex)
       if (context === -1) throw new Error(`Failed to find context '${chunk.changeContext}' in ${path}`)
       lineIndex = context + 1
     }
     if (chunk.oldLines.length === 0) {
-      replacements.push([lines.length, 0, chunk.newLines])
+      replacements.push([lines.length, 0, chunk.newLines.map((text) => ({ text, ending }))])
       continue
     }
     let oldLines = chunk.oldLines
     let newLines = chunk.newLines
-    let found = seek(lines, oldLines, lineIndex, chunk.endOfFile)
+    let found = seek(texts, oldLines, lineIndex, chunk.endOfFile)
     if (found === -1 && oldLines.at(-1) === "") {
       oldLines = oldLines.slice(0, -1)
       if (newLines.at(-1) === "") newLines = newLines.slice(0, -1)
-      found = seek(lines, oldLines, lineIndex, chunk.endOfFile)
+      found = seek(texts, oldLines, lineIndex, chunk.endOfFile)
     }
     if (found === -1 && chunk.oldLines.every((line) => line === "")) {
       const expected =
@@ -335,7 +365,24 @@ function computeReplacements(lines: ReadonlyArray<string>, path: string, chunks:
       throw new Error(`Failed to find ${expected} in ${path}`)
     }
     if (found === -1) throw new Error(`Failed to find expected lines in ${path}:\n${chunk.oldLines.join("\n")}`)
-    replacements.push([found, oldLines.length, newLines])
+    // Context lines stay in place, so only the changed runs between them are replaced.
+    const anchors = [
+      ...(chunk.contextIndices ?? []).filter(([old, next]) => old < oldLines.length && next < newLines.length),
+      [oldLines.length, newLines.length] as const,
+    ]
+    anchors.reduce(
+      ([oldStart, newStart], [oldEnd, newEnd]) => {
+        if (oldStart !== oldEnd || newStart !== newEnd) {
+          replacements.push([
+            found + oldStart,
+            oldEnd - oldStart,
+            newLines.slice(newStart, newEnd).map((text) => ({ text, ending })),
+          ])
+        }
+        return [oldEnd + 1, newEnd + 1] as const
+      },
+      [0, 0] as const,
+    )
     lineIndex = found + oldLines.length
   }
   return replacements.sort((left, right) => left[0] - right[0])

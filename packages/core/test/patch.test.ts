@@ -15,7 +15,9 @@ describe("Patch", () => {
       {
         type: "update",
         path: "update.txt",
-        chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: "section", endOfFile: undefined }],
+        chunks: [
+          { oldLines: ["old"], newLines: ["new"], contextIndices: [], changeContext: "section", endOfFile: undefined },
+        ],
         movePath: undefined,
       },
       { type: "delete", path: "delete.txt" },
@@ -40,7 +42,7 @@ describe("Patch", () => {
         type: "update",
         path: "update.txt",
         movePath: undefined,
-        chunks: [{ oldLines: [], newLines: ["line"], changeContext: undefined }],
+        chunks: [{ oldLines: [], newLines: ["line"], contextIndices: [], changeContext: undefined }],
       },
       { type: "add", path: "add.txt", contents: "content" },
     ])
@@ -54,7 +56,9 @@ describe("Patch", () => {
         type: "update",
         path: "old.txt",
         movePath: "new.txt",
-        chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: undefined, endOfFile: undefined }],
+        chunks: [
+          { oldLines: ["old"], newLines: ["new"], contextIndices: [], changeContext: undefined, endOfFile: undefined },
+        ],
       },
     ])
   })
@@ -110,7 +114,9 @@ describe("Patch", () => {
         type: "update",
         path: "foo.txt",
         movePath: undefined,
-        chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: undefined, endOfFile: undefined }],
+        chunks: [
+          { oldLines: ["old"], newLines: ["new"], contextIndices: [], changeContext: undefined, endOfFile: undefined },
+        ],
       },
     ])
   })
@@ -121,7 +127,9 @@ describe("Patch", () => {
         type: "update",
         path: "file.txt",
         movePath: undefined,
-        chunks: [{ oldLines: ["one"], newLines: ["two"], changeContext: undefined, endOfFile: undefined }],
+        chunks: [
+          { oldLines: ["one"], newLines: ["two"], contextIndices: [], changeContext: undefined, endOfFile: undefined },
+        ],
       },
     ])
   })
@@ -132,7 +140,9 @@ describe("Patch", () => {
         type: "update",
         path: "file.txt",
         movePath: undefined,
-        chunks: [{ oldLines: ["one"], newLines: ["two"], changeContext: undefined, endOfFile: undefined }],
+        chunks: [
+          { oldLines: ["one"], newLines: ["two"], contextIndices: [], changeContext: undefined, endOfFile: undefined },
+        ],
       },
     ])
   })
@@ -149,7 +159,7 @@ describe("Patch", () => {
         type: "update",
         path: "/tmp/update.txt",
         movePath: undefined,
-        chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: undefined }],
+        chunks: [{ oldLines: ["old"], newLines: ["new"], contextIndices: [], changeContext: undefined }],
       },
     ])
   })
@@ -160,7 +170,9 @@ describe("Patch", () => {
         type: "update",
         path: "file.txt",
         movePath: undefined,
-        chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: undefined, endOfFile: undefined }],
+        chunks: [
+          { oldLines: ["old"], newLines: ["new"], contextIndices: [], changeContext: undefined, endOfFile: undefined },
+        ],
       },
     ])
   })
@@ -171,7 +183,15 @@ describe("Patch", () => {
         type: "update",
         path: "file.txt",
         movePath: undefined,
-        chunks: [{ oldLines: ["old\r"], newLines: ["new"], changeContext: undefined, endOfFile: undefined }],
+        chunks: [
+          {
+            oldLines: ["old\r"],
+            newLines: ["new"],
+            contextIndices: [],
+            changeContext: undefined,
+            endOfFile: undefined,
+          },
+        ],
       },
     ])
   })
@@ -182,7 +202,7 @@ describe("Patch", () => {
         type: "update",
         path: "file.txt",
         movePath: undefined,
-        chunks: [{ oldLines: [], newLines: ["quux"], changeContext: undefined, endOfFile: true }],
+        chunks: [{ oldLines: [], newLines: ["quux"], contextIndices: [], changeContext: undefined, endOfFile: true }],
       },
     ])
   })
@@ -194,7 +214,7 @@ describe("Patch", () => {
           type: "update",
           path: "file.txt",
           movePath: undefined,
-          chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: undefined }],
+          chunks: [{ oldLines: ["old"], newLines: ["new"], contextIndices: [], changeContext: undefined }],
         },
       ],
     )
@@ -206,7 +226,7 @@ describe("Patch", () => {
         type: "update",
         path: "file.txt",
         movePath: undefined,
-        chunks: [{ oldLines: ["old"], newLines: ["new"] }],
+        chunks: [{ oldLines: ["old"], newLines: ["new"], contextIndices: [] }],
       },
     ])
     expect(
@@ -218,7 +238,7 @@ describe("Patch", () => {
         type: "update",
         path: "old.txt",
         movePath: "new.txt",
-        chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: undefined }],
+        chunks: [{ oldLines: ["old"], newLines: ["new"], contextIndices: [], changeContext: undefined }],
       },
     ])
   })
@@ -227,6 +247,49 @@ describe("Patch", () => {
     const update = Patch.derive("update.txt", [{ oldLines: ["  old   "], newLines: ["new"] }], "\uFEFFold\n")
     expect(update).toEqual({ content: "new\n", bom: true })
     expect(Patch.joinBom(update.content, update.bom)).toBe("\uFEFFnew\n")
+  })
+
+  test("preserves CRLF line endings on replaced lines", () => {
+    expect(Patch.derive("f", [{ oldLines: ["foo"], newLines: ["FOO"] }], "foo\r\nbar\r\n").content).toBe(
+      "FOO\r\nbar\r\n",
+    )
+  })
+
+  test.each([
+    ["CRLF", "one\r\ntwo\r\nthree\r\n", "ONE\r\ntwo\r\nbetween\r\nthree\r\n"],
+    ["LF", "one\ntwo\nthree\n", "ONE\ntwo\nbetween\nthree\n"],
+    ["unterminated CRLF", "one\r\ntwo\r\nthree", "ONE\r\ntwo\r\nbetween\r\nthree\r\n"],
+  ])("preserves %s line endings across a patch with context", (_, original, expected) => {
+    const patch = "*** Begin Patch\n*** Update File: f\n@@\n-one\n+ONE\n two\n+between\n three\n*** End Patch"
+    const hunk = parse(patch)[0]
+    if (hunk?.type !== "update") throw new Error("expected an update hunk")
+    expect(Patch.derive("f", hunk.chunks, original).content).toBe(expected)
+  })
+
+  test("keeps untouched and context line endings in mixed files", () => {
+    const patch = "*** Begin Patch\n*** Update File: f\n@@\n one\n two\n-three\n+THREE\n+added\n four\n*** End Patch"
+    const hunk = parse(patch)[0]
+    if (hunk?.type !== "update") throw new Error("expected an update hunk")
+    // Context lines keep their bytes; changed and added lines take the file's first ending.
+    expect(Patch.derive("f", hunk.chunks, "one\r\ntwo\nthree\nfour\n").content).toBe(
+      "one\r\ntwo\nTHREE\r\nadded\r\nfour\n",
+    )
+  })
+
+  test("keeps fuzzy-matched context lines byte for byte", () => {
+    const patch = "*** Begin Patch\n*** Update File: f\n@@\n say 'hi'\n-old\n+new\n*** End Patch"
+    const hunk = parse(patch)[0]
+    if (hunk?.type !== "update") throw new Error("expected an update hunk")
+    expect(Patch.derive("f", hunk.chunks, "say ‘hi’  \r\nold\r\n").content).toBe("say ‘hi’  \r\nnew\r\n")
+  })
+
+  test("uses the file's first line ending for appended lines", () => {
+    expect(Patch.derive("f", [{ oldLines: [], newLines: ["c"] }], "a\nb\r\nz\r\n").content).toBe("a\nb\r\nz\r\nc\n")
+    expect(Patch.derive("f", [{ oldLines: [], newLines: ["c"] }], "a\r\nb").content).toBe("a\r\nb\r\nc\r\n")
+  })
+
+  test("keeps a lone carriage return inside the line text", () => {
+    expect(Patch.derive("f", [{ oldLines: ["a\rb"], newLines: ["A\rB"] }], "a\rb\n").content).toBe("A\rB\n")
   })
 
   test("derives multiple update chunks", () => {
@@ -382,7 +445,7 @@ describe("Patch", () => {
         type: "update",
         path: "file.txt",
         movePath: undefined,
-        chunks: [{ oldLines: ["import foo"], newLines: ["import foo", "bar"] }],
+        chunks: [{ oldLines: ["import foo"], newLines: ["import foo", "bar"], contextIndices: [[0, 0]] }],
       },
     ])
   })
@@ -401,9 +464,10 @@ describe("Patch", () => {
           {
             oldLines: ["old a", "*** Update File: b.txt"],
             newLines: ["new a", "*** Update File: b.txt"],
+            contextIndices: [[1, 1]],
             changeContext: undefined,
           },
-          { oldLines: ["old b"], newLines: ["new b"], changeContext: undefined },
+          { oldLines: ["old b"], newLines: ["new b"], contextIndices: [], changeContext: undefined },
         ],
       },
     ])
@@ -423,6 +487,11 @@ describe("Patch", () => {
           {
             oldLines: ["before", "*** Move to: moved.txt", "*** End of File"],
             newLines: ["before", "*** Move to: moved.txt", "*** End of File"],
+            contextIndices: [
+              [0, 0],
+              [1, 1],
+              [2, 2],
+            ],
             changeContext: undefined,
           },
         ],
@@ -436,7 +505,7 @@ describe("Patch", () => {
         type: "update",
         path: "file.txt",
         movePath: undefined,
-        chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: "  section" }],
+        chunks: [{ oldLines: ["old"], newLines: ["new"], contextIndices: [], changeContext: "  section" }],
       },
     ])
   })
@@ -453,6 +522,11 @@ describe("Patch", () => {
           {
             oldLines: ["context before", "", "context after"],
             newLines: ["context before", "", "context after"],
+            contextIndices: [
+              [0, 0],
+              [1, 1],
+              [2, 2],
+            ],
             changeContext: undefined,
           },
         ],
