@@ -51,6 +51,8 @@ interface Input {
     cause: AIError,
     error: SessionError.Error,
     retry: boolean,
+    /** Settled without any provider output: a clean provider-side failure. */
+    clean: boolean,
   ) => Effect.Effect<{ readonly retry: false } | SessionRunnerRetry.Decision>
   readonly recoverContinuation: boolean
   /** The runner owns compaction policy; the attempt invokes it only before durable output. */
@@ -205,6 +207,7 @@ export const make = Effect.gen(function* () {
                   llmError,
                   SessionRunnerRetry.isRetryable(llmFailure) ||
                     (recorded.outputStarted && isInterruptedStream(llmFailure)),
+                  !recorded.outputStarted,
                 ),
               )
             : undefined
