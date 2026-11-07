@@ -14,6 +14,7 @@ import { Skill } from "../../skill.js"
 import { SkillDiscovery } from "../../skill/discovery.js"
 import { ReadToolFileSystem } from "../read-filesystem.js"
 import { Environment } from "../../environment/index.js"
+import { Flag } from "../../flag.js"
 
 export const name = "read"
 const FILENAME = "AGENTS.md"
@@ -39,6 +40,9 @@ export const Plugin = {
     const sessionInstructions = yield* SessionInstructions.Service
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
+    const dedupe = yield* Flag.enabled("context_gc")
+    // session + path + range -> content hash; a repeat of the same bytes answers a marker instead of the payload
+    const seenReads = new Map<string, bigint>()
 
     yield* ctx.tool
       .transform((editor) =>
@@ -88,7 +92,7 @@ export const Plugin = {
                     () => Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
                   ),
                 )
-                return { output, path: input.path }
+                return { output, path: input.path, repeated: false }
               }
 
               const read = (target: FileAccess.Target) =>
@@ -150,11 +154,20 @@ export const Plugin = {
                 Effect.catch(() => Effect.void),
                 Effect.catchDefect(() => Effect.void),
               )
-              return { output: result.content, path: result.path }
+              const key = `${context.sessionID} ${result.path} ${input.offset ?? 0}:${input.limit ?? 0}`
+              const hash = dedupe ? Bun.hash(JSON.stringify(result.content)) : undefined
+              const repeated = hash !== undefined && seenReads.get(key) === hash
+              if (hash !== undefined) {
+                if (seenReads.size > 1000) seenReads.clear() // a hint, not bookkeeping; dont let it grow forever
+                seenReads.set(key, hash)
+              }
+              return { output: result.content, path: result.path, repeated }
             }).pipe(
               Effect.map((result) => ({
                 output: result.output,
-                content: toModelContent(result.path, input.offset, result.output),
+                content: result.repeated
+                  ? `Unchanged since the previous read of ${result.path}.`
+                  : toModelContent(result.path, input.offset, result.output),
                 metadata: { truncated: result.output.type === "file" ? false : result.output.truncated },
               })),
               Effect.mapError((error) => {
