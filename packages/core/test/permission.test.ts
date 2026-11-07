@@ -761,6 +761,30 @@ describe("shell scanner permission impact", () => {
       nextEffect: ["allow", "allow"],
     },
     {
+      name: "assignment prefix",
+      shell: "bash",
+      command: "FOO=bar git status",
+      grants: [["FOO=bar git status *"], ["FOO=bar git status *"]],
+      repeat: [
+        ["allow", "allow"],
+        ["allow", "allow"],
+      ],
+      next: "git status",
+      nextEffect: ["ask", "ask"],
+    },
+    {
+      name: "leading redirect prefix",
+      shell: "bash",
+      command: "2>/dev/null curl -s https://example.com",
+      grants: [["2>/dev/null curl *"], ["2>/dev/null curl *"]],
+      repeat: [
+        ["allow", "allow"],
+        ["allow", "allow"],
+      ],
+      next: "curl -s https://example.com",
+      nextEffect: ["ask", "ask"],
+    },
+    {
       name: "assignment redirect prefix",
       shell: "bash",
       command: "FOO=bar > output; printf done",
