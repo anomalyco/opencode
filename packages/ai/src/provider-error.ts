@@ -151,6 +151,8 @@ const CONTENT_POLICY_TEXT =
   /violating our usage policy|blocked by content filtering policy|content[-_\s]?policy|rejected (?:as a result of our|by the) safety system|detected potentially unsafe or sensitive content/i
 const SERVER_ERROR_TEXT =
   /\b(?:try again|(?:please |you can )?retry (?:the |this |your )?request|try (?:the |this |your )?request again|(?:currently |temporarily )?at capacity|overloaded|temporarily unavailable|service[-_\s]?unavailable|(?:server|internal)[-_\s]?error|server (?:is )?busy|provider returned (?:an )?error|resource[-_\s]?exhausted|upstream (?:connect|connection|request)|request buffer limit while retrying upstream)\b/i
+// Gateways report a dropped upstream endpoint as a 400 with this phrasing; unlike a missing model, it is transient.
+const ENDPOINT_UNAVAILABLE_TEXT = /\bendpoint (?:is )?unavailable\b/i
 
 const Message = Schema.String.check(Schema.isPattern(/\S/))
 
@@ -265,6 +267,9 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     input.status === 408 ||
     input.status === 409 ||
     (input.status !== undefined && input.status >= 500) ||
+    (input.status === 400 &&
+      ENDPOINT_UNAVAILABLE_TEXT.test(text) &&
+      !codes.some((code) => INVALID_REQUEST_CODES.has(code))) ||
     // Server codes and phrasing only decide when no HTTP status contradicts them:
     // gateways such as OpenCode Zen substitute `server_error` for codes they do
     // not forward, so a 4xx with a server code is still a rejected request.
