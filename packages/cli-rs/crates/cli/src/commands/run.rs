@@ -3,6 +3,7 @@
 
 use opencode_api::generated::{SessionID, SessionUpdateInput};
 use opencode_store::target::{self, Prepared, TargetInput};
+use opencode_util::error;
 use serde_json::json;
 use std::cell::Cell;
 use std::io::{IsTerminal, Read};
@@ -21,7 +22,7 @@ mod prompt;
 #[path = "../run/ui.rs"]
 mod ui;
 
-pub fn run(context: &Context, args: &RunArgs) -> anyhow::Result<()> {
+pub fn run(context: &Context, args: &RunArgs) -> error::Result<()> {
     let json = args.format == OutputFormat::Json;
     let exit = Rc::new(Cell::new(0u8));
     let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build()?;

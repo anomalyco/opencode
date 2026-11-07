@@ -13,6 +13,7 @@ use std::time::Instant;
 use opencode_api::client::Client;
 use opencode_local::cli_config::Info;
 use opencode_store::target::TargetInput;
+use opencode_util::error;
 
 pub mod footers;
 pub mod prompt;
@@ -68,6 +69,6 @@ impl std::fmt::Display for InputError {
 impl std::error::Error for InputError {}
 
 /// Runs mini until the user leaves.
-pub fn run(input: Input) -> anyhow::Result<()> {
+pub fn run(input: Input) -> error::Result<()> {
     shell::run(input)
 }

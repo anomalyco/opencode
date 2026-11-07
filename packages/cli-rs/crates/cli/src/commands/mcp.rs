@@ -8,6 +8,7 @@ use opencode_api::generated::{
 };
 use opencode_local::jsonc::{self, Segment};
 use opencode_local::paths::Paths;
+use opencode_util::{bail, error};
 use serde_json::{Map, Value, json};
 
 use super::Context;
@@ -20,7 +21,7 @@ use crate::args::{McpAddArgs, McpArgs, McpAuthArgs, McpCommand, McpLogoutArgs};
 use crate::output::print;
 use crate::prompt;
 
-pub fn run(context: &Context, args: &McpArgs) -> anyhow::Result<()> {
+pub fn run(context: &Context, args: &McpArgs) -> error::Result<()> {
     match &args.command {
         None => crate::help::print(&["mcp"]),
         Some(McpCommand::List) => list(context),
@@ -32,12 +33,12 @@ pub fn run(context: &Context, args: &McpArgs) -> anyhow::Result<()> {
 
 // `list`, `add`, and `logout` let failures escape, so they print as `Error: ...` (C40-handler-errors).
 
-fn servers(server: &Server) -> anyhow::Result<Vec<McpServer>> {
+fn servers(server: &Server) -> error::Result<Vec<McpServer>> {
     let input = McpListInput { location: location()? };
     Ok(server.run(server.client().mcp_list(&input))?.data)
 }
 
-fn list(context: &Context) -> anyhow::Result<()> {
+fn list(context: &Context) -> error::Result<()> {
     let server = Server::connect(context)?;
     let mut servers = servers(&server)?;
     if servers.is_empty() {
@@ -60,25 +61,25 @@ fn list(context: &Context) -> anyhow::Result<()> {
     print(&(lines.join("\n") + "\n"))
 }
 
-fn add(args: &McpAddArgs) -> anyhow::Result<()> {
+fn add(args: &McpAddArgs) -> error::Result<()> {
     let has_command = !args.command.is_empty();
     let url = args.url.as_deref();
     if url.is_some() && has_command {
-        anyhow::bail!("Provide either --url <url> or a command after --, not both");
+        bail!("Provide either --url <url> or a command after --, not both");
     }
     if url.is_none() && !has_command {
-        anyhow::bail!("Provide either --url <url> or a command after --");
+        bail!("Provide either --url <url> or a command after --");
     }
     if let Some(url) = url
         && url::Url::parse(url).is_err()
     {
-        anyhow::bail!("Invalid URL: {url}");
+        bail!("Invalid URL: {url}");
     }
     if url.is_some() && !args.env.is_empty() {
-        anyhow::bail!("--env is only valid for local MCP servers");
+        bail!("--env is only valid for local MCP servers");
     }
     if has_command && !args.header.is_empty() {
-        anyhow::bail!("--header is only valid for remote MCP servers");
+        bail!("--header is only valid for remote MCP servers");
     }
     // Repeated keys keep their first place and take the last value, as an object built in order does.
     let record = |pairs: &[(String, String)]| {
@@ -128,7 +129,7 @@ fn config_path(directory: &Path) -> PathBuf {
     candidates.iter().find(|candidate| candidate.is_file()).unwrap_or(&candidates[0]).clone()
 }
 
-fn auth(context: &Context, args: &McpAuthArgs) -> anyhow::Result<()> {
+fn auth(context: &Context, args: &McpAuthArgs) -> error::Result<()> {
     let name = args.name.as_deref();
     if name.is_none() {
         require_interactive("Pass an MCP server name when running without an interactive terminal")?;
@@ -150,7 +151,7 @@ fn auth(context: &Context, args: &McpAuthArgs) -> anyhow::Result<()> {
     if let Some(name) = name
         && found.is_none()
     {
-        anyhow::bail!("MCP server not found: {name}");
+        bail!("MCP server not found: {name}");
     }
     let integration_id = match found {
         Some(found) => found.integration_id.as_ref().map(ToString::to_string),
@@ -164,7 +165,7 @@ fn auth(context: &Context, args: &McpAuthArgs) -> anyhow::Result<()> {
         })
     });
     let (Some(integration), Some(method)) = (integration, method) else {
-        anyhow::bail!("MCP server \"{}\" is not an OAuth-capable remote server", name.unwrap_or("undefined"));
+        bail!("MCP server \"{}\" is not an OAuth-capable remote server", name.unwrap_or("undefined"));
     };
     if !integration.connections.is_empty() {
         let needs_auth = servers
@@ -247,7 +248,7 @@ fn credential_ids(integration: &IntegrationInfo) -> Vec<String> {
         .collect()
 }
 
-fn remove(server: &Server, credentials: &[String]) -> anyhow::Result<()> {
+fn remove(server: &Server, credentials: &[String]) -> error::Result<()> {
     server.run(async {
         for credential in credentials {
             server
@@ -255,15 +256,15 @@ fn remove(server: &Server, credentials: &[String]) -> anyhow::Result<()> {
                 .credential_remove(&CredentialRemoveInput { credential_id: credential.clone().into() })
                 .await?;
         }
-        anyhow::Ok(())
+        Ok::<_, error::Error>(())
     })
 }
 
-fn logout(context: &Context, args: &McpLogoutArgs) -> anyhow::Result<()> {
+fn logout(context: &Context, args: &McpLogoutArgs) -> error::Result<()> {
     let server = Server::connect(context)?;
     let servers = servers(&server)?;
     let Some(found) = servers.iter().find(|server| server.name == args.name) else {
-        anyhow::bail!("MCP server not found: {}", args.name);
+        bail!("MCP server not found: {}", args.name);
     };
     // Resolved through the server's own integration ID: provider integrations may share its name.
     let integration = match &found.integration_id {

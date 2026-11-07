@@ -2,11 +2,12 @@
 //! entrypoints with `Host.resolve`.
 
 use opencode_service::delegate;
+use opencode_util::error;
 
 use super::Context;
 use crate::args::PluginArgs;
 
-pub fn run(_context: &Context, args: &PluginArgs) -> anyhow::Result<()> {
+pub fn run(_context: &Context, args: &PluginArgs) -> error::Result<()> {
     match &args.command {
         None => crate::help::print(&["plugin"]),
         Some(_) => {

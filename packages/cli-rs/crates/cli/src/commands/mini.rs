@@ -10,13 +10,14 @@ use opencode_local::paths::{self, Paths};
 use opencode_mini::stdin::{self, INTERACTIVE_INPUT_ERROR};
 use opencode_mini::{Input, InputError, signals::Trace};
 use opencode_store::target::{self, TargetInput};
+use opencode_util::{bail, error};
 
 use super::Context;
 use super::client::connect_following;
 use crate::args::MiniArgs;
 use crate::output::Exit;
 
-pub fn run(context: &Context, args: &MiniArgs) -> anyhow::Result<()> {
+pub fn run(context: &Context, args: &MiniArgs) -> error::Result<()> {
     let start = Instant::now();
     if !std::io::stdout().is_terminal() {
         return fail("opencode mini requires a TTY stdout");
@@ -32,7 +33,7 @@ pub fn run(context: &Context, args: &MiniArgs) -> anyhow::Result<()> {
     let piped = match stdin::take_piped() {
         Ok(piped) => piped,
         Err(message) if message == INTERACTIVE_INPUT_ERROR => return fail(&message),
-        Err(message) => anyhow::bail!(message),
+        Err(message) => bail!(message),
     };
     let initial_input = stdin::merge_input(piped.as_deref(), args.prompt.as_deref());
     let Ok(directory) = paths::start_directory() else {
@@ -90,7 +91,7 @@ pub fn run(context: &Context, args: &MiniArgs) -> anyhow::Result<()> {
 }
 
 /// `fail`: the error in TS's colors on stderr, then exit 1.
-fn fail(message: &str) -> anyhow::Result<()> {
+fn fail(message: &str) -> error::Result<()> {
     eprintln!("\x1b[91m\x1b[1mError: \x1b[0m{message}");
     Err(Exit(1).into())
 }

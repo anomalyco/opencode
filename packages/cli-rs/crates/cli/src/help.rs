@@ -1,6 +1,7 @@
 //! The output of the built-in flags and of usage errors, in Effect CLI's layout and colors (`CliOutput.ts`,
 //! `internal/help.ts`, `internal/command.ts`): help, version, completions, and the error section.
 
+use opencode_util::error;
 use std::io::IsTerminal;
 
 use crate::args::{Flag, Shell, Spec};
@@ -37,22 +38,22 @@ pub fn stderr_colors() -> bool {
 }
 
 /// Prints the help of the command at `names` (below the root) to stdout.
-pub fn print(names: &[&str]) -> anyhow::Result<()> {
+pub fn print(names: &[&str]) -> error::Result<()> {
     show(&parse::find_path(names))
 }
 
 /// Prints the help of the command at `path` to stdout.
-pub fn show(path: &[&'static Spec]) -> anyhow::Result<()> {
+pub fn show(path: &[&'static Spec]) -> error::Result<()> {
     output::print(&format!("{}\n", render(path, &name(), colors())))
 }
 
-pub fn version() -> anyhow::Result<()> {
+pub fn version() -> error::Result<()> {
     let style = Style(colors());
     output::print(&format!("{} {}{}\n", style.bold(&name()), style.dim("v"), style.bold(VERSION)))
 }
 
 /// `sh` means bash and `pwsh` PowerShell, as in Effect CLI (`GlobalFlag.Completions`).
-pub fn completions(shell: Shell) -> anyhow::Result<()> {
+pub fn completions(shell: Shell) -> error::Result<()> {
     output::print(&format!("{}\n", completions::generate(shell, &name())))
 }
 

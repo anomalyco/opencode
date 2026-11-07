@@ -18,6 +18,7 @@ mod wizard;
 #[cfg(test)]
 mod tests;
 
+use opencode_util::error;
 use std::process::ExitCode;
 
 use parse::Outcome;
@@ -71,7 +72,7 @@ fn main() -> ExitCode {
     exit(result)
 }
 
-fn exit(result: anyhow::Result<()>) -> ExitCode {
+fn exit(result: error::Result<()>) -> ExitCode {
     let code = match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => ExitCode::from(output::fail(error)),

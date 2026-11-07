@@ -2,16 +2,17 @@
 
 use opencode_api::client::Client;
 use opencode_api::generated::ModelListInput;
+use opencode_util::error;
 use serde_json::Value;
 
 use super::Context;
 use super::client::{block_on, connect, here, locale_compare};
 
-pub fn run(context: &Context) -> anyhow::Result<()> {
+pub fn run(context: &Context) -> error::Result<()> {
     let response = block_on(async {
         let server = connect(context).await?;
         let input = ModelListInput { location: Some(here()?), types: None };
-        anyhow::Ok(server.client.json::<Value>(Client::model_list_call(&input)?).await?)
+        Ok::<_, error::Error>(server.client.json::<Value>(Client::model_list_call(&input)?).await?)
     })??;
     let mut models: Vec<String> =
         data(&response).iter().map(|model| format!("{}/{}", text(&model["providerID"]), text(&model["id"]))).collect();

@@ -34,7 +34,6 @@ opentui = { path = "/home/simon/src/opentui-rust/crates/opentui", features = ["s
 
 # Expected third-party crates, declared once so steps rarely edit manifests. A crate takes one with
 # `name.workspace = true` and adds features with `features = [...]`.
-anyhow = "1"
 base64 = "0.23"
 bytes = "1"
 # Only a dev-dependency of opencode-util, for the differential test of its time module.

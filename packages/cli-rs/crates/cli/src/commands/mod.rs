@@ -21,6 +21,7 @@ pub mod uninstall;
 pub mod upgrade;
 
 use crate::args::{Cli, Command, ServerFlags};
+use opencode_util::error;
 
 /// What every handler gets besides its own arguments.
 pub struct Context {
@@ -28,7 +29,7 @@ pub struct Context {
     pub server: ServerFlags,
 }
 
-pub fn run(context: &Context, cli: &Cli) -> anyhow::Result<()> {
+pub fn run(context: &Context, cli: &Cli) -> error::Result<()> {
     let Some(command) = &cli.command else {
         return default::run(context, &cli.root);
     };

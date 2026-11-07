@@ -20,7 +20,6 @@ test = false
 workspace = true
 
 [dependencies]
-anyhow.workspace = true
 base64.workspace = true
 futures-util.workspace = true
 indexmap.workspace = true

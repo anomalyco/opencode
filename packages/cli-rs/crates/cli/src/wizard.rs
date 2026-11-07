@@ -4,6 +4,7 @@
 
 mod prompt;
 
+use opencode_util::{err, error};
 use std::ffi::OsString;
 
 use crate::args::{Count, Kind, Param, Spec};
@@ -15,7 +16,7 @@ use prompt::{
 
 /// Runs the wizard for the command at `path` (from the root), started with `argv`, then the command line it built,
 /// unless the user cancelled or declined.
-pub fn run(path: &[&'static Spec], argv: &[OsString]) -> anyhow::Result<()> {
+pub fn run(path: &[&'static Spec], argv: &[OsString]) -> error::Result<()> {
     let Some(line) = build(path, argv)? else {
         return Ok(());
     };
@@ -37,7 +38,7 @@ pub fn run(path: &[&'static Spec], argv: &[OsString]) -> anyhow::Result<()> {
 
 /// Asks for the command line. Returns its arguments after the program name, or `None` when the user cancelled or
 /// declined.
-fn build(path: &[&'static Spec], argv: &[OsString]) -> anyhow::Result<Option<Vec<String>>> {
+fn build(path: &[&'static Spec], argv: &[OsString]) -> error::Result<Option<Vec<String>>> {
     let name = help::name();
     log(&introduction(&name, Some(path[0].description.to_string())));
     let node = path[path.len() - 1];
@@ -70,7 +71,7 @@ fn build(path: &[&'static Spec], argv: &[OsString]) -> anyhow::Result<Option<Vec
             log(&format!("\n{}", annotate("Wizard cancelled.", &[RED])));
             Ok(None)
         }
-        Err(Stop::Invalid(message)) => Err(anyhow::anyhow!(message)),
+        Err(Stop::Invalid(message)) => Err(err!(message)),
     }
 }
 
