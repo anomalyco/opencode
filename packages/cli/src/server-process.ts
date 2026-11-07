@@ -12,6 +12,7 @@ import { PersistentPty } from "@opencode/schema/persistent-pty"
 import { HttpServer } from "effect/http"
 import { NetAddress } from "effect/net"
 import { Env } from "./env"
+import { HiddenConsole } from "#hidden-console"
 import { PortOwner } from "./services/port-owner"
 import { ServiceConfig } from "./services/service-config"
 import { RetainedImage } from "./services/retained-image"
@@ -76,6 +77,14 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           ? Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
           : undefined
       if (findIncumbent !== undefined && (yield* findIncumbent) !== undefined) return
+      if (options.mode === "service" && process.platform === "win32") {
+        yield* Effect.try(() => HiddenConsole.attach()).pipe(
+          Effect.flatMap((status) =>
+            status === undefined ? Effect.void : Effect.logWarning("could not attach a hidden console", { status }),
+          ),
+          Effect.catch((cause) => Effect.logWarning("could not attach a hidden console", { cause })),
+        )
+      }
       // Desktop can launch the service directly without injecting its saved environment.
       Object.assign(process.env, ServiceConfig.processEnv(config.env))
       // Keep a package-manager or curl install replaceable while the service runs; Desktop updates its own copy.
