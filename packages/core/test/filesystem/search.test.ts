@@ -17,15 +17,17 @@ import { location } from "../fixture/location"
 import { tmpdir } from "../fixture/tmpdir"
 import { it } from "../lib/effect"
 
-const ripgrepStub = (entry: string, onFind: (input: Ripgrep.FindInput) => void) =>
+const ripgrepStub = (entries: string | readonly string[], onFind: (input: Ripgrep.FindInput) => void) =>
   Layer.succeed(
     Ripgrep.Service,
     Ripgrep.Service.of({
       find: (input) =>
         Effect.gen(function* () {
           onFind(input)
-          if (input.onEntry)
-            yield* input.onEntry(FileSystem.Entry.make({ path: RelativePath.make(entry), type: "file" }))
+          for (const entry of [entries].flat()) {
+            if (input.onEntry)
+              yield* input.onEntry(FileSystem.Entry.make({ path: RelativePath.make(entry), type: "file" }))
+          }
           return []
         }),
       glob: () => Effect.succeed([]),
@@ -34,7 +36,7 @@ const ripgrepStub = (entry: string, onFind: (input: Ripgrep.FindInput) => void) 
   )
 
 const fakeFff = () => {
-  const state = { scanning: true, files: [] as string[], created: 0, destroyed: 0 }
+  const state = { scanning: true, files: [] as string[], directories: [] as string[], created: 0, destroyed: 0 }
   const create: Parameters<typeof FileSystemSearch.makeFffLayer>[0] = () => {
     state.created++
     const search = () => ({
@@ -50,7 +52,13 @@ const fakeFff = () => {
         destroy: () => void state.destroyed++,
         isScanning: () => state.scanning,
         fileSearch: search,
-        directorySearch: () => ({ ok: true, value: { items: [], scores: [] } }),
+        directorySearch: () => ({
+          ok: true as const,
+          value: {
+            items: state.directories.map((relativePath) => ({ relativePath })),
+            scores: state.directories.map(() => ({ total: 1 })),
+          },
+        }),
         mixedSearch: () => ({ ok: true, value: { items: [], scores: [] } }),
       },
     }
@@ -141,6 +149,23 @@ describe("FileSystemSearch", () => {
       expect(fff.state.destroyed).toBe(1)
       expect(yield* findFiles(search)).toEqual([])
       expect(fff.state.created).toBe(1)
+    }),
+  )
+
+  it.effect("normalizes fff directory entries to one forward-slash suffix on every platform", () =>
+    Effect.gen(function* () {
+      const fff = fakeFff()
+      fff.state.scanning = false
+      fff.state.directories = ["web\\backend02\\src"]
+      const { scope, search } = yield* buildSearch(fff.layer)
+
+      const entries = yield* search.find({ query: "src", type: "directory" })
+      expect(entries).toEqual([
+        FileSystem.Entry.make({ path: RelativePath.make("web/backend02/src/"), type: "directory" }),
+      ])
+      expect(entries.every((entry) => !entry.path.includes("\\"))).toBe(true)
+
+      yield* Scope.close(scope, Exit.void)
     }),
   )
 
@@ -260,8 +285,42 @@ describe("FileSystemSearch", () => {
         expect(observed?.limit).toBe(100_000)
         expect(observed?.exclude).toEqual([...Protected.names()].map((name) => `${name}/**`))
         expect((yield* search.find({ query: "src", type: "directory" }))[0]?.path).toBe(
-          RelativePath.make(`src${path.sep}`),
+          RelativePath.make("src/"),
         )
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  it.effect("derives directory entries with forward slashes instead of the platform separator", () =>
+    Effect.gen(function* () {
+      const layer = AppNodeBuilder.build(FileSystemSearch.node, [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(
+              location({ directory: AbsolutePath.make(path.join(os.tmpdir(), "opencode-search-separators")) }),
+            ),
+          ),
+        ),
+        Ripgrep.node.replace(ripgrepStub("web/backend02/src/app.ts", () => {})),
+      ])
+
+      yield* Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        const directories = yield* search.find({ query: "web", type: "directory" })
+        expect(directories).toHaveLength(3)
+        expect(directories.every((entry) => entry.type === "directory" && entry.path.endsWith("/"))).toBe(true)
+        expect(directories.map((entry) => entry.path).toSorted()).toEqual(
+          ["web/", "web/backend02/", "web/backend02/src/"].map((value) => RelativePath.make(value)),
+        )
+
+        const files = yield* search.find({ query: "app", type: "file" })
+        expect(files.map((entry) => `${entry.type}:${entry.path}`)).toEqual([
+          "file:web/backend02/src/app.ts",
+        ])
+
+        const all = [...directories, ...files]
+        expect(all.every((entry) => !entry.path.includes("\\"))).toBe(true)
       }).pipe(Effect.provide(layer))
     }),
   )
