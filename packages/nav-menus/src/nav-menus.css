@@ -212,16 +212,6 @@
       width: 2px;
       background: var(--bar);
     }
-
-    [role="menuitem"][aria-current="page"]:is(:focus-visible, :active)::before {
-      background: var(--link);
-    }
-
-    @media (hover: hover) and (pointer: fine) {
-      [role="menuitem"][aria-current="page"]:hover::before {
-        background: var(--link);
-      }
-    }
   }
 
   [data-slot="meta"] {
