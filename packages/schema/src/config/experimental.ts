@@ -37,6 +37,10 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
       description:
         "Settings for the experimental_image_generate tool, which is offered while a connected provider has an image model.",
     }),
+  image_model: ConfigModel.Selection.pipe(optional).annotate({
+    description:
+      "Model that describes attached images when the session model cannot see them, as providerID/modelID. Falls back to automatic selection when it isn't available. Requires the image_fallback flag.",
+  }),
   subagent_depth: NonNegativeInt.pipe(optional).annotate({
     description: "Maximum subagent nesting depth. Defaults to 1.",
   }),

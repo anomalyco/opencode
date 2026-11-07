@@ -16676,6 +16676,9 @@
               "codemode_vm": {
                 "type": "boolean"
               },
+              "image_fallback": {
+                "type": "boolean"
+              },
               "part_rows": {
                 "type": "boolean"
               },
@@ -16715,6 +16718,33 @@
                         ]
                       }
                     },
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "image_model": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "providerID": {
+                        "type": "string",
+                        "pattern": "^[^/#]+$"
+                      },
+                      "model": {
+                        "type": "string",
+                        "pattern": "^[^#]+$"
+                      },
+                      "variant": {
+                        "type": "string",
+                        "pattern": "^[^#]+$"
+                      }
+                    },
+                    "required": ["providerID", "model"],
                     "additionalProperties": false
                   }
                 ]

@@ -13,6 +13,7 @@ import { SnowflakeCortexPlugin } from "@opencode/core/plugin/provider/snowflake-
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
 import { SessionModelRequest } from "@opencode/core/session/model-request"
+import { SessionImageDescribe } from "@opencode/core/session/image-describe"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { expect } from "bun:test"
 import { Effect, Layer, Schedule, Stream } from "effect"
@@ -21,6 +22,11 @@ import { Socket } from "effect/socket"
 import { withEnv } from "../fixture/env"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
+
+const imageDescribe = Layer.succeed(
+  SessionImageDescribe.Service,
+  SessionImageDescribe.Service.of({ substitute: (messages) => Effect.succeed(messages) }),
+)
 
 const it = testEffect(
   Layer.merge(PluginTestLayer, SessionModelTransport.layer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))),
@@ -89,7 +95,7 @@ const fixture = Effect.fn(function* () {
       Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer), Layer.fresh)),
       Effect.provideService(HttpClient.HttpClient, http),
     )
-  }).pipe(Effect.provide(SessionModelRequest.layer), Effect.provide(ModelResolver.layer))
+  }).pipe(Effect.provide(SessionModelRequest.layer.pipe(Layer.provide(imageDescribe))), Effect.provide(ModelResolver.layer))
   const stop = Effect.gen(function* () {
     replies.push(Response.json({ message: "Conversation complete", error: {} }, { status: 400 }))
     expect((yield* send).find((event) => event.type === "finish")?.reason.normalized).toBe("stop")

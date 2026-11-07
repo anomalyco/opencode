@@ -16,5 +16,7 @@ export const registry = {
   schedules: "Enable experimental scheduled tasks that wake a session with a prompt.",
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
   codemode_vm: "Run the Code Mode execute tool on the experimental bytecode VM instead of the legacy interpreter.",
+  image_fallback:
+    "Describe images with a vision-capable model when the session model cannot see them, instead of replacing them with an error placeholder. Set experimental.image_model to choose the describing model.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry

@@ -9,15 +9,21 @@ import { Location } from "@opencode/core/location"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Project } from "@opencode/core/project"
 import { AbsolutePath } from "@opencode/core/schema"
+import { SessionImageDescribe } from "@opencode/core/session/image-describe"
 import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
-import { DateTime, Effect, Stream } from "effect"
+import { DateTime, Effect, Layer, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
+
+const imageDescribe = Layer.succeed(
+  SessionImageDescribe.Service,
+  SessionImageDescribe.Service.of({ substitute: (messages) => Effect.succeed(messages) }),
+)
 
 const KINDS: ReadonlyArray<SessionRequestKind> = ["primary", "compaction", "title", "generate"]
 
@@ -55,7 +61,7 @@ describe("SessionModelRequest HTTP hooks", () => {
           seen.push({ hook: "response", kind: event.kind, agent: event.agent })
         }),
       )
-      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer.pipe(Layer.provide(imageDescribe))))
 
       for (const kind of KINDS) {
         const prepared = yield* requests[kind]({
@@ -94,7 +100,7 @@ describe("SessionModelRequest HTTP hooks", () => {
           event.request.headers.set("x-plugin", "kept")
         }),
       )
-      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer.pipe(Layer.provide(imageDescribe))))
       const prepared = yield* requests.primary({
         session,
         agent: Agent.ID.make("build"),
@@ -138,7 +144,7 @@ describe("SessionModelRequest HTTP hooks", () => {
           input.required.push("extra")
         }),
       )
-      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer.pipe(Layer.provide(imageDescribe))))
       const inputSchema = { type: "object", properties: { id: { type: "string" } }, required: ["id"] }
       const tools = {
         definitions: [new ToolDefinition({ name: "lookup", description: "Lookup", inputSchema })],
@@ -208,7 +214,7 @@ describe("SessionModelRequest HTTP hooks", () => {
         closeAll: Effect.void,
       })
       const requests = yield* SessionModelRequest.Service.pipe(
-        Effect.provide(SessionModelRequest.layer),
+        Effect.provide(SessionModelRequest.layer.pipe(Layer.provide(imageDescribe))),
         Effect.provideService(SessionModelTransport.Service, websocketTransport),
       )
       const prepared = yield* requests.primary({

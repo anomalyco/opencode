@@ -3,7 +3,7 @@ import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/core/session"
 import { OpenAIResponses } from "@opencode/ai/protocols/openai-responses"
 import { describe, expect } from "bun:test"
-import { DateTime, Effect } from "effect"
+import { DateTime, Effect, Layer } from "effect"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Location } from "@opencode/core/location"
@@ -17,11 +17,17 @@ import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { SessionModelRequest } from "@opencode/core/session/model-request"
+import { SessionImageDescribe } from "@opencode/core/session/image-describe"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { drain } from "../lib/clock"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
+
+const imageDescribe = Layer.succeed(
+  SessionImageDescribe.Service,
+  SessionImageDescribe.Service.of({ substitute: (messages) => Effect.succeed(messages) }),
+)
 
 const it = testEffect(PluginTestLayer)
 
@@ -361,7 +367,7 @@ describe("OpenAIPlugin", () => {
             webSocket: "session",
           })
         }).pipe(
-          Effect.provide(SessionModelRequest.layer),
+          Effect.provide(SessionModelRequest.layer.pipe(Layer.provide(imageDescribe))),
           Effect.provideService(SessionModelTransport.Service, transport),
         )
 

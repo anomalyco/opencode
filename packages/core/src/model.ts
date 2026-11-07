@@ -81,6 +81,8 @@ export interface Interface extends State.Transformable<Editor> {
   readonly available: (types?: readonly Model.Type[]) => Effect.Effect<readonly Info[]>
   readonly default: () => Effect.Effect<Info | undefined>
   readonly small: (providerID: Provider.ID) => Effect.Effect<Info | undefined>
+  /** A chat model that can describe images: the provider's own vision models first, then a known cheap family anywhere. */
+  readonly image: (providerID?: Provider.ID) => Effect.Effect<Info | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Model") {}
@@ -315,6 +317,24 @@ const layer = Layer.effect(
         return ["gpt-luna", "gemini-flash-lite", "gemini-flash", "claude-haiku"].flatMap(
           (family) => models.find((model) => model.family === family) ?? [],
         )[0]
+      }),
+      image: Effect.fn("Model.image")(function* (providerID) {
+        const value = yield* read()
+        const candidates = value.available.filter(
+          (model) =>
+            model.status === "active" &&
+            model.capabilities.input.some((item) => item.startsWith("image")) &&
+            model.capabilities.input.some((item) => item.startsWith("text")) &&
+            model.capabilities.output.some((item) => item.startsWith("text")),
+        )
+        const byFamily = (models: Info[]) =>
+          ["gemini-flash-lite", "gemini-flash", "gpt-luna", "claude-haiku"].flatMap(
+            (family) => models.find((model) => model.family === family) ?? [],
+          )[0]
+        const own = providerID === undefined ? [] : candidates.filter((model) => model.providerID === providerID)
+        // Prefer the session's provider, whose credentials already work, then a known cheap vision family anywhere.
+        // Never a stranger's flagship by release order, which would bill a premium model without being asked.
+        return byFamily(own) ?? own[0] ?? byFamily(candidates)
       }),
     })
   }),
