@@ -2312,6 +2312,26 @@ export type ModelInfo = {
   limit: { context: number; input?: number; output: number }
 }
 
+export type SessionListInfo = {
+  id: SessionID
+  parentID?: SessionID
+  fork?: { sessionID: SessionID; boundary: SessionForkBoundary }
+  projectID: ProjectID
+  agent?: AgentID
+  model?: ModelRef
+  cost: MoneyUSD
+  tokens: TokenUsageInfo
+  outcome?: "succeeded" | "failed" | "interrupted"
+  time: { created: number; updated: number; busy?: number; idle?: number; viewed?: number; archived?: number }
+  title?: string
+  subpath?: RelativePath
+  metadata?: SessionMetadata
+  permissions?: PermissionRuleset
+  revert?: SessionRevert
+  location: LocationPublicRef
+  experimental?: { time: { lastUserMessage?: number | null; lastAssistantMessage?: number | null } }
+}
+
 export type SessionInfo = {
   id: SessionID
   parentID?: SessionID
@@ -2679,7 +2699,7 @@ export type AgentInfo = {
 }
 
 export type SessionsResponse = {
-  data: Array<SessionInfo>
+  data: Array<SessionListInfo>
   cursor: { previous?: SessionsCursor | null; next?: SessionsCursor | null }
 }
 

@@ -4,7 +4,7 @@ export * from "./session/schema.js"
 import { DateTime, Effect, Layer, Context, Option, Stream } from "effect"
 import { LLMClient } from "@opencode/ai/effect"
 import { ListAnchor, ListCursor, ListFilter } from "@opencode/schema/session"
-import { and, desc, eq } from "drizzle-orm"
+import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { Project } from "./project.js"
 import { Model } from "@opencode/schema/model"
 import { Location } from "./location.js"
@@ -14,8 +14,9 @@ import { PromptInput } from "@opencode/schema/prompt-input"
 import { Bus } from "./bus.js"
 import { Instance } from "./instance/service.js"
 import { Database } from "./database/database.js"
+import { DatabaseBatch } from "./database/batch.js"
 import { SessionProjector } from "./session/projector.js"
-import { SessionMessageTable } from "./session/sql.js"
+import { SessionMessageTable, SessionTable } from "./session/sql.js"
 import { SessionBlob } from "./session/blob.js"
 import { SessionSchema } from "./session/schema.js"
 import { RelativePath } from "./schema.js"
@@ -129,6 +130,14 @@ export interface Interface {
       readonly cursor: { readonly previous?: ListCursor; readonly next?: ListCursor }
     },
     InvalidListCursorError
+  >
+  readonly lastMessageTimes: (
+    sessionIDs: ReadonlyArray<SessionSchema.ID>,
+  ) => Effect.Effect<
+    ReadonlyMap<
+      SessionSchema.ID,
+      { readonly lastUserMessage: number | null; readonly lastAssistantMessage: number | null }
+    >
   >
   readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info, NotFoundError>
   readonly fork: (
@@ -425,6 +434,32 @@ const layer = Layer.effect(
               : undefined,
           },
         }
+      }),
+      lastMessageTimes: Effect.fn("Session.lastMessageTimes")(function* (sessionIDs) {
+        const pages = yield* Effect.forEach(DatabaseBatch.batches(sessionIDs, 1), (ids) =>
+          db
+            .select({
+              id: SessionTable.id,
+              lastUserMessage: sql<
+                number | null
+              >`(select message.time_created from ${SessionMessageTable} as message where message.session_id = ${SessionTable}.id and message.type = 'user' order by message.seq desc limit 1)`,
+              lastAssistantMessage: sql<
+                number | null
+              >`(select message.time_created from ${SessionMessageTable} as message where message.session_id = ${SessionTable}.id and message.type = 'assistant' order by message.seq desc limit 1)`,
+            })
+            .from(SessionTable)
+            .where(inArray(SessionTable.id, ids))
+            .all()
+            .pipe(Effect.orDie),
+        )
+        return new Map(
+          pages
+            .flat()
+            .map((row) => [
+              row.id,
+              { lastUserMessage: row.lastUserMessage, lastAssistantMessage: row.lastAssistantMessage },
+            ]),
+        )
       }),
       messages: Effect.fn("Session.messages")(function* (input) {
         yield* result.get(input.sessionID)

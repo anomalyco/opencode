@@ -7,16 +7,16 @@ import type { Session } from "@opencode/schema/session"
 import type { AbsolutePath } from "@opencode/schema/schema"
 import type { Project } from "@opencode/schema/project"
 import type { RelativePath } from "@opencode/schema/schema"
+import type { Money } from "@opencode/schema/money"
 import type { Model } from "@opencode/schema/model"
 import type { Permission } from "@opencode/schema/permission"
+import type { DateTime } from "effect"
 import type { SessionMessage } from "@opencode/schema/session-message"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
 import type { PromptInput } from "@opencode/schema/prompt-input"
 import type { AgentAttachment } from "@opencode/schema/prompt"
 import type { FileDiff } from "@opencode/schema/file-diff"
 import type { Form } from "@opencode/schema/form"
-import type { DateTime } from "effect"
-import type { Money } from "@opencode/schema/money"
 import type { Skill } from "@opencode/schema/skill"
 import type { InstructionEntry } from "@opencode/schema/instruction-entry"
 import type { Schema } from "effect"
@@ -142,7 +142,44 @@ export type SessionListInput = {
   readonly cursor?: Session.ListCursor | undefined
 }
 export type SessionListOutput = {
-  readonly data: ReadonlyArray<Session.Info>
+  readonly data: ReadonlyArray<{
+    readonly id: Session.ID
+    readonly parentID?: Session.ID | undefined
+    readonly fork?: { readonly sessionID: Session.ID; readonly boundary: Session.ForkBoundary } | undefined
+    readonly projectID: Project.ID
+    readonly agent?: Agent.ID | undefined
+    readonly model?: Model.Ref | undefined
+    readonly cost: Money.USD
+    readonly tokens: {
+      readonly input: number
+      readonly output: number
+      readonly reasoning: number
+      readonly cache: { readonly read: number; readonly write: number }
+    }
+    readonly outcome?: "succeeded" | "failed" | "interrupted" | undefined
+    readonly time: {
+      readonly created: DateTime.Utc
+      readonly updated: DateTime.Utc
+      readonly busy?: DateTime.Utc | undefined
+      readonly idle?: DateTime.Utc | undefined
+      readonly viewed?: DateTime.Utc | undefined
+      readonly archived?: DateTime.Utc | undefined
+    }
+    readonly title?: string | undefined
+    readonly subpath?: RelativePath | undefined
+    readonly metadata?: Session.Metadata | undefined
+    readonly permissions?: Permission.Ruleset | undefined
+    readonly revert?: Session.Revert | undefined
+    readonly location: Location.PublicRef
+    readonly experimental?:
+      | {
+          readonly time: {
+            readonly lastUserMessage?: DateTime.Utc | null | undefined
+            readonly lastAssistantMessage?: DateTime.Utc | null | undefined
+          }
+        }
+      | undefined
+  }>
   readonly cursor: {
     readonly previous?: Session.ListCursor | undefined
     readonly next?: Session.ListCursor | undefined
