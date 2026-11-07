@@ -2291,6 +2291,32 @@ test("models: gateway catalogs keep mounted rows bounded while scrolling, search
 
   await expect(models.getByRole("switch", { name: "A Model 000", exact: true })).toBeVisible()
   await bounded()
+  // Wide and narrow layouts use different scroll owners; mounting a group must preserve either offset.
+  for (const width of [1280, 640]) {
+    await page.setViewportSize({ width, height: 720 })
+    const button = trigger("gateway-b")
+    await button.scrollIntoViewIfNeeded()
+    await button.click()
+    await expect(button).toHaveAttribute("aria-expanded", "false")
+    const offset = await panel.evaluate((element) => {
+      const scroller = getComputedStyle(element).overflowY !== "visible" ? element : element.closest(".settings")!
+      return scroller.scrollTop
+    })
+    expect(offset).toBeGreaterThan(0)
+    await button.click()
+    await expect(button).toHaveAttribute("aria-expanded", "true")
+    await expect(button).toBeInViewport()
+    await expect
+      .poll(() =>
+        panel.evaluate((element) => {
+          const scroller = getComputedStyle(element).overflowY !== "visible" ? element : element.closest(".settings")!
+          return scroller.scrollTop
+        }),
+      )
+      .toBe(offset)
+    await bounded()
+  }
+  await page.setViewportSize({ width: 1280, height: 720 })
   await panel.evaluate((element) => {
     const scroller = getComputedStyle(element).overflowY !== "visible" ? element : element.closest(".settings")!
     scroller.scrollTop = scroller.scrollHeight

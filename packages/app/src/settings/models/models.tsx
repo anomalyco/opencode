@@ -105,6 +105,11 @@ export const SettingsModels: Component<{
       get count() {
         return props.items.length
       },
+      // Wait for the scroll owner before caching its initial offset.
+      get enabled() {
+        return !!layout.scroller
+      },
+      initialOffset: () => layout.scroller?.scrollTop ?? 0,
       getScrollElement: () => layout.scroller ?? null,
       getItemKey: (index) => `${props.items[index].provider.id}:${props.items[index].id}`,
       // Model titles are single-line; keep this in sync with the row height in settings.css.
