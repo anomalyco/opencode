@@ -506,12 +506,14 @@ input.addEventListener("input", async () => {
       return option
     }),
   )
-  if (!pages.length) {
+  if (query && !pages.length) {
     const empty = document.createElement("p")
     empty.dataset.slot = "empty"
-    empty.textContent = query ? `No results for “${query}”` : ""
+    empty.innerHTML = `<span></span>. Try a shorter word, or <a href="${base}">browse the docs</a>.`
+    empty.firstChild!.textContent = `No results for “${query}”`
     results.append(empty)
   }
+  input.setAttribute("aria-expanded", String(!!query))
   highlight(0)
 })
 
