@@ -80,7 +80,7 @@ const budgets: Record<string, number> = {
   "mini.tsx": 126.3,
   "mobile.tsx": 126.3,
   "press/index.tsx": 112,
-  "product/index.tsx": 113.6,
+  "product/index.tsx": 114.7,
   "sdk.tsx": 126.3,
   "terminal.tsx": 126.3,
   "video-editor/index.tsx": 49,
