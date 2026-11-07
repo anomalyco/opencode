@@ -21,6 +21,11 @@ const RESUME_EXHAUSTED = {
   message: "Execution was interrupted repeatedly and will not be resumed automatically.",
 } as const
 
+const ORPHANED = {
+  type: "aborted",
+  message: "Execution stopped because the server restarted.",
+} as const
+
 export interface Options {
   /**
    * Times a single turn may be resumed before it is terminalized instead.
@@ -231,7 +236,17 @@ export const layer = (options?: Options) =>
           const suspended = new Set(
             [...(yield* store.listSuspended()), ...children].filter((sessionID) => !active.has(sessionID)),
           )
-          yield* store.releaseChildClaims(children)
+          // Children without a recoverable Job cannot resume, so settle them through a terminal like any other turn.
+          yield* Effect.forEach(
+            (yield* store.listOrphanedChildren(children)).filter((sessionID) => !active.has(sessionID)),
+            (sessionID) =>
+              bus.publish(
+                SessionEvent.Execution.Failed,
+                { sessionID, error: ORPHANED },
+                { commit: () => store.release(sessionID) },
+              ),
+            { discard: true },
+          )
           yield* Effect.forEach(
             // Admit shell outcomes before a recovered child can start its first model request.
             pending.toSorted((a, b) => Number(a.recovery.kind === "subagent") - Number(b.recovery.kind === "subagent")),
