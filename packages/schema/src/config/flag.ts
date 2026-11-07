@@ -16,5 +16,7 @@ export const registry = {
   schedules: "Enable experimental scheduled tasks that wake a session with a prompt.",
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
   codemode_vm: "Run the Code Mode execute tool on the experimental bytecode VM instead of the legacy interpreter.",
+  openai_compatible_discovery:
+    "Add the models that OpenAI-compatible providers in config list at `GET {baseURL}/models`, so they do not have to be listed by hand.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
