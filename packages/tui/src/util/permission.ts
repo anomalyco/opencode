@@ -8,6 +8,7 @@ export type PermissionPresentation = {
   title: string
   lines: string[]
   diff?: string
+  files?: { file: string; diff: string }[]
   patch?: string
   file?: string
 }
@@ -31,13 +32,22 @@ export function permissionPresentation(
 
   if (action === "edit") {
     const file = text(input.path) || resources[0] || ""
-    const first = dict(Array.isArray(metadata.files) ? metadata.files[0] : undefined)
-    const diff = text(first.patch) || text(first.diff) || text(metadata.diff) || undefined
+    const entries = Array.isArray(metadata.files) ? metadata.files : []
+    const parsed = entries.flatMap((item) => {
+      const entry = dict(item)
+      const diff = text(entry.patch) || text(entry.diff)
+      return diff ? [{ file: text(entry.file) || text(entry.filePath) || text(entry.relativePath), diff }] : []
+    })
+    // An entry without a patch cannot be shown on its own; fall back to the combined diff instead of hiding it.
+    const files = parsed.length === entries.length || !text(metadata.diff) ? parsed : []
+    const diff = files[0]?.diff || text(metadata.diff) || undefined
+    const count = Math.max(entries.length, parsed.length)
     return {
       icon: "→",
-      title: `Edit ${formatPath(file)}`,
+      title: count > 1 ? `Edit ${count} files` : `Edit ${formatPath(file)}`,
       lines: [],
       diff,
+      files: files.length > 1 ? files : undefined,
       patch: diff ? undefined : text(input.patchText) || undefined,
       file,
     }

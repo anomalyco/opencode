@@ -19,15 +19,21 @@ import { useToast } from "../../ui/toast"
 
 type PermissionStage = "permission" | "reject"
 
-function EditBody(props: { file?: string; diff?: string; patch?: string }) {
+function EditBody(props: {
+  file?: string
+  diff?: string
+  files?: { file: string; diff: string }[]
+  patch?: string
+  formatPath: (value: string) => string
+}) {
   const theme = useTheme()
   const themes = useThemes()
   const syntax = themes.currentSyntax
   const config = useConfig().data
   const dimensions = useTerminalDimensions()
 
-  const filepath = createMemo(() => props.file ?? "")
   const diff = createMemo(() => props.diff ?? "")
+  const files = createMemo(() => props.files ?? [{ file: props.file ?? "", diff: diff() }])
 
   const view = createMemo(() => {
     const diffView = config.diffs?.view
@@ -36,7 +42,6 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
     return dimensions().width > 120 ? "split" : "unified"
   })
 
-  const ft = createMemo(() => filetype(filepath()))
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
 
   return (
@@ -52,26 +57,37 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
             },
           }}
         >
-          <PatchDiff
-            diff={diff()}
-            hunkFg={theme.diff.text.hunkHeader}
-            view={view()}
-            filetype={ft()}
-            syntaxStyle={syntax()}
-            showLineNumbers={true}
-            width="100%"
-            wrapMode="word"
-            fg={theme.text.base}
-            addedBg={theme.diff.background.added}
-            removedBg={theme.diff.background.removed}
-            contextBg={theme.diff.background.context}
-            addedSignColor={theme.diff.highlight.added}
-            removedSignColor={theme.diff.highlight.removed}
-            lineNumberFg={theme.diff.lineNumber.text}
-            lineNumberBg={theme.diff.background.context}
-            addedLineNumberBg={theme.diff.lineNumber.background.added}
-            removedLineNumberBg={theme.diff.lineNumber.background.removed}
-          />
+          <For each={files()}>
+            {(item) => (
+              <box flexDirection="column">
+                <Show when={props.files}>
+                  <box paddingLeft={1}>
+                    <text fg={theme.text.muted}>{props.formatPath(item.file)}</text>
+                  </box>
+                </Show>
+                <PatchDiff
+                  diff={item.diff}
+                  hunkFg={theme.diff.text.hunkHeader}
+                  view={view()}
+                  filetype={filetype(item.file)}
+                  syntaxStyle={syntax()}
+                  showLineNumbers={true}
+                  width="100%"
+                  wrapMode="word"
+                  fg={theme.text.base}
+                  addedBg={theme.diff.background.added}
+                  removedBg={theme.diff.background.removed}
+                  contextBg={theme.diff.background.context}
+                  addedSignColor={theme.diff.highlight.added}
+                  removedSignColor={theme.diff.highlight.removed}
+                  lineNumberFg={theme.diff.lineNumber.text}
+                  lineNumberBg={theme.diff.background.context}
+                  addedLineNumberBg={theme.diff.lineNumber.background.added}
+                  removedLineNumberBg={theme.diff.lineNumber.background.removed}
+                />
+              </box>
+            )}
+          </For>
         </scrollbox>
       </Show>
       <Show when={!diff()}>
@@ -167,7 +183,13 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
           )
           const presentationBody = () =>
             props.request.action === "edit" ? (
-              <EditBody file={current.file} diff={current.diff} patch={current.patch} />
+              <EditBody
+                file={current.file}
+                diff={current.diff}
+                files={current.files}
+                patch={current.patch}
+                formatPath={pathFormatter.format}
+              />
             ) : props.request.action === "external_directory" ? (
               <Show when={current.lines.length > 0}>
                 <box paddingLeft={1} gap={1}>
