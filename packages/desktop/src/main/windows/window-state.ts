@@ -152,12 +152,16 @@ function hasBounds(state: Partial<WindowState>): state is WindowState & Required
   return state.x !== undefined && state.y !== undefined && (state.width ?? 0) > 0 && (state.height ?? 0) > 0
 }
 
+// Windows reports a window snapped to a screen edge slightly outside the display because of its
+// invisible resize borders. Keep those saved bounds instead of falling back to the default window.
+const EDGE_TOLERANCE = 16
+
 function within(state: WindowState & { x: number; y: number }, bounds: Rectangle) {
   return (
-    state.x >= bounds.x &&
-    state.y >= bounds.y &&
-    state.x + state.width <= bounds.x + bounds.width &&
-    state.y + state.height <= bounds.y + bounds.height
+    state.x >= bounds.x - EDGE_TOLERANCE &&
+    state.y >= bounds.y - EDGE_TOLERANCE &&
+    state.x + state.width <= bounds.x + bounds.width + EDGE_TOLERANCE &&
+    state.y + state.height <= bounds.y + bounds.height + EDGE_TOLERANCE
   )
 }
 
