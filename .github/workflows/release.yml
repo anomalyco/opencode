@@ -1,5 +1,5 @@
 name: release
-run-name: "${{ inputs.channel == 'beta' && format('release {0} (beta)', '0.0.0-beta-' + github.run_number) || format('release {0}{1}', inputs.bump, inputs.version) }}"
+run-name: "${{ inputs.channel == 'beta' && format('release 0.0.0-beta-{0} (beta)', github.run_number) || format('release {0}{1}', inputs.bump, inputs.version) }}"
 
 # Builds are separated from signing and publishing.
 # - build-* jobs run repository code (`bun run build`, `bun run pack`) with no environment, secrets or id-token.
