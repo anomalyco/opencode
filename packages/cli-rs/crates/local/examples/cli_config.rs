@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("leader:    {:?}", resolved.leader_timeout);
     println!("tabs:      {} enabled={}", resolved.tabs.mode.as_str(), resolved.tabs.enabled);
 
-    let temp = tempfile::tempdir()?;
+    let temp = opencode_util::temp::tempdir()?;
     let paths = Paths::from_vars(|name| match name {
         "HOME" => Some(temp.path().into()),
         "XDG_CONFIG_HOME" => Some(temp.path().join("config").into()),

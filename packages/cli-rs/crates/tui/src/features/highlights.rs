@@ -210,7 +210,7 @@ mod tests {
     /// "only one of several concurrent TUIs claims the highlights".
     #[test]
     fn one_of_several_concurrent_tuis_claims_the_highlights() {
-        let state = tempfile::tempdir().unwrap();
+        let state = opencode_util::temp::tempdir().unwrap();
         let claims: Vec<bool> = std::thread::scope(|scope| {
             let handles: Vec<_> = (0..4)
                 .map(|_| {

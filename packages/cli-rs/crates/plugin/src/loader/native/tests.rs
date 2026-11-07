@@ -191,7 +191,7 @@ fn versions_follow_the_abi_rules() {
 
 #[test]
 fn the_loader_reloads_a_rebuilt_library() {
-    let root = tempfile::tempdir().unwrap();
+    let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
     let dir = config.join("plugins/sample");
     fs::create_dir_all(&dir).unwrap();

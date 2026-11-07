@@ -185,7 +185,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_managed_client_follows_a_restarted_service() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let paths = Paths::from_vars(|name| match name {
             "HOME" => Some(OsString::from(dir.path())),
             "XDG_STATE_HOME" => Some(dir.path().join("state").into()),
@@ -226,7 +226,7 @@ mod tests {
     async fn a_terminal_socket_follows_a_restarted_service() {
         const OLD_TOKEN: &str = "http://127.0.0.1:4096/api/experimental/persistent-pty/pty_1/connect-token";
         const NEW_TOKEN: &str = "http://127.0.0.1:5000/api/experimental/persistent-pty/pty_1/connect-token";
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let paths = Paths::from_vars(|name| match name {
             "HOME" => Some(OsString::from(dir.path())),
             "XDG_STATE_HOME" => Some(dir.path().join("state").into()),
@@ -270,7 +270,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_socket_endpoint_follows_a_restarted_service() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let paths = Paths::from_vars(|name| match name {
             "HOME" => Some(OsString::from(dir.path())),
             "XDG_STATE_HOME" => Some(dir.path().join("state").into()),
@@ -312,7 +312,7 @@ mod tests {
             source: Source::Server,
             warning: None,
         };
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let paths = Paths::from_vars(|name| (name == "HOME").then(|| dir.path().into())).unwrap();
         let client = client(server.clone(), &connection, &paths, &Env::default()).unwrap();
         assert!(client.server_info().await.is_err());

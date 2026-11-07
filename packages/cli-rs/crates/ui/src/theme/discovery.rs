@@ -72,7 +72,7 @@ mod tests {
 
     #[test]
     fn discover_reads_sorted_json_files_and_later_directories_override() {
-        let root = tempfile::tempdir().unwrap();
+        let root = opencode_util::temp::tempdir().unwrap();
         let (first, second) = (root.path().join("one"), root.path().join("two"));
         for (directory, files) in
             [(&first, ["b.json", "a.json", "notes.txt"]), (&second, ["b.json", "c.json", "skip.md"])]

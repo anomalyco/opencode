@@ -59,7 +59,7 @@ fn messages(edited: &str) -> Vec<Value> {
 
 #[tokio::test]
 async fn replays_user_text_reasoning_and_tool_messages_in_order_on_session_load() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = opencode_util::temp::tempdir().unwrap();
     let edited = dir.path().join("edited.ts").to_str().unwrap().to_owned();
     std::fs::write(&edited, "one\r\nthree\r\n").unwrap();
     let acp = start_wire(WireOptions::default()).await;

@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn enter_resolves_symlinks_and_reports_failures() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let real = dir.path().join("real");
         std::fs::create_dir(&real).unwrap();
         #[cfg(unix)]

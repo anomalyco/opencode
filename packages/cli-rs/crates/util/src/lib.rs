@@ -4,4 +4,5 @@ pub mod dl;
 pub mod error;
 #[cfg(feature = "ring")]
 pub mod hash;
+pub mod temp;
 pub mod time;

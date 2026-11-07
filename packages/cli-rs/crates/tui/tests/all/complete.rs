@@ -76,17 +76,17 @@ fn fake() -> Fake {
 struct Setup {
     harness: Harness,
     seen: Log,
-    home: tempfile::TempDir,
+    home: opencode_util::temp::TempDir,
 }
 
 deref_harness!(Setup);
 
 impl Setup {
     fn new() -> Self {
-        Self::with_home(tempfile::tempdir().unwrap())
+        Self::with_home(opencode_util::temp::tempdir().unwrap())
     }
 
-    fn with_home(home: tempfile::TempDir) -> Self {
+    fn with_home(home: opencode_util::temp::TempDir) -> Self {
         let fake = fake();
         let seen = fake.log();
         let deps =
@@ -380,7 +380,7 @@ fn frecency_file_is_shared_with_typescript() {
     assert_eq!(typescript.lines().count(), 3, "{typescript}");
 
     // A new Rust prompt reads the TypeScript file: its load rewrites it the same way, and it counts on.
-    let home = tempfile::TempDir::new().unwrap();
+    let home = opencode_util::temp::TempDir::new().unwrap();
     std::fs::create_dir_all(home.path().join("state")).unwrap();
     std::fs::copy(state.join("frecency.jsonl"), home.path().join("state/frecency.jsonl")).unwrap();
     let again = Setup::with_home(home);
