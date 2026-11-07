@@ -6,29 +6,17 @@ mod prompt;
 
 use std::ffi::OsString;
 
-use clap::{ArgAction, ArgMatches};
-
-use crate::args::AT_MOST_100;
-use crate::help;
+use crate::args::{Count, Kind, Param, Spec};
+use crate::{help, parse};
 use prompt::{
     BLACK_BRIGHT, BOLD, CYAN_BRIGHT, Confirm, GREEN, Int, MAGENTA, Quit, RED, Select, Text, Toggle, WHITE, annotate,
     log,
 };
 
-/// Whether the normalized `argv` asks for the wizard: `--wizard` before any `--`.
-pub fn requested(argv: &[OsString]) -> bool {
-    argv.iter().skip(1).take_while(|arg| *arg != "--").any(|arg| arg == "--wizard")
-}
-
-/// `command` without required arguments, to parse the command line the wizard starts from.
-pub fn lenient(command: clap::Command) -> clap::Command {
-    command.mut_args(|arg| arg.required(false)).mut_subcommands(lenient)
-}
-
-/// Runs the wizard for the command `matches` selected in `command` (built), started with `argv`, then the command
-/// line it built, unless the user cancelled or declined.
-pub fn run(command: &clap::Command, matches: &ArgMatches, argv: &[OsString]) -> anyhow::Result<()> {
-    let Some(line) = build(command, matches, argv)? else {
+/// Runs the wizard for the command at `path` (from the root), started with `argv`, then the command line it built,
+/// unless the user cancelled or declined.
+pub fn run(path: &[&'static Spec], argv: &[OsString]) -> anyhow::Result<()> {
+    let Some(line) = build(path, argv)? else {
         return Ok(());
     };
     // Effect CLI runs the command line as if it had been typed. Running this binary again with it lets
@@ -49,15 +37,10 @@ pub fn run(command: &clap::Command, matches: &ArgMatches, argv: &[OsString]) -> 
 
 /// Asks for the command line. Returns its arguments after the program name, or `None` when the user cancelled or
 /// declined.
-fn build(command: &clap::Command, matches: &ArgMatches, argv: &[OsString]) -> anyhow::Result<Option<Vec<String>>> {
+fn build(path: &[&'static Spec], argv: &[OsString]) -> anyhow::Result<Option<Vec<String>>> {
     let name = help::name();
-    log(&introduction(&name, command.get_about().map(|about| about.to_string())));
-    let mut node = command;
-    let mut leaf = matches;
-    while let Some((sub, sub_matches)) = leaf.subcommand() {
-        node = node.find_subcommand(sub).expect("clap matched it");
-        leaf = sub_matches;
-    }
+    log(&introduction(&name, Some(path[0].description.to_string())));
+    let node = path[path.len() - 1];
     let mut line: Vec<String> = std::iter::once(name)
         .chain(
             argv.iter()
@@ -66,9 +49,9 @@ fn build(command: &clap::Command, matches: &ArgMatches, argv: &[OsString]) -> an
                 .filter(|arg| arg != "--wizard" && !arg.starts_with("--wizard=")),
         )
         .collect();
-    let section = match std::ptr::eq(node, command) {
-        true => "ROOT".to_string(),
-        false => node.get_name().to_string(),
+    let section = match path.len() {
+        1 => "ROOT".to_string(),
+        _ => node.name.to_string(),
     };
     let outcome = (|| -> Result<Option<Vec<String>>, Stop> {
         log_command("Current command", &line, MAGENTA, WHITE);
@@ -102,11 +85,10 @@ impl From<Quit> for Stop {
     }
 }
 
-fn prompt_command(node: &clap::Command, line: &mut Vec<String>, section: &str) -> Result<(), Stop> {
-    let subcommands: Vec<&clap::Command> = node.get_subcommands().filter(|sub| !sub.is_hide_set()).collect();
+fn prompt_command(node: &'static Spec, line: &mut Vec<String>, section: &str) -> Result<(), Stop> {
     // Effect asks for a group's shared flags only, and no command here has any.
-    let (flags, arguments) = match subcommands.is_empty() {
-        true => (flags(node), node.get_positionals().map(|arg| param(node, arg)).collect()),
+    let (flags, arguments): (Vec<Prompted>, Vec<Prompted>) = match node.commands.is_empty() {
+        true => node.params.iter().map(param).partition(|param| param.flag),
         false => (Vec::new(), Vec::new()),
     };
     if !flags.is_empty() {
@@ -114,7 +96,7 @@ fn prompt_command(node: &clap::Command, line: &mut Vec<String>, section: &str) -
         for flag in &flags {
             line.extend(prompt_param(flag)?);
         }
-        if !arguments.is_empty() || !subcommands.is_empty() {
+        if !arguments.is_empty() || !node.commands.is_empty() {
             log_command("Current command", line, MAGENTA, WHITE);
         }
     }
@@ -123,110 +105,57 @@ fn prompt_command(node: &clap::Command, line: &mut Vec<String>, section: &str) -
         for argument in &arguments {
             line.extend(prompt_param(argument)?);
         }
-        if !subcommands.is_empty() {
+        if !node.commands.is_empty() {
             log_command("Current command", line, MAGENTA, WHITE);
         }
     }
-    if subcommands.is_empty() {
+    if node.commands.is_empty() {
         return Ok(());
     }
     let index = Select {
         message: "Command".into(),
-        choices: subcommands
-            .iter()
-            .map(|sub| (sub.get_name().to_string(), sub.get_about().map(|about| about.to_string())))
-            .collect(),
+        choices: node.commands.iter().map(|sub| (sub.name.to_string(), Some(sub.description.to_string()))).collect(),
     }
     .prompt()?;
     log("");
-    let child = subcommands[index];
-    line.push(child.get_name().to_string());
-    let steps = child.get_subcommands().any(|sub| !sub.is_hide_set())
-        || child.get_arguments().any(|arg| !arg.is_global_set() && !is_negation(child, arg));
-    if steps {
+    let child = &node.commands[index];
+    line.push(child.name.to_string());
+    if !child.commands.is_empty() || !child.params.is_empty() {
         log_command("Current command", line, MAGENTA, WHITE);
     }
-    prompt_command(child, line, child.get_name())
+    prompt_command(child, line, child.name)
 }
 
 /// A flag or argument as the wizard sees it: Effect's `getParamMetadata` and primitive type.
-struct Param<'a> {
-    arg: &'a clap::Arg,
+struct Prompted {
+    param: &'static Param,
     name: String,
+    description: &'static str,
     flag: bool,
     kind: Kind,
     optional: bool,
     /// Asks for a count first, with these bounds.
     variadic: Option<(i64, Option<i64>)>,
+    /// `Flag.withOptionalValue`: the value goes inline.
+    inline: bool,
 }
 
-enum Kind {
-    Boolean,
-    Choice(Vec<String>),
-    Int,
-    Text,
-}
-
-/// The command's own flags in declaration order: not the globals, and not the hidden `--no-<flag>` helpers.
-fn flags(node: &clap::Command) -> Vec<Param<'_>> {
-    node.get_arguments()
-        .filter(|arg| !arg.is_positional() && !arg.is_global_set() && !is_negation(node, arg))
-        .map(|arg| param(node, arg))
-        .collect()
-}
-
-fn param<'a>(node: &clap::Command, arg: &'a clap::Arg) -> Param<'a> {
-    let action = arg.get_action();
-    let value_name =
-        arg.get_value_names().and_then(|names| names.first()).map(|name| name.to_string()).unwrap_or_default();
-    let choices: Vec<String> = arg.get_possible_values().iter().map(|value| value.get_name().to_string()).collect();
-    let kind = match () {
-        _ if matches!(action, ArgAction::SetTrue) => Kind::Boolean,
-        _ if !choices.is_empty() => Kind::Choice(choices),
-        _ if value_name == "integer" => Kind::Int,
-        _ => Kind::Text,
+fn param(param: &'static Param) -> Prompted {
+    let (name, description, flag, kind, count, inline) = match param {
+        Param::Flag(flag) => (flag.name, flag.description, true, flag.kind, flag.count, flag.optional_value.is_some()),
+        Param::Arg(arg) => (arg.name, arg.description, false, arg.kind, arg.count, false),
     };
-    let range = arg.get_num_args();
-    if arg.is_positional() {
-        let variadic = matches!(action, ArgAction::Append) || range.is_some_and(|range| range.max_values() > 1);
-        let min = match arg.is_required_set() {
-            true => range.map_or(1, |range| range.min_values()) as i64,
-            false => 0,
-        };
-        let max = range.map(|range| range.max_values()).filter(|max| *max != usize::MAX);
-        return Param {
-            arg,
-            name: value_name,
-            flag: false,
-            kind,
-            optional: !variadic && !arg.is_required_set(),
-            variadic: variadic.then_some((min, max.map(|max| max as i64))),
-        };
-    }
-    let long = arg.get_long().unwrap_or_default().to_string();
-    // Flag.KeyValuePair is optional and repeatable at least once; other repeatable flags are Flag.atMost(100) or
-    // Flag.atLeast(0).
-    let (optional, variadic) = match action {
-        ArgAction::Append if value_name == "key=value" => (true, Some((1, None))),
-        ArgAction::Append => {
-            let limited = AT_MOST_100.contains(&(node.get_name(), long.as_str()));
-            (false, Some((0, limited.then_some(100))))
+    let (optional, variadic) = match count {
+        Count::Repeated { min, max, optional } => {
+            (optional, Some((min.unwrap_or(0) as i64, max.map(|max| max as i64))))
         }
-        _ => (!arg.is_required_set(), None),
+        Count::Required => (false, None),
+        Count::Optional | Count::Default(_) => (true, None),
     };
-    Param { arg, name: long, flag: true, kind, optional, variadic }
+    Prompted { param, name: name.to_string(), description, flag, kind, optional, variadic, inline }
 }
 
-// `--no-replay` is the hidden negation that `args::normalize` emits; Effect CLI has it built into `--replay`.
-fn is_negation(command: &clap::Command, arg: &clap::Arg) -> bool {
-    arg.is_hide_set()
-        && arg
-            .get_long()
-            .and_then(|long| long.strip_prefix("no-"))
-            .is_some_and(|long| command.get_arguments().any(|other| other.get_long() == Some(long)))
-}
-
-fn prompt_param(param: &Param) -> Result<Vec<String>, Stop> {
+fn prompt_param(param: &Prompted) -> Result<Vec<String>, Stop> {
     let label = label(param);
     if param.optional && !Confirm::new(format!("Set {label}?")).prompt()? {
         log("");
@@ -242,68 +171,45 @@ fn prompt_param(param: &Param) -> Result<Vec<String>, Stop> {
     for _ in 0..count {
         values.push(prompt_single(param, &label)?);
     }
-    if !matches!(param.kind, Kind::Boolean) {
-        for value in &values {
-            parse(param, value).map_err(|error| Stop::Invalid(invalid(param, value, &error)))?;
-        }
-    }
+    parse::check(param.param, &values).map_err(Stop::Invalid)?;
     log("");
     if !param.flag {
         return Ok(values);
     }
     // Option-looking values go inline so the parser cannot read them as flags; a flag with an optional value
     // only takes an inline one.
-    let optional_value = param.arg.is_require_equals_set();
     Ok(values
         .into_iter()
-        .flat_map(|value| match optional_value || (value.starts_with('-') && value.len() > 1) {
+        .flat_map(|value| match param.inline || (value.starts_with('-') && value.len() > 1) {
             true => vec![format!("--{}={value}", param.name)],
             false => vec![format!("--{}", param.name), value],
         })
         .collect())
 }
 
-fn prompt_single(param: &Param, label: &str) -> Result<String, Stop> {
+fn prompt_single(param: &Prompted, label: &str) -> Result<String, Stop> {
     let message = label.to_string();
     Ok(match &param.kind {
         Kind::Boolean => {
             Confirm { message, labels: ("true", "false"), placeholders: ("(T/f)", "(t/F)") }.prompt()?.to_string()
         }
         Kind::Choice(choices) => {
-            let index =
-                Select { message, choices: choices.iter().map(|choice| (choice.clone(), None)).collect() }.prompt()?;
-            choices[index].clone()
+            let index = Select { message, choices: choices.iter().map(|choice| (choice.to_string(), None)).collect() }
+                .prompt()?;
+            choices[index].to_string()
         }
         Kind::Int => Int { message, default: None, min: None, max: None }.prompt()?.to_string(),
-        Kind::Text => Text { message }.prompt()?,
+        Kind::String | Kind::KeyValue => Text { message }.prompt()?,
     })
 }
 
-/// Parses one value with the argument's own value parser, as Effect parses each param after its prompts.
-fn parse(param: &Param, value: &str) -> Result<(), clap::Error> {
-    let arg = param.arg.clone().required(false).global(false).action(ArgAction::Set);
-    let (arg, word) = match param.flag {
-        true => (arg, format!("--{}={value}", param.name)),
-        false => (arg.index(1).num_args(1).allow_hyphen_values(true), value.to_string()),
-    };
-    clap::Command::new("wizard").no_binary_name(true).arg(arg).try_get_matches_from([word]).map(drop)
-}
-
-/// The first line of Effect's `InvalidValue`, with clap's reason in place of Effect's schema message.
-fn invalid(param: &Param, value: &str, error: &clap::Error) -> String {
-    let message = error.to_string();
-    let line = message.lines().next().unwrap_or_default();
-    // "error: invalid value '0' for '--max-count <integer>': 0 is not in 1..=4294967295"
-    let reason = line.rsplit_once("': ").map_or(line, |(_, reason)| reason);
-    let kind = if param.flag { "flag --" } else { "argument " };
-    format!("Invalid value for {kind}{}: \"{value}\". Expected: {reason}", param.name)
-}
-
 /// `renderParamLabel`: a flag's description when it is short, else its humanized name.
-fn label(param: &Param) -> String {
-    let description = param.arg.get_help().map(|help| help.to_string().trim().to_string());
+fn label(param: &Prompted) -> String {
+    let description = param.description.trim();
     let label = match description {
-        Some(description) if param.flag && description.encode_utf16().count() <= 32 => description,
+        description if param.flag && !description.is_empty() && description.encode_utf16().count() <= 32 => {
+            description.to_string()
+        }
         _ => humanize(&param.name),
     };
     match param.flag {
@@ -415,55 +321,40 @@ mod tests {
         assert_eq!(humanize("--"), "--");
     }
 
-    // The wizard reads Effect's param metadata from the clap tree; the TypeScript dump has the real values.
+    // The wizard reads Effect's param metadata from the table; the TypeScript dump has the real values.
     #[test]
     fn params_match_the_typescript_metadata() {
         let fixture: Value = serde_json::from_str(include_str!("../tests/fixtures/commands.json")).unwrap();
-        let command = help::command();
         let mut checked = 0;
-        walk(&fixture["root"], &command, &mut checked);
+        walk(&fixture["root"], &crate::args::ROOT, &mut checked);
         assert!(checked > 60, "checked {checked} params");
     }
 
-    fn walk(ts: &Value, node: &clap::Command, checked: &mut usize) {
-        let path = node.get_name();
-        let names: Vec<String> = flags(node).iter().map(|flag| flag.name.clone()).collect();
-        let expected: Vec<String> =
-            ts["flags"].as_array().unwrap().iter().map(|flag| flag["name"].as_str().unwrap().to_string()).collect();
-        assert_eq!(names, expected, "{path}: flag order");
-        for (flag, ts) in flags(node).iter().zip(ts["flags"].as_array().unwrap()) {
-            check(path, flag, ts);
-            *checked += 1;
+    fn walk(ts: &Value, node: &'static Spec, checked: &mut usize) {
+        let (flags, arguments): (Vec<Prompted>, Vec<Prompted>) =
+            node.params.iter().map(param).partition(|param| param.flag);
+        for (params, ts) in [(flags, &ts["flags"]), (arguments, &ts["arguments"])] {
+            let ts = ts.as_array().unwrap();
+            assert_eq!(params.len(), ts.len(), "{}: params", node.name);
+            for (param, ts) in params.iter().zip(ts) {
+                check(node.name, param, ts);
+                *checked += 1;
+            }
         }
-        let arguments: Vec<Param> = node.get_positionals().map(|arg| param(node, arg)).collect();
-        for (argument, ts) in arguments.iter().zip(ts["arguments"].as_array().unwrap()) {
-            check(path, argument, ts);
-            *checked += 1;
-        }
-        for (ts, sub) in ts["commands"].as_array().unwrap().iter().zip(node.get_subcommands()) {
+        for (ts, sub) in ts["commands"].as_array().unwrap().iter().zip(node.commands) {
             walk(ts, sub, checked);
         }
     }
 
-    fn check(path: &str, param: &Param, ts: &Value) {
+    fn check(path: &str, param: &Prompted, ts: &Value) {
         let what = format!("{path} {}", param.name);
         assert_eq!(param.name, ts["name"].as_str().unwrap(), "{what}: name");
-        let kind = match &param.kind {
-            Kind::Boolean => "Boolean",
-            Kind::Choice(_) => "Choice",
-            Kind::Int => "Int",
-            Kind::Text => "String",
-        };
-        let expected = match ts["type"].as_str().unwrap() {
-            "KeyValuePair" | "name" => "String",
-            kind => kind,
-        };
-        assert_eq!(kind, expected, "{what}: type");
         let repeated = ts["repeated"].as_bool().or(ts["variadic"].as_bool()).unwrap();
         let variadic = repeated.then(|| (ts["min"].as_i64().unwrap_or(0), ts["max"].as_i64()));
         assert_eq!(param.variadic, variadic, "{what}: count bounds");
         // The dump calls a repeatable flag optional when it parses to `[]` without input; Effect's metadata does not.
         let optional = ts["optional"].as_bool().unwrap() && !(repeated && ts["type"] != "KeyValuePair");
         assert_eq!(param.optional, optional, "{what}: optional");
+        assert_eq!(param.inline, ts["optionalValue"].as_bool().unwrap_or(false), "{what}: inline value");
     }
 }

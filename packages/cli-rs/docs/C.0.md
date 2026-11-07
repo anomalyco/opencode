@@ -1,54 +1,63 @@
 # C.0: command tree
 
 The `opencode-rs` command line matches the TypeScript CLI's command tree (`packages/cli/src/commands/commands.ts`):
-the same commands, aliases, arguments, flags, and descriptions. The help layout may differ (Q12 b).
+the same commands, aliases, arguments, flags, and descriptions, parsed with the same rules, and the same help,
+completion scripts, and usage errors, byte for byte.
 
 ## Tree
 
-- `crates/cli/src/args.rs` declares the tree with clap derive. Each command has a struct whose fields are the
-  command's arguments and flags, so handlers get typed input. Descriptions are written out with `about` and
-  `help` so they equal the TypeScript strings.
-- `script/gen/commands.ts` dumps the TypeScript `Spec` tree to `crates/cli/tests/fixtures/commands.json`: per
-  node its name, aliases, description, global flags, arguments, and flags (name, aliases, type, choices,
-  description, hidden, optional, repeated with bounds, optional value, default). `crates/cli/src/tests/tree.rs`
-  walks the clap `Command` and compares the same facts. A change on either side fails the test until the
-  other side follows.
-- The type of a flag is carried by its clap value name, which help shows: `string`, `integer`, `key=value`,
-  `choice` with possible values, and `[=name]` for an optional value. Booleans take no value.
+- `crates/cli/src/args.rs` declares the tree as a static table in the shape of Effect CLI's commands: per
+  command its name, alias, description, global flags (`Command.withGlobalFlags`), params in declaration order,
+  and subcommands. A flag has a kind (`Boolean`, `String`, `Int`, `Choice`, `KeyValue`), aliases, a count
+  (optional, default, required, or repeated with bounds), a metavariable, an optional value, a hidden mark, and
+  a check (`Flag.withSchema`, `Flag.mapTryCatch`). Below the table, each command has a struct of typed
+  arguments, which `Cli::new` fills from the checked values, so handlers get typed input.
+- `script/gen/commands.ts` dumps the TypeScript tree to `crates/cli/tests/fixtures/commands.json`: per node its
+  name, aliases, description, global flags, arguments, and flags (name, aliases, type, choices, description,
+  hidden, optional, repeated with bounds, optional value, default). `crates/cli/src/tests/tree.rs` dumps the
+  table in the same shape and compares. A change on either side fails the test until the other side follows.
 
 ## Parsing
 
-clap does most of the parsing. Effect CLI differs from clap in a few places that scripts can see. `args.rs`
-keeps these, with a unit test each:
+`crates/cli/src/parse.rs` ports Effect CLI's lexer and parser (`internal/lexer.ts`, `internal/parser.ts`), the
+steps of `Command.runWith`, and the param parsers of `Param.ts`, with their messages:
 
-| Effect CLI behavior | How |
-| --- | --- |
-| `--no-<flag>` sets a boolean flag to false; a value after it is an error | Argument pre-pass (`args::normalize`) |
-| A boolean flag takes an attached or following literal (`--auto=false`, `--auto no`; `true yes on 1 y` and `false no off 0 n`) | Pre-pass |
-| A flag given twice is an error ("at most 1 value"), booleans included | Pre-pass for booleans; clap for values |
-| Repeatable flags (`--file`, `--header`, `--answer`, `--cors`) collect in order, with their upper bounds | clap `Append`, bounds checked after parsing |
-| `k=v` flags (`--param`, `--header` and `--env` of `mcp add`) need a non-empty key and value | clap value parser |
-| `-w`/`--worktree` takes a value only with `=`; the next word is never consumed | clap `require_equals` with a missing value |
-| Words after `--` go to the command's positional arguments, even if they look like flags | clap |
-| Hidden flags (`--yolo`, `--dangerously-skip-permissions`, `--demo`) parse but are not in help | clap `hide` |
-| Short flags cluster (`-cf`) | clap |
-| `--standalone` and `--server` are valid only on the root and on commands that declare them, before or after the subcommand | clap `global` on the declaring command, plus a scope check for the root's copy |
-| A root flag before a subcommand (`opencode -c upgrade`) is an error | Check after parsing |
-| A group without a subcommand prints its help and exits 0 | Dispatch |
-| Global built-ins anywhere: `--help/-h`, `--version/-v`, `--wizard`, `--completions <shell>`, `--log-level <level>`, `--print-logs` | clap `global` on the root |
+1. Lex: everything after the first `--` is an operand; `-` alone and negative numbers (`-5`, `-.5`, `-1e3`) are
+   values; short flags cluster (`-cf`, `-cm=x`).
+2. Take out the global flags at every command level: the built-ins (`--help/-h`, `--version/-v`, `--wizard`,
+   `--completions <shell>`, `--log-level <level>`), the root's `--print-logs`, and `--standalone` and `--server`
+   where a command declares them. A command's own flag of the same name wins, except at the root before its
+   subcommand (`opencode --server URL session list`).
+3. Walk the commands: only the first value at each level can name a subcommand; a command's own flags do not
+   pass to its subcommands (`opencode -c upgrade` is an error).
+4. A global given outside the commands that declare it is an error.
+5. The first action flag given (help, version, wizard, completions) runs, even when the rest of the line has
+   parse errors (`opencode api --version`).
+6. Parse errors, then each param of the selected command in declaration order, then the settings
+   (`--log-level`, `--print-logs`, `--standalone`, `--server`): the first error stops.
 
-The pre-pass walks the arguments with the clap tree, tracking the selected command like Effect's parser (only
-the first word at each level can name a subcommand). It rewrites boolean forms to a form clap accepts and
-reports the errors above. It leaves every other token alone.
+A boolean flag takes an attached or following literal (`true yes on 1 y`, `false no off 0 n`), and `--no-<flag>`
+sets it to false. A flag given twice is an error ("at most 1 value"); repeatable flags collect in order up to
+their bounds. `-w`/`--worktree` takes a value only after `=`. An alias also resolves as a long flag (`--c`).
+
+`src/tests/parse.rs` tests each rule; `src/tests/output.rs` compares the usage errors of 63 command lines with
+what the TypeScript CLI prints.
 
 ## Output and errors
 
-- `--version` prints `<name> v<version>` like the TypeScript CLI. The name is `OPENCODE_CLI_NAME`, else
-  `opencode-rs`.
-- `--completions bash|zsh|fish|powershell` prints a `clap_complete` script; `sh` means bash and `pwsh`
-  PowerShell, as in Effect CLI.
-- Parse errors go to stderr and exit 1, as in the TypeScript CLI (clap exits 2 by default).
-- Handler errors print to stderr and exit 1. Handlers that are not built yet say so and exit 1.
+The goldens in `crates/cli/tests/fixtures/cli` come from the TypeScript CLI (`script/gen/cli-output.ts`, with
+`FORCE_COLOR=1`); `src/tests/output.rs` compares them byte for byte, and without colors.
+
+- `--help` prints Effect CLI's help (`DESCRIPTION`, `USAGE`, `ARGUMENTS`, `FLAGS`, `GLOBAL FLAGS`,
+  `SUBCOMMANDS`) in its colors, which show when stdout is a terminal or with `FORCE_COLOR`, and never with
+  `NO_COLOR` or `TERM=dumb`.
+- `--version` prints `<name> v<version>`. The name is `OPENCODE_CLI_NAME`, else `opencode-rs`.
+- `--completions bash|zsh|fish|powershell` prints Effect CLI's static script (`src/completions.rs`); `sh` means
+  bash and `pwsh` PowerShell.
+- A usage error prints the command's help to stdout and the `ERROR` section to stderr, and exits 1. Like Bun's
+  `console.error`, the section is wrapped in red when stderr is a terminal or with `FORCE_COLOR`.
+- A group without a subcommand prints its help and exits 0.
+- Handler errors print to stderr and exit 1.
 - Writes to stdout ignore a closed pipe (EPIPE), like `packages/cli/src/node/index.ts:4-7`.
-- `--wizard` runs Effect CLI's command wizard (`src/wizard.rs`, step C.15). Required arguments are not
-  checked on a line with `--wizard`, so the wizard can ask for them.
+- `--wizard` runs Effect CLI's command wizard (`src/wizard.rs`, step C.15) over the table, before the command
+  line's arguments are checked, so the wizard can ask for them.

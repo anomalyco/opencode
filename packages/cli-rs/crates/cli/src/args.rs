@@ -1,88 +1,580 @@
-//! The command tree of `packages/cli/src/commands/commands.ts`, with the same commands, flags, and descriptions.
-//! `src/tests/tree.rs` proves it against a dump of the TypeScript tree. Effect CLI parses a few things differently
-//! from clap; `normalize` and `validate` keep those behaviors (docs/C.0.md).
+//! The command tree of `packages/cli/src/commands/commands.ts` as a static table in the shape of Effect CLI's
+//! commands, flags, and arguments, and the typed arguments each handler takes. `src/tests/tree.rs` proves the
+//! table against a dump of the TypeScript tree; `parse.rs` parses a command line over it.
 
-use std::collections::HashSet;
-use std::ffi::OsString;
+use crate::parse::Values;
 
-use clap::parser::ValueSource;
-use clap::{ArgAction, ArgMatches, Args, Parser, Subcommand, ValueEnum};
+/// A command: Effect's `Command.make(name, params)` with its description, alias, global flags, and subcommands.
+pub struct Spec {
+    pub name: &'static str,
+    /// `Command.withAlias`: a second name, shown as `name, alias` in help.
+    pub alias: Option<&'static str>,
+    pub description: &'static str,
+    /// `Command.withGlobalFlags`: flags this command and its subcommands accept anywhere on the line.
+    pub globals: &'static [Flag],
+    /// Flags and arguments in declaration order, which is the order Effect parses and reports them in.
+    pub params: &'static [Param],
+    pub commands: &'static [Spec],
+}
 
-#[derive(Parser, Debug)]
-#[command(name = "opencode-rs", about = "OpenCode command line interface")]
+pub enum Param {
+    Flag(Flag),
+    Arg(Arg),
+}
+
+#[derive(Clone, Copy)]
+pub struct Flag {
+    pub name: &'static str,
+    /// Single letters are short flags (`-c`), longer ones long flags.
+    pub aliases: &'static [&'static str],
+    pub description: &'static str,
+    pub kind: Kind,
+    /// `Flag.withMetavar`: the type shown in help in place of the kind's name.
+    pub metavar: Option<&'static str>,
+    pub hidden: bool,
+    pub count: Count,
+    /// `Flag.withOptionalValue`: the flag takes a value only after `=`, and is this value without one.
+    pub optional_value: Option<&'static str>,
+    pub check: Check,
+}
+
+#[derive(Clone, Copy)]
+pub struct Arg {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub kind: Kind,
+    pub count: Count,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    Boolean,
+    String,
+    Int,
+    Choice(&'static [&'static str]),
+    KeyValue,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Count {
+    Required,
+    /// `Flag.optional`, `Argument.optional`.
+    Optional,
+    /// `Flag.withDefault`.
+    Default(Default),
+    /// `Flag.atMost`, `Flag.atLeast`, `Argument.variadic`, and `Flag.KeyValuePair` (at least one pair, then
+    /// `optional` when wrapped in `Flag.optional`).
+    Repeated {
+        min: Option<usize>,
+        max: Option<usize>,
+        optional: bool,
+    },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Default {
+    Bool(bool),
+    Text(&'static str),
+    Int(i64),
+}
+
+/// `Flag.withSchema` and `Flag.mapTryCatch` checks after the kind's own parse.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Check {
+    None,
+    AtLeast(i64),
+    Between(i64, i64),
+    NonEmpty,
+    PairingUrl,
+}
+
+impl Flag {
+    const fn new(name: &'static str, description: &'static str, kind: Kind, count: Count) -> Flag {
+        Flag {
+            name,
+            aliases: &[],
+            description,
+            kind,
+            metavar: None,
+            hidden: false,
+            count,
+            optional_value: None,
+            check: Check::None,
+        }
+    }
+
+    const fn alias(self, aliases: &'static [&'static str]) -> Flag {
+        Flag { aliases, ..self }
+    }
+
+    const fn hidden(self) -> Flag {
+        Flag { hidden: true, ..self }
+    }
+
+    const fn check(self, check: Check) -> Flag {
+        Flag { check, ..self }
+    }
+
+    const fn count(self, count: Count) -> Flag {
+        Flag { count, ..self }
+    }
+
+    pub fn is_boolean(&self) -> bool {
+        self.kind == Kind::Boolean
+    }
+
+    /// The long name that sets a boolean to false.
+    pub fn negation(&self) -> Option<String> {
+        self.is_boolean().then(|| format!("no-{}", self.name))
+    }
+}
+
+impl Arg {
+    pub fn is_variadic(&self) -> bool {
+        matches!(self.count, Count::Repeated { .. })
+    }
+
+    /// Effect's help and completions: a variadic argument is required when it needs at least one value.
+    pub fn is_required(&self) -> bool {
+        match self.count {
+            Count::Required => true,
+            Count::Repeated { min, .. } => min.unwrap_or(0) > 0,
+            _ => false,
+        }
+    }
+}
+
+impl Kind {
+    /// `Primitive.getTypeName`.
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            Kind::Boolean => "boolean",
+            Kind::String => "string",
+            Kind::Int => "integer",
+            Kind::Choice(_) => "choice",
+            Kind::KeyValue => "key=value",
+        }
+    }
+}
+
+impl Spec {
+    const fn new(name: &'static str, description: &'static str) -> Spec {
+        Spec { name, alias: None, description, globals: &[], params: &[], commands: &[] }
+    }
+
+    const fn alias(self, alias: &'static str) -> Spec {
+        Spec { alias: Some(alias), ..self }
+    }
+
+    const fn globals(self, globals: &'static [Flag]) -> Spec {
+        Spec { globals, ..self }
+    }
+
+    const fn params(self, params: &'static [Param]) -> Spec {
+        Spec { params, ..self }
+    }
+
+    const fn commands(self, commands: &'static [Spec]) -> Spec {
+        Spec { commands, ..self }
+    }
+
+    pub fn flags(&self) -> impl Iterator<Item = &Flag> {
+        self.params.iter().filter_map(|param| match param {
+            Param::Flag(flag) => Some(flag),
+            Param::Arg(_) => None,
+        })
+    }
+
+    pub fn arguments(&self) -> impl Iterator<Item = &Arg> {
+        self.params.iter().filter_map(|param| match param {
+            Param::Arg(arg) => Some(arg),
+            Param::Flag(_) => None,
+        })
+    }
+
+    /// The subcommand named `name` or aliased so.
+    pub fn find(&self, name: &str) -> Option<&Spec> {
+        self.commands.iter().find(|sub| sub.name == name || sub.alias == Some(name))
+    }
+}
+
+const fn boolean(name: &'static str, description: &'static str) -> Flag {
+    Flag::new(name, description, Kind::Boolean, Count::Default(Default::Bool(false)))
+}
+
+const fn string(name: &'static str, description: &'static str) -> Flag {
+    Flag::new(name, description, Kind::String, Count::Optional)
+}
+
+const fn int(name: &'static str, description: &'static str) -> Flag {
+    Flag::new(name, description, Kind::Int, Count::Optional)
+}
+
+const fn choice(name: &'static str, description: &'static str, choices: &'static [&'static str]) -> Flag {
+    Flag::new(name, description, Kind::Choice(choices), Count::Optional)
+}
+
+const fn key_value(name: &'static str, description: &'static str) -> Flag {
+    Flag::new(name, description, Kind::KeyValue, Count::Repeated { min: Some(1), max: None, optional: true })
+}
+
+const AT_MOST_100: Count = Count::Repeated { min: None, max: Some(100), optional: false };
+
+const fn arg(name: &'static str, description: &'static str) -> Arg {
+    Arg { name, description, kind: Kind::String, count: Count::Required }
+}
+
+const fn optional(name: &'static str, description: &'static str) -> Arg {
+    Arg { name, description, kind: Kind::String, count: Count::Optional }
+}
+
+const fn variadic(name: &'static str, description: &'static str, min: usize, max: Option<usize>) -> Arg {
+    Arg { name, description, kind: Kind::String, count: Count::Repeated { min: Some(min), max, optional: false } }
+}
+
+const STANDALONE_TEXT: &str = "Run with a private server instead of the background service";
+const SERVER_TEXT: &str = "Connect to a server URL instead of the background service";
+const SESSION_TEXT: &str = "Session ID to continue, or to create if it does not exist";
+
+const STANDALONE: Flag = boolean("standalone", STANDALONE_TEXT);
+const SERVER: Flag = string("server", SERVER_TEXT);
+const PRINT_LOGS: Flag = boolean("print-logs", "Print logs to stderr (server logs require --standalone)");
+const SERVER_FLAGS: &[Flag] = &[STANDALONE, SERVER];
+
+/// Effect CLI's built-in global flags (`GlobalFlag.BuiltIns`), accepted by every command.
+pub const BUILTINS: &[Flag] = &[
+    boolean("help", "Show help information").alias(&["h"]),
+    boolean("version", "Show version information").alias(&["v"]),
+    boolean("wizard", "Start wizard mode for a command"),
+    Flag {
+        metavar: Some("<bash|zsh|fish|powershell|sh|pwsh>"),
+        ..choice("completions", "Print shell completion script", Shell::CHOICES)
+    },
+    Flag {
+        metavar: Some("<all|trace|debug|info|warn|warning|error|fatal|none>"),
+        ..choice("log-level", "Sets the minimum log level", LogLevel::CHOICES)
+    },
+];
+
+const AUTO: Param = Param::Flag(boolean("auto", "Auto-approve permissions that are not explicitly denied"));
+const YOLO: Param = Param::Flag(boolean("yolo", "").hidden());
+const DANGEROUSLY: Param = Param::Flag(boolean("dangerously-skip-permissions", "").hidden());
+const CONTINUE: Param = Param::Flag(boolean("continue", "Continue the last session").alias(&["c"]));
+const SESSION: Param = Param::Flag(string("session", SESSION_TEXT).alias(&["s"]));
+const PROMPT: Param = Param::Flag(string("prompt", "Prompt to use"));
+const AGENT: Param = Param::Flag(string("agent", "Agent to use"));
+const FORMAT: Param = Param::Flag(
+    choice("format", "Output format", OutputFormat::CHOICES).count(Count::Default(Default::Text("default"))),
+);
+const TARGET: Param = Param::Arg(optional("target", "Integration ID or name"));
+const CREDENTIAL: Param =
+    Param::Arg(optional("credential", "Credential ID or label (opens an account picker when omitted)"));
+/// `Updater.methods`.
+const UPGRADE_METHODS: &[&str] = &["curl", "npm", "pnpm", "bun", "yarn", "vp", "brew", "winget"];
+const MCP_NAME: &str = "Name of the MCP server";
+const KEY: &str = "Service setting or env";
+
+pub static ROOT: Spec = Spec::new("opencode", "OpenCode command line interface")
+    .globals(&[PRINT_LOGS])
+    .params(&[
+        Param::Flag(STANDALONE),
+        Param::Flag(SERVER),
+        AUTO,
+        YOLO,
+        DANGEROUSLY,
+        Param::Arg(optional("directory", "Directory to start OpenCode in")),
+        CONTINUE,
+        SESSION,
+        PROMPT,
+    ])
+    .commands(&[
+        Spec::new("upgrade", "Upgrade OpenCode to the latest or a specific version").alias("update").params(&[
+            Param::Arg(optional("target", "Version to upgrade to (with or without a leading v)")),
+            Param::Flag(choice("method", "Installation method to use", UPGRADE_METHODS).alias(&["m"])),
+        ]),
+        Spec::new("uninstall", "Uninstall OpenCode, keeping session data, configuration, and state").params(&[
+            Param::Flag(boolean("dry-run", "Show what would be removed without removing")),
+            Param::Flag(boolean("force", "Skip confirmation prompts").alias(&["f"])),
+        ]),
+        Spec::new("acp", "Start an Agent Client Protocol server")
+            .params(&[Param::Flag(boolean("login", "Run auth login instead of starting the server"))]),
+        Spec::new("api", "Make a request to the running server").globals(SERVER_FLAGS).params(&[
+            Param::Arg(variadic(
+                "operation | method path",
+                "OpenAPI operation ID, or an HTTP method followed by a path",
+                1,
+                Some(2),
+            )),
+            Param::Flag(string("data", "Request body").alias(&["d"])),
+            Param::Flag(string("header", "Request header in name:value form").alias(&["H"]).count(AT_MOST_100)),
+            Param::Flag(key_value("param", "OpenAPI path or query parameter")),
+        ]),
+        Spec::new("debug", "Debugging and troubleshooting tools").commands(&[
+            Spec::new("agents", "List all agents").globals(SERVER_FLAGS),
+            Spec::new("config", "List configuration sources").globals(SERVER_FLAGS),
+            Spec::new("heap-dump", "Write a heap snapshot of the running server and print its path")
+                .globals(&[SERVER])
+                .params(&[Param::Flag(string(
+                    "directory",
+                    "Directory to write the snapshot into instead of the server's log directory",
+                ))]),
+            Spec::new("paths", "Show global paths (data, config, cache, state)").params(&[Param::Arg(Arg {
+                kind: Kind::Choice(PathName::CHOICES),
+                ..optional("name", "Print only one path: db, home, data, config, cache, state, tmp, bin, log, repos")
+            })]),
+        ]),
+        Spec::new("auth", "manage integrations and credentials").globals(SERVER_FLAGS).commands(&[
+            Spec::new("list", "list integrations and credentials").params(&[FORMAT]),
+            Spec::new("login", "connect an integration").params(&[
+                Param::Arg(optional("target", "Integration ID, name, or well-known provider URL")),
+                Param::Flag(string("method", "Authentication method ID")),
+                Param::Flag(
+                    string("answer", "Provider form answer (key=value; repeat for multiple fields)").count(AT_MOST_100),
+                ),
+            ]),
+            Spec::new("logout", "log out of a saved account").params(&[TARGET, CREDENTIAL]),
+            Spec::new("export", "print stored credentials, including secrets, as JSON").params(&[Param::Arg(optional(
+                "target",
+                "Integration ID or name (exports every integration when omitted)",
+            ))]),
+            Spec::new("import", "import credentials exported by auth export")
+                .params(&[Param::Arg(optional("file", "JSON file to import (reads stdin when omitted)"))]),
+            Spec::new("switch", "switch the active account for an integration").params(&[TARGET, CREDENTIAL]),
+        ]),
+        Spec::new("mcp", "Manage MCP (Model Context Protocol) servers").commands(&[
+            Spec::new("list", "List configured MCP servers and their status").globals(SERVER_FLAGS),
+            Spec::new("add", "Add an MCP server to your configuration").params(&[
+                Param::Arg(arg("name", MCP_NAME)),
+                Param::Arg(variadic("command", "Command and arguments for a local server, passed after --", 0, None)),
+                Param::Flag(string("url", "URL for a remote MCP server")),
+                Param::Flag(key_value("header", "HTTP header for a remote server, as name=value")),
+                Param::Flag(key_value("env", "Environment variable for a local server, as name=value")),
+                Param::Flag(boolean("global", "Write to the global config instead of the project config")),
+            ]),
+            Spec::new("auth", "Authenticate with an OAuth-capable remote MCP server")
+                .globals(SERVER_FLAGS)
+                .params(&[Param::Arg(optional("name", MCP_NAME))]),
+            Spec::new("logout", "Remove stored OAuth credentials for an MCP server")
+                .globals(SERVER_FLAGS)
+                .params(&[Param::Arg(arg("name", MCP_NAME))]),
+        ]),
+        Spec::new("plugin", "Manage plugins").commands(&[
+            Spec::new("list", "List plugins")
+                .globals(SERVER_FLAGS)
+                .params(&[Param::Flag(boolean("builtin", "Include built-in server plugins"))]),
+            Spec::new("add", "Install a plugin and add it to the global configuration")
+                .params(&[Param::Arg(arg("package", "npm registry or Git package specifier"))]),
+            Spec::new("check", "Check package plugins for updates")
+                .globals(SERVER_FLAGS)
+                .params(&[Param::Arg(optional("target", "Configured package target"))]),
+            Spec::new("update", "Update package plugins")
+                .globals(SERVER_FLAGS)
+                .params(&[Param::Arg(optional("target", "Configured package target; omit to update all outdated plugins"))]),
+            Spec::new("remove", "Remove a plugin from global configuration")
+                .params(&[Param::Arg(arg("package", "configured package specifier"))]),
+        ]),
+        Spec::new("models", "List all available models").globals(SERVER_FLAGS),
+        Spec::new("stats", "Show shareable usage statistics").globals(SERVER_FLAGS).params(&[
+            Param::Flag(int("days", "Show the last N days; 0 means today").check(Check::AtLeast(0))),
+            Param::Flag(int("year", "Show a calendar year").check(Check::Between(1970, 9999))),
+            Param::Flag(boolean("all", "Show lifetime statistics")),
+            Param::Flag(string("project", "Filter by project ID, or use \".\" for the current project")),
+            Param::Flag(boolean("models", "Show model usage")),
+            Param::Flag(boolean("tools", "Show tool reliability")),
+            Param::Flag(boolean("cost", "Show cost and token details")),
+            Param::Flag(boolean("full", "Show every detailed section")),
+            Param::Flag(
+                int("limit", "Number of rows in detailed sections")
+                    .check(Check::AtLeast(1))
+                    .count(Count::Default(Default::Int(5))),
+            ),
+            Param::Flag(boolean("json", "Output statistics as JSON")),
+        ]),
+        Spec::new("mini", "Start the minimal interactive interface").globals(SERVER_FLAGS).params(&[
+            CONTINUE,
+            SESSION,
+            Param::Flag(boolean("fork", "Fork the session when continuing")),
+            Param::Flag(
+                boolean("replay", "Restore session history on resume and resize (disable with --no-replay)")
+                    .count(Count::Optional),
+            ),
+            Param::Flag(int("replay-limit", "Limit replay to the newest N messages (default: 200)")),
+            Param::Flag(string("model", "Model to use in the format provider/model").alias(&["m"])),
+            AGENT,
+            PROMPT,
+            Param::Flag(boolean("demo", "").hidden()),
+        ]),
+        Spec::new("run", "Run OpenCode with a message").globals(SERVER_FLAGS).params(&[
+            Param::Arg(variadic("message", "Message to send", 0, None)),
+            CONTINUE,
+            SESSION,
+            Param::Flag(boolean("fork", "Fork the session before continuing")),
+            Param::Flag(Flag {
+                metavar: Some("name"),
+                optional_value: Some(""),
+                ..string("worktree", "Start a new session in a new git worktree, optionally with this name").alias(&["w"])
+            }),
+            Param::Flag(string("model", "Model to use in the format provider/model#variant").alias(&["m"])),
+            AGENT,
+            FORMAT,
+            Param::Flag(string("file", "File to attach to the message").alias(&["f"]).count(AT_MOST_100)),
+            Param::Flag(string("title", "Session title")),
+            Param::Flag(boolean(
+                "archived",
+                "Create the session archived so it stays out of session lists (useful for scripted or CI runs)",
+            )),
+            Param::Flag(boolean("thinking", "Show thinking blocks")),
+            AUTO,
+            YOLO,
+            DANGEROUSLY,
+        ]),
+        Spec::new("session", "Manage sessions").globals(SERVER_FLAGS).commands(&[
+            Spec::new("list", "List top-level sessions in the current project, newest first").params(&[
+                Param::Flag(
+                    int("max-count", "Limit to N most recent sessions (default: 100)")
+                        .alias(&["n"])
+                        .check(Check::AtLeast(1)),
+                ),
+                Param::Flag(
+                    choice("format", "Output format", SessionListFormat::CHOICES)
+                        .count(Count::Default(Default::Text("table"))),
+                ),
+            ]),
+            Spec::new("delete", "Delete a session and its child sessions")
+                .params(&[Param::Arg(arg("sessionID", "Session ID to delete"))]),
+            Spec::new("export", "Export session data as JSON").params(&[
+                Param::Arg(optional("session", "Session ID to export")),
+                Param::Flag(boolean("sanitize", "Redact sensitive transcript and file data")),
+            ]),
+            Spec::new("import", "Import session data from a JSON file or URL").params(&[
+                Param::Arg(arg("file", "JSON file or URL to import")),
+                Param::Flag(string("directory", "Directory in which to import the session")),
+            ]),
+        ]),
+        Spec::new("service", "Manage the background server").commands(&[
+            Spec::new("start", "Start the background server"),
+            Spec::new("restart", "Restart the background server"),
+            Spec::new("status", "Show background server status"),
+            Spec::new("stop", "Stop the background server"),
+            Spec::new("get", "Get service configuration")
+                .params(&[Param::Arg(optional("key", KEY)), Param::Arg(optional("name", "Environment variable name"))]),
+            Spec::new("set", "Set service configuration").params(&[
+                Param::Arg(arg("key", KEY)),
+                Param::Arg(arg("value", "Setting value or environment variable name")),
+                Param::Arg(optional("env-value", "Environment variable value")),
+            ]),
+            Spec::new("unset", "Unset service configuration")
+                .params(&[Param::Arg(arg("key", KEY)), Param::Arg(optional("name", "Environment variable name"))]),
+        ]),
+        Spec::new("reload", "Reload configuration").globals(SERVER_FLAGS),
+        Spec::new("pair", "Print one-time links to connect a browser or app").params(&[
+            Param::Flag(string("url", "Use an external HTTP(S) server URL in pairing links").check(Check::PairingUrl)),
+            Param::Flag(boolean(
+                "remote",
+                "Pair through the OpenTunnel remote address, enabling remote access if needed (exposes the server to the internet)",
+            )),
+            Param::Flag(boolean(
+                "yes",
+                "Accept exposing the server to the internet when --remote enables remote access for the first time (required without an interactive terminal)",
+            ).alias(&["y"])),
+        ]),
+        Spec::new("serve", "Start the v2 API and web server").params(&[
+            Param::Flag(string("hostname", "")),
+            Param::Flag(int("port", "")),
+            Param::Flag(
+                string("cors", "Additional allowed CORS origin (repeat for multiple origins)")
+                    .check(Check::NonEmpty)
+                    .count(Count::Repeated { min: Some(0), max: None, optional: false }),
+            ),
+            Param::Flag(boolean("service", "")),
+            Param::Flag(boolean("stdio", "")),
+        ]),
+    ]);
+
+macro_rules! choices {
+    ($name:ident { $($variant:ident = $text:literal),* $(,)? }) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        pub enum $name {
+            $($variant),*
+        }
+
+        impl $name {
+            pub const CHOICES: &'static [&'static str] = &[$($text),*];
+
+            pub fn from_choice(text: &str) -> $name {
+                match text {
+                    $($text => $name::$variant,)*
+                    _ => unreachable!("the parser accepts only {:?}", $name::CHOICES),
+                }
+            }
+        }
+    };
+}
+
+choices!(PathName {
+    Db = "db",
+    Home = "home",
+    Data = "data",
+    Config = "config",
+    Cache = "cache",
+    State = "state",
+    Tmp = "tmp",
+    Bin = "bin",
+    Log = "log",
+    Repos = "repos",
+});
+choices!(OutputFormat { Default = "default", Json = "json" });
+choices!(SessionListFormat { Table = "table", Json = "json" });
+choices!(Shell { Bash = "bash", Zsh = "zsh", Fish = "fish", Powershell = "powershell", Sh = "sh", Pwsh = "pwsh" });
+choices!(LogLevel {
+    All = "all",
+    Trace = "trace",
+    Debug = "debug",
+    Info = "info",
+    Warn = "warn",
+    Warning = "warning",
+    Error = "error",
+    Fatal = "fatal",
+    None = "none",
+});
+
+/// The parsed command line a handler runs with.
+#[derive(Debug)]
 pub struct Cli {
-    #[command(flatten)]
     pub root: RootArgs,
-    #[command(flatten)]
     pub global: GlobalArgs,
-    #[command(subcommand)]
     pub command: Option<Command>,
 }
 
-/// The Effect CLI built-ins and `--print-logs`, accepted by every command.
-#[derive(Args, Debug, Clone, Default)]
+/// The global settings every command accepts: Effect CLI's `--log-level` and `--print-logs`.
+#[derive(Debug, Clone, Default)]
 pub struct GlobalArgs {
-    #[arg(short = 'h', long, global = true, action = ArgAction::Help, help = "Show help information")]
-    pub help: Option<bool>,
-    #[arg(short = 'v', long, global = true, help = "Show version information")]
-    pub version: bool,
-    #[arg(long, global = true, help = "Start wizard mode for a command")]
-    pub wizard: bool,
-    #[arg(long, global = true, value_name = "shell", help = "Print shell completion script")]
-    pub completions: Option<Shell>,
-    #[arg(long, global = true, value_name = "level", help = "Sets the minimum log level")]
     pub log_level: Option<LogLevel>,
-    #[arg(long, global = true, help = "Print logs to stderr (server logs require --standalone)")]
     pub print_logs: bool,
 }
 
-#[derive(Args, Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct RootArgs {
-    // Own ids: clap copies the values of global args to every level by id, and `validate` must tell the
-    // root's `--server` from that of the selected command.
-    #[arg(id = "root_standalone", long = "standalone", help = STANDALONE)]
     pub standalone: bool,
-    #[arg(id = "root_server", long = "server", value_name = "string", help = SERVER)]
     pub server: Option<String>,
-    #[command(flatten)]
     pub permissions: PermissionFlags,
-    #[arg(value_name = "directory", help = "Directory to start OpenCode in")]
     pub directory: Option<String>,
-    #[arg(short = 'c', long = "continue", help = "Continue the last session")]
     pub continue_: bool,
-    #[arg(short = 's', long, value_name = "string", help = SESSION)]
     pub session: Option<String>,
-    #[arg(long, value_name = "string", help = "Prompt to use")]
     pub prompt: Option<String>,
 }
 
-const STANDALONE: &str = "Run with a private server instead of the background service";
-const SERVER: &str = "Connect to a server URL instead of the background service";
-const SESSION: &str = "Session ID to continue, or to create if it does not exist";
-
 /// `--standalone` and `--server` on a command that declares them; they apply to its subcommands too.
-#[derive(Args, Debug, Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ServerFlags {
-    #[arg(long, global = true, help = STANDALONE)]
     pub standalone: bool,
-    #[arg(long, global = true, value_name = "string", help = SERVER)]
     pub server: Option<String>,
 }
 
-/// `debug heap-dump` takes `--server` without `--standalone`.
-#[derive(Args, Debug, Clone, Default)]
-pub struct ServerOnly {
-    #[arg(long, global = true, value_name = "string", help = SERVER)]
-    pub server: Option<String>,
-}
-
-#[derive(Args, Debug, Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct PermissionFlags {
-    #[arg(long, help = "Auto-approve permissions that are not explicitly denied")]
     pub auto: bool,
-    #[arg(long, hide = true)]
     pub yolo: bool,
-    #[arg(long, hide = true)]
     pub dangerously_skip_permissions: bool,
 }
 
@@ -93,386 +585,187 @@ impl PermissionFlags {
     }
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Debug)]
 pub enum Command {
-    #[command(about = "Upgrade OpenCode to the latest or a specific version", visible_alias = "update")]
     Upgrade(UpgradeArgs),
-    #[command(about = "Uninstall OpenCode, keeping session data, configuration, and state")]
     Uninstall(UninstallArgs),
-    #[command(about = "Start an Agent Client Protocol server")]
     Acp(AcpArgs),
-    #[command(about = "Make a request to the running server")]
     Api(ApiArgs),
-    #[command(about = "Debugging and troubleshooting tools")]
     Debug(DebugArgs),
-    #[command(about = "manage integrations and credentials")]
     Auth(AuthArgs),
-    #[command(about = "Manage MCP (Model Context Protocol) servers")]
     Mcp(McpArgs),
-    #[command(about = "Manage plugins")]
     Plugin(PluginArgs),
-    #[command(about = "List all available models")]
-    Models(ServerArgs),
-    #[command(about = "Show shareable usage statistics")]
+    Models,
     Stats(StatsArgs),
-    #[command(about = "Start the minimal interactive interface")]
     Mini(MiniArgs),
-    #[command(about = "Run OpenCode with a message")]
     Run(RunArgs),
-    #[command(about = "Manage sessions")]
     Session(SessionArgs),
-    #[command(about = "Manage the background server")]
     Service(ServiceArgs),
-    #[command(about = "Reload configuration")]
-    Reload(ServerArgs),
-    #[command(about = "Print one-time links to connect a browser or app")]
+    Reload,
     Pair(PairArgs),
-    #[command(about = "Start the v2 API and web server")]
     Serve(ServeArgs),
 }
 
-/// A command whose only flags are `--standalone` and `--server`.
-#[derive(Args, Debug, Clone, Default)]
-pub struct ServerArgs {
-    #[command(flatten)]
-    pub server: ServerFlags,
-}
+// `upgrade`, `uninstall`, `plugin`, and `serve` run the TypeScript CLI with the process arguments, which parses
+// them again.
+#[derive(Debug)]
+pub struct UpgradeArgs;
 
-#[derive(Args, Debug)]
-pub struct UpgradeArgs {
-    #[arg(value_name = "target", help = "Version to upgrade to (with or without a leading v)")]
-    pub target: Option<String>,
-    #[arg(short = 'm', long, value_name = "choice", help = "Installation method to use")]
-    pub method: Option<UpgradeMethod>,
-}
+#[derive(Debug)]
+pub struct UninstallArgs;
 
-#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UpgradeMethod {
-    Curl,
-    Npm,
-    Pnpm,
-    Bun,
-    Yarn,
-    Vp,
-    Brew,
-    Winget,
-}
-
-#[derive(Args, Debug)]
-pub struct UninstallArgs {
-    #[arg(long, help = "Show what would be removed without removing")]
-    pub dry_run: bool,
-    #[arg(short = 'f', long, help = "Skip confirmation prompts")]
-    pub force: bool,
-}
-
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct AcpArgs {
-    #[arg(long, help = "Run auth login instead of starting the server")]
     pub login: bool,
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct ApiArgs {
-    #[arg(
-        value_name = "operation | method path",
-        required = true,
-        num_args = 1..=2,
-        help = "OpenAPI operation ID, or an HTTP method followed by a path"
-    )]
     pub request: Vec<String>,
-    #[arg(short = 'd', long, value_name = "string", help = "Request body")]
     pub data: Option<String>,
-    #[arg(short = 'H', long, value_name = "string", action = ArgAction::Append, help = "Request header in name:value form")]
     pub header: Vec<String>,
-    #[arg(long, value_name = "key=value", action = ArgAction::Append, value_parser = key_value, help = "OpenAPI path or query parameter")]
     pub param: Vec<(String, String)>,
-    #[command(flatten)]
-    pub server: ServerFlags,
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct DebugArgs {
-    #[command(subcommand)]
     pub command: Option<DebugCommand>,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Debug)]
 pub enum DebugCommand {
-    #[command(about = "List all agents")]
-    Agents(ServerArgs),
-    #[command(about = "List configuration sources")]
-    Config(ServerArgs),
-    #[command(about = "Write a heap snapshot of the running server and print its path")]
+    Agents,
+    Config,
     HeapDump(HeapDumpArgs),
-    #[command(about = "Show global paths (data, config, cache, state)")]
     Paths(PathsArgs),
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct HeapDumpArgs {
-    #[arg(
-        long,
-        value_name = "string",
-        help = "Directory to write the snapshot into instead of the server's log directory"
-    )]
     pub directory: Option<String>,
-    #[command(flatten)]
-    pub server: ServerOnly,
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct PathsArgs {
-    #[arg(
-        value_name = "name",
-        help = "Print only one path: db, home, data, config, cache, state, tmp, bin, log, repos"
-    )]
     pub name: Option<PathName>,
 }
 
-#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PathName {
-    Db,
-    Home,
-    Data,
-    Config,
-    Cache,
-    State,
-    Tmp,
-    Bin,
-    Log,
-    Repos,
-}
-
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct AuthArgs {
-    #[command(subcommand)]
     pub command: Option<AuthCommand>,
-    #[command(flatten)]
-    pub server: ServerFlags,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Debug)]
 pub enum AuthCommand {
-    #[command(about = "list integrations and credentials")]
     List(AuthListArgs),
-    #[command(about = "connect an integration")]
     Login(AuthLoginArgs),
-    #[command(about = "log out of a saved account")]
     Logout(AuthAccountArgs),
-    #[command(about = "print stored credentials, including secrets, as JSON")]
     Export(AuthExportArgs),
-    #[command(about = "import credentials exported by auth export")]
     Import(AuthImportArgs),
-    #[command(about = "switch the active account for an integration")]
     Switch(AuthAccountArgs),
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct AuthListArgs {
-    #[arg(long, value_name = "choice", default_value = "default", help = "Output format")]
     pub format: OutputFormat,
 }
 
-#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OutputFormat {
-    Default,
-    Json,
-}
-
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct AuthLoginArgs {
-    #[arg(value_name = "target", help = "Integration ID, name, or well-known provider URL")]
     pub target: Option<String>,
-    #[arg(long, value_name = "string", help = "Authentication method ID")]
     pub method: Option<String>,
-    #[arg(
-        long,
-        value_name = "string",
-        action = ArgAction::Append,
-        help = "Provider form answer (key=value; repeat for multiple fields)"
-    )]
     pub answer: Vec<String>,
 }
 
 /// `auth logout` and `auth switch`.
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct AuthAccountArgs {
-    #[arg(value_name = "target", help = "Integration ID or name")]
     pub target: Option<String>,
-    #[arg(value_name = "credential", help = "Credential ID or label (opens an account picker when omitted)")]
     pub credential: Option<String>,
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct AuthExportArgs {
-    #[arg(value_name = "target", help = "Integration ID or name (exports every integration when omitted)")]
     pub target: Option<String>,
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct AuthImportArgs {
-    #[arg(value_name = "file", help = "JSON file to import (reads stdin when omitted)")]
     pub file: Option<String>,
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct McpArgs {
-    #[command(subcommand)]
     pub command: Option<McpCommand>,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Debug)]
 pub enum McpCommand {
-    #[command(about = "List configured MCP servers and their status")]
-    List(ServerArgs),
-    #[command(about = "Add an MCP server to your configuration")]
+    List,
     Add(McpAddArgs),
-    #[command(about = "Authenticate with an OAuth-capable remote MCP server")]
     Auth(McpAuthArgs),
-    #[command(about = "Remove stored OAuth credentials for an MCP server")]
     Logout(McpLogoutArgs),
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct McpAddArgs {
-    #[arg(value_name = "name", help = "Name of the MCP server")]
     pub name: String,
-    #[arg(value_name = "command", help = "Command and arguments for a local server, passed after --")]
     pub command: Vec<String>,
-    #[arg(long, value_name = "string", help = "URL for a remote MCP server")]
     pub url: Option<String>,
-    #[arg(long, value_name = "key=value", action = ArgAction::Append, value_parser = key_value, help = "HTTP header for a remote server, as name=value")]
     pub header: Vec<(String, String)>,
-    #[arg(long, value_name = "key=value", action = ArgAction::Append, value_parser = key_value, help = "Environment variable for a local server, as name=value")]
     pub env: Vec<(String, String)>,
-    #[arg(long, help = "Write to the global config instead of the project config")]
     pub global: bool,
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct McpAuthArgs {
-    #[arg(value_name = "name", help = "Name of the MCP server")]
     pub name: Option<String>,
-    #[command(flatten)]
-    pub server: ServerFlags,
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct McpLogoutArgs {
-    #[arg(value_name = "name", help = "Name of the MCP server")]
     pub name: String,
-    #[command(flatten)]
-    pub server: ServerFlags,
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct PluginArgs {
-    #[command(subcommand)]
     pub command: Option<PluginCommand>,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Debug)]
 pub enum PluginCommand {
-    #[command(about = "List plugins")]
-    List(PluginListArgs),
-    #[command(about = "Install a plugin and add it to the global configuration")]
-    Add(PluginAddArgs),
-    #[command(about = "Check package plugins for updates")]
-    Check(PluginCheckArgs),
-    #[command(about = "Update package plugins")]
-    Update(PluginUpdateArgs),
-    #[command(about = "Remove a plugin from global configuration")]
-    Remove(PluginRemoveArgs),
+    List,
+    Add,
+    Check,
+    Update,
+    Remove,
 }
 
-#[derive(Args, Debug)]
-pub struct PluginListArgs {
-    #[arg(long, help = "Include built-in server plugins")]
-    pub builtin: bool,
-    #[command(flatten)]
-    pub server: ServerFlags,
-}
-
-#[derive(Args, Debug)]
-pub struct PluginAddArgs {
-    #[arg(value_name = "package", help = "npm registry or Git package specifier")]
-    pub package: String,
-}
-
-#[derive(Args, Debug)]
-pub struct PluginCheckArgs {
-    #[arg(value_name = "target", help = "Configured package target")]
-    pub target: Option<String>,
-    #[command(flatten)]
-    pub server: ServerFlags,
-}
-
-#[derive(Args, Debug)]
-pub struct PluginUpdateArgs {
-    #[arg(value_name = "target", help = "Configured package target; omit to update all outdated plugins")]
-    pub target: Option<String>,
-    #[command(flatten)]
-    pub server: ServerFlags,
-}
-
-#[derive(Args, Debug)]
-pub struct PluginRemoveArgs {
-    #[arg(value_name = "package", help = "configured package specifier")]
-    pub package: String,
-}
-
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct StatsArgs {
-    #[arg(long, value_name = "integer", value_parser = clap::value_parser!(u32), help = "Show the last N days; 0 means today")]
     pub days: Option<u32>,
-    #[arg(long, value_name = "integer", value_parser = clap::value_parser!(u16).range(1970..=9999), help = "Show a calendar year")]
     pub year: Option<u16>,
-    #[arg(long, help = "Show lifetime statistics")]
     pub all: bool,
-    #[arg(long, value_name = "string", help = "Filter by project ID, or use \".\" for the current project")]
     pub project: Option<String>,
-    #[arg(long, help = "Show model usage")]
     pub models: bool,
-    #[arg(long, help = "Show tool reliability")]
     pub tools: bool,
-    #[arg(long, help = "Show cost and token details")]
     pub cost: bool,
-    #[arg(long, help = "Show every detailed section")]
     pub full: bool,
-    #[arg(long, value_name = "integer", default_value = "5", value_parser = clap::value_parser!(u32).range(1..), help = "Number of rows in detailed sections")]
     pub limit: u32,
-    #[arg(long, help = "Output statistics as JSON")]
     pub json: bool,
-    #[command(flatten)]
-    pub server: ServerFlags,
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct MiniArgs {
-    #[arg(short = 'c', long = "continue", help = "Continue the last session")]
     pub continue_: bool,
-    #[arg(short = 's', long, value_name = "string", help = SESSION)]
     pub session: Option<String>,
-    #[arg(long, help = "Fork the session when continuing")]
     pub fork: bool,
-    #[arg(long, help = "Restore session history on resume and resize (disable with --no-replay)")]
     pub replay: bool,
-    // Set by `normalize` for `--no-replay` and `--replay=false`, so `replay()` can tell false from absent.
-    #[arg(long = "no-replay", hide = true)]
     pub no_replay: bool,
-    #[arg(long, value_name = "integer", help = "Limit replay to the newest N messages (default: 200)")]
     pub replay_limit: Option<i64>,
-    #[arg(short = 'm', long, value_name = "string", help = "Model to use in the format provider/model")]
     pub model: Option<String>,
-    #[arg(long, value_name = "string", help = "Agent to use")]
     pub agent: Option<String>,
-    #[arg(long, value_name = "string", help = "Prompt to use")]
     pub prompt: Option<String>,
-    #[arg(long, hide = true)]
-    pub demo: bool,
-    #[command(flatten)]
-    pub server: ServerFlags,
 }
 
 impl MiniArgs {
@@ -485,48 +778,22 @@ impl MiniArgs {
     }
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct RunArgs {
-    #[arg(value_name = "message", help = "Message to send")]
     pub message: Vec<String>,
-    #[arg(short = 'c', long = "continue", help = "Continue the last session")]
     pub continue_: bool,
-    #[arg(short = 's', long, value_name = "string", help = SESSION)]
     pub session: Option<String>,
-    #[arg(long, help = "Fork the session before continuing")]
     pub fork: bool,
-    // A value only with `=`: `run -w "fix it"` keeps "fix it" as the message (framework/flag.ts:3-4).
-    #[arg(
-        short = 'w',
-        long,
-        value_name = "name",
-        num_args = 0..=1,
-        require_equals = true,
-        default_missing_value = "",
-        help = "Start a new session in a new git worktree, optionally with this name"
-    )]
+    /// `Some("")` for `-w` without a name.
     pub worktree: Option<String>,
-    #[arg(short = 'm', long, value_name = "string", help = "Model to use in the format provider/model#variant")]
     pub model: Option<String>,
-    #[arg(long, value_name = "string", help = "Agent to use")]
     pub agent: Option<String>,
-    #[arg(long, value_name = "choice", default_value = "default", help = "Output format")]
     pub format: OutputFormat,
-    #[arg(short = 'f', long, value_name = "string", action = ArgAction::Append, help = "File to attach to the message")]
     pub file: Vec<String>,
-    #[arg(long, value_name = "string", help = "Session title")]
     pub title: Option<String>,
-    #[arg(
-        long,
-        help = "Create the session archived so it stays out of session lists (useful for scripted or CI runs)"
-    )]
     pub archived: bool,
-    #[arg(long, help = "Show thinking blocks")]
     pub thinking: bool,
-    #[command(flatten)]
     pub permissions: PermissionFlags,
-    #[command(flatten)]
-    pub server: ServerFlags,
 }
 
 impl RunArgs {
@@ -536,433 +803,290 @@ impl RunArgs {
     }
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct SessionArgs {
-    #[command(subcommand)]
     pub command: Option<SessionCommand>,
-    #[command(flatten)]
-    pub server: ServerFlags,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Debug)]
 pub enum SessionCommand {
-    #[command(about = "List top-level sessions in the current project, newest first")]
     List(SessionListArgs),
-    #[command(about = "Delete a session and its child sessions")]
     Delete(SessionDeleteArgs),
-    #[command(about = "Export session data as JSON")]
     Export(SessionExportArgs),
-    #[command(about = "Import session data from a JSON file or URL")]
     Import(SessionImportArgs),
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct SessionListArgs {
-    #[arg(short = 'n', long, value_name = "integer", value_parser = clap::value_parser!(u32).range(1..), help = "Limit to N most recent sessions (default: 100)")]
     pub max_count: Option<u32>,
-    #[arg(long, value_name = "choice", default_value = "table", help = "Output format")]
     pub format: SessionListFormat,
 }
 
-#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SessionListFormat {
-    Table,
-    Json,
-}
-
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct SessionDeleteArgs {
-    #[arg(value_name = "sessionID", help = "Session ID to delete")]
     pub session_id: String,
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct SessionExportArgs {
-    #[arg(value_name = "session", help = "Session ID to export")]
     pub session: Option<String>,
-    #[arg(long, help = "Redact sensitive transcript and file data")]
     pub sanitize: bool,
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct SessionImportArgs {
-    #[arg(value_name = "file", help = "JSON file or URL to import")]
     pub file: String,
-    #[arg(long, value_name = "string", help = "Directory in which to import the session")]
     pub directory: Option<String>,
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct ServiceArgs {
-    #[command(subcommand)]
     pub command: Option<ServiceCommand>,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Debug)]
 pub enum ServiceCommand {
-    #[command(about = "Start the background server")]
     Start,
-    #[command(about = "Restart the background server")]
     Restart,
-    #[command(about = "Show background server status")]
     Status,
-    #[command(about = "Stop the background server")]
     Stop,
-    #[command(about = "Get service configuration")]
     Get(ServiceGetArgs),
-    #[command(about = "Set service configuration")]
     Set(ServiceSetArgs),
-    #[command(about = "Unset service configuration")]
     Unset(ServiceUnsetArgs),
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct ServiceGetArgs {
-    #[arg(value_name = "key", help = "Service setting or env")]
     pub key: Option<String>,
-    #[arg(value_name = "name", help = "Environment variable name")]
     pub name: Option<String>,
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct ServiceSetArgs {
-    #[arg(value_name = "key", help = "Service setting or env")]
     pub key: String,
-    #[arg(value_name = "value", help = "Setting value or environment variable name")]
     pub value: String,
-    #[arg(value_name = "env-value", help = "Environment variable value")]
     pub env_value: Option<String>,
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct ServiceUnsetArgs {
-    #[arg(value_name = "key", help = "Service setting or env")]
     pub key: String,
-    #[arg(value_name = "name", help = "Environment variable name")]
     pub name: Option<String>,
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug)]
 pub struct PairArgs {
-    #[arg(long, value_name = "string", value_parser = pairing_url, help = "Use an external HTTP(S) server URL in pairing links")]
     pub url: Option<String>,
-    #[arg(
-        long,
-        help = "Pair through the OpenTunnel remote address, enabling remote access if needed (exposes the server to the internet)"
-    )]
     pub remote: bool,
-    #[arg(
-        short = 'y',
-        long,
-        help = "Accept exposing the server to the internet when --remote enables remote access for the first time (required without an interactive terminal)"
-    )]
     pub yes: bool,
 }
 
-#[derive(Args, Debug)]
-pub struct ServeArgs {
-    #[arg(long, value_name = "string")]
-    pub hostname: Option<String>,
-    #[arg(long, value_name = "integer")]
-    pub port: Option<i64>,
-    #[arg(
-        long,
-        value_name = "string",
-        action = ArgAction::Append,
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
-        help = "Additional allowed CORS origin (repeat for multiple origins)"
-    )]
-    pub cors: Vec<String>,
-    #[arg(long)]
-    pub service: bool,
-    #[arg(long)]
-    pub stdio: bool,
-}
+#[derive(Debug)]
+pub struct ServeArgs;
 
-#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Shell {
-    Bash,
-    Zsh,
-    Fish,
-    Powershell,
-    Sh,
-    Pwsh,
-}
-
-#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LogLevel {
-    All,
-    Trace,
-    Debug,
-    Info,
-    Warn,
-    Warning,
-    Error,
-    Fatal,
-    None,
-}
-
-fn key_value(value: &str) -> Result<(String, String), String> {
-    let Some((key, val)) = value.split_once('=') else {
-        return Err(format!("Invalid key=value format. Expected format: key=value, got: {value}"));
-    };
-    if key.is_empty() || val.is_empty() {
-        return Err(format!("Invalid key=value format. Both key and value must be non-empty. Got: {value}"));
-    }
-    Ok((key.to_string(), val.to_string()))
-}
-
-// commands.ts:551-561: an HTTP(S) URL without credentials, query, or fragment, without trailing slashes.
-fn pairing_url(value: &str) -> Result<String, String> {
-    let error = "Expected an HTTP(S) server URL without credentials, query parameters, or a fragment";
-    let url = url::Url::parse(value).map_err(|_| error.to_string())?;
-    let plain = matches!(url.scheme(), "http" | "https")
-        && url.username().is_empty()
-        && url.password().is_none()
-        && url.query().is_none()
-        && url.fragment().is_none();
-    if !plain {
-        return Err(error.to_string());
-    }
-    Ok(url.as_str().trim_end_matches('/').to_string())
-}
-
-/// Rewrites Effect CLI boolean forms into ones clap accepts, walking the arguments with `command` (built, so
-/// global flags are visible at every level) the way Effect's parser does: only the first word at each level
-/// can name a subcommand, and everything after `--` is left alone.
-///
-/// - `--flag=<literal>`, `--flag <literal>` (`true yes on 1 y`, `false no off 0 n`) set the boolean.
-/// - `--no-flag` sets it to false; a value after it is an error.
-/// - A boolean given twice is an error, as Effect reports "at most 1 value".
-/// - Short clusters split into single flags (`-cf` is `-c -f`), as Effect's lexer does.
-///
-/// A false boolean is dropped, or becomes the hidden `--no-<flag>` where the command has one.
-pub fn normalize(command: &clap::Command, args: Vec<OsString>) -> Result<Vec<OsString>, String> {
-    let mut input = args.into_iter();
-    let mut out: Vec<OsString> = input.next().into_iter().collect();
-    let mut tokens: Vec<OsString> = Vec::new();
-    let mut rest: Vec<OsString> = Vec::new();
-    for arg in input.by_ref() {
-        if arg == "--" {
-            rest.push(arg);
-            break;
-        }
-        match arg.to_str().and_then(cluster) {
-            Some(split) => tokens.extend(split.into_iter().map(OsString::from)),
-            None => tokens.push(arg),
+impl GlobalArgs {
+    /// The settings from the values `parse` checked.
+    pub fn from_values(values: &mut Values) -> GlobalArgs {
+        GlobalArgs {
+            log_level: values.string("log-level").map(|level| LogLevel::from_choice(&level)),
+            print_logs: values.flag("print-logs"),
         }
     }
-    rest.extend(input);
+}
 
-    let mut node = command;
-    let mut first = true;
-    let mut seen = HashSet::new();
-    let mut tokens = tokens.into_iter().peekable();
-    while let Some(token) = tokens.next() {
-        let Some(text) = token.to_str().filter(|text| is_flag(text)) else {
-            match token.to_str().and_then(|name| find_subcommand(node, name)) {
-                Some(sub) if first => node = sub,
-                _ => first = false,
-            }
-            out.push(token);
-            continue;
+impl Cli {
+    /// The typed arguments of the command at `path` (names below the root), from the values `parse` checked
+    /// against its params.
+    pub fn new(path: &[&str], values: &mut Values, global: GlobalArgs) -> Cli {
+        let root = match path {
+            [] => RootArgs {
+                standalone: values.flag("standalone"),
+                server: values.string("server"),
+                permissions: permissions(values),
+                directory: values.string("directory"),
+                continue_: values.flag("continue"),
+                session: values.string("session"),
+                prompt: values.string("prompt"),
+            },
+            _ => RootArgs::default(),
         };
-        let (name, value) = match text.split_once('=') {
-            Some((name, value)) => (name, Some(value)),
-            None => (text, None),
-        };
-        let negated = name.strip_prefix("--no-").and_then(|long| find_long(node, long).filter(|arg| is_bool(arg)));
-        if let Some(arg) = negated {
-            let literal = value.map(str::to_string).or_else(|| take_literal(&mut tokens));
-            if let Some(literal) = literal {
-                let long = arg.get_long().unwrap_or_default();
-                return Err(format!(
-                    "Invalid value for flag --{long}: \"{literal}\". Expected: omit the value and use {name} by itself to set --{long} to false"
-                ));
-            }
-            record(&mut seen, arg)?;
-            push_bool(&mut out, node, arg, false);
-            continue;
+        Cli { root, global, command: command(path, values) }
+    }
+}
+
+fn permissions(values: &mut Values) -> PermissionFlags {
+    PermissionFlags {
+        auto: values.flag("auto"),
+        yolo: values.flag("yolo"),
+        dangerously_skip_permissions: values.flag("dangerously-skip-permissions"),
+    }
+}
+
+fn command(path: &[&str], v: &mut Values) -> Option<Command> {
+    Some(match path {
+        [] => return None,
+        ["upgrade"] => Command::Upgrade(UpgradeArgs),
+        ["uninstall"] => Command::Uninstall(UninstallArgs),
+        ["acp"] => Command::Acp(AcpArgs { login: v.flag("login") }),
+        ["api"] => Command::Api(ApiArgs {
+            request: v.list("operation | method path"),
+            data: v.string("data"),
+            header: v.list("header"),
+            param: v.pairs("param"),
+        }),
+        ["debug", rest @ ..] => Command::Debug(DebugArgs {
+            command: match rest {
+                [] => None,
+                ["agents"] => Some(DebugCommand::Agents),
+                ["config"] => Some(DebugCommand::Config),
+                ["heap-dump"] => Some(DebugCommand::HeapDump(HeapDumpArgs { directory: v.string("directory") })),
+                _ => Some(DebugCommand::Paths(PathsArgs {
+                    name: v.string("name").map(|name| PathName::from_choice(&name)),
+                })),
+            },
+        }),
+        ["auth", rest @ ..] => Command::Auth(AuthArgs {
+            command: match rest {
+                [] => None,
+                ["list"] => {
+                    Some(AuthCommand::List(AuthListArgs { format: OutputFormat::from_choice(&v.text("format")) }))
+                }
+                ["login"] => Some(AuthCommand::Login(AuthLoginArgs {
+                    target: v.string("target"),
+                    method: v.string("method"),
+                    answer: v.list("answer"),
+                })),
+                ["logout"] => Some(AuthCommand::Logout(account(v))),
+                ["export"] => Some(AuthCommand::Export(AuthExportArgs { target: v.string("target") })),
+                ["import"] => Some(AuthCommand::Import(AuthImportArgs { file: v.string("file") })),
+                _ => Some(AuthCommand::Switch(account(v))),
+            },
+        }),
+        ["mcp", rest @ ..] => Command::Mcp(McpArgs {
+            command: match rest {
+                [] => None,
+                ["list"] => Some(McpCommand::List),
+                ["add"] => Some(McpCommand::Add(McpAddArgs {
+                    name: v.text("name"),
+                    command: v.list("command"),
+                    url: v.string("url"),
+                    header: v.pairs("header"),
+                    env: v.pairs("env"),
+                    global: v.flag("global"),
+                })),
+                ["auth"] => Some(McpCommand::Auth(McpAuthArgs { name: v.string("name") })),
+                _ => Some(McpCommand::Logout(McpLogoutArgs { name: v.text("name") })),
+            },
+        }),
+        ["plugin", rest @ ..] => Command::Plugin(PluginArgs {
+            command: match rest {
+                [] => None,
+                ["list"] => Some(PluginCommand::List),
+                ["add"] => Some(PluginCommand::Add),
+                ["check"] => Some(PluginCommand::Check),
+                ["update"] => Some(PluginCommand::Update),
+                _ => Some(PluginCommand::Remove),
+            },
+        }),
+        ["models"] => Command::Models,
+        ["stats"] => Command::Stats(StatsArgs {
+            days: v.int("days").map(saturate),
+            year: v.int("year").map(saturate),
+            all: v.flag("all"),
+            project: v.string("project"),
+            models: v.flag("models"),
+            tools: v.flag("tools"),
+            cost: v.flag("cost"),
+            full: v.flag("full"),
+            limit: v.int("limit").map_or(5, saturate),
+            json: v.flag("json"),
+        }),
+        ["mini"] => {
+            let replay = v.optional_flag("replay");
+            Command::Mini(MiniArgs {
+                continue_: v.flag("continue"),
+                session: v.string("session"),
+                fork: v.flag("fork"),
+                replay: replay == Some(true),
+                no_replay: replay == Some(false),
+                replay_limit: v.int("replay-limit"),
+                model: v.string("model"),
+                agent: v.string("agent"),
+                prompt: v.string("prompt"),
+            })
         }
-        let Some(arg) = find_flag(node, name) else {
-            out.push(token);
-            continue;
-        };
-        if is_bool(arg) {
-            let literal = value.map(str::to_string).or_else(|| take_literal(&mut tokens));
-            let enabled = match literal.as_deref() {
-                None => true,
-                Some(literal) => parse_bool(literal).ok_or_else(|| {
-                    format!(
-                        "Invalid value for flag --{}: \"{literal}\". Expected: boolean",
-                        arg.get_long().unwrap_or_default()
-                    )
-                })?,
-            };
-            record(&mut seen, arg)?;
-            push_bool(&mut out, node, arg, enabled);
-            continue;
-        }
-        // A flag that takes the next word: keep that word out of subcommand detection.
-        let takes_next = value.is_none()
-            && !arg.is_require_equals_set()
-            && arg.get_num_args().is_some_and(|range| range.min_values() > 0);
-        out.push(token);
-        if takes_next && let Some(next) = tokens.next_if(|next| next.to_str().is_none_or(|next| !is_flag(next))) {
-            out.push(next);
-        }
-    }
-    out.extend(rest);
-    Ok(out)
+        ["run"] => Command::Run(RunArgs {
+            message: v.list("message"),
+            continue_: v.flag("continue"),
+            session: v.string("session"),
+            fork: v.flag("fork"),
+            worktree: v.string("worktree"),
+            model: v.string("model"),
+            agent: v.string("agent"),
+            format: OutputFormat::from_choice(&v.text("format")),
+            file: v.list("file"),
+            title: v.string("title"),
+            archived: v.flag("archived"),
+            thinking: v.flag("thinking"),
+            permissions: permissions(v),
+        }),
+        ["session", rest @ ..] => Command::Session(SessionArgs {
+            command: match rest {
+                [] => None,
+                ["list"] => Some(SessionCommand::List(SessionListArgs {
+                    max_count: v.int("max-count").map(saturate),
+                    format: SessionListFormat::from_choice(&v.text("format")),
+                })),
+                ["delete"] => Some(SessionCommand::Delete(SessionDeleteArgs { session_id: v.text("sessionID") })),
+                ["export"] => Some(SessionCommand::Export(SessionExportArgs {
+                    session: v.string("session"),
+                    sanitize: v.flag("sanitize"),
+                })),
+                _ => Some(SessionCommand::Import(SessionImportArgs {
+                    file: v.text("file"),
+                    directory: v.string("directory"),
+                })),
+            },
+        }),
+        ["service", rest @ ..] => Command::Service(ServiceArgs {
+            command: match rest {
+                [] => None,
+                ["start"] => Some(ServiceCommand::Start),
+                ["restart"] => Some(ServiceCommand::Restart),
+                ["status"] => Some(ServiceCommand::Status),
+                ["stop"] => Some(ServiceCommand::Stop),
+                ["get"] => Some(ServiceCommand::Get(ServiceGetArgs { key: v.string("key"), name: v.string("name") })),
+                ["set"] => Some(ServiceCommand::Set(ServiceSetArgs {
+                    key: v.text("key"),
+                    value: v.text("value"),
+                    env_value: v.string("env-value"),
+                })),
+                _ => Some(ServiceCommand::Unset(ServiceUnsetArgs { key: v.text("key"), name: v.string("name") })),
+            },
+        }),
+        ["reload"] => Command::Reload,
+        ["pair"] => Command::Pair(PairArgs { url: v.string("url"), remote: v.flag("remote"), yes: v.flag("yes") }),
+        _ => Command::Serve(ServeArgs),
+    })
 }
 
-// Effect's lexer: a word starting with `-` is a flag unless it is `-` alone or a negative number.
-fn is_flag(text: &str) -> bool {
-    text.len() > 1 && text.starts_with('-') && text != "--" && !text.starts_with("--=") && !is_negative_number(text)
+fn account(values: &mut Values) -> AuthAccountArgs {
+    AuthAccountArgs { target: values.string("target"), credential: values.string("credential") }
 }
 
-// lexer.ts:49, `^-(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$`.
-fn is_negative_number(text: &str) -> bool {
-    let digits = |part: &str| part.chars().all(|char| char.is_ascii_digit());
-    let number = &text[1..];
-    let (mantissa, exponent) = match number.split_once(['e', 'E']) {
-        Some((mantissa, exponent)) => (mantissa, Some(exponent)),
-        None => (number, None),
-    };
-    let mantissa = match mantissa.split_once('.') {
-        Some((int, frac)) => digits(int) && digits(frac) && !(int.is_empty() && frac.is_empty()),
-        None => !mantissa.is_empty() && digits(mantissa),
-    };
-    let exponent = exponent.is_none_or(|exponent| {
-        let exponent = exponent.strip_prefix(['+', '-']).unwrap_or(exponent);
-        !exponent.is_empty() && digits(exponent)
-    });
-    mantissa && exponent
+// The checks keep these in range except beyond `u32::MAX` days or rows, which mean the same as the maximum.
+fn saturate<T: TryFrom<i64> + Bounded>(value: i64) -> T {
+    T::try_from(value).unwrap_or(T::MAX)
 }
 
-/// `-abc` is `-a -b -c`, and `-ab=v` is `-a -b=v`.
-fn cluster(text: &str) -> Option<Vec<String>> {
-    if !is_flag(text) || text.starts_with("--") {
-        return None;
-    }
-    let (flags, value) = match text[1..].split_once('=') {
-        Some((flags, value)) => (flags, Some(value)),
-        None => (&text[1..], None),
-    };
-    if flags.chars().count() < 2 {
-        return None;
-    }
-    let mut split: Vec<String> = flags.chars().map(|char| format!("-{char}")).collect();
-    if let (Some(last), Some(value)) = (split.last_mut(), value) {
-        last.push('=');
-        last.push_str(value);
-    }
-    Some(split)
+trait Bounded {
+    const MAX: Self;
 }
 
-fn find_subcommand<'a>(node: &'a clap::Command, name: &str) -> Option<&'a clap::Command> {
-    node.get_subcommands().find(|sub| sub.get_name() == name || sub.get_all_aliases().any(|alias| alias == name))
+impl Bounded for u32 {
+    const MAX: u32 = u32::MAX;
 }
 
-fn find_long<'a>(node: &'a clap::Command, long: &str) -> Option<&'a clap::Arg> {
-    node.get_arguments().find(|arg| arg.get_long() == Some(long))
-}
-
-fn find_flag<'a>(node: &'a clap::Command, name: &str) -> Option<&'a clap::Arg> {
-    if let Some(long) = name.strip_prefix("--") {
-        return find_long(node, long);
-    }
-    let mut chars = name[1..].chars();
-    let short = chars.next().filter(|_| chars.next().is_none())?;
-    node.get_arguments().find(|arg| arg.get_short() == Some(short))
-}
-
-fn is_bool(arg: &clap::Arg) -> bool {
-    matches!(arg.get_action(), ArgAction::SetTrue)
-}
-
-fn parse_bool(text: &str) -> Option<bool> {
-    match text {
-        "true" | "yes" | "on" | "1" | "y" => Some(true),
-        "false" | "no" | "off" | "0" | "n" => Some(false),
-        _ => None,
-    }
-}
-
-fn take_literal(tokens: &mut std::iter::Peekable<impl Iterator<Item = OsString>>) -> Option<String> {
-    tokens.next_if(|next| next.to_str().and_then(parse_bool).is_some()).and_then(|next| next.into_string().ok())
-}
-
-fn record(seen: &mut HashSet<String>, arg: &clap::Arg) -> Result<(), String> {
-    let long = arg.get_long().unwrap_or_default();
-    if seen.insert(long.to_string()) {
-        return Ok(());
-    }
-    Err(format!("Invalid value for flag --{long}: \"2 occurrences\". Expected: at most 1 value"))
-}
-
-fn push_bool(out: &mut Vec<OsString>, node: &clap::Command, arg: &clap::Arg, enabled: bool) {
-    let long = arg.get_long().unwrap_or_default();
-    if enabled {
-        out.push(format!("--{long}").into());
-        return;
-    }
-    if find_long(node, &format!("no-{long}")).is_some() {
-        out.push(format!("--no-{long}").into());
-    }
-}
-
-/// The repeatable flags with `Flag.atMost(100)` in commands.ts, by command name and flag.
-pub const AT_MOST_100: [(&str, &str); 3] = [("api", "header"), ("login", "answer"), ("run", "file")];
-
-/// Checks Effect CLI rules clap does not know, after clap parsed `matches` of `command` (built). Returns the
-/// `--standalone` and `--server` that apply to the selected command: the root's own, or those of the
-/// command that declares them, which may be given before the subcommand (`opencode --server URL session list`).
-pub fn validate(command: &clap::Command, matches: &ArgMatches) -> Result<ServerFlags, String> {
-    let mut path = vec![command];
-    let mut leaf = matches;
-    while let Some((name, sub)) = leaf.subcommand() {
-        path.push(path.last().and_then(|node| node.find_subcommand(name)).expect("clap matched it"));
-        leaf = sub;
-    }
-    let names: Vec<&str> = path.iter().map(|node| node.get_name()).collect();
-    if path.len() == 1 {
-        return Ok(ServerFlags {
-            standalone: matches.get_flag("root_standalone"),
-            server: matches.get_one::<String>("root_server").cloned(),
-        });
-    }
-    let mut flags = ServerFlags {
-        standalone: leaf.try_get_one::<bool>("standalone").ok().flatten().copied().unwrap_or(false),
-        server: leaf.try_get_one::<String>("server").ok().flatten().cloned(),
-    };
-    let root_flags = command.get_arguments().filter(|arg| !arg.is_global_set() && !arg.is_positional());
-    for arg in root_flags {
-        let id = arg.get_id().as_str();
-        if matches.value_source(id) != Some(ValueSource::CommandLine) {
-            continue;
-        }
-        let long = arg.get_long().unwrap_or(id);
-        // Effect CLI does not pass a command's own flags to its subcommands; only declared globals apply.
-        if !matches!(long, "standalone" | "server") || leaf.try_contains_id(long).is_err() {
-            return Err(format!("Unrecognized flag: --{long} in command {}", names.join(" ")));
-        }
-        if leaf.value_source(long) == Some(ValueSource::CommandLine) {
-            return Err(format!("Invalid value for flag --{long}: \"2 occurrences\". Expected: at most 1 value"));
-        }
-        match long {
-            "standalone" => flags.standalone = true,
-            _ => flags.server = matches.get_one::<String>(id).cloned(),
-        }
-    }
-    // Flag.atMost(100) in commands.ts.
-    if let Some((_, id)) = AT_MOST_100.iter().find(|(name, _)| names.last() == Some(name)) {
-        let count = leaf.get_raw_occurrences(id).map_or(0, |values| values.count());
-        if count > 100 {
-            return Err(format!(
-                "Invalid value for flag --{id}: \"{count} occurrences\". Expected: at most 100 values"
-            ));
-        }
-    }
-    Ok(flags)
+impl Bounded for u16 {
+    const MAX: u16 = u16::MAX;
 }

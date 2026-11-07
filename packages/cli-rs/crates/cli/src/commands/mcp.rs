@@ -23,7 +23,7 @@ use crate::prompt;
 pub fn run(context: &Context, args: &McpArgs) -> anyhow::Result<()> {
     match &args.command {
         None => crate::help::print(&["mcp"]),
-        Some(McpCommand::List(_)) => list(context),
+        Some(McpCommand::List) => list(context),
         Some(McpCommand::Add(args)) => add(args),
         Some(McpCommand::Auth(args)) => prompted(auth(context, args)),
         Some(McpCommand::Logout(args)) => logout(context, args),
