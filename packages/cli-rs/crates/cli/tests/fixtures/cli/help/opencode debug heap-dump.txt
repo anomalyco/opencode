@@ -1,0 +1,17 @@
+[1mDESCRIPTION[0m
+  Write a heap snapshot of the running server and print its path
+
+[1mUSAGE[0m
+  [36mopencode debug heap-dump [flags][0m
+
+[1mFLAGS[0m
+  [32m--directory[0m [2mstring[0m    Directory to write the snapshot into instead of the server's log directory
+
+[1mGLOBAL FLAGS[0m
+  [32m--help[0m, [32m-h[0m                                                          Show help information
+  [32m--version[0m, [32m-v[0m                                                       Show version information
+  [32m--wizard[0m                                                            Start wizard mode for a command
+  [32m--completions[0m [2m<bash|zsh|fish|powershell|sh|pwsh>[0m                    Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)
+  [32m--log-level[0m [2m<all|trace|debug|info|warn|warning|error|fatal|none>[0m    Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)
+  [32m--print-logs[0m                                                        Print logs to stderr (server logs require --standalone)
+  [32m--server[0m [2mstring[0m                                                     Connect to a server URL instead of the background service

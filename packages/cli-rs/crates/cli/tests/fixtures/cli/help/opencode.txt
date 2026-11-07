@@ -1,0 +1,43 @@
+[1mDESCRIPTION[0m
+  OpenCode command line interface
+
+[1mUSAGE[0m
+  [36mopencode <subcommand> [flags] [<directory>][0m
+
+[1mARGUMENTS[0m
+  [32mdirectory[0m [2mstring[0m    Directory to start OpenCode in[2m (optional)[0m
+
+[1mFLAGS[0m
+  [32m--standalone[0m            Run with a private server instead of the background service
+  [32m--server[0m [2mstring[0m         Connect to a server URL instead of the background service
+  [32m--auto[0m                  Auto-approve permissions that are not explicitly denied
+  [32m--continue[0m, [32m-c[0m          Continue the last session
+  [32m--session[0m, [32m-s[0m [2mstring[0m    Session ID to continue, or to create if it does not exist
+  [32m--prompt[0m [2mstring[0m         Prompt to use
+
+[1mGLOBAL FLAGS[0m
+  [32m--help[0m, [32m-h[0m                                                          Show help information
+  [32m--version[0m, [32m-v[0m                                                       Show version information
+  [32m--wizard[0m                                                            Start wizard mode for a command
+  [32m--completions[0m [2m<bash|zsh|fish|powershell|sh|pwsh>[0m                    Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)
+  [32m--log-level[0m [2m<all|trace|debug|info|warn|warning|error|fatal|none>[0m    Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)
+  [32m--print-logs[0m                                                        Print logs to stderr (server logs require --standalone)
+
+[1mSUBCOMMANDS[0m
+  [36mupgrade, update[0m    Upgrade OpenCode to the latest or a specific version
+  [36muninstall[0m          Uninstall OpenCode, keeping session data, configuration, and state
+  [36macp[0m                Start an Agent Client Protocol server
+  [36mapi[0m                Make a request to the running server
+  [36mdebug[0m              Debugging and troubleshooting tools
+  [36mauth[0m               manage integrations and credentials
+  [36mmcp[0m                Manage MCP (Model Context Protocol) servers
+  [36mplugin[0m             Manage plugins
+  [36mmodels[0m             List all available models
+  [36mstats[0m              Show shareable usage statistics
+  [36mmini[0m               Start the minimal interactive interface
+  [36mrun[0m                Run OpenCode with a message
+  [36msession[0m            Manage sessions
+  [36mservice[0m            Manage the background server
+  [36mreload[0m             Reload configuration
+  [36mpair[0m               Print one-time links to connect a browser or app
+  [36mserve[0m              Start the v2 API and web server
