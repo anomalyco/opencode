@@ -80,6 +80,8 @@ export interface Interface extends State.Transformable<Editor> {
   /** Enabled models of the given types, chat when none are given. Only chat models are offered for sessions. */
   readonly available: (types?: readonly Model.Type[]) => Effect.Effect<readonly Info[]>
   readonly default: () => Effect.Effect<Info | undefined>
+  /** The default model the configuration names for this Location, whether or not the catalog has it. */
+  readonly configuredDefault: () => Effect.Effect<{ readonly providerID: Provider.ID; readonly modelID: ID } | undefined>
   readonly small: (providerID: Provider.ID) => Effect.Effect<Info | undefined>
 }
 
@@ -300,9 +302,16 @@ const layer = Layer.effect(
       default: Effect.fn("Model.default")(function* () {
         const value = yield* read()
         const requested = value.data.defaultModel
-        const model = requested && value.byProvider.get(requested.providerID)?.get(requested.modelID)
+        if (!requested) return value.available.find(supportsText)
+        // A configured provider the catalog never registered, such as an entry the schema rejected, must not fall
+        // back to another provider: that would send the prompt somewhere the user did not choose.
+        if (!input?.records.has(requested.providerID)) return undefined
+        const model = value.byProvider.get(requested.providerID)?.get(requested.modelID)
         return model?.enabled ? model : value.available.find(supportsText)
       }),
+      configuredDefault: Effect.fn("Model.configuredDefault")(() =>
+        read().pipe(Effect.map((value) => value.data.defaultModel)),
+      ),
       small: Effect.fn("Model.small")(function* (providerID) {
         const value = yield* read()
         const models = value.available.filter(

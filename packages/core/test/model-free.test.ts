@@ -88,3 +88,45 @@ for (const flag of [undefined, "0", "1", "true"]) {
       ),
     )
 }
+
+it.effect("resolves no default instead of another provider when the configured provider is missing", () =>
+  Effect.gen(function* () {
+    const providers = yield* Provider.Service
+    const models = yield* Model.Service
+    const resolver = yield* ModelResolver.Service
+    const enabledProvider = Provider.ID.make("enabled")
+    yield* providers.transform((editor) => {
+      editor.update(enabledProvider, () => {})
+      editor.models.update(enabledProvider, Model.ID.make("fallback"), (model) => {
+        model.package = Provider.aisdk("@ai-sdk/openai-compatible")
+      })
+    })
+    yield* models.transform((editor) =>
+      editor.default.set(Provider.ID.make("dropped"), Model.ID.make("configured")),
+    )
+
+    expect(yield* resolver.resolve()).toBeUndefined()
+  }).pipe(Effect.provide(layer)),
+)
+
+it.effect("fails a configured model without a package instead of running on another provider", () =>
+  Effect.gen(function* () {
+    const providers = yield* Provider.Service
+    const models = yield* Model.Service
+    const resolver = yield* ModelResolver.Service
+    const probe = Provider.ID.make("probe")
+    const enabled = Provider.ID.make("enabled")
+    yield* providers.transform((editor) => {
+      editor.update(probe, () => {})
+      editor.models.update(probe, Model.ID.make("probe-1"), () => {})
+      editor.update(enabled, () => {})
+      editor.models.update(enabled, Model.ID.make("loadable"), (model) => {
+        model.package = Provider.aisdk("@ai-sdk/openai-compatible")
+      })
+    })
+    yield* models.transform((editor) => editor.default.set(probe, Model.ID.make("probe-1")))
+
+    const failure = yield* resolver.resolve().pipe(Effect.flip)
+    expect(failure._tag).toBe("SessionRunnerModel.UnsupportedPackageError")
+  }).pipe(Effect.provide(layer)),
+)
