@@ -180,13 +180,27 @@
       display: none;
     }
 
+    /* 16px, like the icons on the menu button's column. It points to the inline end while closed
+       (right, or left in right-to-left pages) and turns to point down when open. */
     [data-slot="chevron"] {
-      transition: scale 200ms var(--ease-out);
+      width: 16px;
+      height: 16px;
+      rotate: -90deg;
+      transition: rotate 180ms var(--ease-out);
+
+      html[dir="rtl"] & {
+        rotate: 90deg;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+      }
     }
   }
 
-  &[open] summary [data-slot="chevron"] {
-    scale: 1 -1;
+  &[open] summary [data-slot="chevron"],
+  html[dir="rtl"] &[open] summary [data-slot="chevron"] {
+    rotate: 0deg;
   }
 
   summary [data-slot="label"] {
@@ -221,9 +235,11 @@
     display: block;
     background: var(--bg);
 
-    /* One line above the bar and one below, each across the whole screen. The top line sits on the
-       row above the bar: stuck, that row is the top bar's own bottom hairline, which paints over it,
-       so there's only ever one line there and nothing moves when the bar sticks. */
+    /* At rest the bar has no lines. Pinned (data-stuck, from ContentsMenu), a line fades in above
+       and below it, each across the whole screen. The top line sits on the row above the bar, where
+       the bar above (the top bar's hairline, or the legal tabs' divider) already draws its own and
+       paints over it, so there's only ever one line there. Nothing moves when they show; the bar's
+       background stays a hard cut. */
     summary::before,
     summary::after {
       content: "";
@@ -232,6 +248,17 @@
       height: 1px;
       background: var(--border);
       pointer-events: none;
+      opacity: 0;
+      transition: opacity 150ms ease;
+
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+      }
+    }
+
+    &[data-stuck] summary::before,
+    &[data-stuck] summary::after {
+      opacity: 1;
     }
 
     summary::before {
@@ -252,7 +279,7 @@
        edge), like the accordions' plus. */
     @media (max-width: 40rem) {
       summary [data-slot="chevron"] {
-        margin-inline-end: calc(34px - var(--edge) - 6px);
+        margin-inline-end: calc(34px - var(--edge) - 8px);
       }
     }
 

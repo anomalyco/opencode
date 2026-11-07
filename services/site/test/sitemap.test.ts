@@ -6,7 +6,7 @@ import { SolidStartServerFileRouter } from "../node_modules/@solidjs/start/dist/
 import { config } from "~/config"
 import type { ChangelogRelease } from "~/lib/changelog"
 import { LOCALES, strip } from "~/lib/language"
-import { legalDocuments } from "~/lib/legal"
+import { legalDocuments } from "~/lib/legal-documents"
 import {
   sitemapExclusion,
   sitemapExclusions,
@@ -46,13 +46,13 @@ const xml = sitemapXml(sitemapPages(routes, { releases }))
 const urls = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1])
 
 describe("sitemap", () => {
-  test("/sitemap.xml is an index of this site's sitemaps, with the pages and the V2 docs at /v2", () => {
+  test("/sitemap.xml is an index of this site's sitemaps, with the pages and the V2 docs at /docs", () => {
     const index = sitemapIndexXml(sitemapFiles)
     const files = [...index.matchAll(/<sitemap><loc>([^<]+)<\/loc><\/sitemap>/g)].map((match) => match[1])
     expect(index).toContain('<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">')
     expect(files).toEqual(sitemapFiles.map((file) => `${config.baseUrl}${file}`))
     expect(files).toContain(`${config.baseUrl}/sitemap-pages.xml`)
-    expect(files).toContain(`${config.baseUrl}/v2/sitemap.xml`)
+    expect(files).toContain(`${config.baseUrl}/docs/sitemap.xml`)
     expect(files.some((file) => file === `${config.baseUrl}/sitemap.xml`)).toBe(false)
   })
 

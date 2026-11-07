@@ -1,6 +1,7 @@
 import { For, Show, createSignal, createUniqueId, onCleanup, onMount, type JSX } from "solid-js"
 import { ExternalArrow, NewTab } from "./icons"
 import { onCloseMenus } from "./menu-open"
+import { placeMenu } from "./place-menu"
 import { Sheet, prefersSheet, type SheetControl } from "./sheet"
 
 /** One row: a link, with the external arrow and a new-tab note when it opens in a new tab. */
@@ -9,7 +10,7 @@ export type SiteMenuItem = { label: string; href: string; external?: boolean }
 /**
  * The site's dropdown: a trigger and a menu of links in the shared menu look (site.css's
  * `site-menu`: rows edge to edge, the grey hover tint and the bar on the left, the popover colours,
- * shadow and opening animation). It opens above the trigger or below it, from its start or end edge.
+ * shadow and opening animation). It opens where it fits (placeMenu), from the trigger's start or end edge.
  * Arrow keys, Home and End move between rows; Escape and a click outside close it and Escape gives
  * focus back to the trigger; opened from the keyboard, focus moves to the first row. On a touch
  * phone the trigger opens the site's bottom sheet (sheet.tsx) instead. Every dropdown uses this.
@@ -20,7 +21,6 @@ export function SiteMenu(props: {
   /** The menu's accessible name. */
   label: string
   items: SiteMenuItem[]
-  placement?: "above" | "below"
   align?: "start" | "end"
 }) {
   const [open, setOpen] = createSignal(false)
@@ -54,6 +54,8 @@ export function SiteMenu(props: {
   const toggle = (event: MouseEvent) => {
     if (sheet() && sheetControl) return sheetControl.open(trigger)
     setOpen(!open())
+    const menu = root.querySelector<HTMLElement>('[data-slot="menu"]')
+    if (menu) placeMenu(menu)
     if (open() && event.detail === 0) rows()[0]?.focus({ preventScroll: true })
   }
 
@@ -70,12 +72,7 @@ export function SiteMenu(props: {
     item.external ? { target: "_blank", rel: "noopener noreferrer" } : { target: undefined, rel: undefined }
 
   return (
-    <div
-      ref={root}
-      data-component="site-menu"
-      data-placement={props.placement ?? "above"}
-      data-align={props.align ?? "start"}
-    >
+    <div ref={root} data-component="site-menu" data-align={props.align ?? "start"}>
       <button
         ref={trigger}
         type="button"

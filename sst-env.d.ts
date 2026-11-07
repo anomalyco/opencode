@@ -10,40 +10,12 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "AWS_SES_ACCESS_KEY_ID": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "AWS_SES_SECRET_ACCESS_KEY": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
     "Api": import("@cloudflare/workers-types").Service
-    "Console": {
-      "type": "sst.cloudflare.SolidStart"
-      "url": string
-    }
-    "EMAILOCTOPUS_API_KEY": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
     "GITHUB_APP_ID": {
       "type": "sst.sst.Secret"
       "value": string
     }
     "GITHUB_APP_PRIVATE_KEY": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "SALESFORCE_CLIENT_ID": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "SALESFORCE_CLIENT_SECRET": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "SALESFORCE_INSTANCE_URL": {
       "type": "sst.sst.Secret"
       "value": string
     }

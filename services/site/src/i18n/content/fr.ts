@@ -35,68 +35,34 @@ export const content = {
     desktop: {
       title: "OpenCode | App desktop pour macOS, Windows et Linux",
       description:
-        "Lancez plusieurs agents OpenCode à la fois, chacun dans son onglet. Relisez chaque changement en diff, commentez n'importe quelle ligne et prévisualisez dans le navigateur intégré.",
+        "Lancez autant d'agents OpenCode que vous voulez en parallèle, voyez chaque changement dans un navigateur à côté et reprenez-les sur tout appareil. Pour macOS, Windows et Linux.",
       intro:
         "Lancez plusieurs agents à la fois, chaque session dans son propre onglet. Relisez chaque changement en diff, commentez n'importe quelle ligne et vérifiez le résultat dans le navigateur intégré. Pour macOS, Windows et Linux.",
-      features: {
-        "built-in-terminal": {
-          title: "Terminal intégré",
-          body: "Lancez des commandes dans un onglet de terminal à côté de la session.",
-        },
-        "ssh-servers": {
-          title: "Serveurs SSH",
-          body: "Connectez-vous à une autre machine en SSH et travaillez sur ses projets.",
-        },
-        extensions: {
-          title: "Extensions",
-          body: "Gérez serveurs MCP, plugins et skills dans un seul menu.",
-        },
-        wsl: {
-          title: "WSL",
-          body: "Sous Windows, lancez les sessions dans une distribution WSL 2 plutôt qu'en natif.",
-        },
-        "office-files": {
-          title: "Fichiers Office",
-          body: "Ouvrez des fichiers Word, Excel et PowerPoint à côté de la session.",
-        },
-        "keyboard-shortcuts": {
-          title: "Raccourcis clavier",
-          body: "Chaque action a un raccourci clavier, et vous pouvez tous les modifier.",
-        },
-        "updates-itself": {
-          title: "Mises à jour auto",
-          body: "Les nouvelles versions se téléchargent et s'installent depuis l'app.",
-        },
-        "all-your-projects": {
-          title: "Tous vos projets",
-          body: "Passez d'un projet et de ses sessions à l'autre dans une seule fenêtre.",
-        },
-      },
       showcase: {
-        "sessions-in-tabs": {
-          title: "Sessions en onglets",
-          body: "Plusieurs agents à la fois, chaque session dans son onglet.",
-        },
-        "review-and-comment": {
-          title: "Relire et commenter",
-          body: "Lisez chaque changement en diff, commentez une ligne et renvoyez-la.",
+        "parallel-agents": {
+          title: "Agents en parallèle",
+          body: "Lancez autant d'agents que vous voulez et laissez-les tous travailler en parallèle. Passez de l'un à l'autre à mesure qu'ils terminent.",
         },
         "see-it-in-the-browser": {
           title: "Voir dans le navigateur",
-          body: "Le travail de l'agent s'ouvre dans un navigateur à côté de la session.",
+          body: "Votre app s'ouvre dans un navigateur à côté de l'agent, pour que vous voyiez tous les deux chaque changement arriver.",
         },
-        "pair-your-phone": {
-          title: "Associer un mobile",
-          body: "Scannez un QR code dans OpenCode Mobile pour piloter depuis l'iPhone.",
+        "on-every-device": {
+          title: "Sur tous vos appareils",
+          body: "Lancez des agents sur tous vos appareils et reprenez-les depuis l'app desktop, le terminal ou votre téléphone.",
+        },
+        "extend-it": {
+          title: "Étendez-le",
+          body: "Connectez vos outils et services pour que l'agent puisse travailler avec tout. Ou demandez à OpenCode de créer ses propres plugins, avec leur interface dans la barre latérale.",
         },
       },
     },
     mobile: {
       title: "OpenCode | Mobile, vos sessions de code sur votre téléphone",
       description:
-        "Lancez, pilotez et approuvez des sessions OpenCode depuis votre téléphone. Parlez à l'agent, relisez ses changements et autorisez ce qu'il demande, pendant qu'il tourne sur votre ordinateur.",
+        "Lancez et pilotez des sessions OpenCode depuis votre téléphone. Parlez à l'agent pendant qu'il tourne sur votre ordinateur.",
       intro:
-        "Lancez, pilotez et approuvez des sessions depuis votre téléphone, où que vous soyez. Appelez une session et parlez à l'agent, relisez ses changements et autorisez ce qu'il demande, le tout avec OpenCode sur votre propre ordinateur.",
+        "Lancez et pilotez des sessions depuis votre téléphone, où que vous soyez. Appelez une session et parlez à l'agent, ou ouvrez une session pour reprendre où vous en étiez, le tout avec OpenCode sur votre propre ordinateur.",
       features: {
         "notify-when-done": {
           title: "Notifié à la fin",
@@ -135,10 +101,6 @@ export const content = {
         voice: {
           title: "Voix",
           body: "Appelez une session et parlez. L'agent vous répond à voix haute.",
-        },
-        approvals: {
-          title: "Approbations",
-          body: "Quand l'agent demande, relisez et autorisez depuis le téléphone.",
         },
         sessions: {
           title: "Sessions",
@@ -403,7 +365,7 @@ export const content = {
         },
       },
       install:
-        "Lancez cette commande une fois. Elle ajoute le serveur MCP browse aux agents de votre choix et associe l'extension depuis le Chrome Web Store. Nécessite Node.js 22.19 ou plus récent.",
+        "Une ligne installe Browse, l'ajoute aux agents qu'il trouve et associe l'extension. Sous Windows, lancez irm https://opencode.ai/browse/install.ps1 | iex. Ou demandez à votre agent de l'installer.",
     },
   },
   apps: {
@@ -445,7 +407,7 @@ export const content = {
     steps: {
       download: {
         title: "Télécharger",
-        line: "Desktop, mobile ou terminal.",
+        line: "Desktop, terminal ou mobile.",
       },
       "use-free-models": {
         title: "Modèles gratuits",
@@ -462,7 +424,7 @@ export const content = {
   byos: {
     title: "Apportez votre abonnement",
     headline: "Utilisez les abonnements que vous avez déjà.",
-    line: "Connectez-vous avec ChatGPT Plus ou Pro, GitHub Copilot ou Claude Code. Ou prenez un abonnement OpenCode.",
+    line: "Connectez-vous avec ChatGPT Plus ou Pro, ou avec GitHub Copilot. Ou prenez un abonnement OpenCode.",
     yours: {
       label: "Votre abonnement",
       items: {
@@ -778,7 +740,7 @@ export const content = {
       more: "Parmi ses autres projets figurent SST et OpenTUI, tous open source sur [GitHub](github).",
       projects: {
         opencode: {
-          body: "L'agent de code open source, avec des apps desktop, mobile et terminal, et un SDK. Sous licence MIT, plus de 220 000 étoiles sur GitHub.",
+          body: "L'agent de code open source, avec des apps desktop, terminal et mobile, et un SDK. Sous licence MIT, plus de 220 000 étoiles sur GitHub.",
         },
         sst: {
           body: "Un framework pour créer des apps full-stack sur votre propre infrastructure. Sous licence MIT, open source depuis 2020, plus de 26 000 étoiles sur GitHub.",
@@ -802,9 +764,9 @@ export const content = {
     about: {
       title: "À propos d'OpenCode",
       boilerplate: {
-        long: "OpenCode est un agent de code open source. Il existe en app desktop, en app mobile, en interface terminal et en SDK, et il fonctionne avec les modèles de n'importe quel fournisseur, dont Claude, GPT et Gemini. OpenCode est sous licence MIT et développé par Anomaly. Il compte plus de 220 000 étoiles sur GitHub et plus de 1 000 contributeurs, et plus de 22 millions de développeurs l'utilisent chaque mois.",
+        long: "OpenCode est un agent de code open source. Il existe en app desktop, en interface terminal, en app mobile et en SDK, et il fonctionne avec les modèles de n'importe quel fournisseur, dont Claude, GPT et Gemini. OpenCode est sous licence MIT et développé par Anomaly. Il compte plus de 220 000 étoiles sur GitHub et plus de 1 000 contributeurs, et plus de 22 millions de développeurs l'utilisent chaque mois.",
         short:
-          "OpenCode est un agent de code open source d'Anomaly, avec des apps desktop, mobile et terminal, et un SDK.",
+          "OpenCode est un agent de code open source d'Anomaly, avec des apps desktop, terminal et mobile, et un SDK.",
       },
       products: {
         "opencode-console": {
@@ -1143,18 +1105,6 @@ export const content = {
         },
       },
     },
-    integrations: {
-      title: "Intégrations",
-      items: {
-        github: {
-          body: "Utilisez OpenCode dans GitHub Actions.",
-        },
-        gitlab: {
-          label: "GitLab",
-          body: "Utilisez OpenCode dans GitLab CI/CD ou Duo.",
-        },
-      },
-    },
     faq: {
       items: {},
     },
@@ -1226,10 +1176,6 @@ export const content = {
     "create-install-and-share-desktop-plugins": {
       text: "Créez, installez et partagez des plugins desktop.",
       link: "Nouveautés de la 2.2",
-    },
-    "use-your-claude-code-login-in-opencode": {
-      text: "Utilisez votre connexion Claude Code dans OpenCode.",
-      link: "Voir la v2.2.3",
     },
     "desktop-terminals-now-survive-restarts": {
       text: "Les terminaux de l'app desktop survivent aux redémarrages.",

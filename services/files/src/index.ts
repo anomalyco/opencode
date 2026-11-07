@@ -8,6 +8,8 @@ export default {
         "Range, If-Range, If-Match, If-None-Match, If-Modified-Since, If-Unmodified-Since",
       "Access-Control-Expose-Headers":
         "Accept-Ranges, Content-Length, Content-Range, Content-Disposition, ETag, Last-Modified",
+      // Like everything on dev.opencode.ai, dev's files ask search engines not to index them.
+      ...(env.STAGE === "dev" ? { "X-Robots-Tag": "noindex, nofollow" } : {}),
     }
 
     if (!url.pathname.startsWith("/files/")) {
@@ -153,7 +155,7 @@ export default {
     }
     return response
   },
-} satisfies ExportedHandler<{ FILES: R2Bucket }>
+} satisfies ExportedHandler<{ FILES: R2Bucket; STAGE: "dev" | "production" }>
 
 function matches(value: string, etag: string, weak: boolean) {
   return value.split(",").some((part) => {

@@ -1,4 +1,4 @@
-import { createEffect, onCleanup, onMount } from "solid-js"
+import { createEffect, on, onCleanup, onMount } from "solid-js"
 
 // The Console landing backdrop (dev.opencode.ai/console, preset "vertical" with dots): 2px dots
 // where columns cross rows. Gaps are 24px at the centre and tighten to 8px at the edges
@@ -38,11 +38,10 @@ export function ConsoleField(props: { dot?: number }) {
       element.style.setProperty("--console-dots", `url(${canvas.toDataURL()})`)
       element.dataset.ready = ""
     }
-    // Redraw when the dot size changes (switching between Console options).
-    createEffect(() => {
-      dot()
-      draw()
-    })
+    // Redraw when the dot size changes (switching between Console options). The first draw is the
+    // resize observer's first callback, after layout and before the frame paints, so mounting neither
+    // forces a layout nor draws and encodes the mask twice.
+    createEffect(on(dot, draw, { defer: true }))
     const resize = new ResizeObserver(draw)
     resize.observe(element)
 

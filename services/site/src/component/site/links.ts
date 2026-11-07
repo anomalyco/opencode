@@ -10,8 +10,8 @@ export function siteLinks(t: Translate, route: (path: string) => string) {
     // show by default). Design mode reorders, hides and renames them (settings navConfig); the links
     // stay fixed. Items that leave the site carry the arrow.
     nav: [
-      // Demo: points at the docs mock in this branch instead of the live docs site.
-      { id: "docs", label: t("nav.docs"), href: route(docsUrl()), arrow: true },
+      // The docs live on this site under /docs, so no arrow.
+      { id: "docs", label: t("nav.docs"), href: route(docsUrl()) },
       { id: "products", label: t("site.nav.product"), href: route("/product") },
       // Settings › Product nav demo sends Data and Console to their header demos instead.
       { id: "data", label: t("nav.data"), href: route("/data"), demo: route("/data-demo"), arrow: true },
@@ -130,7 +130,7 @@ export const anomalyApps = [
 ] as const
 
 /**
- * "More from Anomaly" on /product: the apps above, then OpenTUI from the press kit
+ * "More from Anomaly" on the product pages: the apps above, then OpenTUI from the press kit
  * (lib/press-content.ts), which has no app icon (the list draws its logo mark).
  */
 export const anomalyProducts = [

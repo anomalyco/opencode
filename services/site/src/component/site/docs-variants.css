@@ -233,7 +233,7 @@
     li {
       position: relative;
       margin-bottom: 0.375rem;
-      padding-left: 1.75rem;
+      padding-inline-start: 1.75rem;
       counter-increment: item;
     }
 
@@ -248,7 +248,7 @@
 
     input {
       accent-color: var(--text-strong);
-      margin-right: 0.5rem;
+      margin-inline-end: 0.5rem;
     }
   }
 }
@@ -304,16 +304,16 @@
   :is(:is(ul, ol):not([data-component], [data-slot]), ul[data-slot="tasks"], [data-component="downloads"]) > li {
     --marker-line: 1lh;
     position: relative;
-    padding-left: var(--marker-column);
+    padding-inline-start: var(--marker-column);
   }
 
   :is(ul:not([data-component], [data-slot]), [data-component="downloads"]) > li::before,
   ol:not([data-component], [data-slot]) > li::before,
   ul[data-slot="tasks"] > li > input {
     position: absolute;
-    left: calc(var(--marker-column) / 2);
+    inset-inline-start: calc(var(--marker-column) / 2);
     top: calc(var(--marker-line) / 2);
-    translate: -50% -50%;
+    translate: calc(-50% * var(--x-dir, 1)) -50%;
     margin: 0;
   }
 
@@ -424,8 +424,8 @@
 
 [data-page="docs"][data-docs-variants~="blockquote-2"] [data-component="docs-article"] blockquote {
   margin: 0 0 1.5rem;
-  padding-left: 1rem;
-  border-left: 2px solid var(--text-muted);
+  padding-inline-start: 1rem;
+  border-inline-start: 2px solid var(--text-muted);
   font-weight: 500;
   color: var(--text-weak);
 
@@ -561,7 +561,7 @@
 
 [data-page="docs"][data-docs-variants~="callout-3"] [data-component="docs-article"] [data-component="callout"] {
   padding: 1rem;
-  border-left: 3px solid var(--callout-rule);
+  border-inline-start: 3px solid var(--callout-rule);
   background: color-mix(in srgb, var(--callout-rule) 7%, transparent);
 
   /* The text is body copy (Typography 4's body size, line height and colour), never the lead. */
@@ -634,7 +634,8 @@
     [data-docs-variants~="tabs-2"],
     [data-docs-variants~="tabs-3"],
     [data-docs-variants~="tabs-4"],
-    [data-docs-variants~="tabs-5"]
+    [data-docs-variants~="tabs-5"],
+    [data-docs-variants~="tabs-6"]
   )
   [data-component="docs-article"]
   [data-component="plan-tabs"] {
@@ -761,6 +762,38 @@
     border-bottom-width: 1px;
     font-family: var(--font-mono);
     font-size: var(--fs-micro, 12px);
+  }
+}
+
+/* With the Vercel square code tabs, plan tabs (which switch prose, not code) take the code tabs'
+   label: OpenTUI Mono, muted until selected, with the 2px ink underline and an inside focus ring. */
+[data-page="docs"][data-docs-variants~="tabs-6"] [data-component="docs-article"] [data-component="plan-tabs"] {
+  [role="tablist"] {
+    overflow-x: auto;
+    scrollbar-width: none;
+    font-family: var(--font-mono);
+  }
+
+  [role="tab"] {
+    flex-shrink: 0;
+    color: var(--text-weak);
+    transition: color 150ms ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+      }
+    }
+
+    &[aria-selected="true"] {
+      color: var(--text-strong);
+      -webkit-text-stroke: var(--title-stroke);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+      outline-offset: -2px;
+    }
   }
 }
 
@@ -1270,7 +1303,8 @@
   [data-component="docs-article"]
   [data-component="steps"]
   > li {
-  padding: 0 0 1.25rem 2.75rem;
+  padding-block: 0 1.25rem;
+  padding-inline: 2.75rem 0;
 
   &:last-child {
     padding-bottom: 0;
@@ -1279,7 +1313,7 @@
   &::before {
     content: counter(step);
     position: absolute;
-    left: 0;
+    inset-inline-start: 0;
     top: 0;
     width: 1.75rem;
     height: 1.75rem;
@@ -1296,7 +1330,7 @@
   &:not(:last-child)::after {
     content: "";
     position: absolute;
-    left: calc(0.875rem - 0.5px);
+    inset-inline-start: calc(0.875rem - 0.5px);
     top: 2.25rem;
     bottom: 0.5rem;
     width: 1px;
@@ -1372,15 +1406,31 @@
     [data-docs-variants~="cards-4"],
     [data-docs-variants~="cards-5"]
   )
-  [data-component="docs-article"]
+  [data-component="docs-article"] {
   [data-component="card-group"] {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 0.75rem;
-  margin: 0 0 1.5rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: 0.75rem;
+    margin: 0 0 1.5rem;
 
+    /* CardGroup cols={n} sets the column count; phones stack. */
+    &[style*="--card-columns"] {
+      grid-template-columns: repeat(var(--card-columns), minmax(0, 1fr));
+
+      @media (max-width: 40rem) {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    > [data-component="docs-card"] {
+      margin: 0;
+    }
+  }
+
+  /* A card on its own, outside a group, is spaced like any block. */
   [data-component="docs-card"] {
     display: block;
+    margin: 0 0 1.5rem;
     padding: 1rem;
     border: 1px solid var(--border);
     color: var(--text-strong);
@@ -1408,11 +1458,7 @@
   }
 }
 
-[data-page="docs"][data-docs-variants~="cards-3"]
-  [data-component="docs-article"]
-  [data-component="card-group"]
-  [data-component="docs-card"]
-  strong {
+[data-page="docs"][data-docs-variants~="cards-3"] [data-component="docs-article"] [data-component="docs-card"] strong {
   font-family: var(--font-mono);
   font-size: var(--anno-size);
   letter-spacing: var(--anno-track);
@@ -1474,9 +1520,10 @@
   font-size: var(--fs-meta);
 
   :is(th, td) {
-    padding: 0.5rem 1rem 0.5rem 0;
+    padding-block: 0.5rem;
+    padding-inline: 0 1rem;
     border-bottom: 1px solid var(--border);
-    text-align: left;
+    text-align: start;
     vertical-align: top;
   }
 
@@ -1677,13 +1724,14 @@
 
   summary {
     --padding-top: 0.875rem;
-    padding: var(--padding-top) 3rem 0.875rem 1rem;
+    padding-block: var(--padding-top) 0.875rem;
+    padding-inline: 1rem 3rem;
 
     &::before,
     &::after {
       content: "";
       position: absolute;
-      right: 1rem;
+      inset-inline-end: 1rem;
       top: calc(var(--padding-top) + 0.5lh - 0.5px);
       width: 12px;
       height: 1px;
@@ -2070,9 +2118,10 @@
   }
 
   :is(th, td) {
-    padding: 0.5rem 1rem 0.5rem 0;
+    padding-block: 0.5rem;
+    padding-inline: 0 1rem;
     border-bottom: 1px solid var(--border);
-    text-align: left;
+    text-align: start;
     vertical-align: top;
   }
 
@@ -2148,7 +2197,7 @@
 
   a[rel="next"] {
     grid-column: 2;
-    text-align: right;
+    text-align: end;
   }
 
   small {
@@ -2758,7 +2807,8 @@
     justify-content: space-between;
     gap: 1rem;
     height: 2.5rem;
-    padding: 0 0.375rem 0 1rem;
+    padding-block: 0;
+    padding-inline: 1rem 0.375rem;
     border-bottom: 1px solid var(--code-border);
     background: var(--code-head);
     font: 400 var(--fs-micro, 12px) / 1 var(--font-mono);
@@ -2808,7 +2858,7 @@
   [data-slot="code-copy"] {
     flex-shrink: 0;
     height: 2.5rem;
-    margin-right: -0.375rem;
+    margin-inline-end: -0.375rem;
     padding: 0 0.75rem;
   }
 
@@ -3131,7 +3181,8 @@
   [data-slot="tabs"] {
     gap: 0;
     height: 2.5rem;
-    padding: 0 6.5rem 0 0;
+    padding-block: 0;
+    padding-inline: 0 6.5rem;
     align-items: stretch;
     border-bottom: 1px solid var(--code-border);
     background: var(--code-head);
@@ -3150,7 +3201,7 @@
       /* The first tab starts at the block's edge, so its underline does too; its 1rem of padding
          puts the label over the code's first column. */
       &:first-child {
-        padding-left: 1rem;
+        padding-inline-start: 1rem;
       }
 
       &[aria-selected="true"] {
@@ -3203,10 +3254,10 @@
   [data-slot="copy"] {
     position: absolute;
     top: 0;
-    right: 0;
+    inset-inline-end: 0;
     height: calc(2.5rem - 1px);
     background: var(--code-head);
-    box-shadow: -1.25rem 0 1rem -0.5rem var(--code-head);
+    box-shadow: calc(-1.25rem * var(--x-dir, 1)) 0 1rem -0.5rem var(--code-head);
     min-width: 0;
     margin: 0;
     padding: 0 0.75rem;
@@ -3326,7 +3377,12 @@
 }
 
 [data-page="docs"] [data-slot="tree-row"] [data-slot="file-icon"] {
-  margin-right: 0.375rem;
+  margin-inline-end: 0.375rem;
+}
+
+/* A note after a name in a file tree ("loaded initially"), in the label grey. */
+[data-page="docs"] [data-slot="tree-note"] {
+  color: var(--code-label);
 }
 
 [data-site][data-theme="dark"] [data-slot="file-icon"] {
@@ -3419,6 +3475,10 @@
     &[data-method="delete"] {
       color: light-dark(hsl(0, 65%, 42%), #e67c7c);
     }
+
+    &:is([data-method="put"], [data-method="patch"]) {
+      color: light-dark(hsl(35, 80%, 30%), #e0af68);
+    }
   }
 
   > [data-slot="api-body"] {
@@ -3474,9 +3534,10 @@
   line-height: 1.55;
 
   th {
-    padding: 0 1rem 0.5rem 0;
+    padding-block: 0 0.5rem;
+    padding-inline: 0 1rem;
     border-bottom: 1px solid var(--code-border);
-    text-align: left;
+    text-align: start;
     font: 400 var(--fs-micro, 12px) / 1.4 var(--font-mono);
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -3486,9 +3547,10 @@
   }
 
   td {
-    padding: 0.75rem 1rem 0.75rem 0;
+    padding-block: 0.75rem;
+    padding-inline: 0 1rem;
     border-bottom: 1px solid var(--code-border);
-    text-align: left;
+    text-align: start;
     vertical-align: baseline;
     color: var(--text);
   }
@@ -3498,7 +3560,7 @@
   }
 
   :is(th, td):last-child {
-    padding-right: 0;
+    padding-inline-end: 0;
   }
 
   td > code {
@@ -3892,6 +3954,49 @@
         position: relative;
       }
     }
+  }
+}
+
+/* Code tabs blend the same way: the border and the tab row's fill on blended layers, the tabs and
+   Copy above them, and Copy loses its solid header fill (the row behind it is the blend). */
+[data-page="docs"]
+  [data-component="callout"]:not(:is([data-blend="fixed"], [data-blend="a"], [data-blend="b"], [data-blend="d"]) *)
+  [data-component="code-tabs"] {
+  border-color: transparent;
+  background: transparent;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border: 1px solid var(--code-border);
+    mix-blend-mode: var(--blend);
+    pointer-events: none;
+  }
+
+  [data-slot="tabs"] {
+    position: relative;
+    border-bottom-color: transparent;
+    background: transparent;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 -1px;
+      border-bottom: 1px solid var(--code-border);
+      background: var(--code-head);
+      mix-blend-mode: var(--blend);
+      pointer-events: none;
+    }
+
+    > button {
+      position: relative;
+    }
+  }
+
+  [data-slot="copy"] {
+    background: transparent;
+    box-shadow: none;
   }
 }
 

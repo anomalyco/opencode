@@ -467,6 +467,13 @@ export function createComposerEditor(input: {
   }
 
   const onKeyDown = (event: KeyboardEvent, height?: number) => {
+    // Escape, Enter and Tab cancel, confirm or cycle IME candidates; Safari can report them as keyCode 229.
+    if (
+      event.isComposing ||
+      (event.keyCode === 229 && (event.key === "Escape" || event.key === "Enter" || event.key === "Tab"))
+    )
+      return true
+
     flushFocus()
 
     if (
@@ -518,8 +525,7 @@ export function createComposerEditor(input: {
       !event.shiftKey &&
       !event.altKey &&
       !event.ctrlKey &&
-      !event.metaKey &&
-      !event.isComposing
+      !event.metaKey
     ) {
       event.preventDefault()
 
@@ -549,7 +555,6 @@ export function createComposerEditor(input: {
       !event.altKey &&
       !event.ctrlKey &&
       !event.metaKey &&
-      !event.isComposing &&
       (event.key === "ArrowUp" || event.key === "ArrowDown") &&
       (event.shiftKey
         ? event.key === "ArrowUp" && openHistory(height)

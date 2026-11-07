@@ -5,6 +5,7 @@ import { HttpEffect, HttpMiddleware, HttpRouter, HttpServer } from "effect/http"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import type { LayerNode } from "@opencode/util/effect/layer-node"
 import { isAllowedCorsOrigin } from "./cors"
+import { RequestSite } from "./request-site"
 import { withoutParentSpan } from "./request-tracing"
 import { createRoutes } from "./routes"
 import type { ServerOptions } from "./options"
@@ -50,6 +51,7 @@ export const make = Effect.fn("ServerFetch.make")(function* (options: ServerOpti
   return Context.get(context, HttpRouter.HttpRouter)
     .asHttpEffect()
     .pipe(
+      RequestSite.middleware(options),
       HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
       HttpEffect.toWebHandlerWith(context),
     )

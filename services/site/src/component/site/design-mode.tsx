@@ -100,7 +100,7 @@ export const copyVariants = {
       "OpenCode is an open source coding agent that works with any model. Run it as a desktop app, from your phone, in the terminal or inside your own tools with the SDK.",
       "OpenCode is an open source coding agent. Use it in the desktop app, on your phone, in your terminal, or from your own code with the SDK.",
       "OpenCode writes, edits and explains code with the model of your choice. It's open source, and runs on your desktop, your phone, your terminal and your own code.",
-      "One open source coding agent for every place you work: a desktop app, a phone app, a terminal interface and an SDK.",
+      "One open source coding agent for every place you work: a desktop app, a terminal interface, a phone app and an SDK.",
       // From the coding-agents review (positioningRec), adjusted to the site copy rules.
       "OpenCode is an open source coding agent. It runs on your computer, and the desktop app, phone, terminal and SDK all connect to the same sessions.",
     ],
@@ -118,7 +118,7 @@ export const copyVariants = {
       "Used by developers at",
     ],
   },
-  // Home sections and FAQ answers without copy of their own in Design mode until the coding-agents
+  // Home sections without copy of their own in Design mode until the coding-agents
   // review (positioningRec). One line each: editing reads the whole text, links included. Links in
   // an option come from homeContent's copyLinks phrases.
   "home.feature.anyModel.body": {
@@ -146,57 +146,6 @@ export const copyVariants = {
       `OpenCode is MIT licensed. ${config.stats.contributors} contributors have made ${config.stats.commits}+ commits, and ${config.stats.monthlyUsers} developers use it every month.`,
     ],
   },
-  "home.privacy.title": { label: "Privacy title", lines: 1, options: ["Your code stays yours"] },
-  "home.privacy.body": {
-    label: "Privacy",
-    lines: 1,
-    options: [
-      "OpenCode runs on your computer and keeps your sessions there. Your code goes only to the model provider you choose. If you choose a model hosted by OpenCode, its training and retention terms are listed in the docs.",
-    ],
-  },
-  "home.faq.a3": {
-    label: "FAQ: extra subscriptions",
-    lines: 1,
-    options: [
-      "No. OpenCode includes free models that need no account. You can also connect any of 200+ providers, sign in with ChatGPT or Copilot, or run local models.",
-    ],
-  },
-  "home.faq.a4": {
-    label: "FAQ: existing subscriptions",
-    lines: 1,
-    options: ["Yes. Sign in with ChatGPT (Plus or Pro) or GitHub Copilot, including GitHub Enterprise."],
-  },
-  "home.faq.a6": {
-    label: "FAQ: cost",
-    lines: 1,
-    options: [
-      "OpenCode is free and MIT licensed. The free models cost nothing. With another provider, you pay that provider. OpenCode Go is from $10/month, and OpenCode Models are pay as you go.",
-    ],
-  },
-  "home.faq.a7": {
-    label: "FAQ: data and privacy",
-    lines: 1,
-    options: [
-      "OpenCode runs on your computer and keeps your sessions there. Your code goes only to the model provider you choose. If you choose a model hosted by OpenCode, its training and retention terms are listed in the docs.",
-    ],
-  },
-  // The home email sign-up (signup.tsx); its own copy is the first option.
-  "home.signup.title": {
-    label: "Sign-up title",
-    lines: 1,
-    options: ["Stay in the loop", "Release notes", "Get the updates"],
-  },
-  "home.signup.body": {
-    label: "Sign-up intro",
-    lines: 1,
-    options: [
-      "Release notes and new products by email, when they ship. No spam, and you can unsubscribe at any time.",
-      "One email when something ships: new releases and new products. Nothing else.",
-      "Be the first to hear about new releases and products. Every email has an unsubscribe link.",
-    ],
-  },
-  // Sign-up style "sentence": the button that shows once the address is valid.
-  "home.signup.button": { label: "Sign-up button", lines: 1, options: ["Get early access", "Let me know", "Join"] },
   // The home page's "New" bar (announcement.ts): each option keeps its own link.
   "home.announcement": { label: "Announcement", lines: 1, options: announcements.map(announcementCopy) },
   // "Get started" (lib/get-started.ts); the first option is the page's own copy.
@@ -220,7 +169,7 @@ export const copyVariants = {
     label: "Own subs line",
     lines: 1,
     options: [
-      "Log in with ChatGPT Plus or Pro, GitHub Copilot or Claude Code. Or use an OpenCode subscription.",
+      "Log in with ChatGPT Plus or Pro or GitHub Copilot. Or use an OpenCode subscription.",
       "Log in with OpenAI to use your ChatGPT Plus or Pro account, or with GitHub to use your Copilot account.",
       "Log in with ChatGPT or GitHub Copilot, add any API key, or subscribe to OpenCode Go.",
     ],
@@ -376,10 +325,10 @@ export const copyVariants = {
     lines: 1,
     options: [
       "One agent, every surface. Start a session on your desktop, steer it from your phone, pick it up in the terminal or drive it from your own code.",
-      "OpenCode runs on desktop, mobile and the terminal, and from your own code. Every app shares the same sessions, so you start on one and carry on in another.",
-      "Desktop, mobile and terminal on one OpenCode server, and the SDK inside your own code. A session started in one app is already there in the others.",
+      "OpenCode runs on desktop, the terminal and mobile, and from your own code. Every app shares the same sessions, so you start on one and carry on in another.",
+      "Desktop, terminal and mobile on one OpenCode server, and the SDK inside your own code. A session started in one app is already there in the others.",
       "Use OpenCode wherever you work. The apps share one server and the same sessions: start at your desk, approve from your phone, finish in the terminal.",
-      "The same agent on desktop, mobile, the terminal and the SDK, with the same sessions across the apps. Switch surfaces without losing your place.",
+      "The same agent on desktop, the terminal, mobile and the SDK, with the same sessions across the apps. Switch surfaces without losing your place.",
     ],
   },
   // The products after the carousel's four, on /product and their own pages.

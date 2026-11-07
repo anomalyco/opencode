@@ -212,7 +212,7 @@ export const voiceAnswers: VoiceAnswer[] = [
     asks: ["what is browse", "can it use my browser", "browser automation"],
     keys: ["browse", "browser", "chrome", "tabs", "playwright", "web"],
     text: "Browse lets your agents use your real browser, with your tabs, logins and extensions. They drive background tabs, and hand the tab back to you for a login or a payment.",
-    links: [{ label: "Browse", href: "/browse" }],
+    links: [{ label: "Browse", href: "/product/browse" }],
   },
   {
     id: "who",
@@ -262,7 +262,7 @@ export const fallbackAnswer: VoiceAnswer = {
   id: "fallback",
   asks: [],
   keys: [],
-  text: "I'm not sure about that one. I can tell you what OpenCode is, which models it works with, how to install it, what it costs, and about the desktop, mobile and terminal apps.",
+  text: "I'm not sure about that one. I can tell you what OpenCode is, which models it works with, how to install it, what it costs, and about the desktop, terminal and mobile apps.",
   links: [{ label: "Docs", href: docsUrl("/") }],
 }
 

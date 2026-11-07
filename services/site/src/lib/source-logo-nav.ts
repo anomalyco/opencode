@@ -6,7 +6,7 @@ import { docsUrl } from "~/lib/docs"
 // What each main nav item is, keyed by its link. An item added to the nav without one still gets
 // its row, just without a description.
 const descriptions: Record<string, string> = {
-  "/product": "desktop, mobile, terminal and SDK",
+  "/product": "desktop, terminal, mobile and SDK",
   [docsUrl()]: "guides and reference",
   "/data": "model usage rankings",
   "/console": "inference, subscriptions and teams",
