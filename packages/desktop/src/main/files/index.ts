@@ -124,7 +124,13 @@ function make(
       return true
     }),
     openPath: Effect.fn("DesktopFiles.openPath")(function* (target: string, application?: string) {
-      if (!application) return yield* Effect.promise(() => shell.openPath(target))
+      if (!application) {
+        const error = yield* Effect.promise(() => shell.openPath(target))
+
+        if (error) return yield* Effect.fail(new Error(error))
+
+        return
+      }
 
       if (process.platform === "win32" && /^powershell(\.exe)?$/i.test(path.basename(application))) {
         const info = yield* fs.stat(target)
