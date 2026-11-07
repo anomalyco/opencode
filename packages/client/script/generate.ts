@@ -137,10 +137,6 @@ await Effect.runPromise(
         emitEffectShape(effectContract, {
           typeReferences: effectTypeReferences,
           outputTypes: {
-            "session.list": {
-              name: "typeof SessionListResponse.Type",
-              import: 'import type { SessionListResponse } from "@opencode/protocol/groups/session"',
-            },
             "event.subscribe": {
               name: "OpenCodeEvent",
               import: 'import type { OpenCodeEvent } from "@opencode/protocol/groups/event"',

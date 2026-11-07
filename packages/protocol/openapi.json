@@ -23403,9 +23403,6 @@
           "revert": {
             "$ref": "#/components/schemas/Session.Revert"
           },
-          "location": {
-            "$ref": "#/components/schemas/Location.PublicRef"
-          },
           "experimental": {
             "type": "object",
             "properties": {
@@ -23440,6 +23437,9 @@
             },
             "required": ["time"],
             "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.PublicRef"
           }
         },
         "required": ["id", "projectID", "cost", "tokens", "time", "location"],

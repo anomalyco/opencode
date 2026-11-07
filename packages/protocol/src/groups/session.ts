@@ -5,7 +5,7 @@ import { Session } from "@opencode/schema/session"
 import { SessionStats } from "@opencode/schema/session-stats"
 import { InstructionEntry } from "@opencode/schema/instruction-entry"
 import { Project } from "@opencode/schema/project"
-import { DateTimeUtcFromMillis, NonNegativeInt, optional, PositiveInt } from "@opencode/schema/schema"
+import { DateTimeUtcFromMillis, NonNegativeInt, PositiveInt } from "@opencode/schema/schema"
 import { Event } from "@opencode/schema/event"
 import { SessionLegacy } from "@opencode/schema/session-legacy"
 import { Context, Schema, SchemaGetter, Struct } from "effect"
@@ -45,31 +45,7 @@ const SessionActive = Schema.Struct({
 const PublicSessionInfo = Schema.Struct({
   ...Struct.omit(Session.Info.fields, ["location"]),
   location: Location.PublicRef,
-  experimental: Schema.Struct({
-    time: Schema.Struct({
-      lastUserMessage: optional(
-        Schema.NullOr(DateTimeUtcFromMillis).annotate({
-          description:
-            "In session lists, the creation time in milliseconds of the last stored user message in timeline order, or null if none.",
-        }),
-      ),
-      lastAssistantMessage: optional(
-        Schema.NullOr(DateTimeUtcFromMillis).annotate({
-          description:
-            "In session lists, the creation time in milliseconds of the last stored assistant message in timeline order, including tool-only steps, or null if none.",
-        }),
-      ),
-    }),
-  }).pipe(optional),
 }).annotate({ identifier: "Session.Info" })
-
-export const SessionListResponse = Schema.Struct({
-  data: Schema.Array(PublicSessionInfo),
-  cursor: Schema.Struct({
-    previous: Session.ListCursor.pipe(Schema.optional),
-    next: Session.ListCursor.pipe(Schema.optional),
-  }),
-}).annotate({ identifier: "SessionsResponse" })
 
 const PublicSessionTransfer = Schema.Struct({
   info: PublicSessionInfo,
@@ -149,7 +125,13 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.get("session.list", "/api/session", {
         query: SessionsQuery,
-        success: SessionListResponse,
+        success: Schema.Struct({
+          data: Schema.Array(PublicSessionInfo),
+          cursor: Schema.Struct({
+            previous: Session.ListCursor.pipe(Schema.optional),
+            next: Session.ListCursor.pipe(Schema.optional),
+          }),
+        }).annotate({ identifier: "SessionsResponse" }),
         error: [InvalidCursorError, InvalidRequestError],
       }).annotateMerge(
         OpenApi.annotations({

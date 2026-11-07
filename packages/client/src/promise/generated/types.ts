@@ -2328,8 +2328,8 @@ export type SessionInfo = {
   metadata?: SessionMetadata
   permissions?: PermissionRuleset
   revert?: SessionRevert
-  location: LocationPublicRef
   experimental?: { time: { lastUserMessage?: number | null; lastAssistantMessage?: number | null } }
+  location: LocationPublicRef
 }
 
 export type SessionCreated = {
@@ -3847,10 +3847,10 @@ export type ExperimentalSessionImportInput = {
         readonly more?: true
       }>
     }
-    readonly location: { readonly directory: string }
     readonly experimental?: {
       readonly time: { readonly lastUserMessage?: number | null; readonly lastAssistantMessage?: number | null }
     }
+    readonly location: { readonly directory: string }
   }
   readonly messages: ReadonlyArray<JsonValue>
   readonly location?: { readonly directory: string } | null | undefined

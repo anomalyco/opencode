@@ -60,6 +60,22 @@ export const Info = Schema.Struct({
   /** Evaluated after the agent's rules; the last matching rule wins. */
   permissions: Permission.Ruleset.pipe(optional),
   revert: Revert.pipe(optional),
+  experimental: Schema.Struct({
+    time: Schema.Struct({
+      lastUserMessage: optional(
+        Schema.NullOr(DateTimeUtcFromMillis).annotate({
+          description:
+            "In session lists, the creation time in milliseconds of the last stored user message in timeline order, or null if none.",
+        }),
+      ),
+      lastAssistantMessage: optional(
+        Schema.NullOr(DateTimeUtcFromMillis).annotate({
+          description:
+            "In session lists, the creation time in milliseconds of the last stored assistant message in timeline order, including tool-only steps, or null if none.",
+        }),
+      ),
+    }),
+  }).pipe(optional),
 }).annotate({ identifier: "Session.Info" })
 
 export const ListAnchor = Schema.Struct({

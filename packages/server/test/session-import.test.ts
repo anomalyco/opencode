@@ -96,7 +96,7 @@ it.live("includes the latest user and assistant message times in the session lis
   }).pipe(Effect.scoped),
 )
 
-it.live("returns message times across pages larger than the database parameter limit", () =>
+it.live("returns message times across pages with more than 100 sessions", () =>
   Effect.gen(function* () {
     const request = yield* setup
     const template = Schema.decodeUnknownSync(SessionResponse)(yield* request("/api/session", { title: "Template" }))

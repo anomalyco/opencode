@@ -7,7 +7,6 @@ import type { Session } from "@opencode/schema/session"
 import type { AbsolutePath } from "@opencode/schema/schema"
 import type { Project } from "@opencode/schema/project"
 import type { RelativePath } from "@opencode/schema/schema"
-import type { SessionListResponse } from "@opencode/protocol/groups/session"
 import type { Model } from "@opencode/schema/model"
 import type { Permission } from "@opencode/schema/permission"
 import type { SessionMessage } from "@opencode/schema/session-message"
@@ -142,7 +141,13 @@ export type SessionListInput = {
   readonly subpath?: RelativePath | undefined
   readonly cursor?: Session.ListCursor | undefined
 }
-export type SessionListOutput = typeof SessionListResponse.Type
+export type SessionListOutput = {
+  readonly data: ReadonlyArray<Session.Info>
+  readonly cursor: {
+    readonly previous?: Session.ListCursor | undefined
+    readonly next?: Session.ListCursor | undefined
+  }
+}
 export type SessionListOperation<E = never> = (input?: SessionListInput) => Effect.Effect<SessionListOutput, E>
 
 export type SessionCreateInput = {

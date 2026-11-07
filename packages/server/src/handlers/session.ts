@@ -67,34 +67,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.list",
         Effect.fn(function* (ctx) {
-          const page = yield* session
-            .list(ctx.query)
+          return yield* session
+            .list(ctx.query, { messageTimes: true })
             .pipe(
               Effect.catchTag(
                 "Session.InvalidListCursorError",
                 (error) => new InvalidCursorError({ message: error.message }),
               ),
             )
-          const times = yield* session.lastMessageTimes(page.data.map((item) => item.id))
-          return {
-            ...page,
-            data: page.data.map((item) => {
-              const time = times.get(item.id)
-              return time
-                ? {
-                    ...item,
-                    experimental: {
-                      time: {
-                        lastUserMessage:
-                          time.lastUserMessage === null ? null : DateTime.makeUnsafe(time.lastUserMessage),
-                        lastAssistantMessage:
-                          time.lastAssistantMessage === null ? null : DateTime.makeUnsafe(time.lastAssistantMessage),
-                      },
-                    },
-                  }
-                : item
-            }),
-          }
         }),
       )
       .handle(

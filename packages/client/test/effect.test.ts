@@ -74,6 +74,29 @@ test("session.get returns the decoded Effect projection", async () => {
   expect(DateTime.toEpochMillis(result.time.created)).toBe(1_717_171_717_000)
 })
 
+test("session.list decodes experimental message times", async () => {
+  const httpClient = HttpClient.make((request) =>
+    Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        Response.json({
+          data: [{ ...session.data, experimental: { time: { lastUserMessage: 1_000, lastAssistantMessage: null } } }],
+          cursor: {},
+        }),
+      ),
+    ),
+  )
+  const result = await Effect.gen(function* () {
+    const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
+    return yield* client.session.list()
+  }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
+
+  const time = result.data[0]?.experimental?.time
+  if (!time?.lastUserMessage) throw new Error("Expected a user message time")
+  expect(DateTime.toEpochMillis(time.lastUserMessage)).toBe(1_000)
+  expect(time.lastAssistantMessage).toBeNull()
+})
+
 test("session instructions methods use the public HTTP contract", async () => {
   const requests: Array<{ method: string; url: string; body?: unknown }> = []
   const instructions = [{ key: "review-notes", value: { text: "Check the diff", priority: 1 } }]
