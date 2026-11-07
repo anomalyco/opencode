@@ -135,7 +135,7 @@ function ReasoningHeader(props: {
           theme.text.feedback.warning.base.r,
           theme.text.feedback.warning.base.g,
           theme.text.feedback.warning.base.b,
-          0.6,
+          theme.thinkingOpacity,
         )
       : theme.text.feedback.warning.base
 

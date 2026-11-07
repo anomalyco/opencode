@@ -70,7 +70,7 @@ function resolveExpandedTheme(definition: ThemeDefinition): ResolvedTheme {
     return scale
   })
   const hueSteps = compileHueSteps(hue)
-  const base = tokens(definition)
+  const base = { ...tokens(definition), thinkingOpacity: definition.thinkingOpacity ?? 0.6 }
   const views = {} as Record<SurfaceName, ResolvedTheme>
   const view = (tokens: ThemeTokensDefinition): ResolvedTheme => ({
     ...resolveView(tokens, hue, categorical, hueSteps),
@@ -94,6 +94,7 @@ function tokens(definition: ThemeTokensDefinition): ThemeTokensDefinition {
     diff: definition.diff,
     syntax: definition.syntax,
     markdown: definition.markdown,
+    ...(definition.thinkingOpacity === undefined ? {} : { thinkingOpacity: definition.thinkingOpacity }),
   }
 }
 
