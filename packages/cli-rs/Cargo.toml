@@ -37,7 +37,7 @@ anyhow = "1"
 base64 = "0.23"
 bytes = "1"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
-clap = { version = "4", features = ["derive", "env", "wrap_help"] }
+clap = { version = "4", features = ["derive", "wrap_help"] }
 clap_complete = "4"
 futures-util = { version = "0.3", default-features = false, features = ["std", "sink"] }
 indexmap = { version = "2", features = ["serde"] }
@@ -63,7 +63,7 @@ tempfile = "3"
 thiserror = "2"
 tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "sync", "time", "io-util", "process", "fs", "net", "signal"] }
 tokio-tungstenite = { version = "0.30", features = ["rustls-tls-native-roots"] }
-tokio-util = { version = "0.7", features = ["io", "codec"] }
+tokio-util = "0.7"
 unicode-width = "0.2"
 url = "2"
 
