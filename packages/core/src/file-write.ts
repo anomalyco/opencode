@@ -91,13 +91,24 @@ const layer = Layer.effect(
 
     const write = Effect.fn("FileWrite.write")(function* (input: WriteInput, context: FileAccess.Invocation) {
       const resolved = yield* target(input.path, context)
-      const current = yield* FileMutation.readOptionalText(environment.files, resolved.absolute)
-      yield* authorize(
-        resolved,
-        context,
-        fileDiff(resolved.resource, current?.text ?? "", Bom.split(input.content).text, current ? "modified" : "added"),
+      // Every caller of FileWrite.write joins the same transaction lock that edit and patch hold, so a write that
+      // lands while an edit awaits approval cannot overwrite the text that edit commits afterwards.
+      return yield* fileMutation.withLock([resolved.absolute])(
+        Effect.gen(function* () {
+          const current = yield* FileMutation.readOptionalText(environment.files, resolved.absolute)
+          yield* authorize(
+            resolved,
+            context,
+            fileDiff(
+              resolved.resource,
+              current?.text ?? "",
+              Bom.split(input.content).text,
+              current ? "modified" : "added",
+            ),
+          )
+          return yield* commit(resolved, input.content)
+        }),
       )
-      return yield* commit(resolved, input.content)
     })
 
     return Service.of({ target, authorize, commit, write })
