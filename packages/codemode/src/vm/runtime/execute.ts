@@ -12,7 +12,7 @@ import { createBuiltins } from "./intrinsics.js"
 import { Interpreter } from "./interpreter.js"
 import type { Value } from "./objects.js"
 import { formatLocation, sourceLocation } from "./model.js"
-import { Driver, SUSPENDED } from "./driver.js"
+import { callPath, Driver, SUSPENDED } from "./driver.js"
 import { Interruption } from "./signals.js"
 import { Source } from "./source.js"
 import type { Vm } from "../vm.js"
@@ -115,6 +115,14 @@ export const resumeProgram = <R>(
       }
       const fresh = instantiate(resumed)
       const snapshot = restoreInto(state, fresh.vm)
+      for (const call of fresh.vm.calls()) {
+        if (call.status !== "started") continue
+        if (call.request.kind !== "tool" || fresh.tools.mode(call.request.path)?._tag !== "CodeModeDurable") {
+          throw new SnapshotError(
+            `The pending durable call ${call.key} (${callPath(call)}) cannot resume because that tool is no longer a durable tool in this runtime.`,
+          )
+        }
+      }
       return new Running(resumed, snapshot.header.budget.activeMs, () => fresh, true)
     },
     catch: (error) => (error instanceof SnapshotError ? error : new SnapshotError(String(error))),
@@ -197,7 +205,6 @@ export class Running<R> {
       self.driver = new Driver(prepared.vm, prepared.tools, yield* Effect.context<R>())
       if (roundTrip) self.driver.checkpoint = Effect.sync(() => self.trip())
       self.startedAt = Date.now()
-      yield* Deferred.succeed(self.started, undefined)
       return yield* self.execute()
     }).pipe(
       Effect.onExit((exit) =>
@@ -239,6 +246,7 @@ export class Running<R> {
     const base = Effect.gen(function* () {
       const driver = self.driver
       if (self.resuming) driver.resume()
+      yield* Deferred.succeed(self.started, undefined)
       const outcome = yield* driver.run()
       if (outcome === SUSPENDED) return self.suspended!
       self.finished = true

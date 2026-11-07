@@ -118,16 +118,16 @@ type Suspended = {
 const runtime = CodeMode.make({ tools, engine: "vm" })
 
 // inline
-const outcome = yield * runtime.program(code).run()
+const outcome = yield* runtime.program(code).run()
 
 // in the background, suspended from another fiber
 const program = runtime.program(code, undefined, { runId: "run-1" })
-const fiber = yield * Effect.forkChild(program.run())
-const suspended = yield * program.suspend() // the same Suspended that run() returns
-const outcome = yield * Fiber.join(fiber)
+const fiber = yield* Effect.forkChild(program.run())
+const suspended = yield* program.suspend() // the same Suspended that run() returns
+const outcome = yield* Fiber.join(fiber)
 
 // later, in this process or another one built from the same version
-yield * runtime.resume(CodeMode.toBytes(suspended.state)).run()
+yield* runtime.resume(CodeMode.toBytes(suspended.state)).run()
 ```
 
 The default runtime has no `program` or `resume`, and ignores `Tool.idempotent`, `Tool.durable`, and extension
@@ -241,11 +241,7 @@ const web = Extension.make({
     ),
   },
 })
-const result =
-  yield *
-  CodeMode.make({ extensions: [web] })
-    .execute(code)
-    .pipe(Effect.provideService(Session, session))
+const result = yield* CodeMode.make({ extensions: [web] }).execute(code).pipe(Effect.provideService(Session, session))
 ```
 
 Every value crossing in either direction is converted, never shared: arguments come in as copies, results go out as

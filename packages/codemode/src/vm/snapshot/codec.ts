@@ -482,8 +482,7 @@ class Encoder {
   private hostValue(extension: string, root: object): Encoded {
     const known = this.roots.get(root)
     if (known !== undefined) return known
-    const data = this.env.hosts!.encode(extension, root)
-    plainData(data, extension, new Set())
+    const data = plainData(this.env.hosts!.encode(extension, root), extension, new Set())
     const id = this.records.length
     const ref: Encoded = ["r", id]
     this.roots.set(root, ref)
@@ -942,16 +941,23 @@ class Decoder {
 }
 
 // What an extension's `snapshot.encode` gives must be plain data the codec copies and hands back to `decode`: JSON
-// values and Uint8Arrays.
-const plainData = (data: unknown, extension: string, seen: Set<object>): void => {
-  if (data === null || typeof data === "string" || typeof data === "boolean" || data instanceof Uint8Array) return
-  if (typeof data === "number" && Number.isFinite(data)) return
+// values and Uint8Arrays. Views (such as a `Buffer` slice on a shared slab) are copied into standalone `Uint8Array`s.
+const plainData = (data: unknown, extension: string, seen: Set<object>): unknown => {
+  if (data === null || typeof data === "string" || typeof data === "boolean") return data
+  if (typeof data === "number" && Number.isFinite(data)) return data
+  if (data instanceof Uint8Array) {
+    return data.constructor === Uint8Array && data.byteOffset === 0 && data.byteLength === data.buffer.byteLength
+      ? data
+      : new Uint8Array(data)
+  }
   const fail = (what: string): never => {
     throw new SnapshotError(
       `The extension "${extension}" saved a value it returned as data holding ${what}; snapshot.encode must give plain data (JSON values and Uint8Arrays).`,
     )
   }
-  if (typeof data !== "object") return fail(typeof data === "number" ? String(data) : `a ${typeof data}`)
+  if (typeof data !== "object") {
+    return fail(data === undefined ? "undefined" : typeof data === "number" ? String(data) : `a ${typeof data}`)
+  }
   if (seen.has(data)) return fail("a circular reference")
   const proto = Object.getPrototypeOf(data)
   if (!Array.isArray(data) && proto !== Object.prototype && proto !== null) {
@@ -959,8 +965,15 @@ const plainData = (data: unknown, extension: string, seen: Set<object>): void =>
     return fail(`${/^[AEIOU]/.test(name) ? "an" : "a"} ${name}`)
   }
   seen.add(data)
-  for (const item of Object.values(data)) plainData(item, extension, seen)
+  if (Array.isArray(data)) {
+    const out = data.map((item) => plainData(item, extension, seen))
+    seen.delete(data)
+    return out
+  }
+  const out: { [key: string]: unknown } = proto === null ? Object.create(null) : {}
+  for (const [key, item] of Object.entries(data)) out[key] = plainData(item, extension, seen)
   seen.delete(data)
+  return out
 }
 
 const functionName = (fn: Obj): string => {

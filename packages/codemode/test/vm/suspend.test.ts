@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { Effect, Fiber, Schema } from "effect"
+import { Context, Effect, Fiber, Schema } from "effect"
 import { CodeMode, Extension, Tool } from "../../src/index.js"
 
 // Suspending a run, saving its state, and resuming it in a brand-new runtime.
@@ -1044,26 +1044,55 @@ describe("idempotent and durable tools", () => {
     expect(auto).toMatchObject({ ok: true, value: expect.stringMatching(/^[0-9a-f-]{36}:0$/) })
   })
 
-  test("Tool.durable infers start's JSON data type into wait and cancel and checks output", () => {
-    const typed = Tool.make({
+  test("Tool.idempotent and Tool.durable infer input from schema, data from start, union services across start/wait/cancel, and check output", async () => {
+    class StartService extends Context.Service<StartService, { readonly prefix: string }>()("test/StartService") {}
+    class WaitService extends Context.Service<WaitService, { readonly multiplier: number }>()("test/WaitService") {}
+    class CancelService extends Context.Service<CancelService, { readonly onCancel: (id: string) => void }>()(
+      "test/CancelService",
+    ) {}
+
+    const idempotentTyped = Tool.make({
+      description: "Typed idempotent tool",
+      input: Schema.Struct({ name: Schema.String }),
+      output: Schema.String,
+      execute: Tool.idempotent((input, { key }) => {
+        const checkName: string = input.name
+        // @ts-expect-error input is strictly typed from input schema, not any
+        void input.nonexistent
+        return Effect.succeed(`${checkName}:${key}`)
+      }),
+    })
+
+    const durableTyped = Tool.make({
       description: "Typed durable tool",
       input: Schema.Struct({ name: Schema.String, count: Schema.Number }),
       output: Schema.Struct({ label: Schema.String }),
       execute: Tool.durable({
-        start: (input, { key }) => Effect.succeed({ jobId: `${input.name}:${key}`, attempts: input.count }),
-        wait: (data, { key }) => {
-          const checkJobId: string = data.jobId
-          const checkAttempts: number = data.attempts
-          // @ts-expect-error wait receives start's exact data shape
-          void data.nonexistent
-          return Effect.succeed({ label: `${checkJobId}:${checkAttempts}:${key}` })
-        },
-        cancel: (data) => {
-          const checkJobId: string = data.jobId
-          // @ts-expect-error cancel receives start's exact data shape
-          void data.nonexistent
-          return Effect.sync(() => void checkJobId)
-        },
+        start: (input, { key }) =>
+          Effect.gen(function* () {
+            const svc = yield* StartService
+            const checkName: string = input.name
+            // @ts-expect-error input is strictly typed from input schema, not any
+            void input.nonexistent
+            return { jobId: `${svc.prefix}:${checkName}:${key}`, attempts: input.count }
+          }),
+        wait: (data, { key }) =>
+          Effect.gen(function* () {
+            const svc = yield* WaitService
+            const checkJobId: string = data.jobId
+            const checkAttempts: number = data.attempts * svc.multiplier
+            // @ts-expect-error wait receives start's exact data shape
+            void data.nonexistent
+            return { label: `${checkJobId}:${checkAttempts}:${key}` }
+          }),
+        cancel: (data) =>
+          Effect.gen(function* () {
+            const svc = yield* CancelService
+            const checkJobId: string = data.jobId
+            // @ts-expect-error cancel receives start's exact data shape
+            void data.nonexistent
+            svc.onCancel(checkJobId)
+          }),
       }),
     })
     Tool.make({
@@ -1077,7 +1106,280 @@ describe("idempotent and durable tools", () => {
         cancel: () => Effect.void,
       }),
     })
-    expect(typed._tag).toBe("CodeModeTool")
+    expect(idempotentTyped._tag).toBe("CodeModeTool")
+    expect(durableTyped._tag).toBe("CodeModeTool")
+
+    const runtime = CodeMode.make({
+      engine: "vm",
+      tools: { idem: idempotentTyped, dur: durableTyped },
+    })
+    const result = await Effect.runPromise(
+      runtime
+        .program(
+          `return [await tools.idem({ name: "a" }), (await tools.dur({ name: "b", count: 3 })).label]`,
+          undefined,
+          { runId: "svc" },
+        )
+        .run()
+        .pipe(
+          Effect.provideService(StartService, { prefix: "p" }),
+          Effect.provideService(WaitService, { multiplier: 10 }),
+          Effect.provideService(CancelService, { onCancel: () => {} }),
+        ),
+    )
+    expect(result).toEqual({
+      ok: true,
+      value: ["a:svc:0", "p:b:svc:1:30:svc:1"],
+      toolCalls: [{ name: "idem" }, { name: "dur" }],
+    })
+  })
+
+  test("suspending a resumed program before run() starts waits for driver.resume() and leaves nothing running", async () => {
+    const read = idempotentManual()
+    const runtime = CodeMode.make({ engine: "vm", tools: { read: read.tool } })
+    const initial = background(
+      runtime.program(`return (await tools.read({ value: 5 })).value`, undefined, { runId: "sr" }),
+    )
+    await read.called()
+    const firstSuspended = suspendedOf(await Effect.runPromise(initial.suspend))
+
+    // Re-suspend the resumed program immediately from another fiber before run() begins.
+    read.reset()
+    const secondSuspended = suspendedOf(
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const resumed = runtime.resume(CodeMode.toBytes(firstSuspended.state))
+          const fiber = yield* Effect.forkChild(resumed.run())
+          const suspended = yield* resumed.suspend()
+          expect(yield* Fiber.join(fiber)).toBe(suspended)
+          return suspended
+        }),
+      ),
+    )
+    // If driver.resume() launched the idempotent call, suspending detached and interrupted it.
+    for (const attempt of read.attempts) expect(attempt.interrupted).toBe(true)
+
+    read.reset()
+    const finalRun = background(runtime.resume(CodeMode.toBytes(secondSuspended.state)))
+    await read.called()
+    read.attempts[read.attempts.length - 1]!.answer(5)
+    expect(await Effect.runPromise(finalRun.result)).toEqual({
+      ok: true,
+      value: 5,
+      toolCalls: [{ name: "read" }],
+    })
+  })
+
+  test("a detached idempotent or durable call that settles at a slice before interruption does not fire tool.after twice", async () => {
+    const afterEvents: Array<string> = []
+    let resolveIdem!: (value: number) => void
+    let idemCalled = latch()
+    const idem = Tool.make({
+      description: "Idempotent settling on detach",
+      input: Value,
+      output: Value,
+      execute: Tool.idempotent((input) =>
+        Effect.promise(() => {
+          idemCalled.resolve()
+          return new Promise<number>((r) => {
+            resolveIdem = r
+          }).then((v) => ({ value: v + input.value }))
+        }),
+      ),
+    })
+    const runtime = CodeMode.make({
+      engine: "vm",
+      tools: { idem },
+      hooks: {
+        "tool.after": (call, res) => Effect.sync(() => void afterEvents.push(`${call.key}:${res.status}`)),
+      },
+    })
+    // Run a busy loop alongside the in-flight idempotent call so suspend lands at a slice.
+    const code = `
+      const p = tools.idem({ value: 1 })
+      const started = Date.now()
+      while (Date.now() - started < 300) {}
+      return (await p).value`
+    const run = background(runtime.program(code, undefined, { runId: "sl" }))
+    await idemCalled.promise
+    // Resolve the underlying promise right as suspend detaches, so the fiber settles with success while detaching.
+    const suspendPromise = Effect.runPromise(run.suspend)
+    resolveIdem(41)
+    const suspended = suspendedOf(await suspendPromise)
+    expect(afterEvents).toEqual([])
+
+    idemCalled = latch()
+    const resumed = background(runtime.resume(CodeMode.toBytes(suspended.state)))
+    await idemCalled.promise
+    resolveIdem(41)
+    expect(await Effect.runPromise(resumed.result)).toEqual({
+      ok: true,
+      value: 42,
+      toolCalls: [{ name: "idem" }],
+    })
+    expect(afterEvents).toEqual(["sl:0:success"])
+  })
+
+  test("durable.start edge cases: uninterruptible start on interrupt cancels data, invalid start JSON fires after, and wait failure rejects", async () => {
+    const events: Array<string> = []
+    const cancelled: Array<string> = []
+    const inStart = latch()
+    const startGate = latch()
+
+    // 1. An uninterruptible start that finishes while an interrupt is pending saves its data, fires after(interrupted), and runs cancel.
+    const uninterruptibleJob = Tool.make({
+      description: "Uninterruptible start",
+      input: Value,
+      output: Value,
+      execute: Tool.durable({
+        start: (input, { key }) =>
+          Effect.uninterruptible(
+            Effect.gen(function* () {
+              inStart.resolve()
+              yield* Effect.promise(() => startGate.promise)
+              return { jobId: `${key}:${input.value}` }
+            }),
+          ),
+        wait: () => Effect.never,
+        cancel: ({ jobId }) => Effect.sync(() => void cancelled.push(jobId)),
+      }),
+    })
+    const runtime1 = CodeMode.make({
+      engine: "vm",
+      tools: { job: uninterruptibleJob },
+      hooks: {
+        "tool.after": (call, res) => Effect.sync(() => void events.push(`${call.key}:${res.status}`)),
+      },
+    })
+    const prog1 = runtime1.program(`return await tools.job({ value: 9 })`, undefined, { runId: "u" })
+    const fiber1 = Effect.runFork(prog1.run())
+    await inStart.promise
+    const interruptFiber = Effect.runFork(Fiber.interrupt(fiber1))
+    await Bun.sleep(10)
+    startGate.resolve()
+    await Effect.runPromise(Fiber.join(interruptFiber))
+    expect(cancelled).toEqual(["u:0:9"])
+    expect(events).toEqual(["u:0:interrupted"])
+
+    // 2. Non-JSON data returned from start fires tool.after with failure.
+    const badStartEvents: Array<string> = []
+    const badStart = Tool.make({
+      description: "Bad start data",
+      input: Value,
+      output: Value,
+      execute: Tool.durable({
+        start: () => {
+          const circular: Record<string, unknown> = {}
+          circular.self = circular
+          return Effect.succeed(circular as unknown as CodeMode.DataValue)
+        },
+        wait: () => Effect.succeed({ value: 1 }),
+        cancel: () => Effect.void,
+      }),
+    })
+    const badOutcome = await Effect.runPromise(
+      CodeMode.make({
+        engine: "vm",
+        tools: { bad: badStart },
+        hooks: {
+          "tool.after": (call, res) => Effect.sync(() => void badStartEvents.push(`${call.key}:${res.status}`)),
+        },
+      })
+        .program(`return await tools.bad({ value: 1 })`, undefined, { runId: "bad" })
+        .run(),
+    )
+    expect(badOutcome).toMatchObject({ ok: false, error: { kind: "InvalidToolOutput" } })
+    expect(badStartEvents).toEqual(["bad:0:failure"])
+
+    // 3. A failing wait rejects the call's promise with a catchable ToolError and fires tool.after with failure.
+    const waitEvents: Array<string> = []
+    const failingWait = Tool.make({
+      description: "Failing wait",
+      input: Value,
+      output: Value,
+      execute: Tool.durable({
+        start: (input, { key }) => Effect.succeed({ key, v: input.value }),
+        wait: ({ key }) => Effect.fail(new Error(`wait boom ${key}`)),
+        cancel: () => Effect.void,
+      }),
+    })
+    const caughtWait = await Effect.runPromise(
+      CodeMode.make({
+        engine: "vm",
+        tools: { failWait: failingWait },
+        hooks: {
+          "tool.after": (call, res) => Effect.sync(() => void waitEvents.push(`${call.key}:${res.status}`)),
+        },
+      })
+        .program(
+          `try { return await tools.failWait({ value: 1 }) } catch (e) { return [e.name, e.message] }`,
+          undefined,
+          { runId: "wf" },
+        )
+        .run(),
+    )
+    expect(caughtWait).toEqual({
+      ok: true,
+      value: ["Error", "wait boom wf:0"],
+      toolCalls: [{ name: "failWait" }],
+    })
+    expect(waitEvents).toEqual(["wf:0:failure"])
+  })
+
+  test("resuming a started durable call fails with SnapshotError when the tool was removed or is no longer durable, and completed calls clear their data", async () => {
+    const jobs = durableJobs()
+    const read = idempotentManual()
+    const runtime = CodeMode.make({ engine: "vm", tools: { job: jobs.tool, read: read.tool } })
+    const run = background(
+      runtime.program(
+        `const first = await tools.job({ value: 1 }); const second = await tools.read({ value: 2 }); return first.value + second.value`,
+        undefined,
+        { runId: "chg" },
+      ),
+    )
+    await jobs.waiting()
+    const suspendedWhileStarted = suspendedOf(await Effect.runPromise(run.suspend))
+
+    // Removing the tool or changing it to plain/idempotent refuses resume with SnapshotError.
+    const plainTool = Tool.make({
+      description: "Plain",
+      input: Value,
+      output: Value,
+      execute: (input) => Effect.succeed(input),
+    })
+    const toolSets: ReadonlyArray<Record<string, Tool.Tool>> = [{}, { job: plainTool }, { job: read.tool }]
+    for (const tools of toolSets) {
+      expect(
+        (await refusal(CodeMode.make({ engine: "vm", tools }).resume(suspendedWhileStarted.state))).message,
+      ).toContain("cannot resume because that tool is no longer a durable tool")
+    }
+
+    // Complete `job` while `read` is still running: `job` moves to the inbox with its `data` cleared.
+    const jobs2 = durableJobs()
+    const read2 = idempotentManual()
+    const run2 = background(
+      CodeMode.make({ engine: "vm", tools: { job: jobs2.tool, read: read2.tool } }).program(
+        `const [a, b] = await Promise.all([tools.job({ value: 1 }), tools.read({ value: 2 })]); return a.value + b.value`,
+        undefined,
+        { runId: "chg2" },
+      ),
+    )
+    await Promise.all([jobs2.waiting(), read2.called()])
+    jobs2.finish("chg2:0", 10)
+    await Bun.sleep(10)
+    const suspendedAfterJob = suspendedOf(await Effect.runPromise(run2.suspend))
+    expect(JSON.stringify(suspendedAfterJob.state)).not.toContain('"tags"')
+    read2.reset()
+    const resumedAfterJob = background(
+      CodeMode.make({ engine: "vm", tools: { job: jobs2.tool, read: read2.tool } }).resume(suspendedAfterJob.state),
+    )
+    await read2.called()
+    read2.attempts[1]!.answer(20)
+    expect(await Effect.runPromise(resumedAfterJob.result)).toEqual({
+      ok: true,
+      value: 30,
+      toolCalls: [{ name: "job" }, { name: "read" }],
+    })
   })
 })
 
@@ -1186,6 +1488,10 @@ describe("extension snapshot hooks", () => {
   test("a suspend fails, and the run goes on, when encode throws or returns non-plain data", async () => {
     const cases: ReadonlyArray<readonly [Partial<Extension.Snapshot>, string]> = [
       [
+        { encode: () => undefined },
+        "The run's state couldn't be saved: The extension \"fetch\" saved a value it returned as data holding undefined; snapshot.encode must give plain data (JSON values and Uint8Arrays).",
+      ],
+      [
         { encode: () => ({ when: new Date(0) }) },
         "The run's state couldn't be saved: The extension \"fetch\" saved a value it returned as data holding a Date; snapshot.encode must give plain data (JSON values and Uint8Arrays).",
       ],
@@ -1221,6 +1527,37 @@ describe("extension snapshot hooks", () => {
         ],
       })
     }
+  })
+
+  test("a Buffer or Uint8Array view returned by snapshot.encode copies only its slice, not the underlying slab", async () => {
+    const slab = new ArrayBuffer(8192)
+    const view = new Uint8Array(slab, 100, 4)
+    view.set(new TextEncoder().encode('"hi"'))
+    const { extension } = web({
+      encode: (value) => ({
+        ...(value as { readonly [savedSymbol]: Saved })[savedSymbol],
+        body: Buffer.from(view.buffer, view.byteOffset, view.byteLength),
+      }),
+    })
+    const { jobs, run } = await suspendWith(extension)
+    const suspended = suspendedOf(await Effect.runPromise(run.suspend))
+    // The serialized ArrayBuffer record holds only the 4-byte slice, not the 8 KiB slab.
+    expect(suspended.state.records.filter((r) => r.t === "ArrayBuffer")).toEqual([
+      { t: "ArrayBuffer", d: btoa('"hi"') },
+    ])
+    const fresh = web()
+    const resumed = background(
+      CodeMode.make({ engine: "vm", tools: { job: jobs.tool }, extensions: [fresh.extension] }).resume(
+        CodeMode.toBytes(suspended.state),
+      ),
+    )
+    await jobs.waiting()
+    jobs.finish("h:1", 1)
+    expect(await Effect.runPromise(resumed.result)).toEqual({
+      ok: true,
+      value: ['"hi"', "hi", "7", true, 4, "https://a.test/", true],
+      toolCalls: [{ name: "job" }],
+    })
   })
 
   test("a state that holds a hooked value is refused without that extension or without its hooks", async () => {
@@ -1295,5 +1632,28 @@ describe("legacy engine compatibility", () => {
     })
     expect(keys).toHaveLength(2)
     expect(keys[0]).not.toBe(keys[1])
+
+    // Interrupting a durable tool on the legacy engine calls cancel(data).
+    const cancelled: Array<number> = []
+    const waiting = latch()
+    const cancellable = Tool.make({
+      description: "Cancellable on legacy",
+      input: Value,
+      output: Value,
+      execute: Tool.durable({
+        start: (input) => Effect.succeed({ n: input.value }),
+        wait: () =>
+          Effect.promise(() => {
+            waiting.resolve()
+            return new Promise(() => {})
+          }),
+        cancel: ({ n }) => Effect.sync(() => void cancelled.push(n)),
+      }),
+    })
+    const legacyRuntime = CodeMode.make({ engine: "legacy", tools: { cancellable } })
+    const fiber = Effect.runFork(legacyRuntime.execute(`return await tools.cancellable({ value: 77 })`))
+    await waiting.promise
+    await Effect.runPromise(Fiber.interrupt(fiber))
+    expect(cancelled).toEqual([77])
   })
 })

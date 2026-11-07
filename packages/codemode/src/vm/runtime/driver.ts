@@ -124,24 +124,28 @@ export class Driver<R> {
   /** Stops host work still running, waiting for its cleanup; a durable tool's work is cancelled unless detached. */
   interrupt(): Effect.Effect<void> {
     const self = this
-    return Effect.gen(function* () {
-      self.stopping = true
-      while (self.fibers.size > 0) yield* Fiber.interruptAll([...self.fibers.values()])
-      // A suspended run's durable work keeps running, to be waited on at resume.
-      if (self.suspending) return
-      for (const call of self.vm.calls()) {
-        const request = call.request
-        if (call.status !== "started" || request.kind !== "tool") continue
-        call.status = "completed"
-        yield* Effect.ignore(self.tools.cancel(request.path, call.data as Json)).pipe(
-          Effect.provideContext(self.services),
-        )
-      }
-    })
+    return Effect.uninterruptible(
+      Effect.gen(function* () {
+        self.stopping = true
+        while (self.fibers.size > 0) yield* Fiber.interruptAll([...self.fibers.values()])
+        // A suspended run's durable work keeps running, to be waited on at resume.
+        if (self.suspending) return
+        for (const call of self.vm.calls()) {
+          const request = call.request
+          if (call.status !== "started" || request.kind !== "tool") continue
+          call.status = "completed"
+          yield* self.tools.interrupted(call.key).pipe(Effect.provideContext(self.services))
+          yield* Effect.ignore(self.tools.cancel(request.path, call.data as Json)).pipe(
+            Effect.provideContext(self.services),
+          )
+        }
+      }),
+    )
   }
 
   /** Starts tool calls that were queued (including idempotent calls) and waits on durable calls in `started`. */
   resume(): void {
+    if (this.suspending) return
     for (const call of this.vm.calls()) {
       if (call.status === "queued") this.launch(call)
       else if (call.status === "started") this.wait(call)
@@ -162,13 +166,27 @@ export class Driver<R> {
     const request = call.request
     if (request.kind === "tool") {
       if (this.tools.mode(request.path)?._tag === "CodeModeDurable") {
-        const started = this.tools.start(request.path, request.args, call.key, (name) => this.admit(call.id, name))
-        return this.fork(call.id, started, (data) => {
+        const started = this.tools.start(
+          request.path,
+          request.args,
+          call.key,
+          (name) => this.admit(call.id, name),
+          (data) => {
+            const current = this.vm.call(call.id)
+            if (current === undefined) return
+            current.status = "started"
+            current.data = data
+          },
+        )
+        return this.fork(call.id, started, () => {
           const current = this.vm.call(call.id)
           if (current === undefined) return
-          current.status = "started"
-          current.data = data as Json
-          if (this.stopping || this.detached.has(call.id)) return
+          if (this.stopping || this.detached.has(call.id)) {
+            if (this.stopping && !this.suspending) {
+              Effect.runForkWith(this.services)(this.tools.interrupted(call.key))
+            }
+            return
+          }
           this.wait(current)
         })
       }

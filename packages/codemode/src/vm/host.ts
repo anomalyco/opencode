@@ -149,6 +149,7 @@ export class HostCalls {
     if (call === undefined) return
     this.running.delete(id)
     // Its outcome is all that is left: the host function, its arguments, and what it returned are dropped.
+    call.data = undefined
     const request = call.request
     if (request.kind === "extension") {
       request.call.invocation = undefined
