@@ -67,8 +67,6 @@ icu_provider
 idna
 idna_adapter
 indexmap
-inotify
-inotify-sys build
 ipnet
 is_terminal_polyfill
 itoa
@@ -79,8 +77,6 @@ litemap
 log
 memchr
 mio
-notify
-notify-types
 num-traits build
 once_cell
 openssl-probe
@@ -102,7 +98,6 @@ rustls-native-certs
 rustls-pki-types
 rustls-platform-verifier
 rustls-webpki
-same-file
 serde build
 serde_core build
 serde_derive proc-macro
@@ -163,7 +158,6 @@ url
 utf8_iter
 utf8parse
 utf_types
-walkdir
 want
 writeable
 yoke

@@ -14,7 +14,6 @@ base64.workspace = true
 chrono.workspace = true
 indexmap.workspace = true
 log.workspace = true
-notify.workspace = true
 rand.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -24,6 +23,12 @@ url.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["system"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { workspace = true, features = ["event"] }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+notify.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
