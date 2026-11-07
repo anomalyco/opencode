@@ -6,6 +6,7 @@ import { Global } from "@opencode/util/global"
 import * as Open from "@opencode/util/open"
 import { waitForGoUpsellConnect } from "../src/component/dialog-go-upsell"
 import { GoUpsellArtRenderable } from "../src/component/go-upsell-art"
+import { Locale } from "../src/util/locale"
 import { SimulationRenderer } from "@opencode/simulation/frontend/renderer"
 import path from "node:path"
 import { Writable } from "node:stream"
@@ -728,7 +729,11 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
     width: 100,
     height: 40,
     state: state.path,
-    config: { animations: false, tabs: { mode: "off" }, session: { sidebar: "hide", tps: true } },
+    config: {
+      animations: false,
+      tabs: { mode: "off" },
+      session: { sidebar: "hide", tps: true, timestamps: true, date_format: "dd-mon-yyyy" },
+    },
     args: { sessionID: session.id },
     fetch: (url) => {
       if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
@@ -796,6 +801,7 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
   )
   expect(initial).toContain("Current input")
   expect(initial).toContain("4.0s \u00b7 20.0 tok/s")
+  expect(initial).toContain(Locale.datetime(5000, "dd-mon-yyyy"))
   expect(initial).not.toContain("Prepended input")
 
   setup.mockInput.pressKey("g", { ctrl: true })
