@@ -69,6 +69,7 @@ const names = new Map(
     amoled: "AMOLED",
     aura: "Aura",
     ayu: "Ayu",
+    breeze: "Breeze",
     carbonfox: "Carbonfox",
     catppuccin: "Catppuccin",
     "catppuccin-frappe": "Catppuccin Frappe",
