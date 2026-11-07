@@ -1,7 +1,8 @@
 import { castDraft, produce, type WritableDraft } from "immer"
-import { DateTime, Effect, Match, pipe, Schema } from "effect"
+import { DateTime, Effect, Match, Option, pipe, Schema } from "effect"
 import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
+import { decodeToolInput } from "./runner/to-llm-message.js"
 
 export interface Adapter {
   readonly getAgent: () => Effect.Effect<SessionMessage.AgentSelected["agent"] | undefined>
@@ -378,7 +379,16 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
                 SessionMessage.ToolStateError.make({
                   status: "error",
                   error: event.data.error,
-                  input: typeof match.state.input === "string" ? {} : match.state.input,
+                  input:
+                    typeof match.state.input === "string"
+                      ? Option.match(decodeToolInput(match.state.input), {
+                          onNone: () => ({}),
+                          onSome: (value) =>
+                            value && typeof value === "object" && !Array.isArray(value)
+                              ? (value as Record<string, unknown>)
+                              : {},
+                        })
+                      : match.state.input,
                   ...(event.data.content === undefined ? {} : { content: event.data.content }),
                   ...(event.data.metadata === undefined ? {} : { metadata: event.data.metadata }),
                 }),
