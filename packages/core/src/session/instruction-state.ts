@@ -2,6 +2,7 @@ export * as InstructionState from "./instruction-state.js"
 
 import { and, eq, gte, inArray, sql } from "drizzle-orm"
 import { Effect, Option, Schema } from "effect"
+import { DatabaseBatch } from "../database/batch.js"
 import type { Database } from "../database/database.js"
 import type { Bus } from "../bus.js"
 import { Instructions } from "../instructions/index.js"
@@ -221,17 +222,14 @@ const find = Effect.fnUntraced(function* (db: DatabaseService, sessionID: Sessio
 
 const insertBlobs = Effect.fnUntraced(function* (db: DatabaseService, blobs: Readonly<Record<string, Schema.Json>>) {
   const rows = Object.entries(blobs).map(([hash, value]) => ({ hash: Instructions.Hash.make(hash), value }))
-  if (rows.length === 0) return
-  yield* db.insert(InstructionBlobTable).values(rows).onConflictDoNothing().run().pipe(Effect.orDie)
+  for (const batch of DatabaseBatch.insertBatches(InstructionBlobTable, rows))
+    yield* db.insert(InstructionBlobTable).values(batch).onConflictDoNothing().run().pipe(Effect.orDie)
 })
 
 const loadBlobs = Effect.fnUntraced(function* (db: DatabaseService, values: ReadonlyArray<Instructions.Hash>) {
   const hashes = [...new Set(values)]
-  const batches = Array.from({ length: Math.ceil(hashes.length / 500) }, (_, index) =>
-    hashes.slice(index * 500, (index + 1) * 500),
-  )
   const rows = (yield* Effect.forEach(
-    batches,
+    DatabaseBatch.batches(hashes, 1),
     (batch) =>
       db.select().from(InstructionBlobTable).where(inArray(InstructionBlobTable.hash, batch)).all().pipe(Effect.orDie),
     { concurrency: 4 },
