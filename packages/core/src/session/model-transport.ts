@@ -16,6 +16,7 @@ import { Cause, Clock, Context, Duration, Effect, Fiber, Layer, Metric, Queue, S
 import { Headers } from "effect/http"
 import { Socket } from "effect/socket"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { ModelRetry } from "../model-retry.js"
 import { SessionSchema } from "./schema.js"
 import { webSocketConstructor } from "../effect/app-node-platform.js"
 
@@ -345,15 +346,24 @@ export const makeLayer = (connector: WebSocketConnector) =>
           : yield* open(owner, exchange, key).pipe(
               Effect.catch((error) => {
                 if (error.reason._tag === "Transport" && error.reason.code === "owner-closed") return Effect.fail(error)
-                // Any connect failure, transient or not, pins the Session to HTTP until restart or move:
-                // a network that refuses the upgrade would otherwise charge every step for a failed connect.
-                owner.httpFallback = true
-                return Effect.logWarning("session websocket connect failed; using http", {
+                const attrs = {
                   sessionTransport: "websocket",
                   phase: "connect",
                   delivery: "not-sent",
                   code: error.reason._tag === "Transport" ? error.reason.code : error.reason._tag,
-                }).pipe(
+                }
+                // An unreachable host (DNS down, no route) says nothing about the socket, so only this exchange uses
+                // HTTP; the runner retries it, and the socket is tried again once the network is back. Every retry
+                // lands here during an outage, so it logs at debug; the retry itself is already recorded.
+                if (ModelRetry.isUnreachable(error))
+                  return Effect.logDebug("session websocket host unreachable; using http for this exchange", attrs).pipe(
+                    Effect.andThen(metric("connect_failure")),
+                    Effect.as(undefined),
+                  )
+                // Any other connect failure, transient or not, pins the Session to HTTP until restart or move:
+                // a network that refuses the upgrade would otherwise charge every step for a failed connect.
+                owner.httpFallback = true
+                return Effect.logWarning("session websocket connect failed; using http", attrs).pipe(
                   Effect.andThen(metric("connect_failure")),
                   Effect.andThen(metric("fallback")),
                   Effect.as(undefined),

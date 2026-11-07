@@ -1214,6 +1214,20 @@ it.effect("keeps the code of a host name that didn't resolve", () =>
   }),
 )
 
+// Bun's fetch reports a resolver that failed outright (EAI_FAIL) under c-ares' name.
+it.effect("keeps the code of a failed lookup", () =>
+  Effect.gen(function* () {
+    const failed = yield* streamFailure(
+      Object.assign(new TypeError("getaddrinfo EBADRESP api.example.com"), {
+        code: "EBADRESP",
+        syscall: "getaddrinfo",
+      }),
+    )
+    expect(failed.reason).toMatchObject({ _tag: "Transport", operation: "request", code: "EBADRESP" })
+    expect(ModelRetry.isUnreachable(failed)).toBeTrue()
+  }),
+)
+
 it.effect("classifies mid-stream socket drops as read transport errors", () =>
   Effect.gen(function* () {
     const cause = Object.assign(new Error("terminated"), {

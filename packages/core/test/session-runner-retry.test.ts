@@ -7,7 +7,7 @@ import { Provider } from "@opencode/core/provider"
 import { SessionSchema } from "@opencode/core/session/schema"
 import { SessionRunnerRetry } from "@opencode/core/session/runner/retry"
 import { toSessionError } from "@opencode/core/session/to-session-error"
-import { Clock, Duration, Effect } from "effect"
+import { Clock, Duration, Effect, Fiber } from "effect"
 import { TestClock } from "effect/testing"
 import { it } from "./lib/effect"
 
@@ -83,6 +83,14 @@ describe("SessionRunnerRetry.policy", () => {
     }),
   )
 
+  test("treats every failed lookup Bun reports as an unreachable host", () => {
+    const failure = (code: string) =>
+      new AIError({ reason: new TransportError({ message: code, transport: "http", operation: "request", code }) })
+    for (const code of ["ENOTFOUND", "EAI_AGAIN", "EBADRESP", "ESERVFAIL", "ETIMEOUT"])
+      expect(ModelRetry.isUnreachable(failure(code))).toBe(true)
+    expect(ModelRetry.isUnreachable(failure("ETIMEDOUT"))).toBe(false)
+  })
+
   it.effect("keeps a refused connection on the general allowance", () =>
     Effect.gen(function* () {
       expect(ModelRetry.isUnreachable(refused)).toBe(false)
@@ -115,6 +123,26 @@ describe("ModelRetry.retryOneShot", () => {
       })
       yield* ModelRetry.retryOneShot(Effect.suspend(() => (calls++, Effect.fail(cutOff)))).pipe(Effect.flip)
       expect(calls).toBe(1)
+    }),
+  )
+
+  it.effect("replays a failed lookup but not a connection timeout", () =>
+    Effect.gen(function* () {
+      const attempts = Effect.fnUntraced(function* (code: string) {
+        let calls = 0
+        const error = new AIError({
+          reason: new TransportError({ message: code, transport: "http", operation: "request", code }),
+        })
+        const fiber = yield* ModelRetry.retryOneShot(Effect.suspend(() => (calls++, Effect.fail(error)))).pipe(
+          Effect.flip,
+          Effect.forkChild,
+        )
+        yield* TestClock.adjust("1 minute")
+        yield* Fiber.join(fiber)
+        return calls
+      })
+      expect(yield* attempts("EBADRESP")).toBeGreaterThan(1)
+      expect(yield* attempts("ETIMEDOUT")).toBe(1)
     }),
   )
 })
