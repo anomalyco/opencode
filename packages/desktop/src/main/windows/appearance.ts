@@ -13,6 +13,7 @@ import type { DesktopPaths } from "../paths"
 import { BACKGROUND_COLOR_KEY, PINCH_ZOOM_ENABLED_KEY, ZOOM_LEVEL_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
 import { platformFrame, savedBackgroundColor, storedBackgroundColor, storedZoomLevel, titlebarOverlay, tone } from "./defaults"
+import { applyThemeSource } from "./theme-source-controller"
 
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
 
@@ -69,6 +70,9 @@ export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = 
   if (process.platform === "darwin" || process.platform === "win32") {
     nativeTheme.themeSource = theme.scheme ?? theme.mode ?? "system"
   }
+
+  // Linux resolves the portal separately: Chromium only reads its appearance at startup.
+  if (process.platform === "linux") applyThemeSource(theme.scheme)
 
   updateTitlebar(win)
 }
