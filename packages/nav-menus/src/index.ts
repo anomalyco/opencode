@@ -382,6 +382,8 @@ export function installNavMenus(options: NavMenusOptions = {}) {
     }
   })
   on("pointerdown", (event: PointerEvent) => {
+    // A long press whose click never came (some phones send none) mustn't eat the next tap.
+    swallowClick = undefined
     const trigger = triggerOf(event.target)
     // Pressing the other trigger hands over at once; anywhere else the menu folds away.
     if (current && !inside(event.target)) close(false, !!trigger)

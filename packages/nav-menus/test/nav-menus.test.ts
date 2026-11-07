@@ -51,6 +51,23 @@ describe("logo menu", () => {
     expect(items(menu)[0]!.querySelector("svg")).not.toBeNull()
   })
 
+  test("a long press opens it, and the next tap follows the logo even when the press sent no click", async () => {
+    const touch = () =>
+      logo().dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch", clientX: 10, clientY: 10 }),
+      )
+
+    touch()
+    await Bun.sleep(550)
+    expect(menus()[0]?.getAttribute("data-nav-menu")).toBe("logo")
+
+    touch()
+    const tap = new MouseEvent("click", { bubbles: true, cancelable: true })
+    logo().dispatchEvent(tap)
+
+    expect(tap.defaultPrevented).toBe(false)
+  })
+
   test("Shift+F10 opens it on its first card, and Escape returns to the logo", () => {
     logo().focus()
 
