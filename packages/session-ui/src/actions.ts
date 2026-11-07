@@ -15,6 +15,8 @@ export type SessionUserComment =
       type: "note"
       comment: string
       label: string
+      title?: string
+      subtitle?: string
       icon: string
     }
   | {

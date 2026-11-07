@@ -31,7 +31,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
   ctx.add(Slot, {
     at: "session.header",
     order: 10,
-    render: (input) => <SessionContextUsage session={input.session} placement="bottom" />,
+    render: (input) => <SessionContextUsage session={input.session} active={input.active} placement="bottom" />,
   })
 
   ctx.add(

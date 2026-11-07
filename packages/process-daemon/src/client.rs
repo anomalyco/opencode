@@ -144,6 +144,7 @@ impl TerminalClient {
                 instance_id,
                 pid,
                 protocol,
+                ..
             } if instance_id == client.registration.instance_id
                 && pid == client.registration.pid
                 && protocol == PROTOCOL_VERSION =>

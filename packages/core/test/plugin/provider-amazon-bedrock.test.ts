@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
@@ -72,6 +73,27 @@ describe("AmazonBedrockPlugin", () => {
         const result = required(yield* catalog.get(Provider.ID.amazonBedrock))
         expect(result.package).toBe("@opencode/ai/providers/amazon-bedrock")
         expect(result.settings).toEqual({ baseURL: "https://bedrock.example", region: "us-east-1" })
+      }),
+    ),
+  )
+
+  it.effect("gives the package the profile of a stored AWS profile login", () =>
+    withEnv(noAmbientAWS, () =>
+      Effect.gen(function* () {
+        const catalog = yield* seedBedrock()
+        const credentials = yield* Credential.Service
+        yield* credentials.create({
+          integrationID: Integration.ID.make(Provider.ID.amazonBedrock),
+          value: Credential.External.make({
+            type: "external",
+            methodID: Integration.MethodID.make("aws-profile"),
+            metadata: { profile: "work" },
+          }),
+        })
+        yield* addPlugin()
+        const result = required(yield* catalog.get(Provider.ID.amazonBedrock))
+        expect(result.settings).toEqual({ profile: "work", region: "us-east-1" })
+        expect(result.activation).toBe("enabled")
       }),
     ),
   )

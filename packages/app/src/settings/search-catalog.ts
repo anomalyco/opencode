@@ -106,17 +106,17 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "experimental",
-    label: "settings.experimental.row.newModelPicker.title",
-    target: "settings-new-model-picker",
-    description: "settings.experimental.row.newModelPicker.description",
-    keywords: "model picker selector switcher redesign",
-  },
-  {
-    tab: "experimental",
     label: "settings.experimental.row.foldUserMessages.title",
     target: "settings-fold-user-messages",
     description: "settings.experimental.row.foldUserMessages.description",
     keywords: "fold collapse long messages prompts read more",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.newQuestionUI.title",
+    target: "settings-new-question-ui",
+    description: "settings.experimental.row.newQuestionUI.description",
+    keywords: "question answers keyboard dock redesign",
   },
   {
     tab: "appearance",
@@ -174,6 +174,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "notifications",
+    label: "settings.general.notifications.questions.title",
+    target: "settings-notifications-questions",
+    section: "settings.general.section.notifications",
+    description: "settings.general.notifications.questions.description",
+    keywords: "desktop notifications questions mcp elicitation input",
+  },
+  {
+    tab: "notifications",
     label: "settings.general.notifications.errors.title",
     target: "settings-notifications-errors",
     section: "settings.general.section.notifications",
@@ -195,6 +203,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     section: "settings.general.section.sounds",
     description: "settings.general.sounds.permissions.description",
     keywords: "sound audio permissions",
+  },
+  {
+    tab: "notifications",
+    label: "settings.general.sounds.questions.title",
+    target: "settings-sounds-questions",
+    section: "settings.general.section.sounds",
+    description: "settings.general.sounds.questions.description",
+    keywords: "sound audio questions mcp elicitation input",
   },
   {
     tab: "notifications",

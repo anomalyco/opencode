@@ -112,7 +112,7 @@ export function createRegion(input: {
   open: (key: string) => void
   /** Whether the side region is open, and the user's toggle for it. */
   side: Accessor<{ opened(): boolean; toggle(): void }>
-  /** Runs when a close leaves no stored tab, in the same batch as the close. */
+  /** Runs when a close leaves no stored tab and no New tab, in the same batch as the close. */
   onEmptied?: () => void
   /** Runs work that forces a layout, like moving focus, once the region's open motion lands. */
   settled?: (run: () => void) => void
@@ -327,6 +327,14 @@ export function createRegion(input: {
     if (state.adding.some((value) => !live(value))) setState("adding", (list) => list.filter(live))
   })
 
+  // Closing the last New tab of a strip with no tabs closes the region, as closing its last tab does.
+  const dismissNewTab = (id: string) =>
+    batch(() => {
+      setState("adding", (list) => list.filter((value) => value.id !== id))
+
+      if (stored().length === 0 && !state.adding.some(live)) input.onEmptied?.()
+    })
+
   return {
     /** Whether a key event belongs to the side region rather than the session around it. */
     focus: createSideFocus(),
@@ -372,15 +380,13 @@ export function createRegion(input: {
         setState("chosen", pane, id)
       })
     },
-    dismissNewTab(id: string) {
-      setState("adding", (list) => list.filter((value) => value.id !== id))
-    },
+    dismissNewTab,
     /** Closes the shown new tab view in the given or active pane; returns whether one was showing. */
     closeNewTab(pane: SessionPane = activePane()) {
       const value = shownNewTab(pane)
 
       if (!value) return false
-      setState("adding", (list) => list.filter((entry) => entry.id !== value.id))
+      dismissNewTab(value.id)
 
       return true
     },

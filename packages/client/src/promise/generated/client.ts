@@ -243,6 +243,18 @@ import type {
   ExperimentalPersistentPtyConnectTokenOutput,
   ExperimentalMediaGetInput,
   ExperimentalMediaGetOutput,
+  ExperimentalScheduleCreateInput,
+  ExperimentalScheduleCreateOutput,
+  ExperimentalScheduleListInput,
+  ExperimentalScheduleListOutput,
+  ExperimentalScheduleGetInput,
+  ExperimentalScheduleGetOutput,
+  ExperimentalSchedulePauseInput,
+  ExperimentalSchedulePauseOutput,
+  ExperimentalScheduleResumeInput,
+  ExperimentalScheduleResumeOutput,
+  ExperimentalScheduleDeleteInput,
+  ExperimentalScheduleDeleteOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1473,6 +1485,84 @@ export function make(options: ClientOptions) {
               declaredStatuses: [400, 401, 404],
               empty: false,
               binary: true,
+            },
+            requestOptions,
+          ),
+      },
+      schedule: {
+        create: (input: ExperimentalScheduleCreateInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalScheduleCreateOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/schedule`,
+              body: {
+                sessionID: input["sessionID"],
+                name: input["name"],
+                when: input["when"],
+                if: input["if"],
+                until: input["until"],
+                ends: input["ends"],
+                prompt: input["prompt"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        list: (input: ExperimentalScheduleListInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalScheduleListOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/schedule`,
+              query: { sessionID: input["sessionID"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        get: (input: ExperimentalScheduleGetInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalScheduleGetOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/schedule/${encodeURIComponent(input.scheduleID)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        pause: (input: ExperimentalSchedulePauseInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalSchedulePauseOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/schedule/${encodeURIComponent(input.scheduleID)}/pause`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        resume: (input: ExperimentalScheduleResumeInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalScheduleResumeOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/schedule/${encodeURIComponent(input.scheduleID)}/resume`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        delete: (input: ExperimentalScheduleDeleteInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalScheduleDeleteOutput>(
+            {
+              method: "DELETE",
+              path: `/api/experimental/schedule/${encodeURIComponent(input.scheduleID)}`,
+              successStatus: 204,
+              declaredStatuses: [400, 401, 403, 404],
+              empty: true,
             },
             requestOptions,
           ),

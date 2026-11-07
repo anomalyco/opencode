@@ -78,6 +78,7 @@ export const makeClient = <
         acquirer,
         compiler: Statement.makeCompilerSqlite(options.transformQueryNames),
         transactionAcquirer,
+        driver: "sqlite",
         spanAttributes: [
           ...(options.spanAttributes ? Object.entries(options.spanAttributes) : []),
           ["db.system.name", "sqlite"],

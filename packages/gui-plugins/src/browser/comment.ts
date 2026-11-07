@@ -9,6 +9,7 @@ export type ElementComment = {
   tabID: Browser.TabID
   url: string
   element: Omit<PaneElement, "rect" | "ref"> & { ref?: Browser.Ref }
+  subtitle?: string
   comment: string
 }
 
@@ -31,6 +32,8 @@ export function commentNote(input: ElementComment): ComposerNote {
     origin: input.origin,
     commentID: crypto.randomUUID(),
     label: input.element.label,
+    title: input.element.selector || input.element.label,
+    subtitle: input.subtitle,
     icon: "select-element",
     subject: subject(input),
     comment: input.comment,

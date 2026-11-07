@@ -13,7 +13,7 @@ const FETCHED_AT = "x-opencode-changelog-fetched-at"
 const PAGE_CACHE = `public, max-age=60, s-maxage=${FRESH_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`
 const SECURITY = {
   "Content-Security-Policy":
-    "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; font-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
 }

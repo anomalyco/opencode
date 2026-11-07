@@ -7,6 +7,12 @@ use serde::{Deserialize, Serialize};
 use crate::service::{TerminalId, TerminalInfo};
 
 pub const PROTOCOL_VERSION: u32 = 7;
+/// Additive capabilities of this daemon. Breaking changes bump `PROTOCOL_VERSION`.
+pub const FEATURES: &[&str] = &["rename"];
+
+pub fn features() -> Vec<String> {
+    FEATURES.iter().map(|feature| feature.to_string()).collect()
+}
 pub const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
 const OUTPUT_FRAME_TAG: u8 = 0;
 
@@ -74,6 +80,10 @@ pub enum Request {
         id: TerminalId,
         rows: Option<u16>,
     },
+    Rename {
+        id: TerminalId,
+        title: Option<String>,
+    },
     Replay {
         id: TerminalId,
         offset: u64,
@@ -103,6 +113,8 @@ pub enum Response {
         instance_id: String,
         pid: u32,
         protocol: u32,
+        #[serde(default)]
+        features: Vec<String>,
     },
     Created {
         terminal: TerminalInfo,
@@ -283,5 +295,44 @@ mod tests {
             );
         }
         assert_eq!(PROTOCOL_VERSION, 7);
+    }
+
+    #[test]
+    fn additive_fields_default_when_absent() {
+        assert!(matches!(
+            serde_json::from_str::<Response>(
+                r#"{"type":"pong","instance_id":"a","pid":1,"protocol":7}"#
+            )
+            .unwrap(),
+            Response::Pong { features, .. } if features.is_empty()
+        ));
+        assert!(matches!(
+            serde_json::from_str::<Request>(r#"{"op":"rename","id":1,"title":null}"#).unwrap(),
+            Request::Rename { id: 1, title: None }
+        ));
+        assert!(matches!(
+            serde_json::from_str::<Request>(r#"{"op":"rename","id":1}"#).unwrap(),
+            Request::Rename { id: 1, title: None }
+        ));
+        let terminal = serde_json::json!({
+            "id": 1,
+            "pid": null,
+            "title": "shell",
+            "foreground_process": null,
+            "group_id": "group",
+            "command": [],
+            "cwd": "/",
+            "cols": 80,
+            "rows": 24,
+            "lifecycle": {"status": "running"},
+            "output_head": 0,
+            "output_tail": 0,
+        });
+        let info = serde_json::from_value::<TerminalInfo>(terminal).unwrap();
+        assert_eq!(info.user_title, None);
+        assert_eq!(
+            serde_json::to_value(&info).unwrap()["user_title"],
+            serde_json::Value::Null
+        );
     }
 }

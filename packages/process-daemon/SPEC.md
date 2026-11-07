@@ -27,6 +27,7 @@ replay, and explicit lifecycle state.
 - Promotion, canonical resize, and input are one ordered actor command.
 - Subscription replay and live events cross one ordered actor boundary.
 - OSC 0/2 title changes update authoritative terminal metadata and publish ordered subscription events.
+- A user title set by rename takes precedence over OSC titles; title changes publish only when the effective title changes.
 - The deepest TTY-attached process in the foreground process group updates authoritative process metadata.
 - Controller delivery applies backpressure; observers tolerate bounded output bursts and are disconnected when their backlog remains full.
 - Adjacent output is coalesced before fanout, flushing at 8 KiB, after 1 ms, or before the next non-output event.
@@ -57,7 +58,7 @@ A snapshot is built on the actor thread and contains owned values only:
 - Plain parsed screen text
 - VT checkpoint synthesized by libghostty formatter
 - Raw replay head and tail offsets
-- Current title derived from libghostty state
+- Current effective title and user title
 - Current foreground process derived from PTY process state
 
 No borrowed libghostty object crosses a thread boundary.
@@ -88,6 +89,24 @@ bounded. Results exceeding that budget fail rather than truncate. Complete
 responses remain subject to the transport's 8 MiB frame limit. Protocol 7
 supports `read_rows` alongside the existing snapshot and replay operations.
 
+## Titles
+
+`TerminalInfo.title` is the effective title: the user title, else the latest
+OSC 0/2 title, else the title given at creation. An empty OSC title (a program
+resetting it) or an empty user title counts as unset. `TerminalInfo.user_title`
+is always serialized, as `null` when unset.
+
+`Request::Rename { id, title: Option<String> }` (`op: "rename"`) sets the user
+title, or clears it when `title` is null or empty, and returns `Response::Ok`.
+The terminal actor handles it as one command, so it is ordered with output.
+OSC titles keep being tracked while a user title is set and show through again
+once it is cleared.
+
+Rename and OSC updates publish `TitleChanged` with the effective title only
+when it changes; an OSC change hidden behind a user title publishes nothing.
+
+`list` returns terminals in creation order.
+
 ## Failure Boundary
 
 Losing the owning server connection stops `opencode-pty` and its terminals.
@@ -108,11 +127,19 @@ only observe or operate an existing daemon and never start one.
 Protocol v7 uses four-byte big-endian framing with bounded UTF-8 JSON control
 frames and tagged raw binary output frames. It supports ping, create, list,
 write, resize, atomic interaction promotion, snapshot, read_rows, replay, replay-to-live
-subscriptions, title updates, controller takeover, terminate, and destructive service
+subscriptions, title updates, rename, controller takeover, terminate, and destructive service
 shutdown, ownership acquisition, and restart handoff preparation.
 
+`Pong` and the registration carry `features`, the daemon's additive
+capabilities (currently `["rename"]`). Additive changes, such as a new request
+or field older clients can ignore, extend `features` and keep the protocol
+version; clients check `features` before sending a new request, since a daemon
+that cannot parse one drops the connection. Only breaking changes bump
+`PROTOCOL_VERSION`, which clients reject on mismatch. A missing `features`
+means none.
+
 Registration is written atomically with private permissions and contains an
-instance ID, PID, protocol version, socket path, and random credential. A
+instance ID, PID, protocol version, features, socket path, and random credential. A
 service lock elects one process and protects stale socket cleanup. On Unix, the
 socket uses a fixed-length hash of the canonical runtime path
 under a private per-user `/tmp` directory to stay below platform path limits.

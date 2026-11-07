@@ -46,12 +46,14 @@ export function useNewSessionLocationDialog(input: {
 }) {
   const dialog = useDialog()
 
-  return (options?: { onWorkspace?: (value: string) => void }) => {
+  /** Pass `project` to open straight on that project's worktree step; stepping back still reaches the projects. */
+  return (options?: { project?: PromptProject; onWorkspace?: (value: string) => void }) => {
     void dialog.show(
       () => (
         <NewSessionLocationDialog
           project={input.project}
           workspace={input.workspace}
+          drilled={options?.project}
           onWorkspace={options?.onWorkspace}
         />
       ),
@@ -63,6 +65,7 @@ export function useNewSessionLocationDialog(input: {
 function NewSessionLocationDialog(props: {
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
+  drilled?: PromptProject
   onWorkspace?: (value: string) => void
 }) {
   const dialog = useDialog()
@@ -81,7 +84,12 @@ function NewSessionLocationDialog(props: {
     query: string
     /** The projects view to restore when stepping back out of a project or the server step. */
     back?: { query: string; active: string; others: boolean }
-  }>({ query: "", others: false })
+  }>({
+    query: "",
+    others: false,
+    drilled: props.drilled,
+    back: props.drilled ? { query: "", active: projectEntryID(props.drilled), others: false } : undefined,
+  })
 
   const connection = (project: PromptProject) =>
     project.server ? servers.list.find((item) => ServerConnection.key(item) === project.server!.key) : serverSDK.server

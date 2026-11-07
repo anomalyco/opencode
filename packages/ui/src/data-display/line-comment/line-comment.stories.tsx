@@ -13,6 +13,7 @@ Line comment **display** and **editor** cards aligned with OpenCode line-comment
 ### Editor
 - \`LineCommentEditor\`: the card is the text field (\`label\` names it, default “Comment”), footer (optional selection meta + Cancel / Comment).
 - \`Enter\` submits (Shift+Enter newline); \`Escape\` cancels. Controlled via \`value\` / \`onInput\`.
+- Compact editors show a cancel action when empty, unless \`allowEmpty\` enables submitting an optional comment.
 `
 
 export default {
@@ -69,17 +70,32 @@ export const DisplayMultiline = {
 }
 
 export const Editor = {
-  render: () => {
+  args: { variant: "default", allowEmpty: false },
+  argTypes: {
+    variant: { control: "select", options: ["default", "compact"] },
+    allowEmpty: { control: "boolean" },
+  },
+  render: (args) => {
     const [value, setValue] = createSignal("")
+    const [result, setResult] = createSignal("")
 
     return (
       <div style={{ width: "400px" }}>
         <LineCommentEditor
+          variant={args.variant}
+          allowEmpty={args.allowEmpty}
           value={value()}
           onInput={setValue}
-          onCancel={() => setValue("")}
-          onSubmit={() => setValue("")}
+          onCancel={() => {
+            setValue("")
+            setResult("Cancelled")
+          }}
+          onSubmit={(comment) => {
+            setValue("")
+            setResult(`Submitted: ${comment}`)
+          }}
         />
+        <output aria-label="Editor result">{result()}</output>
       </div>
     )
   },

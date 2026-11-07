@@ -885,7 +885,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
             <Show when={textual() ? answerField()!.key : undefined} keyed>
               <box paddingLeft={1}>
                 <textarea
-                  cursorStyle={config.cursor}
+                  cursorStyle={{ ...config.cursor }}
                   ref={(val: TextareaRenderable) => {
                     textarea = val
                     val.traits = { status: "ANSWER" }
@@ -1025,7 +1025,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                         >
                           <textarea
                             flexGrow={1}
-                            cursorStyle={config.cursor}
+                            cursorStyle={{ ...config.cursor }}
                             ref={(val: TextareaRenderable) => {
                               textarea = val
                               val.traits = { status: "ANSWER" }

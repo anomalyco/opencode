@@ -3,7 +3,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { expect } from "bun:test"
-import { binaryPath } from "@opencode-ai/pty"
+import { binaryPath } from "@opencode/pty"
 import { PersistentPty } from "@opencode/schema/persistent-pty"
 import { Session } from "@opencode/schema/session"
 import { Effect, Exit, Schema, Scope } from "effect"
@@ -140,6 +140,55 @@ async function waitForRead(client: ReturnType<typeof OpenCode.make>, sessionID: 
   }
   throw new Error(`Terminal ${ptyID} did not become current for ${sessionID}`)
 }
+
+smoke(
+  "rejects a cwd that is missing or not a directory without starting a shell",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* testDirectory()
+      const server = yield* ServerProcess.start<never, never>({
+        hostname: "127.0.0.1",
+        port: 0,
+        password: "secret",
+        app: { version: "test-version" },
+        database: { path: fixture.database },
+        pty: { root: fixture.directory },
+        fs: { filewatcher: false },
+      })
+      const base = HttpServer.formatAddress(server.address)
+      const createPath = "/api/experimental/session/ses_invalid_cwd/terminal"
+      const file = path.join(fixture.root, "file.txt")
+      yield* Effect.promise(() => fs.writeFile(file, ""))
+      for (const cwd of [path.join(fixture.root, "missing"), file]) {
+        const response = yield* Effect.promise(async () => {
+          const response = await fetch(new URL(createPath, base), {
+            method: "POST",
+            headers: { authorization: `Basic ${btoa("opencode:secret")}`, "content-type": "application/json" },
+            body: JSON.stringify({ command: "/bin/sh", args: [], cwd, title: "invalid", env: {} }),
+          })
+          return { status: response.status, body: await response.json() }
+        })
+        expect(response).toEqual({
+          status: 400,
+          body: {
+            _tag: "InvalidRequestError",
+            message: `cwd is not a directory: ${cwd}`,
+            kind: "invalid_cwd",
+            field: "cwd",
+          },
+        })
+      }
+      // The daemon is never started, so no shell can have been spawned.
+      expect(existsSync(fixture.directory)).toBeFalse()
+      expect((yield* request(base, "GET", createPath)).data).toEqual([])
+      const valid = { command: "/bin/sh", args: [], cwd: fixture.root, title: "valid", env: {} }
+      const created = yield* request(base, "POST", createPath, valid)
+      const terminal = Schema.decodeUnknownSync(PersistentPty.Info)(created.data)
+      expect(terminal.cwd).toBe(fixture.root)
+      yield* request(base, "POST", "/api/experimental/persistent-pty/shutdown")
+    }),
+  20_000,
+)
 
 smoke(
   "creates two persistent terminals for one session through the client API",

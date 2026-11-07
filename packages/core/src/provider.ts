@@ -115,6 +115,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/groq", () => import("@opencode/ai/providers/groq")],
   ["@opencode/ai/providers/meta", () => import("@opencode/ai/providers/meta")],
   ["@opencode/ai/providers/meta/chat", () => import("@opencode/ai/providers/meta/chat")],
+  ["@opencode/ai/providers/meta/images", () => import("@opencode/ai/providers/meta/images")],
   ["@opencode/ai/providers/meta/messages", () => import("@opencode/ai/providers/meta/messages")],
   ["@opencode/ai/providers/meta/responses", () => import("@opencode/ai/providers/meta/responses")],
   ["@opencode/ai/providers/minimax", () => import("@opencode/ai/providers/minimax")],

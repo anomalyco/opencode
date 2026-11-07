@@ -157,6 +157,25 @@ Search the web for the latest Bun release notes.
 Permission: `websearch` with the query as its resource. See [Websearch](/websearch)
 for providers, selection, rate limits, and disabling the tool.
 
+## Images
+
+### Image generate
+
+`experimental_image_generate` creates a new image from a prompt, or edits
+existing ones. It is experimental and appears while a connected provider has an
+image model. To choose its default model, see
+[`experimental.image_generate`](/config#image-generation).
+
+```text
+Generate a flat app icon of a paper plane on a blue background and save it to assets/icon.png.
+```
+
+Give it a `prompt`, and optionally `images` to edit or use as references, a
+specific `model`, or a `path` to save to. It runs in the background and
+notifies the session with the saved path when the image is ready.
+
+Permission: `experimental_image_generate` with the selected model as its resource.
+
 ## Interaction
 
 ### Question

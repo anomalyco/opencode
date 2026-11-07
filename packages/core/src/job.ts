@@ -23,6 +23,12 @@ const Background = Schema.Struct({
       agent: Schema.String,
       description: Schema.String,
     }),
+    Schema.Struct({
+      kind: Schema.Literal("image"),
+      sessionID: SessionSchema.ID,
+      path: Schema.String,
+      model: Schema.String,
+    }),
   ]),
   status: Schema.Literals(["running", "completed", "error", "cancelled"]),
   output: Schema.optionalKey(Schema.String),

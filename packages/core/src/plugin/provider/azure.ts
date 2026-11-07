@@ -337,7 +337,7 @@ export function make(
 
       const refresh = () => rebind().pipe(Effect.andThen(FiberHandle.run(discovery, discover())))
 
-      // The connection's resource wins for Azure itself, matching the runtime merge of credentials over settings.
+      // The connection's resource wins over configured settings for Azure itself.
       const resourceFor = (provider: Provider.Info) =>
         provider.id === Provider.ID.azure
           ? (loaded.resource ?? resolveResourceName(provider.settings))

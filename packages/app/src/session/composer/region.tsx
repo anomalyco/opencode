@@ -23,6 +23,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { uuid } from "@/runtime/persistence/uuid"
 import { contextItemKey } from "@/composer/schema"
 import type { QuoteSource } from "@/composer/quote-source"
+import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { requireServerKey, sessionHref } from "@/shell/routes/session"
 import { useComposerCommands } from "@/composer/commands"
@@ -36,6 +37,7 @@ import { useSessionFork } from "../fork"
 import { SessionComposerRegion } from "./session-composer-region"
 import { createSessionComposerController, type SessionComposerController } from "./controller"
 import { SessionQueuePanel } from "./queue-panel"
+import { SessionGoLimitTray } from "./go-limit-tray"
 import { SessionActivityChips, type SessionActivityItem } from "./activity-chips"
 import { SessionComposerLane, useComposerLaneAlignment } from "./composer-lane"
 import { SessionTodoPill } from "./todo-pill"
@@ -49,6 +51,7 @@ import { createSessionRequestModel } from "../requests/model"
 import type { Region } from "@/runtime/plugin/panels"
 import { SessionLocationMissing } from "./location-missing"
 import { SessionPluginPills } from "./plugin-pills"
+import { createTimelineActions, type TimelineActionsView, type TimelinePendingActions } from "./timeline-actions"
 import type { MountedSession, SessionScreen } from "@opencode/plugin/gui"
 
 export function createActiveSessionRegion(input: {
@@ -228,13 +231,16 @@ export function createActiveSessionRegion(input: {
 
   const recalled = new Set<string>()
 
-  // The free allowance stops a prompt after it was sent. Hand its text back so switching models and resending is one
-  // step, unless the user has already started typing something else.
+  // The free allowance or a Go usage limit stops a prompt after it was sent. Hand its text back so switching models and
+  // resending is one step, unless the user has already started typing something else.
   onCleanup(
     location().event.on("session.step.failed", (event) => {
       const sessionID = input.session.identity.params.id
+      const type = event.data.error.type
 
-      if (!sessionID || event.data.sessionID !== sessionID || event.data.error.type !== "provider.free-limit") return
+      if (!sessionID || event.data.sessionID !== sessionID) return
+
+      if (type !== "provider.free-limit" && type !== "provider.go-limit") return
 
       if (recalled.has(event.data.assistantMessageID)) return
       recalled.add(event.data.assistantMessageID)
@@ -267,12 +273,8 @@ export function createActiveSessionRegion(input: {
     showToast({ title: language.t("common.requestFailed") })
   }
 
-  const pendingSteer: NonNullable<SessionUserActions["pending"]> = {
-    status: (messageID) => {
-      const sessionID = input.session.identity.params.id
-
-      return sessionID ? data.session.pending.status(sessionID, messageID) : undefined
-    },
+  const pendingSteer: TimelinePendingActions = {
+    status: (sessionID, messageID) => data.session.pending.status(sessionID, messageID),
     queue: ({ sessionID, messageID }) =>
       server.api.session.inbox
         .update({ sessionID, inboxID: messageID, delivery: "queue" })
@@ -353,16 +355,16 @@ export function createActiveSessionRegion(input: {
       source: () => prompt.capture().quoteSource,
       // A child session has no composer to quote into, and a shell command takes no quotes.
       available: () => !input.session.data.isChild() && prompt.capture().mode.current() !== "shell",
-      add: (text: string, comment: boolean, source: QuoteSource) => {
+      add: (text: string, source: QuoteSource, anchor?: ComposerQuoteAnchor) => {
         const item = { type: "quote" as const, text, commentID: uuid() }
         prompt.context.add(item)
 
         if (source.length) prompt.capture().quoteSource.add(contextItemKey(item), source)
 
-        if (comment) {
+        if (anchor) {
           prompt.capture().quoteSource.pend(contextItemKey(item))
 
-          return prompt.capture().quoteComment.set(contextItemKey(item))
+          return prompt.capture().quoteComment.set(contextItemKey(item), anchor)
         }
 
         focusPrompt()
@@ -370,29 +372,15 @@ export function createActiveSessionRegion(input: {
       focus: focusPrompt,
     },
     actions: {
-      timeline: {
-        get revert() {
-          if (input.session.data.isChild()) return
-
-          return revertMessage
-        },
-        get fork() {
-          if (input.session.data.isChild()) return
-
-          return forkMessage
-        },
-        get pending() {
-          if (input.session.data.isChild()) return
-
-          return pendingSteer
-        },
-        get chooseModel() {
-          if (input.session.data.isChild()) return
-
-          return () => command.trigger("model.choose")
-        },
-        openAttachment,
-      } satisfies SessionUserActions,
+      // Each timeline passes its own session and child flag, which a kept timeline holds while another is routed.
+      timeline: (view: TimelineActionsView) =>
+        createTimelineActions(view, {
+          revert: revertMessage,
+          fork: forkMessage,
+          pending: pendingSteer,
+          chooseModel: () => command.trigger("model.choose"),
+          openAttachment,
+        }),
     },
     requests: state,
   }
@@ -574,6 +562,10 @@ export function ActiveSessionComposerRegion(props: {
             <SessionPluginPills session={props.view()} screen={props.screen} alignment={alignment} />
           </SessionComposerLane>
           <SessionQueuePanel queue={props.model.queue} hidden={props.model.region.state.blocked()} />
+          <SessionGoLimitTray
+            sessionID={props.session.identity.params.id}
+            selection={() => props.model.composer.model.selection}
+          />
         </Show>
       }
       composer={

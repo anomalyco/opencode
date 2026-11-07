@@ -40,11 +40,11 @@ merges into `policies`:
 
 Each statement has three fields:
 
-| Field      | Values                                        | Meaning                                              |
-| ---------- | --------------------------------------------- | ---------------------------------------------------- |
-| `action`   | `provider.use`, `tool.use`, `integration.use` | The operation being controlled                       |
-| `resource` | string or wildcard pattern                    | What the statement applies to; depends on the action |
-| `effect`   | `allow`, `deny`                               | The decision when this statement matches             |
+| Field      | Values                                                                                                     | Meaning                                              |
+| ---------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `action`   | `provider.use`, `tool.use`, `integration.connect`, `integration.use`, `mcp.use`, `skill.use`, `plugin.use` | The operation being controlled                       |
+| `resource` | string or wildcard pattern                                                                                 | What the statement applies to; depends on the action |
+| `effect`   | `allow`, `deny`                                                                                            | The decision when this statement matches             |
 
 Statements that fail validation are dropped with a warning in the server log and
 the rest of the list still applies. Check the log after editing a `deny`.
@@ -153,27 +153,104 @@ broader `deny`, after which the agent's own rules decide.
 
 ## Integrations
 
-`integration.use` controls whether an MCP server, skill, or plugin is loaded. The
-resource is the integration kind and its ID:
+An integration is anything you connect in `/connect`: the OpenCode Console
+(`opencode`), a provider such as `anthropic`, a web search service such as `exa`,
+or a well-known config origin such as `https://ai.acme.com`. Signing in to an MCP
+server is not affected by integration policies; use `mcp.use` to control MCP
+servers.
 
-| Resource          | Applies to                                                        |
-| ----------------- | ----------------------------------------------------------------- |
-| `mcp:<server>`    | An [MCP server](/mcp-servers) by its configured name              |
-| `skill:<id>`      | A [skill](/skills) by its ID                                      |
-| `plugin:<target>` | A [plugin](/plugins) by unversioned package name or absolute path |
+`integration.connect` controls which integrations `/connect` lists and which can be
+connected. The resource is the integration ID.
+
+`integration.use` controls everything an integration supplies: its providers and
+models, its web search, and the MCP servers and config a Console workspace or
+well-known origin delivers. The resource is `<integration>#<account>`, where the
+account is the connected organization or account ID, such as
+`opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1`. Without a connected account it is the
+bare integration ID: the signed-out free tier is `opencode`, an `ANTHROPIC_API_KEY`
+environment variable is `anthropic`, and a provider from `opencode.json` is its
+provider ID.
+
+This MDM policy requires one Console workspace and nothing else:
 
 ```jsonc
 {
   "policies": [
-    { "action": "integration.use", "resource": "mcp:*", "effect": "deny" },
-    { "action": "integration.use", "resource": "mcp:github", "effect": "allow" },
-    { "action": "integration.use", "resource": "plugin:opencode-acme-cli", "effect": "deny" },
+    { "action": "integration.connect", "resource": "*", "effect": "deny" },
+    { "action": "integration.connect", "resource": "opencode", "effect": "allow" },
+    { "action": "integration.use", "resource": "*", "effect": "deny" },
+    { "action": "integration.use", "resource": "opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1", "effect": "allow" },
+  ],
+}
+```
+
+`/connect` offers only the Console so members can sign in. The free tier, personal
+Console accounts, other organizations, environment API keys, and providers from
+`opencode.json` are all unavailable. The workspace's providers, MCP servers, and
+web search work, and changing them in the Console needs no new MDM profile.
+
+Only managed policies can withhold the MCP servers and config an integration
+delivers; its own policies keep applying either way.
+
+A provider the connected Console workspace supplies can't be changed by user,
+project, or remote configuration: its settings, headers, models, and package come
+only from the Console and managed configuration. Other providers stay configurable
+as usual.
+
+## MCP servers, skills, and plugins
+
+| Action       | Resource                                                          |
+| ------------ | ----------------------------------------------------------------- |
+| `mcp.use`    | An [MCP server](/mcp-servers) by its configured name              |
+| `skill.use`  | A [skill](/skills) by its ID                                      |
+| `plugin.use` | A [plugin](/plugins) by unversioned package name or absolute path |
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "plugin.use", "resource": "opencode-acme-cli", "effect": "deny" },
   ],
 }
 ```
 
 A denied MCP server or skill is removed, and a denied plugin is not loaded, however
 it was configured.
+
+### Upgrading from `integration.use`
+
+Before OpenCode 2.3.0, `integration.use` covered MCP servers, skills, and plugins
+through an `mcp:`, `skill:`, or `plugin:` prefix. Prefixed statements still load and
+are converted to `mcp.use`, `skill.use`, or `plugin.use`.
+
+A statement without one of those prefixes, including a bare `*`, now applies to
+integrations instead. A broad deny such as
+
+```jsonc
+{ "action": "integration.use", "resource": "*", "effect": "deny" }
+```
+
+no longer blocks MCP servers, skills, or plugins. Instead it blocks every provider,
+including the free tier, unless a later statement allows an integration. To keep
+the old meaning, replace it with:
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "skill.use", "resource": "*", "effect": "deny" },
+    { "action": "plugin.use", "resource": "*", "effect": "deny" },
+  ],
+}
+```
+
+Exceptions move the same way: `integration.use` `mcp:github` becomes `mcp.use`
+`github`, and `skill:team:review` becomes `skill.use` `team:review`.
+
+Clients older than 2.3.0 ignore `integration.connect`, `integration.use` (in its new
+meaning), `mcp.use`, `skill.use`, and `plugin.use`, so require 2.3.0 or newer
+wherever you rely on them.
 
 ## Precedence
 

@@ -53,7 +53,7 @@ const nativeOptions = (options: XAIImageOptions | undefined) => {
 }
 
 /** xAI renders `1k` or `2k`; other tiers use the nearest one. */
-const resolution = (request: Request) => {
+export const resolution = (request: { readonly resolution?: string }) => {
   if (request.resolution === undefined) return undefined
   return (ImageSizing.tier(request.resolution) ?? 1) < 1.5 ? "1k" : "2k"
 }
@@ -133,4 +133,5 @@ export const model = (input: MediaRoute.ModelInput) =>
 export const XAIImages = {
   protocol,
   model,
+  resolution,
 } as const

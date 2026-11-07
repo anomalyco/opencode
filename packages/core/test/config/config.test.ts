@@ -217,37 +217,35 @@ describe("Config", () => {
 
   // Filesystem sandboxes deny reads outside the project. Simulate a denied discovery root with a
   // symlink into an unsearchable directory, which makes realpath fail with EACCES.
-  itWithPermissions(
-    "treats unreadable discovery roots as absent",
-    () =>
-      Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
-        Effect.flatMap((tmp) => {
-          const global = path.join(tmp.path, "global")
-          const home = path.join(global, "home")
-          const project = path.join(home, "project")
-          const locked = path.join(tmp.path, "locked")
-          return Effect.promise(async () => {
-            await fs.mkdir(path.join(locked, "agents"), { recursive: true })
-            await fs.mkdir(project, { recursive: true })
-            await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ shell: "project" }))
-            await fs.symlink(path.join(locked, "agents"), path.join(home, ".agents"))
-            await fs.symlink(path.join(locked, "agents"), path.join(project, ".opencode"))
-            await fs.chmod(locked, 0o000)
-          }).pipe(
-            Effect.andThen(Effect.addFinalizer(() => Effect.promise(() => fs.chmod(locked, 0o755)))),
-            Effect.andThen(
-              Effect.gen(function* () {
-                const config = yield* Config.Service
-                const entries = yield* config.entries()
-                expect(entries.flatMap((entry) => (entry.type === "document" ? [entry.info.shell] : []))).toEqual([
-                  "project",
-                ])
-              }).pipe(Effect.provide(testLayer(project, global))),
-            ),
-            Effect.scoped,
-          )
-        }),
-      ),
+  itWithPermissions("treats unreadable discovery roots as absent", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const home = path.join(global, "home")
+        const project = path.join(home, "project")
+        const locked = path.join(tmp.path, "locked")
+        return Effect.promise(async () => {
+          await fs.mkdir(path.join(locked, "agents"), { recursive: true })
+          await fs.mkdir(project, { recursive: true })
+          await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ shell: "project" }))
+          await fs.symlink(path.join(locked, "agents"), path.join(home, ".agents"))
+          await fs.symlink(path.join(locked, "agents"), path.join(project, ".opencode"))
+          await fs.chmod(locked, 0o000)
+        }).pipe(
+          Effect.andThen(Effect.addFinalizer(() => Effect.promise(() => fs.chmod(locked, 0o755)))),
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              const entries = yield* config.entries()
+              expect(entries.flatMap((entry) => (entry.type === "document" ? [entry.info.shell] : []))).toEqual([
+                "project",
+              ])
+            }).pipe(Effect.provide(testLayer(project, global))),
+          ),
+          Effect.scoped,
+        )
+      }),
+    ),
   )
 
   it.live("discovers the global config directory once when the project walk reaches it", () =>
@@ -323,9 +321,7 @@ describe("Config", () => {
               ])
               expect(Config.latest(entries, "shell")).toBe("system")
               expect(Config.latest(entries, "username")).toBe("system-user")
-              expect(
-                ManagedPolicy.decision(ManagedPolicy.statements(entries), "tool.use", "shell:ls"),
-              ).toBe("deny")
+              expect(ManagedPolicy.decision(ManagedPolicy.statements(entries), "tool.use", "shell:ls")).toBe("deny")
             }).pipe(
               Effect.provide(
                 testLayer(project, global, project, undefined, undefined, emptyCredentialNode, emptyWellknownNode, {
@@ -556,6 +552,110 @@ describe("Config", () => {
             }).pipe(
               Effect.provide(
                 testLayer(project, global, project, undefined, undefined, emptyCredentialNode, emptyWellknownNode, {
+                  system,
+                }),
+              ),
+            ),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.live("keeps only the policies of documents from integrations managed policy denies", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const system = path.join(tmp.path, "system")
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        const allowed = "org_allowed"
+        const opencode = Integration.ID.make("opencode")
+        const origin = "https://ai.acme.com"
+        const credentialID = Credential.ID.create()
+        let org = "org_personal"
+        const credentialNode = makeGlobalNode({
+          service: Credential.Service,
+          layer: Layer.mock(Credential.Service)({
+            list: () => Effect.succeed([]),
+            get: (id) =>
+              Effect.succeed(
+                new Credential.Info({
+                  id,
+                  integrationID: opencode,
+                  label: "Console",
+                  value: Credential.Key.make({ type: "key", key: "secret", metadata: { orgID: org } }),
+                }),
+              ),
+          }),
+          deps: [],
+        })
+        const entry: WellKnown.Entry = { origin, integrationID: Integration.ID.make(origin), manifest: {} }
+        const wellknownNode = makeGlobalNode({
+          service: WellKnown.Service,
+          layer: Layer.mock(WellKnown.Service)({
+            entries: () => Effect.succeed([entry]),
+            snapshot: () => [entry],
+            cached: () =>
+              Effect.succeed([
+                {
+                  mcp: { servers: { wiki: { type: "remote", url: "https://wiki.acme.com/mcp" } } },
+                  policies: [{ action: "tool.use", resource: "shell:rm*", effect: "deny" }],
+                },
+              ]),
+          }),
+          deps: [],
+        })
+        const supplied = (entries: readonly Entry[]) =>
+          entries.flatMap((entry) =>
+            entry.type === "document" && !entry.path
+              ? [{ servers: Object.keys(entry.info.mcp?.servers ?? {}), policies: entry.info.policies?.length ?? 0 }]
+              : [],
+          )
+        return Effect.promise(() =>
+          fs.mkdir(system, { recursive: true }).then(() =>
+            fs.writeFile(
+              path.join(system, "opencode.json"),
+              JSON.stringify({
+                policies: [
+                  { action: "integration.use", resource: "*", effect: "deny" },
+                  { action: "integration.use", resource: `opencode#${allowed}`, effect: "allow" },
+                ],
+              }),
+            ),
+          ),
+        ).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              const install = () =>
+                config.integration!(
+                  opencode,
+                  ConfigIntegration.make({
+                    integrationID: opencode,
+                    connection: { type: "credential", id: credentialID, label: "Console", method: "key" },
+                    organization: org,
+                    info: decodeInfo({
+                      mcp: { servers: { docs: { type: "remote", url: "https://docs.acme.com/mcp" } } },
+                      policies: [{ action: "mcp.use", resource: "github", effect: "deny" }],
+                    }),
+                  }),
+                )
+              yield* install()
+              // The personal account's servers and the denied well-known origin's config are gone; their policies stay.
+              expect(supplied(yield* config.entries())).toEqual([
+                { servers: [], policies: 1 },
+                { servers: [], policies: 1 },
+              ])
+              org = allowed
+              yield* config.integration!(opencode, undefined)
+              yield* install()
+              expect(supplied(yield* config.entries())).toEqual([
+                { servers: ["docs"], policies: 1 },
+                { servers: [], policies: 1 },
+              ])
+            }).pipe(
+              Effect.provide(
+                testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode, {
                   system,
                 }),
               ),

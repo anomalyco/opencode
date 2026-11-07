@@ -6,7 +6,7 @@ import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { ProviderID, type ModelID, type OpenString, type ProviderOptions } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { SystemOne } from "../protocols/system-one.js"
-import { OpenAIImages } from "../protocols/openai-images.js"
+import { OpenAIImages, type OpenAIImageSizing } from "../protocols/openai-images.js"
 import { MediaRoute } from "../route/media.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
@@ -176,6 +176,21 @@ const bodyOptions = (body: OpenAIChat.OpenAIChatBody, input: unknown, maxTokens:
   }
 }
 
+const IMAGE_RESOLUTIONS = new Set(["512", "768", "1K", "1.5K", "2K", "4K"])
+
+// A pixel `size` renders at the upstream's own tier (Gemini 2K comes back as 4K) and FLUX 3 rejects it, so sizing goes
+// out as an aspect ratio and a resolution tier. Values OpenRouter doesn't list are left out.
+const imageSizing: OpenAIImageSizing = (request) => {
+  const resolution = request.resolution
+    ?.toUpperCase()
+    .replace(/^0\.5K$/, "512")
+    .replace(/^0\.75K$/, "768")
+  return {
+    aspect_ratio: request.aspect,
+    resolution: resolution !== undefined && IMAGE_RESOLUTIONS.has(resolution) ? resolution : undefined,
+  }
+}
+
 export const route = Route.make({
   id: ADAPTER,
   provider: id,
@@ -213,7 +228,14 @@ export const configure = (input: Config = {}) => {
   })
   const media = MediaRoute.deployment({ ...input, baseURL: input.baseURL ?? baseURL }, auth)
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
-    OpenAIImages.model({ ...media, id: modelID, provider: id, providerOptions })
+    OpenAIImages.model({
+      ...media,
+      id: modelID,
+      provider: id,
+      providerOptions,
+      sizing: imageSizing,
+      imageInput: "references",
+    })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     decisionRoute.model<OpenRouterDecisionOptions>({
       id: modelID,

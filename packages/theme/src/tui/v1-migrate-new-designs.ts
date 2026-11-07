@@ -9,6 +9,7 @@ import {
   categoricalTokens,
   chromaticHues,
   detectMode,
+  dialogBackground,
   hex,
   inferHues,
   referenceHues,
@@ -28,7 +29,7 @@ export function migrateV1NewDesigns(theme: ThemeV1Json): ThemeDocument {
     const darkMode = detectMode(dark)
     if (lightMode === darkMode) {
       const definition = migrateMode(lightMode === "light" ? light : dark, lightMode)
-      if (lightMode === "light") return { base: base(definition), light: lightOverrides(definition) }
+      if (lightMode === "light") return { base: base(definition), light: lightOverrides(definition, light) }
       return { base: base(definition), dark: { hue: definition.hue } }
     }
   }
@@ -36,7 +37,7 @@ export function migrateV1NewDesigns(theme: ThemeV1Json): ThemeDocument {
   const darkDefinition = migrateMode(dark, "dark")
   return {
     base: base(lightDefinition),
-    light: lightOverrides(lightDefinition),
+    light: lightOverrides(lightDefinition, light),
     dark: darkDefinition,
   }
 }
@@ -53,8 +54,12 @@ const lightDialog = {
   },
 } satisfies ModeDefinition["@dialog"]
 
-function lightOverrides(definition: ThemeDefinition): ModeDefinition {
-  return { hue: definition.hue, "@dialog": lightDialog }
+function lightOverrides(definition: ThemeDefinition, theme: Theme): ModeDefinition {
+  if (theme.backgroundPanel.a === 1) return { hue: definition.hue, "@dialog": lightDialog }
+  return {
+    hue: definition.hue,
+    "@dialog": { ...lightDialog, background: { ...lightDialog.background, base: dialogBackground(theme) } },
+  }
 }
 
 // Mirrors the opencode2 token layout: text at 100/200/300, the page at 900, raised surfaces at 700/600/500,
@@ -125,7 +130,7 @@ function migrateMode(theme: Theme, mode: Mode): ThemeDefinition {
     ...paletteTokens(theme),
     "@dialog": {
       background: {
-        base: "$background.raised.base",
+        base: dialogBackground(theme),
         action: {
           primary: { $hovered: "$background.raised.max" },
           secondary: { $hovered: "$background.raised.max" },

@@ -1,4 +1,4 @@
-import { Show } from "solid-js"
+import { Show, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { InlineInput } from "@opencode/ui/inline-input"
 import { getFilename } from "@opencode/util/path"
@@ -16,17 +16,25 @@ export function SettingsProjectRow(props: {
   project: LocalProject
   server: ServerConnection.Any
   onOpen: (project: LocalProject) => void
+  onAdd?: () => void
+  onMount?: (button: HTMLButtonElement) => void
 }) {
   const language = useLanguage()
   const global = useGlobal()
 
-  const [store, setStore] = createStore({
+  const [store, setStore] = createStore<{
+    menu: boolean
+    editor?: { draft: string; saving: boolean }
+  }>({
     menu: false,
-    editor: undefined as { draft: string; saving: boolean } | undefined,
   })
 
   let button: HTMLButtonElement | undefined
   let input: HTMLInputElement | undefined
+
+  onMount(() => {
+    if (button) props.onMount?.(button)
+  })
 
   const openEditor = () => {
     setStore("editor", { draft: displayName(props.project), saving: false })
@@ -147,6 +155,7 @@ export function SettingsProjectRow(props: {
             onOpenChange={(open) => setStore("menu", open)}
             onEdit={() => props.onOpen(props.project)}
             onRename={openEditor}
+            onAdd={props.onAdd}
           />
         </Show>
       </div>

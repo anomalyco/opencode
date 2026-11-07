@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.sessionReview.title": "Sesijas izmaiņas",
   "ui.sessionReview.title.git": "Git izmaiņas",
   "ui.sessionReview.title.branch": "Zara izmaiņas",
@@ -72,10 +72,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Abonē OpenCode Go par $10/mēn., lai iegūtu uzticamu piekļuvi labākajiem atvērtā koda modeļiem.",
   "dialog.usageExceeded.freeTier.actionLabel": "Abonēt",
-  "dialog.usageExceeded.accountRateLimit.title": "Sasniegts Go limits",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Lietojuma limits sasniegts. Lai turpinātu izmantot šo modeli, aktivizē lietošanu no sava atlikuma",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Atvērt iestatījumus",
   "ui.sessionTurn.status.delegating": "Deleģē darbu",
   "ui.sessionTurn.status.planning": "Plāno nākamos soļus",
   "ui.sessionTurn.status.gatheringContext": "Izpēta",

@@ -99,7 +99,7 @@ const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(f
     return FileAttachment.create({
       data: Base64.make(Buffer.from(blob.data).toString("base64")),
       mime: blob.mime,
-      source: { type: "inline" },
+      source: input.source ?? { type: "inline" },
       name: input.name,
       description: input.description,
       mention: input.mention,
@@ -109,7 +109,7 @@ const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(f
   const resolved = input.uri.startsWith("data:")
     ? {
         bytes: yield* decodeDataURL(input.uri, label),
-        source: { type: "inline" as const },
+        source: input.source ?? { type: "inline" as const },
         start: undefined,
         end: undefined,
         name: undefined,

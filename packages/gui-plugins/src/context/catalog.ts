@@ -3,10 +3,13 @@ import { createKeyed, type MountedSession } from "@opencode/plugin/gui"
 
 const location = (session: MountedSession) => (session.directory ? { directory: session.directory } : undefined)
 
-/** Loads the provider and model catalogs of the routed session's location. */
-export function syncCatalog(session: Accessor<MountedSession>) {
+/**
+ * Loads the provider and model catalogs of the routed session's location. A detached view loads nothing; once
+ * selected again it loads if its target changed or the server reconnected meanwhile.
+ */
+export function syncCatalog(session: Accessor<MountedSession>, active: Accessor<boolean> = () => true) {
   // The same target while another session of the same directory is routed, so a session switch loads nothing.
-  const target = createMemo(
+  const live = createMemo(
     () => {
       const current = session()
 
@@ -14,6 +17,21 @@ export function syncCatalog(session: Accessor<MountedSession>) {
     },
     undefined,
     { equals: (a, b) => a?.data === b?.data && a?.ref?.directory === b?.ref?.directory },
+  )
+
+  const changes = createMemo((count: number) => (live(), count + 1), 0)
+
+  const target = createMemo<
+    { data: MountedSession["server"]["data"]; ref?: { directory: string }; change: number } | undefined
+  >(
+    (previous) => {
+      if (!active()) return previous
+      const current = live()
+
+      return current && { ...current, change: changes() }
+    },
+    undefined,
+    { equals: (a, b) => a?.change === b?.change },
   )
 
   // Loads again when the server reconnects or is replaced, and when another session's directory is routed.

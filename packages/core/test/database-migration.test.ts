@@ -58,6 +58,7 @@ const parkedClient = (arrived: Deferred.Deferred<void>, gate: Deferred.Deferred<
           executeRaw: (query, params) => park(query, connection.executeRaw(query, params)),
         }),
         compiler: Statement.makeCompilerSqlite(),
+        driver: client.driver,
         spanAttributes: [],
       })
     }),

@@ -85,7 +85,55 @@ test("quotes selected terminal output into the composer", async ({ page }) => {
   await expect(chips).toHaveCount(1)
   await expect(chips).toContainText("Terminal")
   await expect(toolbar).toBeHidden()
+  const comment = page.locator('[data-component="composer-quote-comment"] textarea')
+  await expect(comment).toBeFocused()
+  await comment.fill("Investigate this output")
+
+  const atTile = async () => {
+    const popover = await page.locator('[data-component="composer-quote-comment"]').boundingBox()
+    const tile = await chips.nth(0).boundingBox()
+
+    return (
+      popover && tile && Math.abs(popover.x - tile.x) < 1 && Math.abs(popover.y + popover.height - (tile.y - 8)) < 1
+    )
+  }
+
+  await expect.poll(atTile).toBe(false)
+  // Cached terminals can hide without a write or grid resize; the unsaved editor still follows its tile.
+  await page.getByRole("button", { name: "Add tab", exact: true }).click()
+  await expect(terminal).toBeHidden()
+  await expect.poll(atTile).toBe(true)
+  await expect(comment).toHaveValue("Investigate this output")
+  await page.locator("#review-panel").getByRole("tab", { name: "Terminal 1", exact: true }).click()
+  await expect(terminal).toBeVisible()
+  await expect.poll(atTile).toBe(false)
+  await expect(comment).toHaveValue("Investigate this output")
+
+  // Any output invalidates terminal row identity; the same draft stays open beside its composer tile.
+  pty.send(Array.from({ length: 80 }, (_, index) => `output row ${index}\r\n`).join(""))
+  await expect.poll(atTile).toBe(true)
+  await expect(comment).toHaveValue("Investigate this output")
+  await comment.fill("")
+  await comment.press("Enter")
+  await expect(comment).toHaveCount(0)
   await expect(editor).toBeFocused()
+
+  // The plugin's Alt path skips the editor too, and either quote can still be commented from its tile.
+  const next = await canvas.boundingBox()
+
+  if (!next) throw new Error("The terminal has no canvas")
+  await page.mouse.move(next.x + 2, next.y + 4)
+  await page.mouse.down()
+  await page.mouse.move(next.x + 320, next.y + 26, { steps: 8 })
+  await page.mouse.up()
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click({ modifiers: ["Alt"] })
+  await expect(chips).toHaveCount(2)
+  await expect(comment).toHaveCount(0)
+  await expect(editor).toBeFocused()
+  await chips.nth(0).click()
+  await comment.fill("Why did the build fail?")
+  await comment.press("Enter")
+  await expect(chips.nth(0)).toContainText("Why did the build fail?")
 })
 
 test("routes typing to the composer unless the open terminal is focused", async ({ page }) => {

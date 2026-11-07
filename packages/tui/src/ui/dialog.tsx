@@ -96,7 +96,7 @@ export function DialogHeader(
     closeLabel?: string
     onClose?: () => void
     gap?: number
-    /** Faint line below the title. Shown only under the "new-designs" experiment. */
+    /** Muted line below the title. Shown only under the "new-designs" experiment. */
     description?: string
   }>,
 ) {
@@ -112,7 +112,7 @@ export function DialogHeader(
       )}
       {props.children}
       <text
-        fg={newDesigns() ? theme.text.faint : theme.text.muted}
+        fg={theme.text.muted}
         flexShrink={0}
         onMouseUp={() => (props.onClose ?? dialog.clear)()}
       >
@@ -124,7 +124,7 @@ export function DialogHeader(
     <Show when={newDesigns() && props.description} fallback={row()}>
       <box>
         {row()}
-        <text fg={theme.text.faint} wrapMode="word">
+        <text fg={theme.text.muted} wrapMode="word">
           {props.description}
         </text>
       </box>
@@ -297,7 +297,7 @@ function DialogFooterItem(props: { action: DialogFooterAction; variant: "primary
         onMouseOut={() => setHovered(false)}
         onMouseUp={trigger}
       >
-        <text>{label(theme.text.faint)}</text>
+        <text>{label(theme.text.muted)}</text>
       </box>
     </Show>
   )

@@ -8,7 +8,7 @@ story.describe("touch timeline", () => {
     expect(await page.evaluate(() => matchMedia("(hover: none)").matches)).toBe(true)
 
     for (const action of [
-      { slot: "user-message-copy-wrapper", name: "Copy message" },
+      { slot: "user-message-copy-wrapper", name: "More actions" },
       { slot: "text-part-copy-wrapper", name: "Copy response" },
     ]) {
       const actions = timeline.locator(`[data-slot="${action.slot}"]`)
@@ -18,10 +18,9 @@ story.describe("touch timeline", () => {
       await expect(actions.getByRole("button", { name: action.name, exact: true })).toBeVisible()
     }
 
-    // Agent and model are omitted on mobile, leaving only the time and duration.
+    // Agent and model are omitted on mobile, leaving only the response duration.
     await expect(timeline.locator('[data-slot="user-message-meta-item"]')).toHaveCount(0)
     await expect(timeline.locator('[data-slot="user-message-pending"]')).toBeHidden()
-    await expect(timeline.locator('[data-slot="user-message-meta-tail"]')).not.toBeEmpty()
     const responseMeta = timeline.locator('[data-slot="text-part-meta"]')
     await expect(responseMeta).not.toBeEmpty()
     await expect(responseMeta).not.toContainText("Build")
@@ -62,7 +61,7 @@ story("desktop message actions still appear on hover and keyboard focus", async 
   expect(await page.evaluate(() => matchMedia("(hover: hover)").matches)).toBe(true)
 
   for (const action of [
-    { slot: "user-message-copy-wrapper", name: "Copy message" },
+    { slot: "user-message-copy-wrapper", name: "More actions" },
     { slot: "text-part-copy-wrapper", name: "Copy response" },
   ]) {
     const actions = timeline.locator(`[data-slot="${action.slot}"]`)
@@ -72,25 +71,29 @@ story("desktop message actions still appear on hover and keyboard focus", async 
     await actions.locator("..").hover()
     await expect(actions).toHaveCSS("opacity", "1")
     await expect(actions).toHaveCSS("pointer-events", "auto")
+
     if (action.slot === "text-part-copy-wrapper") {
       await expect(actions).toHaveCSS("height", "20px")
-      await expect(actions).toHaveCSS("margin-top", "4px")
-      await expect(actions).toHaveCSS("gap", "8px")
+      await expect(actions).toHaveCSS("margin-top", "8px")
+      await expect(actions).toHaveCSS("gap", "4px")
       const meta = actions.locator('[data-slot="text-part-meta"]')
       await expect(meta).toHaveCSS("font-size", "12px")
-      await expect(meta).toHaveCSS("line-height", "16px")
+      await expect(meta).toHaveCSS("line-height", "18px")
       await expect(meta).toHaveCSS("gap", "4px")
       await expect(meta.locator('[data-slot="text-part-meta-item"]')).toHaveText(["Build", "Claude Sonnet 4", "4s"])
       const separators = meta.locator('[data-slot="text-part-meta-separator"]')
       await expect(separators).toHaveCount(2)
+
       for (const separator of await separators.all()) {
         await expect(separator).toHaveText("\u00B7")
-        await expect(separator).toHaveCSS("opacity", "0.66")
       }
+
       const copy = actions.getByRole("button", { name: action.name, exact: true })
       await expect(copy).toHaveCSS("width", "20px")
       await expect(copy).toHaveCSS("height", "20px")
+      await expect(copy.locator('[data-slot="icon-svg"]')).toHaveCSS("width", "14px")
     }
+
     await page.mouse.move(0, 0)
     await expect(actions).toHaveCSS("opacity", "0")
     await actions.getByRole("button", { name: action.name, exact: true }).focus()

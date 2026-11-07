@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { SessionMessageInfo } from "@opencode/client/promise"
+import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { expected, messages } from "../utils/markdown-sessions"
 import { expectPath, holdRoute, seed, sessionHref, type SeedInput } from "../utils/app"
@@ -66,7 +66,7 @@ for (const width of [1440, 390]) {
       // The gap above the composer is part of the tail: the status lane, then the activity pill and its gap.
       const spacer = page.locator('[data-timeline-row="bottom-spacer"]')
       await expect(spacer).toBeVisible()
-      expect(await spacer.evaluate((element) => element.getBoundingClientRect().height)).toBe(82)
+      expect(await spacer.evaluate((element) => element.getBoundingClientRect().height)).toBe(86)
     } finally {
       release.resolve()
     }
@@ -169,7 +169,7 @@ test("reloads a transcript only after inline file links have their final styling
   }
 })
 
-test("restores verified inline paths before painting after a workspace tab switch", async ({ page }) => {
+test("keeps verified inline paths across a workspace tab switch", async ({ page }) => {
   const directory = "C:/OpenCode/InlinePaths"
   const other = "C:/OpenCode/OtherInlinePaths"
   const sourceID = "ses_inline_source"
@@ -177,7 +177,8 @@ test("restores verified inline paths before painting after a workspace tab switc
   const queries: { query: string; directory: string }[] = []
   const existing = new Set([directory])
   await page.clock.setFixedTime(new Date("2026-10-21T00:00:00Z"))
-  await mockWorkspace(page, {
+
+  const workspace = await mockWorkspace(page, {
     name: "InlinePaths",
     directory,
     project: { sandboxes: [other] },
@@ -204,34 +205,17 @@ test("restores verified inline paths before painting after a workspace tab switc
       return existing.has(input.directory) ? ["src/file.ts"] : []
     },
   })
+
   await page.goto(sessionHref(sourceID))
-  const source = page.locator(`[data-timeline-part-id="answer_${sourceID}:text:0"] code`)
+  const source = part(page, sourceID).locator("code")
   await expect(source).toHaveAttribute("data-inline-code-kind", "path")
   const original = await source.elementHandle()
   await tab(page, targetID).click()
-  const target = page.locator(`[data-timeline-part-id="answer_${targetID}:text:0"] code`)
+  const target = part(page, targetID).locator("code")
   await expect(target).toHaveText("src/file.ts")
   await expect.poll(() => queries.some((query) => query.directory === other)).toBe(true)
   await expect(target).not.toHaveAttribute("data-inline-code-kind")
   expect(await original!.evaluate((node) => node.isConnected)).toBe(false)
-
-  const insertion = await page.evaluateHandle((id) => {
-    type Insertion = { kind?: string | null }
-
-    const state: Insertion = {}
-
-    const observer = new MutationObserver(() => {
-      const code = document.querySelector(`[data-timeline-part-id="answer_${id}:text:0"] code`)
-
-      if (!code) return
-      state.kind = code.getAttribute("data-inline-code-kind")
-      observer.disconnect()
-    })
-
-    observer.observe(document, { childList: true, subtree: true })
-
-    return state
-  }, sourceID)
 
   const count = queries.length
   const held = await holdRoute(page, /\/api\/fs\/find\?/)
@@ -239,25 +223,25 @@ test("restores verified inline paths before painting after a workspace tab switc
   try {
     await tab(page, sourceID).click()
     await expect(source).toBeVisible()
-    // The other workspace disposes the old timeline, so this must exercise a real Markdown remount.
-    expect(await source.evaluate((node, original) => node === original, original)).toBe(false)
-    expect(await insertion.evaluate((state) => state.kind)).toBe("path")
+    // The source workspace's timeline is kept while the other workspace is selected, so its links need no new lookup.
+    expect(await source.evaluate((node, original) => node === original, original)).toBe(true)
+    await expect(source).toHaveAttribute("data-inline-code-kind", "path")
     expect(held.requests).toHaveLength(0)
     expect(queries).toHaveLength(count)
   } finally {
     held.release()
-    await insertion.dispose()
   }
 
-  // Expired positives keep their styling while revalidation is pending; negatives must discover new files.
-  await tab(page, targetID).click()
-  await expect(target).toBeVisible()
+  // Markdown that renders again repeats its lookups: expired positives keep their styling while revalidation is
+  // pending, and negatives must discover new files. Link results last as long as the session screen, which going
+  // Home unmounts, so the text changes in place.
   await page.clock.setFixedTime(new Date("2026-10-21T00:01:01Z"))
   const refresh = await holdRoute(page, /\/api\/fs\/find\?/)
 
   try {
-    await tab(page, sourceID).click()
+    await workspace.push([textEnded(sourceID, directory)])
     await refresh.arrived
+    await expect(part(page, sourceID)).toContainText("again")
     await expect(source).toHaveAttribute("data-inline-code-kind", "path")
   } finally {
     refresh.release()
@@ -265,6 +249,9 @@ test("restores verified inline paths before painting after a workspace tab switc
 
   existing.add(other)
   await tab(page, targetID).click()
+  await expect(target).toBeVisible()
+  await workspace.push([textEnded(targetID, other)])
+  await expect(part(page, targetID)).toContainText("again")
   await expect(target).toHaveAttribute("data-inline-code-kind", "path")
 })
 
@@ -355,7 +342,7 @@ test("focuses Find in the selected cached timeline", async ({ page }) => {
   await expect(search).toHaveCount(0)
 })
 
-test("disposes the old workspace's shell while destination history is loading", async ({ page }) => {
+test("keeps the old workspace's shell on its own Location while destination history is loading", async ({ page }) => {
   const destination = "C:/OpenCode/OtherProject"
   const requested = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
@@ -430,7 +417,7 @@ test("disposes the old workspace's shell while destination history is loading", 
     output.text += "Output after returning\n"
     await tab(page, fixture.sourceID).click()
     await expect(shell.locator('[data-slot="bash-result"]')).toContainText("Output after returning")
-    expect(await original!.evaluate((element) => element.isConnected)).toBe(false)
+    expect(await original!.evaluate((element) => element.isConnected)).toBe(true)
     expect(reads.length).toBeGreaterThan(1)
     expect(reads.every((directory) => directory === fixture.directory)).toBe(true)
   } finally {
@@ -612,6 +599,21 @@ for (const grouped of [true, false]) {
 function placeholderHistory(id: string) {
   return { items: [{ id: `msg_${id}`, type: "user", text: `History for ${id}`, time: { created: 1 } }] } satisfies {
     items: SessionMessageInfo[]
+  }
+}
+
+function part(page: Page, sessionID: string) {
+  return page.locator(`[data-timeline-part-id="answer_${sessionID}:text:0"]`)
+}
+
+function textEnded(sessionID: string, directory: string): OpenCodeEvent {
+  return {
+    id: `evt_text_${sessionID}`,
+    created: 4,
+    type: "session.text.ended",
+    location: { directory },
+    durable: { aggregateID: sessionID, seq: 0, version: 1 },
+    data: { sessionID, assistantMessageID: `answer_${sessionID}`, ordinal: 0, text: "Inspect `src/file.ts` again." },
   }
 }
 

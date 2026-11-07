@@ -156,6 +156,30 @@ describe("GitLabPlugin", () => {
     ),
   )
 
+  it.effect("sends requests to the instance an OAuth login was issued against", () =>
+    withEnv({ GITLAB_TOKEN: undefined }, () =>
+      Effect.gen(function* () {
+        const fixture = yield* discoveryFixture
+        yield* fixture.credentials.create({
+          integrationID,
+          value: {
+            type: "oauth",
+            methodID: Integration.MethodID.make("oauth"),
+            access: "access-token",
+            refresh: "refresh-token",
+            expires: 0,
+            metadata: { instanceUrl: "https://self-managed.gitlab.example", clientID: "client" },
+          },
+        })
+        yield* addPlugin()
+        yield* drain
+        expect((yield* fixture.providers.get(providerID))?.settings).toEqual({
+          instanceUrl: "https://self-managed.gitlab.example",
+        })
+      }),
+    ),
+  )
+
   it.effect("does not discover with only an ambient GITLAB_TOKEN or configured apiKey", () =>
     withEnv({ GITLAB_TOKEN: "env-token" }, () =>
       Effect.gen(function* () {

@@ -1511,3 +1511,51 @@ story("composer pills show per session, open their rows, and fail only their own
   await rows.nth(0).click()
   await expect(page.locator("body")).toHaveAttribute("data-picked", "12")
 })
+
+story("a composer pill with a menu opens the plugin's content under the host's heading", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountComposerPills, until, ComposerPill } = await import(fixture)
+
+    const host = mountComposerPills({
+      definitions: [
+        {
+          id: "acme",
+          windowEntry: async () => ({
+            default: (ctx: Context) =>
+              void ctx.add(ComposerPill, {
+                id: "goal",
+                // `menu` wins over the view's rows.
+                show: () => ({ label: "Goal", title: "Ship the release", rows: [{ id: "unused", label: "Unused" }] }),
+                menu: (input: { readonly session: { readonly directory: string }; close(): void }) => {
+                  const button = document.createElement("button")
+                  button.dataset.testid = "goal-pause"
+                  button.textContent = `Pause ${input.session.directory}`
+                  button.onclick = () => input.close()
+
+                  return button
+                },
+              }),
+          }),
+        },
+      ],
+    })
+
+    await until(() => host.status("acme") === "active")
+  }, fixture)
+
+  const pill = page.getByTestId("composer-pills").locator('[data-slot="session-plugin-pill"]')
+  await expect(pill).toHaveText("Goal")
+
+  await pill.click()
+  const popover = page.locator('[data-slot="session-plugin-pill-popover"]')
+  await expect(popover.getByText("Ship the release")).toBeVisible()
+  await expect(popover.locator('[data-slot="session-plugin-pill-row"]')).toHaveCount(0)
+  await expect(popover.getByTestId("goal-pause")).toHaveText("Pause /repo")
+
+  await popover.getByTestId("goal-pause").click()
+  await expect(popover).toHaveCount(0)
+
+  // The content renders again on the next open.
+  await pill.click()
+  await expect(page.getByTestId("goal-pause")).toBeVisible()
+})

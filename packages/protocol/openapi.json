@@ -5170,17 +5170,13 @@
             "schema": {
               "anyOf": [
                 {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/Model.Type"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Model.Type"
-                      }
-                    }
-                  ]
+                  "$ref": "#/components/schemas/Model.Type"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Model.Type"
+                  }
                 },
                 {
                   "type": "null"
@@ -8478,7 +8474,7 @@
             }
           }
         },
-        "description": "Store an integration credential. It becomes the integration's active credential unless activate is false and the integration already has one. Fails with a conflict when the requested ID already exists.",
+        "description": "Store an integration credential. It becomes the integration's active credential unless activate is false and the integration already has one. Fails with a conflict when the requested ID already exists, and with an invalid request when an `integration.connect` policy denies the integration.",
         "summary": "Create credential",
         "requestBody": {
           "content": {
@@ -10594,225 +10590,217 @@
             "schema": {
               "anyOf": [
                 {
-                  "anyOf": [
-                    {
-                      "anyOf": [
-                        {
-                          "type": "string",
-                          "enum": [
-                            "location.shutdown",
-                            "models-dev.refreshed",
-                            "credential.updated",
-                            "credential.switched",
-                            "integration.updated",
-                            "provider.updated",
-                            "model.updated",
-                            "agent.updated",
-                            "session.created",
-                            "session.agent.selected",
-                            "session.model.selected",
-                            "session.moved",
-                            "session.renamed",
-                            "session.metadata.updated",
-                            "session.permissions",
-                            "session.viewed",
-                            "session.archived",
-                            "session.unarchived",
-                            "session.usage.updated",
-                            "session.deleted",
-                            "session.forked",
-                            "session.inbox.delivered",
-                            "session.inbox.enqueued",
-                            "session.inbox.cancelled",
-                            "session.inbox.delivery.changed",
-                            "session.execution.started",
-                            "session.execution.succeeded",
-                            "session.execution.failed",
-                            "session.execution.interrupted",
-                            "session.instructions.updated",
-                            "session.synthetic",
-                            "session.skill.activated",
-                            "session.shell.started",
-                            "session.shell.ended",
-                            "session.step.started",
-                            "session.step.streamed",
-                            "session.step.ended",
-                            "session.step.failed",
-                            "session.text.started",
-                            "session.text.delta",
-                            "session.text.ended",
-                            "session.reasoning.started",
-                            "session.reasoning.delta",
-                            "session.reasoning.ended",
-                            "session.tool.input.started",
-                            "session.tool.input.delta",
-                            "session.tool.input.ended",
-                            "session.tool.called",
-                            "session.tool.progress",
-                            "session.tool.success",
-                            "session.tool.failed",
-                            "session.retry.scheduled",
-                            "session.compaction.started",
-                            "session.compaction.delta",
-                            "session.compaction.ended",
-                            "session.compaction.failed",
-                            "session.revert.staged",
-                            "session.revert.cleared",
-                            "session.revert.committed",
-                            "filesystem.changed",
-                            "reference.updated",
-                            "permission.asked",
-                            "permission.replied",
-                            "plugin.updated",
-                            "project.updated",
-                            "worktree.updated",
-                            "worktree.resolved",
-                            "command.updated",
-                            "config.updated",
-                            "skill.updated",
-                            "pty.created",
-                            "pty.updated",
-                            "pty.exited",
-                            "pty.deleted",
-                            "persistent-pty.added",
-                            "persistent-pty.removed",
-                            "shell.created",
-                            "shell.exited",
-                            "shell.deleted",
-                            "form.created",
-                            "form.replied",
-                            "form.cancelled",
-                            "websearch.updated",
-                            "session.status",
-                            "session.idle",
-                            "tui.prompt.append",
-                            "tui.command.execute",
-                            "tui.toast.show",
-                            "tui.session.select",
-                            "installation.updated",
-                            "installation.update-available",
-                            "vcs.branch.updated",
-                            "mcp.status.changed",
-                            "mcp.resources.changed"
-                          ]
-                        },
-                        {
-                          "type": "string",
-                          "pattern": "^rpc\\.[\\s\\S]*?$"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string",
-                            "enum": [
-                              "location.shutdown",
-                              "models-dev.refreshed",
-                              "credential.updated",
-                              "credential.switched",
-                              "integration.updated",
-                              "provider.updated",
-                              "model.updated",
-                              "agent.updated",
-                              "session.created",
-                              "session.agent.selected",
-                              "session.model.selected",
-                              "session.moved",
-                              "session.renamed",
-                              "session.metadata.updated",
-                              "session.permissions",
-                              "session.viewed",
-                              "session.archived",
-                              "session.unarchived",
-                              "session.usage.updated",
-                              "session.deleted",
-                              "session.forked",
-                              "session.inbox.delivered",
-                              "session.inbox.enqueued",
-                              "session.inbox.cancelled",
-                              "session.inbox.delivery.changed",
-                              "session.execution.started",
-                              "session.execution.succeeded",
-                              "session.execution.failed",
-                              "session.execution.interrupted",
-                              "session.instructions.updated",
-                              "session.synthetic",
-                              "session.skill.activated",
-                              "session.shell.started",
-                              "session.shell.ended",
-                              "session.step.started",
-                              "session.step.streamed",
-                              "session.step.ended",
-                              "session.step.failed",
-                              "session.text.started",
-                              "session.text.delta",
-                              "session.text.ended",
-                              "session.reasoning.started",
-                              "session.reasoning.delta",
-                              "session.reasoning.ended",
-                              "session.tool.input.started",
-                              "session.tool.input.delta",
-                              "session.tool.input.ended",
-                              "session.tool.called",
-                              "session.tool.progress",
-                              "session.tool.success",
-                              "session.tool.failed",
-                              "session.retry.scheduled",
-                              "session.compaction.started",
-                              "session.compaction.delta",
-                              "session.compaction.ended",
-                              "session.compaction.failed",
-                              "session.revert.staged",
-                              "session.revert.cleared",
-                              "session.revert.committed",
-                              "filesystem.changed",
-                              "reference.updated",
-                              "permission.asked",
-                              "permission.replied",
-                              "plugin.updated",
-                              "project.updated",
-                              "worktree.updated",
-                              "worktree.resolved",
-                              "command.updated",
-                              "config.updated",
-                              "skill.updated",
-                              "pty.created",
-                              "pty.updated",
-                              "pty.exited",
-                              "pty.deleted",
-                              "persistent-pty.added",
-                              "persistent-pty.removed",
-                              "shell.created",
-                              "shell.exited",
-                              "shell.deleted",
-                              "form.created",
-                              "form.replied",
-                              "form.cancelled",
-                              "websearch.updated",
-                              "session.status",
-                              "session.idle",
-                              "tui.prompt.append",
-                              "tui.command.execute",
-                              "tui.toast.show",
-                              "tui.session.select",
-                              "installation.updated",
-                              "installation.update-available",
-                              "vcs.branch.updated",
-                              "mcp.status.changed",
-                              "mcp.resources.changed"
-                            ]
-                          },
-                          {
-                            "type": "string",
-                            "pattern": "^rpc\\.[\\s\\S]*?$"
-                          }
-                        ]
-                      }
-                    }
+                  "type": "string",
+                  "enum": [
+                    "location.shutdown",
+                    "models-dev.refreshed",
+                    "credential.updated",
+                    "credential.switched",
+                    "integration.updated",
+                    "provider.updated",
+                    "model.updated",
+                    "agent.updated",
+                    "session.created",
+                    "session.agent.selected",
+                    "session.model.selected",
+                    "session.moved",
+                    "session.renamed",
+                    "session.metadata.updated",
+                    "session.permissions",
+                    "session.viewed",
+                    "session.archived",
+                    "session.unarchived",
+                    "session.usage.updated",
+                    "session.deleted",
+                    "session.forked",
+                    "session.inbox.delivered",
+                    "session.inbox.enqueued",
+                    "session.inbox.cancelled",
+                    "session.inbox.delivery.changed",
+                    "session.execution.started",
+                    "session.execution.succeeded",
+                    "session.execution.failed",
+                    "session.execution.interrupted",
+                    "session.instructions.updated",
+                    "session.synthetic",
+                    "session.skill.activated",
+                    "session.shell.started",
+                    "session.shell.ended",
+                    "session.step.started",
+                    "session.step.streamed",
+                    "session.step.ended",
+                    "session.step.failed",
+                    "session.text.started",
+                    "session.text.delta",
+                    "session.text.ended",
+                    "session.reasoning.started",
+                    "session.reasoning.delta",
+                    "session.reasoning.ended",
+                    "session.tool.input.started",
+                    "session.tool.input.delta",
+                    "session.tool.input.ended",
+                    "session.tool.called",
+                    "session.tool.progress",
+                    "session.tool.success",
+                    "session.tool.failed",
+                    "session.retry.scheduled",
+                    "session.compaction.started",
+                    "session.compaction.delta",
+                    "session.compaction.ended",
+                    "session.compaction.failed",
+                    "session.revert.staged",
+                    "session.revert.cleared",
+                    "session.revert.committed",
+                    "filesystem.changed",
+                    "reference.updated",
+                    "permission.asked",
+                    "permission.replied",
+                    "plugin.updated",
+                    "project.updated",
+                    "worktree.updated",
+                    "worktree.resolved",
+                    "command.updated",
+                    "config.updated",
+                    "skill.updated",
+                    "pty.created",
+                    "pty.updated",
+                    "pty.exited",
+                    "pty.deleted",
+                    "persistent-pty.added",
+                    "persistent-pty.removed",
+                    "shell.created",
+                    "shell.exited",
+                    "shell.deleted",
+                    "form.created",
+                    "form.replied",
+                    "form.cancelled",
+                    "websearch.updated",
+                    "session.status",
+                    "session.idle",
+                    "tui.prompt.append",
+                    "tui.command.execute",
+                    "tui.toast.show",
+                    "tui.session.select",
+                    "installation.updated",
+                    "installation.update-available",
+                    "vcs.branch.updated",
+                    "mcp.status.changed",
+                    "mcp.resources.changed"
                   ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^rpc\\.[\\s\\S]*?$"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "location.shutdown",
+                          "models-dev.refreshed",
+                          "credential.updated",
+                          "credential.switched",
+                          "integration.updated",
+                          "provider.updated",
+                          "model.updated",
+                          "agent.updated",
+                          "session.created",
+                          "session.agent.selected",
+                          "session.model.selected",
+                          "session.moved",
+                          "session.renamed",
+                          "session.metadata.updated",
+                          "session.permissions",
+                          "session.viewed",
+                          "session.archived",
+                          "session.unarchived",
+                          "session.usage.updated",
+                          "session.deleted",
+                          "session.forked",
+                          "session.inbox.delivered",
+                          "session.inbox.enqueued",
+                          "session.inbox.cancelled",
+                          "session.inbox.delivery.changed",
+                          "session.execution.started",
+                          "session.execution.succeeded",
+                          "session.execution.failed",
+                          "session.execution.interrupted",
+                          "session.instructions.updated",
+                          "session.synthetic",
+                          "session.skill.activated",
+                          "session.shell.started",
+                          "session.shell.ended",
+                          "session.step.started",
+                          "session.step.streamed",
+                          "session.step.ended",
+                          "session.step.failed",
+                          "session.text.started",
+                          "session.text.delta",
+                          "session.text.ended",
+                          "session.reasoning.started",
+                          "session.reasoning.delta",
+                          "session.reasoning.ended",
+                          "session.tool.input.started",
+                          "session.tool.input.delta",
+                          "session.tool.input.ended",
+                          "session.tool.called",
+                          "session.tool.progress",
+                          "session.tool.success",
+                          "session.tool.failed",
+                          "session.retry.scheduled",
+                          "session.compaction.started",
+                          "session.compaction.delta",
+                          "session.compaction.ended",
+                          "session.compaction.failed",
+                          "session.revert.staged",
+                          "session.revert.cleared",
+                          "session.revert.committed",
+                          "filesystem.changed",
+                          "reference.updated",
+                          "permission.asked",
+                          "permission.replied",
+                          "plugin.updated",
+                          "project.updated",
+                          "worktree.updated",
+                          "worktree.resolved",
+                          "command.updated",
+                          "config.updated",
+                          "skill.updated",
+                          "pty.created",
+                          "pty.updated",
+                          "pty.exited",
+                          "pty.deleted",
+                          "persistent-pty.added",
+                          "persistent-pty.removed",
+                          "shell.created",
+                          "shell.exited",
+                          "shell.deleted",
+                          "form.created",
+                          "form.replied",
+                          "form.cancelled",
+                          "websearch.updated",
+                          "session.status",
+                          "session.idle",
+                          "tui.prompt.append",
+                          "tui.command.execute",
+                          "tui.toast.show",
+                          "tui.session.select",
+                          "installation.updated",
+                          "installation.update-available",
+                          "vcs.branch.updated",
+                          "mcp.status.changed",
+                          "mcp.resources.changed"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^rpc\\.[\\s\\S]*?$"
+                      }
+                    ]
+                  }
                 },
                 {
                   "type": "null"
@@ -11388,10 +11376,12 @@
                     "properties": {
                       "rows": {
                         "type": "integer",
+                        "maximum": 9007199254740991,
                         "exclusiveMinimum": 0
                       },
                       "cols": {
                         "type": "integer",
+                        "maximum": 9007199254740991,
                         "exclusiveMinimum": 0
                       }
                     },
@@ -12652,6 +12642,460 @@
         "summary": "Read media blob"
       }
     },
+    "/api/experimental/schedule": {
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.schedule.create",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Schedule.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Schedule a prompt that wakes the Session once after a delay, at a time, every interval, or on a cron. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "summary": "Create schedule",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Schedule.CreatePayload"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.schedule.list",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Schedule.Info"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List a Session's schedules, oldest first. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "summary": "List schedules"
+      }
+    },
+    "/api/experimental/schedule/{scheduleID}": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.schedule.get",
+        "parameters": [
+          {
+            "name": "scheduleID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Schedule.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Schedule.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ScheduleNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read one schedule. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "summary": "Get schedule"
+      },
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.schedule.delete",
+        "parameters": [
+          {
+            "name": "scheduleID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Schedule.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ScheduleNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Delete a schedule. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "summary": "Delete schedule"
+      }
+    },
+    "/api/experimental/schedule/{scheduleID}/pause": {
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.schedule.pause",
+        "parameters": [
+          {
+            "name": "scheduleID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Schedule.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Schedule.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ScheduleNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Stop a schedule from firing until it is resumed. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "summary": "Pause schedule"
+      }
+    },
+    "/api/experimental/schedule/{scheduleID}/resume": {
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.schedule.resume",
+        "parameters": [
+          {
+            "name": "scheduleID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Schedule.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Schedule.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ScheduleNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Resume a paused schedule. A one-shot that fell due while paused fires once; a repeating schedule resumes at its next slot. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "summary": "Resume schedule"
+      }
+    },
     "/api/shell": {
       "get": {
         "tags": ["shell"],
@@ -12851,7 +13295,8 @@
                   },
                   "timeout": {
                     "type": "integer",
-                    "minimum": 0
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   },
                   "metadata": {
                     "type": "object"
@@ -13104,7 +13549,7 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$"
+              "pattern": "^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?$"
             },
             "required": false
           },
@@ -13113,7 +13558,7 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$"
+              "pattern": "^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?$"
             },
             "required": false
           }
@@ -13138,11 +13583,13 @@
                         },
                         "cursor": {
                           "type": "integer",
-                          "minimum": 0
+                          "minimum": 0,
+                          "maximum": 9007199254740991
                         },
                         "size": {
                           "type": "integer",
-                          "minimum": 0
+                          "minimum": 0,
+                          "maximum": 9007199254740991
                         },
                         "truncated": {
                           "type": "boolean"
@@ -14276,7 +14723,9 @@
                       "type": "string"
                     },
                     "pid": {
-                      "type": "integer"
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     },
                     "memory": {
                       "type": "object",
@@ -14533,7 +14982,8 @@
                               "anyOf": [
                                 {
                                   "type": "integer",
-                                  "minimum": 0
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
                                 },
                                 {
                                   "type": "null"
@@ -14544,7 +14994,8 @@
                               "anyOf": [
                                 {
                                   "type": "integer",
-                                  "minimum": 0
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
                                 },
                                 {
                                   "type": "null"
@@ -15183,6 +15634,7 @@
           },
           "steps": {
             "type": "integer",
+            "maximum": 9007199254740991,
             "exclusiveMinimum": 0
           },
           "permissions": {
@@ -15320,6 +15772,7 @@
           },
           "steps": {
             "type": "integer",
+            "maximum": 9007199254740991,
             "exclusiveMinimum": 0
           },
           "disabled": {
@@ -15521,7 +15974,15 @@
               "properties": {
                 "action": {
                   "type": "string",
-                  "enum": ["provider.use", "tool.use", "integration.use"]
+                  "enum": [
+                    "provider.use",
+                    "tool.use",
+                    "integration.connect",
+                    "integration.use",
+                    "mcp.use",
+                    "skill.use",
+                    "plugin.use"
+                  ]
                 },
                 "resource": {
                   "type": "string"
@@ -15608,14 +16069,17 @@
                   },
                   "max_width": {
                     "type": "integer",
+                    "maximum": 9007199254740991,
                     "exclusiveMinimum": 0
                   },
                   "max_height": {
                     "type": "integer",
+                    "maximum": 9007199254740991,
                     "exclusiveMinimum": 0
                   },
                   "max_base64_bytes": {
                     "type": "integer",
+                    "maximum": 9007199254740991,
                     "exclusiveMinimum": 0
                   }
                 },
@@ -15629,10 +16093,12 @@
             "properties": {
               "max_lines": {
                 "type": "integer",
+                "maximum": 9007199254740991,
                 "exclusiveMinimum": 0
               },
               "max_bytes": {
                 "type": "integer",
+                "maximum": 9007199254740991,
                 "exclusiveMinimum": 0
               }
             },
@@ -15646,14 +16112,17 @@
                 "properties": {
                   "startup": {
                     "type": "integer",
+                    "maximum": 9007199254740991,
                     "exclusiveMinimum": 0
                   },
                   "catalog": {
                     "type": "integer",
+                    "maximum": 9007199254740991,
                     "exclusiveMinimum": 0
                   },
                   "execution": {
                     "type": "integer",
+                    "maximum": 9007199254740991,
                     "exclusiveMinimum": 0
                   }
                 },
@@ -15686,14 +16155,16 @@
                 "properties": {
                   "tokens": {
                     "type": "integer",
-                    "minimum": 0
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   }
                 },
                 "additionalProperties": false
               },
               "buffer": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "additionalProperties": false
@@ -15790,12 +16261,53 @@
               "media_blob": {
                 "type": "boolean"
               },
+              "image_generate": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "model": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "providerID": {
+                                "type": "string",
+                                "pattern": "^[^/#]+$"
+                              },
+                              "model": {
+                                "type": "string",
+                                "pattern": "^[^#]+$"
+                              },
+                              "variant": {
+                                "type": "string",
+                                "pattern": "^[^#]+$"
+                              }
+                            },
+                            "required": ["providerID", "model"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              },
               "schedules": {
                 "type": "boolean"
               },
               "subagent_depth": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "location_idle_timeout": {
                 "anyOf": [
@@ -15815,7 +16327,15 @@
                   "properties": {
                     "action": {
                       "type": "string",
-                      "enum": ["provider.use", "tool.use", "integration.use"]
+                      "enum": [
+                        "provider.use",
+                        "tool.use",
+                        "integration.connect",
+                        "integration.use",
+                        "mcp.use",
+                        "skill.use",
+                        "plugin.use"
+                      ]
                     },
                     "resource": {
                       "type": "string"
@@ -15904,7 +16424,9 @@
                 "enum": ["context"]
               },
               "size": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
               }
             },
             "required": ["type", "size"],
@@ -15965,10 +16487,14 @@
                 "type": "object",
                 "properties": {
                   "min": {
-                    "type": "integer"
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
                   },
                   "max": {
-                    "type": "integer"
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
                   }
                 },
                 "additionalProperties": false
@@ -16116,13 +16642,19 @@
             "type": "object",
             "properties": {
               "context": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
               },
               "input": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
               },
               "output": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
               }
             },
             "additionalProperties": false
@@ -16555,7 +17087,8 @@
           },
           "expires": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "metadata": {
             "type": "object"
@@ -16591,11 +17124,13 @@
           },
           "additions": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "deletions": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "status": {
             "type": "string",
@@ -16813,42 +17348,6 @@
           "$ref": "#/components/schemas/Form.Field"
         }
       },
-      "Form.Fields_1": {
-        "type": "array",
-        "prefixItems": [
-          {
-            "$ref": "#/components/schemas/Form.Field"
-          }
-        ],
-        "minItems": 1,
-        "items": {
-          "$ref": "#/components/schemas/Form.Field"
-        }
-      },
-      "Form.Fields_2": {
-        "type": "array",
-        "prefixItems": [
-          {
-            "$ref": "#/components/schemas/Form.Field"
-          }
-        ],
-        "minItems": 1,
-        "items": {
-          "$ref": "#/components/schemas/Form.Field"
-        }
-      },
-      "Form.Fields_3": {
-        "type": "array",
-        "prefixItems": [
-          {
-            "$ref": "#/components/schemas/Form.Field"
-          }
-        ],
-        "minItems": 1,
-        "items": {
-          "$ref": "#/components/schemas/Form.Field"
-        }
-      },
       "Form.ID": {
         "type": "string",
         "pattern": "^frm_"
@@ -16979,11 +17478,13 @@
           },
           "minItems": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "maxItems": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "custom": {
             "type": "boolean"
@@ -17166,11 +17667,13 @@
           },
           "minLength": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "maxLength": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "pattern": {
             "type": "string"
@@ -17200,15 +17703,11 @@
             "type": "string"
           },
           {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
+            "type": "number"
+          },
+          {
+            "type": "string",
+            "enum": ["Infinity", "-Infinity", "NaN"]
           },
           {
             "type": "boolean"
@@ -17237,15 +17736,11 @@
                 "type": "string"
               },
               {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
               },
               {
                 "type": "boolean"
@@ -17510,7 +18005,7 @@
             "$ref": "#/components/schemas/Generate.Usage"
           },
           "native": {
-            "$ref": "#/components/schemas/Generate.Native_1"
+            "$ref": "#/components/schemas/Generate.Native"
           }
         },
         "required": ["answers"],
@@ -17570,7 +18065,7 @@
       },
       "Generate.ImageAspect": {
         "type": "string",
-        "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?:[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+        "pattern": "^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?:[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?$",
         "description": "Aspect ratio as width:height, for example 16:9"
       },
       "Generate.ImageOutput": {
@@ -17610,6 +18105,7 @@
           },
           "n": {
             "type": "integer",
+            "maximum": 9007199254740991,
             "exclusiveMinimum": 0
           },
           "aspect": {
@@ -17657,10 +18153,6 @@
         "additionalProperties": false
       },
       "Generate.Native": {
-        "type": "object",
-        "description": "Provider-specific data the shared fields do not cover"
-      },
-      "Generate.Native_1": {
         "type": "object",
         "description": "Provider-specific data the shared fields do not cover"
       },
@@ -17722,7 +18214,9 @@
               "type": "object",
               "properties": {
                 "value": {
-                  "type": "integer"
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
                 },
                 "label": {
                   "type": "string"
@@ -17858,10 +18352,14 @@
             "enum": ["InstructionEntryValueTooLargeError"]
           },
           "actualBytes": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           },
           "maxBytes": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           },
           "message": {
             "type": "string"
@@ -18352,7 +18850,7 @@
             "type": "string"
           },
           "form": {
-            "$ref": "#/components/schemas/Form.Fields_3"
+            "$ref": "#/components/schemas/Form.Fields"
           }
         },
         "required": ["id", "type", "label"],
@@ -18400,7 +18898,7 @@
             "type": "string"
           },
           "form": {
-            "$ref": "#/components/schemas/Form.Fields_2"
+            "$ref": "#/components/schemas/Form.Fields"
           }
         },
         "required": ["type"],
@@ -18442,7 +18940,7 @@
             "type": "string"
           },
           "form": {
-            "$ref": "#/components/schemas/Form.Fields_1"
+            "$ref": "#/components/schemas/Form.Fields"
           }
         },
         "required": ["id", "type", "label"],
@@ -18639,14 +19137,17 @@
             "properties": {
               "startup": {
                 "type": "integer",
+                "maximum": 9007199254740991,
                 "exclusiveMinimum": 0
               },
               "catalog": {
                 "type": "integer",
+                "maximum": 9007199254740991,
                 "exclusiveMinimum": 0
               },
               "execution": {
                 "type": "integer",
+                "maximum": 9007199254740991,
                 "exclusiveMinimum": 0
               }
             },
@@ -18728,14 +19229,17 @@
             "properties": {
               "startup": {
                 "type": "integer",
+                "maximum": 9007199254740991,
                 "exclusiveMinimum": 0
               },
               "catalog": {
                 "type": "integer",
+                "maximum": 9007199254740991,
                 "exclusiveMinimum": 0
               },
               "execution": {
                 "type": "integer",
+                "maximum": 9007199254740991,
                 "exclusiveMinimum": 0
               }
             },
@@ -19027,7 +19531,9 @@
                 "enum": ["context"]
               },
               "size": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
               }
             },
             "required": ["type", "size"],
@@ -19134,13 +19640,19 @@
             "type": "object",
             "properties": {
               "context": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
               },
               "input": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
               },
               "output": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
               }
             },
             "required": ["context", "output"],
@@ -19300,7 +19812,9 @@
             "type": "string"
           },
           "expires_in": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           }
         },
         "required": ["code", "expires_in"],
@@ -19506,10 +20020,12 @@
             "properties": {
               "cols": {
                 "type": "integer",
+                "maximum": 9007199254740991,
                 "exclusiveMinimum": 0
               },
               "rows": {
                 "type": "integer",
+                "maximum": 9007199254740991,
                 "exclusiveMinimum": 0
               }
             },
@@ -19574,11 +20090,13 @@
           },
           "pid": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "exitCode": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "sessionID": {
             "$ref": "#/components/schemas/Session.ID"
@@ -19598,10 +20116,12 @@
             "properties": {
               "cols": {
                 "type": "integer",
+                "maximum": 9007199254740991,
                 "exclusiveMinimum": 0
               },
               "rows": {
                 "type": "integer",
+                "maximum": 9007199254740991,
                 "exclusiveMinimum": 0
               }
             },
@@ -19613,11 +20133,13 @@
             "properties": {
               "head": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "tail": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["head", "tail"],
@@ -19672,10 +20194,12 @@
               },
               "cols": {
                 "type": "integer",
+                "maximum": 9007199254740991,
                 "exclusiveMinimum": 0
               },
               "rows": {
                 "type": "integer",
+                "maximum": 9007199254740991,
                 "exclusiveMinimum": 0
               },
               "cursor": {
@@ -19683,11 +20207,13 @@
                 "properties": {
                   "x": {
                     "type": "integer",
-                    "minimum": 0
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   },
                   "y": {
                     "type": "integer",
-                    "minimum": 0
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": ["x", "y"],
@@ -19720,11 +20246,13 @@
             "properties": {
               "x": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "y": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["x", "y"],
@@ -19745,10 +20273,12 @@
             "properties": {
               "cols": {
                 "type": "integer",
+                "maximum": 9007199254740991,
                 "exclusiveMinimum": 0
               },
               "rows": {
                 "type": "integer",
+                "maximum": 9007199254740991,
                 "exclusiveMinimum": 0
               }
             },
@@ -20000,19 +20530,23 @@
         "properties": {
           "created": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "updated": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "active": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "archived": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": ["created", "updated", "active"],
@@ -20151,6 +20685,9 @@
           "uri": {
             "type": "string"
           },
+          "source": {
+            "$ref": "#/components/schemas/Prompt.FileSource"
+          },
           "name": {
             "type": "string"
           },
@@ -20188,7 +20725,7 @@
       },
       "Provider.CacheTTL": {
         "type": "string",
-        "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?(?:ms|s|m|h|d)$"
+        "pattern": "^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?(?:ms|s|m|h|d)$"
       },
       "Provider.Compaction": {
         "anyOf": [
@@ -20413,7 +20950,9 @@
           "status": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
               },
               {
                 "type": "null"
@@ -20423,7 +20962,9 @@
           "retryAfterMs": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
               },
               {
                 "type": "null"
@@ -20461,11 +21002,13 @@
           },
           "pid": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "exitCode": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": ["id", "title", "command", "args", "cwd", "status", "pid"],
@@ -20500,6 +21043,7 @@
           },
           "expires_in": {
             "type": "integer",
+            "maximum": 9007199254740991,
             "exclusiveMinimum": 0
           }
         },
@@ -20637,6 +21181,454 @@
         "required": ["_tag", "type", "message"],
         "additionalProperties": false
       },
+      "Schedule.Action": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Schedule.Action.Prompt"
+          }
+        ]
+      },
+      "Schedule.Action.Prompt": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["prompt"]
+          },
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "prompt"],
+        "additionalProperties": false
+      },
+      "Schedule.Condition": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Schedule.Condition.Shell"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.Condition.Code"
+          }
+        ]
+      },
+      "Schedule.Condition.Code": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["code"]
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "code"],
+        "additionalProperties": false
+      },
+      "Schedule.Condition.Shell": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["shell"]
+          },
+          "run": {
+            "type": "string"
+          },
+          "is": {
+            "type": "string"
+          },
+          "matches": {
+            "type": "string"
+          },
+          "changes": {
+            "type": "boolean"
+          }
+        },
+        "required": ["type", "run"],
+        "additionalProperties": false
+      },
+      "Schedule.ConditionInput": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "run": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Shell command to run in the Session's directory. Alone, exit 0 wakes and stdout is appended."
+              },
+              "is": {
+                "type": "string"
+              },
+              "matches": {
+                "type": "string"
+              },
+              "changes": {
+                "type": "boolean"
+              },
+              "code": {
+                "not": {}
+              }
+            },
+            "required": ["run"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Code Mode JavaScript check (no fetch; 30s, 20 tool calls, 32 KB output cap). Call tools statically as tools.<ns>.<tool>(...) or tools[\"ns-name\"].tool(...); each is authorized once at creation to run unattended. Runs once at creation with state = null (if baselines state without waking; until matches immediately if true), with globals state, now (epoch ms) and runs. Return a boolean or { wake, state?, message? } (message is appended to prompt on wake), e.g.: const t = await tools.slack.read_thread({ id }); return { wake: state !== null && t.count > state.count, state: { count: t.count }, message: \"New reply\" }"
+              },
+              "run": {
+                "not": {}
+              },
+              "is": {
+                "not": {}
+              },
+              "matches": {
+                "not": {}
+              },
+              "changes": {
+                "not": {}
+              }
+            },
+            "required": ["code"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "Schedule.CreatePayload": {
+        "type": "object",
+        "properties": {
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "name": {
+            "type": "string"
+          },
+          "when": {
+            "$ref": "#/components/schemas/Schedule.WhenInput"
+          },
+          "if": {
+            "$ref": "#/components/schemas/Schedule.ConditionInput"
+          },
+          "until": {
+            "$ref": "#/components/schemas/Schedule.ConditionInput"
+          },
+          "ends": {
+            "$ref": "#/components/schemas/Schedule.Ends"
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The message the Session receives when the schedule wakes."
+          }
+        },
+        "required": ["sessionID", "prompt"],
+        "additionalProperties": false
+      },
+      "Schedule.Duration": {
+        "type": "string",
+        "description": "A duration such as \"90 seconds\", \"5 minutes\" or \"2 hours\"."
+      },
+      "Schedule.Ends": {
+        "type": "object",
+        "properties": {
+          "after": {
+            "$ref": "#/components/schemas/Schedule.Duration"
+          },
+          "at": {
+            "type": "string"
+          },
+          "times": {
+            "type": "integer",
+            "maximum": 9007199254740991,
+            "exclusiveMinimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "Schedule.ID": {
+        "type": "string",
+        "pattern": "^sch_"
+      },
+      "Schedule.Info": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Schedule.ID"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "name": {
+            "type": "string"
+          },
+          "when": {
+            "$ref": "#/components/schemas/Schedule.When"
+          },
+          "tz": {
+            "type": "string"
+          },
+          "if": {
+            "$ref": "#/components/schemas/Schedule.Condition"
+          },
+          "until": {
+            "$ref": "#/components/schemas/Schedule.Condition"
+          },
+          "action": {
+            "$ref": "#/components/schemas/Schedule.Action"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Schedule.Status"
+          },
+          "nextDueAt": {
+            "type": "number"
+          },
+          "endsAt": {
+            "type": "number"
+          },
+          "remainingRuns": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "runCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "lastFiredAt": {
+            "type": "number"
+          },
+          "lastOutcome": {
+            "$ref": "#/components/schemas/Schedule.Outcome"
+          },
+          "lastOutput": {
+            "type": "string"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              },
+              "updated": {
+                "type": "number"
+              }
+            },
+            "required": ["created", "updated"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "when", "tz", "action", "status", "runCount", "time"],
+        "additionalProperties": false
+      },
+      "Schedule.Outcome": {
+        "type": "string",
+        "enum": ["fired", "late", "checked", "expired", "skipped", "disabled", "failed"]
+      },
+      "Schedule.Status": {
+        "type": "string",
+        "enum": ["active", "paused", "done"]
+      },
+      "Schedule.When": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Schedule.When.In"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.When.At"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.When.Every"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.When.Cron"
+          }
+        ]
+      },
+      "Schedule.When.At": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["at"]
+          },
+          "at": {
+            "type": "string"
+          },
+          "tz": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "at"],
+        "additionalProperties": false
+      },
+      "Schedule.When.Cron": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["cron"]
+          },
+          "cron": {
+            "type": "string"
+          },
+          "tz": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "cron"],
+        "additionalProperties": false
+      },
+      "Schedule.When.Every": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["every"]
+          },
+          "every": {
+            "$ref": "#/components/schemas/Schedule.Duration"
+          },
+          "tz": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "every"],
+        "additionalProperties": false
+      },
+      "Schedule.When.In": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["in"]
+          },
+          "in": {
+            "$ref": "#/components/schemas/Schedule.Duration"
+          },
+          "tz": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "in"],
+        "additionalProperties": false
+      },
+      "Schedule.WhenInput": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "in": {
+                "$ref": "#/components/schemas/Schedule.Duration"
+              },
+              "at": {
+                "not": {}
+              },
+              "every": {
+                "not": {}
+              },
+              "cron": {
+                "not": {}
+              },
+              "tz": {
+                "type": "string"
+              }
+            },
+            "required": ["in"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "in": {
+                "not": {}
+              },
+              "every": {
+                "not": {}
+              },
+              "cron": {
+                "not": {}
+              },
+              "tz": {
+                "type": "string"
+              }
+            },
+            "required": ["at"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "every": {
+                "$ref": "#/components/schemas/Schedule.Duration"
+              },
+              "in": {
+                "not": {}
+              },
+              "at": {
+                "not": {}
+              },
+              "cron": {
+                "not": {}
+              },
+              "tz": {
+                "type": "string"
+              }
+            },
+            "required": ["every"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cron": {
+                "type": "string"
+              },
+              "in": {
+                "not": {}
+              },
+              "at": {
+                "not": {}
+              },
+              "every": {
+                "not": {}
+              },
+              "tz": {
+                "type": "string"
+              }
+            },
+            "required": ["cron"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "ScheduleNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ScheduleNotFoundError"]
+          },
+          "scheduleID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "scheduleID", "message"],
+        "additionalProperties": false
+      },
       "ServerInfo": {
         "type": "object",
         "properties": {
@@ -20645,7 +21637,8 @@
           },
           "pid": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "hostname": {
             "anyOf": [
@@ -21030,6 +22023,9 @@
               "updated": {
                 "type": "number"
               },
+              "busy": {
+                "type": "number"
+              },
               "idle": {
                 "type": "number"
               },
@@ -21175,7 +22171,7 @@
             "type": "string"
           },
           "native": {
-            "$ref": "#/components/schemas/Session.Message.Native_3"
+            "$ref": "#/components/schemas/Session.Message.Native"
           },
           "cost": {
             "$ref": "#/components/schemas/Money.USD"
@@ -21204,7 +22200,7 @@
             "type": "string"
           },
           "native": {
-            "$ref": "#/components/schemas/Session.Message.Native_1"
+            "$ref": "#/components/schemas/Session.Message.Native"
           },
           "time": {
             "type": "object",
@@ -21228,6 +22224,7 @@
         "properties": {
           "attempt": {
             "type": "integer",
+            "maximum": 9007199254740991,
             "exclusiveMinimum": 0
           },
           "at": {
@@ -21274,7 +22271,7 @@
             "type": "boolean"
           },
           "native": {
-            "$ref": "#/components/schemas/Session.Message.Native_2"
+            "$ref": "#/components/schemas/Session.Message.Native"
           },
           "state": {
             "anyOf": [
@@ -21360,7 +22357,7 @@
             "$ref": "#/components/schemas/Model.Ref"
           },
           "native": {
-            "$ref": "#/components/schemas/Session.Message.Native_4"
+            "$ref": "#/components/schemas/Session.Message.Native"
           },
           "summary": {
             "type": "string"
@@ -21627,18 +22624,6 @@
       "Session.Message.Native": {
         "type": "object"
       },
-      "Session.Message.Native_1": {
-        "type": "object"
-      },
-      "Session.Message.Native_2": {
-        "type": "object"
-      },
-      "Session.Message.Native_3": {
-        "type": "object"
-      },
-      "Session.Message.Native_4": {
-        "type": "object"
-      },
       "Session.Message.Shell": {
         "type": "object",
         "properties": {
@@ -21694,11 +22679,13 @@
               },
               "cursor": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "size": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "truncated": {
                 "type": "boolean"
@@ -22004,7 +22991,8 @@
           },
           "retryAfterMs": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": ["type", "message"],
@@ -22134,7 +23122,8 @@
           },
           "steps": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": ["date", "steps"],
@@ -22158,19 +23147,23 @@
           },
           "sessions": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "subagents": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "prompts": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "steps": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "tokens": {
             "$ref": "#/components/schemas/TokenUsage.Info"
@@ -22183,11 +23176,13 @@
           },
           "activeDays": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "streak": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "activity": {
             "type": "array",
@@ -22226,7 +23221,8 @@
           },
           "steps": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "tokens": {
             "$ref": "#/components/schemas/TokenUsage.Info"
@@ -22243,19 +23239,23 @@
         "properties": {
           "calls": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "succeeded": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "failed": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "unfinished": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": ["calls", "succeeded", "failed", "unfinished"],
@@ -22269,19 +23269,23 @@
           },
           "calls": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "succeeded": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "failed": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "unfinished": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "durationP50": {
             "type": "number"
@@ -22426,7 +23430,8 @@
           },
           "pid": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "exit": {
             "type": "number"
@@ -22862,11 +23867,13 @@
           },
           "additions": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "deletions": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "status": {
             "type": "string",
@@ -23034,15 +24041,11 @@
           "dcid": {
             "anyOf": [
               {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
               },
               {
                 "type": "null"

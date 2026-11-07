@@ -38,16 +38,20 @@ export function SessionQueuePanel(props: { queue: SessionQueueView; hidden?: boo
       (next) => {
         const prevLive = lastLive
         lastLive = next
+
         if (next.length === 0) return
 
         // An in-place edit or reorder keeps the row count: a row whose ID it replaced swaps in place rather than closing,
         // while a row that was already closing keeps closing until its exit completes.
         const swap = next.length === prevLive.length && prevLive.length > 0
+
         if (!swap && prevLive.length > 0 && !props.hidden)
           next.forEach((row) => !prevLive.some((item) => item.id === row.id) && appearing.add(row.id))
+
         const kept = untrack(shown).filter(
           (row) => !swap || next.some((item) => item.id === row.id) || !prevLive.some((item) => item.id === row.id),
         )
+
         setShown(keepLeaving(kept, next))
       },
       { defer: true },
@@ -63,10 +67,14 @@ export function SessionQueuePanel(props: { queue: SessionQueueView; hidden?: boo
         stopCascade?.()
         stopCascade = undefined
         const step = queueStagger()
+
         if (!now || was !== false || step <= 0 || prefersReducedMotion()) return
         queueMicrotask(() => {
           if (!open()) return
-          stopCascade = cascade([...listRef.querySelectorAll<HTMLElement>('[data-component="session-queue-row"]')], step)
+          stopCascade = cascade(
+            [...listRef.querySelectorAll<HTMLElement>('[data-component="session-queue-row"]')],
+            step,
+          )
         })
       },
       { defer: true },
@@ -145,16 +153,16 @@ export function SessionQueuePanel(props: { queue: SessionQueueView; hidden?: boo
 }
 
 function keepLeaving<T extends { id: string }>(previous: T[], next: T[]) {
-  return previous.reduce(
-    (rows, row, index) => {
-      if (rows.some((item) => item.id === row.id)) return rows
-      const before = previous.slice(0, index).findLast((item) => rows.some((entry) => entry.id === item.id))
-      const at = before ? rows.findIndex((item) => item.id === before.id) + 1 : 0
+  const rows = [...next]
 
-      return [...rows.slice(0, at), row, ...rows.slice(at)]
-    },
-    [...next],
-  )
+  previous.forEach((row, index) => {
+    if (rows.some((item) => item.id === row.id)) return
+    const before = previous.slice(0, index).findLast((item) => rows.some((entry) => entry.id === item.id))
+    const at = before ? rows.findIndex((item) => item.id === before.id) + 1 : 0
+    rows.splice(at, 0, row)
+  })
+
+  return rows
 }
 
 function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: number }) {
@@ -179,14 +187,16 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
     },
   })
 
+  // Not keyed: the queue rebuilds every row object whenever it changes, and a keyed row would remount, tooltips and
+  // all, each time a prompt is added or the server confirms one.
   return (
-    <Show when={row()} keyed>
+    <Show when={row()}>
       {(entry) => (
         <div
           ref={sortable.ref}
           data-component={leaving() ? undefined : "session-queue-row"}
           data-leaving={leaving() || undefined}
-          aria-busy={leaving() ? undefined : entry.pending}
+          aria-busy={leaving() ? undefined : entry().pending}
           class="group/queue-row mb-px flex h-8 shrink-0 items-center justify-between gap-2 rounded-md py-1 ps-0.5 pe-2"
           classList={{
             "bg-v2-overlay-simple-overlay-hover": editing(),
@@ -209,22 +219,22 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
                 type="button"
                 data-action="session-queue-edit"
                 dir="auto"
-                aria-disabled={entry.pending}
+                aria-disabled={entry().pending}
                 class="max-w-full min-w-0 self-start truncate rounded-sm text-start text-[13px] font-[440] leading-[var(--line-height-compact)]"
                 classList={{
-                  "text-v2-text-text-faint": editing() || entry.pending,
-                  "cursor-progress": entry.pending,
+                  "text-v2-text-text-faint": editing() || entry().pending,
+                  "cursor-progress": entry().pending,
                   "cursor-text text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover":
-                    !editing() && !entry.pending,
+                    !editing() && !entry().pending,
                 }}
                 onClick={() => props.queue.edit(props.id)}
               >
-                {entry.text ||
-                  (entry.attachments ? language.plural("session.queue.attachments", entry.attachments) : "")}
+                {entry().text ||
+                  (entry().attachments ? language.plural("session.queue.attachments", entry().attachments) : "")}
               </button>
-              <Show when={entry.attachments && entry.text}>
+              <Show when={entry().attachments && entry().text}>
                 <span class="shrink-0 whitespace-nowrap text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
-                  {language.plural("session.queue.attachments", entry.attachments)}
+                  {language.plural("session.queue.attachments", entry().attachments)}
                 </span>
               </Show>
             </div>
@@ -234,14 +244,14 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
             class="flex shrink-0 items-center gap-1.5"
             classList={{
               "opacity-0 focus-within:opacity-100 group-hover/queue-row:opacity-100 [@media(hover:none)]:opacity-100":
-                !active() && !editing() && !entry.pending,
+                !active() && !editing() && !entry().pending,
               "pointer-events-none": props.queue.busy() || leaving(),
             }}
           >
-            <Show when={entry.pending}>
+            <Show when={entry().pending}>
               <Loader class="size-3.5 text-v2-text-text-faint" />
             </Show>
-            <Show when={!editing() && !entry.pending}>
+            <Show when={!editing() && !entry().pending}>
               <Tooltip
                 placement="top"
                 inactive={!props.queue.working()}
@@ -273,7 +283,7 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
                 />
               </Tooltip>
             </Show>
-            <Show when={!entry.pending}>
+            <Show when={!entry().pending}>
               <Tooltip placement="top" value={language.t("session.queue.remove")}>
                 <IconButton
                   data-action="session-queue-remove"

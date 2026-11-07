@@ -4,6 +4,7 @@ import {
   NO_PROVIDER,
   REMOTE_SERVER,
   SERVER,
+  T0,
   draftHref,
   expectPath,
   holdRoute,
@@ -1356,3 +1357,43 @@ async function emptySidePanel(page: Page) {
 
   return { beta, alphaTab: page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(alpha.id)}"])`) }
 }
+
+test("opening a session from the inbox keeps the list's scroll position and rows", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 480 })
+
+  const sessions = Array.from({ length: 24 }, (_, index) => ({
+    id: `ses_inbox_${String(index).padStart(2, "0")}`,
+    title: `Inbox session ${index}`,
+    time: { created: T0, updated: T0 + index, idle: T0 + index },
+  }))
+
+  await mockWorkspace(page, {
+    name: "Inbox",
+    sessions,
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: [],
+      // Every seeded session finished a run after the inbox was first used, so Recent lists them all.
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true, since: 0 } },
+    },
+  })
+  await page.goto("/")
+
+  const list = page.locator('[data-slot="sidebar-inbox-scroll"]')
+  const items = list.locator('[data-slot="sidebar-inbox-item"]')
+  const target = items.filter({ hasText: "Inbox session 0" })
+  await expect(items).toHaveCount(sessions.length)
+  await list.evaluate((element) => element.scrollTo(0, element.scrollHeight))
+  await expect(target).toBeInViewport({ ratio: 1 })
+  const offset = await list.evaluate((element) => element.scrollTop)
+  expect(offset).toBeGreaterThan(0)
+  const row = await target.elementHandle()
+
+  await target.click()
+  await expectPath(page, sessionHref("ses_inbox_00"))
+  await expect(target).toHaveAttribute("data-state", "active")
+  // Opening a session loads it into the client, which updates every section.
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+  expect(await target.evaluate((element, before) => element === before, row)).toBe(true)
+  expect(await list.evaluate((element) => element.scrollTop)).toBe(offset)
+})

@@ -7,16 +7,57 @@ import { goPlanModels } from "./go-models"
 const ticks = [100, 1000, 10000]
 const max = Math.max(...goPlanModels.map((model) => model.plusRequests).filter(Number.isFinite))
 
-export function GoPlanChart(props: { href: string }) {
+export function GoPlanChart(props: { href: string; audience?: "individuals" | "teams" }) {
   const i18n = useI18n()
   const language = useLanguage()
   const id = createUniqueId()
   const [expanded, setExpanded] = createSignal(false)
+  const tiers = createMemo(() =>
+    props.audience === "teams"
+      ? ([{ tier: "teams", label: "Go Teams" }] as const)
+      : ([
+          { tier: "go", label: "Go" },
+          { tier: "plus", label: "Go Plus" },
+        ] as const),
+  )
   const models = createMemo(() => goPlanModels.filter((model) => expanded() || model.featured))
   const position = (requests: number) =>
     Number.isFinite(requests)
       ? 4 + Math.pow(Math.log10(Math.max(requests / 100, 1)) / Math.log10(max / 100), 2.2) * 78
       : 100
+  const lanes = (model: (typeof goPlanModels)[number]) =>
+    props.audience === "teams"
+      ? [
+          {
+            tier: "teams" as const,
+            width: position(model.teamsRequests),
+            requests: model.teamsRequests,
+            allowance: model.teamsAllowance,
+            previousRequests: model.previous?.teamsRequests,
+            previousAllowance: model.previous?.teamsAllowance,
+          },
+        ]
+      : [
+          {
+            tier: "go" as const,
+            // The Go bar is a linear fraction of the Plus bar so the multiplier reads true on the log scale.
+            width: Number.isFinite(model.plusRequests)
+              ? (position(model.plusRequests) * model.requests) / model.plusRequests
+              : position(model.requests),
+            requests: model.requests,
+            allowance: model.allowance,
+            previousRequests: model.previous?.requests,
+            previousAllowance: model.previous?.allowance,
+          },
+          {
+            tier: "plus" as const,
+            width: position(model.plusRequests),
+            requests: model.plusRequests,
+            allowance: model.plusAllowance,
+            previousRequests: model.previous?.plusRequests,
+            previousAllowance: model.previous?.plusAllowance,
+          },
+        ]
   const format = createMemo(() => new Intl.NumberFormat(language.tag(language.locale())))
   const currency = createMemo(
     () =>
@@ -36,14 +77,14 @@ export function GoPlanChart(props: { href: string }) {
           <p>{i18n.t("go.plans.description")}</p>
         </div>
         <ul data-slot="legend" aria-label={i18n.t("go.plans.legend")}>
-          <li>
-            <i data-tier="go" />
-            Go
-          </li>
-          <li>
-            <i data-tier="plus" />
-            Go Plus
-          </li>
+          <For each={tiers()}>
+            {(item) => (
+              <li>
+                <i data-tier={item.tier} />
+                {item.label}
+              </li>
+            )}
+          </For>
         </ul>
       </div>
       <div data-slot="scroll">
@@ -93,45 +134,35 @@ export function GoPlanChart(props: { href: string }) {
                       {(tick) => <span data-slot="gridline" style={{ "inset-inline-start": `${position(tick)}%` }} />}
                     </For>
                     <div data-slot="track">
-                      <div data-slot="lane">
-                        {/* The Go bar is a linear fraction of the Plus bar so the multiplier reads true on the log scale. */}
-                        <span
-                          data-tier="go"
-                          style={{
-                            width: `${
-                              Number.isFinite(model.plusRequests)
-                                ? (position(model.plusRequests) * model.requests) / model.plusRequests
-                                : position(model.requests)
-                            }%`,
-                          }}
-                        />
-                        <span data-slot="remainder" />
-                      </div>
-                      <div data-slot="lane">
-                        <span data-tier="plus" style={{ width: `${position(model.plusRequests)}%` }} />
-                        <span data-slot="remainder" />
-                      </div>
+                      <For each={lanes(model)}>
+                        {(lane) => (
+                          <div data-slot="lane">
+                            <span data-tier={lane.tier} style={{ width: `${lane.width}%` }} />
+                            <span data-slot="remainder" />
+                          </div>
+                        )}
+                      </For>
                     </div>
                   </td>
                   <td data-slot="number">
-                    <span>
-                      <Show when={model.previous?.requests}>{(base) => <s>{format().format(base())}</s>}</Show>
-                      {format().format(model.requests)}
-                    </span>
-                    <span>
-                      <Show when={model.previous?.plusRequests}>{(base) => <s>{format().format(base())}</s>}</Show>
-                      {format().format(model.plusRequests)}
-                    </span>
+                    <For each={lanes(model)}>
+                      {(lane) => (
+                        <span>
+                          <Show when={lane.previousRequests}>{(base) => <s>{format().format(base())}</s>}</Show>
+                          {format().format(lane.requests)}
+                        </span>
+                      )}
+                    </For>
                   </td>
                   <td data-slot="number">
-                    <span>
-                      <Show when={model.previous?.allowance}>{(base) => <s>{currency().format(base())}</s>}</Show>
-                      {Number.isFinite(model.allowance) ? currency().format(model.allowance) : "∞"}
-                    </span>
-                    <span>
-                      <Show when={model.previous?.plusAllowance}>{(base) => <s>{currency().format(base())}</s>}</Show>
-                      {Number.isFinite(model.plusAllowance) ? currency().format(model.plusAllowance) : "∞"}
-                    </span>
+                    <For each={lanes(model)}>
+                      {(lane) => (
+                        <span>
+                          <Show when={lane.previousAllowance}>{(base) => <s>{currency().format(base())}</s>}</Show>
+                          {Number.isFinite(lane.allowance) ? currency().format(lane.allowance) : "∞"}
+                        </span>
+                      )}
+                    </For>
                   </td>
                 </tr>
               )}

@@ -185,6 +185,7 @@ const make = (options: Config) =>
         compiler,
         transactionAcquirer,
         transactionService: WorkerdTransaction,
+        driver: "sqlite-do",
         spanAttributes: [
           ...(options.spanAttributes ? Object.entries(options.spanAttributes) : []),
           [ATTR_DB_SYSTEM_NAME, "sqlite"],

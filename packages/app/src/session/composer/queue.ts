@@ -543,14 +543,18 @@ export function queuedPromptRows(items: QueuedPrompt[], sent: SentEdit[] = [], g
 
     if (sent.some((entry) => entry.original === item.id && entry.admitted && entry.delivery === "steer")) return []
 
+    const presentation = readPromptPresentation(item.payload.metadata)
+    // Text-only edits preserve the original context suffix. A context-only edit currently loads that suffix as text.
+    const comments = !edit || presentation?.displayText.trim() ? (presentation?.comments ?? []) : []
+
     return [
       {
         id: item.id,
-        text: edit ? edit.text : queuedPromptText(item),
-        attachments: edit
-          ? edit.attachments
-          : (item.payload.files?.length ?? 0) +
-            (readPromptPresentation(item.payload.metadata)?.attachments.length ?? 0),
+        text: edit ? edit.text : (presentation?.displayText.trim() ?? queuedPromptText(item)),
+        attachments:
+          (edit ? edit.attachments : (item.payload.files?.length ?? 0) + (presentation?.attachments.length ?? 0)) +
+          // File comments already contribute their context file; quotes and plugin notes have no file.
+          comments.filter((comment) => comment.type === "quote" || comment.type === "note").length,
         pending: moves.some(([old, next]) => old === item.id || next === item.id) ? true : undefined,
       },
     ]

@@ -741,6 +741,7 @@ export const dict = {
   "home.workspaceTip":
     "Indítsa el a következő munkamenetet egy új munkaterületen, hogy a változtatások elszigeteltek maradjanak",
   "session.tab.add": "Tabulátor hozzáadása",
+  "session.tab.closeOthers": "Többi lap bezárása",
   "session.queue.attachments.one": "Plusz {{count}} rögzítés",
   "session.queue.attachments.other": "Plusz {{count}} tartozékok",
   "settings.backToSettings": "Vissza a beállításokhoz",

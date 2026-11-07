@@ -619,6 +619,12 @@ export interface ComposerPillRow {
   run?(): void
 }
 
+/** What a composer pill's `menu` receives: the pill's session and a way to close the popover. Do not destructure. */
+export interface ComposerPillMenuProps extends ComposerPillProps {
+  /** Closes the popover, for example after the user picks an action in it. Does nothing once it is closed. */
+  close(): void
+}
+
 /** What a composer pill shows above one session's composer. */
 export interface ComposerPillView {
   /** The capsule's text; long text truncates. */
@@ -627,11 +633,14 @@ export interface ComposerPillView {
   readonly icon?: IconName
   /** Colors the capsule's icon. */
   readonly tone?: ComposerPillTone
-  /** Accessible name, and the heading of the menu the pill opens, when it differs from `label`. */
+  /**
+   * Accessible name, and the heading of the menu or popover the pill opens, when it differs from `label`. The heading
+   * wraps to at most three lines, then truncates.
+   */
   readonly title?: string
-  /** The menu the pill opens. Omit it for a pill that runs `run` instead. */
+  /** The menu the pill opens. Omit it for a pill that runs `run` instead. Unused when the pill has a `menu`. */
   readonly rows?: readonly ComposerPillRow[]
-  /** Runs when the user clicks a pill without `rows`. */
+  /** Runs when the user clicks a pill without `rows` or a `menu`. */
   run?(): void
 }
 
@@ -652,6 +661,16 @@ export interface ComposerPill {
    * @param input - The session and its screen. Do not destructure.
    */
   show(input: ComposerPillProps): ComposerPillView | undefined
+  /**
+   * Your content for the popover the pill opens, for a pill that needs more than `rows`, such as status text and
+   * buttons. The host owns the capsule and the popover around this content: its placement, focus, dismissal, and the
+   * heading (`title`, else `label`). When set, clicking the pill opens the popover, and the view's `rows` and `run` are
+   * unused. Renders each time the popover opens; its own reactivity updates it while open, also when another session is
+   * routed. A render that throws renders nothing and records the error.
+   *
+   * @param input - The session, its screen, and `close`. Do not destructure.
+   */
+  menu?(input: ComposerPillMenuProps): JSX.Element
 }
 
 /** The places a `Slot` renders, with the input each passes to `render`. */

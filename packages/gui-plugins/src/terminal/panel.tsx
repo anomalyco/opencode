@@ -59,8 +59,8 @@ export default function TerminalPanel(props: {
 
   // Selected output quotes into the composer of the screen showing this panel.
   const quote: TerminalQuoteTarget = {
-    available: () => props.screen.composer.quotable(),
-    add(text, comment) {
+    available: () => opened() && props.screen.composer.quotable(),
+    add(text, anchor) {
       const composer = props.screen.composer
       const commentID = crypto.randomUUID()
 
@@ -70,7 +70,7 @@ export default function TerminalPanel(props: {
         text,
         source: { label: plugin.t("quote.label"), icon: "terminal", subject: "the terminal" },
       })
-      composer.focus(comment ? commentID : undefined)
+      composer.focus(anchor ? commentID : undefined, { anchor })
     },
   }
 

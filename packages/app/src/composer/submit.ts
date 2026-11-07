@@ -288,11 +288,11 @@ function handoffMessage(value: ComposerSubmission): SessionMessageUser {
       ),
       comments: value.context.flatMap((item): PromptComment[] => {
         if (item.type === "quote") return [quoteComment(item)]
+
+        if (item.type === "note") return [noteComment(item, item.comment.trim())]
         const comment = item.comment?.trim()
 
         if (!comment) return []
-
-        if (item.type === "note") return [noteComment(item, comment)]
 
         return [
           {
@@ -433,6 +433,8 @@ function restoreSubmission(
           type: "note",
           origin: item.origin,
           label: item.label,
+          title: item.title,
+          subtitle: item.subtitle,
           icon: item.icon,
           subject: item.subject,
           href: item.href,

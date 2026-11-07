@@ -37,3 +37,20 @@ story("a terminal opened without a focus request leaves focus in the composer", 
 
   await expect(root.getByRole("textbox", { name: "Composer", exact: true })).toBeFocused()
 })
+
+story("disposing a terminal invalidates its retained quote anchor", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountTerminalQuote } = await import(fixture)
+    await mountTerminalQuote()
+  }, fixture)
+  const root = page.getByTestId("terminal-quote-fixture")
+  await root.getByRole("button", { name: "Select output", exact: true }).click()
+  await page.getByRole("toolbar", { name: "quote.actions", exact: true }).getByRole("button").click()
+  await expect(root.getByLabel("Quoted output", { exact: true })).toHaveText("Retained terminal output")
+  await expect(root.getByLabel("Quote placement", { exact: true })).toHaveText("Source")
+  await root.getByRole("button", { name: "Dispose source", exact: true }).click()
+
+  await expect(root.getByTestId("terminal-quote-source")).toHaveCount(0)
+  await expect(root.getByLabel("Quote placement", { exact: true })).toHaveText("Tile")
+  await expect(root.getByLabel("Quoted output", { exact: true })).toHaveText("Retained terminal output")
+})

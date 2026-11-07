@@ -357,7 +357,7 @@ function RejectPrompt(props: {
           textColor={theme.text.base}
           focusedTextColor={theme.text.base}
           cursorColor={theme.text.base}
-          cursorStyle={config.cursor}
+          cursorStyle={{ ...config.cursor }}
         />
         <box
           id="session.permission.reject.actions"

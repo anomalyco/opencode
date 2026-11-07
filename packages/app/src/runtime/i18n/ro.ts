@@ -738,6 +738,7 @@ export const dict = {
   "dialog.server.menu.remove": "Eliminați",
   "home.workspaceTip": "Începeți următoarea sesiune într-un spațiu de lucru nou pentru a păstra modificările izolate",
   "session.tab.add": "Adăugați fila",
+  "session.tab.closeOthers": "Închide celelalte file",
   "session.queue.attachments.one": "Plus {{count}} atașament",
   "session.queue.attachments.other": "Plus {{count}} atașamente",
   "settings.backToSettings": "Înapoi la setări",

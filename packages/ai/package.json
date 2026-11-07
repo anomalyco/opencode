@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "2.2.0",
+  "version": "2.2.2",
   "name": "@opencode/ai",
   "type": "module",
   "license": "MIT",
@@ -74,6 +74,7 @@
     "./providers/groq": "./src/providers/groq.ts",
     "./providers/meta": "./src/providers/meta.ts",
     "./providers/meta/chat": "./src/providers/meta/chat.ts",
+    "./providers/meta/images": "./src/providers/meta/images.ts",
     "./providers/meta/messages": "./src/providers/meta/messages.ts",
     "./providers/meta/responses": "./src/providers/meta/responses.ts",
     "./providers/minimax": "./src/providers/minimax.ts",

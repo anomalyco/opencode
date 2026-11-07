@@ -39,6 +39,17 @@ describe("handle", () => {
     expect(body).toContain('<details class="section"><summary>')
   })
 
+  test("links the system status and lets its bundled script fetch the summary", async () => {
+    const response = await handle(request("/changelog"), async () => changelog)
+    const body = await response.text()
+    const csp = response.headers.get("content-security-policy")?.split("; ") ?? []
+    expect(body).toContain('<a class="status" href="/status" data-status="unknown">System status</a>')
+    const script = /<script src="(\/changelog\/[\w.-]+\.js)" defer><\/script>/.exec(body)?.[1]
+    expect(await Bun.file(new URL(`../public${script}`, import.meta.url)).exists()).toBe(true)
+    expect(csp).toContain("script-src 'self'")
+    expect(csp).toContain("connect-src 'self'")
+  })
+
   test("answers HEAD without a body", async () => {
     const response = await handle(request("/changelog", "HEAD"), async () => changelog)
     expect(response.status).toBe(200)

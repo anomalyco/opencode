@@ -417,7 +417,7 @@ it.live("blocks a local plugin before module initialization and honors replaceme
     )
     const modules = yield* PluginModule.make()
     const operation = { type: "add" as const, target: directory.path, options: {} }
-    yield* setOrganizationPolicy([{ action: "integration.use", resource: `plugin:${directory.path}`, effect: "deny" }])
+    yield* setOrganizationPolicy([{ action: "plugin.use", resource: directory.path, effect: "deny" }])
     expect(yield* modules.load(operation)).toEqual({ blocked: true })
     expect(yield* Effect.promise(() => Bun.file(entered).exists())).toBe(false)
     yield* setOrganizationPolicy(undefined)
@@ -475,7 +475,7 @@ for (const target of ["policy-fixture@1.2.3", "@scope/policy-fixture@1.2.3"]) {
     Effect.gen(function* () {
         const modules = yield* PluginModule.make()
       yield* setOrganizationPolicy([
-        { action: "integration.use", resource: `plugin:${target.slice(0, target.lastIndexOf("@"))}`, effect: "deny" },
+        { action: "plugin.use", resource: target.slice(0, target.lastIndexOf("@")), effect: "deny" },
       ])
       const operation = { type: "add" as const, target, options: {} }
       expect(yield* modules.load(operation, { install: false })).toEqual({ blocked: true })

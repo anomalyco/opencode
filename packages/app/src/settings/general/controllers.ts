@@ -177,6 +177,12 @@ export function createSoundSettingsController() {
       (value) => settings.sounds.setPermissionsEnabled(value),
       (id) => settings.sounds.setPermissions(id),
     ),
+    questions: channel(
+      settings.sounds.questionsEnabled,
+      settings.sounds.questions,
+      (value) => settings.sounds.setQuestionsEnabled(value),
+      (id) => settings.sounds.setQuestions(id),
+    ),
     errors: channel(
       settings.sounds.errorsEnabled,
       settings.sounds.errors,

@@ -80,6 +80,8 @@ describe("composer persistence schemas", () => {
       type: "note" as const,
       origin: "example",
       label: "button#save",
+      title: "button#save",
+      subtitle: "Browser annotation",
       icon: "select-element",
       subject: 'the "button#save" element',
       href: "tab_00000000-0000-4000-8000-000000000000",
@@ -103,7 +105,19 @@ describe("composer persistence schemas", () => {
       key: "browser:tab_00000000-0000-4000-8000-000000000000:c=picked",
     }
 
-    const value = decode({ context: { items: [note, { ...note, subject: null }, browser, { ...browser, url: null }] } })
+    const value = decode({
+      context: {
+        items: [
+          note,
+          { ...note, subject: null },
+          browser,
+          { ...browser, url: null },
+          { ...note, comment: "", commentID: "empty-live" },
+          { ...durable, comment: "", commentID: "empty-durable" },
+        ],
+      },
+    })
+
     expect(value.context.items).toEqual([
       { ...durable, key: "note:example:c=note" },
       {
@@ -118,7 +132,10 @@ describe("composer persistence schemas", () => {
         commentID: "picked",
         key: "note:browser:c=picked",
       },
+      { ...durable, comment: "", commentID: "empty-live", key: "note:example:c=empty-live" },
+      { ...durable, comment: "", commentID: "empty-durable", key: "note:example:c=empty-durable" },
     ])
+    expect(decode(Schema.encodeSync(ComposerStore)(value))).toEqual(value)
   })
 
   test("drops invalid parts without losing valid mentions or optional field recovery", () => {

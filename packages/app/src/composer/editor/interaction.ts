@@ -25,7 +25,7 @@ import {
 import { clonePrompt, isAttachment, promptLength } from "../prompt-parts"
 import type { ComposerQueue } from "../adapter"
 import { isCommentItem } from "../state"
-import type { createComposerQuoteSource } from "../quote-source"
+import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
 
 export type ComposerSelectControl = {
   options: Accessor<ComposerOption[]>
@@ -79,8 +79,11 @@ export function createComposerEditor(input: {
   openContext?: (key: string) => void
   onContextRemove?: (item: ComposerComment) => void
   onQuoteComment?: (item: Extract<ComposerComment, { type: "quote" }>, comment: string) => void
-  quoteComment?: { key: Accessor<string | undefined>; set: (key?: string) => void }
-  quoteSource?: Pick<ReturnType<typeof createComposerQuoteSource>, "reveal">
+  quoteComment?: {
+    key: Accessor<string | undefined>
+    anchor?: Accessor<ComposerQuoteAnchor | undefined>
+    set: (key?: string) => void
+  }
   onEditor?: (element: HTMLElement) => void
   onSuggestionSelect?: (item: ComposerSuggestion) => (() => void) | void
   view: ComposerEditorView
@@ -572,8 +575,9 @@ export function createComposerEditor(input: {
       input.openContext?.(id)
     },
     editingQuote: () => quoteComment.key(),
-    quoteSource: input.quoteSource,
+    quoteAnchor: () => input.quoteComment?.anchor?.(),
     editQuote: (key?: string) => quoteComment.set(key),
+    focusQuotePrompt: () => restoreFocus(),
     commentQuote(id: string, comment: string) {
       const item = draft.state.context.items.find((entry) => entry.key === id)
 

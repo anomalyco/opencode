@@ -747,13 +747,13 @@ test("groups consecutive sent prompts under the last one's meta line, with each 
       return Math.round(below.y - above.y - above.height)
     })
     .toBe(4)
-  await expect(first.locator('[data-slot="user-message-meta-tail"]')).toBeHidden()
-  await expect(last.locator('[data-slot="user-message-meta-tail"]')).toBeVisible()
+  await expect(first.locator('[data-slot="user-message-copy-wrapper"]')).toBeHidden()
+  await expect(last.locator('[data-slot="user-message-copy-wrapper"]')).toBeVisible()
 
   // The first message keeps its own actions, shown beside its bubble on hover.
   await bubble(first).hover()
   await expect(first.locator('[data-slot="user-message-run-actions"]')).toHaveCSS("opacity", "1")
-  await expect(first.getByRole("button", { name: "Copy message" })).toHaveCount(1)
+  await expect(first.getByRole("button", { name: "More actions" })).toHaveCount(1)
 })
 
 test("leaves a long prompt unfolded while Fold long messages is off", async ({ page }) => {

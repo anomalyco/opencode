@@ -132,6 +132,11 @@ footer a:hover { background: var(--paper-hover); text-decoration: underline; tex
 .legal { display: flex; justify-content: center; flex-wrap: wrap; gap: 32px; padding: 2rem 1.5rem 5rem; color: var(--ink-weak); }
 .legal a { color: var(--ink-weak); text-decoration: none; }
 .legal a:hover { color: var(--ink); text-decoration: underline; }
+.status { --status-dot: var(--ink-weaker); display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; }
+.status::before { content: ""; flex: none; width: 6px; height: 6px; background: var(--status-dot); }
+.status[data-status="operational"] { --status-dot: #198b43; }
+.status[data-status="degraded"] { --status-dot: #c48a00; }
+.status[data-status="outage"] { --status-dot: #d93636; }
 
 @media (max-width: 40rem) {
   footer { flex-wrap: wrap; }

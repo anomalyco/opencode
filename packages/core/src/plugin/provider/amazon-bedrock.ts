@@ -4,6 +4,7 @@ import { define } from "@opencode/plugin/effect/plugin"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Provider } from "../../provider.js"
+import { credentialSettings, metadataSettings } from "./credential-settings.js"
 
 // Ambient inputs the AWS default credential chain can turn into credentials
 // without any key stored in opencode. Mirrors the presence checks the AWS CLI
@@ -82,11 +83,20 @@ export const AmazonBedrockPlugin = define({
         },
       })
     })
+    // The AWS profile method stores its form answer as credential metadata.
+    const login = yield* credentialSettings(ctx, Provider.ID.amazonBedrock, (value) =>
+      value.type === "external" && value.methodID === "aws-profile"
+        ? metadataSettings(value.metadata, ["profile"])
+        : {},
+    )
     yield* ctx.provider.transform((evt) => {
       for (const item of evt.list()) {
         if (!isBedrock(item.provider)) continue
         evt.update(item.provider.id, (provider) => {
-          const settings = provider.settings ?? {}
+          const settings = {
+            ...provider.settings,
+            ...((provider.integrationID ?? provider.id) === Provider.ID.amazonBedrock ? login.settings : {}),
+          }
           const chain = typeof settings.profile === "string" || CHAIN_ENV.some((name) => process.env[name])
           // SigV4 authenticates through the AWS default chain rather than a key
           // credential, so ambient AWS configuration is what makes Bedrock usable.

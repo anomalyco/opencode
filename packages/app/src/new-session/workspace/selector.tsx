@@ -9,7 +9,12 @@ import { Typeahead } from "@opencode/ui/typeahead"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { NewSessionWorkspaceController } from "./controller"
 
-export function NewSessionBranch(props: { workspace: NewSessionWorkspaceController; onDone: () => void }) {
+export function NewSessionBranch(props: {
+  workspace: NewSessionWorkspaceController
+  onDone: () => void
+  /** Opens the project's worktree picker; the checkout branch is static text without it. */
+  onWorktree?: () => void
+}) {
   const language = useLanguage()
 
   const [state, setState] = createStore({ open: false, truncated: false })
@@ -64,6 +69,9 @@ export function NewSessionBranch(props: { workspace: NewSessionWorkspaceControll
       ? language.t("session.new.workspace.fromBranch", { branch: props.workspace.bar.branch() ?? "" })
       : props.workspace.bar.branch()
 
+  // A truncated name keeps its full-text tooltip; otherwise the clickable checkout branch explains its action.
+  const hint = () => !creating() && !!props.onWorktree && !state.truncated
+
   const observe = (element: HTMLSpanElement) =>
     createResizeObserver(element, () => setState("truncated", element.scrollWidth > element.clientWidth))
 
@@ -71,20 +79,39 @@ export function NewSessionBranch(props: { workspace: NewSessionWorkspaceControll
     <Show when={props.workspace.bar.branch()}>
       <Tooltip
         placement="top"
-        value={label()}
-        disabled={!state.truncated}
+        openDelay={hint() ? 800 : undefined}
+        value={hint() ? language.t("session.location.worktree") : label()}
+        disabled={!state.truncated && !hint()}
         class="flex min-w-0 max-w-[220px]"
         contentClass="max-w-[calc(100vw-32px)] break-all"
       >
         <Show
           when={creating()}
           fallback={
-            <div class="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 ps-1.5 pe-2 text-v2-text-text-faint">
-              <Icon name="branch" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-              <span ref={observe} dir="auto" class="min-w-0 truncate">
-                {label()}
-              </span>
-            </div>
+            <Show
+              when={props.onWorktree}
+              fallback={
+                <div class="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 ps-1.5 pe-2 text-v2-text-text-faint">
+                  <Icon name="branch" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+                  <span ref={observe} dir="auto" class="min-w-0 truncate">
+                    {label()}
+                  </span>
+                </div>
+              }
+            >
+              <button
+                type="button"
+                aria-haspopup="dialog"
+                aria-description={language.t("session.location.worktree")}
+                class="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 rounded-sm ps-1.5 pe-2 text-v2-text-text-faint transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none"
+                onClick={() => props.onWorktree?.()}
+              >
+                <Icon name="branch" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+                <span ref={observe} dir="auto" class="min-w-0 truncate">
+                  {label()}
+                </span>
+              </button>
+            </Show>
           }
         >
           <Popover

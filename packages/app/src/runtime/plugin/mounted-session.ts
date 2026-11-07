@@ -229,12 +229,12 @@ export function createMountedSession(session: SessionModel) {
     },
     attach: (part) => write((draft) => draft.context.add(part)),
     quotable: () => !!prompt()?.quotable(),
-    focus(commentID) {
+    focus(commentID, options) {
       if (commentID === undefined) return prompt()?.focus()
 
       const item = composer.context.items().find((entry) => entry.type === "quote" && entry.commentID === commentID)
 
-      if (item) composer.capture().quoteComment.set(item.key)
+      if (item) composer.capture().quoteComment.set(item.key, options?.anchor)
     },
     update: (id, patch) => write((draft) => draft.context.updateComment(id, patch)),
     detach: (id) => write((draft) => draft.context.removeComment(id)),

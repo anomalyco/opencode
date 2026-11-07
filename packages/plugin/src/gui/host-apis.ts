@@ -469,7 +469,8 @@ export interface ComposerFile {
 }
 
 /**
- * A comment on something other than workspace lines, such as an element picked in a page. The model reads
+ * A reference to something other than workspace lines, such as an element picked in a page, with an optional comment.
+ * The model reads "The user referenced <subject>." when `comment` is empty, otherwise
  * "The user made the following comment regarding <subject>: <comment>".
  */
 export interface ComposerNote {
@@ -481,11 +482,15 @@ export interface ComposerNote {
   commentID: string
   /** Chip text naming the subject, e.g. `button#save`. */
   label: string
+  /** Primary heading while `comment` is empty, e.g. `button#save`. Defaults to `label`; ignored with a comment. */
+  title?: string
+  /** Plain-text footer with or without a comment, e.g. `Browser annotation`. Defaults to `label` when omitted. */
+  subtitle?: string
   /** Chip icon. */
   icon: IconName
   /** What the comment is about, for the model. Quote untrusted text such as page content. */
   subject: string
-  /** The user's comment. */
+  /** The user's comment. An empty string attaches the subject without a comment. */
   comment: string
   /** The link opening the chip routes, with `origin`. */
   href?: string
@@ -524,6 +529,36 @@ export interface ComposerQuote {
     /** Where the text came from, for the model, e.g. `the terminal`. Not localized. */
     readonly subject: string
   }
+}
+
+/**
+ * Positions a quote's optional comment editor beside its source, in viewport pixels. Called after the first editor
+ * measurement, on scroll and resize, and when reactive values it reads change. The editor holds its opening bottom
+ * edge as its input grows upward. Return undefined when the source is unavailable to use the composer tile instead.
+ * Never persisted.
+ *
+ * @param size - The current editor width and its frozen opening height; never called with an unmeasured zero height.
+ * @example
+ * const anchor: ComposerQuoteAnchor = (size) => ({ top: 200, left: 400 - size.width / 2 })
+ */
+export type ComposerQuoteAnchor = (size: {
+  /** Current editor width in pixels. */
+  width: number
+  /** Measured opening height in pixels, unchanged as the input grows. */
+  height: number
+}) =>
+  | {
+      /** Physical distance from the viewport's top edge, in pixels. Clamped to the viewport. */
+      top: number
+      /** Physical distance from the viewport's left edge, in pixels. Clamped to the viewport. */
+      left: number
+    }
+  | undefined
+
+/** Optional placement for a newly attached quote's comment editor. */
+export interface ComposerFocusOptions {
+  /** Positions the editor beside its source instead of its tile. Omit for tile placement. */
+  anchor?: ComposerQuoteAnchor
 }
 
 /** A model the composer sends a prompt with, as the model picker names it. */
@@ -616,8 +651,9 @@ export interface Composer {
    * its focus and the comment editor opens once the composer shows.
    *
    * @param commentID - The attached quote whose comment editor to open. Omit it to focus the prompt.
+   * @param options - Optional placement beside the quote's source. Omit to anchor to its composer tile.
    */
-  focus(commentID?: string): void
+  focus(commentID?: string, options?: ComposerFocusOptions): void
   /**
    * Changes an attached part. Files, notes and quotes alike; a note or a quote takes only `comment`. Before the
    * session's draft loads, it waits and applies in call order.

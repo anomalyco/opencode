@@ -104,7 +104,9 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
       synchronous iterators, and confined synchronous generators. Abrupt completion invokes the iterator's optional `return()`.
 - [x] `for...in` over own keys of plain objects, arrays, strings, and tool references. `null`, `undefined`, and other
       non-objects iterate nothing. An un-awaited promise throws rather than iterating.
-- [ ] `for...in` over inherited enumerable keys (`Object.create(proto)`), and skipping keys deleted during the loop.
+- [x] `for...in` over inherited enumerable keys (`Object.create(proto)`): own keys first, then each prototype's, skipping
+      keys a nearer level already has, even as a non-enumerable property.
+- [ ] `for...in` skipping keys deleted during the loop.
 - [x] Unlabeled `break` and `continue`.
 - [x] `try`, `catch`, optional catch bindings, and `finally`.
 - [x] `throw` with arbitrary values.
@@ -338,8 +340,8 @@ reject }` object.
       (`Object.getPrototypeOf("a") === String.prototype`); `null`, `undefined`, and the two confined symbols throw a
       `TypeError`.
 - [x] `Object.create(proto)` with an object or `null` prototype; any other prototype is a `TypeError`
-      (`Object prototype may only be an Object or null`). Inherited reads, `in`, `hasOwnProperty`, and own-only
-      `Object.keys` follow the chain as in JS, but `for...in` still enumerates own keys only. A second `properties`
+      (`Object prototype may only be an Object or null`). Inherited reads, `in`, `hasOwnProperty`, own-only
+      `Object.keys`, and `for...in` follow the chain as in JS. A second `properties`
       argument other than `undefined` throws a `TypeError`: property descriptors are not supported (there is no
       `Object.defineProperty` either).
 - [x] `Object.freeze`, `Object.seal`, and `Object.preventExtensions`, with `isFrozen`, `isSealed`, and `isExtensible`.

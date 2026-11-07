@@ -14,6 +14,7 @@ import { Model } from "../../model.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
 import { Provider } from "../../provider.js"
 import type { PluginInternal } from "../internal.js"
+import { credentialSettings, metadataSettings } from "./credential-settings.js"
 
 const providerID = Provider.ID.gitlab
 const integrationID = Integration.ID.make("gitlab")
@@ -261,7 +262,15 @@ export const GitLabPlugin = define({
       })
     })
 
+    // An OAuth login pins the instance it was issued against, so requests go there too.
+    const login = yield* credentialSettings(ctx, integrationID, (value) =>
+      value.type === "oauth" ? metadataSettings(value.metadata, ["instanceUrl"]) : {},
+    )
     yield* ctx.provider.transform((editor) => {
+      if (login.settings.instanceUrl && editor.get(providerID))
+        editor.update(providerID, (provider) => {
+          provider.settings = { ...provider.settings, ...login.settings }
+        })
       const item = editor.get(providerID)
       if (!item || !loaded.models?.length) return
       editor.add({

@@ -184,6 +184,12 @@ const withSubagent = (location: Location.Ref) =>
           model.variants = [{ id: Model.VariantID.make("fast") }]
         })
         editor.models.update(Provider.ID.make("test"), Model.ID.make("plain"), () => {})
+        editor.models.update(Provider.ID.make("test"), Model.ID.make("painter"), (model) => {
+          model.type = "image"
+        })
+        editor.models.update(Provider.ID.make("test"), Model.ID.make("classifier"), (model) => {
+          model.type = "decision"
+        })
       }),
     ).pipe(Effect.provide(locations.get(location)))
     yield* Agent.Service.use((agents) =>
@@ -774,6 +780,14 @@ describe("SubagentTool", () => {
             ["test/missing", 'Model "test/missing" is not available. Use the models tool to see what is available.'],
             ["test/override#slow", 'Variant "slow" is not available for "test/override". Available: fast.'],
             ["test/plain#high", 'Model "test/plain" has no variants. Omit the variant.'],
+            [
+              "test/painter",
+              'Model "test/painter" is an image model; subagents need a chat model. Use the models tool to find one.',
+            ],
+            [
+              "test/classifier",
+              'Model "test/classifier" is a decision model; subagents need a chat model. Use the models tool to find one.',
+            ],
           ] as const
           for (const [model, message] of failures) {
             expect(yield* call(`call-${model}`, { model })).toEqual({
