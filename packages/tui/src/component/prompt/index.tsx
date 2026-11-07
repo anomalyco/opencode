@@ -9,19 +9,7 @@ import {
   stripAnsiSequences,
   type KeyEvent,
 } from "@opentui/core"
-import {
-  createEffect,
-  createMemo,
-  onMount,
-  createSignal,
-  onCleanup,
-  on,
-  Show,
-  Switch,
-  Match,
-  For,
-  untrack,
-} from "solid-js"
+import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match, For } from "solid-js"
 import path from "path"
 import { useLocal } from "../../context/local"
 import { useTheme, useThemes } from "../../context/theme"
@@ -84,7 +72,7 @@ import { truncateFilePath } from "../../ui/file-path"
 import { PromptMetadataRow } from "./metadata"
 import { limitLabel, useUsageLimits } from "../usage"
 import { isDeepEqual } from "remeda"
-import { isLocationNotFoundError, type LocationRef } from "@opencode/client"
+import { isLocationNotFoundError } from "@opencode/client"
 import { retry } from "@opencode/util/retry"
 
 export type PromptProps = {
@@ -1129,41 +1117,25 @@ export function Prompt(props: PromptProps) {
     mode: "normal" | "shell"
     prompt: PromptInfo
     delivery: SessionInbox.Delivery
-    slash: boolean
   }>()
-  // Catalogs a submission reads: the agent, its model, and the configured default model.
-  // Slash input also needs commands so it is not sent as an ordinary prompt.
-  function missingSubmitCatalogs(location: LocationRef, slash: boolean) {
-    return [
-      data.location.agent,
-      data.location.model,
-      data.location.config,
-      ...(slash ? [data.location.command] : []),
-    ].filter((catalog) => catalog.list(location) === undefined)
-  }
+  // A waiting send only goes out for the draft, mode, session, and location it was made for.
   createEffect(() => {
     // Cancel even native Enter callbacks that have not created a pending load yet.
     const modalOpen = dialog.stack.length > 0
     if (modalOpen) nativeSubmitVersion++
     const pending = pendingSubmit()
     if (!pending) return
-    const location = currentLocation.ref ?? data.location.default()
     // Dialog handlers can clear the modal before navigating. Cancel on open so
-    // closing a workspace picker cannot retry against the previous location.
+    // closing a workspace picker cannot send against the previous location.
     if (
       modalOpen ||
       disabled() ||
       props.sessionID !== pending.sessionID ||
       store.mode !== pending.mode ||
       !isDeepEqual(store.prompt, pending.prompt) ||
-      locationKey(location) !== pending.location
-    ) {
+      locationKey(currentLocation.ref ?? data.location.default()) !== pending.location
+    )
       setPendingSubmit(undefined)
-      return
-    }
-    if (missingSubmitCatalogs(location, pending.slash).length > 0) return
-    setPendingSubmit(undefined)
-    untrack(() => void submit(pending.delivery))
   })
 
   async function submit(delivery: SessionInbox.Delivery = "steer") {
@@ -1223,40 +1195,45 @@ export function Prompt(props: PromptProps) {
       return true
     }
     // A worktree switch updates the active location before its catalogs arrive.
-    // Join their in-flight loads instead of silently dropping this submission.
+    // Wait for their loads instead of silently dropping this submission.
     const location = currentLocation.ref ?? data.location.default()
     const slashHead = parseSlashHead(inputText, /\s/)
-    const slashInput = store.mode === "normal" && slashHead !== undefined
-    const catalogs = missingSubmitCatalogs(location, slashInput)
-    if (catalogs.length > 0) {
+    // Slash input also needs the commands, or it would be sent as an ordinary prompt.
+    const commands = store.mode === "normal" && slashHead !== undefined
+    const loaded = () =>
+      local.model.catalogsLoaded(location) && (!commands || data.location.command.list(location) !== undefined)
+    if (!loaded()) {
       const pending = {
         location: locationKey(location),
         sessionID: props.sessionID,
         mode: store.mode,
         prompt: structuredClone(unwrap(store.prompt)),
         delivery,
-        slash: slashInput,
       }
       setPendingSubmit(pending)
+      const waiting = () => !disposed && pendingSubmit() === pending
       // Match the location provider's bounded retry policy. A shared request can
       // fail while that provider is still preparing the workspace in the background.
       void retry(
         async () => {
-          if (disposed || pendingSubmit() !== pending) return
-          await Promise.all(catalogs.map((catalog) => catalog.sync(location)))
+          if (!waiting()) return
+          await Promise.all([
+            local.model.loadMissingCatalogs(location),
+            commands && data.location.command.list(location) === undefined && data.location.command.sync(location),
+          ])
         },
-        {
-          retryIf: (error) => !disposed && pendingSubmit() === pending && !isLocationNotFoundError(error),
-        },
+        { retryIf: (error) => waiting() && !isLocationNotFoundError(error) },
       )
         .then(() => {
-          // Only the effect above sends. A load can settle without publishing under this
-          // location's key, and repeating it would join the settled entry, so fail instead.
-          if (disposed || pendingSubmit() !== pending) return
-          if (missingSubmitCatalogs(location, slashInput).length > 0) throw new Error("Workspace data did not load")
+          if (!waiting()) return
+          // A load can settle without publishing under this location's key, and loading
+          // again would rejoin the settled entry, so fail instead of waiting forever.
+          if (!loaded()) throw new Error("Workspace data did not load")
+          setPendingSubmit(undefined)
+          void submit(delivery)
         })
         .catch((error: unknown) => {
-          if (disposed || pendingSubmit() !== pending) return
+          if (!waiting()) return
           setPendingSubmit(undefined)
           toast.show({ title: "Failed to prepare prompt", message: errorMessage(error), variant: "error" })
         })
@@ -1659,7 +1636,7 @@ export function Prompt(props: PromptProps) {
       const sessionLocation = props.sessionID ? data.session.get(props.sessionID)?.location : location
       if (!sessionLocation || locationKey(sessionLocation) !== locationKey(location)) return previous
 
-      const loading = data.location.agent.list(location) === undefined || !local.model.catalogReady
+      const loading = !local.model.catalogsLoaded(location)
       const error = currentLocation.error
       const failed = error && locationKey(error.location) === locationKey(location)
       if (loading && !failed) return previous
