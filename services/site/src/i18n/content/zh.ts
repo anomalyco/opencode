@@ -187,7 +187,10 @@ export const content = {
           title: "任意 MCP 客户端",
           body: "OpenCode、Claude Code、Cursor、Codex、Zed 等众多客户端。",
         },
-        "named-sessions": { title: "命名会话", body: "每个会话都保留自己的标签页，重启后依然存在。" },
+        "all-your-logins": {
+          title: "沿用你的所有登录",
+          body: "智能体直接使用你已登录的网站。无需密钥，无需设置。",
+        },
         allowlists: { title: "允许列表", body: "将会话的标签页限制在您指定的网站内。" },
       },
       install:
@@ -195,6 +198,7 @@ export const content = {
     },
   },
   apps: {
+    browse: { category: "代理浏览器控制", body: "让你的代理使用你真实的浏览器，保留登录状态和标签页。" },
     hex: { category: "语音听写", body: "适用于任意应用的设备端语音听写。" },
     opentunnel: { category: "本地隧道", body: "为本地应用提供公开的 HTTPS URL。" },
     opentui: { category: "库", body: "用于构建终端用户界面的库。" },

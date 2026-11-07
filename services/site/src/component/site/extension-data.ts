@@ -26,6 +26,8 @@ type Extension = {
   product?: boolean
   /** For the page's structured data; every OS when left out. */
   operatingSystem?: string
+  /** A hero still per theme (videos.ts heroStills); the hero stays black when left out. */
+  hero?: boolean
 }
 
 export const extensionPages: readonly Extension[] = [
@@ -45,7 +47,7 @@ export const extensionPages: readonly Extension[] = [
       { title: "Lend a tab", body: "Click the toolbar button to hand an agent a tab you have open." },
       { title: "Record and capture", body: "Screenshots, screen recordings and network traffic as a HAR." },
       { title: "Any MCP client", body: "OpenCode, Claude Code, Cursor, Codex, Zed and many more." },
-      { title: "Named sessions", body: "Each session keeps its own tabs, across restarts." },
+      { title: "All your logins", body: "Agents use the sites you're already signed into. No keys, no setup." },
       { title: "Allowlists", body: "Limit a session's tabs to the sites you name." },
     ],
     install: {
@@ -54,6 +56,7 @@ export const extensionPages: readonly Extension[] = [
     },
     store: "https://chromewebstore.google.com/detail/mfnicocicmmlkpjnaffgihfjhdgjkdjg",
     product: true,
+    hero: true,
     source: "https://github.com/anomalyco/browse",
   },
   // {

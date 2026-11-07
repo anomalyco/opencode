@@ -152,6 +152,16 @@ function heroThemes(slug: PageSlug) {
 }
 
 /**
+ * A hero with a still per theme and no video yet, framed like the themed heroes above: Browse's
+ * (product-videos/heroes/browse-landscape-*.webp) is an HTML scene of OpenCode driving an agent tab,
+ * rendered with Playwright.
+ */
+export function heroStills(slug: string) {
+  const file = (theme: string) => `/product-videos/heroes/${slug}-landscape-${theme}.webp`
+  return { poster: file("light"), themes: { light: { poster: file("light") }, dark: { poster: file("dark") } } }
+}
+
+/**
  * The page's colour scheme on the client: the site's theme (the site root's data-theme, which the
  * pre-paint script sets from the saved choice), else the system's. Server: undefined.
  */

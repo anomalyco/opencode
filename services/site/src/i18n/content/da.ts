@@ -262,9 +262,9 @@ export const content = {
           title: "Enhver MCP-klient",
           body: "OpenCode, Claude Code, Cursor, Codex, Zed og mange flere.",
         },
-        "named-sessions": {
-          title: "Navngivne sessioner",
-          body: "Hver session beholder sine egne faner, også efter genstart.",
+        "all-your-logins": {
+          title: "Alle dine logins",
+          body: "Agenter bruger de sites, du allerede er logget ind på. Ingen nøgler, ingen opsætning.",
         },
         allowlists: { title: "Hvidlister", body: "Begræns en sessions faner til de sites, du angiver." },
       },
@@ -273,6 +273,10 @@ export const content = {
     },
   },
   apps: {
+    browse: {
+      category: "Browserstyring for agenter",
+      body: "Lad din agent bruge din rigtige browser, med dine logins og faner.",
+    },
     opentunnel: { category: "Lokale tunneler", body: "Offentlige HTTPS-URL'er til lokale apps." },
     opentui: { category: "Bibliotek", body: "Et bibliotek til terminalbrugerflader." },
     hex: { category: "Diktering", body: "Diktering direkte på enheden til enhver app." },

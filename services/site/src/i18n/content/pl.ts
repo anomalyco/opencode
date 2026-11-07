@@ -380,9 +380,9 @@ export const content = {
           title: "Każdy klient MCP",
           body: "OpenCode, Claude Code, Cursor, Codex, Zed i wiele innych.",
         },
-        "named-sessions": {
-          title: "Nazwane sesje",
-          body: "Każda sesja zachowuje swoje karty, także po restarcie.",
+        "all-your-logins": {
+          title: "Wszystkie twoje logowania",
+          body: "Agenci korzystają ze stron, na których już jesteś zalogowany. Bez kluczy, bez konfiguracji.",
         },
         allowlists: {
           title: "Listy stron",
@@ -394,6 +394,10 @@ export const content = {
     },
   },
   apps: {
+    browse: {
+      category: "Sterowanie przeglądarką dla agentów",
+      body: "Pozwól agentowi korzystać z Twojej prawdziwej przeglądarki, z Twoimi logowaniami i kartami.",
+    },
     hex: {
       category: "Dyktowanie głosowe",
       body: "Dyktowanie głosowe na urządzeniu w każdej aplikacji.",

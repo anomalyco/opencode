@@ -225,7 +225,10 @@ export const content = {
           title: "모든 MCP 클라이언트",
           body: "OpenCode, Claude Code, Cursor, Codex, Zed 등 다양한 클라이언트.",
         },
-        "named-sessions": { title: "이름 있는 세션", body: "각 세션은 재시작 후에도 자기 탭을 유지합니다." },
+        "all-your-logins": {
+          title: "모든 로그인 그대로",
+          body: "에이전트가 이미 로그인한 사이트를 그대로 사용합니다. 키도, 설정도 필요 없습니다.",
+        },
         allowlists: { title: "허용 목록", body: "세션의 탭을 지정한 사이트로만 제한하세요." },
       },
       install:
@@ -233,6 +236,10 @@ export const content = {
     },
   },
   apps: {
+    browse: {
+      category: "에이전트용 브라우저 제어",
+      body: "로그인과 탭이 그대로인 실제 브라우저를 에이전트가 사용하게 하세요.",
+    },
     hex: { category: "음성 받아쓰기", body: "어떤 앱에서든 쓰는 온디바이스 음성 받아쓰기." },
     opentunnel: { category: "로컬 터널", body: "로컬 앱을 위한 공개 HTTPS URL." },
     opentui: { category: "라이브러리", body: "터미널 사용자 인터페이스를 위한 라이브러리." },

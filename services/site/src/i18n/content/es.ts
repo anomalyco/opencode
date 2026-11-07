@@ -355,9 +355,9 @@ export const content = {
           title: "Todo cliente MCP",
           body: "OpenCode, Claude Code, Cursor, Codex, Zed y muchos más.",
         },
-        "named-sessions": {
-          title: "Sesiones con nombre",
-          body: "Cada sesión conserva sus pestañas, incluso tras reiniciar.",
+        "all-your-logins": {
+          title: "Todas tus sesiones iniciadas",
+          body: "Los agentes usan los sitios en los que ya has iniciado sesión. Sin claves, sin configuración.",
         },
         allowlists: {
           title: "Lista blanca",
@@ -369,6 +369,10 @@ export const content = {
     },
   },
   apps: {
+    browse: {
+      category: "Control del navegador para agentes",
+      body: "Deja que tu agente use tu navegador real, con tus sesiones iniciadas y tus pestañas.",
+    },
     opentunnel: {
       category: "Túneles locales",
       body: "URL HTTPS públicas para apps locales.",

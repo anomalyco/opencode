@@ -707,7 +707,7 @@ export default function PageSettings(props: { home?: boolean; terminal?: boolean
             onChange={(value) => setSiteSetting("productFeatureColumns", value)}
           />
           <SettingsSelect
-            label="More products"
+            label="Works great with OpenCode"
             options={companionStyles}
             value={siteSettings.companionStyle}
             onChange={(value) => setSiteSetting("companionStyle", value)}

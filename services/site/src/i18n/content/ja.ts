@@ -274,7 +274,10 @@ export const content = {
           body: "スクリーンショット、画面録画、HAR形式のネットワーク通信。",
         },
         "any-mcp-client": { title: "全MCPクライアント", body: "OpenCode、Claude Code、Cursor、Codex、Zedなど多数。" },
-        "named-sessions": { title: "名前付きセッション", body: "各セッションは再起動後も自分のタブを保持します。" },
+        "all-your-logins": {
+          title: "ログインはそのまま",
+          body: "エージェントは、すでにサインインしているサイトをそのまま使います。キーも設定も不要です。",
+        },
         allowlists: { title: "許可リスト", body: "セッションのタブを、指定したサイトだけに制限できます。" },
       },
       install:
@@ -282,6 +285,10 @@ export const content = {
     },
   },
   apps: {
+    browse: {
+      category: "エージェント向けブラウザ操作",
+      body: "ログインもタブもそのまま、いつものブラウザをエージェントが使えます。",
+    },
     opentunnel: { category: "ローカルトンネル", body: "ローカルアプリに公開HTTPS URLを。" },
     opentui: { category: "ライブラリ", body: "ターミナルUIのためのライブラリ。" },
     hex: { category: "音声入力", body: "どのアプリでも使える、デバイス上の音声入力。" },
