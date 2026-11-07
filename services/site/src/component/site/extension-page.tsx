@@ -13,6 +13,7 @@ import { extensionsSource } from "~/i18n/content/areas/extensions"
 import { ExtensionDownload } from "./download-sections"
 import { extensionPages, type ExtensionSlug } from "./extension-data"
 import { NewTab } from "./icons"
+import { heroStills, ProductHero } from "./product-hero"
 import { MoreFromAnomaly } from "./product-list"
 import { siteSettings } from "./settings"
 import { Site } from "./site"
@@ -108,8 +109,8 @@ export function ExtensionPage(props: { slug: ExtensionSlug; path?: string }) {
       </Show>
 
       <div data-slot="first-screen">
-        {/* Plain black until there is real footage of the product. */}
-        <div data-component="product-hero" data-product={props.slug} data-empty />
+        {/* Plain black until the extension has a hero. */}
+        <ProductHero slug={props.slug} media={data().hero ? heroStills(props.slug) : undefined} />
 
         <section data-component="product-intro" data-section="intro">
           <div data-slot="copy">

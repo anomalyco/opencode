@@ -468,7 +468,6 @@ export const dict = {
   "site.code.failed": "فشل",
   "site.code.copied": "نُسخ إلى الحافظة",
   "site.code.failedHint": "تعذّر النسخ. حدّد الكود بنفسك.",
-  "site.companions.free": "مجاني",
   "site.announcement.label": "جديد. {{message}}",
   "site.announcement.aside": "الجديد في OpenCode",
   "site.announcement.dismiss": "إخفاء الإعلان",

@@ -468,7 +468,6 @@ export const dict = {
   "site.code.failed": "Ошибка",
   "site.code.copied": "Скопировано в буфер обмена",
   "site.code.failedHint": "Не удалось скопировать. Выделите код вручную.",
-  "site.companions.free": "Бесплатно",
   "site.announcement.label": "Новое. {{message}}",
   "site.announcement.aside": "Новое в OpenCode",
   "site.announcement.dismiss": "Скрыть объявление",

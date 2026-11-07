@@ -151,17 +151,6 @@ function heroThemes(slug: PageSlug) {
   }
 }
 
-/**
- * The page's colour scheme on the client: the site's theme (the site root's data-theme, which the
- * pre-paint script sets from the saved choice), else the system's. Server: undefined.
- */
-export function pageScheme(): "light" | "dark" | undefined {
-  if (typeof document === "undefined") return
-  const theme = document.querySelector<HTMLElement>("[data-site]")?.dataset.theme
-  if (theme === "light" || theme === "dark") return theme
-  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
-}
-
 /** The default product video set: locked-off real UI shots joined by hard cuts (public/product-videos/locked). */
 const defaultSet = "locked"
 
