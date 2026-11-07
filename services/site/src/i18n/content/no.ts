@@ -288,7 +288,7 @@ export const content = {
     },
     subscriptions: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } },
     steps: {
-      download: { title: "Last ned", line: "Desktop, mobil eller terminal." },
+      download: { title: "Last ned", line: "Desktop, terminal eller mobil." },
       "use-free-models": {
         title: "Bruk gratis modeller",
         line: "OpenCode har et sett gratis modeller. Ingen konto trengs.",
@@ -475,7 +475,7 @@ export const content = {
       learnMore: "Les mer på [anoma.ly](site).",
       projects: {
         opencode: {
-          body: "Kodeagenten med åpen kildekode, med apper for skrivebord, mobil og terminal og et SDK. MIT-lisensiert, over 220 000 GitHub-stjerner.",
+          body: "Kodeagenten med åpen kildekode, med apper for skrivebord, terminal og mobil og et SDK. MIT-lisensiert, over 220 000 GitHub-stjerner.",
         },
         sst: {
           body: "Et rammeverk for å bygge fullstack-apper på din egen infrastruktur. MIT-lisensiert, åpent siden 2020, med over 26 000 GitHub-stjerner.",
@@ -498,9 +498,9 @@ export const content = {
     about: {
       title: "Om OpenCode",
       boilerplate: {
-        long: "OpenCode er en kodeagent med åpen kildekode. Den finnes som skrivebordsapp, mobilapp, terminal-UI og SDK, og fungerer med modeller fra alle leverandører, blant annet Claude, GPT og Gemini. OpenCode er MIT-lisensiert og laget av Anomaly. Den har over 220 000 GitHub-stjerner og mer enn 1 000 bidragsytere, og over 22 millioner utviklere bruker den hver måned.",
+        long: "OpenCode er en kodeagent med åpen kildekode. Den finnes som skrivebordsapp, terminal-UI, mobilapp og SDK, og fungerer med modeller fra alle leverandører, blant annet Claude, GPT og Gemini. OpenCode er MIT-lisensiert og laget av Anomaly. Den har over 220 000 GitHub-stjerner og mer enn 1 000 bidragsytere, og over 22 millioner utviklere bruker den hver måned.",
         short:
-          "OpenCode er en kodeagent med åpen kildekode fra Anomaly, med apper for skrivebord, mobil og terminal og et SDK.",
+          "OpenCode er en kodeagent med åpen kildekode fra Anomaly, med apper for skrivebord, terminal og mobil og et SDK.",
       },
       products: {
         "opencode-console": {

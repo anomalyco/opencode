@@ -298,7 +298,7 @@ export const content = {
     },
     subscriptions: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } },
     steps: {
-      download: { title: "ダウンロード", line: "デスクトップ、モバイル、ターミナル。" },
+      download: { title: "ダウンロード", line: "デスクトップ、ターミナル、モバイル。" },
       "use-free-models": {
         title: "無料モデルを使う",
         line: "OpenCodeには無料モデルが付属しています。アカウントは不要です。",
@@ -481,7 +481,7 @@ export const content = {
       projects: {
         opencode: {
           name: "OpenCode",
-          body: "オープンソースのコーディングエージェント。デスクトップ、モバイル、ターミナル向けのアプリとSDKがあります。MITライセンス、GitHubスター220,000以上。",
+          body: "オープンソースのコーディングエージェント。デスクトップ、ターミナル、モバイル向けのアプリとSDKがあります。MITライセンス、GitHubスター220,000以上。",
         },
         sst: {
           name: "SST",
@@ -508,9 +508,9 @@ export const content = {
     about: {
       title: "OpenCodeについて",
       boilerplate: {
-        long: "OpenCodeはオープンソースのコーディングエージェントです。デスクトップアプリ、モバイルアプリ、ターミナルUI、SDKとして提供され、Claude、GPT、Geminiなど、あらゆるプロバイダーのモデルで動作します。OpenCodeはMITライセンスで、Anomalyが開発しています。GitHubスターは220,000以上、コントリビューターは1,000人以上で、毎月2,200万人以上の開発者が利用しています。",
+        long: "OpenCodeはオープンソースのコーディングエージェントです。デスクトップアプリ、ターミナルUI、モバイルアプリ、SDKとして提供され、Claude、GPT、Geminiなど、あらゆるプロバイダーのモデルで動作します。OpenCodeはMITライセンスで、Anomalyが開発しています。GitHubスターは220,000以上、コントリビューターは1,000人以上で、毎月2,200万人以上の開発者が利用しています。",
         short:
-          "OpenCodeはAnomalyが開発するオープンソースのコーディングエージェントで、デスクトップ、モバイル、ターミナル向けのアプリとSDKがあります。",
+          "OpenCodeはAnomalyが開発するオープンソースのコーディングエージェントで、デスクトップ、ターミナル、モバイル向けのアプリとSDKがあります。",
       },
       products: {
         "opencode-console": {

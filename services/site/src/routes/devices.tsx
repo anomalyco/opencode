@@ -18,8 +18,8 @@ const devices = [
 const pages = [
   "/",
   "/desktop",
-  "/mobile",
   "/terminal",
+  "/mobile",
   "/sdk",
   "/product",
   "/docs",

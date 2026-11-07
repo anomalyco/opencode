@@ -321,7 +321,7 @@ export const content = {
     },
     subscriptions: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } },
     steps: {
-      download: { title: "Download", line: "Desktop, Mobile oder Terminal." },
+      download: { title: "Download", line: "Desktop, Terminal oder Mobile." },
       "use-free-models": {
         title: "Gratis-Modelle nutzen",
         line: "OpenCode bringt eine Reihe kostenloser Modelle mit. Ohne Account.",
@@ -520,7 +520,7 @@ export const content = {
       learnMore: "Mehr erfährst du auf [anoma.ly](site).",
       projects: {
         opencode: {
-          body: "Der Open-Source-Coding-Agent, mit Apps für Desktop, Mobile und Terminal sowie einem SDK. MIT-lizenziert, über 220.000 GitHub-Sterne.",
+          body: "Der Open-Source-Coding-Agent, mit Apps für Desktop, Terminal und Mobile sowie einem SDK. MIT-lizenziert, über 220.000 GitHub-Sterne.",
         },
         sst: {
           body: "Ein Framework, um Full-Stack-Apps auf deiner eigenen Infrastruktur zu bauen. MIT-lizenziert, offen seit 2020, mit über 26.000 GitHub-Sternen.",
@@ -543,9 +543,9 @@ export const content = {
     about: {
       title: "Über OpenCode",
       boilerplate: {
-        long: "OpenCode ist ein Open-Source-Coding-Agent. Es gibt ihn als Desktop-App, Mobile-App, Terminal-UI und SDK, und er funktioniert mit Modellen jedes Anbieters, darunter Claude, GPT und Gemini. OpenCode ist MIT-lizenziert und wird von Anomaly entwickelt. Es hat über 220.000 GitHub-Sterne und mehr als 1.000 Mitwirkende, und über 22 Millionen Entwickler nutzen es jeden Monat.",
+        long: "OpenCode ist ein Open-Source-Coding-Agent. Es gibt ihn als Desktop-App, Terminal-UI, Mobile-App und SDK, und er funktioniert mit Modellen jedes Anbieters, darunter Claude, GPT und Gemini. OpenCode ist MIT-lizenziert und wird von Anomaly entwickelt. Es hat über 220.000 GitHub-Sterne und mehr als 1.000 Mitwirkende, und über 22 Millionen Entwickler nutzen es jeden Monat.",
         short:
-          "OpenCode ist ein Open-Source-Coding-Agent von Anomaly, mit Apps für Desktop, Mobile und Terminal sowie einem SDK.",
+          "OpenCode ist ein Open-Source-Coding-Agent von Anomaly, mit Apps für Desktop, Terminal und Mobile sowie einem SDK.",
       },
       products: {
         "opencode-console": {

@@ -446,7 +446,7 @@ export const content = {
     steps: {
       download: {
         title: "Pobierz",
-        line: "Desktop, telefon lub terminal.",
+        line: "Desktop, terminal lub telefon.",
       },
       "use-free-models": {
         title: "Darmowe modele",
@@ -790,7 +790,7 @@ export const content = {
       projects: {
         opencode: {
           name: "OpenCode",
-          body: "Open source'owy agent do programowania, z aplikacjami na desktop, telefon i terminal oraz SDK. Licencja MIT, ponad 220 000 gwiazdek na GitHubie.",
+          body: "Open source'owy agent do programowania, z aplikacjami na desktop, terminal i telefon oraz SDK. Licencja MIT, ponad 220 000 gwiazdek na GitHubie.",
         },
         sst: {
           name: "SST",
@@ -817,9 +817,9 @@ export const content = {
     about: {
       title: "O OpenCode",
       boilerplate: {
-        long: "OpenCode to open source'owy agent do programowania. Jest dostępny jako aplikacja desktopowa, aplikacja mobilna, interfejs terminalowy i SDK, i działa z modelami dowolnego dostawcy, w tym Claude, GPT i Gemini. OpenCode ma licencję MIT i jest tworzony przez Anomaly. Ma ponad 220 000 gwiazdek na GitHubie i ponad 1000 współtwórców, a co miesiąc korzysta z niego ponad 22 miliony programistów.",
+        long: "OpenCode to open source'owy agent do programowania. Jest dostępny jako aplikacja desktopowa, interfejs terminalowy, aplikacja mobilna i SDK, i działa z modelami dowolnego dostawcy, w tym Claude, GPT i Gemini. OpenCode ma licencję MIT i jest tworzony przez Anomaly. Ma ponad 220 000 gwiazdek na GitHubie i ponad 1000 współtwórców, a co miesiąc korzysta z niego ponad 22 miliony programistów.",
         short:
-          "OpenCode to open source'owy agent do programowania od Anomaly, z aplikacjami na desktop, telefon i terminal oraz SDK.",
+          "OpenCode to open source'owy agent do programowania od Anomaly, z aplikacjami na desktop, terminal i telefon oraz SDK.",
       },
       products: {
         "opencode-console": {

@@ -5,8 +5,8 @@ import type { Translate } from "~/i18n"
 import { rich } from "~/i18n/rich"
 import type { RichText } from "~/lib/markdown"
 
-// Product order rule: whenever copy lists the products, name them in this order: desktop, mobile,
-// terminal, SDK (the order of `products` in component/site/product-data.ts).
+// Product order rule: whenever copy lists the products, name them in this order: desktop, terminal,
+// mobile, SDK (the order of `products` in component/site/product-data.ts).
 
 /** Splits copy into text and links wherever one of the phrases appears, in any letter case. */
 export function linkPhrases(text: string, links: readonly { text: string; href: string }[]): RichText {

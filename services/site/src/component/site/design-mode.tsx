@@ -100,7 +100,7 @@ export const copyVariants = {
       "OpenCode is an open source coding agent that works with any model. Run it as a desktop app, from your phone, in the terminal or inside your own tools with the SDK.",
       "OpenCode is an open source coding agent. Use it in the desktop app, on your phone, in your terminal, or from your own code with the SDK.",
       "OpenCode writes, edits and explains code with the model of your choice. It's open source, and runs on your desktop, your phone, your terminal and your own code.",
-      "One open source coding agent for every place you work: a desktop app, a phone app, a terminal interface and an SDK.",
+      "One open source coding agent for every place you work: a desktop app, a terminal interface, a phone app and an SDK.",
       // From the coding-agents review (positioningRec), adjusted to the site copy rules.
       "OpenCode is an open source coding agent. It runs on your computer, and the desktop app, phone, terminal and SDK all connect to the same sessions.",
     ],
@@ -325,10 +325,10 @@ export const copyVariants = {
     lines: 1,
     options: [
       "One agent, every surface. Start a session on your desktop, steer it from your phone, pick it up in the terminal or drive it from your own code.",
-      "OpenCode runs on desktop, mobile and the terminal, and from your own code. Every app shares the same sessions, so you start on one and carry on in another.",
-      "Desktop, mobile and terminal on one OpenCode server, and the SDK inside your own code. A session started in one app is already there in the others.",
+      "OpenCode runs on desktop, the terminal and mobile, and from your own code. Every app shares the same sessions, so you start on one and carry on in another.",
+      "Desktop, terminal and mobile on one OpenCode server, and the SDK inside your own code. A session started in one app is already there in the others.",
       "Use OpenCode wherever you work. The apps share one server and the same sessions: start at your desk, approve from your phone, finish in the terminal.",
-      "The same agent on desktop, mobile, the terminal and the SDK, with the same sessions across the apps. Switch surfaces without losing your place.",
+      "The same agent on desktop, the terminal, mobile and the SDK, with the same sessions across the apps. Switch surfaces without losing your place.",
     ],
   },
   // The products after the carousel's four, on /product and their own pages.

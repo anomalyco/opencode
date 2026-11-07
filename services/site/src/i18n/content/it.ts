@@ -407,7 +407,7 @@ export const content = {
     steps: {
       download: {
         title: "Scarica",
-        line: "Desktop, mobile o terminale.",
+        line: "Desktop, terminale o mobile.",
       },
       "use-free-models": {
         title: "Modelli gratuiti",
@@ -740,7 +740,7 @@ export const content = {
       more: "Tra gli altri progetti ci sono SST e OpenTUI, tutti open source su [GitHub](github).",
       projects: {
         opencode: {
-          body: "L'agente di coding open source, con app per desktop, mobile e terminale, e un SDK. Licenza MIT, oltre 220.000 stelle su GitHub.",
+          body: "L'agente di coding open source, con app per desktop, terminale e mobile, e un SDK. Licenza MIT, oltre 220.000 stelle su GitHub.",
         },
         sst: {
           body: "Un framework per creare app full-stack sulla tua infrastruttura. Licenza MIT, open source dal 2020, oltre 26.000 stelle su GitHub.",
@@ -764,9 +764,9 @@ export const content = {
     about: {
       title: "Chi è OpenCode",
       boilerplate: {
-        long: "OpenCode è un agente di coding open source. È disponibile come app desktop, app mobile, UI da terminale e SDK, e funziona con modelli di qualsiasi provider, tra cui Claude, GPT e Gemini. OpenCode ha licenza MIT ed è sviluppato da Anomaly. Ha oltre 220.000 stelle su GitHub e più di 1.000 contributori, e oltre 22 milioni di sviluppatori lo usano ogni mese.",
+        long: "OpenCode è un agente di coding open source. È disponibile come app desktop, UI da terminale, app mobile e SDK, e funziona con modelli di qualsiasi provider, tra cui Claude, GPT e Gemini. OpenCode ha licenza MIT ed è sviluppato da Anomaly. Ha oltre 220.000 stelle su GitHub e più di 1.000 contributori, e oltre 22 milioni di sviluppatori lo usano ogni mese.",
         short:
-          "OpenCode è un agente di coding open source di Anomaly, con app per desktop, mobile e terminale, e un SDK.",
+          "OpenCode è un agente di coding open source di Anomaly, con app per desktop, terminale e mobile, e un SDK.",
       },
       products: {
         "opencode-console": {

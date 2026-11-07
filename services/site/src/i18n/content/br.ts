@@ -446,7 +446,7 @@ export const content = {
     steps: {
       download: {
         title: "Baixe",
-        line: "Desktop, mobile ou terminal.",
+        line: "Desktop, terminal ou mobile.",
       },
       "use-free-models": {
         title: "Use modelos grátis",
@@ -790,7 +790,7 @@ export const content = {
       projects: {
         opencode: {
           name: "OpenCode",
-          body: "O agente de programação de código aberto, com apps para desktop, mobile e terminal, e um SDK. Licença MIT, mais de 220.000 estrelas no GitHub.",
+          body: "O agente de programação de código aberto, com apps para desktop, terminal e mobile, e um SDK. Licença MIT, mais de 220.000 estrelas no GitHub.",
         },
         sst: {
           name: "SST",
@@ -817,9 +817,9 @@ export const content = {
     about: {
       title: "Sobre o OpenCode",
       boilerplate: {
-        long: "OpenCode é um agente de programação de código aberto. Ele vem como app desktop, app mobile, interface de terminal e SDK, e funciona com modelos de qualquer provedor, incluindo Claude, GPT e Gemini. O OpenCode tem licença MIT e é feito pela Anomaly. Tem mais de 220.000 estrelas no GitHub e mais de 1.000 colaboradores, e mais de 22 milhões de desenvolvedores o usam todo mês.",
+        long: "OpenCode é um agente de programação de código aberto. Ele vem como app desktop, interface de terminal, app mobile e SDK, e funciona com modelos de qualquer provedor, incluindo Claude, GPT e Gemini. O OpenCode tem licença MIT e é feito pela Anomaly. Tem mais de 220.000 estrelas no GitHub e mais de 1.000 colaboradores, e mais de 22 milhões de desenvolvedores o usam todo mês.",
         short:
-          "OpenCode é um agente de programação de código aberto da Anomaly, com apps para desktop, mobile e terminal, e um SDK.",
+          "OpenCode é um agente de programação de código aberto da Anomaly, com apps para desktop, terminal e mobile, e um SDK.",
       },
       products: {
         "opencode-console": {

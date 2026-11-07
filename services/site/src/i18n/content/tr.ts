@@ -446,7 +446,7 @@ export const content = {
     steps: {
       download: {
         title: "İndir",
-        line: "Masaüstü, mobil ya da terminal.",
+        line: "Masaüstü, terminal ya da mobil.",
       },
       "use-free-models": {
         title: "Ücretsiz modeller",
@@ -790,7 +790,7 @@ export const content = {
       projects: {
         opencode: {
           name: "OpenCode",
-          body: "Masaüstü, mobil ve terminal uygulamaları ile bir SDK'sı olan açık kaynaklı kodlama ajanı. MIT lisanslı, 220.000'den fazla GitHub yıldızı.",
+          body: "Masaüstü, terminal ve mobil uygulamaları ile bir SDK'sı olan açık kaynaklı kodlama ajanı. MIT lisanslı, 220.000'den fazla GitHub yıldızı.",
         },
         sst: {
           name: "SST",
@@ -817,9 +817,9 @@ export const content = {
     about: {
       title: "OpenCode hakkında",
       boilerplate: {
-        long: "OpenCode açık kaynaklı bir kodlama ajanıdır. Masaüstü uygulaması, mobil uygulama, terminal arayüzü ve SDK olarak gelir ve Claude, GPT ve Gemini dahil her sağlayıcının modelleriyle çalışır. OpenCode MIT lisanslıdır ve Anomaly tarafından geliştirilir. 220.000'den fazla GitHub yıldızı ve 1.000'den fazla katkıcısı vardır, her ay 22 milyondan fazla geliştirici onu kullanır.",
+        long: "OpenCode açık kaynaklı bir kodlama ajanıdır. Masaüstü uygulaması, terminal arayüzü, mobil uygulama ve SDK olarak gelir ve Claude, GPT ve Gemini dahil her sağlayıcının modelleriyle çalışır. OpenCode MIT lisanslıdır ve Anomaly tarafından geliştirilir. 220.000'den fazla GitHub yıldızı ve 1.000'den fazla katkıcısı vardır, her ay 22 milyondan fazla geliştirici onu kullanır.",
         short:
-          "OpenCode, Anomaly'nin masaüstü, mobil ve terminal uygulamaları ile bir SDK'sı olan açık kaynaklı kodlama ajanıdır.",
+          "OpenCode, Anomaly'nin masaüstü, terminal ve mobil uygulamaları ile bir SDK'sı olan açık kaynaklı kodlama ajanıdır.",
       },
       products: {
         "opencode-console": {

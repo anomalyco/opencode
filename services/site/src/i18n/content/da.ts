@@ -288,7 +288,7 @@ export const content = {
     },
     subscriptions: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } },
     steps: {
-      download: { title: "Download", line: "Desktop, mobil eller terminal." },
+      download: { title: "Download", line: "Desktop, terminal eller mobil." },
       "use-free-models": {
         title: "Brug gratis modeller",
         line: "OpenCode har et sæt gratis modeller. Ingen konto nødvendig.",
@@ -472,7 +472,7 @@ export const content = {
       learnMore: "Læs mere på [anoma.ly](site).",
       projects: {
         opencode: {
-          body: "Open source-kodningsagenten med apps til desktop, mobil og terminal og et SDK. MIT-licenseret, over 220.000 GitHub-stjerner.",
+          body: "Open source-kodningsagenten med apps til desktop, terminal og mobil og et SDK. MIT-licenseret, over 220.000 GitHub-stjerner.",
         },
         sst: {
           body: "Et framework til at bygge full-stack-apps på din egen infrastruktur. MIT-licenseret, åbent siden 2020, med over 26.000 GitHub-stjerner.",
@@ -495,9 +495,9 @@ export const content = {
     about: {
       title: "Om OpenCode",
       boilerplate: {
-        long: "OpenCode er en open source-kodningsagent. Den findes som desktopapp, mobilapp, terminal-UI og SDK og virker med modeller fra enhver udbyder, bl.a. Claude, GPT og Gemini. OpenCode er MIT-licenseret og lavet af Anomaly. Den har over 220.000 GitHub-stjerner og mere end 1.000 bidragydere, og over 22 millioner udviklere bruger den hver måned.",
+        long: "OpenCode er en open source-kodningsagent. Den findes som desktopapp, terminal-UI, mobilapp og SDK og virker med modeller fra enhver udbyder, bl.a. Claude, GPT og Gemini. OpenCode er MIT-licenseret og lavet af Anomaly. Den har over 220.000 GitHub-stjerner og mere end 1.000 bidragydere, og over 22 millioner udviklere bruger den hver måned.",
         short:
-          "OpenCode er en open source-kodningsagent fra Anomaly med apps til desktop, mobil og terminal og et SDK.",
+          "OpenCode er en open source-kodningsagent fra Anomaly med apps til desktop, terminal og mobil og et SDK.",
       },
       products: {
         "opencode-console": {

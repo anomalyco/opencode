@@ -1,5 +1,5 @@
 // Product copy shared by the carousel, the product pages and the Markdown versions of the pages.
-// Product order rule: copy that lists the products names them as desktop, mobile, terminal, SDK.
+// Product order rule: copy that lists the products names them as desktop, terminal, mobile, SDK.
 
 import { docsUrl } from "~/lib/docs"
 import { isMobile, requestPlatform } from "~/lib/platform"
@@ -26,7 +26,7 @@ export const sdkSnippet = [
   `<span data-p>})</span>`,
 ].join("\n")
 
-export type ProductSlug = "desktop" | "mobile" | "terminal" | "sdk"
+export type ProductSlug = "desktop" | "terminal" | "mobile" | "sdk"
 /** The products after the carousel's four, with pages of their own and cards on /product. */
 export type MoreSlug = "ide" | "mini"
 /** Every product with a page. */
@@ -34,7 +34,7 @@ export type PageSlug = ProductSlug | MoreSlug
 
 /**
  * The products, in the order the carousel shows them. This is the site-wide product order: any copy
- * that lists the products names them as desktop, mobile, terminal, SDK.
+ * that lists the products names them as desktop, terminal, mobile, SDK.
  */
 export const products = [
   {
@@ -44,17 +44,17 @@ export const products = [
     action: "Download",
   },
   {
+    slug: "terminal",
+    name: "Terminal",
+    body: "A fast terminal UI that works in any shell, editor or remote server.",
+    action: "Install",
+  },
+  {
     slug: "mobile",
     name: "Mobile",
     body: "Start, steer and approve sessions from your phone, wherever you are.",
     isNew: true,
     action: "Download",
-  },
-  {
-    slug: "terminal",
-    name: "Terminal",
-    body: "A fast terminal UI that works in any shell, editor or remote server.",
-    action: "Install",
   },
   {
     slug: "sdk",
@@ -210,6 +210,46 @@ export const productDetails: Record<
       },
     ],
   },
+  terminal: {
+    title: "OpenCode | Terminal UI for the open source coding agent",
+    description:
+      "A fast terminal UI for OpenCode that works in any shell, editor or remote server. Describe what you want, see each edit as a diff and approve commands.",
+    operatingSystem: "macOS, Linux, Windows",
+    intro:
+      "A fast terminal UI that works in any shell, editor or remote server. Describe what you want in plain words, watch each edit land as a diff, and choose which commands run on their own.",
+    features: [
+      { title: "Any terminal", body: "Works in any shell, in your editor's terminal or on a remote server." },
+      { title: "Diffs in the timeline", body: "See each edit as a diff in the timeline, as the agent makes it." },
+      { title: "Pick up later", body: "Continue the last session with -c, or any with -s." },
+      { title: "One-off runs", body: "opencode run sends one message and prints the reply." },
+      { title: "Agents and commands", body: "Switch agents with shift+tab and open every command with ctrl+p." },
+      { title: "Auto-approve", body: "Run with --auto to allow every action you haven't denied." },
+      { title: "Any server", body: "Connect to an OpenCode server by URL with --server." },
+      { title: "Usage stats", body: "opencode stats shows shareable usage statistics." },
+    ],
+    showcase: [
+      {
+        title: "Ask in plain words",
+        clip: "/product-videos/features/terminal-1",
+        body: "Type what you want, and the agent shows its plan as it works.",
+      },
+      {
+        title: "Approve what runs",
+        clip: "/product-videos/features/terminal-2",
+        body: "Edits show as diffs, and commands wait for your permission.",
+      },
+      {
+        title: "Make it yours",
+        clip: "/product-videos/features/terminal-3",
+        body: "Switch themes in a keystroke, from the default to tokyonight and more.",
+      },
+      {
+        title: "Mini",
+        clip: "/product-videos/features/terminal-4",
+        body: "Run opencode mini and replies print into your own scrollback.",
+      },
+    ],
+  },
   mobile: {
     title: "OpenCode | Mobile, your coding sessions on your phone",
     description:
@@ -252,46 +292,6 @@ export const productDetails: Record<
         title: "Results",
         clip: "/product-videos/features/mobile-4",
         body: "The call tells you what changed once the work you asked for is done.",
-      },
-    ],
-  },
-  terminal: {
-    title: "OpenCode | Terminal UI for the open source coding agent",
-    description:
-      "A fast terminal UI for OpenCode that works in any shell, editor or remote server. Describe what you want, see each edit as a diff and approve commands.",
-    operatingSystem: "macOS, Linux, Windows",
-    intro:
-      "A fast terminal UI that works in any shell, editor or remote server. Describe what you want in plain words, watch each edit land as a diff, and choose which commands run on their own.",
-    features: [
-      { title: "Any terminal", body: "Works in any shell, in your editor's terminal or on a remote server." },
-      { title: "Diffs in the timeline", body: "See each edit as a diff in the timeline, as the agent makes it." },
-      { title: "Pick up later", body: "Continue the last session with -c, or any with -s." },
-      { title: "One-off runs", body: "opencode run sends one message and prints the reply." },
-      { title: "Agents and commands", body: "Switch agents with shift+tab and open every command with ctrl+p." },
-      { title: "Auto-approve", body: "Run with --auto to allow every action you haven't denied." },
-      { title: "Any server", body: "Connect to an OpenCode server by URL with --server." },
-      { title: "Usage stats", body: "opencode stats shows shareable usage statistics." },
-    ],
-    showcase: [
-      {
-        title: "Ask in plain words",
-        clip: "/product-videos/features/terminal-1",
-        body: "Type what you want, and the agent shows its plan as it works.",
-      },
-      {
-        title: "Approve what runs",
-        clip: "/product-videos/features/terminal-2",
-        body: "Edits show as diffs, and commands wait for your permission.",
-      },
-      {
-        title: "Make it yours",
-        clip: "/product-videos/features/terminal-3",
-        body: "Switch themes in a keystroke, from the default to tokyonight and more.",
-      },
-      {
-        title: "Mini",
-        clip: "/product-videos/features/terminal-4",
-        body: "Run opencode mini and replies print into your own scrollback.",
       },
     ],
   },
@@ -386,8 +386,8 @@ export const productDetails: Record<
  */
 export const productAreas: Partial<Record<PageSlug, string[]>> = {
   desktop: ["desktop"],
-  mobile: ["mobile"],
   terminal: ["terminal"],
+  mobile: ["mobile"],
   sdk: ["sdk"],
 }
 
@@ -397,11 +397,6 @@ export const productAreas: Partial<Record<PageSlug, string[]>> = {
  * request's platform (requestPlatform), so the server and the first render agree.
  */
 export function deviceOrder<T extends { slug: string }>(items: readonly T[]): T[] {
-  const order = [...items]
-  if (!isMobile(requestPlatform())) return order
-  const desktop = order.findIndex((item) => item.slug === "desktop")
-  const mobile = order.findIndex((item) => item.slug === "mobile")
-  if (desktop < 0 || mobile < 0) return order
-  ;[order[desktop], order[mobile]] = [order[mobile], order[desktop]]
-  return order
+  if (!isMobile(requestPlatform())) return [...items]
+  return [...items.filter((item) => item.slug === "mobile"), ...items.filter((item) => item.slug !== "mobile")]
 }

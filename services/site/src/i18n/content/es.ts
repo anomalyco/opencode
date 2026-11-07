@@ -407,7 +407,7 @@ export const content = {
     steps: {
       download: {
         title: "Descarga",
-        line: "Escritorio, móvil o terminal.",
+        line: "Escritorio, terminal o móvil.",
       },
       "use-free-models": {
         title: "Modelos gratis",
@@ -740,7 +740,7 @@ export const content = {
       more: "Otros proyectos son SST y OpenTUI, todos de código abierto en [GitHub](github).",
       projects: {
         opencode: {
-          body: "El agente de programación de código abierto, con apps para escritorio, móvil y terminal, y un SDK. Licencia MIT, más de 220.000 estrellas en GitHub.",
+          body: "El agente de programación de código abierto, con apps para escritorio, terminal y móvil, y un SDK. Licencia MIT, más de 220.000 estrellas en GitHub.",
         },
         sst: {
           body: "Un framework para crear apps full-stack en tu propia infraestructura. Licencia MIT, abierto desde 2020, con más de 26.000 estrellas en GitHub.",
@@ -764,9 +764,9 @@ export const content = {
     about: {
       title: "Sobre OpenCode",
       boilerplate: {
-        long: "OpenCode es un agente de programación de código abierto. Está disponible como app de escritorio, app móvil, interfaz de terminal y SDK, y funciona con modelos de cualquier proveedor, incluidos Claude, GPT y Gemini. OpenCode tiene licencia MIT y lo crea Anomaly. Tiene más de 220.000 estrellas en GitHub y más de 1.000 colaboradores, y más de 22 millones de desarrolladores lo usan cada mes.",
+        long: "OpenCode es un agente de programación de código abierto. Está disponible como app de escritorio, interfaz de terminal, app móvil y SDK, y funciona con modelos de cualquier proveedor, incluidos Claude, GPT y Gemini. OpenCode tiene licencia MIT y lo crea Anomaly. Tiene más de 220.000 estrellas en GitHub y más de 1.000 colaboradores, y más de 22 millones de desarrolladores lo usan cada mes.",
         short:
-          "OpenCode es un agente de programación de código abierto de Anomaly, con apps para escritorio, móvil y terminal, y un SDK.",
+          "OpenCode es un agente de programación de código abierto de Anomaly, con apps para escritorio, terminal y móvil, y un SDK.",
       },
       products: {
         "opencode-console": {

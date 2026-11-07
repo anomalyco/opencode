@@ -215,7 +215,7 @@ export const content = {
     },
     subscriptions: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } },
     steps: {
-      download: { title: "نزّل", line: "Desktop أو Mobile أو Terminal." },
+      download: { title: "نزّل", line: "Desktop أو Terminal أو Mobile." },
       "use-free-models": {
         title: "نماذج مجانية",
         line: "يأتي OpenCode مع مجموعة من النماذج المجانية. لا حاجة إلى حساب.",
@@ -395,7 +395,7 @@ export const content = {
       learnMore: "لمعرفة المزيد، زُر [anoma.ly](site).",
       projects: {
         opencode: {
-          body: "وكيل البرمجة مفتوح المصدر، مع تطبيقات لسطح المكتب والهاتف والطرفية، وSDK. مرخّص بـ MIT، وأكثر من 220,000 نجمة على GitHub.",
+          body: "وكيل البرمجة مفتوح المصدر، مع تطبيقات لسطح المكتب والطرفية والهاتف، وSDK. مرخّص بـ MIT، وأكثر من 220,000 نجمة على GitHub.",
         },
         sst: {
           body: "إطار عمل لبناء تطبيقات متكاملة على بنيتك التحتية الخاصة. مرخّص بـ MIT، ومفتوح منذ 2020، وأكثر من 26,000 نجمة على GitHub.",
@@ -418,8 +418,8 @@ export const content = {
     about: {
       title: "عن OpenCode",
       boilerplate: {
-        long: "OpenCode وكيل برمجة مفتوح المصدر. يتوفر كتطبيق لسطح المكتب وتطبيق للهاتف وواجهة طرفية وSDK، ويعمل مع نماذج من أي مزوّد، منها Claude وGPT وGemini. OpenCode مرخّص بـ MIT ومن صنع Anomaly. لديه أكثر من 220,000 نجمة على GitHub وأكثر من 1,000 مساهم، ويستخدمه أكثر من 22 مليون مطوّر كل شهر.",
-        short: "OpenCode وكيل برمجة مفتوح المصدر من Anomaly، مع تطبيقات لسطح المكتب والهاتف والطرفية، وSDK.",
+        long: "OpenCode وكيل برمجة مفتوح المصدر. يتوفر كتطبيق لسطح المكتب وواجهة طرفية وتطبيق للهاتف وSDK، ويعمل مع نماذج من أي مزوّد، منها Claude وGPT وGemini. OpenCode مرخّص بـ MIT ومن صنع Anomaly. لديه أكثر من 220,000 نجمة على GitHub وأكثر من 1,000 مساهم، ويستخدمه أكثر من 22 مليون مطوّر كل شهر.",
+        short: "OpenCode وكيل برمجة مفتوح المصدر من Anomaly، مع تطبيقات لسطح المكتب والطرفية والهاتف، وSDK.",
       },
       products: {
         "opencode-console": {
