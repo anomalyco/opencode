@@ -19,13 +19,14 @@ use opencode_service::delegate;
 use opencode_service::discover::{self, Found};
 use opencode_service::stop::{self, Poll, Pty};
 use opencode_service::ts_command::TsCommand;
+use opencode_util::error;
 
 use super::Context;
 use super::client::block_on;
 use crate::args::{ServiceArgs, ServiceCommand};
 use crate::output::{Exit, print};
 
-pub fn run(_context: &Context, args: &ServiceArgs) -> anyhow::Result<()> {
+pub fn run(_context: &Context, args: &ServiceArgs) -> error::Result<()> {
     let Some(command) = &args.command else {
         return crate::help::print(&["service"]);
     };
@@ -66,7 +67,7 @@ pub struct Local {
 }
 
 impl Local {
-    pub fn from_env() -> anyhow::Result<Self> {
+    pub fn from_env() -> error::Result<Self> {
         Ok(Self::new(Paths::from_env()?, Env::from_env()))
     }
 
@@ -93,13 +94,13 @@ impl Local {
     }
 
     /// A ready service, started quietly when none runs (`Service.ensure`).
-    pub async fn ensure(&self) -> anyhow::Result<Found> {
+    pub async fn ensure(&self) -> error::Result<Found> {
         Ok(connect::reconnect(self.transport.clone(), &self.paths, &self.env).await?)
     }
 
     /// `ServerConnection.shutdownPersistentPty` (when `terminals`), then `Service.stop`. The registration
     /// stopped is the discovered service's, else one that is still starting, else the client channel's.
-    pub async fn stop(&self, terminals: bool) -> anyhow::Result<()> {
+    pub async fn stop(&self, terminals: bool) -> error::Result<()> {
         let file = match discover::discover(self.transport.as_ref(), &self.paths, self.env.channel.as_deref()).await {
             Ok(found) => {
                 if terminals {
@@ -115,14 +116,14 @@ impl Local {
         Ok(())
     }
 
-    async fn restart(&self) -> anyhow::Result<String> {
+    async fn restart(&self) -> error::Result<String> {
         self.stop(true).await?;
         Ok(self.ensure().await?.service.endpoint.url)
     }
 
     /// `ServiceConfig.set` or `unset` for every key but `remote true`: stops the service first when TS
     /// does, then writes the file.
-    pub fn edit(&self, edit: &Edit) -> anyhow::Result<()> {
+    pub fn edit(&self, edit: &Edit) -> error::Result<()> {
         if edit.stops_service() {
             block_on(self.stop(false))??;
         }

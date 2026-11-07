@@ -2,6 +2,7 @@
 
 use opencode_api::client::Auth;
 use opencode_api::transport::{Request, Reqwest, Transport};
+use opencode_util::{bail, error};
 use serde_json::Value;
 
 use super::Context;
@@ -19,7 +20,7 @@ const METHODS: [(&str, &str); 7] = [
     ("put", "PUT"),
 ];
 
-pub fn run(context: &Context, args: &ApiArgs) -> anyhow::Result<()> {
+pub fn run(context: &Context, args: &ApiArgs) -> error::Result<()> {
     let ok = block_on(async {
         let server = connect(context).await?;
         let endpoint = server.endpoint();
@@ -32,7 +33,7 @@ pub fn run(context: &Context, args: &ApiArgs) -> anyhow::Result<()> {
         let (method, path) = match raw_request(&args.request) {
             Some(request) => request,
             None if args.request.len() != 1 => {
-                anyhow::bail!("Expected an operation name or an HTTP method and path")
+                bail!("Expected an operation name or an HTTP method and path")
             }
             None => {
                 let response = transport
@@ -43,18 +44,18 @@ pub fn run(context: &Context, args: &ApiArgs) -> anyhow::Result<()> {
                         body: None,
                     })
                     .await
-                    .map_err(anyhow::Error::msg)?;
+                    .map_err(error::Error::msg)?;
                 if !(200..300).contains(&response.status) {
-                    anyhow::bail!("Failed to load OpenAPI document: HTTP {}", response.status);
+                    bail!("Failed to load OpenAPI document: HTTP {}", response.status);
                 }
-                let spec: Value = serde_json::from_slice(&response.bytes().await.map_err(anyhow::Error::msg)?)?;
+                let spec: Value = serde_json::from_slice(&response.bytes().await.map_err(error::Error::msg)?)?;
                 resolve_operation(&spec, &args.request[0], &params)?
             }
         };
         let mut headers = auth;
         for header in &args.header {
             let Some((name, value)) = header.split_once(':').filter(|(name, _)| !name.is_empty()) else {
-                anyhow::bail!("Invalid header, expected name:value: {header}");
+                bail!("Invalid header, expected name:value: {header}");
             };
             set(&mut headers, name.trim().to_ascii_lowercase(), value.trim());
         }
@@ -69,9 +70,9 @@ pub fn run(context: &Context, args: &ApiArgs) -> anyhow::Result<()> {
                 body: args.data.clone().map(Into::into),
             })
             .await
-            .map_err(anyhow::Error::msg)?;
+            .map_err(error::Error::msg)?;
         let status = response.status;
-        let body = response.bytes().await.map_err(anyhow::Error::msg)?;
+        let body = response.bytes().await.map_err(error::Error::msg)?;
         let output = String::from_utf8_lossy(&body);
         if !output.is_empty() {
             print(&format!("{output}{}", if output.ends_with('\n') { "" } else { "\n" }))?;
@@ -84,7 +85,7 @@ pub fn run(context: &Context, args: &ApiArgs) -> anyhow::Result<()> {
             eprintln!("HTTP {status} {text}");
             return Ok(false);
         }
-        anyhow::Ok(true)
+        Ok::<_, error::Error>(true)
     })??;
     if ok {
         return Ok(());
@@ -131,7 +132,7 @@ fn resolve_operation(
     spec: &Value,
     operation: &str,
     params: &[(String, String)],
-) -> anyhow::Result<(&'static str, String)> {
+) -> error::Result<(&'static str, String)> {
     let found = spec["paths"]
         .as_object()
         .into_iter()
@@ -144,13 +145,13 @@ fn resolve_operation(
             (value["operationId"].as_str() == Some(operation)).then_some((method, path))
         });
     let Some((method, path)) = found else {
-        anyhow::bail!("Operation not found: {operation}");
+        bail!("Operation not found: {operation}");
     };
     Ok((method, interpolate(path, params)?))
 }
 
 // `{name}` segments take the parameter of that name; the other parameters become the query.
-fn interpolate(path: &str, params: &[(String, String)]) -> anyhow::Result<String> {
+fn interpolate(path: &str, params: &[(String, String)]) -> error::Result<String> {
     let mut used: Vec<&str> = Vec::new();
     let mut pathname = String::new();
     let mut rest = path;
@@ -160,7 +161,7 @@ fn interpolate(path: &str, params: &[(String, String)]) -> anyhow::Result<String
         };
         let name = &rest[open + 1..open + 1 + close];
         let Some((key, value)) = params.iter().find(|(key, _)| key == name) else {
-            anyhow::bail!("Missing path parameter: {name}");
+            bail!("Missing path parameter: {name}");
         };
         used.push(key);
         pathname.push_str(&rest[..open]);

@@ -7,7 +7,6 @@
 # leaves this file in the same commit.
 
 aho-corasick
-anyhow build
 atomic-waker
 base64
 bitflags
