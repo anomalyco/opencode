@@ -290,6 +290,23 @@ test("model dialog toggles a favorite from the keyboard and leads with favorite 
   await expect(dialog.locator('[data-option-key="opencode:mobile-c"]')).toHaveAttribute("data-active", "")
 })
 
+test("model dialog search leads with matching models in most-recently-used order", async ({ page }) => {
+  const { model, dialog } = await openDesktopPicker(page, "ltr", ["mobile-b", "mobile-c"])
+  const search = dialog.getByRole("combobox", { name: "Search models", exact: true })
+
+  await model.click()
+  await search.fill("Mobile")
+
+  await expect(dialog.locator('[data-slot="search-list-header"]')).toHaveText(["Recent", "OpenCode"])
+  await expect
+    .poll(() =>
+      dialog
+        .locator('[data-option-key^="opencode:"]')
+        .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-option-key"))),
+    )
+    .toEqual(["opencode:mobile-b", "opencode:mobile-c", "opencode:mobile-a"])
+})
+
 test("model dialog opens Manage models from its search row with Enter", async ({ page }) => {
   const { model, dialog } = await openDesktopPicker(page, "ltr")
   await model.click()
@@ -339,9 +356,9 @@ test.describe("touch composer pickers", () => {
   })
 })
 
-async function openDesktopPicker(page: Page, direction: "ltr" | "rtl") {
+async function openDesktopPicker(page: Page, direction: "ltr" | "rtl", recent: string[] = []) {
   await page.setViewportSize({ width: 1280, height: 900 })
-  await openPickerSession(page, direction, true)
+  await openPickerSession(page, direction, true, recent)
   const composer = page.locator('[data-component="composer"]')
 
   return {
@@ -352,7 +369,7 @@ async function openDesktopPicker(page: Page, direction: "ltr" | "rtl") {
   }
 }
 
-async function openPickerSession(page: Page, direction: "ltr" | "rtl", paid: boolean) {
+async function openPickerSession(page: Page, direction: "ltr" | "rtl", paid: boolean, recent: string[] = []) {
   await mockOpenCodeServer(page, {
     ...fixture,
     sessions: fixture.sessions.map((session) => ({
@@ -395,7 +412,7 @@ async function openPickerSession(page: Page, direction: "ltr" | "rtl", paid: boo
       "opencode.global.dat:model",
       JSON.stringify({
         user: ["a", "b", "c"].map((id) => ({ providerID: "opencode", modelID: `mobile-${id}`, visibility: "show" })),
-        recent: [],
+        recent: recent.map((modelID) => ({ providerID: "opencode", modelID })),
         variant: {},
       }),
     )

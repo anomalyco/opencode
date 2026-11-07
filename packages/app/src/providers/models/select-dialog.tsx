@@ -654,7 +654,16 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
   const groups = createMemo((): ModelGroup[] => {
     const providers = controller.groups(controller.models(query.search))
 
-    if (query.search.trim()) return providers
+    if (query.search.trim()) {
+      const visible = new Set(providers.flatMap((group) => group.items.map(modelKey)))
+
+      return withSections({
+        groups: providers,
+        favorites: [],
+        recent: controller.recent().filter((item) => visible.has(modelKey(item))),
+        titles: { favorite: language.t("dialog.model.favorites"), recent: language.t("dialog.model.recent") },
+      })
+    }
 
     return withSections({
       groups: providers,
