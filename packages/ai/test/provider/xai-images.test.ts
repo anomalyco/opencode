@@ -14,7 +14,8 @@ describe("xAI Images", () => {
         model: XAI.configure({
           apiKey: "test",
           baseURL: "https://api.xai.test/v1",
-          http: { body: { configured: true }, headers: { "x-default": "yes" } },
+          headers: { "x-default": "yes" },
+          http: { body: { configured: true } },
         }).image("grok-imagine-image"),
         prompt: "A robot tending a rooftop garden",
         n: 2,
@@ -26,11 +27,8 @@ describe("xAI Images", () => {
           response_format: "b64_json",
           future_option: true,
         },
-        http: {
-          body: { future_option: "http" },
-          headers: { "x-request": "yes" },
-          query: { trace: "1" },
-        },
+        headers: { "x-request": "yes" },
+        http: { body: { future_option: "http" }, query: { trace: "1" } },
       })
 
       expect(response.images).toHaveLength(2)

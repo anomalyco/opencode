@@ -16,10 +16,13 @@ import { storageHandlers } from "./ipc-handlers/storage"
 import { windowHandlers } from "./ipc-handlers/window"
 import { IpcPortHandoff, IpcServerProtocolLive } from "./ipc-transport"
 import { ApplicationLifecycle } from "./lifecycle"
-import { showCliInstaller } from "./native/install-cli"
-import { createMenu, sendMenuCommand } from "./native/menu"
+import { createCliInstaller } from "./native/install-cli"
+import { createMenu, disposeMenu, refreshMenu } from "./native/menu"
+import { onNativeTranslations } from "./native/translations"
 import { DesktopCli } from "./service/desktop-cli"
+import { setStorageSnapshotObserver } from "./storage/snapshot"
 import { getLastFocusedWindow } from "./windows"
+import { isRendererUrl } from "./windows/scheme"
 
 const services = Layer.mergeAll(DesktopFiles.layer, Plugins.layer)
 
@@ -46,12 +49,8 @@ export const registerIpcHandlers = Effect.gen(function* () {
   const runFork = Effect.runForkWith(yield* Effect.context())
 
   const menu = {
-    trigger: (id: string) => {
-      const win = getLastFocusedWindow()
-
-      if (win) sendMenuCommand(win, id)
-    },
-    installCli: () => runFork(showCliInstaller(desktopCli)),
+    commandWindow: getLastFocusedWindow,
+    installCli: yield* createCliInstaller(desktopCli),
     createWindow: lifecycle.createWindow,
     openExternal: (url: string) => runFork(openExternalURL(url)),
     relaunch: lifecycle.relaunch,
@@ -75,6 +74,10 @@ export const registerIpcHandlers = Effect.gen(function* () {
       win.webContents.postMessage(IpcTransportPort, null, [channel.port2])
     }
 
+    // A committed document replaces the bound one; its events wait for the port posted when it loads.
+    win.webContents.on("did-navigate", (_event, url) => {
+      if (isRendererUrl(url)) handoff.prepare(win.webContents)
+    })
     win.webContents.on("did-finish-load", post)
 
     // The first window starts loading before the layers exist and may already be done.
@@ -82,6 +85,18 @@ export const registerIpcHandlers = Effect.gen(function* () {
   }
 
   const onWindowCreated = (_event: Electron.Event, win: BrowserWindow) => wire(win)
+  const stopDisconnects = handoff.onDisconnect(lifecycle.deepLinks.disconnect)
+  yield* Effect.addFinalizer(() => Effect.sync(stopDisconnects))
+  const stopSnapshots = setStorageSnapshotObserver(handoff.prepare)
+  yield* Effect.addFinalizer(() => Effect.sync(stopSnapshots))
+  // A language the renderer pushes rebuilds the menu once it is installed.
+  const stopTranslations = onNativeTranslations(refreshMenu)
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => {
+      stopTranslations()
+      disposeMenu()
+    }),
+  )
 
   yield* Effect.sync(() => {
     app.on("browser-window-created", onWindowCreated)

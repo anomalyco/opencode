@@ -153,7 +153,7 @@ describe("Cloudflare", () => {
         }),
       )
 
-      expect(prepared.model.route.defaults.headers).toMatchObject({ "cf-aig-gateway-id": "default" })
+      expect(prepared.model.options?.headers).toMatchObject({ "cf-aig-gateway-id": "default" })
     }),
   )
 

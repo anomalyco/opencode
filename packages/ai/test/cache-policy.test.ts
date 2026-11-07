@@ -366,6 +366,7 @@ describe("applyCachePolicy", () => {
       const prepared = yield* compileRequest(
         ai.request({
           model: anthropicModel,
+          prompt: "Hello",
           tools: [
             duplicate("first"),
             duplicate("second"),
@@ -452,6 +453,7 @@ describe("applyCachePolicy", () => {
   test("marks the final leaf inside a tool namespace", () => {
     const request = ai.request({
       model: anthropicModel,
+      prompt: "Hello",
       tools: [
         {
           type: "namespace",
@@ -481,7 +483,9 @@ describe("applyCachePolicy", () => {
 
       expect(prepared.body).toMatchObject({
         system: [{ type: "text", text: "Sys", cache_control: { type: "ephemeral", ttl: "1h" } }],
-        messages: [{ role: "user", content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral", ttl: "1h" } }] }],
+        messages: [
+          { role: "user", content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral", ttl: "1h" } }] },
+        ],
       })
     }),
   )

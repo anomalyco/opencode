@@ -9,8 +9,11 @@ export const AppAwaitInitialization = Rpc.make("AppAwaitInitialization", { succe
 
 export const AppReconnectService = Rpc.make("AppReconnectService", { success: ServerReadyData })
 
-export const AppConsumeInitialDeepLinks = Rpc.make("AppConsumeInitialDeepLinks", {
-  success: Schema.Array(Schema.String),
+// The renderer listens for DeepLinksOpened before it reports ready, and acknowledges each delivery once handled.
+export const AppReadyDeepLinks = Rpc.make("AppReadyDeepLinks")
+
+export const AppAcknowledgeDeepLinks = Rpc.make("AppAcknowledgeDeepLinks", {
+  payload: { attempt: Schema.Number },
 })
 
 export const AppIsFirstLaunchOnboardingPending = Rpc.make("AppIsFirstLaunchOnboardingPending", {
@@ -69,7 +72,8 @@ export const AppRelaunch = Rpc.make("AppRelaunch")
 export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
   AppReconnectService,
-  AppConsumeInitialDeepLinks,
+  AppReadyDeepLinks,
+  AppAcknowledgeDeepLinks,
   AppIsFirstLaunchOnboardingPending,
   AppFinishFirstLaunchOnboarding,
   AppCheckAppExists,

@@ -1,0 +1,72 @@
+/* Design mode: reordering the /product grid (products-order.tsx), styled like the nav's drag. */
+
+[data-site] {
+  [data-slot="grid"][data-sortable] > [data-card] {
+    position: relative;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    cursor: grab;
+
+    a {
+      cursor: grab;
+    }
+
+    /* A grip above the card's top-left corner on hover. */
+    &::before {
+      content: "";
+      position: absolute;
+      top: -0.875rem;
+      inset-inline-start: 0;
+      width: 10px;
+      height: 6px;
+      background: radial-gradient(circle, var(--link) 1px, transparent 1.2px) 0 0 / 3.33px 3px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    &:focus-within::before,
+    &[data-card-lifted]::before {
+      opacity: 1;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover::before {
+        opacity: 1;
+      }
+    }
+  }
+
+  /* The lifted card rides above the others, outlined like a lifted nav item. */
+  [data-slot="grid"][data-sortable] > [data-card-lifted] {
+    z-index: 2;
+    background: var(--bg);
+    box-shadow: var(--popover-shadow);
+    outline: 2px solid var(--link);
+    outline-offset: 4px;
+
+    a {
+      cursor: grabbing;
+    }
+  }
+
+  [data-slot="products-announcer"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot="grid"][data-sortable] > [data-card]::before {
+      transition: opacity 120ms ease;
+    }
+  }
+}
+
+html:has([data-slot="grid"][data-sortable] > [data-card-lifted]) {
+  cursor: grabbing;
+}

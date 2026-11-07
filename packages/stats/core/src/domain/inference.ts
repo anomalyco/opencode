@@ -23,6 +23,7 @@ import {
   startOfIsoWeek,
   startOfUtcDay,
   type StatBaseAggregate,
+  type StatGrain,
 } from "./stat"
 
 export type StatDimension = "model" | "provider" | "geo" | "geo_model"
@@ -47,24 +48,24 @@ const GO_PRODUCTS = ["go", "go-plus"]
 // and carry no usage. Counting them would publish any requested model name as a stats page.
 const ROUTED_ONLY = "attempts > 0"
 
-// R2 SQL results are cursor-paginated after aggregation. Separate usage and geo
-// queries per day/week avoid combining costly distinct user/session aggregates
-// with the high-cardinality geo dimensions.
+export type StatPeriod = { grain: StatGrain; key: string; start: Date; end: Date }
+export type RetentionPeriod = { start: Date; end: Date; returnStart: Date; returnEnd: Date }
+
 export function buildStatsQueries(
   periodStart: Date,
   periodEnd: Date,
   input?: StatsQuerySource,
   catalog?: CatalogIdentity,
 ) {
-  const source = input ?? {
-    namespace: Resource.R2Sql.namespace,
-    table: Resource.R2Sql.table,
-    dataset: Resource.StatsSyncConfig.dataset,
-    hiddenModels: hiddenStatModels(),
-  }
-  return [...statPeriods("week", periodStart, periodEnd), ...statPeriods("day", periodStart, periodEnd)].flatMap(
-    (period) => [buildStatsQuery(period, source, "usage", catalog), buildStatsQuery(period, source, "geo", catalog)],
-  )
+  return statPeriods(periodStart, periodEnd).flatMap((period) => buildPeriodStatsQueries(period, input, catalog))
+}
+
+// R2 SQL results are cursor-paginated after aggregation. Separate usage and geo
+// queries per day/week avoid combining costly distinct user/session aggregates
+// with the high-cardinality geo dimensions.
+export function buildPeriodStatsQueries(period: StatPeriod, input?: StatsQuerySource, catalog?: CatalogIdentity) {
+  const source = input ?? defaultSource()
+  return [buildStatsQuery(period, source, "usage", catalog), buildStatsQuery(period, source, "geo", catalog)]
 }
 
 export function buildRetentionQueries(
@@ -73,26 +74,32 @@ export function buildRetentionQueries(
   input?: StatsQuerySource,
   catalog?: CatalogIdentity,
 ): RetentionQuery[] {
-  const source = input ?? {
+  return retentionPeriods(periodStart, periodEnd).map((period) => buildPeriodRetentionQuery(period, input, catalog))
+}
+
+// Bound the user-level joins to one activity week and its return week.
+// Combining the entire display window makes full syncs much more expensive.
+export function buildPeriodRetentionQuery(
+  period: RetentionPeriod,
+  input?: StatsQuerySource,
+  catalog?: CatalogIdentity,
+): RetentionQuery {
+  return {
+    cohortDates: [period.start.toISOString().slice(0, 10)],
+    query: buildRetentionQuery([period], input ?? defaultSource(), catalog),
+  }
+}
+
+function defaultSource(): StatsQuerySource {
+  return {
     namespace: Resource.R2Sql.namespace,
     table: Resource.R2Sql.table,
     dataset: Resource.StatsSyncConfig.dataset,
     hiddenModels: hiddenStatModels(),
   }
-  const periods = retentionPeriods(periodStart, periodEnd)
-  // Bound the user-level joins to one activity week and its return week.
-  // Combining the entire display window makes full syncs much more expensive.
-  return periods.map((period) => ({
-    cohortDates: [period.start.toISOString().slice(0, 10)],
-    query: buildRetentionQuery([period], source, catalog),
-  }))
 }
 
-function buildRetentionQuery(
-  periods: { start: Date; end: Date; returnStart: Date; returnEnd: Date }[],
-  source: StatsQuerySource,
-  catalog?: CatalogIdentity,
-) {
+function buildRetentionQuery(periods: RetentionPeriod[], source: StatsQuerySource, catalog?: CatalogIdentity) {
   const first = periods[0]
   const last = periods.at(-1)!
   const scanStartValue = sqlString(first.start.toISOString())
@@ -209,7 +216,7 @@ LIMIT 10000
 }
 
 function buildStatsQuery(
-  period: { grain: "day" | "week"; key: string; start: Date; end: Date },
+  period: StatPeriod,
   source: StatsQuerySource,
   family: StatsQueryFamily,
   catalog?: CatalogIdentity,
@@ -477,7 +484,11 @@ function sqlString(value: string) {
   return `'${value.replace(/'/g, "''")}'`
 }
 
-function statPeriods(grain: "day" | "week", periodStart: Date, periodEnd: Date) {
+export function statPeriods(periodStart: Date, periodEnd: Date) {
+  return [...grainPeriods("week", periodStart, periodEnd), ...grainPeriods("day", periodStart, periodEnd)]
+}
+
+function grainPeriods(grain: StatGrain, periodStart: Date, periodEnd: Date): StatPeriod[] {
   const interval = grain === "day" ? DAY_MS : WEEK_MS
   const first = grain === "day" ? startOfUtcDay(periodStart) : startOfIsoWeek(periodStart)
   const count = Math.max(0, Math.ceil((periodEnd.getTime() - first.getTime()) / interval))
@@ -492,7 +503,7 @@ function statPeriods(grain: "day" | "week", periodStart: Date, periodEnd: Date) 
   })
 }
 
-function retentionPeriods(periodStart: Date, periodEnd: Date) {
+export function retentionPeriods(periodStart: Date, periodEnd: Date): RetentionPeriod[] {
   const first = startOfIsoWeek(periodStart)
   const completeEnd = startOfIsoWeek(periodEnd)
   const count = Math.max(0, Math.floor((completeEnd.getTime() - first.getTime()) / WEEK_MS) - 1)

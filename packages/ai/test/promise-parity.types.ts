@@ -3,7 +3,8 @@ import type { Client, GenerationHandle } from "../src/index.js"
 import type { Generation, ai } from "../src/effect.js"
 
 // The Promise `ai` mirrors the Effect `ai`: same namespaces, methods, arguments and results. The only allowed differences
-// are `signal` on the options bag, Promise for Effect, AsyncIterable for Stream and GenerationHandle for Generation.
+// are `signal` on the options bag, Promise for Effect, AsyncIterable for Stream (in results and arguments) and
+// GenerationHandle for Generation.
 
 type Equal<A, B> = [A, B] extends [B, A] ? true : false
 type Assert<T extends Record<string, true>> = T
@@ -25,7 +26,10 @@ type Signatures<F> = F extends {
       ? [A, R]
       : never
 
-type Positional<P> = P extends readonly [infer A, ...infer Rest] ? [WithoutSignal<A>, ...Positional<Rest>] : []
+type Positional<P> = P extends readonly [infer A, ...infer Rest]
+  ? [Iterated<WithoutSignal<A>>, ...Positional<Rest>]
+  : []
+type Iterated<T> = T extends Stream.Stream<infer A, infer _E, infer _R> ? AsyncIterable<A> : T
 // Paired with its keys: an options bag of optional fields is otherwise assignable to `{}` and back.
 type Options<P> = P extends readonly [unknown, ...infer Rest]
   ? Options<Rest>

@@ -335,7 +335,7 @@ it.effect(
       expect(requests).toHaveLength(1)
       expect(requests[0]?.model).toBe(model)
       expect(requests[0]?.system.map((part) => part.text)).toContain("Initial context")
-      expect(requests[0]?.http?.headers).toMatchObject({ "X-Session-Id": sessionID })
+      expect(requests[0]?.headers).toMatchObject({ "X-Session-Id": sessionID })
       expect(requests[0]?.promptCacheKey).toBe(sessionID)
       const instructionUpdates = requests[0]?.messages.flatMap((message) =>
         message.role === "system"
@@ -392,7 +392,7 @@ it.effect(
       expect(requests).toHaveLength(1)
       expect(requests[0]?.system.map((part) => part.text)).toContain("Answer briefly.")
       expect(userTexts(requests[0])).toEqual(["[redacted]"])
-      expect(requests[0]?.generation).toEqual(expect.objectContaining({ maxTokens: 32 }))
+      expect(requests[0]?.maxTokens).toBe(32)
       expect(requests[0]?.providerOptions).toEqual({ reasoningEffort: "low" })
     }),
   { timeout: 15_000 },

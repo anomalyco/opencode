@@ -1,14 +1,14 @@
 import { define } from "@opencode/plugin/effect/plugin"
 import { Form } from "@opencode/schema/form"
-import { Clock, Deferred, Effect, Option, Schema, Stream } from "effect"
+import { Clock, Deferred, Effect, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { App } from "../../app.js"
-import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
 import { Provider } from "../../provider.js"
 import { configuredSettings } from "./configured.js"
+import { ProviderRefresh } from "./refresh.js"
 
 const providerID = Provider.ID.make("snowflake-cortex")
 const integrationID = Integration.ID.make(providerID)
@@ -40,7 +40,6 @@ export const SnowflakeCortexPlugin = define({
     const http = yield* HttpClient.HttpClient
     const credentials = yield* Credential.Service
     const integrations = yield* Integration.Service
-    const bus = yield* Bus.Service
     const configured = yield* configuredSettings(providerID)
     const account = { value: "" }
     const saved = Effect.gen(function* () {
@@ -201,11 +200,7 @@ export const SnowflakeCortexPlugin = define({
         })
       }
     })
-    yield* bus.subscribe(Credential.Event.Switched).pipe(
-      Stream.filter((event) => event.data.integrationID === integrationID),
-      Stream.runForEach(() => load.pipe(Effect.flatMap((changed) => (changed ? ctx.provider.reload() : Effect.void)))),
-      Effect.forkScoped({ startImmediately: true }),
-    )
+    yield* ProviderRefresh.onSwitch(integrationID, ProviderRefresh.reloadIfChanged(load, ctx.provider.reload()))
     yield* ctx.session.hook(
       "http.request",
       (event) =>

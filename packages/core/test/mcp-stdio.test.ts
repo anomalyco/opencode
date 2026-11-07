@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test"
+import path from "node:path"
 import type { JSONRPCMessage } from "@modelcontextprotocol/client"
 import { Environment } from "@opencode/core/environment/index"
 import { McpStdio } from "@opencode/core/mcp/stdio"
+import { Global } from "@opencode/util/global"
 import { Deferred, Effect, Layer, Sink, Stream } from "effect"
 import { ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
@@ -9,6 +11,17 @@ import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpaw
 const encoder = new TextEncoder()
 const MiB = 1024 * 1024
 const after = encoder.encode('{"jsonrpc":"2.0","method":"after"}\n')
+
+test("resolves cwd from the workspace and expands ~ to the home directory", () => {
+  const directory = path.resolve("project")
+  const home = Global.Path.home
+
+  expect(McpStdio.resolveCwd(directory, undefined)).toBe(directory)
+  expect(McpStdio.resolveCwd(directory, "~")).toBe(home)
+  expect(McpStdio.resolveCwd(directory, "~/tools")).toBe(path.join(home, "tools"))
+  expect(McpStdio.resolveCwd(directory, "tools/server")).toBe(path.join(directory, "tools", "server"))
+  expect(McpStdio.resolveCwd(directory, path.resolve("elsewhere"))).toBe(path.resolve("elsewhere"))
+})
 
 test("receives a frame between 10 and 16 MiB split into pipe-sized chunks", async () => {
   // 12 MiB sits between the SDK read buffer's 10 MiB default and our 16 MiB cap.

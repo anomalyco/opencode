@@ -121,7 +121,7 @@ export function CommentCard(props: {
           <Match when={props.target.type === "note" ? props.target : undefined}>
             {(note) => (
               <>
-                <Icon name={note().icon} data-slot="attachment-card-icon" />
+                <Icon name={note().icon} />
                 <span data-slot="attachment-card-label" dir="ltr">
                   {subtitle()}
                 </span>
@@ -132,14 +132,14 @@ export function CommentCard(props: {
             {(text) => (
               <>
                 <span data-slot="comment-card-quote">
-                  <Icon name={source()?.icon ?? "outline-quote"} data-slot="attachment-card-icon" />
+                  <Icon name={source()?.icon ?? "outline-quote"} />
                   <span data-slot="attachment-card-label" dir="auto">
                     {props.comment ? text() : (source()?.label ?? i18n.t("ui.commentCard.quote"))}
                   </span>
                 </span>
                 <Show when={props.onClick}>
                   <span data-slot="comment-card-action" data-commented={props.comment ? "" : undefined}>
-                    <Icon name="comment" data-slot="attachment-card-icon" />
+                    <Icon name="comment" />
                     <span data-slot="attachment-card-label">
                       {props.comment ? i18n.t("ui.commentCard.editComment") : i18n.t("ui.commentCard.addComment")}
                     </span>

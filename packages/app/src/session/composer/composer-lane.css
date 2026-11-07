@@ -53,6 +53,7 @@
     }
   }
 
+  /* The timeline's tail reserves this height (tailSize in timeline/virtualizer.tsx); change both together. */
   @media (hover: none) {
     min-height: 44px;
   }

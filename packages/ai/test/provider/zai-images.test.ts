@@ -23,11 +23,8 @@ describe("Z.ai Images", () => {
           user_id: "raw-user",
           future_option: true,
         },
-        http: {
-          headers: { "x-request": "yes" },
-          query: { trace: "request" },
-          body: { quality: "final", user_id: "final-user" },
-        },
+        headers: { "x-request": "yes" },
+        http: { query: { trace: "request" }, body: { quality: "final", user_id: "final-user" } },
       })
 
       expect(response.images).toHaveLength(1)

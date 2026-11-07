@@ -1,5 +1,5 @@
 diff --git a/dist/index.cjs b/dist/index.cjs
-index 71cf63076b073284aa14f63cd41efa653e8def0f..789b1636fc6f0adf8137addb648b2af0ac8d9e25 100644
+index 71cf63076b073284aa14f63cd41efa653e8def0f..50d19256d62bd50007f82dcbdb132d34b4145de9 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
 @@ -725,7 +725,7 @@
@@ -27,7 +27,25 @@ index 71cf63076b073284aa14f63cd41efa653e8def0f..789b1636fc6f0adf8137addb648b2af0
  	if (resource) authorizationUrl.searchParams.set("resource", resourceIndicatorToString(resource));
  	return {
  		authorizationUrl,
-@@ -4350,7 +4348,7 @@ var Client = class extends require_src.Protocol {
+@@ -3206,7 +3204,16 @@ var Client = class extends require_src.Protocol {
+ 		}));
+ 		return require_src.runInputRequiredFlow({
+ 			getRequestHandler: (method) => this._getRequestHandler(method),
+-			buildContext: (baseCtx) => this.buildContext(baseCtx, void 0),
++			buildContext: (baseCtx) => this.buildContext({
++				...baseCtx,
++				mcpReq: {
++					...baseCtx.mcpReq,
++					origin: {
++						request: flow.request,
++						options: flow.options
++					}
++				}
++			}, void 0),
+ 			sessionId: this.transport?.sessionId
+ 		}, this._inputRequiredDriverConfig, decoded, flow);
+ 	}
+@@ -4350,7 +4357,7 @@ var Client = class extends require_src.Protocol {
  	_excludeInvalidXMcpHeaderTools(result) {
  		if (this.getProtocolEra() !== "modern" || !this.transport || detectProbeTransportKind(this.transport) === "stdio") return;
  		const filtered = result.tools.filter((tool) => {
@@ -37,7 +55,7 @@ index 71cf63076b073284aa14f63cd41efa653e8def0f..789b1636fc6f0adf8137addb648b2af0
  				console.warn(`[mcp-sdk] excluding tool '${tool.name}' from tools/list: invalid x-mcp-header declaration — ${scan.reason}`);
  				return false;
 diff --git a/dist/index.mjs b/dist/index.mjs
-index c1a09a82b8121d6a1b038ccc6d02bae46d55dbcf..3356a2e3df5122dc993b3a0cc39a73a8581b0cbe 100644
+index c1a09a82b8121d6a1b038ccc6d02bae46d55dbcf..8dbedab213f6a5a04c42385498fba2ac9d20924b 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
 @@ -722,7 +722,7 @@
@@ -65,7 +83,25 @@ index c1a09a82b8121d6a1b038ccc6d02bae46d55dbcf..3356a2e3df5122dc993b3a0cc39a73a8
  	if (resource) authorizationUrl.searchParams.set("resource", resourceIndicatorToString(resource));
  	return {
  		authorizationUrl,
-@@ -4347,7 +4345,7 @@ var Client = class extends Protocol {
+@@ -3203,7 +3201,16 @@ var Client = class extends Protocol {
+ 		}));
+ 		return runInputRequiredFlow({
+ 			getRequestHandler: (method) => this._getRequestHandler(method),
+-			buildContext: (baseCtx) => this.buildContext(baseCtx, void 0),
++			buildContext: (baseCtx) => this.buildContext({
++				...baseCtx,
++				mcpReq: {
++					...baseCtx.mcpReq,
++					origin: {
++						request: flow.request,
++						options: flow.options
++					}
++				}
++			}, void 0),
+ 			sessionId: this.transport?.sessionId
+ 		}, this._inputRequiredDriverConfig, decoded, flow);
+ 	}
+@@ -4347,7 +4354,7 @@ var Client = class extends Protocol {
  	_excludeInvalidXMcpHeaderTools(result) {
  		if (this.getProtocolEra() !== "modern" || !this.transport || detectProbeTransportKind(this.transport) === "stdio") return;
  		const filtered = result.tools.filter((tool) => {

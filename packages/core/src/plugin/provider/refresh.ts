@@ -11,6 +11,21 @@ type Connection = Parameters<typeof IntegrationConnection.key>[0]
 /** How a load asks `SharedCache.get` for its list. */
 export type Options = { readonly interval?: Duration.Input; readonly force?: boolean }
 
+/** Runs `effect` each time the active credential of `integrationID` switches, until the scope closes. */
+export const onSwitch = <E, R>(integrationID: string, effect: Effect.Effect<unknown, E, R>) =>
+  Effect.gen(function* () {
+    const bus = yield* Bus.Service
+    yield* bus.subscribe(Credential.Event.Switched).pipe(
+      Stream.filter((event) => event.data.integrationID === integrationID),
+      Stream.runForEach(() => effect),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+  })
+
+/** Runs `reload` when `load` reports that the derived state changed. */
+export const reloadIfChanged = <E, R>(load: Effect.Effect<boolean, E, R>, reload: Effect.Effect<void>) =>
+  load.pipe(Effect.flatMap((changed) => (changed ? reload : Effect.void)))
+
 /**
  * After an account switch, applies the account's list from the cache at once, however old, while a forced load runs
  * alongside and is applied when it finishes. With nothing cached the first step joins the forced load, so one request
@@ -37,7 +52,6 @@ export const start = Effect.fnUntraced(function* <A>(input: {
   readonly load: (current: A, options: Options) => Effect.Effect<{ readonly connection: Connection; readonly value: A }>
   readonly reload: Effect.Effect<void>
 }): Effect.fn.Return<{ readonly current: A }, never, Bus.Service | Scope.Scope> {
-  const bus = yield* Bus.Service
   const interval = input.interval ?? SharedCache.interval
   const lock = Semaphore.makeUnsafe(1)
   const loading = yield* FiberHandle.make<void, never>()
@@ -55,11 +69,7 @@ export const start = Effect.fnUntraced(function* <A>(input: {
       .pipe(Effect.uninterruptible)
   const load = (options: Options) => Effect.suspend(() => input.load(state.current, { interval, ...options }))
   const refresh = load({}).pipe(Effect.flatMap(apply))
-  yield* bus.subscribe(Credential.Event.Switched).pipe(
-    Stream.filter((event) => event.data.integrationID === input.integrationID),
-    Stream.runForEach(() => FiberHandle.run(loading, switched(load, apply))),
-    Effect.forkScoped({ startImmediately: true }),
-  )
+  yield* onSwitch(input.integrationID, FiberHandle.run(loading, switched(load, apply)))
   yield* FiberHandle.run(loading, refresh, { onlyIfMissing: true }).pipe(Effect.forkScoped)
   yield* Effect.sleep(interval).pipe(
     Effect.andThen(FiberHandle.run(loading, refresh, { onlyIfMissing: true })),

@@ -180,6 +180,7 @@ describe("Open Responses-compatible route", () => {
       const prepared = yield* compileRequest(
         ai.request({
           model,
+          prompt: "Hello",
           tools: [
             {
               type: "namespace",
@@ -985,7 +986,8 @@ describe("Open Responses-compatible route", () => {
         ai.request({
           model,
           prompt: "Think.",
-          generation: { presencePenalty: 0.2, frequencyPenalty: -0.1 },
+          presencePenalty: 0.2,
+          frequencyPenalty: -0.1,
           tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
         }),
       )

@@ -5,7 +5,7 @@ import {
   ai,
   AIError,
   CacheHint,
-  LLMRequest,
+  type LLMRequest,
   Media,
   Message,
   ToolCallPart,
@@ -52,7 +52,8 @@ const request = ai.request({
   // This fixture predates the `cache: "auto"` default; pin the policy off so
   // existing wire-shape assertions only see the manual hint on the system part.
   cache: "none",
-  generation: { maxTokens: 20, temperature: 0 },
+  maxTokens: 20,
+  temperature: 0,
 })
 
 type AnthropicToolResult = Extract<
@@ -86,8 +87,8 @@ describe("Anthropic Messages route", () => {
 
   it.effect("omits empty system text while preserving whitespace", () =>
     Effect.gen(function* () {
-      const empty = yield* compileRequest(LLMRequest.update(request, { system: [{ type: "text", text: "" }] }))
-      const whitespace = yield* compileRequest(LLMRequest.update(request, { system: [{ type: "text", text: " " }] }))
+      const empty = yield* compileRequest({ ...request, system: [{ type: "text", text: "" }] })
+      const whitespace = yield* compileRequest({ ...request, system: [{ type: "text", text: " " }] })
 
       expect(empty.body.system).toBeUndefined()
       expect(whitespace.body.system).toEqual([{ type: "text", text: " " }])
@@ -128,14 +129,13 @@ describe("Anthropic Messages route", () => {
 
   it.effect("lowers adaptive thinking settings with effort", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLMRequest.update(request, {
-          providerOptions: {
-            thinking: { type: "adaptive", display: "summarized" },
-            effort: "low",
-          },
-        }),
-      )
+      const prepared = yield* compileRequest({
+        ...request,
+        providerOptions: {
+          thinking: { type: "adaptive", display: "summarized" },
+          effort: "low",
+        },
+      })
 
       expect(prepared.body).toMatchObject({
         thinking: { type: "adaptive", display: "summarized" },
@@ -146,23 +146,17 @@ describe("Anthropic Messages route", () => {
 
   it.effect("normalizes enabled and disabled thinking settings", () =>
     Effect.gen(function* () {
-      const enabled = yield* compileRequest(
-        LLMRequest.update(request, {
-          generation: { maxTokens: 4_096 },
-          providerOptions: { thinking: { type: "enabled", budgetTokens: 1_024 } },
-        }),
-      )
-      const legacy = yield* compileRequest(
-        LLMRequest.update(request, {
-          generation: { maxTokens: 4_096 },
-          providerOptions: { thinking: { type: "enabled", budget_tokens: 2_048 } },
-        }),
-      )
-      const disabled = yield* compileRequest(
-        LLMRequest.update(request, {
-          providerOptions: { thinking: { type: "disabled" } },
-        }),
-      )
+      const enabled = yield* compileRequest({
+        ...request,
+        maxTokens: 4_096,
+        providerOptions: { thinking: { type: "enabled", budgetTokens: 1_024 } },
+      })
+      const legacy = yield* compileRequest({
+        ...request,
+        maxTokens: 4_096,
+        providerOptions: { thinking: { type: "enabled", budget_tokens: 2_048 } },
+      })
+      const disabled = yield* compileRequest({ ...request, providerOptions: { thinking: { type: "disabled" } } })
 
       expect(enabled.body.thinking).toEqual({ type: "enabled", budget_tokens: 1_024 })
       expect(legacy.body.thinking).toEqual({ type: "enabled", budget_tokens: 2_048 })
@@ -173,12 +167,11 @@ describe("Anthropic Messages route", () => {
   it.effect("fits the thinking budget to half the output limit", () =>
     Effect.gen(function* () {
       const thinking = (maxTokens: number) =>
-        compileRequest(
-          LLMRequest.update(request, {
-            generation: { maxTokens },
-            providerOptions: { thinking: { type: "enabled", budgetTokens: 31_999 } },
-          }),
-        ).pipe(Effect.map((prepared) => prepared.body.thinking))
+        compileRequest({
+          ...request,
+          maxTokens,
+          providerOptions: { thinking: { type: "enabled", budgetTokens: 31_999 } },
+        }).pipe(Effect.map((prepared) => prepared.body.thinking))
 
       expect(yield* thinking(64_000)).toEqual({ type: "enabled", budget_tokens: 31_999 })
       expect(yield* thinking(20_000)).toEqual({ type: "enabled", budget_tokens: 10_000 })
@@ -188,11 +181,9 @@ describe("Anthropic Messages route", () => {
 
   it.effect("rejects enabled thinking without a budget", () =>
     Effect.gen(function* () {
-      const error = yield* compileRequest(
-        LLMRequest.update(request, {
-          providerOptions: { thinking: { type: "enabled" } },
-        }),
-      ).pipe(Effect.flip)
+      const error = yield* compileRequest({ ...request, providerOptions: { thinking: { type: "enabled" } } }).pipe(
+        Effect.flip,
+      )
 
       expect(error.reason._tag).toBe("InvalidRequest")
       expect(error.message).toContain("budgetTokens")
@@ -201,29 +192,27 @@ describe("Anthropic Messages route", () => {
 
   it.effect("lowers passthrough provider options and accepts either key spelling", () =>
     Effect.gen(function* () {
-      const snake = yield* compileRequest(
-        LLMRequest.update(request, {
-          providerOptions: {
-            service_tier: "auto",
-            metadata: { user_id: "user_1" },
-            container: { id: "container_1" },
-            inference_geo: "us",
-            cache_control: { type: "ephemeral", ttl: "1h" },
-            output_config: { format: { type: "json_schema", schema: { type: "object" } } },
-          },
-        }),
-      )
-      const camel = yield* compileRequest(
-        LLMRequest.update(request, {
-          providerOptions: {
-            serviceTier: "standard_only",
-            container: "container_2",
-            inferenceGeo: "eu",
-            cacheControl: { type: "ephemeral" },
-            outputConfig: { effort: "low" },
-          },
-        }),
-      )
+      const snake = yield* compileRequest({
+        ...request,
+        providerOptions: {
+          service_tier: "auto",
+          metadata: { user_id: "user_1" },
+          container: { id: "container_1" },
+          inference_geo: "us",
+          cache_control: { type: "ephemeral", ttl: "1h" },
+          output_config: { format: { type: "json_schema", schema: { type: "object" } } },
+        },
+      })
+      const camel = yield* compileRequest({
+        ...request,
+        providerOptions: {
+          serviceTier: "standard_only",
+          container: "container_2",
+          inferenceGeo: "eu",
+          cacheControl: { type: "ephemeral" },
+          outputConfig: { effort: "low" },
+        },
+      })
 
       expect(snake.body).toMatchObject({
         service_tier: "auto",
@@ -245,7 +234,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("sends fast mode speed with its beta header", () =>
     Effect.gen(function* () {
-      const fast = LLMRequest.update(request, { providerOptions: { speed: "fast" } })
+      const fast = { ...request, providerOptions: { speed: "fast" } }
       const compiled = yield* compileRequest(fast)
       const prepared = yield* AnthropicMessages.route.prepareTransport(compiled.body, fast)
 
@@ -256,14 +245,13 @@ describe("Anthropic Messages route", () => {
 
   it.effect("forwards unknown values for pass-through string enums", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLMRequest.update(request, {
-          providerOptions: {
-            service_tier: "future-tier",
-            thinking: { type: "adaptive", display: "future-display" },
-          },
-        }),
-      )
+      const prepared = yield* compileRequest({
+        ...request,
+        providerOptions: {
+          service_tier: "future-tier",
+          thinking: { type: "adaptive", display: "future-display" },
+        },
+      })
 
       expect(prepared.body).toMatchObject({
         service_tier: "future-tier",
@@ -274,7 +262,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("ignores unknown provider options and rejects malformed known ones", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(LLMRequest.update(request, { providerOptions: { unknownOption: true } }))
+      const prepared = yield* compileRequest({ ...request, providerOptions: { unknownOption: true } })
       const malformed = [
         { service_tier: 1 },
         { metadata: { user_id: 42 } },
@@ -283,7 +271,7 @@ describe("Anthropic Messages route", () => {
         { thinking: { type: "automatic" } },
       ]
       const errors = yield* Effect.forEach(malformed, (providerOptions) =>
-        compileRequest(LLMRequest.update(request, { providerOptions })).pipe(Effect.flip),
+        compileRequest({ ...request, providerOptions }).pipe(Effect.flip),
       )
 
       expect(prepared.body).not.toHaveProperty("unknownOption")
@@ -398,22 +386,6 @@ describe("Anthropic Messages route", () => {
       expect(prepared.map((item) => item.body.messages.some((message) => message.role === "system"))).toEqual(
         ids.map(() => false),
       )
-    }),
-  )
-
-  it.effect("rejects non-text chronological system update content before send", () =>
-    Effect.gen(function* () {
-      const error = yield* compileRequest(
-        ai.request({
-          model: opus48,
-          messages: [
-            Message.user("Before."),
-            Message.make({ role: "system", content: { type: "media", media: Media.base64("AAECAw==", "image/png") } }),
-          ],
-        }),
-      ).pipe(Effect.flip)
-
-      expect(error.message).toContain("Anthropic Messages system messages only support text content for now")
     }),
   )
 
@@ -871,6 +843,65 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("lowers per-part Anthropic media options from provider metadata", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model,
+          prompt: [
+            Message.media(Media.base64("AQID", "image/png"), {
+              providerMetadata: {
+                anthropic: { file_id: "file_img", transformations: { oversized_image: "downsize" } },
+              },
+            }),
+            Message.media(Media.url("https://example.com/report.pdf", { mediaType: "application/pdf" }), {
+              filename: "report.pdf",
+              providerMetadata: { anthropic: { context: "Q3", citations: { enabled: true } } },
+            }),
+            Message.media(Media.base64("aGk=", "text/plain"), {
+              filename: "notes.txt",
+              providerMetadata: { anthropic: { title: "Notes" } },
+            }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages[0]?.content).toEqual([
+        {
+          type: "image",
+          source: { type: "file", file_id: "file_img" },
+          transformations: { oversized_image: "downsize" },
+        },
+        {
+          type: "document",
+          source: { type: "url", url: "https://example.com/report.pdf" },
+          title: "report.pdf",
+          context: "Q3",
+          citations: { enabled: true },
+        },
+        { type: "document", source: { type: "text", media_type: "text/plain", data: "hi" }, title: "Notes" },
+      ])
+    }),
+  )
+
+  it.effect("rejects invalid per-part Anthropic media options", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        ai.request({
+          model,
+          prompt: [
+            Message.media(Media.base64("AQID", "image/png"), {
+              providerMetadata: { anthropic: { transformations: { oversized_image: "shrink" } } },
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("oversized_image")
+    }),
+  )
+
   const video = { type: "video", source: { type: "base64", media_type: "video/mp4", data: "AAECAw==" } }
   const videoFile = { type: "file" as const, uri: "data:video/mp4;base64,AAECAw==", mime: "video/mp4" }
   const customModel = AnthropicMessages.route.with({ provider: "custom" }).model({ id: "video-model" })
@@ -896,25 +927,24 @@ describe("Anthropic Messages route", () => {
         },
       ])
 
-      const nested = yield* compileRequest(
-        LLMRequest.update(user, {
-          messages: [
-            Message.assistant([ToolCallPart.make({ id: "clip", name: "read", input: {} })]),
-            Message.tool({
-              id: "clip",
-              name: "read",
-              resultType: "content",
-              result: [videoFile, { type: "file", uri: "storage://clip", mime: "video/mp4" }],
-            }),
-          ],
-        }),
-      )
+      const nested = yield* compileRequest({
+        ...user,
+        messages: [
+          Message.assistant([ToolCallPart.make({ id: "clip", name: "read", input: {} })]),
+          Message.tool({
+            id: "clip",
+            name: "read",
+            resultType: "content",
+            result: [videoFile, { type: "file", uri: "storage://clip", mime: "video/mp4" }],
+          }),
+        ],
+      })
       expect(expectToolResult(nested.body).content).toEqual([
         video,
         { type: "video", source: { type: "url", url: "storage://clip" } },
       ])
 
-      const foreign = yield* compileRequest(LLMRequest.update(user, { model })).pipe(Effect.flip)
+      const foreign = yield* compileRequest({ ...user, model }).pipe(Effect.flip)
       expect(foreign.message).toContain("got custom:file_clip")
 
       const native = yield* compileRequest(
@@ -964,7 +994,7 @@ describe("Anthropic Messages route", () => {
         { role: "assistant", content: [{ type: "text", text: "Observed." }] },
       ])
 
-      const generic = yield* compileRequest(LLMRequest.update(meta, { model: customModel }))
+      const generic = yield* compileRequest({ ...meta, model: customModel })
       expect(generic.body.messages[1]?.content).toEqual([
         { type: "tool_result", tool_use_id: "first", content: [video] },
         { type: "tool_result", tool_use_id: "second", content: [video] },
@@ -1059,7 +1089,9 @@ describe("Anthropic Messages route", () => {
         .model({ id: "kimi-k2.6" })
       const codingPrepared = yield* compileUnsignedReasoning(coding.model({ id: "k3" }))
       const moonshotPrepared = yield* compileUnsignedReasoning(moonshot)
-      const qwenPrepared = yield* compileUnsignedReasoning(coding.with({ provider: "opencode" }).model({ id: "qwen3.8-flash" }))
+      const qwenPrepared = yield* compileUnsignedReasoning(
+        coding.with({ provider: "opencode" }).model({ id: "qwen3.8-flash" }),
+      )
       const minimaxPrepared = yield* compileUnsignedReasoning(
         coding.with({ provider: "opencode-go" }).model({ id: "minimax-m3" }),
       )
@@ -1737,11 +1769,10 @@ describe("Anthropic Messages route", () => {
       // Anthropic types `redacted_thinking.data` as an opaque string. Its
       // contents are provider-owned and must be replayed without inspection.
       const redactedData = "cmVkYWN0ZWQtdGhpbmtpbmc="
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
-        }),
-      ).pipe(
+      const response = yield* LLMClient.generate({
+        ...request,
+        tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+      }).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -1892,11 +1923,10 @@ describe("Anthropic Messages route", () => {
         { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 1 } },
         { type: "message_stop" },
       )
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
-        }),
-      ).pipe(Effect.provide(fixedResponse(body)))
+      const response = yield* LLMClient.generate({
+        ...request,
+        tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+      }).pipe(Effect.provide(fixedResponse(body)))
       const usage = new Usage({
         inputTokens: 5,
         outputTokens: 1,
@@ -2215,13 +2245,12 @@ describe("Anthropic Messages route", () => {
         { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 8 } },
         { type: "message_stop" },
       )
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          tools: [
-            ToolDefinition.make({ name: "web_search", description: "Web search", inputSchema: { type: "object" } }),
-          ],
-        }),
-      ).pipe(Effect.provide(fixedResponse(body)))
+      const response = yield* LLMClient.generate({
+        ...request,
+        tools: [
+          ToolDefinition.make({ name: "web_search", description: "Web search", inputSchema: { type: "object" } }),
+        ],
+      }).pipe(Effect.provide(fixedResponse(body)))
 
       const toolCall = response.events.find((event) => event.type === "tool-call")
       expect(toolCall).toEqual({
@@ -2279,13 +2308,12 @@ describe("Anthropic Messages route", () => {
         { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
         { type: "message_stop" },
       )
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          tools: [
-            ToolDefinition.make({ name: "web_search", description: "Web search", inputSchema: { type: "object" } }),
-          ],
-        }),
-      ).pipe(Effect.provide(fixedResponse(body)))
+      const response = yield* LLMClient.generate({
+        ...request,
+        tools: [
+          ToolDefinition.make({ name: "web_search", description: "Web search", inputSchema: { type: "object" } }),
+        ],
+      }).pipe(Effect.provide(fixedResponse(body)))
 
       const toolResult = response.events.find((event) => event.type === "tool-result")
       expect(toolResult).toMatchObject({

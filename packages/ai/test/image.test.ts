@@ -48,7 +48,8 @@ describe("Image", () => {
           apiKey: "test",
           baseURL: "https://api.openai.test/v1",
           queryParams: { "api-version": "v1" },
-          http: { body: { deployment: "test" }, headers: { "x-default": "yes" } },
+          headers: { "x-default": "yes" },
+          http: { body: { deployment: "test" } },
         }).image("gpt-image-2"),
         prompt: "A robot tending a rooftop garden",
         n: 2,
@@ -64,9 +65,9 @@ describe("Image", () => {
           native_default: true,
           future_option: true,
         },
+        headers: { "x-request": "yes" },
         http: {
           body: { output_format: "webp", output_compression: 50, future_option: "http", request_metadata: "value" },
-          headers: { "x-request": "yes" },
           query: { trace: "1" },
         },
       })
@@ -488,10 +489,8 @@ describe("Image", () => {
           quality: "high",
           future_option: true,
         },
-        http: {
-          body: { quality: "low", model: "corrupt", prompt: "corrupt", image: "corrupt", "image[]": "corrupt" },
-          headers: { "content-type": "application/json" },
-        },
+        headers: { "content-type": "application/json" },
+        http: { body: { quality: "low", model: "corrupt", prompt: "corrupt", image: "corrupt", "image[]": "corrupt" } },
       })
       .pipe(
         Effect.provide(
@@ -818,6 +817,7 @@ describe("Image", () => {
           imageConfig: { aspectRatio: "4:3", nativeImageOption: true },
           thinkingConfig: { thinkingLevel: "LOW", nativeThinkingOption: true },
         },
+        headers: { "x-request": "yes" },
         http: {
           body: {
             safetySettings: [],
@@ -828,7 +828,6 @@ describe("Image", () => {
               httpOption: true,
             },
           },
-          headers: { "x-request": "yes" },
           query: { trace: "1" },
         },
       })

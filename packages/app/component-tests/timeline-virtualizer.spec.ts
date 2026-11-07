@@ -55,6 +55,25 @@ story("bounds the cheap suffix and reveals only ready measured rows", async ({ p
   })
 })
 
+story("reveals at the end when Markdown never reports ready", async ({ page }) => {
+  // A block that never set data-markdown-ready kept every reveal check waiting, and the timeline stayed invisible.
+  await page.evaluate(async (fixture) => {
+    const { mountTimelineVirtualizer } = await import(fixture)
+    mountTimelineVirtualizer({ count: 100, rowHeight: 60, immediate: true })
+  }, fixture)
+  const root = page.getByTestId("timeline-virtualizer-fixture")
+  const content = root.locator("[data-timeline-virtual-content]")
+  await expect(content).toHaveCSS("visibility", "hidden")
+  await expect(content).toHaveCSS("visibility", "visible")
+  const reveal = await root.evaluate((element) => JSON.parse(element.dataset.firstReveal!))
+  expect(reveal.pendingMarkdown).toBeGreaterThan(0)
+  expect(reveal.rows).toContain(99)
+  const viewport = root.locator("[data-scrollable]")
+  await expect
+    .poll(() => viewport.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+    .toBeLessThanOrEqual(1)
+})
+
 story("treats the reachable end as the end under page zoom", async ({ page }) => {
   // At 110% the browser stops scrolling more than a pixel short of scrollHeight - clientHeight. A mount that waited
   // for that distance to close stayed blank, or froze the renderer in a microtask loop, and scrolling back down to
@@ -62,7 +81,7 @@ story("treats the reachable end as the end under page zoom", async ({ page }) =>
   await page.evaluate(async (fixture) => {
     document.documentElement.style.zoom = "1.1"
     const { mountTimelineVirtualizer } = await import(fixture)
-    mountTimelineVirtualizer({ count: 4, rowHeight: 59.3, immediate: true, viewportHeight: 200.5 })
+    mountTimelineVirtualizer({ count: 4, rowHeight: 57.8, immediate: true, viewportHeight: 200.5 })
   }, fixture)
   const root = page.getByTestId("timeline-virtualizer-fixture")
   const content = root.locator("[data-timeline-virtual-content]")
@@ -95,7 +114,7 @@ story("leaves a reader who scrolled up in place after a scroll to the zoomed end
   await page.evaluate(async (fixture) => {
     document.documentElement.style.zoom = "1.1"
     const { mountTimelineVirtualizer } = await import(fixture)
-    mountTimelineVirtualizer({ count: 40, rowHeight: 59.3, immediate: true, viewportHeight: 200.5 })
+    mountTimelineVirtualizer({ count: 40, rowHeight: 57.8, immediate: true, viewportHeight: 200.5 })
   }, fixture)
   const root = page.getByTestId("timeline-virtualizer-fixture")
   await root.getByRole("button", { name: "Complete Markdown", exact: true }).click()
@@ -128,6 +147,27 @@ story("leaves a reader who scrolled up in place after a scroll to the zoomed end
   expect(await distance()).toBeGreaterThan(70)
 })
 
+story("holds a revealed tool inside a group of several through a later resize", async ({ page }) => {
+  // The anchor looked only for an element naming the tool alone, so a grouped tool let go on the next resize.
+  await page.evaluate(async (fixture) => {
+    const { mountTimelineVirtualizer } = await import(fixture)
+    mountTimelineVirtualizer({ count: 40, rowHeight: 60, immediate: true })
+  }, fixture)
+  const root = page.getByTestId("timeline-virtualizer-fixture")
+  const controls = root.getByTestId("timeline-controls")
+  await root.getByRole("button", { name: "Complete Markdown", exact: true }).click()
+  await expect(root.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+  await expect(controls).toHaveAttribute("data-pinned", "true")
+
+  await root.getByRole("button", { name: "Anchor first row", exact: true }).click()
+  await expect(root.locator('[data-timeline-part-ids="prt_first,prt_grouped"]')).toBeAttached()
+  await root.getByRole("button", { name: "Grow last row", exact: true }).click()
+
+  const viewport = root.locator("[data-scrollable]")
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBe(0)
+  await expect(controls).toHaveAttribute("data-anchored", "true")
+})
+
 for (const input of [
   { name: "offset-only", count: 1, rowHeight: 600, reveal: { scrollTop: 0 } },
   { name: "zero-height", count: 4, rowHeight: 60, reveal: {} },
@@ -147,8 +187,8 @@ for (const input of [
     await expect(content.locator("[data-timeline-key]")).toHaveCount(1)
 
     if (input.name === "offset-only") {
-      // Pinned to the end: the 600px row and the virtualizer's 86px tail, less the 180px viewport.
-      await expect(root).toHaveAttribute("data-last-scroll-top", "506")
+      // Pinned to the end: the 600px row and the virtualizer's 92px tail, less the 180px viewport.
+      await expect(root).toHaveAttribute("data-last-scroll-top", "512")
       await root.locator("[data-scrollable]").dispatchEvent("wheel", { deltaY: -1 })
       await expect(root.getByTestId("timeline-controls")).toHaveAttribute("data-pinned", "false")
     }

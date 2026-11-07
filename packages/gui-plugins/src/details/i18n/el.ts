@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Δεν έχουν ρυθμιστεί πρόσθετα",
   skills: "Δεξιότητες",
   "skills.empty": "Δεν έχουν διαμορφωθεί δεξιότητες",
-  lsp: "LSP",
-  "lsp.empty": "Δεν έχουν διαμορφωθεί διακομιστές LSP",
   failed: "Απέτυχε",
   retry: "Επανάληψη",
   connecting: "Σύνδεση…",

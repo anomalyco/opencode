@@ -18,20 +18,10 @@ export const WslServerRuntime = Schema.Union([
 
 export type WslServerRuntime = typeof WslServerRuntime.Type
 
-export const WslJob = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal("runtime"), startedAt: Schema.Number }),
-  Schema.Struct({ kind: Schema.Literal("distros"), startedAt: Schema.Number }),
-  Schema.Struct({ kind: Schema.Literal("install-wsl"), startedAt: Schema.Number }),
-  Schema.Struct({ kind: Schema.Literal("install-distro"), distro: Schema.String, startedAt: Schema.Number }),
-  Schema.Struct({
-    kind: Schema.Literal("probe-addable"),
-    distros: Schema.Array(Schema.String),
-    startedAt: Schema.Number,
-  }),
-  Schema.Struct({ kind: Schema.Literal("install-opencode"), distro: Schema.String, startedAt: Schema.Number }),
-])
+/** The one job a distro runs; a distro missing from `distroJobs` runs none. */
+export const WslDistroJob = Schema.Literals(["probing", "installing", "updating", "starting", "removing"])
 
-export type WslJob = typeof WslJob.Type
+export type WslDistroJob = typeof WslDistroJob.Type
 
 export const WslRuntimeCheck = Schema.Struct({
   available: Schema.Boolean,
@@ -86,7 +76,8 @@ export const WslServersState = Schema.Struct({
   opencodeChecks: Schema.Record(Schema.String, WslOpencodeCheck),
   pendingRestart: Schema.Boolean,
   servers: Schema.Array(WslServerItem),
-  job: Schema.NullOr(WslJob),
+  hostJob: Schema.Literals(["idle", "busy"]),
+  distroJobs: Schema.Record(Schema.String, WslDistroJob),
 })
 
 export type WslServersState = typeof WslServersState.Type

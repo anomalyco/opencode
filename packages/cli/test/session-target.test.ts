@@ -75,6 +75,8 @@ describe("session target resolver", () => {
 
     const target = await resolveSessionTarget({ client, location: { directory: "/project" }, continue: true, prepare })
     expect(list).toHaveBeenCalledTimes(2)
+    // Archived sessions, such as `opencode run --archived` runs, are never continued implicitly.
+    expect(list).toHaveBeenCalledWith(expect.objectContaining({ archived: false }))
     expect(target.session.id).toBe("ses_implicit")
   })
 

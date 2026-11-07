@@ -19,13 +19,25 @@ import { permissionLayer } from "./lib/permission"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 import { webSearchHost } from "./plugin/host"
 import { TestWebSearch } from "./lib/websearch"
+import type { SessionContext } from "@opencode/plugin/effect/session"
 
+// The plugin's `context` hook, which edits the tools offered to the model.
+const contextHooks: ((event: SessionContext) => Effect.Effect<void>)[] = []
 const webSearchToolNode = makeLocationNode({
   name: "test/websearch-tool-plugin",
   layer: Layer.effectDiscard(
     Effect.gen(function* () {
       const websearch = yield* WebSearch.Service
-      yield* registerToolPlugin(WebSearchTool.Plugin, { websearch: webSearchHost(websearch) })
+      yield* registerToolPlugin(WebSearchTool.Plugin, {
+        websearch: webSearchHost(websearch),
+        session: {
+          hook: (name, callback) =>
+            Effect.sync(() => {
+              if (name === "context") contextHooks.push(callback as (event: SessionContext) => Effect.Effect<void>)
+              return { dispose: Effect.void }
+            }),
+        },
+      })
     }),
   ),
   deps: [Tool.node, Permission.node, WebSearch.node, Form.node],
@@ -345,6 +357,23 @@ describe("WebSearchTool registration", () => {
       expect(results.every((item) => item.status === "completed")).toBe(true)
       expect(fixture.formRequests).toHaveLength(1)
       expect(yield* fixture.kv.get(WebSearch.ProviderKey)).toBe("random")
+    }),
+  )
+
+  it.effect("offers the tool to the model only while a provider remains", () =>
+    Effect.gen(function* () {
+      contextHooks.length = 0
+      const fixture = yield* setup
+      const offered = Effect.fnUntraced(function* () {
+        const event = { tools: { [WebSearchTool.name]: { description: "", input: {} } } }
+        yield* Effect.forEach(contextHooks, (hook) => hook(event as unknown as SessionContext))
+        return WebSearchTool.name in event.tools
+      })
+      expect(yield* offered()).toBe(true)
+
+      // As when policy denies every provider.
+      yield* fixture.websearch.transform((editor) => editor.list().forEach((provider) => editor.remove(provider.id)))
+      expect(yield* offered()).toBe(false)
     }),
   )
 

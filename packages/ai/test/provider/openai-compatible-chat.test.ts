@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { ai, LLMEvent, LLMRequest, Media, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, Media, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src/effect.js"
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat.js"
@@ -25,7 +25,8 @@ const request = ai.request({
   model,
   system: "You are concise.",
   prompt: "Say hello.",
-  generation: { maxTokens: 20, temperature: 0 },
+  maxTokens: 20,
+  temperature: 0,
 })
 
 const deltaChunk = (delta: object, finishReason: string | null = null) => ({
@@ -83,12 +84,11 @@ describe("OpenAI-compatible Chat route", () => {
 
   it.effect("prepares generic Chat target", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLMRequest.update(request, {
-          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
-          toolChoice: ToolChoice.make({ type: "required" }),
-        }),
-      )
+      const prepared = yield* compileRequest({
+        ...request,
+        tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        toolChoice: ToolChoice.make({ type: "required" }),
+      })
 
       expect(prepared.route).toBe("openai-compatible-chat")
       expect(prepared.model).toMatchObject({
@@ -156,7 +156,10 @@ describe("OpenAI-compatible Chat route", () => {
       const declared = yield* prepare("anthropic")
       expect(declared.body).toMatchObject({
         messages: [
-          { role: "system", content: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }] },
+          {
+            role: "system",
+            content: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }],
+          },
           { role: "user", content: [{ type: "text", text: "Say hello.", cache_control: { type: "ephemeral" } }] },
         ],
         tools: [{ function: { name: "lookup" }, cache_control: { type: "ephemeral" } }],
@@ -166,7 +169,10 @@ describe("OpenAI-compatible Chat route", () => {
       const alibaba = yield* prepare("alibaba")
       expect(alibaba.body).toMatchObject({
         messages: [
-          { role: "system", content: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }] },
+          {
+            role: "system",
+            content: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }],
+          },
           { role: "user", content: [{ type: "text", text: "Say hello.", cache_control: { type: "ephemeral" } }] },
         ],
       })
@@ -181,9 +187,7 @@ describe("OpenAI-compatible Chat route", () => {
       const compatible = OpenAICompatibleChat.route
         .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
         .model({ id: "custom-model", compatibility: { maxTokensField: "max_completion_tokens" } })
-      const prepared = yield* compileRequest(
-        ai.request({ model: compatible, prompt: "Say hello.", generation: { maxTokens: 20 } }),
-      )
+      const prepared = yield* compileRequest(ai.request({ model: compatible, prompt: "Say hello.", maxTokens: 20 }))
 
       expect(prepared.body).toMatchObject({ max_completion_tokens: 20 })
       expect(prepared.body).not.toHaveProperty("max_tokens")
@@ -517,13 +521,10 @@ describe("OpenAI-compatible Chat route", () => {
 
   it.effect("assembles indexless parallel tool calls across sparse chunks", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          tools: [
-            ToolDefinition.make({ name: "weather", description: "Get weather", inputSchema: { type: "object" } }),
-          ],
-        }),
-      ).pipe(
+      const response = yield* LLMClient.generate({
+        ...request,
+        tools: [ToolDefinition.make({ name: "weather", description: "Get weather", inputSchema: { type: "object" } })],
+      }).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -567,7 +568,7 @@ describe("OpenAI-compatible Chat route", () => {
       const compatible = OpenAICompatibleChat.route
         .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
         .model({ id: "custom-model", compatibility: { requireFinishReason: false } })
-      const response = yield* LLMClient.generate(LLMRequest.update(request, { model: compatible })).pipe(
+      const response = yield* LLMClient.generate({ ...request, model: compatible }).pipe(
         Effect.provide(fixedResponse(sseEvents(deltaChunk({ content: "Hello" }), deltaChunk({}, "")))),
       )
 

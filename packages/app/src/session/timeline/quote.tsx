@@ -1,4 +1,4 @@
-import { createEffect, on, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -13,6 +13,26 @@ import type { QuoteSource } from "@/composer/quote-source"
 import { quotePosition } from "@/composer/quote-position"
 import { captureQuoteSource } from "./quote-highlight"
 import {
+  activeQuote,
+  canScheduleQuotePlace,
+  canScheduleQuoteReflow,
+  createQuoteState,
+  DISPOSED_QUOTE_EVENT,
+  isQuotePressing,
+  QUOTE_SETTLE_MS,
+  quoteToolbarView,
+  RESET_QUOTE_EVENT,
+  ROOT_RESIZED_QUOTE_EVENT,
+  SELECTION_CHANGED_QUOTE_EVENT,
+  SELECTION_CLEARED_QUOTE_EVENT,
+  transitionQuote,
+  VIEWPORT_MOVED_QUOTE_EVENT,
+  type QuoteEffect,
+  type QuoteEvent,
+  type QuoteHorizontal,
+  type QuotePlacement,
+} from "./quote-machine"
+import {
   characterRect,
   narrowSelection,
   quoteText,
@@ -23,13 +43,7 @@ import {
 
 const IS_MAC = /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
-const SETTLE_MS = 150
-
 const SHORT_LINES = 3
-
-type Rect = { top: number; bottom: number; left: number; right: number }
-
-type Extent = Rect & { short: boolean; backward: boolean }
 
 /** Offers to quote text selected in the session timeline into the composer. */
 export function createTimelineQuote(input: {
@@ -38,98 +52,167 @@ export function createTimelineQuote(input: {
   enabled: () => boolean
   add: (text: string, source: QuoteSource, anchor?: ComposerQuoteAnchor) => void
 }) {
-  const [state, setState] = createStore<{
-    text: string | undefined
-    truncated: boolean
-    extent: Extent | undefined
-    bounds: Rect | undefined
-    layout: number
-  }>({ text: undefined, truncated: false, extent: undefined, bounds: undefined, layout: 0 })
-
-  let selected: TimelineSelection | undefined
-  let horizontal: { left: number; right: number; origin: number } | undefined
+  let current = createQuoteState()
+  const [quoteState, setQuoteState] = createSignal(current)
+  // Counts timeline resizes, so a quote anchor in the composer follows a reflow after the toolbar closed.
+  const [layout, setLayout] = createSignal(0)
   let element: HTMLElement | undefined
-  let timer: ReturnType<typeof setTimeout> | undefined
-  let frame: number | undefined
-  let pointer = false
-  let reflow: number | undefined
-  // The selection Escape dismissed, which stays dismissed until it changes or clears.
-  let dismissed: Range | undefined
+  let settleTimer: ReturnType<typeof setTimeout> | undefined
+  let clearTimer: ReturnType<typeof setTimeout> | undefined
+  let placeFrame: number | undefined
+  let reflowFrame: number | undefined
+  let unwatchPress: (() => void) | undefined
 
-  const close = () => {
-    selected = undefined
-    horizontal = undefined
-    dismissed = undefined
-    clearTimeout(timer)
+  const dispatch = (event: QuoteEvent) =>
+    untrack(() => {
+      const next = transitionQuote(current, event)
 
-    if (reflow !== undefined) cancelAnimationFrame(reflow)
-    reflow = undefined
-    setState({ text: undefined, truncated: false, extent: undefined, bounds: undefined })
-  }
+      if (next.state !== current) {
+        current = next.state
+        setQuoteState(current)
+      }
 
-  const dismiss = () => {
-    const focused = document.activeElement instanceof Node && !!element?.contains(document.activeElement)
-    const selection = window.getSelection()
-    close()
-    dismissed = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : undefined
-
-    if (focused) input.root()?.focus({ preventScroll: true })
-  }
-
-  const place = () => {
-    const root = input.root()
-
-    if (!root || !selected) return
-
-    // The virtualizer removed the selected rows.
-    if (selected.range.collapsed) return close()
-    const measured = measureQuote(root, selected, horizontal)
-    setState({
-      bounds: measured?.bounds,
-      extent:
-        measured && measured.extent.bottom > measured.bounds.top && measured.extent.top < measured.bounds.bottom
-          ? measured.extent
-          : undefined,
+      next.effects.forEach(run)
     })
+
+  const run = (effect: QuoteEffect) => {
+    if (effect.type === "press.watch") return watchPress()
+
+    if (effect.type === "press.unwatch") {
+      unwatchPress?.()
+      unwatchPress = undefined
+
+      return
+    }
+
+    if (effect.type === "settle.schedule" || effect.type === "settle.cancel") {
+      clearTimeout(settleTimer)
+      settleTimer = undefined
+
+      if (effect.type === "settle.cancel") return
+      settleTimer = setTimeout(() => {
+        settleTimer = undefined
+        dispatch({ type: "settle.ready", attempt: effect.attempt })
+      }, QUOTE_SETTLE_MS)
+
+      return
+    }
+
+    if (effect.type === "clear.schedule" || effect.type === "clear.cancel") {
+      clearTimeout(clearTimer)
+      clearTimer = undefined
+
+      if (effect.type === "clear.cancel") return
+      // Runs once the press is handled.
+      clearTimer = setTimeout(() => {
+        clearTimer = undefined
+        dispatch({ type: "clear.ready", attempt: effect.attempt })
+      })
+
+      return
+    }
+
+    if (effect.type === "place.schedule" || effect.type === "place.cancel") {
+      if (placeFrame !== undefined) cancelAnimationFrame(placeFrame)
+      placeFrame = undefined
+
+      if (effect.type === "place.cancel") return
+      placeFrame = requestAnimationFrame(() => {
+        placeFrame = undefined
+        dispatch({ type: "place.ready", attempt: effect.attempt })
+      })
+
+      return
+    }
+
+    if (effect.type === "reflow.schedule" || effect.type === "reflow.cancel") {
+      if (reflowFrame !== undefined) cancelAnimationFrame(reflowFrame)
+      reflowFrame = undefined
+
+      if (effect.type === "reflow.cancel") return
+      reflowFrame = requestAnimationFrame(() => {
+        reflowFrame = undefined
+        dispatch({ type: "reflow.ready", attempt: effect.attempt })
+      })
+
+      return
+    }
+
+    if (effect.type === "quote.read") return read(effect.dismissed)
+
+    if (effect.type === "place.measure") {
+      const root = input.root()
+
+      if (!root) return
+      const selected = effect.quote.selected
+      // The virtualizer removed the selected rows.
+      const collapsed = selected.range.collapsed
+
+      return dispatch({
+        type: "place.measured",
+        collapsed,
+        placement: collapsed ? undefined : placeQuote(root, selected, effect.quote.horizontal),
+      })
+    }
+
+    if (effect.type === "selection.clearIfSame") {
+      const selection = window.getSelection()
+
+      if (selection?.rangeCount && sameRange(selection.getRangeAt(0), effect.range)) selection.removeAllRanges()
+
+      return
+    }
+
+    input.root()?.focus({ preventScroll: true })
   }
 
-  const read = () => {
-    if (pointer) return
+  const read = (dismissed: Range | undefined) => {
     const root = input.root()
     const selection = window.getSelection()
 
-    if (dismissed && selection?.rangeCount && sameRange(selection.getRangeAt(0), dismissed)) return
-    dismissed = undefined
+    if (dismissed && selection?.rangeCount && sameRange(selection.getRangeAt(0), dismissed))
+      return dispatch({ type: "quote.measured", quote: undefined, dismissed: true })
     const next = root && input.enabled() && selection ? timelineSelection(selection, root) : undefined
     const quote = next ? quoteText(next) : undefined
 
-    if (!root || !next || !quote?.text) return close()
-    horizontal = quote.horizontal && { ...quote.horizontal, origin: root.getBoundingClientRect().left }
+    if (!root || !next || !quote?.text) return dispatch({ type: "quote.measured", quote: undefined })
+    const horizontal = quote.horizontal && { ...quote.horizontal, origin: root.getBoundingClientRect().left }
+
     // Selecting a whole paragraph ends the selection at the start of the next block.
-    selected = quote.first
+    const selected = quote.first
       ? narrowSelection(next, quote.first, quote.truncated ? next.end : (quote.last ?? next.end))
       : next
-    setState({ text: quote.text, truncated: quote.truncated })
-    place()
-  }
 
-  const schedule = () => {
-    clearTimeout(timer)
-    timer = setTimeout(read, SETTLE_MS)
-  }
-
-  const schedulePlace = () => {
-    if (frame !== undefined || !selected) return
-    frame = requestAnimationFrame(() => {
-      frame = undefined
-      place()
+    dispatch({
+      type: "quote.measured",
+      quote: {
+        text: quote.text,
+        truncated: quote.truncated,
+        selected,
+        horizontal,
+        placement: placeQuote(root, selected, horizontal),
+      },
     })
   }
 
-  const release = () => {
-    if (!pointer) return
-    pointer = false
-    schedule()
+  // A press can end without a pointerup reaching the document (a native drag of the selection, a capture on a removed
+  // node), so a move with the primary button up also releases it. The listeners exist only while a press is held.
+  const watchPress = () => {
+    unwatchPress?.()
+    const release = () => dispatch({ type: "pointer.up", collapsed: window.getSelection()?.isCollapsed ?? true })
+    const controller = new AbortController()
+    const options = { signal: controller.signal }
+    document.addEventListener("pointerup", release, options)
+    document.addEventListener("pointercancel", release, options)
+    document.addEventListener("contextmenu", release, options)
+    document.addEventListener("dragend", release, options)
+    window.addEventListener("blur", release, options)
+    document.addEventListener("visibilitychange", () => document.hidden && release(), options)
+    document.addEventListener("pointermove", (event) => (event.buttons & 1) === 0 && release(), {
+      signal: controller.signal,
+      passive: true,
+    })
+    unwatchPress = () => controller.abort()
   }
 
   const inside = (target: EventTarget | null) => target instanceof Node && !!element?.contains(target)
@@ -140,7 +223,7 @@ export function createTimelineQuote(input: {
     const selection = window.getSelection()
     const active = document.activeElement
 
-    if (pointer || !root || !input.enabled() || !selection || selection.rangeCount === 0) return
+    if (isQuotePressing(current) || !root || !input.enabled() || !selection || selection.rangeCount === 0) return
 
     if (active !== document.body && !(active instanceof Node && root.contains(active) && !editable(active))) return
     const range = selection.getRangeAt(0)
@@ -156,23 +239,25 @@ export function createTimelineQuote(input: {
 
   makeEventListener(document, "selectionchange", () => {
     containSelectAll()
-
     // Only a new selection waits to settle; a cleared one closes at once.
-    if (window.getSelection()?.isCollapsed ?? true) return close()
-    schedule()
+    dispatch(
+      (window.getSelection()?.isCollapsed ?? true) ? SELECTION_CLEARED_QUOTE_EVENT : SELECTION_CHANGED_QUOTE_EVENT,
+    )
   })
   makeEventListener(document, "pointerdown", (event) => {
     if (inside(event.target) || event.button !== 0) return
-    pointer = true
     const selection = window.getSelection()
     const target = event.target instanceof Element ? event.target : undefined
 
-    if (state.text === undefined || event.shiftKey || !selection?.rangeCount || target?.closest(".scroll-view__thumb"))
-      return
-    const range = selection.getRangeAt(0).cloneRange()
+    const range =
+      activeQuote(current) && !event.shiftKey && selection?.rangeCount && !target?.closest(".scroll-view__thumb")
+        ? selection.getRangeAt(0).cloneRange()
+        : undefined
 
-    // A press on the selection itself may start dragging it; the page clears it on release otherwise.
-    if (
+    // A press on the selection itself may start dragging it; the page clears it on release otherwise. A press on
+    // content the shell makes unselectable leaves the selection as it was, so it clears once the press is handled.
+    const onSelection =
+      !!range &&
       [...range.getClientRects()].some(
         (rect) =>
           event.clientX >= rect.left &&
@@ -180,25 +265,24 @@ export function createTimelineQuote(input: {
           event.clientY >= rect.top &&
           event.clientY <= rect.bottom,
       )
-    )
-      return
 
-    // A press on content the shell makes unselectable leaves the selection as it was, so clear it once the press is
-    // handled.
-    setTimeout(() => {
-      if (selection.rangeCount && sameRange(selection.getRangeAt(0), range)) selection.removeAllRanges()
-    })
+    dispatch({ type: "pointer.down", clearRange: onSelection ? undefined : range })
   })
-  makeEventListener(document, "pointerup", release)
-  makeEventListener(document, "pointercancel", release)
-  makeEventListener(document, "contextmenu", release)
-  makeEventListener(window, "blur", release)
   makeEventListener(document, "keydown", (event) => {
     if (event.defaultPrevented || event.isComposing) return
     const root = input.root()
     const active = document.activeElement
 
-    if (event.key === "Escape" && state.text !== undefined) return dismiss()
+    if (event.key === "Escape" && activeQuote(current)) {
+      const selection = window.getSelection()
+
+      return dispatch({
+        type: "escape",
+        range: selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : undefined,
+        toolbarFocused: active instanceof Node && !!element?.contains(active),
+      })
+    }
+
     const action = element?.querySelector<HTMLButtonElement>("button:not(:disabled)")
 
     if (
@@ -232,56 +316,48 @@ export function createTimelineQuote(input: {
       window.getSelection()?.selectAllChildren(root)
     }
   })
-  makeEventListener(document, "scroll", schedulePlace, { capture: true, passive: true })
-  makeEventListener(window, "resize", schedulePlace)
+
+  const moved = () => canScheduleQuotePlace(current) && dispatch(VIEWPORT_MOVED_QUOTE_EVENT)
+  makeEventListener(document, "scroll", moved, { capture: true, passive: true })
+  makeEventListener(window, "resize", moved)
 
   // A resized timeline, such as when a side panel opens, reflows the selected text.
   createResizeObserver(input.root, () => {
-    setState("layout", (value) => value + 1)
+    setLayout((value) => value + 1)
 
-    if (!selected || reflow !== undefined) return
-    reflow = requestAnimationFrame(() => {
-      reflow = undefined
-      read()
-    })
+    if (canScheduleQuoteReflow(current)) dispatch(ROOT_RESIZED_QUOTE_EVENT)
   })
 
-  createEffect(on(input.sessionKey, close, { defer: true }))
+  createEffect(on(input.sessionKey, () => dispatch(RESET_QUOTE_EVENT), { defer: true }))
   createEffect(() => {
-    if (!input.enabled()) close()
+    if (!input.enabled()) dispatch(RESET_QUOTE_EVENT)
   })
-  onCleanup(() => {
-    clearTimeout(timer)
-
-    if (frame !== undefined) cancelAnimationFrame(frame)
-
-    if (reflow !== undefined) cancelAnimationFrame(reflow)
-  })
+  onCleanup(() => dispatch(DISPOSED_QUOTE_EVENT))
 
   return {
-    state,
+    toolbar: createMemo(() => quoteToolbarView(quoteState())),
     // Alt skips the optional comment. Otherwise the editor replaces the selection toolbar.
     add: (skip: boolean) => {
-      const text = state.text
+      const quote = activeQuote(current)
 
-      if (!text || state.truncated) return
-      const ranges = selected ? quoteText(selected).ranges : []
+      if (!quote?.text || quote.truncated) return
+      const ranges = quoteText(quote.selected).ranges
       const source = captureQuoteSource(ranges)
-      const selection = selected
+      const selection = quote.selected
       const root = input.root()
       const sessionKey = input.sessionKey()
-      let horizontalBounds = horizontal
-      let layout = state.layout
-      const initial = root && selection ? measureQuote(root, selection, horizontalBounds) : undefined
+      let horizontalBounds = quote.horizontal
+      let measuredLayout = layout()
+      const initial = root ? measureQuote(root, selection, horizontalBounds) : undefined
       let last = initial
 
       const anchor: ComposerQuoteAnchor = (size) => {
         // Keep the source anchor reactive when a divider resizes the timeline after selection is cleared.
-        void state.layout
+        const revision = layout()
 
         if (!root?.isConnected || input.sessionKey() !== sessionKey || !input.enabled()) return
 
-        if (layout !== state.layout) {
+        if (measuredLayout !== revision) {
           // Only quoted glyphs determine the width; the enclosing selection also includes block boxes and chrome.
           const rects = ranges
             .flatMap((range) => (range.startContainer.isConnected ? [...range.getClientRects()] : []))
@@ -294,10 +370,10 @@ export function createTimelineQuote(input: {
                 origin: root.getBoundingClientRect().left,
               }
             : undefined
-          layout = state.layout
+          measuredLayout = revision
         }
 
-        const measured = selection && measureQuote(root, selection, horizontalBounds)
+        const measured = measureQuote(root, selection, horizontalBounds)
         last = measured ?? last
 
         if (!last) return
@@ -310,8 +386,8 @@ export function createTimelineQuote(input: {
       }
 
       window.getSelection()?.removeAllRanges()
-      close()
-      input.add(text, source, skip ? undefined : anchor)
+      dispatch(RESET_QUOTE_EVENT)
+      input.add(quote.text, source, skip ? undefined : anchor)
     },
     setElement: (value: HTMLElement | undefined) => {
       element = value
@@ -329,16 +405,15 @@ export function TimelineQuote(props: { controller: TimelineQuoteController }) {
   const [size, setSize] = createStore({ width: 0, height: 0 })
 
   const position = () => {
-    const bounds = quote.state.bounds
-    const extent = quote.state.extent
+    const view = quote.toolbar()
 
-    if (!bounds || !extent) return
+    if (!view) return
 
-    return quotePosition(bounds, extent, size, docked())
+    return quotePosition(view.bounds, view.extent, size, docked())
   }
 
   return (
-    <Show when={quote.state.text !== undefined && position()}>
+    <Show when={position()}>
       {(place) => (
         <Portal>
           <div
@@ -359,7 +434,7 @@ export function TimelineQuote(props: { controller: TimelineQuoteController }) {
             }}
             onMouseDown={(event) => event.preventDefault()}
           >
-            <Show when={quote.state.truncated}>
+            <Show when={quote.toolbar()?.truncated}>
               <span class="px-2 text-[12px] leading-[var(--line-height-compact)] text-v2-text-text-muted [font-weight:440]">
                 {language.t("session.quote.tooLong")}
               </span>
@@ -378,7 +453,7 @@ export function TimelineQuote(props: { controller: TimelineQuoteController }) {
                 size="small"
                 variant="ghost"
                 icon="outline-quote"
-                disabled={quote.state.truncated}
+                disabled={quote.toolbar()?.truncated}
                 onClick={(event: MouseEvent) => quote.add(event.altKey)}
               >
                 {language.t("session.quote.add")}
@@ -391,11 +466,26 @@ export function TimelineQuote(props: { controller: TimelineQuoteController }) {
   )
 }
 
-function measureQuote(
+function placeQuote(
   root: HTMLElement,
   selected: TimelineSelection,
-  horizontal?: { left: number; right: number; origin: number },
-) {
+  horizontal: QuoteHorizontal | undefined,
+): QuotePlacement | undefined {
+  const measured = measureQuote(root, selected, horizontal)
+
+  if (!measured) return undefined
+
+  return {
+    bounds: measured.bounds,
+    // A selection scrolled out of view keeps its quote but hides the toolbar.
+    extent:
+      measured.extent.bottom > measured.bounds.top && measured.extent.top < measured.bounds.bottom
+        ? measured.extent
+        : undefined,
+  }
+}
+
+function measureQuote(root: HTMLElement, selected: TimelineSelection, horizontal?: QuoteHorizontal) {
   if (selected.range.collapsed || !selected.start.node.isConnected || !selected.end.node.isConnected) return
   const view = root.getBoundingClientRect()
 

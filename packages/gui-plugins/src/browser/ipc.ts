@@ -67,6 +67,29 @@ export const PaneEvent = Schema.Union([
 export type PaneEvent = typeof PaneEvent.Type
 
 /**
+ * The `error` of the last `state` event of a binding that main closed. Other errors on a `state` event, such as
+ * `"page_crashed"` or a refused address, leave the binding open.
+ *
+ * - `"browser.pane.unsupported"`: the server has no browser plugin, or its `attached` handshake names a protocol this
+ *   desktop cannot speak. The event carries no tabs. A control event of an unknown type closes nothing.
+ * - `"browser.pane.replaced"`: another window attached to the same session. The event carries no tabs.
+ * - `"browser.pane.suspended"`: the server dropped an attached binding (idle eviction), or main's plugin is going away.
+ *   The event carries the tabs the binding had.
+ * - `"browser.pane.missing"`: the session no longer exists. The event carries no tabs, and main forgot its saved tabs.
+ * - `"browser.pane.registration.closed"`: the stream or attachment ended, registration timed out, the window navigated
+ *   or closed, or the window closed the binding. The event carries no tabs; the window may register again.
+ */
+export const PaneCloseReason = Schema.Literals([
+  "browser.pane.unsupported",
+  "browser.pane.replaced",
+  "browser.pane.suspended",
+  "browser.pane.missing",
+  "browser.pane.registration.closed",
+])
+
+export type PaneCloseReason = typeof PaneCloseReason.Type
+
+/**
  * The native browser pane in the main process. A binding is one registration of a session's pane
  * by a window; its events go to that window only.
  */
