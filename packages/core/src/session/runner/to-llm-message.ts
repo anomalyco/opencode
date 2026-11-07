@@ -225,7 +225,12 @@ const modelSwitched = (message: SessionMessage.ModelSelected, model: Model.Ref):
   return [Message.effort({ effort: to.effort, previous: from.effort })]
 }
 
-function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMetadataKey: string): Message[] {
+function toLLMMessage(
+  message: SessionMessage.Info,
+  model: Model.Ref,
+  providerMetadataKey: string,
+  stale = false,
+): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "idle":
@@ -242,7 +247,12 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
       ]
     case "user":
       const content = [
-        ...(message.skills ?? []).flatMap((skill) => (skill.text === undefined ? [] : [Message.text(skill.text)])),
+        // an old turn's skill body is retrievable on demand; keep only the pointer
+        ...(message.skills ?? []).flatMap((skill) =>
+          skill.text === undefined
+            ? []
+            : [Message.text(stale ? `[Skill unloaded: ${skill.name}]` : skill.text)],
+        ),
         ...(message.text === "" ? [] : [Message.text(message.text)]),
         ...userAttachmentContent(message.files ?? []),
       ]
@@ -257,7 +267,13 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
     case "synthetic":
       return [Message.make({ id: message.id, role: "user", content: message.text })]
     case "skill":
-      return [Message.make({ id: message.id, role: "user", content: message.text })]
+      return [
+        Message.make({
+          id: message.id,
+          role: "user",
+          content: stale ? `[Skill unloaded: ${message.name}]` : message.text,
+        }),
+      ]
     case "system":
       return [Message.system(message.text)]
     case "shell":
@@ -267,7 +283,7 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
         Message.make({
           id: message.id,
           role: "user",
-          content: `The following shell command was executed by the user:\n\nCommand:\n${message.command}\n\nOutput:\n${message.output?.output ?? ""}`,
+          content: `The following shell command was executed by the user:\n\nCommand:\n${message.command}\n\nOutput:\n${stale ? REPLAY_STUB : (message.output?.output ?? "")}`,
         }),
       ]
     case "assistant":
@@ -302,7 +318,17 @@ export const toLLMMessages = (
   providerMetadataKey: string = model.providerID,
   prune = false,
 ) => {
-  const result = messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey))
+  // every message kind that emits a user- or system-role entry; the last one opens the current turn
+  const lastBoundary = prune
+    ? messages.findLastIndex((message) =>
+        ["user", "synthetic", "skill", "shell", "system", "location-switched", "model-switched", "compaction"].includes(
+          message.type,
+        ),
+      )
+    : -1
+  const result = messages.flatMap((message, index) =>
+    toLLMMessage(message, model, providerMetadataKey, index < lastBoundary),
+  )
   return prune ? pruneTranscript(result) : result
 }
 
