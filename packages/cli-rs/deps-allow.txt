@@ -33,7 +33,6 @@ cpufeatures
 crypto-common
 data-encoding
 digest
-displaydoc proc-macro
 equivalent
 errno
 find-msvc-tools
@@ -57,13 +56,6 @@ hyper
 hyper-rustls
 hyper-util
 iana-time-zone
-icu_collections
-icu_locale_core
-icu_normalizer
-icu_normalizer_data build
-icu_properties
-icu_properties_data build
-icu_provider
 idna
 idna_adapter
 indexmap
@@ -73,7 +65,6 @@ itoa
 libc build
 libloading
 linux-raw-sys
-litemap
 log
 memchr
 mio
@@ -82,7 +73,6 @@ once_cell
 openssl-probe
 percent-encoding
 pin-project-lite
-potential_utf
 proc-macro2 build
 quote build
 rand
@@ -110,17 +100,14 @@ similar
 slab
 smallvec
 socket2
-stable_deref_trait
 streaming-iterator
 strsim
 subtle
 syn
 sync_wrapper
-synstructure
 terminal_size
 thiserror build
 thiserror-impl proc-macro
-tinystr
 tokio
 tokio-macros proc-macro
 tokio-rustls
@@ -159,13 +146,5 @@ utf8_iter
 utf8parse
 utf_types
 want
-writeable
-yoke
-yoke-derive proc-macro
-zerofrom
-zerofrom-derive proc-macro
 zeroize
-zerotrie
-zerovec
-zerovec-derive proc-macro
 zmij build
