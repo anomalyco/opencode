@@ -14,6 +14,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Permission } from "@opencode/core/permission"
 import { AgentPlugin } from "@opencode/core/plugin/agent"
+import { MarketplaceLocal } from "@opencode/core/marketplace"
 import { AbsolutePath } from "@opencode/core/schema"
 import { ConfigNormalize } from "@opencode/core/config/normalize"
 import { ConfigAgentV1 } from "@opencode/core/v1/config/agent"
@@ -63,6 +64,81 @@ test("keeps schema fields and name out of legacy agent options", () => {
 })
 
 describe("ConfigAgentPlugin.Plugin", () => {
+  it.effect("keeps Marketplace model, prompt and permissions separate from built-in and user agents", () =>
+    Effect.gen(function* () {
+      const agents = yield* Agent.Service
+      yield* AgentPlugin.Plugin.effect(host({ agent: agentHost(agents) }))
+      const build = yield* agents.get(Agent.ID.make("build"))
+      const explore = yield* agents.get(Agent.ID.make("explore"))
+      if (!build || !explore) throw new Error("expected built-in agents")
+      const key = MarketplaceLocal.Key.make(`pkg_${"a".repeat(64)}`)
+      const marketplace = decode({
+        agents: Object.fromEntries(
+          ["build", "explore", "plan", "reviewer"].map((name) => [
+            name,
+            {
+              system: `Marketplace ${name}`,
+              model: "marketplace/model",
+              mode: "subagent",
+              permissions: [{ action: "edit", resource: "*", effect: "allow" }],
+            },
+          ]),
+        ),
+      })
+      if (!marketplace.agents) throw new Error("expected Marketplace agents")
+      const state = MarketplaceLocal.State.make({
+        revision: 1,
+        installed: {
+          [key]: {
+            file: AbsolutePath.make(path.resolve("marketplace.json")),
+            catalog: "team",
+            item: "review",
+            name: "Review",
+            version: "1.0.0",
+            digest: `sha256:${"a".repeat(64)}`,
+            agents: marketplace.agents,
+          },
+        },
+      })
+      const entries = [
+        new Document({
+          type: "document",
+          info: decode({
+            agents: {
+              reviewer: {
+                system: "User reviewer",
+                model: "user/model",
+                permissions: [{ action: "edit", resource: "*", effect: "deny" }],
+              },
+            },
+          }),
+        }),
+        ...MarketplaceLocal.documents(state),
+      ]
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
+        Effect.provide(Config.testLayer(entries)),
+      )
+      const currentBuild = yield* agents.get(Agent.ID.make("build"))
+      const currentExplore = yield* agents.get(Agent.ID.make("explore"))
+      expect(currentBuild?.system).toBe(build.system)
+      expect(currentBuild?.model).toEqual(build.model)
+      expect(currentBuild?.permissions).toEqual(build.permissions)
+      expect(currentExplore?.system).toBe(explore.system)
+      expect(currentExplore?.model).toEqual(explore.model)
+      expect(currentExplore?.permissions).toEqual(explore.permissions)
+      expect(yield* agents.get(Agent.ID.make("plan"))).toBeUndefined()
+      const user = yield* agents.get(Agent.ID.make("reviewer"))
+      const installed = yield* agents.get(Agent.ID.make(`marketplace/${key}/reviewer`))
+      if (!user || !installed) throw new Error("expected separate user and Marketplace agents")
+      expect(user.system).toBe("User reviewer")
+      expect(user.model).toEqual(Model.Ref.parse("user/model"))
+      expect(Permission.evaluate("edit", "file.ts", user.permissions).effect).toBe("deny")
+      expect(installed.system).toBe("Marketplace reviewer")
+      expect(installed.model).toEqual(Model.Ref.parse("marketplace/model"))
+      expect(Permission.evaluate("edit", "file.ts", installed.permissions).effect).toBe("allow")
+    }),
+  )
+
   for (const item of [
     { name: "separate legacy variant", frontmatter: "model: example/chat\nvariant: high", model: "example/chat#high" },
     { name: "unqualified model", frontmatter: "model: example/chat", model: "example/chat" },

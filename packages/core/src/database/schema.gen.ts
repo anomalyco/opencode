@@ -93,6 +93,13 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`marketplace_registry\` (
+          \`id\` integer PRIMARY KEY,
+          \`revision\` integer NOT NULL,
+          \`installed\` text NOT NULL
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`permission\` (
           \`id\` text PRIMARY KEY,
           \`project_id\` text NOT NULL,
