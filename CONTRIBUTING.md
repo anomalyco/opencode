@@ -22,7 +22,7 @@ New providers should rarely require OpenCode changes. Add the provider to [model
 
 ## Development
 
-Use the Bun version pinned by `packageManager` in [`package.json`](./package.json) to match CI. From the repository root:
+OpenCode requires the Bun version in the `packageManager` field of [`package.json`](./package.json) or newer. From the repository root:
 
 ```bash
 bun install
