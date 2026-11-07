@@ -128,9 +128,17 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
 export function derive(path: string, chunks: ReadonlyArray<UpdateFileChunk>, original: string): FileUpdate {
   const source = Bom.split(original)
   const lines = source.text.split("\n")
+  // parse() strips one CR from each CRLF patch line, so a hunk only ever writes LF. Put the file's own
+  // terminators back on the lines a hunk wrote, and leave mixed-ending files alone.
+  const crlf = /\r\n/.test(source.text) && !/(?:^|[^\r])\n/.test(source.text)
   if (lines.at(-1) === "") lines.pop()
   const replacements = computeReplacements(lines, path, chunks)
   for (const [start, remove, insert] of replacements.reverse()) lines.splice(start, remove, ...insert)
+  if (crlf) {
+    for (let index = 0; index < lines.length; index++) {
+      if (!lines[index]!.endsWith("\r")) lines[index] += "\r"
+    }
+  }
   // The split above lost the final newline as an empty element, and the file must end with one. Always
   // restoring it keeps any other trailing blank lines the patch did not touch, which is why this is not
   // conditional on the array's last line.

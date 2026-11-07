@@ -257,6 +257,19 @@ describe("Patch", () => {
     ).toBe("line 1\n\n")
   })
 
+  test("keeps a CRLF file's line endings on the lines a hunk writes", () => {
+    expect(Patch.derive("update.txt", [{ oldLines: ["b"], newLines: ["B"] }], "a\r\nb\r\nc\r\n").content).toBe(
+      "a\r\nB\r\nc\r\n",
+    )
+    expect(
+      Patch.derive("update.txt", [{ oldLines: ["b", "c"], newLines: ["B", "c"] }], "a\r\nb\r\nc\r\n").content,
+    ).toBe("a\r\nB\r\nc\r\n")
+    // Mixed endings are left exactly as they are, apart from the terminator every update adds.
+    expect(Patch.derive("update.txt", [{ oldLines: ["b"], newLines: ["B"] }], "a\r\nb\nc\n").content).toBe(
+      "a\r\nB\nc\n",
+    )
+  })
+
   test.each(["", "original\n"])("preserves equal-offset insertion order and frozen chunks for %j", (original) => {
     const chunks = Object.freeze([
       Object.freeze({ oldLines: Object.freeze([]), newLines: Object.freeze(["first"]) }),
