@@ -3009,6 +3009,7 @@ function ShellDisplay(props: {
   error?: string
 }) {
   const theme = useTheme()
+  const { currentSyntax: syntax } = useThemes()
   const ctx = use()
   const client = useClient()
   const data = useData()
@@ -3100,6 +3101,7 @@ function ShellDisplay(props: {
   const input = createMemo(() => (props.command ? `${isRunning() ? "" : "$ "}${prefix()}${props.command}` : ""))
   const collapsed = createMemo(() => collapseShellOutput(input(), output(), maxLines, maxChars()))
   const limitedInput = createMemo(() => (expanded() ? input() : collapsed().input))
+  const highlightedInput = createMemo(() => (limitedInput().startsWith("$ ") ? limitedInput().slice(2) : limitedInput()))
   const limitedOutput = createMemo(() => (expanded() ? output() : collapsed().output))
   const expandable = createMemo(() => Boolean(props.shellID) || collapsed().overflow)
   const toggle = () => {
@@ -3124,13 +3126,20 @@ function ShellDisplay(props: {
           <Show
             when={isRunning()}
             fallback={
-              <text
-                fg={theme.text.base}
-                wrapMode={expanded() ? "word" : "char"}
-                maxHeight={expanded() ? undefined : 2}
-              >
-                {limitedInput()}
-              </text>
+              <box flexDirection="row">
+                <text fg={theme.text.base}>$ </text>
+                <code
+                  conceal={false}
+                  fg={theme.text.base}
+                  filetype="bash"
+                  syntaxStyle={syntax()}
+                  content={highlightedInput()}
+                  wrapMode={expanded() ? "word" : "char"}
+                  maxHeight={expanded() ? undefined : 2}
+                  flexGrow={1}
+                  minWidth={0}
+                />
+              </box>
             }
           >
             <box flexDirection="row" gap={1}>
