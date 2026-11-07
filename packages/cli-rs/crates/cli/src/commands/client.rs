@@ -145,7 +145,7 @@ process.exit(0)
     /// `mini` follows a background service that restarts on another port, as `service.reconnect` does.
     #[tokio::test]
     async fn a_following_client_finds_a_restarted_service() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let root = dir.path().to_owned();
         let paths = Paths::from_vars(|name| match name {
             "HOME" => Some(root.clone().into()),
@@ -175,7 +175,7 @@ process.exit(0)
             eprintln!("skipped: bun is not on PATH");
             return;
         }
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let script = dir.path().join("standalone.ts");
         std::fs::write(&script, STANDALONE).unwrap();
         // `OPENCODE_TS_BIN` names one executable.

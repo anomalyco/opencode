@@ -644,7 +644,7 @@ mod tests {
 
     #[test]
     fn the_logger_writes_records_to_the_channel_file() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let logger = Logger::new(Options {
             level: LevelFilter::Info,
             dir: Some(dir.path().join("log")),
@@ -685,7 +685,7 @@ mod tests {
 
     #[test]
     fn trim_keeps_the_tail_from_a_line_boundary() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let path = dir.path().join("opencode-local.log");
         let lines: String = (0..100).map(|index| format!("line {index:03}\n")).collect();
         std::fs::write(&path, &lines).unwrap();
@@ -704,7 +704,7 @@ mod tests {
 
     #[test]
     fn trim_skips_while_another_process_holds_the_lock() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let path = dir.path().join("opencode.log");
         std::fs::write(&path, "a\nb\nc\n").unwrap();
         let lock = dir.path().join("opencode.log.trim");

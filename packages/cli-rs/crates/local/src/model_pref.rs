@@ -214,7 +214,7 @@ mod tests {
 
     #[test]
     fn updates_keep_other_fields_and_sanitize() {
-        let state = tempfile::tempdir().unwrap();
+        let state = opencode_util::temp::tempdir().unwrap();
         let file = state.path().join("model.json");
         fs::write(
             &file,

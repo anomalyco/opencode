@@ -47,7 +47,7 @@ fn fast() -> Timing {
 type Exit = Arc<Mutex<Option<Option<i32>>>>;
 
 struct Fixture {
-    dir: tempfile::TempDir,
+    dir: opencode_util::temp::TempDir,
     registration: PathBuf,
     // Reaped by a thread each, as Bun reaps its children: the exit code once it exited.
     children: Vec<(u32, Exit)>,
@@ -56,7 +56,7 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let registration = dir.path().join("service.json");
         Self { dir, registration, children: Vec::new(), pids: Vec::new() }
     }
@@ -717,7 +717,7 @@ process.exit(0)
 #[tokio::test(flavor = "multi_thread")]
 async fn a_standalone_server_reports_its_url_and_ends_with_its_lease() {
     needs_bun!();
-    let dir = tempfile::tempdir().unwrap();
+    let dir = opencode_util::temp::tempdir().unwrap();
     let record = dir.path().join("password");
     let command: Vec<OsString> = vec!["bun".into(), "-e".into(), STANDALONE.into(), record.clone().into()];
     let server = standalone::start(&command, dir.path(), false).await.unwrap();
@@ -732,7 +732,7 @@ async fn a_standalone_server_reports_its_url_and_ends_with_its_lease() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_standalone_server_that_exits_early_is_an_error() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = opencode_util::temp::tempdir().unwrap();
     let error = standalone::start(&["true".into()], dir.path(), false).await.unwrap_err();
     assert_eq!(error.to_string(), "Standalone server exited before reporting readiness");
 }

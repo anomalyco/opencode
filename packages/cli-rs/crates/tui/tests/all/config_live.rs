@@ -62,7 +62,7 @@ fn a_settings_write_reaches_the_tabs_and_the_leader_timeout_at_once() {
 
 #[test]
 fn an_outside_cli_json_edit_reloads() {
-    let home = tempfile::tempdir().unwrap();
+    let home = opencode_util::temp::tempdir().unwrap();
     let app = TestApp::new(100, 30);
     let (tui, file) = mount_with_file(&app, home.path(), "{}\n");
     assert!(Tabs::enabled(&tui));
@@ -76,7 +76,7 @@ fn an_outside_cli_json_edit_reloads() {
 
 #[test]
 fn two_quick_writes_both_reach_the_file() {
-    let home = tempfile::tempdir().unwrap();
+    let home = opencode_util::temp::tempdir().unwrap();
     let app = TestApp::new(100, 30);
     let (tui, file) = mount_with_file(&app, home.path(), "{}\n");
     settings::update(&tui, set(&["session", "scrollbar"], json!(true)));

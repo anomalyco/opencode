@@ -36,4 +36,3 @@ bytes.workspace = true
 opencode-latex.workspace = true
 opencode-mermaid.workspace = true
 opencode-parity.workspace = true
-tempfile.workspace = true

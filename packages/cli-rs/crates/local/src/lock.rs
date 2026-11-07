@@ -314,7 +314,7 @@ mod tests {
 
     #[test]
     fn layout_and_release() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let lock = acquire(dir.path(), "/some/file.json", &quick()).unwrap();
         let lock_dir = dir.path().join(format!("{}.lock", hash("/some/file.json")));
         assert_eq!(lock.path(), lock_dir);
@@ -327,7 +327,7 @@ mod tests {
 
     #[test]
     fn excludes_and_times_out() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let held = acquire(dir.path(), "k", &quick()).unwrap();
         let err = acquire(dir.path(), "k", &quick()).unwrap_err();
         assert_eq!(err.to_string(), "Timed out waiting for lock: k");
@@ -339,7 +339,7 @@ mod tests {
 
     #[test]
     fn breaks_a_stale_lock() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let options = Options { stale: Duration::from_millis(200), ..quick() };
         let lock_dir = dir.path().join(format!("{}.lock", hash("k")));
         fs::create_dir(&lock_dir).unwrap();
@@ -351,7 +351,7 @@ mod tests {
 
     #[test]
     fn heartbeat_keeps_a_long_hold_fresh() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let options = Options { stale: Duration::from_millis(300), ..quick() };
         let held = acquire(dir.path(), "k", &options).unwrap();
         thread::sleep(Duration::from_millis(700));
@@ -361,7 +361,7 @@ mod tests {
 
     #[test]
     fn refuses_to_release_a_lock_it_lost() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let lock = acquire(dir.path(), "k", &quick()).unwrap();
         fs::write(lock.path().join("meta.json"), r#"{"token":"someone-else"}"#).unwrap();
         let path = lock.path().to_path_buf();
@@ -374,7 +374,7 @@ mod tests {
 
     #[test]
     fn with_lock_runs_and_releases() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         assert_eq!(with_lock(dir.path(), "k", &quick(), || 7).unwrap(), 7);
         assert!(fs::read_dir(dir.path()).unwrap().next().is_none());
     }

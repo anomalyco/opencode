@@ -222,7 +222,7 @@ fn file_url(path: &std::path::Path) -> String {
 
 #[tokio::test]
 async fn attaches_readable_file_links_and_references_unreadable_ones_in_place() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = opencode_util::temp::tempdir().unwrap();
     let file = file_url(&dir.path().join("notes.md"));
     let folder = file_url(&dir.path().join("src"));
     let missing = file_url(&dir.path().join("missing.md"));
@@ -332,7 +332,7 @@ async fn maps_failures_to_acp_errors() {
 
 #[tokio::test]
 async fn session_cancel_during_setup_or_before_admission_returns_cancelled() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = opencode_util::temp::tempdir().unwrap();
     std::fs::write(dir.path().join("notes.md"), "# notes\n").unwrap();
     let aborted = CancellationToken::new();
     let seen = aborted.clone();
@@ -515,7 +515,7 @@ async fn stops_waiting_for_a_wind_down_that_never_ends_and_fails_the_tools_left_
 
 #[tokio::test]
 async fn reports_full_file_diffs_for_a_completed_edit_and_patch() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = opencode_util::temp::tempdir().unwrap();
     let root = dir.path().to_str().unwrap().to_owned();
     let file = |name: &str| format!("{root}/{name}");
     let edited = "one\r\nthree\r\n";

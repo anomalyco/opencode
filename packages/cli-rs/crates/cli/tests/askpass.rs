@@ -29,7 +29,7 @@ fn desktop(chunks: Vec<Vec<u8>>) -> (u16, std::thread::JoinHandle<String>) {
 }
 
 fn helper(port: u16, confirm: bool) -> std::process::Output {
-    let home = tempfile::tempdir().unwrap();
+    let home = opencode_util::temp::tempdir().unwrap();
     let mut command = Command::new(env!("CARGO_BIN_EXE_opencode-rs"));
     command
         .arg("Enter passphrase:")

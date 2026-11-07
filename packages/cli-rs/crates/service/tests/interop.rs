@@ -31,7 +31,7 @@ fn ts_root() -> Option<PathBuf> {
 }
 
 struct Isolation {
-    root: tempfile::TempDir,
+    root: opencode_util::temp::TempDir,
 }
 
 impl Isolation {
@@ -101,7 +101,7 @@ async fn typescript_service_status_sees_a_service_rust_started() {
     let Some(ts_root) = ts_root() else {
         return;
     };
-    let isolation = Isolation { root: tempfile::tempdir().unwrap() };
+    let isolation = Isolation { root: opencode_util::temp::tempdir().unwrap() };
     for dir in ["home", "state/opencode", "config/opencode", "data", "cache"] {
         std::fs::create_dir_all(isolation.path(dir)).unwrap();
     }

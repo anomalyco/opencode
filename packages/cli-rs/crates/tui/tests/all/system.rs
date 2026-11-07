@@ -500,7 +500,7 @@ fn mount_rooted(app: &TestApp, home: &std::path::Path, extra: Value) -> Rc<Tui> 
 
 #[test]
 fn highlights_open_once_after_an_update_into_an_idle_home() {
-    let home = tempfile::tempdir().unwrap();
+    let home = opencode_util::temp::tempdir().unwrap();
     let release = highlights::Release { version: "2.0.27".to_owned(), items: release_highlights() };
 
     // A new install records the version silently.
@@ -673,7 +673,7 @@ fn update_checks_show_their_result_as_typescript() {
 
 #[test]
 fn the_home_notice_opens_the_dialog_and_skip_hides_it_for_good() {
-    let home = tempfile::tempdir().unwrap();
+    let home = opencode_util::temp::tempdir().unwrap();
     let app = TestApp::new(80, 30);
     let (tui, _updater) = with_updater(&app, Some(mount_rooted(&app, home.path(), json!({}))));
     // Without an updater there is no notice and no `/update`; with one, the client's notice shows.

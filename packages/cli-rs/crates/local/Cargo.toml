@@ -29,6 +29,3 @@ rustix = { workspace = true, features = ["event"] }
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 notify.workspace = true
-
-[dev-dependencies]
-tempfile.workspace = true

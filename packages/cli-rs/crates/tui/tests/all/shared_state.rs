@@ -74,7 +74,7 @@ fn session() -> Value {
 struct Setup {
     harness: Harness,
     seen: Log,
-    home: tempfile::TempDir,
+    home: opencode_util::temp::TempDir,
     seq: std::cell::Cell<u64>,
 }
 
@@ -87,7 +87,7 @@ impl Setup {
     }
 
     fn at(route: Route, state: &[(&str, &str)]) -> Self {
-        let home = tempfile::tempdir().unwrap();
+        let home = opencode_util::temp::tempdir().unwrap();
         let paths = support::paths(home.path());
         std::fs::create_dir_all(&paths.state).unwrap();
         for (name, text) in state {
@@ -303,7 +303,7 @@ fn pins_keep_other_clients_pins_and_prune_deleted_sessions() {
 /// carbon-7: a prompt submitted while the history still loads is kept, in memory and in the file.
 #[test]
 fn a_prompt_appended_before_the_history_loads_is_kept() {
-    let state = tempfile::tempdir().unwrap();
+    let state = opencode_util::temp::tempdir().unwrap();
     // A long, broken file takes a while to read and heal.
     let junk = "not json\n".repeat(400_000);
     let file = state.path().join("prompt-history.jsonl");

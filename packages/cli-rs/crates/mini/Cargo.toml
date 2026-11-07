@@ -25,6 +25,3 @@ serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 unicode-width.workspace = true
-
-[dev-dependencies]
-tempfile.workspace = true

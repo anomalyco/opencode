@@ -64,7 +64,7 @@ fn lock_try(dir: &Path, key: &str, stale_ms: u64) -> Option<String> {
 
 #[test]
 fn typescript_holds_rust_waits() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = opencode_util::temp::tempdir().unwrap();
     let Some(mut command) = bun(&["lock-hold", dir.path().to_str().unwrap(), "shared-key", "60000"]) else {
         return;
     };
@@ -87,7 +87,7 @@ fn typescript_holds_rust_waits() {
 
 #[test]
 fn rust_holds_typescript_waits() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = opencode_util::temp::tempdir().unwrap();
     let held = lock::acquire(dir.path(), "shared-key", &quick(60_000)).unwrap();
     let Some(result) = lock_try(dir.path(), "shared-key", 60_000) else {
         return;
@@ -100,7 +100,7 @@ fn rust_holds_typescript_waits() {
 #[test]
 fn stale_locks_are_broken_across_clients() {
     // A TypeScript owner killed while holding the lock.
-    let dir = tempfile::tempdir().unwrap();
+    let dir = opencode_util::temp::tempdir().unwrap();
     let Some(mut command) = bun(&["lock-hold", dir.path().to_str().unwrap(), "k", "300"]) else {
         return;
     };
@@ -156,12 +156,12 @@ fn channel_and_registration_match_typescript() {
 
 // A temporary home whose XDG roots both clients use. TypeScript run from source is channel `local`.
 struct Home {
-    dir: tempfile::TempDir,
+    dir: opencode_util::temp::TempDir,
 }
 
 impl Home {
     fn new() -> Self {
-        Self { dir: tempfile::tempdir().unwrap() }
+        Self { dir: opencode_util::temp::tempdir().unwrap() }
     }
 
     fn var(&self, name: &str) -> Option<OsString> {

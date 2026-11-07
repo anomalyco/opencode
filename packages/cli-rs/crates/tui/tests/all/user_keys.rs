@@ -14,7 +14,7 @@ const LEADERS: [&[u8]; 4] = [b"\x1c", b"\x1b[92;5u", b"\x1b[92;133u", b"\x1b[27;
 
 struct Keys {
     harness: Harness,
-    _home: tempfile::TempDir,
+    _home: opencode_util::temp::TempDir,
 }
 
 deref_harness!(Keys);
@@ -26,7 +26,7 @@ fn mount(mode: &str) -> Keys {
 
 /// [`mount`] at `width` columns. The vertical rail needs 130 (`sessionTabsFitVertically`).
 fn mount_at(mode: &str, width: u16) -> Keys {
-    let home = tempfile::tempdir().unwrap();
+    let home = opencode_util::temp::tempdir().unwrap();
     let paths = support::home_paths(home.path());
     std::fs::create_dir_all(&paths.state).unwrap();
     let config = json!({

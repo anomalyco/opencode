@@ -58,13 +58,13 @@ struct Terminal {
     memory: Memory,
     remotes: Arc<Mutex<Vec<Remote>>>,
     state: PathBuf,
-    _home: tempfile::TempDir,
+    _home: opencode_util::temp::TempDir,
 }
 
 deref_harness!(Terminal);
 
 fn mount(persistent_pty: bool, selection: Option<Value>) -> Terminal {
-    let home = tempfile::tempdir().unwrap();
+    let home = opencode_util::temp::tempdir().unwrap();
     let paths = support::home_paths(home.path());
     let tui_state = paths.state.join(CHANNEL).join("tui");
     std::fs::create_dir_all(&tui_state).unwrap();

@@ -422,7 +422,7 @@ mod tests {
 
     #[test]
     fn files_resolve_within_the_byte_budget() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let png = dir.path().join("a b.png");
         std::fs::write(&png, b"\x89PNG").unwrap();
         let svg = dir.path().join("logo.svg");

@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn the_child_gets_the_arguments_and_reports_its_exit_code() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let log = dir.path().join("args");
         let command = script(dir.path(), &format!("printf '%s\\n' \"$@\" > '{}'\nexit 3", log.display()));
         let status = enable_remote(&command).unwrap().wait().unwrap();
@@ -161,7 +161,7 @@ mod tests {
 
     #[test]
     fn the_tunnel_hostname_needs_a_complete_identity() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let paths = Paths::from_vars(|name| match name {
             "HOME" => Some(dir.path().into()),
             _ => None,

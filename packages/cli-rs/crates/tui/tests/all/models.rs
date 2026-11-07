@@ -115,8 +115,8 @@ fn theme() -> Theme {
 }
 
 /// A temporary state directory holding the fixture's `model.json`.
-fn state() -> tempfile::TempDir {
-    let dir = tempfile::tempdir().unwrap();
+fn state() -> opencode_util::temp::TempDir {
+    let dir = opencode_util::temp::tempdir().unwrap();
     std::fs::write(dir.path().join("model.json"), preferences().to_string()).unwrap();
     dir
 }
@@ -126,7 +126,7 @@ struct Kit {
     app: TestApp,
     local: Rc<Local>,
     fixture: Arc<Server>,
-    _state: tempfile::TempDir,
+    _state: opencode_util::temp::TempDir,
 }
 
 fn kit(width: u16, height: u16) -> Kit {
@@ -258,13 +258,13 @@ struct Models {
     harness: Harness,
     fixture: Arc<Server>,
     state: PathBuf,
-    _home: tempfile::TempDir,
+    _home: opencode_util::temp::TempDir,
 }
 
 deref_harness!(Models);
 
 fn mount() -> Models {
-    let home = tempfile::tempdir().unwrap();
+    let home = opencode_util::temp::tempdir().unwrap();
     let paths = support::home_paths(home.path());
     std::fs::create_dir_all(&paths.state).unwrap();
     std::fs::write(paths.state.join("model.json"), preferences().to_string()).unwrap();

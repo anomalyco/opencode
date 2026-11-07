@@ -231,7 +231,7 @@ mod tests {
     // the list loses its watch.
     #[test]
     fn a_directory_made_again_is_watched_again() {
-        let root = tempfile::tempdir().unwrap();
+        let root = opencode_util::temp::tempdir().unwrap();
         let (a, b) = (root.path().join("a"), root.path().join("b"));
         std::fs::create_dir(&a).unwrap();
         std::fs::create_dir(&b).unwrap();
