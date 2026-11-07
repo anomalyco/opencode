@@ -467,3 +467,31 @@ it.effect(
       expect(yield* models.get(custom, modelID)).toMatchObject({ limit: { context: 32_768 } })
     }),
 )
+
+it.effect("rejects a plugin model without time stored through models.set", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const models = yield* Model.Service
+    const providerID = Provider.ID.make("bad-model")
+    const modelID = Model.ID.make("m1")
+    yield* plugins.activate([
+      {
+        id: "bad-model",
+        revision: "1",
+        effect: (ctx) =>
+          ctx.provider
+            .transform((editor) =>
+              editor.models.set(providerID, [
+                { ...Model.Info.default(providerID, modelID), time: undefined } as unknown as Model.Info,
+              ]),
+            )
+            .pipe(Effect.asVoid),
+      },
+    ])
+    expect((yield* models.available()).map((model) => model.providerID)).not.toContain(providerID)
+    yield* plugins.awaitActivation
+    expect((yield* plugins.list()).find((plugin) => plugin.id === "bad-model")?.state).toMatchObject({
+      status: "failed",
+    })
+  }),
+)
