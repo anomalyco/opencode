@@ -139,7 +139,7 @@
    pass under it (client.ts sets data-fade-top and data-fade-bottom). Phones keep hard cuts. */
 @media (min-width: 60.0625rem) {
   [data-site] [data-component="sidebar"] > [data-component="section-nav"] {
-    --fade: 2rem;
+    --fade: 2.5rem;
     /* The nav is cap-trimmed, so it gives back the line above the first item for focus rings. */
     margin-top: -4px;
     padding-top: 4px;

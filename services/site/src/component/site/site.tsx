@@ -570,6 +570,19 @@ export function Site(props: {
     })
   })
 
+  // In the docs layout the sidebar leaves with the article at the page's end, but the logo and the
+  // docs lockup stay fixed (site.css): while the sidebar is on its way out, its items pass under
+  // them, and data-under fades them out there.
+  onMount(() => {
+    if (!props.aside) return
+    const sidebar = document.querySelector<HTMLElement>('[data-component="sidebar"]')
+    if (!sidebar) return
+    const update = () => sidebar.toggleAttribute("data-under", sidebar.getBoundingClientRect().top < -0.5)
+    window.addEventListener("scroll", update, { passive: true })
+    update()
+    onCleanup(() => window.removeEventListener("scroll", update))
+  })
+
   // Dark plates, videos and banners scroll under the fixed marks (the GitHub mark, the product pages'
   // previous/next chevrons and, on bare pages like /font, the logo): each switches to the artwork
   // for what is behind it (surface.ts, github-link.css).

@@ -362,6 +362,16 @@ if (currentPage && currentPage.offsetTop + currentPage.offsetHeight > nav.client
 new ResizeObserver(fade).observe(nav)
 nav.addEventListener("scroll", fade, { passive: true })
 
+// The sidebar leaves with the article at the page's end, but the logo and lockup stay fixed
+// (site.css): while it is on its way out its items pass under them, and data-under fades them there,
+// as Site does on the site's own pages.
+const sidebar = nav.parentElement!
+function under() {
+  sidebar.toggleAttribute("data-under", sidebar.getBoundingClientRect().top < -0.5)
+}
+window.addEventListener("scroll", under, { passive: true })
+under()
+
 // The Contents rail and its phone bar mark the section being read: the last heading past a third of
 // the window, or at the end of the page the one the address names (else the last in view). The rail
 // keeps it in view; the phone bar draws its lines once pinned (data-stuck).

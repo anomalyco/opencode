@@ -4171,3 +4171,53 @@ html [data-site][data-nav-numbers="1"][data-status-bars="6"] {
 :where([data-site]) :is(h2, h3) {
   text-wrap: pretty;
 }
+
+/* The logo, and the docs lockup beside it, stay fixed in the top-left corner on every page. On most
+   pages the whole sidebar is fixed; in the docs layout (the docs, Press and Brand) it sticks while
+   you read and leaves with the article at the page's end, but the logo and lockup stay. Out of the
+   flow, the sidebar's top padding keeps their place for the nav (the content line, --content-top).
+   While the sidebar is on its way out (Site sets data-under), a strip of the page colour behind the
+   logo row hides what passes under it, ending in the docs nav's 2.5rem fade (docs.css). */
+@media (min-width: 60.0625rem) {
+  [data-site][data-layout="docs"] [data-component="sidebar"] {
+    padding-top: var(--content-top);
+
+    > [data-slot="logo"] {
+      position: fixed;
+      top: calc(var(--banner-offset, 0px) + var(--top));
+      inset-inline-start: calc(var(--page-offset) + var(--edge) - var(--bracket-bearing));
+      z-index: 3;
+
+      &::after {
+        content: "";
+        position: absolute;
+        z-index: -1;
+        top: calc(-1 * var(--top));
+        inset-inline-start: calc(var(--bracket-bearing) - var(--edge));
+        width: var(--sidebar-width);
+        height: var(--content-top);
+        background: var(--bg);
+        mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent);
+        opacity: 0;
+        pointer-events: none;
+      }
+    }
+
+    &[data-under] > [data-slot="logo"]::after {
+      opacity: 1;
+    }
+
+    /* A link reached with Tab scrolls into view below the logo row, never under its strip. */
+    a {
+      scroll-margin-top: var(--content-top);
+    }
+
+    > [data-component="docs-lockup"] {
+      position: fixed;
+      top: calc(var(--banner-offset, 0px) + var(--top));
+      inset-inline-start: calc(var(--page-offset) + var(--edge) + var(--lockup-logo) + 12px - 6px);
+      /* Over the logo's strip, so the lockup and its menus show above it. */
+      z-index: 4;
+    }
+  }
+}
