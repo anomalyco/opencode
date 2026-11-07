@@ -284,6 +284,7 @@ export const dict = {
   "changelog.media.pause": "暂停视频",
   "changelog.media.play": "播放视频",
   "changelog.list.more": "还有 {{count}} 项",
+  "changelog.highlights.all": "查看 {{tag}} 的全部亮点",
   "site.newTab": "{{label}}（在新标签页中打开）",
   "site.products.label": "产品",
   "site.products.gridLabel": "OpenCode 产品",

@@ -284,6 +284,7 @@ export const dict = {
   "changelog.media.pause": "動画を一時停止",
   "changelog.media.play": "動画を再生",
   "changelog.list.more": "ほか{{count}}件",
+  "changelog.highlights.all": "{{tag}} のハイライトをすべて見る",
   "site.newTab": "{{label}}（新しいタブで開きます）",
   "site.products.label": "製品",
   "site.products.gridLabel": "OpenCodeの製品",

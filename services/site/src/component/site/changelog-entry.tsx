@@ -775,6 +775,11 @@ function EntryBody(props: { entry: ChangelogEntry; level: 1 | 2 | 3; media?: Sli
           </section>
         )}
       </For>
+      <Show when={props.entry.hiddenFeatures > 0}>
+        <a data-slot="all-highlights" href={page()}>
+          {i18n.t("changelog.highlights.all", { tag: props.entry.releases[0].tag })}
+        </a>
+      </Show>
 
       <Show when={props.entry.breaking.length > 0}>
         <section data-slot="group" data-kind="breaking">

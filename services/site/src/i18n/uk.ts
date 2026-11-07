@@ -280,6 +280,7 @@ export const dict = {
   "changelog.media.pause": "Пауза",
   "changelog.media.play": "Дивитися",
   "changelog.list.more": "Ще {{count}}",
+  "changelog.highlights.all": "Усі головні зміни {{tag}}",
   "site.newTab": "{{label}} (відкриється в новій вкладці)",
   "site.products.label": "Продукти",
   "site.products.gridLabel": "Продукти OpenCode",
