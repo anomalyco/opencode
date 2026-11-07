@@ -7,6 +7,7 @@ import { Provider } from "@opencode/schema/provider"
 import { Session } from "@opencode/schema/session"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { SessionMessage } from "@opencode/schema/session-message"
+import { Info } from "@opencode/schema/session-stats"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Bus } from "@opencode/core/bus"
 import { DatabaseBatch } from "@opencode/core/database/batch"
@@ -132,8 +133,12 @@ describe("SessionStats", () => {
               SessionMessage.AssistantTool.make({
                 type: "tool",
                 id: "call_pending",
-                name: "pending",
-                state: SessionMessage.ToolStateRunning.make({ status: "running", input: {}, metadata: {} }),
+                name: "skill",
+                state: SessionMessage.ToolStateRunning.make({
+                  status: "running",
+                  input: { id: "effect" },
+                  metadata: {},
+                }),
                 time: { created: DateTime.makeUnsafe(Date.UTC(2026, 0, 2, 10)) },
               }),
             ]),
@@ -222,8 +227,18 @@ describe("SessionStats", () => {
       expect(stats.tools.usage).toMatchObject([
         { name: "read", calls: 1, succeeded: 1, failed: 0, durationP50: 250 },
         { name: "edit", calls: 1, succeeded: 0, failed: 1, durationP50: 2_000 },
-        { name: "pending", calls: 1, succeeded: 0, failed: 0, unfinished: 1 },
+        { name: "skill", calls: 1, succeeded: 0, failed: 0, unfinished: 1 },
       ])
+      expect(stats.skills).toEqual([{ id: "effect", calls: 1 }])
+      expect(stats.sessionUsage).toMatchObject([
+        { sessionID: childID, parentID: sessionID, steps: 1, cost: 3 },
+        { sessionID, steps: 1, cost: 1.5 },
+        { sessionID: forkID, steps: 1, cost: 1.5 },
+      ])
+      expect(stats.sessionUsage?.reduce((sum, row) => sum + row.tokens.input, 0)).toBe(40)
+      const encoded = Schema.encodeSync(Info)(stats)
+      expect(encoded.sessionUsage?.find((row) => row.sessionID === sessionID)).toMatchObject({ title: "" })
+      expect(encoded.sessionUsage?.find((row) => row.sessionID === sessionID)).not.toHaveProperty("parentID")
 
       const summary = yield* SessionStats.get({
         from: Date.UTC(2026, 0, 1),
@@ -235,6 +250,8 @@ describe("SessionStats", () => {
         mode: "summary",
         totals: { calls: 3, succeeded: 1, failed: 1, unfinished: 1 },
       })
+      expect(summary.sessionUsage).toBeUndefined()
+      expect(summary.skills).toBeUndefined()
 
       const withoutTools = yield* SessionStats.get({
         from: Date.UTC(2026, 0, 1),
@@ -256,6 +273,31 @@ describe("SessionStats", () => {
 
       const future = yield* Effect.flip(SessionStats.get({ from: Number.MAX_SAFE_INTEGER, tools: "none" }))
       expect(future._tag).toBe("SessionStats.InvalidRangeError")
+
+      yield* db
+        .insert(SessionPartTable)
+        .values({
+          message_id: SessionMessage.ID.make("msg_stats_child"),
+          session_id: childID,
+          ordinal: 0,
+          type: "tool",
+          call_id: "call_skill_split",
+          data: {
+            type: "tool",
+            id: "call_skill_split",
+            name: "skill",
+            state: { status: "error", input: { name: "legacy-skill" }, error: { type: "tool", message: "failed" } },
+            time: { created: Date.UTC(2026, 0, 3, 10), completed: Date.UTC(2026, 0, 3, 10, 0, 1) },
+          },
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const split = yield* SessionStats.get({ from: Date.UTC(2026, 0, 1), to: Date.UTC(2026, 1, 1), tools: "detail" })
+      expect(split.skills).toEqual([
+        { id: "effect", calls: 1 },
+        { id: "legacy-skill", calls: 1 },
+      ])
+      expect(split.tools).toMatchObject({ totals: { calls: 4, succeeded: 1, failed: 2, unfinished: 1 } })
     }),
   )
 

@@ -16,6 +16,7 @@ import { SettingsKeybinds } from "./keybinds/keybinds"
 import { SettingsNotifications } from "./notifications/notifications"
 import { SettingsProviders } from "./providers/providers"
 import { SettingsModels } from "./models/models"
+import { SettingsUsage } from "./usage/usage"
 import { SettingsServerGeneral, SettingsServerList } from "./servers/servers"
 import { SettingsServerSwitcher } from "./servers/switcher"
 import { SettingsServerUnavailable } from "./servers/unavailable"
@@ -44,6 +45,7 @@ const rootClientTabs = [
 ] as const
 
 const serverTabs = [
+  { value: "usage", icon: pageIcons.usage, label: "settings.usage.title" },
   { value: "providers", icon: pageIcons.providers, label: "settings.providers.title" },
   { value: "models", icon: pageIcons.models, label: "settings.models.title" },
   { value: "extensions", icon: pageIcons.extensions, label: "settings.tab.extensions" },
@@ -53,6 +55,7 @@ const serverTabs = [
 
 // The heading of each per-server page, which its unreachable state keeps.
 const serverPages = {
+  usage: { title: "settings.usage.title", description: "settings.usage.description" },
   providers: { title: "settings.providers.title", description: "settings.providers.description" },
   models: { title: "settings.models.title", description: "settings.models.description" },
   extensions: { title: "settings.tab.extensions", description: "settings.extensions.description" },
@@ -292,6 +295,9 @@ function RootSettings() {
       >
         {(server) => (
           <SettingsServerDataScope server={server}>
+            <Tabs.Content value="usage" class="settings-panel">
+              <SettingsUsage active={surface.view().tab === "usage"} headerAction={<SettingsServerSwitcher />} />
+            </Tabs.Content>
             <Tabs.Content value="providers" class="settings-panel">
               <SettingsProviders
                 directory={undefined}

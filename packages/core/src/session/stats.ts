@@ -10,6 +10,7 @@ import { Event } from "@opencode/schema/event"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { ToolMode } from "@opencode/schema/session-stats"
 import { TokenUsage } from "@opencode/schema/token-usage"
+import { Session } from "@opencode/schema/session"
 import { Database } from "../database/database.js"
 import { DatabaseBatch } from "../database/batch.js"
 import { EventTable } from "../event/sql.js"
@@ -27,6 +28,7 @@ type Tokens = Types.DeepMutable<TokenUsage.Info>
 
 type MessageRow = {
   sessionID: string
+  title: string
   parentID: string | null
   type: "user" | "assistant"
   timeCreated: number
@@ -43,6 +45,7 @@ type MessageRow = {
 
 type ToolRow = {
   name: string | null
+  skill: string | null
   status: string | null
   duration: number | null
 }
@@ -106,6 +109,18 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
   const activity = new Map<string, number>()
   const models = new Map<string, ModelAggregate>()
   const tools = new Map<string, ToolAggregate>()
+  const skills = new Map<string, number>()
+  const sessionUsage = new Map<
+    string,
+    {
+      sessionID: Session.ID
+      title: string
+      parentID?: Session.ID
+      steps: number
+      tokens: Tokens
+      cost: number
+    }
+  >()
   const totals = {
     prompts: 0,
     steps: 0,
@@ -123,6 +138,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
           sql`
           SELECT
             message.session_id AS sessionID,
+            coalesce(session.title, '') AS title,
             session.parent_id AS parentID,
             message.type AS type,
             message.time_created AS timeCreated,
@@ -158,6 +174,20 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
 
                 totals.steps++
                 const tokens = rowTokens(row)
+                if (toolMode === "detail") {
+                  const usage = sessionUsage.get(row.sessionID) ?? {
+                    sessionID: Session.ID.make(row.sessionID),
+                    title: row.title,
+                    parentID: row.parentID ? Session.ID.make(row.parentID) : undefined,
+                    steps: 0,
+                    tokens: emptyTokens(),
+                    cost: 0,
+                  }
+                  usage.steps++
+                  usage.cost += row.cost ?? 0
+                  addTokens(usage.tokens, tokens)
+                  sessionUsage.set(row.sessionID, usage)
+                }
                 addTokens(totals.tokens, tokens)
                 totals.cost += row.cost ?? 0
                 const day = dateKey(row.timeCreated)
@@ -243,6 +273,9 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
             sql`
           SELECT
             json_extract(part.data, '$.name') AS name,
+            CASE WHEN json_extract(part.data, '$.name') = 'skill'
+              THEN coalesce(json_extract(part.data, '$.state.input.id'), json_extract(part.data, '$.state.input.name'))
+            END AS skill,
             json_extract(part.data, '$.state.status') AS status,
             CASE
               WHEN json_extract(part.data, '$.time.completed') IS NULL THEN NULL
@@ -261,6 +294,9 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
           UNION ALL
           SELECT
             json_extract(content.value, '$.name') AS name,
+            CASE WHEN json_extract(content.value, '$.name') = 'skill'
+              THEN coalesce(json_extract(content.value, '$.state.input.id'), json_extract(content.value, '$.state.input.name'))
+            END AS skill,
             json_extract(content.value, '$.state.status') AS status,
             CASE
               WHEN json_extract(content.value, '$.time.completed') IS NULL THEN NULL
@@ -284,6 +320,8 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
             Effect.tap((rows) =>
               Effect.sync(() => {
                 rows.forEach((row) => {
+                  if (typeof row.skill === "string" && row.skill)
+                    skills.set(row.skill, (skills.get(row.skill) ?? 0) + 1)
                   addToolStatus(toolTotals, row.status)
                   if (!row.name) return
                   const tool = tools.get(row.name) ?? {
@@ -379,6 +417,16 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
     models: [...models.values()]
       .sort((a, b) => TokenUsage.total(b.tokens) - TokenUsage.total(a.tokens))
       .map((model) => ({ ...model, cost: Money.USD.make(model.cost) })),
+    ...(toolMode === "detail"
+      ? {
+          sessionUsage: [...sessionUsage.values()]
+            .sort((a, b) => b.cost - a.cost || b.steps - a.steps)
+            .map((usage) => ({ ...usage, cost: Money.USD.make(usage.cost) })),
+          skills: [...skills.entries()]
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+            .map(([id, calls]) => ({ id, calls })),
+        }
+      : {}),
   }
 })
 

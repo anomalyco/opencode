@@ -246,6 +246,12 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
 
 // Pages showing the selected server, and rows of its card on the Servers page.
 export const serverSettings: Entry<SettingsServerTab | "servers">[] = [
+  {
+    tab: "usage",
+    label: "settings.usage.title",
+    description: "settings.usage.description",
+    keywords: "usage statistics tokens cost limits skills tools sessions 使用量 統計 スキル",
+  },
   { tab: "projects", label: "settings.tab.projects" },
   { tab: "workspaces", label: "settings.tab.workspaces", keywords: "workspaces disk usage cleanup delete" },
   { tab: "providers", label: "settings.providers.title", keywords: "connect api key credentials" },

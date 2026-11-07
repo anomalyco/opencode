@@ -1,0 +1,132 @@
+.settings-usage {
+  font-size: 13px;
+  line-height: var(--line-height-base);
+  color: var(--v2-text-text-base);
+}
+
+.usage-controls,
+.usage-meter > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.usage-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.usage-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--v2-border-border-base);
+  border-radius: 12px;
+  background: var(--v2-background-bg-base);
+  min-width: 0;
+}
+
+.usage-total {
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+.usage-note,
+.usage-table small {
+  color: var(--v2-text-text-muted);
+}
+.usage-section {
+  gap: 12px;
+}
+.usage-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.usage-meter-track {
+  width: 100%;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--v2-background-bg-layer-03);
+}
+.usage-meter-track > span {
+  display: block;
+  height: 100%;
+  background: var(--v2-text-text-base);
+}
+.usage-chart {
+  display: flex;
+  align-items: end;
+  height: 140px;
+  gap: 5px;
+  border-bottom: 1px solid var(--v2-border-border-base);
+}
+.usage-day {
+  height: 100%;
+  flex: 1;
+  display: flex;
+  align-items: end;
+}
+.usage-bar {
+  width: 100%;
+  background: var(--v2-text-text-base);
+  opacity: 0.65;
+  border-radius: 3px 3px 0 0;
+}
+.usage-days {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+.usage-days dd {
+  margin: 0;
+}
+.usage-table-wrap {
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid var(--v2-border-border-base);
+  border-radius: 12px;
+}
+.usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: var(--line-height-base);
+}
+.usage-table th,
+.usage-table td {
+  padding: 12px;
+  text-align: end;
+  border-bottom: 1px solid var(--v2-border-border-base);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.usage-table th {
+  font-weight: var(--font-weight-medium);
+}
+.usage-table th:first-child {
+  text-align: start;
+  min-width: 160px;
+  max-width: 260px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.usage-table small {
+  display: block;
+  font-weight: var(--font-weight-regular);
+}
+.usage-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+@container settings-screen (max-width: 767px) {
+  .usage-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -538,6 +538,22 @@ export type ExperimentalSessionStatsOutput = {
     }
     readonly cost: Money.USD
   }>
+  readonly sessionUsage?:
+    | ReadonlyArray<{
+        readonly sessionID: Session.ID
+        readonly title: string
+        readonly parentID?: Session.ID | undefined
+        readonly steps: number
+        readonly tokens: {
+          readonly input: number
+          readonly output: number
+          readonly reasoning: number
+          readonly cache: { readonly read: number; readonly write: number }
+        }
+        readonly cost: Money.USD
+      }>
+    | undefined
+  readonly skills?: ReadonlyArray<{ readonly id: string; readonly calls: number }> | undefined
 }
 export type ExperimentalSessionStatsOperation<E = never> = (
   input?: ExperimentalSessionStatsInput,

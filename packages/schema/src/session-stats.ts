@@ -5,6 +5,7 @@ import { Model } from "./model.js"
 import { Money } from "./money.js"
 import { DateTimeUtcFromMillis, NonNegativeInt, optional } from "./schema.js"
 import { TokenUsage } from "./token-usage.js"
+import { Session } from "./session.js"
 
 export const Activity = Schema.Struct({
   date: Schema.String,
@@ -29,6 +30,22 @@ export const ToolUsage = Schema.Struct({
   durationP50: Schema.Finite.pipe(optional),
 }).annotate({ identifier: "SessionStats.ToolUsage" })
 export type ToolUsage = typeof ToolUsage.Type
+
+export interface SessionUsage extends Schema.Schema.Type<typeof SessionUsage> {}
+export const SessionUsage = Schema.Struct({
+  sessionID: Session.ID,
+  title: Schema.String,
+  parentID: Session.ID.pipe(optional),
+  steps: NonNegativeInt,
+  tokens: TokenUsage.Info,
+  cost: Money.USD,
+}).annotate({ identifier: "SessionStats.SessionUsage" })
+
+export interface SkillUsage extends Schema.Schema.Type<typeof SkillUsage> {}
+export const SkillUsage = Schema.Struct({
+  id: Schema.String,
+  calls: NonNegativeInt,
+}).annotate({ identifier: "SessionStats.SkillUsage" })
 
 export const ToolMode = Schema.Literals(["none", "summary", "detail"])
 export type ToolMode = typeof ToolMode.Type
@@ -64,5 +81,9 @@ export const Info = Schema.Struct({
   streak: NonNegativeInt,
   activity: Schema.Array(Activity),
   models: Schema.Array(ModelUsage),
+  /** Per-session model steps, excluding auxiliary compaction usage; present in detail mode. */
+  sessionUsage: Schema.Array(SessionUsage).pipe(optional),
+  /** Explicit skill tool invocations, including failed calls; present in detail mode. */
+  skills: Schema.Array(SkillUsage).pipe(optional),
 }).annotate({ identifier: "SessionStats.Info" })
 export type Info = typeof Info.Type

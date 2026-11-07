@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test"
-import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
+import type { OpenCodeEvent, SessionMessageInfo, SessionStatsInfo, UsageLimitsInfo } from "@opencode/client/promise"
 import { Permission } from "@opencode/schema/permission"
 import { artifactKind, artifactMime } from "@opencode/util/artifact"
 import { Model } from "@opencode/schema/model"
@@ -79,6 +79,8 @@ export interface MockServerConfig {
   // directory it resolves.
   onLocationGet?: (directory: string) => void
   sessions: MockSession[]
+  sessionStats?: (from: number, to: number) => SessionStatsInfo | undefined
+  usageLimits?: UsageLimitsInfo
   pageMessages: (
     sessionId: string,
     limit: number,
@@ -945,8 +947,12 @@ function mockHandlers(
         configUpdate: () => noContent,
         websearchProviders: () =>
           Effect.sync(() => ({ location: location(config), data: resolve(config.websearchProviders ?? []) })),
-        // No scenario signs in to an OpenCode Console workspace, so none has usage limits.
-        usageLimits: () => Effect.succeed({ location: location(config), data: null }),
+        usageLimits: () => Effect.succeed({ location: location(config), data: config.usageLimits ?? null }),
+        sessionStats: (ctx) => {
+          const query = new URL(ctx.request.url, config.server ?? SERVER).searchParams
+          const stats = config.sessionStats?.(Number(query.get("from")), Number(query.get("to")))
+          return stats ? Effect.succeed({ data: stats }) : unsupported("session statistics", "sessionStats")
+        },
         worktreeList: () =>
           Effect.sync(() => {
             if (config.worktrees) return resolve(config.worktrees)

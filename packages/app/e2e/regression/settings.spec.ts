@@ -5,6 +5,7 @@ import { mockMissingLocation, mockOpenCodeServer } from "../utils/mock-server"
 import { mockRemoteServer, mockWorkspace, openSession, openSettings, type WorkspaceInput } from "../utils/workspace"
 import { recordNotifications } from "../utils/notifications"
 import { installSseTransport } from "../utils/sse-transport"
+import { emptyUsageStats, usageLimits, usageStats } from "../utils/usage"
 
 const directory = "C:/Projects/settings-demo"
 
@@ -55,6 +56,50 @@ const patched = (page: Page) =>
   page.waitForRequest(
     (request) => request.method() === "PATCH" && new URL(request.url()).pathname === `/api/project/${projectID}`,
   )
+
+test("usage settings show recorded activity and switch reporting periods", async ({ page }) => {
+  const { settings } = await open(page, {
+    sessionStats: usageStats,
+  })
+  await settings.getByRole("tab", { name: "Usage", exact: true }).click()
+  await expect(page).toHaveURL("/settings?tab=usage")
+  await expect(
+    settings.getByRole("row", { name: "usage-model openai 3 1,200 300 100 400 0 $0.42", exact: true }),
+  ).toBeVisible()
+  await expect(settings.getByRole("row", { name: "Weekly work 3 2,000 $0.42", exact: true })).toBeVisible()
+  await expect(settings.getByRole("row", { name: "effect 5", exact: true })).toBeVisible()
+  await expect(settings.getByText("No provider allowance is available.", { exact: false })).toBeVisible()
+  await settings.getByRole("button", { name: "30 days", exact: true }).click()
+  await expect(settings.getByRole("row", { name: "Monthly work 3 2,000 $0.42", exact: true })).toBeVisible()
+  await expect(settings.getByText("Weekly work", { exact: true })).toHaveCount(0)
+  await settings.getByRole("button", { name: "Refresh", exact: true }).click()
+  await expect(settings.getByRole("row", { name: "Monthly work 3 2,000 $0.42", exact: true })).toBeVisible()
+})
+
+test("usage settings can retry a failed read without leaving settings", async ({ page }) => {
+  let failed = true
+  const { settings } = await open(page, {
+    sessionStats: (from, to) => (failed ? undefined : emptyUsageStats(from, to)),
+  })
+  await settings.getByRole("tab", { name: "Usage", exact: true }).click()
+  await expect(settings.getByRole("alert")).toContainText("Usage statistics couldn't be loaded.")
+  await expect(settings.getByRole("button", { name: "Back to app", exact: true })).toBeVisible()
+  failed = false
+  await settings.getByRole("button", { name: "Try again", exact: true }).click()
+  await expect(settings.getByRole("table", { name: "Models", exact: true })).toBeVisible()
+  await expect(settings.getByRole("region", { name: "Skills", exact: true })).toContainText(
+    "No recorded activity in this period.",
+  )
+  await expect(settings.getByRole("alert")).toHaveCount(0)
+})
+
+test("usage settings distinguish provider allowances from local estimates", async ({ page }) => {
+  const { settings } = await open(page, { sessionStats: usageStats, usageLimits: usageLimits() })
+  await settings.getByRole("tab", { name: "Usage", exact: true }).click()
+  await expect(settings.getByRole("meter", { name: "Weekly", exact: true })).toHaveAttribute("aria-valuenow", "36")
+  await settings.getByRole("button", { name: "View budget details", exact: true }).click()
+  await expect(page.getByRole("dialog")).toContainText("Usage workspace")
+})
 
 test("settings has its own route and returns through app history", async ({ page }) => {
   const { settings } = await open(page)
