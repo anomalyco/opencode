@@ -283,6 +283,36 @@ const runPermissionCommand = (
 describe("ShellTool scanner permissions", () => {
   const test = isWindows || !Bun.which("sh") ? permissionIt.live.skip : permissionIt.live
 
+  test("configured denial identifies the blocking pattern and executes none of the chain", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        const agents = yield* Agent.Service
+        yield* agents.transform((editor) =>
+          editor.update(toolIdentity.agent, (agent) => {
+            agent.permissions = [
+              { action: "*", resource: "*", effect: "allow" },
+              { action: "shell", resource: "printf blocked *", effect: "deny" },
+            ]
+          }),
+        )
+        const result = yield* executeTool(
+          registry,
+          call({ command: "printf before > before && printf blocked > blocked && printf after > after" }),
+        )
+        expect(result).toMatchObject({
+          status: "error",
+          error: {
+            message: 'Permission denied: shell. Blocked by configured rule patterns: ["printf blocked *"]',
+          },
+        })
+        for (const name of ["before", "blocked", "after"]) {
+          expect(yield* Effect.promise(() => Bun.file(path.join(fixture.active, name)).exists())).toBe(false)
+        }
+        const permission = yield* Permission.Service
+        expect(yield* permission.list()).toEqual([])
+      }),
+    ))
+
   test("declarations reuse approvals while substitutions retain reject/once/always behavior", () =>
     withScanner((registry, fixture) =>
       Effect.gen(function* () {
