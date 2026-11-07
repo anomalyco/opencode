@@ -118,7 +118,7 @@ export const copyVariants = {
       "Used by developers at",
     ],
   },
-  // Home sections and FAQ answers without copy of their own in Design mode until the coding-agents
+  // Home sections without copy of their own in Design mode until the coding-agents
   // review (positioningRec). One line each: editing reads the whole text, links included. Links in
   // an option come from homeContent's copyLinks phrases.
   "home.feature.anyModel.body": {
@@ -144,32 +144,6 @@ export const copyVariants = {
     lines: 1,
     options: [
       `OpenCode is MIT licensed. ${config.stats.contributors} contributors have made ${config.stats.commits}+ commits, and ${config.stats.monthlyUsers} developers use it every month.`,
-    ],
-  },
-  "home.faq.a3": {
-    label: "FAQ: extra subscriptions",
-    lines: 1,
-    options: [
-      "No. OpenCode includes free models that need no account. You can also connect any of 200+ providers, sign in with ChatGPT or Copilot, or run local models.",
-    ],
-  },
-  "home.faq.a4": {
-    label: "FAQ: existing subscriptions",
-    lines: 1,
-    options: ["Yes. Sign in with ChatGPT (Plus or Pro) or GitHub Copilot, including GitHub Enterprise."],
-  },
-  "home.faq.a6": {
-    label: "FAQ: cost",
-    lines: 1,
-    options: [
-      "OpenCode is free and MIT licensed. The free models cost nothing. With another provider, you pay that provider. OpenCode Go is from $10/month, and OpenCode Models are pay as you go.",
-    ],
-  },
-  "home.faq.a7": {
-    label: "FAQ: data and privacy",
-    lines: 1,
-    options: [
-      "OpenCode runs on your computer and keeps your sessions there. Your code goes only to the model provider you choose. If you choose a model hosted by OpenCode, its training and retention terms are listed in the docs.",
     ],
   },
   // The home page's "New" bar (announcement.ts): each option keeps its own link.

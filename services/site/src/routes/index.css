@@ -41,12 +41,6 @@
     }
   }
 
-  /* The FAQ always spans two card columns, whatever the section width setting, so its plus signs
-     end on the third column's right edge. */
-  &[data-site] [data-component="block"]:has([data-component="faq"]) [data-slot="body"] {
-    max-width: var(--two-cards);
-  }
-
   /* "What is OpenCode?": ten features in five rows of two, one feature per card column, under the
      two-column lead. */
   &[data-site] [data-component="block"]:has([data-component="features"]) [data-slot="body"] {
@@ -1200,7 +1194,7 @@
 }
 
 /* No divider above, whatever the section spacer is (the second attribute outranks the spacer
-   rules). The gap below the FAQ is half the "space" spacer's (David, 5 Nov: 184px to 92px, and
+   rules). The gap above the Console is half the "space" spacer's (David, 5 Nov: 184px to 92px, and
    96px to 48px on phones). The "section" option keeps the spacer. */
 [data-page="home"][data-site] [data-component="block"][data-console]:not([data-console="section"]) {
   margin-top: calc(var(--block-space) + 1.25rem);
