@@ -302,7 +302,7 @@ export const content = {
         allowlists: { title: "Allowlists", body: "Beschränke die Tabs einer Session auf die Websites, die du nennst." },
       },
       install:
-        "Eine Zeile installiert Browse, fügt es den gefundenen Agents hinzu und koppelt die Extension. Unter Windows führst du irm https://opencode.ai/browse/install.ps1 | iex aus. Oder bitte deinen Agent, es einzurichten.",
+        "Installiere zuerst die Chrome-Extension. Sie führt dich durch die restlichen Schritte. Um die CLI direkt zu installieren, nimm einen dieser Befehle.",
     },
   },
   apps: {

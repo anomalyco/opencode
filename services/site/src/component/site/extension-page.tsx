@@ -157,7 +157,7 @@ export function ExtensionPage(props: { slug: ExtensionSlug; path?: string }) {
         </For>
       </ul>
 
-      <ExtensionDownload lead={extension().install} command={command()} />
+      <ExtensionDownload lead={extension().install} command={command()} commands={data().install.commands} />
 
       <MoreFromAnomaly slot="more-from-anomaly" exclude={props.slug} />
     </Site>

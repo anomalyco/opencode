@@ -390,7 +390,7 @@ export const content = {
         },
       },
       install:
-        "Jedna linia instaluje Browse, dodaje go do znalezionych agentów i paruje rozszerzenie. W Windows uruchom irm https://opencode.ai/browse/install.ps1 | iex. Możesz też poprosić agenta o skonfigurowanie.",
+        "Najpierw zainstaluj rozszerzenie Chrome. Przeprowadzi cię przez pozostałe kroki. Aby zainstalować CLI bezpośrednio, użyj jednego z tych poleceń.",
     },
   },
   apps: {

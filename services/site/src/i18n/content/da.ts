@@ -269,7 +269,7 @@ export const content = {
         allowlists: { title: "Hvidlister", body: "Begræns en sessions faner til de sites, du angiver." },
       },
       install:
-        "Én linje installerer Browse, tilføjer det til de agenter den finder, og parrer udvidelsen. På Windows skal du køre irm https://opencode.ai/browse/install.ps1 | iex. Eller bed din agent om at sætte det op.",
+        "Installer Chrome-udvidelsen først. Den guider dig gennem resten af trinene. Vil du installere CLI'en direkte, så brug en af disse.",
     },
   },
   apps: {

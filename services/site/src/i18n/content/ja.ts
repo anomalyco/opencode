@@ -281,7 +281,7 @@ export const content = {
         allowlists: { title: "許可リスト", body: "セッションのタブを、指定したサイトだけに制限できます。" },
       },
       install:
-        "1行でBrowseをインストールし、見つけたエージェントに追加して拡張機能とペアリングします。Windowsでは irm https://opencode.ai/browse/install.ps1 | iex を実行します。エージェントに設定を頼むこともできます。",
+        "まず Chrome 拡張機能をインストールしてください。残りの手順は拡張機能が案内します。CLI を直接インストールする場合は、次のいずれかを使ってください。",
     },
   },
   apps: {

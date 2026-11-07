@@ -390,7 +390,7 @@ export const content = {
         },
       },
       install:
-        "Tek satır Browse'u kurar, bulduğu ajanlara ekler ve eklentiyle eşler. Windows'ta irm https://opencode.ai/browse/install.ps1 | iex komutunu çalıştırın. Ya da ajanınızdan kurmasını isteyin.",
+        "Önce Chrome uzantısını yükleyin. Kalan adımlarda size yol gösterir. CLI'yi doğrudan yüklemek için bunlardan birini kullanın.",
     },
   },
   apps: {

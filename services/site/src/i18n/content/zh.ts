@@ -194,7 +194,7 @@ export const content = {
         allowlists: { title: "允许列表", body: "将会话的标签页限制在您指定的网站内。" },
       },
       install:
-        "一行命令安装 Browse，把它添加到找到的代理并配对扩展。在 Windows 上运行 irm https://opencode.ai/browse/install.ps1 | iex。也可以让代理帮你设置。",
+        "请先安装 Chrome 扩展，它会引导你完成其余步骤。如需直接安装 CLI，可使用以下任一命令。",
     },
   },
   apps: {
