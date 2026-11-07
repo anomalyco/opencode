@@ -105,6 +105,8 @@ export const testLayer = (
         emitChange: (update) => PubSub.publish(updates, update).pipe(Effect.asVoid),
         integration: (integrationID, document) =>
           Ref.update(integrations, (current) => {
+            // Like config, keeps the document it holds when handed a deep-equal one.
+            if (isDeepStrictEqual(current.get(integrationID), document)) return current
             const next = new Map(current)
             next.delete(integrationID)
             return document ? next.set(integrationID, document) : next
