@@ -46,6 +46,9 @@ export const Info = Schema.Struct({
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
     updated: DateTimeUtcFromMillis,
+    /** Start of the most recent execution. While it runs, `idle` still holds the previous execution's end. Resuming after a restart starts a new execution. */
+    busy: DateTimeUtcFromMillis.pipe(optional),
+    /** End of the most recent completed execution. */
     idle: DateTimeUtcFromMillis.pipe(optional),
     viewed: DateTimeUtcFromMillis.pipe(optional),
     archived: DateTimeUtcFromMillis.pipe(optional),

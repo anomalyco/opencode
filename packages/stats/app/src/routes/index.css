@@ -392,7 +392,7 @@ body {
 
 [data-page="stats"] [data-slot="footer-grid"] {
   display: grid;
-  grid-template-columns: 120px repeat(4, minmax(0, 1fr));
+  grid-template-columns: 120px repeat(3, minmax(0, 1fr));
   gap: 72px;
   align-items: start;
 }
@@ -429,8 +429,7 @@ body {
   gap: 12px;
 }
 
-[data-page="stats"] [data-slot="footer-column"] a,
-[data-page="stats"] [data-slot="footer-column"] p {
+[data-page="stats"] [data-slot="footer-column"] a {
   color: var(--stats-text);
   font-size: 11px;
   font-weight: 400;
@@ -439,7 +438,6 @@ body {
 }
 
 [data-page="stats"] [data-slot="footer-column"] a,
-[data-page="stats"] [data-slot="footer-column"] p,
 [data-page="stats"] [data-slot="footer-bottom"] {
   color: var(--stats-muted);
 }
@@ -449,227 +447,9 @@ body {
   text-decoration: none;
 }
 
-[data-page="stats"] [data-slot="subscribe-button"] {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: fit-content;
-  height: 28px;
-  margin: 0;
-  padding: 0 12px;
-  border: 1px solid var(--stats-line);
-  border-radius: 0;
-  appearance: none;
-  background: var(--stats-bg);
-  color: var(--stats-text) !important;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-[data-page="stats"] [data-slot="subscribe-button"]:hover {
-  border-color: var(--stats-line-strong);
-  background: var(--stats-layer);
-}
-
-[data-page="stats"] [data-slot="subscribe-button"]:focus-visible,
-[data-page="stats"] [data-slot="theme-option"]:focus-visible,
-[data-page="stats"] [data-component="subscribe-modal"] button:focus-visible,
-[data-page="stats"] [data-component="subscribe-modal"] input:focus-visible {
+[data-page="stats"] [data-slot="theme-option"]:focus-visible {
   outline: 2px solid var(--stats-accent);
   outline-offset: 2px;
-}
-
-[data-page="stats"] [data-component="subscribe-modal"] {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  display: grid;
-  place-items: center;
-  box-sizing: border-box;
-  padding: 8px;
-  color: var(--stats-text);
-  font-family:
-    "IBM Plex Mono",
-    var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
-}
-
-[data-page="stats"] [data-slot="modal-scrim"] {
-  position: absolute;
-  inset: 0;
-  background: #00000066;
-  backdrop-filter: blur(2px);
-}
-
-[data-page="stats"] [data-slot="modal-panel"] {
-  position: relative;
-  z-index: 1;
-  width: min(374px, calc(100vw - 16px));
-  max-height: calc(100dvh - 16px);
-  overflow: auto;
-  background: #fafafa;
-  box-shadow:
-    0 0 0 0.5px #0000001f,
-    0 4px 8px #00000014,
-    0 8px 16px #0000000a;
-}
-
-[data-page="stats"] [data-slot="modal-brand"] {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 122px;
-  background: #242424;
-  color: #ffffff;
-}
-
-[data-page="stats"] [data-slot="modal-logo"] {
-  display: block;
-  width: 234px;
-  height: 42px;
-}
-
-[data-page="stats"] [data-slot="modal-close"] {
-  position: absolute;
-  top: 0;
-  right: 0;
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  appearance: none;
-  background: transparent;
-  color: #808080;
-  cursor: pointer;
-}
-
-[data-page="stats"] [data-slot="modal-close"]:hover {
-  background: #ffffff1a;
-}
-
-[data-page="stats"] [data-slot="modal-body"] {
-  display: grid;
-  gap: 24px;
-  padding: 24px 12px 12px;
-  background: #fafafa;
-}
-
-[data-page="stats"] [data-slot="modal-intro"] {
-  display: grid;
-  gap: 4px;
-  text-align: center;
-}
-
-[data-page="stats"] [data-slot="modal-intro"] h2 {
-  color: #161616;
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 24px;
-  letter-spacing: 0;
-}
-
-[data-page="stats"] [data-slot="modal-intro"] p {
-  color: #5c5c5c;
-  font-size: 16px;
-  font-weight: 400;
-  line-height: 24px;
-}
-
-[data-page="stats"] [data-slot="subscribe-form"] {
-  display: grid;
-  gap: 12px;
-}
-
-[data-page="stats"] [data-slot="subscribe-form"] input,
-[data-page="stats"] [data-slot="subscribe-form"] button {
-  box-sizing: border-box;
-  width: 100%;
-  height: 40px;
-  margin: 0;
-  border-radius: 0;
-  appearance: none;
-  font: inherit;
-  font-size: 13px;
-  line-height: 1;
-}
-
-[data-page="stats"] [data-slot="subscribe-form"] input {
-  padding: 0 12px;
-  border: 0;
-  background: #ffffff;
-  color: #161616;
-  box-shadow:
-    0 0 0 0.5px #00000024,
-    0 1px 1.5px #0000001a;
-}
-
-[data-page="stats"] [data-slot="subscribe-form"] input::placeholder {
-  color: #808080;
-}
-
-[data-page="stats"] [data-slot="subscribe-form"] button {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border: 0;
-  background: #242424;
-  color: #ffffff;
-  font-weight: 500;
-  cursor: pointer;
-  box-shadow:
-    0 0 0 0.5px #3a3a3a,
-    0 1px 1.5px #00000033,
-    inset 0 -1px 2px #0000000f,
-    inset 0 1px 2px #ffffff24;
-}
-
-[data-page="stats"] [data-slot="subscribe-form"] button::before {
-  position: absolute;
-  top: 0.25px;
-  right: 0;
-  left: 0;
-  height: 20px;
-  pointer-events: none;
-  content: "";
-  background: linear-gradient(180deg, #ffffff00 0%, #ffffff12 100%);
-}
-
-[data-page="stats"] [data-slot="subscribe-form"] button span {
-  position: relative;
-}
-
-[data-page="stats"] [data-slot="subscribe-form"] button:disabled {
-  cursor: progress;
-  opacity: 0.7;
-}
-
-[data-page="stats"] [data-slot="subscribe-feedback"]:empty {
-  display: none;
-}
-
-[data-page="stats"] [data-slot="subscribe-feedback"] p {
-  text-align: center;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 16px;
-}
-
-[data-page="stats"] [data-slot="subscribe-feedback"] p[data-state="success"] {
-  color: #198b43;
-}
-
-[data-page="stats"] [data-slot="subscribe-feedback"] p[data-state="error"] {
-  color: #b82d35;
 }
 
 [data-page="stats"] [data-slot="footer-pattern"] {
@@ -783,17 +563,37 @@ body {
     0 2px 4px 0 #0000000a;
 }
 
-[data-page="stats"] [data-slot="status"] {
+[data-page="stats"] [data-slot="footer-bottom"] [data-slot="status"] {
+  --stats-status-dot: var(--stats-faint);
   display: flex;
   align-items: center;
   gap: 10px;
+  color: var(--stats-muted);
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-slot="footer-bottom"] [data-slot="status"]:hover {
+  color: var(--stats-text);
+}
+
+[data-page="stats"] [data-slot="status"][data-status="operational"] {
+  --stats-status-dot: #198b43;
+}
+
+[data-page="stats"] [data-slot="status"][data-status="degraded"] {
+  --stats-status-dot: #c48a00;
+}
+
+[data-page="stats"] [data-slot="status"][data-status="outage"] {
+  --stats-status-dot: #d93636;
 }
 
 [data-page="stats"] [data-slot="status"]::before {
   content: "";
+  flex: none;
   width: 6px;
   height: 6px;
-  background: #198b43;
+  background: var(--stats-status-dot);
 }
 
 [data-page="stats"] [data-component="content"] a {
@@ -8062,7 +7862,7 @@ body {
   }
 
   [data-page="stats"] [data-slot="footer-grid"] {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 40px 32px;
   }
 

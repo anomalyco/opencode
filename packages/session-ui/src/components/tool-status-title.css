@@ -55,7 +55,7 @@
   }
 
   [data-slot="tool-status-done"] {
-    color: var(--text-strong);
+    color: var(--v2-text-text-base);
     opacity: 1;
     filter: blur(0);
     transform: translateY(0);
@@ -76,7 +76,7 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   [data-component="tool-status-title"] [data-slot="tool-status-swap"],
   [data-component="tool-status-title"] [data-slot="tool-status-tail"] {
     transition-duration: 0ms;

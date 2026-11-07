@@ -26,15 +26,6 @@ import { Project } from "./project.js"
 import { SessionFork } from "./session-fork.js"
 import { Permission } from "./permission.js"
 
-export const Source = Schema.Struct({
-  start: NonNegativeInt,
-  end: NonNegativeInt,
-  text: Schema.String,
-}).annotate({
-  identifier: "Session.Event.Source",
-})
-export interface Source extends Schema.Schema.Type<typeof Source> {}
-
 const Base = {
   sessionID: SessionID,
 }

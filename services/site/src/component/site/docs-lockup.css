@@ -1,0 +1,491 @@
+/* The docs section word after the site's logo, set like the Data and Console header lockups
+   (public/nav-demo/switcher.css): OpenTUI Mono Bold 15px caps, 12px after the logo's box and cap-centred
+   on it. It is placed in the sidebar, beside the logo, so the two always move together. */
+[data-site] [data-component="docs-lockup"] {
+  --lockup-logo: var(--logo-box, calc(var(--logo-height) * 4 / 5));
+
+  position: absolute;
+  top: var(--top);
+  inset-inline-start: calc(var(--edge) + var(--lockup-logo) + 12px - 6px);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: var(--logo-height);
+}
+
+[data-site]:not([data-logo="icon"]) [data-component="docs-lockup"] {
+  --lockup-logo: calc(var(--logo-height) * 234 / 42);
+}
+
+[data-component="docs-lockup"] {
+  /* Flex, so the inline-flex trigger fills the row instead of sitting on a text baseline. */
+  [data-slot="dropdown"] {
+    position: relative;
+    display: flex;
+    height: 100%;
+  }
+
+  /* "DOCS / V1": the version reads lighter than the section. */
+  [data-slot="separator"] {
+    padding-top: 1.36px;
+    font: 400 15px/1 var(--font-mono);
+    color: var(--text-weaker);
+  }
+
+  /* The version is secondary to the section: regular weight and muted until hovered or open (the
+     shared segment states below). */
+  [data-variant="version"] [data-slot="trigger"] {
+    font-weight: 400;
+    color: var(--text-weak);
+  }
+
+  [data-variant="version"] [data-slot="menu"] {
+    min-width: 11rem;
+  }
+
+  /* "V2 (latest)": the note after the label is muted, one space after it. */
+  [data-slot="meta"] {
+    margin-inline-start: 1ch;
+    color: var(--text-muted);
+    text-transform: none;
+  }
+
+  /* Height, hit area and states: the shared segment rules below. */
+  [data-slot="trigger"] {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+
+    /* OpenTUI Mono's caps sit 0.325px below its line box's centre; this puts them on the logo's centre. */
+    padding: 0 6px 0.65px;
+    font: 700 15px/1 var(--font-mono);
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--text-strong);
+
+    [data-slot="chevron"] {
+      flex-shrink: 0;
+      width: 10px;
+      height: 10px;
+      color: var(--text-weak);
+      /* The chevron flips instantly when the menu opens. */
+    }
+
+    &[aria-expanded="true"] [data-slot="chevron"] {
+      scale: 1 -1;
+    }
+  }
+
+  [data-slot="menu"] {
+    position: absolute;
+    top: calc(100% + 6px);
+    /* The labels start at the trigger's text: its 6px padding, less the row's 14px padding (as in
+       public/nav-demo/switcher.css). */
+    inset-inline-start: calc(6px - 14px);
+    width: max-content;
+    min-width: 9rem;
+    background: var(--popover-bg);
+    box-shadow: var(--popover-shadow);
+    transform-origin: top var(--x-start, left);
+    animation: docs-lockup-in 160ms var(--ease-out);
+  }
+
+  /* Padding, hover and focus come from the shared menu row style in site.css. */
+  [role="menuitem"] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font: 400 15px/1.2 var(--font-mono);
+    text-transform: uppercase;
+    color: var(--text-strong);
+
+    [data-slot="check"] {
+      flex-shrink: 0;
+      display: block;
+    }
+  }
+}
+
+/* A row that leaves the site (V1, the old docs) has the nav's external arrow after its label. */
+[data-site] [data-component="docs-lockup"] [role="menuitem"] [data-slot="label"]:has(> svg) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* "Docs" has a submenu of versions: a "›" at the row's end, and a flyout beside the menu. */
+[data-site] [data-component="docs-lockup"] {
+  [data-slot="parent"] {
+    position: relative;
+
+    > [role="menuitem"] {
+      padding-inline-end: 36px;
+    }
+
+    /* While its submenu is open the row keeps its hover look (the tint and the hover bar), until
+       another row of the menu is hovered or focused during the submenu's close delay, so only one
+       row ever looks hovered. */
+    &[data-open]:not([data-slot="menu"]:has(:is([role="menuitem"]:hover, :focus-visible):not([data-slot="parent"] *)) *)
+      > [role="menuitem"] {
+      background: var(--menu-open);
+
+      &::before {
+        opacity: 1;
+      }
+    }
+  }
+
+  [data-slot="expand"] {
+    position: absolute;
+    top: 0;
+    inset-inline-end: 0;
+    bottom: 0;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    color: var(--text-weak);
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+      }
+    }
+
+    &:active {
+      color: var(--text-strong);
+    }
+  }
+
+  [data-slot="submenu"] {
+    position: absolute;
+    top: 0;
+    inset-inline-start: calc(100% + 4px);
+    width: max-content;
+    min-width: 9rem;
+    padding: 0;
+    background: var(--popover-bg);
+    box-shadow: var(--popover-shadow);
+    transform-origin: top var(--x-start, left);
+    animation: docs-lockup-in 160ms var(--ease-out);
+
+    /* Bridges the gap to the menu, so the pointer can cross it without closing the flyout. */
+    &::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      inset-inline-end: 100%;
+      width: 8px;
+    }
+  }
+}
+
+@keyframes docs-lockup-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="docs-lockup"] [data-slot="menu"] {
+    animation: none;
+  }
+}
+
+/* Phones: the word sits in the 56px top bar after its 24 × 30 logo, with a 44px tap target, and the
+   menu becomes a sheet under the bar. */
+@media (max-width: 60rem) {
+  /* --lockup-text is the trigger's text x: 12px after the bar's logo. */
+  [data-site] [data-component="docs-lockup"] {
+    --lockup-text: calc(var(--edge) + env(safe-area-inset-left, 0px) + 24px + 12px);
+
+    /* The top bar holds the logo here and never scrolls away, so the word is fixed beside it. The
+       row is the bar's mark: 30px tall and centred, or the Logo size's mark, offset as the mark is
+       (site.css). The triggers keep 44px hit areas. */
+    --lockup-face: var(--logo-mark-h, 30px);
+    position: fixed;
+    top: calc(
+      var(--banner-offset, 0px) + env(safe-area-inset-top, 0px) + (var(--topbar-height) - 30px) / 2 +
+        round(calc((30px - var(--lockup-face)) / 2), 1px)
+    );
+    inset-inline-start: calc(var(--lockup-text) - 6px);
+    z-index: 11;
+    height: var(--lockup-face);
+  }
+
+  [data-site]:not([data-logo="icon"]) [data-component="docs-lockup"] {
+    --lockup-face: 30px;
+  }
+
+  /* A page that renders a copy in each host (DocsLockup inline) shows the top bar's here. */
+  [data-site] [data-component="docs-lockup"][data-host="sidebar"] {
+    display: none;
+  }
+
+  [data-site]:not([data-logo="icon"]) [data-component="docs-lockup"] {
+    --lockup-text: calc(var(--edge) + env(safe-area-inset-left, 0px) + 30px * 234 / 42 + 12px);
+  }
+
+  [data-component="docs-lockup"] {
+    [data-slot="menu"] {
+      position: fixed;
+      top: calc(var(--banner-offset, 0px) + env(safe-area-inset-top, 0px) + var(--topbar-height) + 2px);
+      inset-inline-start: 12px;
+      inset-inline-end: 12px;
+      width: auto;
+      min-width: 0;
+    }
+  }
+
+  /* 44px rows for touch, with the labels indented to the trigger's text (--menu-text, measured when
+     the menu opens; the sheet's 12px inset comes first). Specific enough to beat the
+     shared menu row padding in site.css. */
+  [data-site] [data-component="docs-lockup"] [data-slot="menu"] [role="menuitem"] {
+    padding-block: 13px;
+    padding-inline-start: calc(var(--menu-text) - 12px);
+  }
+
+  /* A 44px tap target of its own, set off from the "Docs" label by a short rule. */
+  [data-site] [data-component="docs-lockup"] [data-slot="expand"] {
+    --lockup-row: 44px;
+    width: 44px;
+    color: var(--text-strong);
+
+    &::before {
+      content: "";
+      position: absolute;
+      top: 12px;
+      bottom: 12px;
+      inset-inline-start: 0;
+      width: 1px;
+      background: var(--border);
+    }
+
+    svg {
+      width: 12px;
+      height: 12px;
+    }
+  }
+}
+
+/* Settings › Docs submenu › nested (always on touch and narrow screens): the versions open in place
+   under "Docs", indented one step, and "›" turns to point down. Opening and closing are instant. */
+[data-site] [data-component="docs-lockup"] [data-submenu="nested"] {
+  [data-slot="expand"] {
+    bottom: auto;
+    height: var(--lockup-row, 34px);
+
+    &[aria-expanded="true"] svg {
+      rotate: 90deg;
+    }
+  }
+
+  [data-slot="submenu"] {
+    position: static;
+    width: auto;
+    min-width: 0;
+    padding: 0;
+    background: none;
+    box-shadow: none;
+    animation: none;
+
+    &::before {
+      content: none;
+    }
+
+    /* One step in from the menu's labels, whatever their padding. */
+    [data-slot="label"] {
+      margin-inline-start: 14px;
+    }
+  }
+}
+
+/* "Docs" and its current version sit one above the other when nested, so their active bars stop
+   short of the rows' edges instead of joining into one line. */
+[data-site][data-menu-active="bar"]
+  [data-component="docs-lockup"]
+  [data-submenu="nested"]
+  :is([data-slot="parent"], [data-slot="submenu"])
+  [role="menuitem"][aria-current="page"]::before {
+  top: 8px;
+  bottom: 8px;
+}
+
+/* Settings › Docs nav › split (the default), as in the Data and Console headers
+   (public/nav-demo/switcher.css): the word links to the section's home and the chevron after it is
+   its own button for the menu. Both forms render; the root's data-docs-nav picks one, so a saved
+   choice applies before first paint. The word and the chevron each get a 44px tall hit area. */
+[data-component="docs-lockup"] [data-split] {
+  display: flex;
+  align-items: center;
+
+  :is([data-slot="word"], [data-slot="toggle"]) {
+    display: none;
+  }
+}
+
+[data-site][data-docs-nav="split"] [data-component="docs-lockup"] [data-split] {
+  [data-slot="trigger"] {
+    display: none;
+  }
+
+  :is([data-slot="word"], [data-slot="toggle"]) {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* OpenTUI Mono's caps sit 0.325px below its line box's centre; this puts them on the logo's centre. */
+  [data-slot="word"] {
+    padding: 0 6px 0.65px;
+    font: 700 15px/1 var(--font-mono);
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--text-strong);
+  }
+
+  /* 5px either side of the 10px chevron, and 2px after the word. */
+  [data-slot="toggle"] {
+    width: 20px;
+    margin-inline-start: 2px;
+
+    [data-slot="chevron"] {
+      width: 10px;
+      height: 10px;
+    }
+
+    &[aria-expanded="true"] [data-slot="chevron"] {
+      scale: 1 -1;
+    }
+  }
+
+  /* The chevron leads: while it is hovered, pressed or open, the word takes half its fill, so the two
+     read as one split control. Hovering the word fills only the word. */
+  @media (hover: hover) and (pointer: fine) {
+    &:has([data-slot="toggle"]:hover) [data-slot="word"]:not(:hover, :active) {
+      background: color-mix(in srgb, var(--lockup-hover) 50%, transparent);
+    }
+  }
+
+  &:has([data-slot="toggle"]:is(:active, [aria-expanded="true"])) [data-slot="word"]:not(:hover, :active) {
+    background: color-mix(in srgb, var(--lockup-press) 50%, transparent);
+  }
+}
+
+/* The chevron rests muted; no specificity, so the shared states below win. */
+:where([data-site] [data-component="docs-lockup"] [data-slot="toggle"]) {
+  color: var(--text-weak);
+}
+
+/* Every interactive segment of the lockup (the section word, its chevron, the combined trigger and
+   the version) shares one set of states, as the Data and Console product names do
+   (public/nav-demo/switcher.css): hover fills with the logo's inner square beside it (--logo-inner,
+   site.css) with the text at full strength, pressed and open one step further from the page, and a
+   2px ring for the keyboard. Neutral grey whatever Settings › Menu color. The visible fill is the
+   logo mark's height (the lockup row is the mark's height and top); a transparent ::before keeps
+   each hit area 32px tall beside the sidebar and 44px for touch. The separator isn't interactive. */
+[data-site] [data-component="docs-lockup"] {
+  --segment-height: 32px;
+  --lockup-hover: var(--logo-inner);
+  --lockup-press: light-dark(
+    color-mix(in srgb, var(--logo-inner) 94%, black),
+    color-mix(in srgb, var(--logo-inner) 94%, white)
+  );
+
+  @media (max-width: 60rem), (pointer: coarse) {
+    --segment-height: 44px;
+  }
+}
+
+[data-site] [data-component="docs-lockup"] :is([data-slot="trigger"], [data-slot="word"], [data-slot="toggle"]) {
+  height: 100%;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: calc(50% - var(--segment-height) / 2) 0;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      background: var(--lockup-hover);
+      color: var(--text-strong);
+
+      [data-slot="chevron"] {
+        color: var(--text-strong);
+      }
+    }
+  }
+
+  &:active {
+    background: var(--lockup-press);
+  }
+
+  &[aria-expanded="true"] {
+    background: var(--lockup-press);
+    color: var(--text-strong);
+
+    [data-slot="chevron"] {
+      color: var(--text-strong);
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: 2px;
+  }
+}
+
+/* The logo before the lockup stays a plain link (no fill); its keyboard ring, drawn around the mark
+   (site.css), is 2px like the segments'. */
+[data-site]
+  :is([data-component="sidebar"], [data-component="topbar"]):has([data-component="docs-lockup"])
+  > [data-slot="logo"]:focus-visible
+  [data-slot="icon"] {
+  outline-width: 2px;
+}
+
+/* Settings › Section menu › fan: no panel; each row is a small card on the see-through pop-up
+   surface with the logo fan's ring and tight shadow (logo-fan.css), and the cards spring out one
+   after another (docs-lockup.tsx). The rows keep the shared hover tint and active bar. Beside the
+   sidebar only; the phone sheet keeps the list. */
+@media (min-width: 60.0625rem) {
+  [data-site][data-section-menu="fan"]
+    [data-component="docs-lockup"]
+    :is([data-slot="menu"], [data-slot="submenu"]):not([hidden]) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    width: max-content;
+    min-width: 9rem;
+    padding: 0;
+    background: none;
+    box-shadow: none;
+    animation: none;
+
+    > [role="menuitem"],
+    > [data-slot="parent"] > [role="menuitem"] {
+      background: color-mix(in srgb, var(--popover-bg) 85%, transparent);
+      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(8px);
+      box-shadow: var(--fan-shadow);
+    }
+  }
+
+  /* As under the logo fan (logo-fan.css), the docs nav under the cards fades out while they're
+     open, so it doesn't show through the gaps and the see-through cards. */
+  [data-site][data-section-menu="fan"]
+    [data-component="sidebar"]:has([data-component="docs-lockup"] [data-slot="menu"]:not([hidden]))
+    > [data-component="section-nav"] {
+    opacity: 0;
+    pointer-events: none;
+  }
+}

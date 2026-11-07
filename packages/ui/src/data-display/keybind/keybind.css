@@ -34,6 +34,9 @@
   border-radius: 2px;
   flex: none;
   flex-grow: 0;
+  transition:
+    background-color var(--keybind-transition-duration, 0s) ease,
+    box-shadow var(--keybind-transition-duration, 0s) ease;
 }
 
 [data-component="keybind-v2"][data-variant="neutral"] [data-slot="keybind-v2-key"] {
@@ -42,6 +45,11 @@
 
 [data-component="keybind-v2"][data-variant="ghost"] [data-slot="keybind-v2-key"] {
   background: transparent;
+}
+
+[data-component="keybind-v2"][data-variant="outline"] [data-slot="keybind-v2-key"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--v2-border-border-strong);
 }
 
 [data-component="keybind-v2"] [data-slot="keybind-v2-label"] {
@@ -53,8 +61,8 @@
   padding: 0;
   flex: none;
   font-style: normal;
-  font-weight: 530;
-  font-size: 11px;
+  font-weight: var(--keybind-font-weight, 530);
+  font-size: var(--keybind-font-size, 11px);
   line-height: 1;
   text-align: center;
   letter-spacing: 0.05px;
@@ -67,7 +75,7 @@
   user-select: none;
 }
 
-[data-component="keybind-v2"][data-variant="neutral"] [data-slot="keybind-v2-label"] {
+[data-component="keybind-v2"]:is([data-variant="neutral"], [data-variant="outline"]) [data-slot="keybind-v2-label"] {
   color: var(--v2-text-text-muted);
 }
 

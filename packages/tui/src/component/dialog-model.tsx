@@ -1,5 +1,5 @@
 import type { ModelInfo } from "@opencode/client"
-import { createMemo, createSignal, Show } from "solid-js"
+import { createMemo, createSignal, onMount, Show } from "solid-js"
 import { useLocal } from "../context/local"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
@@ -13,6 +13,8 @@ import { useLocation } from "../context/location"
 import { useNewDesigns } from "../config"
 import { DialogFreeModels } from "./dialog-model-free"
 import { FavoriteMarker, ModelDetail, isFreeModel, prioritizeFavorites, sortModelOptions } from "./model-options"
+import { DialogUsage, useUsageLimits } from "./usage"
+import { formatDollars, usageLevel } from "../util/usage-limits"
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
@@ -60,6 +62,19 @@ function DialogConnectedModels(props: {
   const newDesigns = useNewDesigns()
   const data = useData()
   const location = useLocation()
+  const dialog = useDialog()
+  const limits = useUsageLimits()
+  // Spend moves with every request, so the picker shows fresh limits.
+  onMount(() => limits.load(true))
+  const usage = (model: ModelInfo) => {
+    const value = limits.usage(model)
+    if (value) {
+      const level = usageLevel(value, model)
+      return { text: `${formatDollars(value.left)} left`, danger: level === "out" || level === "reached" }
+    }
+    if (limits.unlimited(model)) return { text: "No limit" }
+    return undefined
+  }
   const [query, setQuery] = createSignal("")
   // Under new designs, favoriting does not reorder the list until the dialog is reopened.
   const favoritesAtOpen = [...local.model.favorite()]
@@ -105,7 +120,7 @@ function DialogConnectedModels(props: {
             description: provider?.name ?? model.providerID,
             category,
             footer: trailing(model, isFavorite(item)),
-            detail: newDesigns() ? () => <ModelDetail model={model} /> : undefined,
+            detail: newDesigns() ? () => <ModelDetail model={model} usage={usage(model)} /> : undefined,
             onSelect: () => {
               props.onSelect(model.providerID, model.id)
             },
@@ -129,8 +144,7 @@ function DialogConnectedModels(props: {
         .map((model) => {
           const provider = providers().get(model.providerID)
           const value = { providerID: model.providerID, modelID: model.id }
-          // Users with nothing connected can only favorite models in the free picker (new designs); this picker keeps them unavailable.
-          const favorite = connected() && isFavorite(value)
+          const favorite = isFavorite(value)
           return {
             value,
             providerID: model.providerID,
@@ -141,7 +155,7 @@ function DialogConnectedModels(props: {
             category: connected() ? (freeGroup(model) ? "Free" : (provider?.name ?? model.providerID)) : undefined,
             footer: trailing(model, favorite),
             free: isFreeModel(model),
-            detail: newDesigns() ? () => <ModelDetail model={model} /> : undefined,
+            detail: newDesigns() ? () => <ModelDetail model={model} usage={usage(model)} /> : undefined,
             onSelect() {
               props.onSelect(model.providerID, model.id)
             },
@@ -178,6 +192,8 @@ function DialogConnectedModels(props: {
       return results.map((option) => ({ ...option, description: option.providerName, category: undefined }))
     }
 
+    if (!connected()) return prioritizeFavorites(modelOptions, favoritePriority)
+
     return [
       ...favoriteOptions,
       ...recentOptions,
@@ -213,9 +229,15 @@ function DialogConnectedModels(props: {
           onTrigger: props.onConnect,
         },
         {
+          command: "model.dialog.usage",
+          title: newDesigns() ? "usage" : "Usage",
+          selection: "none",
+          hidden: !limits.info(),
+          onTrigger: () => dialog.replace(() => <DialogUsage />),
+        },
+        {
           command: "model.dialog.favorite",
           title: newDesigns() ? (option) => (isFavorite(option?.value) ? "unfavorite" : "favorite") : "Favorite",
-          hidden: !connected(),
           onTrigger: (option) => {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
           },

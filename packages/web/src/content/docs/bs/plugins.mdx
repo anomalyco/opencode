@@ -84,7 +84,7 @@ import { escape } from "shescape"
 export const MyPlugin = async (ctx) => {
   return {
     "tool.execute.before": async (input, output) => {
-      if (input.tool === "shell") {
+      if (input.tool === "bash") {
         output.args.command = escape(output.args.command)
       }
     },
@@ -312,7 +312,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-Nivoi su: `debug`, `info`, `warn`, `error`. Pogledajte [SDK dokumentaciju](https://opencode.ai/docs/sdk) za detalje.
+Nivoi su: `debug`, `info`, `warn`, `error`. Pogledajte [SDK dokumentaciju](/docs/sdk) za detalje.
 
 ### Kuke za sažimanje
 

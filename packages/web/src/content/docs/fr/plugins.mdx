@@ -90,7 +90,7 @@ import { escape } from "shescape"
 export const MyPlugin = async (ctx) => {
   return {
     "tool.execute.before": async (input, output) => {
-      if (input.tool === "shell") {
+      if (input.tool === "bash") {
         output.args.command = escape(output.args.command)
       }
     },
@@ -322,7 +322,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-Niveaux : `debug`, `info`, `warn`, `error`. Voir la [documentation du SDK](https://opencode.ai/docs/sdk) pour plus de détails.
+Niveaux : `debug`, `info`, `warn`, `error`. Voir la [documentation du SDK](/docs/sdk) pour plus de détails.
 
 ---
 

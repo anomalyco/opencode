@@ -1,13 +1,12 @@
-import type { RouteDefaultsInput } from "../route/client.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type ModelID, type RequestOptions } from "../schema/index.js"
 import * as BedrockConverse from "../protocols/bedrock-converse.js"
 import type { BedrockCredentials } from "../protocols/bedrock-converse.js"
 import { BedrockAuth } from "../protocols/utils/bedrock-auth.js"
 
 export const id = ProviderID.make("amazon-bedrock")
 
-export type Config = RouteDefaultsInput & {
+export type Config = RequestOptions & {
   /** Bedrock API key. Falls back to `AWS_BEARER_TOKEN_BEDROCK`; bearer auth takes precedence over SigV4. */
   readonly apiKey?: string
   /** `sigv4` ignores `apiKey` fallbacks from the environment; `bearer` requires a token. */
@@ -21,18 +20,19 @@ export type Config = RouteDefaultsInput & {
   readonly region?: string
   /** Override the computed `https://bedrock-runtime.<region>.amazonaws.com` URL. */
   readonly baseURL?: string
+  readonly providerOptions?: BedrockConverse.OptionsInput
 }
 
-export interface Settings extends ProviderPackage.Settings {
-  readonly apiKey?: string
-  readonly auth?: "bearer" | "sigv4"
-  readonly baseURL?: string
-  readonly credentials?: BedrockCredentials
-  readonly profile?: string
-  readonly region?: string
-  readonly topP?: number
-  readonly thinking?: BedrockConverse.OptionsInput["thinking"]
-}
+export type Settings = ProviderPackage.Settings &
+  BedrockConverse.OptionsInput & {
+    readonly apiKey?: string
+    readonly auth?: "bearer" | "sigv4"
+    readonly baseURL?: string
+    readonly credentials?: BedrockCredentials
+    readonly profile?: string
+    readonly region?: string
+    readonly topP?: number
+  }
 export const routes = [BedrockConverse.route]
 
 const bedrockBaseURL = (region: string) => `https://bedrock-runtime.${region}.amazonaws.com`
@@ -57,22 +57,25 @@ export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
   return {
     id,
-    model: (modelID: string | ModelID) => route.model({ id: modelID }),
+    model: (modelID: string | ModelID) => route.model<BedrockConverse.OptionsInput>({ id: modelID }),
     configure,
   }
 }
 
 export const provider = configure()
-export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) =>
+export const model: ProviderPackage.Model<Settings, BedrockConverse.OptionsInput> = (
+  modelID,
+  { apiKey, auth, baseURL, credentials, profile, region, topP, headers, body, ...providerOptions }: Settings = {},
+) =>
   configure({
-    apiKey: settings.apiKey,
-    auth: settings.auth,
-    baseURL: settings.baseURL,
-    credentials: settings.credentials,
-    generation: settings.topP === undefined ? undefined : { topP: settings.topP },
-    headers: settings.headers === undefined ? undefined : { ...settings.headers },
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    providerOptions: settings.thinking === undefined ? undefined : { thinking: settings.thinking },
-    profile: settings.profile,
-    region: settings.region,
+    apiKey,
+    auth,
+    baseURL,
+    credentials,
+    topP,
+    headers: headers === undefined ? undefined : { ...headers },
+    http: body === undefined ? undefined : { body: { ...body } },
+    providerOptions,
+    profile,
+    region,
   }).model(modelID)

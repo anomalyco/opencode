@@ -3,7 +3,7 @@ title: Benutzerdefinierte Tools
 description: Erstellen Sie Tools, die der LLM in OpenCode aufrufen kann.
 ---
 
-Benutzerdefinierte Tools sind von Ihnen erstellte Funktionen, die der LLM während Gesprächen aufrufen kann. Sie arbeiten neben [built-in tools](/docs/tools) von OpenCode wie `read`, `write` und `shell`.
+Benutzerdefinierte Tools sind von Ihnen erstellte Funktionen, die der LLM während Gesprächen aufrufen kann. Sie arbeiten neben [built-in tools](/docs/tools) von OpenCode wie `read`, `write` und `bash`.
 
 ---
 

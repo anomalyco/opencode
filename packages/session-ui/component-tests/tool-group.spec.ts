@@ -1,5 +1,5 @@
 import type { Locator } from "@playwright/test"
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 // The digits drawn inside the count's clipped width, left to right. Each slot shows whichever visible glyph lines up
 // with it, so a slot mid-roll reads "_", and the spare leading zero outside the width is skipped.

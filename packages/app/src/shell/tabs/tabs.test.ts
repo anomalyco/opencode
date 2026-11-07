@@ -9,7 +9,15 @@ import {
   takeClosedTab,
   type ClosedTab,
 } from "./closed"
-import { findSessionTab, sessionIDHasOpenTab, tabHref, tabKey, type SessionTab, type Tab } from "./tabs"
+import {
+  findSessionTab,
+  sessionIDHasOpenTab,
+  tabHref,
+  tabKey,
+  tabMatchesRoute,
+  type SessionTab,
+  type Tab,
+} from "./tabs"
 import { Schema } from "effect"
 import { TabStorage } from "./schema"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -97,10 +105,15 @@ describe("tab migration", () => {
     expect(Schema.decodeUnknownSync(TabStorage.Infos)({ tab: { title: "Title", directory: "/project" } })).toEqual({
       tab: { title: "Title", directory: "/project" },
     })
-    const regions = Schema.decodeUnknownSync(TabStorage.Regions)({ tab: { terminal: true, terminalHeight: 300 } })
-    expect(regions).toEqual({ tab: { dock: true, dockHeight: 300 } })
-    expect(Schema.encodeSync(TabStorage.Regions)(regions)).toEqual({ tab: { terminal: true, terminalHeight: 300 } })
-    expect(() => Schema.decodeUnknownSync(TabStorage.Regions)({ tab: { terminal: "yes" } })).toThrow()
+
+    // The removed terminal dock's fields decode away.
+    const regions = Schema.decodeUnknownSync(TabStorage.Regions)({
+      tab: { review: true, sessionWidth: 300, terminal: true, terminalHeight: 300 },
+    })
+
+    expect(regions).toEqual({ tab: { side: true, sessionWidth: 300 } })
+    expect(Schema.encodeSync(TabStorage.Regions)(regions)).toEqual({ tab: { review: true, sessionWidth: 300 } })
+    expect(() => Schema.decodeUnknownSync(TabStorage.Regions)({ tab: { review: "yes" } })).toThrow()
   })
 })
 
@@ -123,6 +136,22 @@ test("finds open root and routed session tabs", () => {
   expect(sessionIDHasOpenTab(tabs, server, "child")).toBe(true)
   expect(sessionIDHasOpenTab(tabs, server, "closed")).toBe(false)
   expect(sessionIDHasOpenTab(tabs, ServerConnection.Key.make("other"), "root")).toBe(false)
+})
+
+test("a tab owns the route that shows it, including its child session, whichever tab was remembered", () => {
+  const tab = { ...sessionTab("root"), routeSessionId: "child" }
+  const draft: Tab = { type: "draft", draftID: "draft", server, directory: "/project" }
+
+  expect(tabMatchesRoute(tab, { type: "session", server, sessionId: "root" })).toBe(true)
+  expect(tabMatchesRoute(tab, { type: "session", server, sessionId: "child" })).toBe(true)
+  expect(tabMatchesRoute(tab, { type: "session", server, sessionId: "other" })).toBe(false)
+  expect(tabMatchesRoute(tab, { type: "session", server: ServerConnection.Key.make("other"), sessionId: "root" })).toBe(
+    false,
+  )
+  expect(tabMatchesRoute(draft, { type: "draft", draftID: "draft" })).toBe(true)
+  expect(tabMatchesRoute(draft, { type: "draft", draftID: "other" })).toBe(false)
+  expect(tabMatchesRoute(tab, { type: "home" })).toBe(false)
+  expect(tabMatchesRoute(tab, { type: "settings" })).toBe(false)
 })
 
 describe("tab memory", () => {
@@ -170,14 +199,14 @@ describe("closed tab stack", () => {
   })
 
   test("caps the stack size", () => {
-    const stack = Array.from({ length: 30 }, (_, i) => i).reduce<ClosedTab[]>(
+    const stack = Array.from({ length: 105 }, (_, i) => i).reduce<ClosedTab[]>(
       (acc, i) => pushClosedTab(acc, sessionTab(`s${i}`), i),
       [],
     )
 
-    expect(stack).toHaveLength(25)
+    expect(stack).toHaveLength(100)
     expect(stack[0]?.tab.sessionId).toBe("s5")
-    expect(stack.at(-1)?.tab.sessionId).toBe("s29")
+    expect(stack.at(-1)?.tab.sessionId).toBe("s104")
   })
 
   test("keeps only the newest close record for a session", () => {

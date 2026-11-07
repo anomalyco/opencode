@@ -1,9 +1,9 @@
 <p align="center">
   <a href="https://opencode.ai">
     <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+      <source srcset=".github/assets/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+      <source srcset=".github/assets/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+      <img src=".github/assets/logo-ornate-light.svg" alt="OpenCode logo">
     </picture>
   </a>
 </p>
@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/@opencode/cli"><img alt="npm" src="https://img.shields.io/npm/v/@opencode/cli?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+  <a href="https://github.com/anomalyco/opencode/actions/workflows/release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/release.yml?style=flat-square&branch=dev" /></a>
 </p>
 
 <p align="center">
@@ -80,18 +80,7 @@ brew install --cask opencode-desktop
 
 #### 설치 디렉터리
 
-설치 스크립트는 설치 경로를 다음 우선순위로 결정합니다.
-
-1. `$OPENCODE_INSTALL_DIR` - 사용자 지정 설치 디렉터리
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification 준수 경로
-3. `$HOME/bin` - 표준 사용자 바이너리 디렉터리 (존재하거나 생성 가능할 경우)
-4. `$HOME/.opencode/bin` - 기본 폴백
-
-```bash
-# 예시
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/v2/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/v2/install | bash
-```
+설치 스크립트는 OpenCode를 `$HOME/.opencode/bin`에 설치합니다.
 
 ### Agents
 

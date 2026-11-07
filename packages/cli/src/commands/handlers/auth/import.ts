@@ -19,7 +19,7 @@ export default Runtime.handler(
       const credentials = yield* Schema.decodeUnknownEffect(
         Schema.fromJsonString(Schema.Array(CredentialLegacy.Entry)),
       )(text)
-      const client = yield* createClient({ server: Option.getOrUndefined(input.server), standalone: input.standalone })
+      const client = yield* createClient()
       const existing = yield* request((signal) => client.credential.list({ signal }))
       const ids = new Set(existing.map((credential) => credential.id))
       const integrations = new Set(existing.map((credential) => credential.integrationID))

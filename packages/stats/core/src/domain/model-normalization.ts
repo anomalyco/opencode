@@ -9,6 +9,7 @@ export const MODEL_AUTHOR_RULES = [
   { match: "grok", author: "xai" },
   { match: "hy3", author: "tencent" },
   { match: "hy4", author: "tencent" },
+  { match: "inkling", author: "thinkingmachines" },
   { match: "kimi", author: "moonshot" },
   { match: "longcat", author: "meituan" },
   { match: "mimo", author: "xiaomi" },
@@ -18,11 +19,12 @@ export const MODEL_AUTHOR_RULES = [
   { match: "qwen", author: "qwen" },
 ] as const
 export const EXCLUDED_MODELS = new Set(["alpha-gpt-next"])
-export const STEALTH_MODELS = new Set(["exo", "omen-alpha", "union-alpha"])
+export const STEALTH_MODELS = new Set(["crouton-alpha", "exo", "iceman", "iceman-contributor", "omen-alpha", "pulse-alpha", "union-alpha"])
 export const FREE_MODELS = new Set(["gpt-5-nano", "grok-code", "big-pickle"])
 export const MODEL_NAME_MAX_LENGTH = 256
 export const MODEL_NAME_ALIASES: Record<string, string> = {
-  "cat-jam": "beam",
+  beam: "beam-1.0-501b-a23b",
+  "cat-jam": "beam-1.0-501b-a23b",
   "deepseek-flash": "deepseek-v4.1-flash",
   "deepseek-v4-1-flash-opencode-bo44an": "deepseek-v4.1-flash",
   "deepseek-v4-flash-0731": "deepseek-v4-flash",

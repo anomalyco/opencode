@@ -1,0 +1,1998 @@
+[data-page="home"] {
+  /* Hero layout options. Sizes use the carousel's card width so the text can sit on the same grid. */
+
+  [data-component="content"] {
+    container-type: inline-size;
+  }
+
+  [data-component="hero"],
+  [data-component="block"],
+  [data-component="logo-wall"] {
+    --card: calc((100cqw - var(--gaps) * var(--gutter)) / var(--visible));
+    --two-cards: calc(var(--card) * 2 + var(--gutter));
+    /* The open source stats numbers' size, which follows the hero option. */
+    --hero-size: clamp(2.25rem, 4.4vw, 4rem);
+  }
+
+  &[data-site]:has([data-component="hero"][data-variant="two-up"])
+    :is([data-component="hero"], [data-component="block"]) {
+    --hero-size: calc(var(--two-cards) / (15 * 0.57) * 0.98);
+  }
+
+  &[data-site]:has([data-component="hero"][data-variant="full"])
+    :is([data-component="hero"], [data-component="block"]) {
+    --hero-size: calc(100cqw / (31 * 0.57) * 0.98);
+  }
+
+  /* Sections sit on the carousel grid: the label takes the first card's width and the body
+     starts with the second card. With three or more whole cards on screen the body spans two
+     cards; with fewer it runs to the right edge. */
+  &[data-site] [data-component="block"] {
+    grid-template-columns: var(--card) minmax(0, 1fr);
+
+    [data-slot="body"] {
+      grid-column: 2;
+      max-width: calc(var(--card) * var(--body-cards) + var(--gutter) * (var(--body-cards) - 1));
+    }
+
+    /* The lead paragraph stays within two card columns even when the section runs to the edge. */
+    [data-slot="lead"] {
+      max-width: var(--two-cards);
+    }
+  }
+
+  /* "What is OpenCode?": ten features in five rows of two, one feature per card column, under the
+     two-column lead. */
+  &[data-site] [data-component="block"]:has([data-component="features"]) [data-slot="body"] {
+    max-width: none;
+  }
+
+  &[data-site] [data-component="features"] {
+    max-width: var(--two-cards);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+    /* Phones: one column, each title over its description. */
+    @media (max-width: 40rem) {
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: 2rem;
+    }
+  }
+
+  /* Settings › Section columns: from 80rem up each section's content spans two or three card
+     columns beside its title, whatever the section width, and so does everything inside it. The
+     features stay two to a row (ten in five rows) at either span, never three, so no row is left
+     with one; the tools keep four to a row and grow wider.
+     The attribute repeats to outrank the per-section widths above. Narrower screens keep the
+     section width behaviour. */
+  @media (min-width: 80rem) {
+    &[data-site] [data-component="block"][data-columns][data-columns] {
+      --body-span: var(--two-cards);
+
+      &[data-columns="3"] {
+        --body-span: calc(var(--card) * 3 + var(--gutter) * 2);
+      }
+
+      :is([data-slot="body"], [data-slot="lead"], [data-component="features"], [data-component="tools"]) {
+        max-width: min(100%, var(--body-span));
+      }
+
+      /* The Console copy keeps its own measure at two columns; split has no title column. */
+      &[data-columns="3"]:not([data-console="split"]) [data-slot="copy"] {
+        max-width: min(100%, var(--body-span));
+      }
+
+      /* Settings › copy columns: the lead (or the Console headline and text) takes its own two or
+         three cards, while the features, tools and stats keep the section's columns. The body
+         grows to whichever is wider. */
+      &[data-copy-columns] {
+        --copy-span: var(--two-cards);
+
+        &[data-copy-columns="3"] {
+          --copy-span: calc(var(--card) * 3 + var(--gutter) * 2);
+        }
+
+        :is([data-slot="body"], [data-slot="copy"]) {
+          max-width: min(100%, max(var(--body-span), var(--copy-span)));
+        }
+
+        :is([data-slot="lead"], [data-slot="copy"] > h3, [data-slot="copy"] > p) {
+          max-width: min(100%, var(--copy-span));
+        }
+
+        [data-component="stats"] {
+          max-width: min(100%, var(--body-span));
+        }
+      }
+    }
+  }
+
+  /* Hero title: shared with /product in component/site/hero-title.css. */
+
+  /* Hero subtitle: Settings › Subtitle width sets how many card columns it spans, never past the
+     content edge; below 60rem the hero is one column, so it runs the full width. "2 columns" ends on
+     the second column's right edge whatever the hero option, like the /product subtitle. */
+  &[data-site] [data-component="hero"] p[data-width] {
+    --columns: 2;
+    max-width: min(100%, calc(var(--card) * var(--columns) + var(--gutter) * (var(--columns) - 1)));
+    text-wrap: pretty;
+  }
+
+  &[data-site] [data-component="hero"] p[data-width="3"] {
+    --columns: 3;
+  }
+
+  &[data-site] [data-component="hero"] p[data-width="4"] {
+    --columns: 4;
+  }
+
+  /* Settings › Announcement: the "New" bar, modelled on the docs' V1 notice (docs-version-notice.css:
+     the same height, padding and type, square corners) in the link blue: a solid tag, then a light
+     wash of the blue with blue text. Closed, it has no height and no opacity; the site root's
+     data-home-announcement opens it, set before first paint for a saved value, so a saved "on"
+     never animates in. Contrast (light on #fff and #fbfbfb, dark on #0c0c0c with the dark blues):
+     tag 5.2:1 (dark 5.2:1 and up), text 5.7:1 (dark 6.4:1 and up). */
+  /* The bar is placed against the content column (its page slot is display: contents). */
+  [data-component="content"] {
+    position: relative;
+  }
+
+  [data-component="announcement"] {
+    --card: calc((100cqw - var(--gaps) * var(--gutter)) / var(--visible));
+    --announce-tint: light-dark(
+      color-mix(in srgb, var(--link) 9%, var(--bg)),
+      color-mix(in srgb, var(--link) 12%, var(--bg))
+    );
+    --announce-text: light-dark(color-mix(in srgb, var(--link) 85%, #000), color-mix(in srgb, var(--link) 85%, #fff));
+    --announce-hover: light-dark(color-mix(in srgb, var(--link) 70%, #000), color-mix(in srgb, var(--link) 60%, #fff));
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      grid-template-rows 200ms var(--ease-out),
+      opacity 200ms ease,
+      visibility 0s linear 200ms;
+
+    /* Level with the logo, over the hero's three card columns; the hero stays where it is. */
+    @media (min-width: 60.0625rem) {
+      position: absolute;
+      z-index: 1;
+      top: calc(var(--top) + (var(--logo-height) - 2rem) / 2);
+      /* The content column's left padding, where the hero starts. */
+      inset-inline-start: var(--gutter);
+      width: min(100%, calc(var(--card) * 3 + var(--gutter) * 2));
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+    }
+
+    [data-slot="clip"] {
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* On phones the bar is part of the page, so the space under it opens and closes with it. */
+    @media (max-width: 60rem) {
+      [data-slot="bar"] {
+        margin-bottom: 1.5rem;
+      }
+    }
+
+    [data-slot="bar"] {
+      display: flex;
+      align-items: stretch;
+      min-height: 2rem;
+      background: var(--announce-tint);
+      font: 400 13px/1.4 var(--font-mono);
+      color: var(--announce-text);
+    }
+
+    [data-slot="badge"] {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      padding: 1px 0.75rem 0;
+      background: light-dark(var(--link), color-mix(in srgb, var(--link) 65%, #000));
+      color: #fff;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    p {
+      align-self: center;
+      margin: 0;
+      padding: 0.375rem 0.75rem 0.3125rem;
+      text-wrap: pretty;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 0.15em;
+      transition: color 150ms ease;
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--announce-hover);
+        }
+      }
+
+      &:active {
+        color: var(--announce-hover);
+      }
+
+      &:focus-visible {
+        color: var(--announce-hover);
+        outline: 2px solid var(--link);
+        outline-offset: 2px;
+      }
+    }
+  }
+
+  /* Settings › Announcement style. "bar" is the box above; "text" is one line of blue text with
+     no box: "NEW" set like the bar's tag, then the whole message as its link, underlined on hover.
+     2rem tall like the bar, so it centres on the logo the same way. The blue is the bar's text
+     blue (5.9:1 on the light page, 6.5:1 and up on the dark one). */
+  [data-component="announcement"] {
+    [data-slot="line"] {
+      display: none;
+      align-items: center;
+      gap: 0.75rem;
+      min-height: 2rem;
+      margin: 0;
+      /* Over the bar's own paragraph padding. */
+      padding: 0;
+      font: 400 13px/1.4 var(--font-mono);
+      color: var(--announce-text);
+      text-wrap: pretty;
+
+      a {
+        text-decoration: none;
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        a:hover {
+          color: var(--announce-text);
+          text-decoration: underline;
+        }
+      }
+
+      a:active {
+        color: var(--announce-text);
+        text-decoration: underline;
+      }
+
+      a:focus-visible {
+        color: var(--announce-text);
+        text-decoration: underline;
+      }
+    }
+
+    /* The link's right chevron (icons.tsx), in the text's colour, a small step after the words. */
+    [data-slot="chevron-right"] {
+      display: inline-block;
+      margin-inline-start: 0.25rem;
+      vertical-align: -1px;
+    }
+
+    [data-slot="new"] {
+      flex-shrink: 0;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    /* "chip": "NEW" in white on the bar tag's blue (5.2:1 light, 6.2:1 and up dark), 4px of
+       padding round it, so it stays shorter than the logo. */
+    &[data-style="chip"] [data-slot="new"] {
+      padding: 4px 8px;
+      background: light-dark(var(--link), color-mix(in srgb, var(--link) 65%, #000));
+      color: #fff;
+      line-height: 1;
+    }
+
+    &:is([data-style="text"], [data-style="chip"]) {
+      [data-slot="bar"] {
+        display: none;
+      }
+
+      [data-slot="line"] {
+        display: flex;
+      }
+
+      @media (max-width: 60rem) {
+        [data-slot="line"] {
+          align-items: baseline;
+          min-height: 0;
+          margin-bottom: 1.25rem;
+        }
+      }
+    }
+  }
+
+  /* "banner": the in-content line and bar give way to the banner above the page. */
+  [data-component="announcement"][data-style="banner"] {
+    display: none;
+  }
+
+  &[data-site][data-home-announcement="on"] [data-component="announcement"] {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    visibility: visible;
+    transition:
+      grid-template-rows 200ms var(--ease-out),
+      opacity 200ms ease,
+      visibility 0s;
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+    }
+  }
+
+  /* Settings › Hero install: every option renders hidden, and only an exact match of the site root's
+     data-hero-install (set by the pre-paint script for a saved value) shows one. "off", or no
+     attribute at all, shows none, so nothing appears or goes after load. "agent only" shows the row
+     above the carousel with just the agent button (below). Phones never show any. */
+  &[data-site] [data-component="hero-install"] {
+    display: none;
+  }
+
+  @media (min-width: 60.0625rem) {
+    &[data-site][data-hero-install="line"] [data-component="hero-install"][data-mode="line"],
+    &[data-site][data-hero-install="tabs"] [data-component="hero-install"][data-mode="tabs"],
+    &[data-site]:is([data-hero-install="above carousel"], [data-hero-install="agent only"])
+      [data-component="hero-install"][data-mode="row"] {
+      display: flex;
+    }
+  }
+
+  /* "agent only": the row keeps its place and spacing, with the ghost button (robot icon and the
+     Design mode label) as its only visible part, whatever the install row style. */
+  &[data-site][data-hero-install="agent only"] [data-component="hero-install"][data-mode="row"] {
+    padding-inline-end: 0;
+
+    > :not([data-slot="sr-only"]) {
+      display: none;
+    }
+
+    > [data-slot="ghost"] {
+      display: inline-flex;
+    }
+  }
+
+  /* Settings › Hero install: a small mono command under the subtitle, desktop only. The tabs and
+     the command share one 36px bordered box, the height of a site button. */
+  [data-component="hero-install"] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1.25rem;
+    /* 1.75rem below the subtitle, inside the hero's 2.5rem gap. */
+    margin-top: -0.75rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+    color: var(--text-weak);
+
+    @media (max-width: 60rem) {
+      display: none;
+    }
+
+    [data-slot="tabs"] {
+      display: flex;
+      height: 2.25rem;
+      border: 1px solid var(--border);
+      border-inline-end: 0;
+
+      button {
+        padding: 0 0.75rem;
+        color: var(--text-weaker);
+        transition:
+          color 150ms ease,
+          background-color 150ms ease;
+
+        &[aria-selected="true"] {
+          background: var(--bg-weaker);
+          color: var(--text-strong);
+        }
+
+        @media (hover: hover) and (pointer: fine) {
+          &:hover {
+            color: var(--text-strong);
+          }
+        }
+
+        &:active {
+          color: var(--text-strong);
+        }
+
+        &:focus-visible {
+          outline: 2px solid var(--link);
+          outline-offset: -2px;
+        }
+      }
+    }
+
+    &[data-mode="tabs"] {
+      column-gap: 0;
+    }
+
+    /* Above the product carousel: the curl command, and beside it the agent button (the brand page's
+       neutral copy button). The space above it, from the subtitle's ink (its line box runs about
+       0.375rem below the text, as in logo-wall.css) through the carousel's 3rem top margin, and the
+       space below it to the cards are both 2.5rem. */
+    &[data-mode="row"] {
+      flex-wrap: nowrap;
+      gap: 0.75rem;
+      margin: calc(2.5rem - 3rem - 0.375rem) 0 2.5rem;
+
+      > * {
+        flex-shrink: 0;
+      }
+
+      /* Settings › Install row style: every layout's parts render, and data-style shows the ones it
+         uses. */
+      > :is(
+        [data-slot="segmented"],
+        [data-slot="ghost"],
+        [data-slot="agent-icon"],
+        [data-slot="or"],
+        [data-slot="agent-link"],
+        [data-slot="agent-note"],
+        [data-slot="agent-button"]
+      ) {
+        display: none;
+      }
+
+      &[data-style="inline"] > :is([data-slot="or"], [data-slot="agent-link"]),
+      &[data-style^="text link"] > [data-slot="agent-link"],
+      &[data-style="icon only"] > [data-slot="agent-icon"],
+      &[data-style="ghost button left"] > [data-slot="ghost"],
+      &[data-style="button"] > [data-slot="agent-button"] {
+        display: inline-flex;
+      }
+
+      &[data-style="segmented"] > [data-slot="segmented"] {
+        display: flex;
+      }
+
+      /* Far right, on the page's right padding (the carousel bleeds past it). */
+      &[data-style="text link right"] {
+        padding-inline-end: var(--edge);
+
+        > [data-slot="agent-link"] {
+          margin-inline-start: auto;
+        }
+      }
+
+      &[data-style="text link left"] > [data-slot="agent-link"] {
+        order: -1;
+      }
+
+      &[data-style="inline"] {
+        gap: 0.25rem;
+
+        > [data-slot="or"] {
+          color: var(--text-weaker);
+          font-family: var(--font-sans);
+          font-size: var(--fs-small);
+        }
+      }
+
+      /* A small muted line under the command, on its text. */
+      &[data-style="two rows"] {
+        flex-wrap: wrap;
+        row-gap: 0.25rem;
+
+        > [data-slot="agent-note"] {
+          display: block;
+          flex-basis: 100%;
+          padding-inline-start: 0.875rem;
+          font-family: var(--font-sans);
+          font-size: var(--fs-meta);
+          color: var(--text-weaker);
+
+          [data-slot="agent-link"] {
+            display: inline-flex;
+            height: auto;
+            padding: 0;
+            font-size: inherit;
+          }
+        }
+      }
+
+      /* The row's width holds whichever text it copies. */
+      &[data-style="segmented"] [data-slot="install"] [data-slot="text"] {
+        width: 46ch;
+      }
+
+      /* Text actions: Inter, muted, the copy icon after the label. */
+      [data-slot="agent-link"] {
+        align-items: center;
+        gap: 0.375rem;
+        height: 2.25rem;
+        padding: 0 0.5rem;
+        font-family: var(--font-sans);
+        font-size: var(--fs-small);
+        color: var(--text-weak);
+        transition: color 150ms ease;
+
+        @media (hover: hover) and (pointer: fine) {
+          &:hover {
+            color: var(--text-strong);
+          }
+        }
+
+        &:active {
+          color: var(--text-strong);
+        }
+
+        &:focus-visible {
+          outline: 2px solid var(--link);
+          outline-offset: 2px;
+        }
+      }
+
+      [data-slot="agent-icon"] {
+        align-items: center;
+        justify-content: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        color: var(--text-weak);
+
+        @media (hover: hover) and (pointer: fine) {
+          &:hover {
+            color: var(--text-strong);
+            background: var(--bg-weaker);
+          }
+        }
+
+        &:active {
+          color: var(--text-strong);
+          background: var(--bg-weaker);
+        }
+
+        &:focus-visible {
+          outline: 2px solid var(--link);
+          outline-offset: -2px;
+        }
+      }
+
+      [data-slot="ghost"] {
+        align-items: center;
+        gap: 0.5rem;
+        height: 2.25rem;
+        padding: 0 0.75rem;
+        border: 1px solid var(--border);
+        font-family: var(--font-sans);
+        font-size: var(--fs-small);
+        color: var(--text-strong);
+        transition: background-color 150ms ease;
+
+        > svg:first-child {
+          color: var(--text-weak);
+        }
+
+        @media (hover: hover) and (pointer: fine) {
+          &:hover {
+            background: var(--bg-weaker);
+          }
+        }
+
+        &:active {
+          background: var(--bg-weaker);
+        }
+
+        &:focus-visible {
+          outline: 2px solid var(--link);
+          outline-offset: 2px;
+        }
+      }
+
+      /* Like the Terminal menu rows: the chosen side has the blue tint and the bar on its left. */
+      [data-slot="segmented"] {
+        height: 2.25rem;
+        margin-inline-end: 0.25rem;
+
+        button {
+          position: relative;
+          padding: 0 0.75rem;
+          font-family: var(--font-mono);
+          font-size: var(--fs-meta);
+          color: var(--text-weak);
+
+          &::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            inset-inline-start: 0;
+            width: 2px;
+            background: var(--link);
+            opacity: 0;
+          }
+
+          &[aria-pressed="true"] {
+            color: var(--text-strong);
+            background: light-dark(
+              color-mix(in srgb, var(--link) 7%, transparent),
+              color-mix(in srgb, var(--link) 13%, transparent)
+            );
+
+            &::before {
+              opacity: 1;
+            }
+          }
+
+          @media (hover: hover) and (pointer: fine) {
+            &:hover {
+              color: var(--text-strong);
+            }
+          }
+
+          &:active {
+            color: var(--text-strong);
+          }
+
+          &:focus-visible {
+            outline: 2px solid var(--link);
+            outline-offset: -2px;
+          }
+        }
+      }
+
+      /* A row of the Terminal card's install menu (site.css: the site-menu rows), outside a menu:
+         no box, the command in the menu's mono size and colour, and Copy crossfading to Copied.
+         Hover and keyboard focus add the menu's tint and the bar on the left edge, always in the
+         blue of Settings › Menu color "blue" (the same mixes of the link blue), whatever that
+         setting is. 36px tall, like the agent button beside it. */
+      [data-slot="install"] {
+        --row-hover: light-dark(
+          color-mix(in srgb, var(--link) 7%, transparent),
+          color-mix(in srgb, var(--link) 13%, transparent)
+        );
+        --row-press: light-dark(
+          color-mix(in srgb, var(--link) 11%, transparent),
+          color-mix(in srgb, var(--link) 18%, transparent)
+        );
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, auto) 16px;
+        gap: 0.75rem;
+        align-items: center;
+        flex: 0 1 auto;
+        min-width: 0;
+        height: 2.25rem;
+        padding: 0 0.875rem;
+        font-family: var(--font-mono);
+        font-size: var(--fs-meta);
+        text-align: start;
+
+        &::before {
+          content: "";
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          inset-inline-start: 0;
+          width: 2px;
+          background: var(--link);
+          opacity: 0;
+        }
+
+        @media (hover: hover) and (pointer: fine) {
+          &:hover {
+            background: var(--row-hover);
+
+            &::before {
+              opacity: 1;
+            }
+          }
+        }
+
+        &:focus-visible {
+          outline: none;
+          background: var(--row-hover);
+
+          &::before {
+            opacity: 1;
+          }
+        }
+
+        &:active {
+          background: var(--row-press);
+        }
+
+        [data-slot="text"] {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: var(--text-strong);
+        }
+
+        [data-slot="status"] {
+          display: grid;
+          justify-items: end;
+          color: var(--text-weak);
+
+          svg {
+            display: block;
+          }
+
+          > span {
+            grid-area: 1 / 1;
+            transition:
+              opacity 150ms ease,
+              filter 150ms ease;
+          }
+        }
+
+        [data-slot="done"],
+        &[data-copied] [data-slot="idle"] {
+          opacity: 0;
+          filter: blur(2px);
+        }
+
+        &[data-copied] [data-slot="status"] {
+          color: var(--text-strong);
+        }
+
+        &[data-copied] [data-slot="done"] {
+          opacity: 1;
+          filter: none;
+        }
+      }
+    }
+
+    [data-slot="copy-labels"] {
+      display: inline-grid;
+
+      > span {
+        grid-area: 1 / 1;
+        visibility: hidden;
+      }
+
+      > [data-active] {
+        visibility: visible;
+      }
+    }
+
+    [data-slot="copy-icon"] {
+      flex-shrink: 0;
+    }
+
+    [data-slot="command"] {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      height: 2.25rem;
+      padding-block: 0;
+      padding-inline: 0.875rem 0.25rem;
+      border: 1px solid var(--border);
+      min-width: 0;
+    }
+
+    code {
+      color: var(--text-strong);
+      white-space: nowrap;
+    }
+
+    [data-slot="copy"] {
+      align-self: stretch;
+      min-width: 8ch;
+      padding: 0 0.625rem;
+      color: var(--text-weak);
+      transition:
+        color 150ms ease,
+        scale 160ms var(--ease-out);
+
+      &:active {
+        scale: 0.97;
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--text-strong);
+        }
+      }
+    }
+
+    [data-slot="more"] {
+      color: var(--text-weak);
+      text-decoration: underline;
+      text-decoration-color: var(--border-strong);
+      text-underline-offset: 0.2em;
+      transition: color 150ms ease;
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--text-strong);
+        }
+      }
+
+      &:active {
+        color: var(--text-strong);
+      }
+    }
+  }
+
+  [data-component="features"] {
+    line-height: 1.4;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2.5rem var(--gutter);
+
+    /* The whole feature is one link to its docs page; the arrow after the title shows on hover. */
+    a {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      color: inherit;
+    }
+
+    strong {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-weight: 500;
+    }
+
+    /* The description only: a title with Design mode copy has its own span inside the strong. */
+    a > span {
+      color: var(--text-weak);
+      transition: color 150ms ease;
+    }
+
+    [data-slot="external"] {
+      flex-shrink: 0;
+      translate: calc(-3px * var(--x-dir, 1)) -2px;
+      opacity: 0;
+      transition:
+        opacity 150ms ease,
+        translate 200ms var(--ease-out);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      a:hover {
+        [data-slot="external"] {
+          opacity: 1;
+          translate: 0 -2px;
+        }
+
+        > span {
+          color: var(--text);
+        }
+      }
+    }
+
+    a:active {
+      [data-slot="external"] {
+        opacity: 1;
+        translate: 0 -2px;
+      }
+
+      > span {
+        color: var(--text);
+      }
+    }
+
+    a:focus-visible [data-slot="external"] {
+      opacity: 1;
+      translate: 0 -2px;
+    }
+
+    /* Touch has no hover to reveal the arrow, so it always shows. */
+    @media (hover: none), (pointer: coarse) {
+      [data-slot="external"] {
+        opacity: 1;
+        translate: 0 -2px;
+      }
+    }
+  }
+
+  [data-component="stats"] {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--gutter);
+
+    /* The numerals' baseline and the label's cap height are the box edges (text-box), so the gap
+       is the space you see; the same 16px as the avatar wall to the line under it. */
+    div {
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 1rem;
+    }
+
+    dd {
+      font-family: var(--font-mono);
+      font-size: min(var(--hero-size), var(--fs-display-max));
+      line-height: 1.2;
+      letter-spacing: -0.03em;
+      text-box: trim-end cap alphabetic;
+
+      /* "225K" and "1K+" read left to right in every language; their digits are flex items. */
+      > * {
+        direction: ltr;
+        unicode-bidi: isolate;
+      }
+    }
+
+    dt {
+      color: var(--text-weak);
+      text-box: trim-start cap alphabetic;
+    }
+  }
+
+  /* Slot stats: every character is a box one line tall, side by side, so the digits' reels and the
+     fixed "K" or "+" share a baseline. A reel only clips and fades its edges while it spins. */
+  [data-component="slot-stat"] {
+    display: inline-flex;
+    font-variant-numeric: tabular-nums;
+
+    > span {
+      display: block;
+      height: 1lh;
+    }
+
+    [data-slot="reel"] {
+      overflow: hidden;
+
+      &[data-spinning] {
+        mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
+      }
+    }
+
+    [data-slot="strip"] {
+      display: flex;
+      flex-direction: column;
+      will-change: transform;
+
+      > span {
+        height: 1lh;
+      }
+    }
+
+    /* A reel keeps its cells once it has spun (SlotDigit); only a spinning reel shows them. */
+    [data-slot="reel"]:not([data-spinning]) [data-slot="strip"] > span + span {
+      display: none;
+    }
+  }
+
+  [data-component="odometer"] {
+    display: inline-flex;
+
+    [data-slot="digit"] {
+      display: inline-block;
+      height: 1lh;
+      overflow: hidden;
+      /* Soften the edges so neighboring digits never peek in mid-roll. */
+      mask-image: linear-gradient(transparent, #000 15%, #000 85%, transparent);
+    }
+
+    [data-slot="strip"] {
+      display: flex;
+      flex-direction: column;
+      transition: translate 2000ms cubic-bezier(0.16, 1, 0.3, 1);
+      transition-delay: calc(var(--index) * 120ms);
+    }
+  }
+
+  [data-component="odometer"] [data-slot="suffix"] {
+    display: inline-block;
+    opacity: 0;
+    translate: 0 0.3em;
+    transition:
+      opacity 500ms ease,
+      translate 700ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition-delay: calc(var(--index) * 120ms + 900ms);
+  }
+
+  [data-component="stats"][data-visible] [data-slot="suffix"] {
+    opacity: 1;
+    translate: 0 0;
+  }
+
+  [data-component="stats"][data-visible] [data-slot="strip"] {
+    translate: 0 calc(var(--target) * -1lh);
+  }
+
+  /* Once the sidebar is gone the cards are wider than half the page, so the stats numbers set on
+     the content width instead, sized like a 15-character title line and never larger than the
+     two-card size. */
+  @media (max-width: 60rem) {
+    &[data-site] :is([data-component="hero"], [data-component="block"]) {
+      --hero-fit: min(calc(var(--two-cards) / (15 * 0.57) * 0.98), calc(100cqw / (15 * 0.57) * 0.98));
+    }
+
+    &[data-site] [data-component="stats"] dd {
+      font-size: min(var(--hero-fit), var(--fs-display-max));
+    }
+
+    &[data-site] [data-component="block"] [data-slot="body"] {
+      max-width: none;
+    }
+  }
+}
+
+/* Console section. The markup is the same for every option so the setting only switches an
+   attribute. The copy starts on the second card, in line with the other section bodies; split
+   starts it on the first. */
+[data-page="home"][data-site] [data-component="block"][data-console] {
+  /* Console height: the padding and minimum height the panel and inline options use, and the
+     figure height for split. "card" is a carousel card's 4:5 media. The copy is centred
+     vertically and the section grows when the copy needs more room. */
+  --console-pad: 3.5rem;
+  --console-min: 0px;
+  --console-figure: 22rem;
+  position: relative;
+
+  &[data-console-height="card"] {
+    --console-pad: 1.5rem;
+    --console-min: calc(var(--card) * 5 / 4);
+    --console-figure: var(--console-min);
+  }
+
+  &[data-console-height="half"] {
+    --console-pad: 3rem;
+    --console-min: max(360px, 50svh);
+    --console-figure: var(--console-min);
+  }
+
+  /* Twice the 1.25rem it was, above the kicker and below the button (David, Nov 2026). */
+  &[data-console-height="compact"] {
+    --console-pad: 2.5rem;
+    --console-figure: 0px;
+  }
+
+  [data-slot="console"] {
+    position: relative;
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: var(--console-min);
+    padding-inline-start: calc(var(--card) + var(--gutter));
+  }
+
+  [data-slot="copy"] {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    max-width: min(34rem, 100%);
+  }
+
+  /* The section's name inside the panel, a small uppercase label above the headline. */
+  [data-slot="eyebrow"] {
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-weak);
+  }
+
+  /* The headline: 28px at 1440, a step down from the Console site's second-level headlines. */
+  h3 {
+    margin-top: 1rem;
+    font-family: var(--font-mono);
+    font-size: clamp(1.5rem, 2vw, 1.75rem);
+    font-weight: 400;
+    line-height: 1.2;
+    letter-spacing: -0.03em;
+    color: var(--text-strong);
+    text-wrap: balance;
+  }
+
+  p {
+    margin-top: 0.75rem;
+    font-size: var(--fs-lead);
+    line-height: 1.4;
+    color: var(--text);
+    text-wrap: pretty;
+  }
+
+  [data-slot="actions"] {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    margin-top: 2.25rem;
+  }
+
+  /* The same size and line as the button label, so the two share a baseline. */
+  [data-slot="note"] {
+    min-width: 0;
+    font-size: var(--fs-small);
+    line-height: 1.25rem;
+    color: var(--text-weak);
+  }
+
+  /* The dots come from console-field.tsx as a mask. The landing page shows base dots at 0.3 and
+     accent columns at 0.5. Here they fade in from just past halfway down, below most of the copy. They sweep in from the
+     centre once, the first time the section comes into view. */
+  [data-component="console-field"] {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      visibility: hidden;
+      background: color-mix(in srgb, var(--text-strong) 50%, transparent);
+      mask-image:
+        var(--console-dots), linear-gradient(to bottom, transparent 55%, #000 100%),
+        linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent);
+      mask-size:
+        100% 100%,
+        100% 100%,
+        0% 100%;
+      mask-position: center;
+      mask-repeat: no-repeat;
+      mask-composite: intersect;
+      transition: mask-size 1.1s var(--ease-out);
+    }
+
+    &[data-ready]::before {
+      visibility: visible;
+    }
+
+    &[data-entered]::before {
+      mask-size:
+        100% 100%,
+        100% 100%,
+        300% 100%;
+    }
+    /* After the sweep, a soft band of brighter dots drifts across the field, like light passing
+       over it. It runs only while the section is on screen. */
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      visibility: hidden;
+      background: var(--text-strong);
+      mask-image:
+        var(--console-dots), linear-gradient(to bottom, transparent 55%, #000 100%),
+        linear-gradient(105deg, transparent 35%, #000 50%, transparent 65%);
+      mask-size:
+        100% 100%,
+        100% 100%,
+        250% 100%;
+      mask-position:
+        center,
+        center,
+        150% 0;
+      mask-repeat: no-repeat;
+      mask-composite: intersect;
+      opacity: 0.7;
+    }
+
+    &[data-ready][data-entered]::after {
+      visibility: visible;
+      animation: console-shimmer 7s 1.1s linear infinite;
+      animation-play-state: paused;
+    }
+
+    &[data-ready][data-entered][data-visible]::after {
+      animation-play-state: running;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      &::before {
+        transition: none;
+      }
+
+      &[data-ready][data-entered]::after {
+        animation: none;
+        visibility: hidden;
+      }
+    }
+  }
+}
+
+/* No divider above, whatever the section spacer is (the second attribute outranks the spacer
+   rules). The gap above the Console is half the "space" spacer's (David, 5 Nov: 184px to 92px, and
+   96px to 48px on phones). The "section" option keeps the spacer. */
+[data-page="home"][data-site] [data-component="block"][data-console]:not([data-console="section"]) {
+  margin-top: calc(var(--block-space) + 1.25rem);
+  padding-top: 0;
+  border-top: 0;
+  border-image: none;
+  background-image: none;
+
+  @media (max-width: 60rem) {
+    margin-top: var(--block-space);
+  }
+}
+
+/* The dither band is a border and two pseudo-elements; one more attribute outranks it. */
+[data-page="home"][data-site][data-spacer] [data-component="block"][data-console]:not([data-console="section"]) {
+  border-top: 0;
+
+  &::before,
+  &::after {
+    content: none;
+  }
+}
+
+/* Panel: a dark panel across the whole content width, filled with the dots. It stays dark in the
+   light theme, like the Console site; the tokens inside resolve to their dark values. */
+[data-page="home"][data-site] [data-component="block"][data-console="panel"] [data-slot="console"] {
+  color-scheme: dark;
+  padding-block: var(--console-pad);
+  padding-inline-end: 1.75rem;
+  background: var(--bg-weak);
+}
+
+/* Inline: no panel. The dots sit behind the whole section. */
+[data-page="home"][data-site] [data-component="block"][data-console="inline"] {
+  [data-slot="console"] {
+    padding-block: var(--console-pad);
+  }
+
+  /* No frame: the dots alone make the background and run to every edge, so they draw the
+     section's shape. A soft clearing centred on the copy keeps the text readable. The third mask
+     layer is the sweep (before) or the shimmer band (after), which animate. */
+  [data-component="console-field"] {
+    /* The shimmer stays faint over 1px dots, as on the Console site. */
+    &::after {
+      opacity: 0.35;
+    }
+
+    /* Settings › Inline fade sets how far the dots thin out at the centre: 100% clears them
+       completely, 0% leaves the field even. */
+    --clearing: radial-gradient(
+      ellipse 42% 62% at 38% 50%,
+      rgb(0 0 0 / calc(1 - var(--clearing-strength, 1))) 35%,
+      #000 100%
+    );
+
+    &::before {
+      mask-image:
+        var(--console-dots), var(--clearing), linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent);
+    }
+
+    &::after {
+      mask-image:
+        var(--console-dots), var(--clearing), linear-gradient(105deg, transparent 35%, #000 50%, transparent 65%);
+    }
+  }
+}
+
+/* Slim: one short row, centred: the headline that names the Console, then "Talk to sales"
+   (secondary) and "Start for free" (primary). The dots from the inline option fill the row, with
+   a soft clearing behind the content. */
+[data-page="home"][data-site] [data-component="block"][data-console="slim"] {
+  [data-slot="console"] {
+    display: none;
+  }
+
+  [data-slot="slim"] {
+    position: relative;
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    column-gap: 2.5rem;
+    row-gap: 1.25rem;
+    padding: 4rem 0;
+    text-align: center;
+
+    h3 {
+      position: relative;
+      font-family: var(--font-mono);
+      font-size: clamp(1.25rem, 1.7vw, 1.5rem);
+      font-weight: 400;
+      line-height: 1.25;
+      letter-spacing: -0.02em;
+      color: var(--text-strong);
+      text-wrap: balance;
+    }
+
+    [data-slot="actions"] {
+      position: relative;
+      display: flex;
+      flex: none;
+      gap: 0.75rem;
+    }
+
+    [data-component="console-field"] {
+      &::after {
+        opacity: 0.35;
+      }
+
+      --clearing: radial-gradient(
+        ellipse 46% 70% at 50% 50%,
+        rgb(0 0 0 / calc(1 - var(--clearing-strength, 1))) 35%,
+        #000 100%
+      );
+
+      &::before {
+        mask-image:
+          var(--console-dots), var(--clearing), linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent);
+      }
+
+      &::after {
+        mask-image:
+          var(--console-dots), var(--clearing), linear-gradient(105deg, transparent 35%, #000 50%, transparent 65%);
+      }
+    }
+
+    @media (max-width: 60rem) {
+      flex-direction: column;
+      padding: 3rem 0;
+    }
+  }
+}
+
+/* Split: the copy on one half, the dots as a framed figure on the other. With four cards on
+   screen each half is exactly two cards. */
+[data-page="home"][data-site] [data-component="block"][data-console="split"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+
+  [data-slot="console"] {
+    display: contents;
+  }
+
+  [data-slot="copy"] {
+    grid-area: 1 / 1;
+    align-self: center;
+    padding-inline-end: var(--gutter);
+  }
+
+  [data-component="console-field"] {
+    position: relative;
+    grid-area: 1 / 2;
+    min-height: var(--console-figure);
+    color-scheme: dark;
+    background: var(--bg-weak);
+    border: 1px solid var(--border);
+  }
+}
+
+/* Settings › Console label: "inside" keeps the eyebrow above the headline; "left" sets the name in
+   the first card column like every other section title, and the panel (or the slim row) starts on
+   the second card, as wide as Section columns sets from 80rem up. Split has no title column and
+   keeps its eyebrow. */
+[data-page="home"][data-site] [data-component="block"][data-console] > [data-slot="label"] {
+  display: none;
+}
+
+[data-page="home"][data-site]
+  [data-component="block"][data-console-label="left"]:is(
+    [data-console="panel"],
+    [data-console="inline"],
+    [data-console="slim"]
+  ) {
+  > [data-slot="label"] {
+    display: block;
+    grid-row: 1;
+  }
+
+  [data-slot="eyebrow"] {
+    display: none;
+  }
+
+  [data-slot="copy"] h3 {
+    margin-top: 0;
+  }
+
+  :is([data-slot="console"], [data-slot="slim"]) {
+    grid-column: 2;
+    grid-row: 1;
+    max-width: var(--body-span, none);
+  }
+
+  @media (min-width: 60.0625rem) {
+    [data-slot="console"] {
+      padding-inline-start: 0;
+    }
+
+    &[data-console="panel"] [data-slot="console"] {
+      padding-inline-start: 1.75rem;
+    }
+  }
+}
+
+/* Settings › Console layout "columns" (with the name on the left): the panel (or slim row) runs
+   across columns 2–4, to the content edge. Below 60rem the section stacks. */
+[data-page="home"][data-site]
+  [data-component="block"][data-console-label="left"][data-console-layout="columns"]:is(
+    [data-console="panel"],
+    [data-console="inline"],
+    [data-console="slim"]
+  )
+  :is([data-slot="console"], [data-slot="slim"]) {
+  max-width: none;
+}
+
+/* "block": the whole section is one dark container across the content width (dark in both
+   themes, like the panel; in the dark theme its --bg-weak is a step lighter than the page). The
+   panel spans all four columns so its dots run edge to edge; the copy starts on the column-2 line,
+   where the other sections' bodies (the FAQ questions) start, under the small uppercase "CONSOLE"
+   kicker. The first column stays empty. The page sets data-console="panel" and the name on the
+   left whatever Console and Console label are saved as, so only these rules apply. */
+[data-page="home"][data-site] [data-component="block"][data-console="panel"][data-console-layout="block"] {
+  color-scheme: dark;
+  background: var(--console-band-bg);
+
+  > [data-slot="label"] {
+    display: none;
+  }
+
+  [data-slot="console"] {
+    grid-column: 1 / -1;
+    max-width: none;
+    background: none;
+  }
+
+  /* The kicker at the section titles' size (--title-size), still uppercase and muted. */
+  [data-slot="eyebrow"] {
+    display: block;
+    font-size: var(--title-size);
+    line-height: 1.2;
+    letter-spacing: 0.06em;
+  }
+
+  [data-slot="copy"] h3 {
+    margin-top: 0.75rem;
+  }
+
+  /* The extra attribute outranks the "left" label's panel inset. */
+  @media (min-width: 60.0625rem) {
+    &[data-console-label] [data-slot="console"] {
+      padding-inline-start: calc(var(--card) + var(--gutter));
+    }
+  }
+}
+
+@media (max-width: 60rem) {
+  /* On phones "card" falls back to auto. */
+  [data-page="home"][data-site] [data-component="block"][data-console] {
+    --console-pad: 2.5rem;
+
+    &[data-console-height="card"] {
+      --console-pad: 2.5rem;
+      --console-min: 0px;
+    }
+
+    &[data-console-height="half"] {
+      --console-pad: 2.5rem;
+    }
+
+    /* Twice the 1.5rem it was. */
+    &[data-console-height="compact"] {
+      --console-pad: 3rem;
+    }
+
+    [data-slot="console"] {
+      padding-inline-start: 0;
+    }
+
+    h3 {
+      font-size: var(--fs-entry);
+    }
+
+    p {
+      font-size: var(--fs-lead);
+    }
+
+    [data-slot="actions"] {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+
+    /* Phones set the button label at 16px; the note follows it. */
+    [data-slot="note"] {
+      font-size: var(--fs-ui);
+      line-height: 1.5rem;
+    }
+  }
+
+  [data-page="home"][data-site] [data-component="block"][data-console="panel"] [data-slot="console"] {
+    padding: var(--console-pad) 1.5rem;
+  }
+
+  [data-page="home"][data-site] [data-component="block"][data-console="inline"] {
+    [data-slot="console"] {
+      padding-block: var(--console-pad);
+    }
+  }
+
+  [data-page="home"][data-site] [data-component="block"][data-console="split"] {
+    [data-slot="copy"] {
+      order: 1;
+      padding-inline-end: 0;
+    }
+
+    [data-component="console-field"] {
+      order: 2;
+      min-height: max(16rem, var(--console-min));
+      margin-top: 2.5rem;
+    }
+  }
+}
+
+/* Section: like every other home section. The spacer above, the name in the first card column,
+   and the copy from the second card, as wide as Console width sets (two cards below 80rem). No
+   dots and no panel; Console height and Console label don't apply. The headline keeps the panel's
+   size and is trimmed to its cap height, so its first line shares the title's top line. */
+[data-page="home"][data-site] [data-component="block"][data-console="section"] {
+  > [data-slot="label"] {
+    display: block;
+    grid-row: 1;
+  }
+
+  [data-component="console-field"],
+  [data-slot="eyebrow"] {
+    display: none;
+  }
+
+  [data-slot="console"] {
+    grid-column: 2;
+    grid-row: 1;
+    min-height: 0;
+    padding: 0;
+  }
+
+  [data-slot="copy"] {
+    max-width: min(100%, var(--body-span, var(--two-cards)));
+
+    h3 {
+      margin-top: 0;
+      text-box: trim-start cap alphabetic;
+    }
+
+    [data-slot="actions"] {
+      margin-top: 2.5rem;
+    }
+  }
+}
+
+@keyframes console-shimmer {
+  from {
+    mask-position:
+      center,
+      center,
+      150% 0;
+  }
+  to {
+    mask-position:
+      center,
+      center,
+      -50% 0;
+  }
+}
+
+/* Corner: the Console moves out of the page body into a small 4:5 card fixed in the bottom-left
+   corner, under the sidebar nav. When the footer nav scrolls into view the card slides down out of
+   the way (ease-in, it is leaving) and the footer nav slides up into its place (ease-out). */
+[data-page="home"][data-site] [data-component="block"]:is([data-console="corner"], [data-console="off"]) {
+  display: none;
+}
+
+[data-site] [data-component="console-widget"] {
+  position: fixed;
+  inset-inline-start: calc(var(--page-offset) + var(--edge));
+  bottom: var(--edge);
+  z-index: 3;
+  /* Sized to its content: as wide as the headline needs (two lines of about 19 characters), never
+     wider than the sidebar, and as tall as the label, headline and button. It follows the page
+     theme so it sits quietly beside the carousel. */
+  width: max-content;
+  max-width: calc(var(--sidebar-width) - var(--edge) - var(--gutter));
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding: 1rem;
+  overflow: hidden;
+  background: var(--bg-weak);
+  color: var(--text);
+  transition:
+    transform 320ms cubic-bezier(0.55, 0, 1, 0.45),
+    opacity 240ms ease-in;
+
+  &[data-away] {
+    transform: translateY(calc(100% + var(--edge)));
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  &:not([data-away]) {
+    transition:
+      transform 420ms var(--ease-out),
+      opacity 300ms ease-out;
+  }
+
+  [data-slot="copy"] {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+
+  [data-slot="eyebrow"] {
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    line-height: 1;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-weak);
+  }
+
+  [data-slot="headline"] {
+    max-width: 20ch;
+    margin-top: 0.75rem;
+    font-family: var(--font-mono);
+    font-size: var(--title-size);
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    color: var(--text-strong);
+    text-wrap: balance;
+  }
+
+  /* The button follows the headline. */
+  [data-slot="actions"] {
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.625rem;
+  }
+
+  /* Quieter alternatives to the dark primary button, picked in Settings › Corner button. Neutral
+     is a step darker than the card. */
+  [data-component="site-button"][data-variant="neutral"] {
+    background: var(--bg-weaker);
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--border);
+      }
+    }
+
+    &:active {
+      background: var(--border);
+    }
+  }
+
+  [data-component="site-button"][data-variant="outline"] {
+    background: transparent;
+    color: var(--text-strong);
+    box-shadow: inset 0 0 0 1px var(--border-strong);
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--bg-weaker);
+      }
+    }
+
+    &:active {
+      background: var(--bg-weaker);
+    }
+  }
+
+  [data-component="site-button"][data-variant="link"] {
+    height: auto;
+    padding: 0;
+    background: none;
+    color: var(--text-strong);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+    text-decoration-color: var(--border-strong);
+
+    &::after {
+      content: "→";
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: none;
+        text-decoration-color: currentColor;
+      }
+    }
+
+    &:active {
+      background: none;
+      text-decoration-color: currentColor;
+    }
+  }
+
+  /* The dots fill the lower part of the card, behind the button. */
+  [data-component="console-field"] {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      visibility: hidden;
+      background: color-mix(in srgb, var(--text-strong) 45%, transparent);
+      mask-image: var(--console-dots), linear-gradient(to bottom, transparent 35%, #000 100%);
+      mask-size: 100% 100%;
+      mask-repeat: no-repeat;
+      mask-composite: intersect;
+    }
+
+    &[data-ready]::before {
+      visibility: visible;
+    }
+  }
+
+  /* No sidebar on phones and tablets, and no room on short windows. */
+  @media (max-width: 60rem), (max-height: 40rem) {
+    display: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &,
+    &:not([data-away]) {
+      transition: opacity 200ms ease;
+    }
+
+    &[data-away] {
+      transform: none;
+    }
+  }
+}
+
+/* While the corner card is showing, the footer nav waits below and slides up as the card leaves. */
+[data-site] [data-component="secondary-nav"][data-reveal] {
+  transition:
+    transform 420ms var(--ease-out) 160ms,
+    opacity 320ms ease-out 160ms;
+
+  &[data-reveal="hidden"] {
+    transform: translateY(1.5rem);
+    opacity: 0;
+    transition: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &[data-reveal="hidden"] {
+      transform: none;
+    }
+  }
+}
+
+[data-page="home"][data-site] {
+  /* "Bring your own tools": a grid of service tiles, four to a row within two card columns. */
+  [data-component="tools"] {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.5rem;
+    max-width: var(--two-cards);
+    font-family: var(--font-mono);
+    font-size: var(--mono-size);
+    line-height: 1.2;
+
+    li {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      padding: 1rem;
+      background: var(--bg-weak);
+      color: var(--text);
+    }
+
+    /* The reveal's parts (reveal.css): the tile's content animates, its tile or cell stays put. */
+    [data-slot="brand"],
+    [data-slot="mark"] {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+    }
+
+    [data-slot="icon"] {
+      flex-shrink: 0;
+      width: 1.25rem;
+      height: 1.25rem;
+      background: currentColor;
+      mask-size: contain;
+      mask-repeat: no-repeat;
+      mask-position: center;
+    }
+
+    [data-slot="wordmark"] {
+      width: calc(var(--width) * var(--logo-size));
+      height: calc(var(--height) * var(--logo-size));
+      translate: 0 calc(var(--shift) * var(--logo-size));
+      background: currentColor;
+      mask-size: contain;
+      mask-repeat: no-repeat;
+      mask-position: center;
+    }
+
+    /* The typed name stays as the tile's accessible text. */
+    [data-slot="name"] {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    &[data-tiles="logo"] li {
+      --logo-size: 2.5rem;
+      justify-content: center;
+      height: 3.5rem;
+      padding-block: 0;
+    }
+
+    /* Logo-only tiles ("Bring your own subs"): the mark centred, twice the icon's size. The
+       models.dev marks share one square box with their own margins, so one size balances them; it
+       steps down at narrow widths and stays on whole pixels.
+       Four across (three on phones) on 12 tracks, so a short last row can share the full width
+       equally and no cell is left empty, whatever the number of logos. --wash-columns tells the
+       entrance wash (reveal.ts) the number of cells across. */
+    &[data-tiles="icon"] {
+      --icon-size: 40px;
+      --wash-columns: 4;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+
+      li {
+        grid-column: span 3;
+        justify-content: center;
+        height: 4rem;
+        padding-block: 0;
+      }
+
+      @media (width > 40rem) {
+        li:nth-child(4n + 1):nth-last-child(3),
+        li:nth-child(4n + 1):nth-last-child(3) ~ li {
+          grid-column: span 4;
+        }
+
+        li:nth-child(4n + 1):nth-last-child(2),
+        li:nth-child(4n + 1):nth-last-child(2) ~ li {
+          grid-column: span 6;
+        }
+
+        li:nth-child(4n + 1):last-child {
+          grid-column: span 12;
+        }
+      }
+
+      [data-slot="icon"] {
+        width: var(--icon-size);
+        height: var(--icon-size);
+      }
+
+      @media (max-width: 60rem) {
+        --icon-size: 36px;
+      }
+
+      /* Phones: three across (the wordmark tiles keep two). */
+      @media (max-width: 40rem) {
+        --icon-size: 32px;
+        --wash-columns: 3;
+
+        li {
+          grid-column: span 4;
+        }
+
+        li:nth-child(3n + 1):nth-last-child(2),
+        li:nth-child(3n + 1):nth-last-child(2) ~ li {
+          grid-column: span 6;
+        }
+
+        li:nth-child(3n + 1):last-child {
+          grid-column: span 12;
+        }
+      }
+    }
+
+    /* One ruled grid: the list draws the top and left edges, each cell its right and bottom, so
+       shared edges stay one hairline at any column count. */
+    &[data-grid="outline"] {
+      gap: 0;
+      border-top: 1px solid var(--border);
+      border-inline-start: 1px solid var(--border);
+
+      li {
+        justify-content: center;
+        height: 5rem;
+        background: none;
+        border-inline-end: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+      }
+    }
+
+    @media (max-width: 40rem) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+}
+
+/* Phones: no divider above "Bring your own tools" or above the section after it, the "space"
+   spacer's gap instead, so the two subscription and tools sections read as one run. */
+@media (max-width: 40rem) {
+  [data-page="home"][data-site][data-site]
+    [data-component="block"][data-component="block"]:is(
+      [data-section="tools"],
+      [data-section="tools"] + [data-component="block"]
+    ) {
+    margin-top: calc(var(--block-space) * 2);
+    padding-top: 0;
+    border-top: 0;
+    background-image: none;
+
+    &::before,
+    &::after {
+      content: none;
+    }
+  }
+}
+
+/* Phones: the home sections' rhythm, 48px either side of a divider (the 60rem step's --block-space,
+   which each block's own 4.5rem otherwise outranks), and the same around the logo row, so the
+   shorter cards aren't followed by gaps sized for desktop. */
+@media (max-width: 40rem) {
+  [data-page="home"][data-site] [data-component="block"] {
+    --block-space: 3rem;
+  }
+
+  [data-page="home"][data-site][data-site]:is(
+      [data-spacer="line"],
+      [data-spacer="dashed"],
+      [data-spacer="hatch"],
+      [data-spacer="dot gradient"],
+      [data-spacer="dither gradient"]
+    )
+    [data-component="logo-wall"]:not([data-layout="section"]) {
+    margin-top: 3rem;
+    padding-top: calc(3rem - 0.25rem);
+
+    &[data-layout="above"] {
+      padding-top: 3rem;
+    }
+  }
+}
+
+/* Phones: the Console panel's background (the dark panel and its dots) runs edge to edge, to the
+   screen's edges; its content keeps the page's side padding, so its text lines up with the FAQ's
+   above on both sides. */
+@media (max-width: 40rem) {
+  [data-page="home"][data-site]
+    [data-component="block"][data-console="panel"][data-console-layout="block"][data-console-layout] {
+    margin-inline: calc(-1 * var(--edge));
+
+    [data-slot="console"] {
+      padding-inline: var(--edge);
+    }
+  }
+}
+
+/* Tablet portrait (641 to 960px): 40px either side of a divider, between the phones' 48px and the
+   desktop's 72px rhythm read at this width, and the same around the logo row (whose label sits
+   above its logos here). */
+@media (min-width: 40.0625rem) and (max-width: 60rem) {
+  [data-page="home"][data-site] [data-component="block"] {
+    --block-space: 2.5rem;
+  }
+
+  [data-page="home"][data-site][data-site]:is(
+      [data-spacer="line"],
+      [data-spacer="dashed"],
+      [data-spacer="hatch"],
+      [data-spacer="dot gradient"],
+      [data-spacer="dither gradient"]
+    )
+    [data-component="logo-wall"]:not([data-layout="section"]) {
+    margin-top: 2.5rem;
+    padding-top: calc(2.5rem - 0.3125rem);
+
+    &[data-layout="above"] {
+      padding-top: 2.5rem;
+    }
+  }
+}

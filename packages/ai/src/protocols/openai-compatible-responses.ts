@@ -1,10 +1,8 @@
-import { Route, type RouteRoutedLanguageModelInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { OpenResponses } from "./open-responses.js"
 
 const ADAPTER = "openai-compatible-responses"
-
-export type OpenAICompatibleResponsesLanguageModelInput = RouteRoutedLanguageModelInput
 
 /**
  * Deployment adapter for providers that expose an Open Responses-compatible
@@ -17,7 +15,7 @@ export const route = Route.make({
   protocol: OpenResponses.protocol,
   endpoint: Endpoint.path(OpenResponses.PATH),
   transport: OpenResponses.httpTransport,
-  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
 export * as OpenAICompatibleResponses from "./openai-compatible-responses.js"

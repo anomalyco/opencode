@@ -184,10 +184,21 @@ export const ExecuteCode = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Execute code"
-      description="A Code Mode execution shares the shell treatment: the code and its result split into a two-tone card."
+      description="Each Code Mode execution lists the tools its script called."
       document={executeCodeDocument}
       width="786px"
       shellToolDefaultOpen
+    />
+  ),
+}
+
+export const ExecuteGrouped = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Execute grouped"
+      description="Executions inside a tool group open by default to the tools their scripts called."
+      document={executeCodeDocument}
+      width="786px"
     />
   ),
 }
@@ -196,14 +207,14 @@ export const ExecuteFailed = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Execute failed"
-      description="Failed Code Mode executions open to show the full code and the full error message."
+      description="Failed Code Mode executions mark the failed call, which expands to show its input and the full error message."
       document={storyDocument([
         storyTool(
           "tool_execute_search",
           "execute",
           "completed",
           { code: 'const found = search({ namespace: "browser", offset: 20, limit: 30 });\nreturn found;\n' },
-          { output: "[]" },
+          { output: "[]", metadata: { toolCalls: [] } },
         ),
         storyTool(
           "tool_execute_failed_url",
@@ -215,7 +226,16 @@ export const ExecuteFailed = {
           {
             output:
               "Invalid browser URL. Use an HTTP/HTTPS URL or about:blank without embedded credentials. Paths and file:// URLs are not browser URLs; use browser.preview to show a local file to the user. The connected server must be able to reach the address; localhost refers to that server.",
-            metadata: { error: true },
+            metadata: {
+              error: true,
+              toolCalls: [
+                {
+                  tool: "browser.tabs.open",
+                  status: "error",
+                  input: { url: "file:///C:/tmp/opencode/throne-of-glass-luke.html", focus: true },
+                },
+              ],
+            },
           },
         ),
         {
@@ -243,7 +263,22 @@ export const ExecuteFailed = {
           {
             output:
               "[browser.operation_failed] browser.screenshot failed. Screenshot needs a visible tab. Call browser.tabs.focus and keep its desktop window visible.",
-            metadata: { error: true },
+            metadata: {
+              error: true,
+              toolCalls: [
+                {
+                  tool: "browser.tabs.open",
+                  status: "completed",
+                  input: { url: "http://localhost:4399", focus: true },
+                },
+                {
+                  tool: "browser.wait",
+                  status: "completed",
+                  input: { tabID: "tab_4f1c", condition: "load", timeoutMs: 5000 },
+                },
+                { tool: "browser.screenshot", status: "error", input: { tabID: "tab_4f1c", fullPage: true } },
+              ],
+            },
           },
         ),
         storyTool(
@@ -251,7 +286,7 @@ export const ExecuteFailed = {
           "execute",
           "completed",
           { code: "const list = await tools.browser.tabs.list();\nreturn list;\n" },
-          { output: "[]" },
+          { output: "[]", metadata: { toolCalls: [{ tool: "browser.tabs.list", status: "completed" }] } },
         ),
       ])}
       width="786px"

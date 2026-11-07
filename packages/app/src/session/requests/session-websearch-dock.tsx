@@ -1,10 +1,10 @@
 import { createMemo, Show } from "solid-js"
 import { Button } from "@opencode/ui/button"
-import { DockShell, DockTray } from "@opencode/ui/dock-surface"
 import { Select } from "@opencode/ui/select"
 import { useLanguage } from "@/runtime/i18n/language"
 import { SettingsRow } from "@/settings/row"
 import type { WebSearchRequestModel } from "./websearch"
+import { selectWebSearchDockView } from "./websearch-machine"
 import "./session-websearch-dock.css"
 
 export function SessionWebSearchDock(props: { model: WebSearchRequestModel; onSubmit: () => void }) {
@@ -16,20 +16,38 @@ export function SessionWebSearchDock(props: { model: WebSearchRequestModel; onSu
   ])
 
   const current = createMemo(() => options().find((option) => option.value === props.model.selected()))
-  const busy = () => props.model.sending() || !props.model.connected()
+
+  const dock = createMemo(() =>
+    selectWebSearchDockView({
+      request: props.model.request(),
+      connected: props.model.connected(),
+      sending: props.model.sending(),
+      loading: props.model.loading(),
+      loadFailed: props.model.loadFailed(),
+      failed: props.model.failed(),
+      optionUnavailable: props.model.optionUnavailable(),
+      specific: props.model.specific(),
+      options: props.model.options(),
+      hasSelection: !!current(),
+    }),
+  )
 
   const status = () => {
-    if (props.model.loading()) return language.t("common.loading")
+    const status = dock().status
 
-    if (props.model.failed()) return language.t("session.websearch.failed")
+    if (status === "loading") return language.t("common.loading")
 
-    if (!props.model.options().length) return language.t("session.websearch.empty")
+    if (status === "failed") return language.t("session.websearch.failed")
+
+    if (status === "loadFailed") return language.t("session.websearch.loadFailed")
+
+    if (status === "empty") return language.t("session.websearch.empty")
+
+    if (status === "unavailable") return language.t("session.websearch.unavailable")
   }
 
-  const unavailable = () => props.model.loading() || props.model.loadFailed() || !props.model.options().length
-
   const submit = (selection: string | false) => {
-    if (busy()) return
+    if (dock().busy) return
     props.onSubmit()
     void props.model.submit(selection)
   }
@@ -40,7 +58,7 @@ export function SessionWebSearchDock(props: { model: WebSearchRequestModel; onSu
       aria-label={language.t("session.websearch.title")}
       aria-busy={props.model.sending()}
     >
-      <DockShell class="websearch-body">
+      <div class="websearch-body">
         <div class="websearch-setting">
           <SettingsRow
             title={language.t("session.websearch.title")}
@@ -53,25 +71,25 @@ export function SessionWebSearchDock(props: { model: WebSearchRequestModel; onSu
               value={(option) => option.value}
               label={(option) => option.label}
               onSelect={(option) => option && props.model.select(option.value)}
-              disabled={busy() || unavailable()}
+              disabled={dock().selectDisabled}
               placeholder={language.t("session.websearch.provider")}
               contentClass="websearch-provider-menu"
             />
           </SettingsRow>
         </div>
-      </DockShell>
-      <DockTray attach="top" class="websearch-footer">
+      </div>
+      <div class="websearch-footer">
         <div class="websearch-status" aria-live="polite">
-          <Show when={props.model.loadFailed()} fallback={status()}>
-            <span>{language.t("session.websearch.loadFailed")}</span>
-            <Button variant="ghost" size="small" onClick={props.model.retry} disabled={busy()}>
+          <Show when={status()}>{(text) => <span>{text()}</span>}</Show>
+          <Show when={dock().showRetry}>
+            <Button variant="ghost" size="small" onClick={props.model.retry} disabled={dock().busy}>
               {language.t("session.websearch.retry")}
             </Button>
           </Show>
         </div>
         <div class="websearch-actions">
-          <Show when={!props.model.specific()}>
-            <Button variant="ghost" size="small" onClick={() => submit(false)} disabled={busy()}>
+          <Show when={dock().showDisable}>
+            <Button variant="ghost" size="small" onClick={() => submit(false)} disabled={dock().busy}>
               {language.t("session.websearch.disable")}
             </Button>
           </Show>
@@ -83,12 +101,12 @@ export function SessionWebSearchDock(props: { model: WebSearchRequestModel; onSu
 
               if (selected) submit(selected)
             }}
-            disabled={busy() || unavailable() || !current()}
+            disabled={dock().enableDisabled}
           >
             {language.t("session.websearch.enable")}
           </Button>
         </div>
-      </DockTray>
+      </div>
     </section>
   )
 }

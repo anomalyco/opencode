@@ -23,7 +23,7 @@ Crie `.opencode/commands/test.md`:
 ---
 description: Execute testes com cobertura
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Execute a suíte de testes completa com relatório de cobertura e mostre quaisquer falhas.
@@ -61,7 +61,7 @@ Use a opção `command` na sua [configuração](/docs/config) do opencode:
       // Isso é exibido como a descrição no TUI
       "description": "Execute testes com cobertura",
       "agent": "build",
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }
@@ -86,7 +86,7 @@ Você também pode definir comandos usando arquivos markdown. Coloque-os em:
 ---
 description: Execute testes com cobertura
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Execute a suíte de testes completa com relatório de cobertura e mostre quaisquer falhas.
@@ -301,7 +301,7 @@ Use a configuração `model` para substituir o modelo padrão para este comando.
 {
   "command": {
     "analyze": {
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }

@@ -3,26 +3,19 @@ import { useGlobal } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
-import { type ServerHealth } from "@/runtime/server/health"
+import { selectServerHealthRank, type ServerHealth } from "@/runtime/server/health-machine"
 import { showToast } from "@/shell/notifications/toast"
-import { useExtensionServers } from "@/runtime/extension/servers"
+import { usePluginServers } from "@/runtime/plugin/servers"
 
 export function sortServerConnections(input: {
   servers: ServerConnection.Any[]
   health: Record<string, ServerHealth | undefined>
 }) {
   const order = new Map(input.servers.map((item, index) => [item, index] as const))
-
-  const rank = (value?: ServerHealth) => {
-    if (value?.healthy === true) return 0
-
-    if (value?.healthy === false) return 2
-
-    return 1
-  }
+  const rank = (conn: ServerConnection.Any) => selectServerHealthRank(input.health[ServerConnection.key(conn)])
 
   return input.servers.slice().sort((a, b) => {
-    const health = rank(input.health[ServerConnection.key(a)]) - rank(input.health[ServerConnection.key(b)])
+    const health = rank(a) - rank(b)
 
     if (health !== 0) return health
 
@@ -32,13 +25,13 @@ export function sortServerConnections(input: {
 
 export function useServerActionsController() {
   const server = useServers()
-  const extensions = useExtensionServers()
+  const plugins = usePluginServers()
   const tabs = useTabs()
   const language = useLanguage()
 
   const remove = async (key: ServerConnection.Key) => {
     try {
-      await extensions.entry(key)?.entry.remove?.()
+      await plugins.entry(key)?.entry.remove?.()
       tabs.removeServer(key)
       server.remove(key)
     } catch (err) {

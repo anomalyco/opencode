@@ -9,7 +9,7 @@
 // The view itself is stateless except for derived memos.
 /** @jsxImportSource @opentui/solid */
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { TextBuffer, TextBufferView } from "@opentui/core"
+import { RGBA, TextBuffer, TextBufferView } from "@opentui/core"
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { OneCellSpinner } from "../component/one-cell-spinner"
 import { WORK_SPINNERS, SEED_LAUNCH, SEED_MONO } from "../ui/one-cell-motion"
@@ -228,10 +228,10 @@ export function RunFooterView(props: RunFooterViewProps) {
   const theme = createMemo(() => runTheme().footer)
   const agentColor = createMemo(() => {
     const colors = theme().categorical
-    const index = props
-      .agents()
-      .filter((agent) => !agent.hidden)
-      .findIndex((agent) => agent.id === props.currentAgentID())
+    const agents = props.agents().filter((agent) => !agent.hidden)
+    const index = agents.findIndex((agent) => agent.id === props.currentAgentID())
+    const color = agents[index]?.color
+    if (!props.mono && color) return RGBA.fromHex(color)
     return colors[Math.max(0, index) % colors.length]!
   })
   const block = createMemo(() => runTheme().block)

@@ -1,0 +1,37 @@
+[data-composer-pill][data-slot="session-todo-pill"] {
+  gap: 6px;
+  padding-inline-start: 8px;
+}
+
+[data-composer-pill-panel][data-slot="session-todo-panel"] {
+  width: max-content;
+  min-width: max(var(--kb-popper-anchor-width, 0px), 240px);
+  max-width: min(400px, calc(100vw - 56px));
+}
+
+[data-slot="session-todo-glyph"] {
+  color: var(--v2-icon-icon-faint);
+
+  &[data-status="in_progress"] {
+    color: var(--v2-state-fg-warning);
+  }
+
+  &[data-status="completed"] {
+    color: var(--v2-icon-icon-muted);
+  }
+}
+
+[data-slot="session-todo-row"] {
+  [data-slot="session-todo-text"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  &[data-status="in_progress"] [data-slot="session-todo-text"] {
+    color: var(--v2-text-text-base);
+  }
+
+  &:is([data-status="completed"], [data-status="cancelled"]) [data-slot="session-todo-text"] {
+    color: var(--v2-text-text-faint);
+    text-decoration: line-through;
+  }
+}

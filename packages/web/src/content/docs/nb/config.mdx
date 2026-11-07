@@ -14,7 +14,7 @@ OpenCode støtter både **JSON** og **JSONC** (JSON med kommentarer) formater.
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-sonnet-4-5",
+  "model": "anthropic/claude-sonnet-5-5",
   "autoupdate": true,
   "server": {
     "port": 4096,
@@ -35,7 +35,7 @@ Konfigurasjonsfiler er **slått sammen**, ikke erstattet.
 
 Konfigurasjonsfiler slås sammen, ikke erstattes. Innstillinger fra følgende konfigurasjonsplasseringer kombineres. Senere konfigurasjoner overstyrer tidligere kun for motstridende nøkler. Ikke-motstridende innstillinger fra alle konfigurasjoner er bevart.
 
-For eksempel, hvis din globale konfigurasjon setter `theme: "opencode"` og `autoupdate: true`, og prosjektkonfigurasjonen setter `model: "anthropic/claude-sonnet-4-5"`, vil den endelige konfigurasjonen inkludere alle tre innstillingene.
+For eksempel, hvis din globale konfigurasjon setter `theme: "opencode"` og `autoupdate: true`, og prosjektkonfigurasjonen setter `model: "anthropic/claude-sonnet-5-5"`, vil den endelige konfigurasjonen inkludere alle tre innstillingene.
 
 ---
 
@@ -218,7 +218,7 @@ Du kan administrere verktøyene en LLM kan bruke gjennom alternativet `tools`.
   "$schema": "https://opencode.ai/config.json",
   "tools": {
     "write": false,
-    "shell": false
+    "bash": false
   }
 }
 ```
@@ -235,8 +235,8 @@ Du kan konfigurere leverandørene og modellene du vil bruke i OpenCode-konfigura
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
-  "model": "anthropic/claude-sonnet-4-5",
-  "small_model": "anthropic/claude-haiku-4-5"
+  "model": "anthropic/claude-sonnet-5-5",
+  "small_model": "anthropic/claude-haiku-5-5"
 }
 ```
 
@@ -325,7 +325,7 @@ Du kan konfigurere spesialiserte agenter for spesifikke oppgaver gjennom alterna
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
-      "model": "anthropic/claude-sonnet-4-5",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         // Disable file modification tools for review-only agent
@@ -370,7 +370,7 @@ Du kan konfigurere egendefinerte kommandoer for repeterende oppgaver gjennom alt
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-haiku-4-5",
+      "model": "anthropic/claude-haiku-5-5",
     },
     "component": {
       "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
@@ -445,14 +445,14 @@ Du kan konfigurere kodeformatere gjennom alternativet `formatter`.
 
 Som standard **tillater OpenCode alle operasjoner** uten å kreve eksplisitt godkjenning. Du kan endre dette ved å bruke alternativet `permission`.
 
-Slik sikrer du at verktøyene `edit` og `shell` krever brukergodkjenning:
+Slik sikrer du at verktøyene `edit` og `bash` krever brukergodkjenning:
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "edit": "ask",
-    "shell": "ask"
+    "bash": "ask"
   }
 }
 ```

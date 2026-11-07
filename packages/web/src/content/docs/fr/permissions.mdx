@@ -28,7 +28,7 @@ Vous pouvez définir des autorisations globalement (avec `*`) et remplacer des o
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "*": "ask",
-    "shell": "allow",
+    "bash": "allow",
     "edit": "deny"
   }
 }
@@ -53,7 +53,7 @@ Pour la plupart des autorisations, vous pouvez utiliser un objet pour appliquer 
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": {
+    "bash": {
       "*": "ask",
       "git *": "allow",
       "npm *": "allow",
@@ -88,7 +88,7 @@ Vous pouvez utiliser `~` ou `$HOME` au début d'un modèle pour référencer vot
 
 ### Répertoires externes
 
-Utilisez `external_directory` pour autoriser les appels d'outils qui touchent des chemins en dehors du répertoire de travail où OpenCode a été démarré. Cela s'applique à tout outil qui prend un chemin en entrée (par exemple `read`, `edit`, `glob`, `grep` et de nombreuses commandes `shell`).
+Utilisez `external_directory` pour autoriser les appels d'outils qui touchent des chemins en dehors du répertoire de travail où OpenCode a été démarré. Cela s'applique à tout outil qui prend un chemin en entrée (par exemple `read`, `edit`, `glob`, `grep` et de nombreuses commandes `bash`).
 
 L'expansion du répertoire personnel (comme `~/...`) n'affecte que la façon dont un modèle est écrit. Cela n'intègre pas un chemin externe à l'espace de travail actuel, donc les chemins en dehors du répertoire de travail doivent toujours être autorisés via `external_directory`.
 
@@ -121,7 +121,7 @@ Tout répertoire autorisé ici hérite des mêmes valeurs par défaut que l'espa
 }
 ```
 
-Gardez la liste centrée sur les chemins approuvés et superposez des règles d'autorisation ou de refus supplémentaires selon les besoins pour d'autres outils (par exemple `shell`).
+Gardez la liste centrée sur les chemins approuvés et superposez des règles d'autorisation ou de refus supplémentaires selon les besoins pour d'autres outils (par exemple `bash`).
 
 ---
 
@@ -133,7 +133,7 @@ Les autorisations OpenCode sont classées par nom d'outil, plus quelques garde-f
 - `edit` — toutes les modifications de fichiers (couvre `edit`, `write`, `patch`)
 - `glob` — globalisation de fichiers (correspond au modèle global)
 - `grep` — recherche de contenu (correspond au modèle regex)
-- `shell` - exécution de commandes shell (correspond aux commandes analysées comme `git status --porcelain`)
+- `bash` - exécution de commandes shell (correspond aux commandes analysées comme `git status --porcelain`)
 - `task` — lancement de sous-agents (correspond au type de sous-agent)
 - `skill` — chargement d'une compétence (correspond au nom de la compétence)
 - `lsp` — exécution de requêtes LSP (actuellement non granulaires)
@@ -175,7 +175,7 @@ Lorsque OpenCode demande l'approbation, l'interface utilisateur propose trois r�
 - `always` — approuve les futures demandes correspondant aux modèles suggérés (pour le reste de la session OpenCode en cours)
 - `reject` — refuser la demande
 
-L'ensemble des modèles que `always` approuverait est fourni par l'outil (par exemple, les approbations shell mettent généralement sur liste blanche un préfixe de commande sûr comme `git status*`).
+L'ensemble des modèles que `always` approuverait est fourni par l'outil (par exemple, les approbations bash mettent généralement sur liste blanche un préfixe de commande sûr comme `git status*`).
 
 ---
 
@@ -191,7 +191,7 @@ Reportez-vous à la section [Règles granulaires (syntaxe d'objet)](#granular-ru
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": {
+    "bash": {
       "*": "ask",
       "git *": "allow",
       "git commit *": "deny",
@@ -202,7 +202,7 @@ Reportez-vous à la section [Règles granulaires (syntaxe d'objet)](#granular-ru
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "*": "ask",
           "git *": "allow",
           "git commit *": "ask",
@@ -223,7 +223,7 @@ description: Code review without edits
 mode: subagent
 permission:
   edit: deny
-  shell: ask
+  bash: ask
   webfetch: deny
 ---
 

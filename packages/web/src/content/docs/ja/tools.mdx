@@ -18,7 +18,7 @@ description: LLM が使用できるツールを管理します。
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "edit": "deny",
-    "shell": "ask",
+    "bash": "ask",
     "webfetch": "allow"
   }
 }
@@ -45,7 +45,7 @@ OpenCode で利用可能なすべての組み込みツールを次に示しま�
 
 ---
 
-### shell
+### bash
 
 プロジェクト環境でシェルコマンドを実行します。
 
@@ -53,7 +53,7 @@ OpenCode で利用可能なすべての組み込みツールを次に示しま�
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": "allow"
+    "bash": "allow"
   }
 }
 ```

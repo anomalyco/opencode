@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "ڈی بگ بار نوں ٹوگل کرو",
+  providerAriaLabel: "فراہم کنندہ دی کارکردگی دی تشخیص",
+  na: "لاگو نئیں",
+  "duration.label": "TIME",
+  "duration.tip": "ਤਾਜ਼ਾ ਵਾਰੀ ਸ਼ੁਰੂ ਕਰਨ ਵਾਲੇ ਪ੍ਰੌਂਪਟ ਤੋਂ ਉਸਦੇ ਜਵਾਬ ਦੇ ਪੂਰਾ ਹੋਣ ਤੱਕ ਦਾ ਸਮਾਂ।",
+  "tps.label": "TPS",
+  "tps.tip": "ਤਾਜ਼ਾ ਵਾਰੀ ਦੀਆਂ ਮਾਡਲ ਬੇਨਤੀਆਂ ਵਿੱਚ ਪ੍ਰਤੀ ਸਕਿੰਟ ਆਉਟਪੁੱਟ ਅਤੇ ਤਰਕ ਟੋਕਨ, ਟੂਲ ਦੇ ਸਮੇਂ ਤੋਂ ਬਿਨਾਂ।",
+  "focus.label": "FOCUS",
+  "focus.tip": "سارے انٹرایکٹو عناصر اُتے فوکس سٹائل لازمی لاگو کرو",
+  "focus.on": "چالو",
+  "focus.off": "بند",
+  "direction.label": "DIR",
+  "direction.tip": "چُنی ہوئی زبان نوں بدلے بغیر پوری ایپ دے لے آؤٹ دی سمت لازمی مقرر کرو",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

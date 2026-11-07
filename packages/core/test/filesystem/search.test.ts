@@ -3,7 +3,7 @@ import fuzzysort from "fuzzysort"
 import { mkdir } from "node:fs/promises"
 import os from "os"
 import path from "path"
-import { Deferred, Effect, Layer } from "effect"
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { FileSystem } from "@opencode/core/filesystem"
@@ -33,7 +33,117 @@ const ripgrepStub = (entry: string, onFind: (input: Ripgrep.FindInput) => void) 
     }),
   )
 
+const fakeFff = () => {
+  const state = { scanning: true, files: [] as string[], created: 0, destroyed: 0 }
+  const create: Parameters<typeof FileSystemSearch.makeFffLayer>[0] = () => {
+    state.created++
+    const search = () => ({
+      ok: true as const,
+      value: {
+        items: state.files.map((relativePath) => ({ relativePath })),
+        scores: state.files.map(() => ({ total: 1 })),
+      },
+    })
+    return {
+      ok: true,
+      value: {
+        destroy: () => void state.destroyed++,
+        isScanning: () => state.scanning,
+        fileSearch: search,
+        directorySearch: () => ({ ok: true, value: { items: [], scores: [] } }),
+        mixedSearch: () => ({ ok: true, value: { items: [], scores: [] } }),
+      },
+    }
+  }
+  const layer = FileSystemSearch.makeFffLayer(create).pipe(
+    Layer.provide(
+      Layer.succeed(
+        Location.Service,
+        Location.Service.of(location({ directory: AbsolutePath.make(path.join(os.tmpdir(), "opencode-fff-fake")) })),
+      ),
+    ),
+  )
+  return { state, layer }
+}
+
+const buildSearch = (layer: Layer.Layer<FileSystemSearch.Service>) =>
+  Effect.gen(function* () {
+    const scope = yield* Scope.make()
+    const context = yield* Layer.buildWithScope(layer, scope)
+    return { scope, search: Context.get(context, FileSystemSearch.Service) }
+  })
+
+const findFiles = (search: FileSystemSearch.Interface) =>
+  search.find({ query: "src", type: "file" }).pipe(Effect.map((entries) => entries.map((entry) => entry.path)))
+
 describe("FileSystemSearch", () => {
+  it.effect("creates the fff picker on first search and waits for its initial scan", () =>
+    Effect.gen(function* () {
+      const fff = fakeFff()
+      const { scope, search } = yield* buildSearch(fff.layer)
+      expect(fff.state.created).toBe(0)
+
+      const pending = yield* Effect.forkChild(findFiles(search))
+      yield* TestClock.adjust("100 millis")
+      expect(fff.state.created).toBe(1)
+      expect(pending.pollUnsafe()).toBeUndefined()
+
+      fff.state.files = ["src/a.ts", "src/b.ts"]
+      fff.state.scanning = false
+      yield* TestClock.adjust("20 millis")
+      expect(yield* Fiber.join(pending)).toEqual([RelativePath.make("src/a.ts"), RelativePath.make("src/b.ts")])
+      expect(fff.state.created).toBe(1)
+
+      yield* Scope.close(scope, Exit.void)
+      expect(fff.state.destroyed).toBe(1)
+    }),
+  )
+
+  it.effect("returns partial fff results once the initial scan wait times out", () =>
+    Effect.gen(function* () {
+      const fff = fakeFff()
+      fff.state.files = ["src/a.ts"]
+      const { scope, search } = yield* buildSearch(fff.layer)
+
+      const pending = yield* Effect.forkChild(findFiles(search))
+      yield* TestClock.adjust("2900 millis")
+      expect(pending.pollUnsafe()).toBeUndefined()
+      yield* TestClock.adjust("100 millis")
+      expect(yield* Fiber.join(pending)).toEqual([RelativePath.make("src/a.ts")])
+
+      // The picker is still scanning, but later searches no longer wait for it.
+      const next = yield* Effect.forkChild(findFiles(search))
+      yield* TestClock.adjust("1 millis")
+      expect(next.pollUnsafe()).toBeDefined()
+      yield* Scope.close(scope, Exit.void)
+    }),
+  )
+
+  it.effect("keeps the fff picker owned by the layer when the first search is interrupted", () =>
+    Effect.gen(function* () {
+      const fff = fakeFff()
+      const { scope, search } = yield* buildSearch(fff.layer)
+
+      const pending = yield* Effect.forkChild(findFiles(search))
+      yield* TestClock.adjust("100 millis")
+      yield* Fiber.interrupt(pending)
+      expect(fff.state.created).toBe(1)
+      expect(fff.state.destroyed).toBe(0)
+
+      fff.state.files = ["src/a.ts"]
+      fff.state.scanning = false
+      const next = yield* Effect.forkChild(findFiles(search))
+      yield* TestClock.adjust("20 millis")
+      expect(yield* Fiber.join(next)).toEqual([RelativePath.make("src/a.ts")])
+      expect(fff.state.created).toBe(1)
+
+      yield* Scope.close(scope, Exit.void)
+      expect(fff.state.destroyed).toBe(1)
+      expect(yield* findFiles(search)).toEqual([])
+      expect(fff.state.created).toBe(1)
+    }),
+  )
+
   it.live("honors wildcard directory rules from .gitignore", () =>
     Effect.gen(function* () {
       const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-fff-ignore-")))).path
@@ -59,6 +169,33 @@ describe("FileSystemSearch", () => {
         const search = yield* FileSystemSearch.Service
         const entries = yield* search.find({ query: "target" })
         expect(entries.every((entry) => !entry.path.startsWith("rust/target/"))).toBe(true)
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  it.live("real fff finds files on first search", () =>
+    Effect.gen(function* () {
+      const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-fff-lazy-")))).path
+      yield* Effect.promise(() => Bun.write(path.join(directory, "src/existing-alpha.ts"), "alpha"))
+      expect(Bun.spawnSync(["git", "init", "-q"], { cwd: directory }).exitCode).toBe(0)
+
+      const ref = Location.Ref.make({ directory: AbsolutePath.make(directory) })
+      const layer = FileSystemSearch.fffLayer.pipe(
+        Layer.provide(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(
+              location(ref, { vcs: { type: "git", store: AbsolutePath.make(path.join(directory, ".git")) } }),
+            ),
+          ),
+        ),
+      )
+      yield* Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        const found = yield* search
+          .find({ query: "existing-alpha", type: "file" })
+          .pipe(Effect.map((entries) => entries.map((entry) => entry.path)))
+        expect(found).toContain(RelativePath.make("src/existing-alpha.ts"))
       }).pipe(Effect.provide(layer))
     }),
   )
