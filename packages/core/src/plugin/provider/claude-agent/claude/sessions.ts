@@ -55,12 +55,16 @@ interface ToolContinuation {
   readonly results: Array<{ id: string; result: ToolResult.Result }>
 }
 
+// A request holds the entry while it runs; otherwise an idle timer may be counting down to stop the process.
+type Activity =
+  | { readonly status: "running"; readonly fiber: Fiber.Fiber<unknown, unknown> }
+  | { readonly status: "idle"; readonly timer: Fiber.Fiber<void, never> }
+
 interface Entry {
   readonly lock: Semaphore.Semaphore
   process?: LiveProcess
   record?: SessionRecord.Record
-  idle?: Fiber.Fiber<void, never>
-  active?: Fiber.Fiber<unknown, unknown>
+  activity?: Activity
 }
 
 export interface Interface {
@@ -105,19 +109,23 @@ export function registry() {
   }, Effect.uninterruptible)
 
   const armIdle = Effect.fn("ClaudeSessions.armIdle")(function* (entry: Entry) {
-    if (entry.idle) yield* Fiber.interrupt(entry.idle)
-    entry.idle = yield* Effect.sleep(IDLE_MS).pipe(
+    const timer = yield* Effect.sleep(IDLE_MS).pipe(
       Effect.andThen(entry.lock.withPermit(stop(entry))),
       Effect.catch((error) => Effect.logWarning(error)),
       Effect.forkDetach,
     )
+    const previous = entry.activity
+    // A request started while the timer was forking, so the entry is no longer idle.
+    if (previous?.status === "running") return yield* Fiber.interrupt(timer)
+    entry.activity = { status: "idle", timer }
+    if (previous) yield* Fiber.interrupt(previous.timer)
   })
 
   const closeEntries = Effect.fn("ClaudeSessions.closeEntries")(function* () {
     for (const entry of [...entries.values(), ...temporary]) {
-      if (entry.active) yield* Fiber.interrupt(entry.active)
+      if (entry.activity?.status === "running") yield* Fiber.interrupt(entry.activity.fiber)
       // The active turn's finalizer can install a new idle timer.
-      if (entry.idle) yield* Fiber.interrupt(entry.idle)
+      if (entry.activity?.status === "idle") yield* Fiber.interrupt(entry.activity.timer)
       yield* entry.lock.withPermit(stop(entry)).pipe(Effect.catch((error) => Effect.logWarning(error)))
     }
     entries.clear()
@@ -270,10 +278,8 @@ export function registry() {
         request.emit(message)
       }
 
-      let completed = false
-      let interrupted = false
-      let started = false
-      let parked = false
+      // A step that fails after it started stays "started".
+      let outcome: "unstarted" | "started" | "completed" | "parked" | "interrupted" = "unstarted"
       const step = Effect.gen(function* () {
         if (!continuation) session.begin(content, userID)
         if (continuation) {
@@ -282,40 +288,40 @@ export function registry() {
             live.pending.resolve(item.id, item.result)
           }
         }
-        started = true
-        const outcome = yield* attempt(() => session.readStep(emit, request.tools))
-        parked = outcome === "tools"
-        completed = true
-        live.waiting = parked ? waiting : undefined
+        outcome = "started"
+        const result = yield* attempt(() => session.readStep(emit, request.tools))
+        outcome = result === "tools" ? "parked" : "completed"
+        live.waiting = outcome === "parked" ? waiting : undefined
       })
 
       // A tool boundary ends only the OpenCode step; the Claude turn waits for the results. Anything else interrupts and drains it.
       const interruptUnlessParked = Effect.gen(function* () {
-        if (parked) return
+        if (outcome === "parked") return
         yield* interrupt(entry).pipe(Effect.orDie)
       })
 
       const saveRecord = Effect.gen(function* () {
-        if (!request.sessionID || !session.persisted || !started) return
+        if (!request.sessionID || !session.persisted || outcome === "unstarted") return
+        const replied = outcome === "completed" || outcome === "parked"
         const history =
-          completed || interrupted
+          outcome !== "started"
             ? Checkpoints.build({
                 prompt: request.prompt,
                 previous: entry.record,
                 userID,
-                reply: completed ? reply : [],
-                messageID: completed ? messageID : undefined,
+                reply: replied ? reply : [],
+                messageID: replied ? messageID : undefined,
                 toolMessages,
               })
             : undefined
-        entry.record = { claudeSessionID: session.id, history, interrupted: interrupted && !completed }
+        entry.record = { claudeSessionID: session.id, history, interrupted: outcome === "interrupted" }
         yield* records.set(request.sessionID, entry.record)
       })
 
       yield* step.pipe(
         Effect.onInterrupt(() =>
           Effect.sync(() => {
-            interrupted = true
+            if (outcome === "started") outcome = "interrupted"
           }),
         ),
         Effect.ensuring(interruptUnlessParked),
@@ -324,7 +330,7 @@ export function registry() {
     })
 
     const release = Effect.fn("ClaudeSessions.release")(function* (entry: Entry, request: Request) {
-      entry.active = undefined
+      entry.activity = undefined
       if (!request.sessionID) {
         yield* stop(entry).pipe(Effect.catch((error) => Effect.logWarning(error)))
         const sessionID = entry.record?.claudeSessionID
@@ -442,11 +448,11 @@ export function registry() {
       const entry = entryFor(request)
       yield* entry.lock.withPermit(
         Effect.gen(function* () {
-          if (entry.idle) {
-            yield* Fiber.interrupt(entry.idle)
-            entry.idle = undefined
-          }
-          entry.active = yield* Effect.withFiber(Effect.succeed)
+          const fiber = yield* Effect.withFiber(Effect.succeed)
+          const previous = entry.activity
+          // Mark the entry running before interrupting its timer, so a concurrent idle() cannot arm a new one.
+          entry.activity = { status: "running", fiber }
+          if (previous?.status === "idle") yield* Fiber.interrupt(previous.timer)
           const prepared = yield* prepare(entry, request)
           yield* turn(entry, request, prepared.start, prepared.continuation)
         }).pipe(Effect.ensuring(release(entry, request))),
@@ -456,7 +462,7 @@ export function registry() {
     const idle = Effect.fn("ClaudeSessions.idle")(function* (sessionID: string) {
       const entry = entries.get(sessionID)
       // Other processes already have a timer, and a running request starts one when it ends.
-      if (!entry?.process?.waiting || entry.active) return
+      if (!entry?.process?.waiting || entry.activity?.status === "running") return
       yield* armIdle(entry)
     })
 
