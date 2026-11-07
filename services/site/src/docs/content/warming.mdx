@@ -19,6 +19,29 @@ With this configuration, OpenCode warms a recently active session after four
 minutes without a model request. It continues every four minutes until 30
 minutes have passed since the latest non-warming request.
 
+## Which models are warmed
+
+The top-level `warming` setting warms only models whose provider caches
+prompts at explicit markers, such as Anthropic models and Anthropic-compatible
+endpoints. Their cache entries expire after a few minutes and cost extra to
+write again.
+
+Providers that cache implicitly, such as OpenAI and Gemini, are not warmed.
+They charge nothing extra to rebuild a cache and often keep it through the
+pause, so a keep-alive request rarely pays for itself.
+
+To warm another model, for example to keep a local model loaded, set
+`cache.warming` on the model or its provider. It takes the same values as
+`warming` and overrides it for that model:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "lmstudio": { "settings": { "cache": { "warming": true } } },
+  },
+}
+```
+
 ## Options
 
 Use the object form to change the warming prompt, idle interval, or active

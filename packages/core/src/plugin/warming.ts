@@ -7,6 +7,7 @@ import type { Session } from "@opencode/schema/session"
 import { ConfigWarming } from "@opencode/schema/config/warming"
 import { Clock, Duration, Effect, Option, Schema, Scope, Stream } from "effect"
 import { Config } from "../config.js"
+import { SessionWarmup } from "../session/warmup.js"
 import { resolveModel } from "./optimize.js"
 
 const decodeWarming = Schema.decodeUnknownOption(ConfigWarming.Warming)
@@ -17,10 +18,16 @@ const defaults = {
   duration: Duration.minutes(30),
 }
 
+type Settings = typeof defaults & {
+  /** Whether the model's or provider's own `cache.warming` turned warming on, rather than the top-level setting. */
+  readonly forModel: boolean
+}
+
 export const Plugin = define({
   id: "opencode.warming",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
+    const warmup = yield* SessionWarmup.Service
     // A model's or provider's `cache.warming` overrides the top-level `warming`.
     const loadSettings = Effect.fn("WarmingPlugin.loadSettings")(function* (event: SessionHooks["context"]) {
       // Warming must never fail the request it hooks, so an unreadable catalog falls back to the top-level setting.
@@ -46,7 +53,7 @@ export const Plugin = define({
         Duration.isFinite(duration) &&
         Duration.isGreaterThan(interval, Duration.zero) &&
         Duration.isLessThan(interval, duration)
-      if (valid) return { ...settings, interval }
+      if (valid) return { ...settings, interval, forModel: local !== undefined }
       yield* Effect.logWarning("warming interval must be positive and shorter than a finite duration", {
         interval,
         duration,
@@ -54,7 +61,7 @@ export const Plugin = define({
     })
 
     const scope = yield* Scope.Scope
-    const sessions = new Map<Session.ID, { last: number; expires: number; settings: typeof defaults }>()
+    const sessions = new Map<Session.ID, { last: number; expires: number; settings: Settings }>()
     // A ping during a model request would compete with the request it keeps warm, which stalls single-slot local models.
     // A request counts from its context hook, because `session.step.started` waits for the first response chunk.
     const requesting = new Set<Session.ID>()
@@ -80,6 +87,8 @@ export const Plugin = define({
         ),
         Effect.forkScoped({ startImmediately: true }),
       )
+    const stop = (sessionID: Session.ID) =>
+      Effect.sync(() => sessions.delete(sessionID)).pipe(Effect.andThen(warmup.forget(sessionID)))
     const loop: (sessionID: Session.ID) => Effect.Effect<void> = Effect.fn("WarmingPlugin.loop")(
       function* (sessionID) {
         const current = sessions.get(sessionID)
@@ -91,14 +100,15 @@ export const Plugin = define({
           yield* Effect.sleep(Duration.millis(next - now))
           return yield* loop(sessionID)
         }
-        if (now >= current.expires) {
-          sessions.delete(sessionID)
-          return
-        }
+        if (now >= current.expires) return yield* stop(sessionID)
         if (requesting.has(sessionID)) {
           yield* Effect.sleep(current.settings.interval)
           return yield* loop(sessionID)
         }
+        // The top-level setting only warms caches written at explicit markers. An implicit cache (OpenAI, Gemini) charges
+        // no premium to rebuild and often outlives the pause, so a keep-alive there rarely pays for itself. A model's own
+        // `cache.warming` still warms it, for example to keep a local model loaded.
+        if (!current.settings.forModel && !(yield* warmup.marked(sessionID))) return yield* stop(sessionID)
 
         const last = current.last
         yield* Effect.logInfo("warming session", { sessionID, last })
@@ -118,10 +128,7 @@ export const Plugin = define({
 
         const active = sessions.get(event.sessionID)
         const settings = yield* loadSettings(event)
-        if (!settings) {
-          sessions.delete(event.sessionID)
-          return
-        }
+        if (!settings) return yield* stop(event.sessionID)
 
         // Once generate exposes request metadata to context hooks, tag warm requests instead of matching the prompt.
         const message = event.messages.at(-1)
@@ -135,6 +142,8 @@ export const Plugin = define({
           return
         }
 
+        // Before the runner records this step's request.
+        yield* warmup.watch(event.sessionID)
         const now = yield* Clock.currentTimeMillis
         const duration = Duration.toMillis(settings.duration)
         if (active) {
