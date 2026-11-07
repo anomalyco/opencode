@@ -252,6 +252,7 @@ const layer = Layer.effect(
         }
         yield* compaction.precompute(Effect.succeed(loaded), estimate)
         const stepLimitReached = loaded.agent.info.steps !== undefined && step >= loaded.agent.info.steps
+        const gcStats = { reclaimed: 0 }
         const transcript = SessionModelRequest.baseTranscript({
           agent: loaded.agent.info,
           model: loaded.model,
@@ -259,7 +260,10 @@ const layer = Layer.effect(
           initial: loaded.initial,
           messages: loaded.messages,
           prune,
+          stats: gcStats,
         })
+        if (gcStats.reclaimed > 0)
+          yield* Effect.annotateCurrentSpan({ "opencode.context_gc.reclaimed_chars": gcStats.reclaimed })
         const prepared = yield* context.request
           .primary({
             session: loaded.session,

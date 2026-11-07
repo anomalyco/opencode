@@ -230,6 +230,7 @@ function toLLMMessage(
   model: Model.Ref,
   providerMetadataKey: string,
   stale = false,
+  stats?: GCStats,
 ): Message[] {
   switch (message.type) {
     case "agent-switched":
@@ -248,11 +249,14 @@ function toLLMMessage(
     case "user":
       const content = [
         // an old turn's skill body is retrievable on demand; keep only the pointer
-        ...(message.skills ?? []).flatMap((skill) =>
-          skill.text === undefined
-            ? []
-            : [Message.text(stale ? `[Skill unloaded: ${skill.name}]` : skill.text)],
-        ),
+        ...(message.skills ?? []).flatMap((skill) => {
+          if (skill.text === undefined) return []
+          if (stale) {
+            if (stats) stats.reclaimed += skill.text.length
+            return [Message.text(`[Skill unloaded: ${skill.name}]`)]
+          }
+          return [Message.text(skill.text)]
+        }),
         ...(message.text === "" ? [] : [Message.text(message.text)]),
         ...userAttachmentContent(message.files ?? []),
       ]
@@ -267,6 +271,7 @@ function toLLMMessage(
     case "synthetic":
       return [Message.make({ id: message.id, role: "user", content: message.text })]
     case "skill":
+      if (stale && stats) stats.reclaimed += message.text.length
       return [
         Message.make({
           id: message.id,
@@ -279,6 +284,7 @@ function toLLMMessage(
     case "shell":
       // Background shell results enter context once, through their completion inbox item.
       if (message.metadata?.background === true) return []
+      if (stale && stats) stats.reclaimed += message.output?.output.length ?? 0
       return [
         Message.make({
           id: message.id,
@@ -317,6 +323,7 @@ export const toLLMMessages = (
   model: Model.Ref,
   providerMetadataKey: string = model.providerID,
   prune = false,
+  stats?: GCStats,
 ) => {
   // only kinds that emit a user-role entry count; system messages are mid-turn
   // updates and must not move the boundary forward over a live tool call
@@ -326,14 +333,21 @@ export const toLLMMessages = (
       )
     : -1
   const result = messages.flatMap((message, index) =>
-    toLLMMessage(message, model, providerMetadataKey, index < lastBoundary),
+    toLLMMessage(message, model, providerMetadataKey, index < lastBoundary, stats),
   )
-  return prune ? pruneTranscript(result) : result
+  return prune ? pruneTranscript(result, stats) : result
 }
 
 const REPLAY_STUB = "[older tool output was cleared to save context; run the tool again if it is still needed]"
 // Below this size a stub costs about as much as it saves.
 const REPLAY_STUB_MIN = 800
+// truncated tool output is spilled to a file; keep that pointer so the model can page it back
+const SAVED_PATH = /full output saved to ([^\]]+)\]/
+// read results start with this header, written by the read tool itself
+const READ_HEADER = /^Read (?:file|directory) (.+?),/
+
+/** Chars the gc pass reclaimed, for span telemetry. */
+export type GCStats = { reclaimed: number }
 
 const resultSize = (result: ToolResultValue) => {
   if (result.type === "content")
@@ -341,22 +355,34 @@ const resultSize = (result: ToolResultValue) => {
   return typeof result.value === "string" ? result.value.length : (JSON.stringify(result.value)?.length ?? 0)
 }
 
-const stubResult = (part: ToolResultPart) => {
+const readPath = (part: ToolResultPart) => {
+  if (part.name !== "read" || part.result.type !== "text" || typeof part.result.value !== "string") return
+  return READ_HEADER.exec(part.result.value)?.[1]
+}
+
+const stubResult = (part: ToolResultPart, index: number, latestRead: Map<string, number>) => {
   // providerMetadata is model-scoped replay proof; rewriting those parts breaks the provider's own checks
-  if (part.providerMetadata !== undefined || resultSize(part.result) < REPLAY_STUB_MIN) return part
+  if (part.providerMetadata !== undefined) return part
+  // a file the model re-read later is dead weight at any size; the newer copy carries the current truth
+  const path = readPath(part)
+  if (path !== undefined && (latestRead.get(path) ?? 0) > index)
+    return { ...part, result: { type: "text" as const, value: `[superseded by a newer read of ${path}]` } }
+  if (resultSize(part.result) < REPLAY_STUB_MIN) return part
+  const saved = typeof part.result.value === "string" ? SAVED_PATH.exec(part.result.value)?.[1] : undefined
+  const value = saved ? `[cleared to save context; full output saved to ${saved}]` : REPLAY_STUB
   return {
     ...part,
-    result: { type: part.result.type === "error" ? ("error" as const) : ("text" as const), value: REPLAY_STUB },
+    result: { type: part.result.type === "error" ? ("error" as const) : ("text" as const), value },
   }
 }
 
-const gcMessage = (message: Message): Message => {
+const gcMessage = (message: Message, index: number, latestRead: Map<string, number>): Message => {
   switch (message.role) {
     case "system":
     case "user":
       return message
     case "tool": {
-      const content = message.content.map(stubResult)
+      const content = message.content.map((part) => stubResult(part, index, latestRead))
       return content.every((part, i) => part === message.content[i])
         ? message
         : new ToolMessage({ ...message, content })
@@ -367,7 +393,7 @@ const gcMessage = (message: Message): Message => {
         // signed/native blocks stay, the provider still needs them
         if (part.type === "reasoning")
           return part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0 ? [part] : []
-        return [part.type === "tool-result" ? stubResult(part) : part]
+        return [part.type === "tool-result" ? stubResult(part, index, latestRead) : part]
       })
       // an empty assistant message is worse than a kept reasoning block
       if (content.length === 0) return message
@@ -378,20 +404,39 @@ const gcMessage = (message: Message): Message => {
   }
 }
 
+const messageSize = (message: Message) =>
+  message.content.reduce((sum, part) => {
+    if (part.type === "text" || part.type === "reasoning") return sum + part.text.length
+    if (part.type === "tool-result") return sum + resultSize(part.result)
+    return sum
+  }, 0)
+
 /**
  * Reclaim space from turns that are already over. Everything before the last
  * user message is settled history: readable reasoning there can never be
  * re-entered, and large tool outputs are almost never re-read. The current
  * turn is left alone so in-flight tool calls keep their full context.
  */
-export const pruneTranscript = (messages: ReadonlyArray<Message>): Message[] => {
+export const pruneTranscript = (messages: ReadonlyArray<Message>, stats?: GCStats): Message[] => {
   const boundary = messages.findLastIndex((m) => m.role === "user")
   if (boundary <= 0) return messages.slice()
+  // newest read result per file, anywhere in the transcript; older copies are superseded
+  const latestRead = new Map<string, number>()
+  messages.forEach((message, index) => {
+    for (const part of message.content)
+      if (part.type === "tool-result") {
+        const path = readPath(part)
+        if (path !== undefined) latestRead.set(path, index)
+      }
+  })
   let changed = false
   const next = messages.map((message, index) => {
     if (index >= boundary) return message
-    const pruned = gcMessage(message)
-    if (pruned !== message) changed = true
+    const pruned = gcMessage(message, index, latestRead)
+    if (pruned !== message) {
+      changed = true
+      if (stats) stats.reclaimed += messageSize(message) - messageSize(pruned)
+    }
     return pruned
   })
   return changed ? next : messages.slice()

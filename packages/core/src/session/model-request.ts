@@ -109,6 +109,7 @@ export const baseTranscript = (input: {
   readonly initial: ReadonlyArray<Instructions.Rendered>
   readonly messages: ReadonlyArray<SessionMessage.Info>
   readonly prune?: boolean
+  readonly stats?: { reclaimed: number }
 }) => {
   const providerMetadataKey = input.model.model.route.providerMetadataKey ?? input.model.model.provider
   return {
@@ -124,7 +125,7 @@ export const baseTranscript = (input: {
         metadata: { experimental: { instructions: input.initial } },
       },
     ].filter((part) => part.text.length > 0),
-    messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey, input.prune),
+    messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey, input.prune, input.stats),
   }
 }
 

@@ -15,6 +15,8 @@ import { SkillDiscovery } from "../../skill/discovery.js"
 import { ReadToolFileSystem } from "../read-filesystem.js"
 import { Environment } from "../../environment/index.js"
 import { Flag } from "../../flag.js"
+import { createHash } from "node:crypto"
+import { formatPatch, structuredPatch } from "diff"
 
 export const name = "read"
 const FILENAME = "AGENTS.md"
@@ -41,8 +43,19 @@ export const Plugin = {
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const dedupe = yield* Flag.enabled("context_gc")
-    // session + path + range -> content hash; a repeat of the same bytes answers a marker instead of the payload
-    const seenReads = new Map<string, bigint>()
+    // session + path + range -> what we served last time. repeat of the same bytes gets a marker,
+    // a changed file gets its diff back instead of the whole page again
+    const seenReads = new Map<string, { hash: string; text?: string }>()
+    const KEEP_TEXT_MAX = 64 * 1024
+    const servedText = (output: typeof Output.Type) =>
+      output.type === "text-page" || (output.type === "file" && output.encoding === "utf8")
+        ? output.content
+        : undefined
+    const diffReads = (previous: string, current: string) => {
+      const patch = formatPatch(structuredPatch("before", "after", previous, current, "", "", { context: 2 }))
+      // a diff that is not smaller than the file is no saving, fall through to a normal read
+      return patch.length < current.length ? patch : undefined
+    }
 
     yield* ctx.tool
       .transform((editor) =>
@@ -155,19 +168,27 @@ export const Plugin = {
                 Effect.catchDefect(() => Effect.void),
               )
               const key = `${context.sessionID} ${result.path} ${input.offset ?? 0}:${input.limit ?? 0}`
-              const hash = dedupe ? Bun.hash(JSON.stringify(result.content)) : undefined
-              const repeated = hash !== undefined && seenReads.get(key) === hash
+              const text = dedupe ? servedText(result.content) : undefined
+              const hash = dedupe ? createHash("sha256").update(JSON.stringify(result.content)).digest("hex") : undefined
+              const seen = hash === undefined ? undefined : seenReads.get(key)
+              const repeated = seen?.hash === hash
+              const changed =
+                !repeated && seen?.text !== undefined && text !== undefined
+                  ? diffReads(seen.text, text)
+                  : undefined
               if (hash !== undefined) {
-                if (seenReads.size > 1000) seenReads.clear() // a hint, not bookkeeping; dont let it grow forever
-                seenReads.set(key, hash)
+                if (seenReads.size > 200) seenReads.clear() // a hint, not bookkeeping; dont let it grow forever
+                seenReads.set(key, { hash, text: text !== undefined && text.length <= KEEP_TEXT_MAX ? text : undefined })
               }
-              return { output: result.content, path: result.path, repeated }
+              return { output: result.content, path: result.path, repeated, changed }
             }).pipe(
               Effect.map((result) => ({
                 output: result.output,
                 content: result.repeated
                   ? `Unchanged since the previous read of ${result.path}.`
-                  : toModelContent(result.path, input.offset, result.output),
+                  : result.changed !== undefined
+                    ? `${result.path} changed since the previous read of this range. Diff of what it was vs what it is now:\n${result.changed}`
+                    : toModelContent(result.path, input.offset, result.output),
                 metadata: { truncated: result.output.type === "file" ? false : result.output.truncated },
               })),
               Effect.mapError((error) => {
