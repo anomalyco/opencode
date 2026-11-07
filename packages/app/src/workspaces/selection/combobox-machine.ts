@@ -61,7 +61,7 @@ export type PickerComboboxEvent =
 export type PickerComboboxEffect =
   | { readonly type: "search.start"; readonly attempt: number; readonly query: string; readonly timeoutMs: number }
   | { readonly type: "search.cancel" }
-  | { readonly type: "choose.directory"; readonly path: string; readonly submit?: true }
+  | { readonly type: "choose.directory"; readonly path: string; readonly submit?: true; readonly resolved: boolean }
   | { readonly type: "choose.file"; readonly absolute: string; readonly submit?: true }
   | { readonly type: "submit" }
 
@@ -251,7 +251,7 @@ function commit(state: LiveCombobox, context: PickerComboboxContext, submit: boo
 
   return result(close(state, displayInputDirectory(value, context.home)), [
     ...cancel(state),
-    chosenDirectory(state.input, submit),
+    chosenDirectory(state.input, false, submit),
   ])
 }
 
@@ -265,18 +265,18 @@ function choose(state: LiveCombobox, item: PickerSuggestion, context: PickerComb
     ])
   }
 
-  const value = resolve(item.absolute, context)
+  const value = resolve(item.absolute, context, true)
 
   if (!value) return unchanged(state)
 
   return result(close(state, displayInputDirectory(value, context.home)), [
     ...cancel(state),
-    chosenDirectory(item.absolute, submit),
+    chosenDirectory(item.absolute, true, submit),
   ])
 }
 
-function chosenDirectory(path: string, submit: boolean): PickerComboboxEffect {
-  return submit ? { type: "choose.directory", path, submit } : { type: "choose.directory", path }
+function chosenDirectory(path: string, resolved: boolean, submit: boolean): PickerComboboxEffect {
+  return submit ? { type: "choose.directory", path, resolved, submit } : { type: "choose.directory", path, resolved }
 }
 
 function withInput(
@@ -306,8 +306,10 @@ function step(state: OpenCombobox, delta: -1 | 1): OpenCombobox {
   return { ...state, active: nextSuggestionIndex(effectiveActiveIndex(state), delta, state.items.length) }
 }
 
-function resolve(path: string, context: PickerComboboxContext) {
-  return resolvePickerTarget(context.policy, path, context.home, context.root || context.fallback)
+function resolve(path: string, context: PickerComboboxContext, preserveWhitespace = false) {
+  return resolvePickerTarget(context.policy, path, context.home, context.root || context.fallback, {
+    preserveWhitespace,
+  })
 }
 
 function close(state: LiveCombobox, input: string): PickerComboboxState {
