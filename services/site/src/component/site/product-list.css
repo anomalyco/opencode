@@ -140,6 +140,12 @@
         }
       }
 
+      /* No press scale: a transform would make the button the box its cover is placed in, and a
+         click on the row would end outside it. */
+      [data-slot="get"] {
+        transform: none !important;
+      }
+
       [data-slot="get"]::before {
         content: "";
         position: absolute;
