@@ -77,7 +77,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
         info,
         count: timeouts !== undefined && same(timeouts.info, info) ? timeouts.count + 1 : 1,
       }
-      if (timeouts.count >= 3) {
+      if (timeouts.count >= 3 && !pool.starting(info.pid)) {
         yield* announce("missing")
         yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
         yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
@@ -107,7 +107,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
 
     const failed = pool.reap()
     if (failed !== undefined) return yield* Effect.fail(failed)
-    if (pool.shouldRecruit(info !== undefined)) {
+    if ((info === undefined || !pool.starting(info.pid)) && pool.shouldRecruit(info !== undefined)) {
       yield* announce("missing")
       pool.add(yield* spawnContender)
     }

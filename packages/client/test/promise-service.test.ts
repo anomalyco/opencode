@@ -48,7 +48,7 @@ test("ensures a missing service with native promises", async () => {
   const endpoint = await ensure({
     file: registration,
     version: "test",
-    command: fixture.command("coordinated"),
+    command: fixture.command("coordinated", "600"),
     onStart: (reason) => starts.push(reason),
   })
   const info = await Bun.file(registration).json()
@@ -172,20 +172,22 @@ test("accepts a surviving contender after a failure without recruiting replaceme
   expect(await fixture.starts()).toHaveLength(2)
 })
 
-test("recovers when an unresponsive contender is evicted after a prior failure", async () => {
+test("reports the prior failure at the startup deadline without killing a live contender", async () => {
   await using fixture = await serviceFixture()
-  const pending = ensure({ file: fixture.registration, version: "test", command: fixture.command("controlled") })
+  const pending = ensure({ file: fixture.registration, version: "test", command: fixture.command("controlled") }).catch(
+    (error: unknown) => error,
+  )
   const [first, second] = await fixture.waitForStarts(2)
   await fixture.release(second, "hang")
   await fixture.waitForFile()
   await fixture.release(first, "fail")
-  const [, , third] = await fixture.waitForStarts(3)
-  await fixture.release(third, "ready")
-  const endpoint = await pending
-  fixture.track(third)
-
-  expect((await Service.discover({ file: fixture.registration, version: "test" }))?.url).toBe(endpoint.url)
-  expect((await Bun.file(fixture.registration).json()).pid).toBe(third)
+  const error = await pending
+  expect(error).toBeInstanceOf(Error)
+  if (!(error instanceof Error)) throw error
+  expect(error.message).toContain("Server process exited with code 23")
+  expect(await fixture.starts()).toHaveLength(2)
+  expect((await Bun.file(fixture.registration).json()).pid).toBe(second)
+  expect(() => process.kill(second, 0)).not.toThrow()
 })
 
 test("reports a bounded contender stderr tail with native promises", async () => {
