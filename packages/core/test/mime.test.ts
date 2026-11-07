@@ -15,3 +15,25 @@ describe("Mime.detect", () => {
     expect(Mime.detect(ftyp("0000001c667479704d344120000002004d34412069736f6d69736f3200000008"))).toBe("audio/mp4")
   })
 })
+
+describe("Mime.detect text that starts with image signatures", () => {
+  test("does not mistake BM/GIF8-prefixed text for images (#59245)", () => {
+    expect(Mime.detect(new TextEncoder().encode("BMI,age\n22.5,31"))).toBe("text/plain")
+    expect(Mime.detect(new TextEncoder().encode("BMW, the car notes"))).toBe("text/plain")
+    expect(Mime.detect(new TextEncoder().encode("GIF89x is not a signature"))).toBe("text/plain")
+    expect(Mime.detect(new TextEncoder().encode("BM"))).toBe("text/plain")
+  })
+
+  test("still accepts real BMP and GIF headers", () => {
+    const bmp = new Uint8Array(26)
+    bmp.set([0x42, 0x4d], 0)
+    new DataView(bmp.buffer).setUint32(2, 70, true) // file size
+    new DataView(bmp.buffer).setUint32(10, 54, true) // pixel offset
+    new DataView(bmp.buffer).setUint32(14, 40, true) // BITMAPINFOHEADER
+    expect(Mime.detect(bmp)).toBe("image/bmp")
+    const coreHeader = new Uint8Array(12)
+    new DataView(coreHeader.buffer).setUint32(4, 7, true)
+    expect(Mime.detect(new Uint8Array([...new TextEncoder().encode("GIF89a"), ...coreHeader]))).toBe("image/gif")
+    expect(Mime.detect(new Uint8Array([...new TextEncoder().encode("GIF87a"), ...coreHeader]))).toBe("image/gif")
+  })
+})
