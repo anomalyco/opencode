@@ -87,6 +87,47 @@ describe("Claude sessions", () => {
     }),
   )
 
+  it.effect("each Claude config folder keeps its own Claude session, and switching back catches up", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make([
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn({ index: 1 }),
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn({ recording: "text-resume" }),
+        FakeClaude.expectInterrupt(),
+      ])
+      const test = yield* TestSessions.start(claude)
+      const work = yield* TestSessions.model(test.sessions, { configDir: "/home/dan/.claude-work" })
+      yield* TestSessions.reply(test.model, first)
+      const id = claude.runs[0]!.args.find((arg) => arg.startsWith("--session-id="))!.split("=")[1]
+      const prompt = TestSessions.followup()
+      yield* TestSessions.reply(work, prompt)
+      prompt.push(
+        { role: "assistant", content: [{ type: "text", text: "COPPER-OTTER" }] },
+        { role: "user", content: [{ type: "text", text: "And once more?" }] },
+      )
+      yield* TestSessions.reply(test.model, prompt)
+      const user = (run: number) =>
+        JSON.stringify(claude.runs[run]!.received.find((message) => message.type === "user").message.content)
+      // The other folder cannot resume this login's transcript, so it starts its own from the whole history.
+      expect(claude.runs[1]!.env.CLAUDE_CONFIG_DIR).toBe("/home/dan/.claude-work")
+      expect(claude.runs[1]!.args.some((arg) => arg.startsWith("--resume="))).toBe(false)
+      expect(user(1)).toContain("Remember the marker COPPER-OTTER")
+      const other = (yield* SessionRecord.make(test.storage).get("session-a", "/home/dan/.claude-work"))!
+      expect(other.claudeSessionID).not.toBe(id)
+      expect(claude.runs[2]!.args).toContain(`--resume=${id}`)
+      expect(user(2)).toContain("What was the marker?")
+      expect(user(2)).not.toContain("Remember the marker COPPER-OTTER")
+      expect((yield* SessionRecord.make(test.storage).get("session-a"))!.claudeSessionID).toBe(id)
+      yield* test.registry.close()
+      claude.check()
+    }),
+  )
+
   it.effect("cancellation drains past the interrupt receipt before accepting another turn", () =>
     Effect.gen(function* () {
       const drain = Promise.withResolvers<void>()

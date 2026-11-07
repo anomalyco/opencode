@@ -2,6 +2,8 @@ export * as ClaudeQueryOptions from "./query-options.js"
 
 import type { LanguageModelV3FunctionTool } from "@ai-sdk/provider"
 import type { Options } from "@anthropic-ai/claude-agent-sdk"
+import os from "node:os"
+import path from "node:path"
 import { ToolHooks } from "../tools/hooks.js"
 import type { PendingTools } from "../tools/pending.js"
 import { ToolServer } from "../tools/server.js"
@@ -39,6 +41,9 @@ export function connectionEnv(connection: {
   if (typeof settings.authToken === "string") env.ANTHROPIC_AUTH_TOKEN = settings.authToken
   if (typeof settings.headerTimeout === "number") env.API_TIMEOUT_MS = String(settings.headerTimeout)
   if (typeof settings.chunkTimeout === "number") env.CLAUDE_STREAM_IDLE_TIMEOUT_MS = String(settings.chunkTimeout)
+  // ClaudeAccounts picks the folder for each request. The login check and model list use the first.
+  const dirs = configDirs(settings.configDir)
+  if (dirs.length > 0) env.CLAUDE_CONFIG_DIR = dirs[0]
   const headers: string[] = []
   for (const [name, value] of Object.entries(connection.headers ?? {})) {
     headers.push(`${name}: ${value}`)
@@ -48,6 +53,18 @@ export function connectionEnv(connection: {
     env.CLAUDE_CODE_EXTRA_BODY = JSON.stringify(connection.body)
   }
   return env
+}
+
+export function configDirs(value: unknown) {
+  const dirs: string[] = []
+  for (const item of Array.isArray(value) ? value : [value]) {
+    if (typeof item !== "string") continue
+    // Claude Code does not expand ~, so a configDir like ~/.claude-work would point inside the project.
+    // An absolute path also means Claude Code and our own transcript lookups agree on the folder.
+    const dir = item.startsWith("~/") ? path.join(os.homedir(), item.slice(2)) : item
+    dirs.push(path.resolve(dir))
+  }
+  return dirs
 }
 
 export function base(input: {
