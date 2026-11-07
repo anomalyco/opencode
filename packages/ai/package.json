@@ -162,7 +162,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anomalyco/opencode.git",
+    "url": "git+https://github.com/Mackery6969/opencode.git",
     "directory": "packages/ai"
   }
 }

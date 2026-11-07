@@ -1,5 +1,17 @@
 #!/bin/sh
 set -e
+# Ensure bun is on PATH (Windows git-bash may not have ~/.bun/bin)
+if ! command -v bun >/dev/null 2>&1; then
+  for candidate in \
+    /c/Users/davis/.bun/bin/bun \
+    /c/Users/davis/scoop/shims/bun \
+    /c/Users/davis/AppData/Local/Programs/bun/bin/bun; do
+    if [ -f "$candidate" ]; then
+      export PATH="$(dirname "$candidate"):$PATH"
+      break
+    fi
+  done
+fi
 # Check if bun version matches package.json
 # keep in sync with packages/script/src/index.ts semver qualifier
 bun -e '

@@ -39,7 +39,7 @@ describe("getProjectAvatarGenerated", () => {
     expect(getProjectAvatarGenerated({ id: "abc", icon: { override: "data:custom" } })).toBeUndefined()
     expect(getProjectAvatarGenerated({ id: "abc", icon: { url: "data:auto" } })).toBeUndefined()
     expect(getProjectAvatarGenerated({ id: "abc", icon: { color: "blue" } })).toBeUndefined()
-    const opencode = createHash("sha1").update("git-remote:github.com/anomalyco/opencode").digest("hex")
+    const opencode = createHash("sha1").update("git-remote:github.com/Mackery6969/opencode").digest("hex")
     expect(getProjectAvatarGenerated({ id: opencode, worktree: "/repo" })).toBeUndefined()
   })
 

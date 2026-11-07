@@ -12,13 +12,13 @@ describe("security.txt", () => {
   test("has the RFC 9116 fields", () => {
     expect(fields.every((field) => /^[A-Za-z-]+$/.test(field[0]) && field[1])).toBe(true)
     expect(values("Contact")).toEqual([
-      "https://github.com/anomalyco/opencode/security/advisories/new",
+      "https://github.com/Mackery6969/opencode/security/advisories/new",
       "mailto:security@anoma.ly",
     ])
     expect(values("Expires")).toHaveLength(1)
     expect(values("Canonical")).toEqual(["https://opencode.ai/.well-known/security.txt"])
     // The policy is SECURITY.md on GitHub (the security page draft is kept outside the repository).
-    expect(values("Policy")).toEqual(["https://github.com/anomalyco/opencode/security/policy"])
+    expect(values("Policy")).toEqual(["https://github.com/Mackery6969/opencode/security/policy"])
   })
 
   // Field lines are bare "Name: value" with no trailing comment; anything else is a whole-line

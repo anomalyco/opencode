@@ -160,7 +160,7 @@ jobs:
   # Runs even when compute found no change, so an open bot pull request with stale hashes is closed, not merged.
   publish:
     needs: compute
-    if: github.repository == 'anomalyco/opencode' && github.ref == 'refs/heads/dev'
+    if: github.repository == 'Mackery6969/opencode' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-24.04
     concurrency:
       group: bot-nix-hashes-publish

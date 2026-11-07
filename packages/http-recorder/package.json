@@ -7,11 +7,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anomalyco/opencode.git",
+    "url": "git+https://github.com/Mackery6969/opencode.git",
     "directory": "packages/http-recorder"
   },
-  "homepage": "https://github.com/anomalyco/opencode/tree/dev/packages/http-recorder",
-  "bugs": "https://github.com/anomalyco/opencode/issues",
+  "homepage": "https://github.com/Mackery6969/opencode/tree/dev/packages/http-recorder",
+  "bugs": "https://github.com/Mackery6969/opencode/issues",
   "keywords": [
     "effect",
     "http",

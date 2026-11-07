@@ -1224,7 +1224,7 @@ describe("OpencodePlugin", () => {
                 providerID: state.providerID,
                 results: [
                   {
-                    url: "https://github.com/anomalyco/opencode",
+                    url: "https://github.com/Mackery6969/opencode",
                     title: "OpenCode",
                     content: "Open source AI coding agent.",
                     time: { published: 1_700_000_000_000 },
@@ -1266,7 +1266,7 @@ describe("OpencodePlugin", () => {
               providerID: WebSearch.ID.make("opencode"),
               results: [
                 {
-                  url: "https://github.com/anomalyco/opencode",
+                  url: "https://github.com/Mackery6969/opencode",
                   title: "OpenCode",
                   content: "Open source AI coding agent.",
                   time: { published: 1_700_000_000_000 },

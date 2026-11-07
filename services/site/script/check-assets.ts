@@ -10,7 +10,7 @@ const args = parseArgs({
   options: {
     manifest: { type: "string", default: "public/product-assets/manifest.json" },
     "max-behind": { type: "string", default: "3" },
-    repo: { type: "string", default: "anomalyco/opencode" },
+    repo: { type: "string", default: "Mackery6969/opencode" },
   },
 }).values
 

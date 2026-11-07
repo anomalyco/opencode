@@ -9,7 +9,7 @@
 // look at the new ones (and at allowlisted ones whose picture changed).
 import { faces } from "../src/lib/contributor-faces"
 
-const repo = "anomalyco/opencode"
+const repo = "Mackery6969/opencode"
 const out = Bun.argv[2] ?? `${process.env.TMPDIR ?? "/tmp"}/contributor-faces.html`
 const allowed = new Set(faces.map((face) => face.login))
 

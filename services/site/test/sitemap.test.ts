@@ -30,7 +30,7 @@ const release = (index: number): ChangelogRelease => ({
   name: `v2.0.${index}`,
   // One release a day, so none merge.
   date: new Date(Date.UTC(2026, 0, 1) + index * 86_400_000).toISOString(),
-  url: `https://github.com/anomalyco/opencode/releases/tag/v2.0.${index}`,
+  url: `https://github.com/Mackery6969/opencode/releases/tag/v2.0.${index}`,
   highlights: [],
   sections: [],
   notes: {

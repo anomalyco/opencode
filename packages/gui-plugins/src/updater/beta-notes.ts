@@ -1,6 +1,6 @@
 import { Option, Schema } from "effect"
 
-const REPOSITORY = "https://github.com/anomalyco/opencode"
+const REPOSITORY = "https://github.com/Mackery6969/opencode"
 
 /** The dialog lists at most this many changes and links the rest. */
 const SHOWN = 10

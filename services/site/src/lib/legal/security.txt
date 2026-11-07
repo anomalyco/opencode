@@ -27,10 +27,10 @@
 # | Language           | English                                               |
 # +--------------------+-------------------------------------------------------+
 # ------------------------------------------------------------------------------
-Contact: https://github.com/anomalyco/opencode/security/advisories/new
+Contact: https://github.com/Mackery6969/opencode/security/advisories/new
 Contact: mailto:security@anoma.ly
 Expires: 2027-11-04T00:00:00.000Z
-Policy: https://github.com/anomalyco/opencode/security/policy
+Policy: https://github.com/Mackery6969/opencode/security/policy
 Preferred-Languages: en
 Canonical: https://opencode.ai/.well-known/security.txt
 Hiring: mailto:engineering@anomaly.jobs

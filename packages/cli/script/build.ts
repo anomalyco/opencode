@@ -232,7 +232,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
         name: `@Mackery6969/${name}`,
         version: Script.version,
         license: "MIT",
-        repository: { type: "git", url: "git+https://github.com/anomalyco/opencode.git" },
+        repository: { type: "git", url: "git+https://github.com/Mackery6969/opencode.git" },
         os: [item.os],
         cpu: [item.arch],
       },

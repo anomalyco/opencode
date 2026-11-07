@@ -9,7 +9,7 @@ import { dirname, join } from "path"
 import { fileURLToPath } from "url"
 
 const app = join(dirname(fileURLToPath(import.meta.url)), "..")
-const repo = "https://github.com/anomalyco/opencode"
+const repo = "https://github.com/Mackery6969/opencode"
 
 // Every file that has held a document's text, newest first. The text moved from the route files to
 // src/lib/legal, so a version is the text of all of them at that commit.

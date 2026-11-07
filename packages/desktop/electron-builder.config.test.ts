@@ -59,7 +59,7 @@ test.each(channels)("channel identity for $channel", ({ channel, appId, feed }) 
   expect(config.extraMetadata?.desktopName).toBe(`${appId}.desktop`)
   // The executable must never end in `.desktop`: libappimage resolves the
   // AppImage's desktop entry by globbing `*.desktop`, and an ELF matching
-  // that glob breaks integration (anomalyco/opencode#51867).
+  // that glob breaks integration (Mackery6969/opencode#51867).
   expect(config.linux?.executableName).toBe(appId.replace(/\.desktop$/, ""))
   expect(config.linux?.executableName).not.toMatch(/\.desktop$/)
   // The installed `.desktop` filename still derives from `desktopName` so

@@ -59,7 +59,7 @@ test("lists the notes after the previous commit, features first, humanized, with
         type: "fix",
         summary: "Disable animated wheel scrolling on linux",
         description: "Wheel scrolling on Linux no longer glides.",
-        pr: { number: 57120, url: "https://github.com/anomalyco/opencode/pull/57120" },
+        pr: { number: 57120, url: "https://github.com/Mackery6969/opencode/pull/57120" },
         author: { name: "Ada Lovelace", avatar: "https://avatars.githubusercontent.com/u/1?s=48" },
       },
       { sha: short(28), type: "perf", summary: "Cache the model list" },
@@ -131,5 +131,5 @@ test("lists every change the build carries for the What's new page, and links it
   )
   expect(notes.fixed).toHaveLength(10)
   expect([notes.total, notes.more]).toEqual([20, false])
-  expect(betaHistory(value)).toBe(`https://github.com/anomalyco/opencode/commits/${sha(30)}`)
+  expect(betaHistory(value)).toBe(`https://github.com/Mackery6969/opencode/commits/${sha(30)}`)
 })

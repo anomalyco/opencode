@@ -39,8 +39,8 @@ export const legalHistory = {
       addedCount: 16,
       removedCount: 12,
       source:
-        "https://github.com/anomalyco/opencode/blob/bc2891953b63dccfb3b688892b09009b9574caaa/packages/console/app/src/routes/legal/privacy-policy/index.tsx",
-      diff: "https://github.com/anomalyco/opencode/commit/bc2891953b63dccfb3b688892b09009b9574caaa#diff-86623c1b761ddcf78790804023aeabaca6b33689a83d2402241105bf407fdc31",
+        "https://github.com/Mackery6969/opencode/blob/bc2891953b63dccfb3b688892b09009b9574caaa/packages/console/app/src/routes/legal/privacy-policy/index.tsx",
+      diff: "https://github.com/Mackery6969/opencode/commit/bc2891953b63dccfb3b688892b09009b9574caaa#diff-86623c1b761ddcf78790804023aeabaca6b33689a83d2402241105bf407fdc31",
     },
     {
       sha: "926b2af0cc606398342b487a26ada2ee7badd39c",
@@ -62,8 +62,8 @@ export const legalHistory = {
       addedCount: 0,
       removedCount: 8,
       source:
-        "https://github.com/anomalyco/opencode/blob/926b2af0cc606398342b487a26ada2ee7badd39c/packages/console/app/src/routes/legal/privacy-policy/index.tsx",
-      diff: "https://github.com/anomalyco/opencode/commit/926b2af0cc606398342b487a26ada2ee7badd39c#diff-86623c1b761ddcf78790804023aeabaca6b33689a83d2402241105bf407fdc31",
+        "https://github.com/Mackery6969/opencode/blob/926b2af0cc606398342b487a26ada2ee7badd39c/packages/console/app/src/routes/legal/privacy-policy/index.tsx",
+      diff: "https://github.com/Mackery6969/opencode/commit/926b2af0cc606398342b487a26ada2ee7badd39c#diff-86623c1b761ddcf78790804023aeabaca6b33689a83d2402241105bf407fdc31",
     },
     {
       sha: "eb463de93ef91b3c9355ecfefe937c68556f0040",
@@ -89,8 +89,8 @@ export const legalHistory = {
       addedCount: 38,
       removedCount: 1,
       source:
-        "https://github.com/anomalyco/opencode/blob/eb463de93ef91b3c9355ecfefe937c68556f0040/packages/console/app/src/routes/legal/privacy-policy/index.tsx",
-      diff: "https://github.com/anomalyco/opencode/commit/eb463de93ef91b3c9355ecfefe937c68556f0040#diff-86623c1b761ddcf78790804023aeabaca6b33689a83d2402241105bf407fdc31",
+        "https://github.com/Mackery6969/opencode/blob/eb463de93ef91b3c9355ecfefe937c68556f0040/packages/console/app/src/routes/legal/privacy-policy/index.tsx",
+      diff: "https://github.com/Mackery6969/opencode/commit/eb463de93ef91b3c9355ecfefe937c68556f0040#diff-86623c1b761ddcf78790804023aeabaca6b33689a83d2402241105bf407fdc31",
     },
     {
       sha: "19d00098910af21b33458ba4ea011c25d472f8b7",
@@ -107,8 +107,8 @@ export const legalHistory = {
       addedCount: 2,
       removedCount: 3,
       source:
-        "https://github.com/anomalyco/opencode/blob/19d00098910af21b33458ba4ea011c25d472f8b7/packages/console/app/src/routes/legal/privacy-policy/index.tsx",
-      diff: "https://github.com/anomalyco/opencode/commit/19d00098910af21b33458ba4ea011c25d472f8b7#diff-86623c1b761ddcf78790804023aeabaca6b33689a83d2402241105bf407fdc31",
+        "https://github.com/Mackery6969/opencode/blob/19d00098910af21b33458ba4ea011c25d472f8b7/packages/console/app/src/routes/legal/privacy-policy/index.tsx",
+      diff: "https://github.com/Mackery6969/opencode/commit/19d00098910af21b33458ba4ea011c25d472f8b7#diff-86623c1b761ddcf78790804023aeabaca6b33689a83d2402241105bf407fdc31",
     },
     {
       sha: "4863aedf3dfcabf02d7c193a5d5e4e4da0535717",
@@ -133,8 +133,8 @@ export const legalHistory = {
       addedCount: 5,
       removedCount: 5,
       source:
-        "https://github.com/anomalyco/opencode/blob/4863aedf3dfcabf02d7c193a5d5e4e4da0535717/packages/console/app/src/routes/legal/privacy-policy/index.tsx",
-      diff: "https://github.com/anomalyco/opencode/commit/4863aedf3dfcabf02d7c193a5d5e4e4da0535717#diff-86623c1b761ddcf78790804023aeabaca6b33689a83d2402241105bf407fdc31",
+        "https://github.com/Mackery6969/opencode/blob/4863aedf3dfcabf02d7c193a5d5e4e4da0535717/packages/console/app/src/routes/legal/privacy-policy/index.tsx",
+      diff: "https://github.com/Mackery6969/opencode/commit/4863aedf3dfcabf02d7c193a5d5e4e4da0535717#diff-86623c1b761ddcf78790804023aeabaca6b33689a83d2402241105bf407fdc31",
     },
     {
       sha: "b83282b9405fe3a89d483453c343ee7e4d645379",
@@ -152,8 +152,8 @@ export const legalHistory = {
       addedCount: 4,
       removedCount: 2,
       source:
-        "https://github.com/anomalyco/opencode/blob/b83282b9405fe3a89d483453c343ee7e4d645379/packages/console/app/src/routes/legal/privacy-policy/index.tsx",
-      diff: "https://github.com/anomalyco/opencode/commit/b83282b9405fe3a89d483453c343ee7e4d645379#diff-86623c1b761ddcf78790804023aeabaca6b33689a83d2402241105bf407fdc31",
+        "https://github.com/Mackery6969/opencode/blob/b83282b9405fe3a89d483453c343ee7e4d645379/packages/console/app/src/routes/legal/privacy-policy/index.tsx",
+      diff: "https://github.com/Mackery6969/opencode/commit/b83282b9405fe3a89d483453c343ee7e4d645379#diff-86623c1b761ddcf78790804023aeabaca6b33689a83d2402241105bf407fdc31",
     },
     {
       sha: "289b2b6a51c3a02b5263dbb10e8dc413c23867a4",
@@ -166,8 +166,8 @@ export const legalHistory = {
       addedCount: 352,
       removedCount: 0,
       source:
-        "https://github.com/anomalyco/opencode/blob/289b2b6a51c3a02b5263dbb10e8dc413c23867a4/packages/console/app/src/routes/legal/privacy-policy/index.tsx",
-      diff: "https://github.com/anomalyco/opencode/commit/289b2b6a51c3a02b5263dbb10e8dc413c23867a4#diff-86623c1b761ddcf78790804023aeabaca6b33689a83d2402241105bf407fdc31",
+        "https://github.com/Mackery6969/opencode/blob/289b2b6a51c3a02b5263dbb10e8dc413c23867a4/packages/console/app/src/routes/legal/privacy-policy/index.tsx",
+      diff: "https://github.com/Mackery6969/opencode/commit/289b2b6a51c3a02b5263dbb10e8dc413c23867a4#diff-86623c1b761ddcf78790804023aeabaca6b33689a83d2402241105bf407fdc31",
     },
   ],
   "/legal/terms-of-service": [
@@ -185,8 +185,8 @@ export const legalHistory = {
       addedCount: 2,
       removedCount: 1,
       source:
-        "https://github.com/anomalyco/opencode/blob/64b9ba339e26d3d1fef23990274a6bc56470500b/packages/console/app/src/routes/legal/terms-of-service/index.tsx",
-      diff: "https://github.com/anomalyco/opencode/commit/64b9ba339e26d3d1fef23990274a6bc56470500b#diff-af798db409166356bf4ec3212cb527b5fe96befbd94700a605c3a4672fca2168",
+        "https://github.com/Mackery6969/opencode/blob/64b9ba339e26d3d1fef23990274a6bc56470500b/packages/console/app/src/routes/legal/terms-of-service/index.tsx",
+      diff: "https://github.com/Mackery6969/opencode/commit/64b9ba339e26d3d1fef23990274a6bc56470500b#diff-af798db409166356bf4ec3212cb527b5fe96befbd94700a605c3a4672fca2168",
     },
     {
       sha: "4863aedf3dfcabf02d7c193a5d5e4e4da0535717",
@@ -207,8 +207,8 @@ export const legalHistory = {
       addedCount: 3,
       removedCount: 3,
       source:
-        "https://github.com/anomalyco/opencode/blob/4863aedf3dfcabf02d7c193a5d5e4e4da0535717/packages/console/app/src/routes/legal/terms-of-service/index.tsx",
-      diff: "https://github.com/anomalyco/opencode/commit/4863aedf3dfcabf02d7c193a5d5e4e4da0535717#diff-af798db409166356bf4ec3212cb527b5fe96befbd94700a605c3a4672fca2168",
+        "https://github.com/Mackery6969/opencode/blob/4863aedf3dfcabf02d7c193a5d5e4e4da0535717/packages/console/app/src/routes/legal/terms-of-service/index.tsx",
+      diff: "https://github.com/Mackery6969/opencode/commit/4863aedf3dfcabf02d7c193a5d5e4e4da0535717#diff-af798db409166356bf4ec3212cb527b5fe96befbd94700a605c3a4672fca2168",
     },
     {
       sha: "b83282b9405fe3a89d483453c343ee7e4d645379",
@@ -230,8 +230,8 @@ export const legalHistory = {
       addedCount: 4,
       removedCount: 3,
       source:
-        "https://github.com/anomalyco/opencode/blob/b83282b9405fe3a89d483453c343ee7e4d645379/packages/console/app/src/routes/legal/terms-of-service/index.tsx",
-      diff: "https://github.com/anomalyco/opencode/commit/b83282b9405fe3a89d483453c343ee7e4d645379#diff-af798db409166356bf4ec3212cb527b5fe96befbd94700a605c3a4672fca2168",
+        "https://github.com/Mackery6969/opencode/blob/b83282b9405fe3a89d483453c343ee7e4d645379/packages/console/app/src/routes/legal/terms-of-service/index.tsx",
+      diff: "https://github.com/Mackery6969/opencode/commit/b83282b9405fe3a89d483453c343ee7e4d645379#diff-af798db409166356bf4ec3212cb527b5fe96befbd94700a605c3a4672fca2168",
     },
     {
       sha: "289b2b6a51c3a02b5263dbb10e8dc413c23867a4",
@@ -244,8 +244,8 @@ export const legalHistory = {
       addedCount: 174,
       removedCount: 0,
       source:
-        "https://github.com/anomalyco/opencode/blob/289b2b6a51c3a02b5263dbb10e8dc413c23867a4/packages/console/app/src/routes/legal/terms-of-service/index.tsx",
-      diff: "https://github.com/anomalyco/opencode/commit/289b2b6a51c3a02b5263dbb10e8dc413c23867a4#diff-af798db409166356bf4ec3212cb527b5fe96befbd94700a605c3a4672fca2168",
+        "https://github.com/Mackery6969/opencode/blob/289b2b6a51c3a02b5263dbb10e8dc413c23867a4/packages/console/app/src/routes/legal/terms-of-service/index.tsx",
+      diff: "https://github.com/Mackery6969/opencode/commit/289b2b6a51c3a02b5263dbb10e8dc413c23867a4#diff-af798db409166356bf4ec3212cb527b5fe96befbd94700a605c3a4672fca2168",
     },
   ],
 } satisfies Record<string, LegalVersion[]>

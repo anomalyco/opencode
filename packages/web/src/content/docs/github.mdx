@@ -65,7 +65,7 @@ Or you can set it up manually.
              persist-credentials: false
 
          - name: Run OpenCode
-           uses: anomalyco/opencode/github@latest
+           uses: Mackery6969/opencode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            with:
@@ -103,7 +103,7 @@ Or you can set it up manually.
     - run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-    - uses: anomalyco/opencode/github@latest
+    - uses: Mackery6969/opencode/github@latest
       env:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -155,7 +155,7 @@ jobs:
           persist-credentials: false
 
       - name: Run OpenCode
-        uses: anomalyco/opencode/github@latest
+        uses: Mackery6969/opencode/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
@@ -189,7 +189,7 @@ jobs:
       issues: write
     steps:
       - uses: actions/checkout@v6
-      - uses: anomalyco/opencode/github@latest
+      - uses: Mackery6969/opencode/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -245,7 +245,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: anomalyco/opencode/github@latest
+      - uses: Mackery6969/opencode/github@latest
         if: steps.check.outputs.result == 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -267,7 +267,7 @@ For `issues` events, the `prompt` input is **required** since there's no comment
 Override the default prompt to customize OpenCode's behavior for your workflow.
 
 ```yaml title=".github/workflows/opencode.yml"
-- uses: anomalyco/opencode/github@latest
+- uses: Mackery6969/opencode/github@latest
   with:
     model: anthropic/claude-sonnet-5-5
     prompt: |

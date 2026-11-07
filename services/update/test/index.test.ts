@@ -194,10 +194,10 @@ test("caches rollout fallback reads across caller IPs and overlapping releases",
 
 function publishClaims(ref: string, event_name = "push", environment = "release") {
   return {
-    repository: "anomalyco/opencode",
+    repository: "Mackery6969/opencode",
     repository_id: "975734319",
     repository_owner_id: "66570915",
-    workflow_ref: `anomalyco/opencode/.github/workflows/release.yml@${ref}`,
+    workflow_ref: `Mackery6969/opencode/.github/workflows/release.yml@${ref}`,
     ref,
     event_name,
     environment,

@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.90"
 description = "Persistent PTY service for OpenCode"
 license = "MIT"
-repository = "https://github.com/anomalyco/opencode"
+repository = "https://github.com/Mackery6969/opencode"
 links = "ghostty-vt"
 
 [dependencies]

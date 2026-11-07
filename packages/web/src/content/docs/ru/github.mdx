@@ -64,7 +64,7 @@ opencode github install
              persist-credentials: false
 
          - name: Run OpenCode
-           uses: anomalyco/opencode/github@latest
+           uses: Mackery6969/opencode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            with:
@@ -138,7 +138,7 @@ jobs:
           persist-credentials: false
 
       - name: Run OpenCode
-        uses: anomalyco/opencode/github@latest
+        uses: Mackery6969/opencode/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
@@ -175,7 +175,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: anomalyco/opencode/github@latest
+      - uses: Mackery6969/opencode/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -231,7 +231,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: anomalyco/opencode/github@latest
+      - uses: Mackery6969/opencode/github@latest
         if: steps.check.outputs.result == 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -253,7 +253,7 @@ jobs:
 Переопределите приглашение по умолчанию, чтобы настроить поведение opencode для вашего рабочего процесса.
 
 ```yaml title=".github/workflows/opencode.yml"
-- uses: anomalyco/opencode/github@latest
+- uses: Mackery6969/opencode/github@latest
   with:
     model: anthropic/claude-sonnet-5-5
     prompt: |

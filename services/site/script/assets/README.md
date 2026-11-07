@@ -7,7 +7,7 @@ Status: **terminal is automated** (`script/capture-assets.ts`). The other surfac
 
 ## 1. Current assets (Nov 2 2026)
 
-Latest release: **v2.2.5** (Oct 30 2026). Source: `gh api 'repos/anomalyco/opencode/releases?per_page=8'`.
+Latest release: **v2.2.5** (Oct 30 2026). Source: `gh api 'repos/Mackery6969/opencode/releases?per_page=8'`.
 
 | Used on                     | File                                                                   | Source                                                                         | Shows                                                                                                                           | Size                       | Mode | Problem                                                                                      |
 | --------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | ---- | -------------------------------------------------------------------------------------------- |
@@ -124,7 +124,7 @@ Until then, the web capture with the desktop window chrome (vertical tabs, title
 
 ### Mobile: iOS Simulator (not automated yet)
 
-The `real-ios` recording builds `anomalyco/opencode-ios` in the simulator, drives it with XCUITest and talks to a local demo server with the stub model. For stills:
+The `real-ios` recording builds `Mackery6969/opencode-ios` in the simulator, drives it with XCUITest and talks to a local demo server with the stub model. For stills:
 
 ```sh
 xcrun simctl boot "iPhone 17 Pro"

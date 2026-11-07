@@ -149,7 +149,7 @@ for (const target of targets) {
         name: `@Mackery6969/${name}`,
         version: Script.version,
         license: pkg.license,
-        repository: { type: "git", url: "git+https://github.com/anomalyco/opencode.git" },
+        repository: { type: "git", url: "git+https://github.com/Mackery6969/opencode.git" },
         os: [target.platform],
         cpu: [target.arch],
       },

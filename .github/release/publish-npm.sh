@@ -17,7 +17,7 @@ fi
 
 if ! dry_run; then
   for file in "$npm_dir"/*.tgz; do
-    gh attestation verify "$file" --repo anomalyco/opencode --signer-workflow anomalyco/opencode/.github/workflows/release.yml > /dev/null
+    gh attestation verify "$file" --repo Mackery6969/opencode --signer-workflow Mackery6969/opencode/.github/workflows/release.yml > /dev/null
   done
 fi
 

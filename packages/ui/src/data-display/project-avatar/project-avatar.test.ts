@@ -12,7 +12,7 @@ describe("getProjectAvatarSource", () => {
   })
 
   test("recognizes the OpenCode repository by its remote-derived project ID", () => {
-    const id = createHash("sha1").update("git-remote:github.com/anomalyco/opencode").digest("hex")
+    const id = createHash("sha1").update("git-remote:github.com/Mackery6969/opencode").digest("hex")
 
     expect(getProjectAvatarSource(id)).toBe("https://opencode.ai/favicon.svg")
     expect(getProjectAvatarSource(id, { override: "data:custom" })).toBe("data:custom")

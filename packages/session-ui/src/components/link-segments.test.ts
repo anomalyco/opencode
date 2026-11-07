@@ -3,11 +3,11 @@ import { linkSegments } from "./link-segments"
 
 describe("linkSegments", () => {
   test("marks URLs in shell output", () => {
-    expect(linkSegments("Created https://github.com/anomalyco/opencode/pull/57302\n")).toEqual([
+    expect(linkSegments("Created https://github.com/Mackery6969/opencode/pull/57302\n")).toEqual([
       { text: "Created " },
       {
-        text: "https://github.com/anomalyco/opencode/pull/57302",
-        href: "https://github.com/anomalyco/opencode/pull/57302",
+        text: "https://github.com/Mackery6969/opencode/pull/57302",
+        href: "https://github.com/Mackery6969/opencode/pull/57302",
       },
       { text: "\n" },
     ])
