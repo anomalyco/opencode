@@ -620,8 +620,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI ကို ထည့်သွင်း၍ မရပါ: {{error}}",
   "command.project.copyID": "ပရောဂျက် ID ကို ကူးယူပါ",
   "command.session.copyID": "ဆက်ရှင် ID ကို ကူးယူပါ",
-  "server.row.incompatible":
-    "ဤဆာဗာတွင် လုပ်ဆောင်နေသော OpenCode {{version}} သည် ဤအက်ပ်နှင့် မကိုက်ညီပါ။ ဆက်လက်လုပ်ဆောင်ရန် OpenCode V2 သို့ အဆင့်မြှင့်ပါ။",
   "toast.session.copyID.failed.title": "ဆက်ရှင် ID ကို ကူးယူ၍ မရပါ",
   "toast.session.copyID.failed.description": "ဆက်ရှင် ID ကို ကူးယူစဉ် အမှားတစ်ခု ဖြစ်ပွားခဲ့သည်",
   "toast.project.copyID.failed.title": "ပရောဂျက် ID ကို ကူးယူ၍ မရပါ",
@@ -630,8 +628,6 @@ export const dict = {
   "error.page.description.status": "ဆာဗာက HTTP {{status}} တုံ့ပြန်ချက်ကို ပြန်ပေးခဲ့သည်။",
   "error.page.action.reload": "ပြန်လည်ဖွင့်ပါ",
   "session.error.incompatible": "ဤဆာဗာဗားရှင်းကို ပံ့ပိုးမထားပါ",
-  "session.error.incompatible.description":
-    "{{server}} တွင် လုပ်ဆောင်နေသော OpenCode {{version}} သည် ဤအက်ပ်နှင့် မကိုက်ညီပါ။ ဆက်လက်လုပ်ဆောင်ရန် ဆာဗာကို OpenCode V2 သို့ အဆင့်မြှင့်ပါ။",
   "session.background.moveInline": "လုပ်ဆောင်နေသည့် အလုပ်ကို နောက်ခံသို့ ရွှေ့ရန် {{keybind}} ကို နှိပ်ပါ",
   "dialog.server.menu.hide": "ပရောဂျက်စာရင်းမှ ဝှက်ပါ",
   "dialog.server.menu.show": "ပရောဂျက်စာရင်းတွင် ပြပါ",

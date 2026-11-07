@@ -681,8 +681,6 @@ export const dict = {
   "desktop.cli.failed.message": "Gagal menginstal CLI: {{error}}",
   "command.project.copyID": "Salin ID Proyek",
   "command.session.copyID": "Salin ID Sesi",
-  "server.row.incompatible":
-    "Server ini menjalankan OpenCode {{version}}, yang tidak kompatibel dengan aplikasi ini. Tingkatkan ke OpenCode V2 untuk melanjutkan.",
   "toast.session.copyID.failed.title": "Gagal menyalin ID sesi",
   "toast.session.copyID.failed.description": "Terjadi kesalahan saat menyalin ID sesi",
   "toast.project.copyID.failed.title": "Gagal menyalin ID proyek",
@@ -691,8 +689,6 @@ export const dict = {
   "error.page.description.status": "Server mengembalikan respons HTTP {{status}}.",
   "error.page.action.reload": "Muat ulang",
   "session.error.incompatible": "Versi server ini tidak didukung",
-  "session.error.incompatible.description":
-    "{{server}} menjalankan OpenCode {{version}}, yang tidak kompatibel dengan aplikasi ini. Tingkatkan server ke OpenCode V2 untuk melanjutkan.",
   "session.background.moveInline": "Tekan {{keybind}} untuk memindahkan pekerjaan yang berjalan ke latar belakang",
   "dialog.server.menu.hide": "Sembunyikan dari daftar proyek",
   "dialog.server.menu.show": "Tampilkan dalam daftar proyek",

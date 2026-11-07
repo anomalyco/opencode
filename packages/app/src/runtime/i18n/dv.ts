@@ -625,8 +625,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI އިންސްޓޯލް ނުކުރެވުނެވެ: \u2068{{error}}\u2069",
   "command.project.copyID": "ޕްރޮޖެކްޓް ID ކޮޕީކުރުން",
   "command.session.copyID": "ސެޝަން ID ކޮޕީކުރުން",
-  "server.row.incompatible":
-    "މި ސަރވަރގައި ހިނގަނީ OpenCode \u2068{{version}}\u2069 އެވެ، އެއީ މި އެޕް އާއި އެއްގޮތް ނޫނެވެ. ކުރިއަށް ގެންދިއުމަށް OpenCode V2 އަށް އަޕްގްރޭޑް ކުރާށެވެ.",
   "toast.session.copyID.failed.title": "ސެޝަން ID ކޮޕީ ނުކުރެވުނެވެ",
   "toast.session.copyID.failed.description": "ސެޝަން ID ކޮޕީކުރަމުން ދިޔައިރު ގޯހެއް ދިމާވިއެވެ",
   "toast.project.copyID.failed.title": "ޕްރޮޖެކްޓް ID ކޮޕީ ނުކުރެވުނެވެ",
@@ -635,8 +633,6 @@ export const dict = {
   "error.page.description.status": "ސަރވަރުން HTTP \u2068{{status}}\u2069 ރެސްޕޮންސެއް ދީފިއެވެ.",
   "error.page.action.reload": "އަލުން ލޯޑްކުރުން",
   "session.error.incompatible": "މި ސަރވަރ ވަރޝަން ސަޕޯޓް ނުކުރެއެވެ",
-  "session.error.incompatible.description":
-    "\u2068{{server}}\u2069 ގައި ހިނގަނީ OpenCode \u2068{{version}}\u2069 އެވެ، އެއީ މި އެޕް އާއި އެއްގޮތް ނޫނެވެ. ކުރިއަށް ގެންދިއުމަށް ސަރވަރ OpenCode V2 އަށް އަޕްގްރޭޑް ކުރާށެވެ.",
   "session.background.moveInline": "ހިނގަމުންދާ މަސައްކަތް ބެކްގްރައުންޑަށް ލުމަށް \u2068{{keybind}}\u2069 ފިއްތާށެވެ",
   "dialog.server.menu.hide": "ޕްރޮޖެކްޓް ލިސްޓުން ފޮރުވާށެވެ",
   "dialog.server.menu.show": "ޕްރޮޖެކްޓް ލިސްޓުގައި ދައްކާށެވެ",
