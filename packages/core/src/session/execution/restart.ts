@@ -16,8 +16,7 @@ import { SubagentCompletion } from "../subagent-completion.js"
 const CONTINUE_AFTER_SERVER_RESTART =
   "The server restarted while you were working. Continue from where you left off without repeating completed work."
 
-const SUBAGENTS_RESUMED =
-  "Your running subagents have resumed automatically and will report back when they finish. Do not start or resume them again."
+const SUBAGENTS_RESUMED = "Subagents have resumed automatically."
 
 const RESUME_EXHAUSTED = {
   type: "aborted",

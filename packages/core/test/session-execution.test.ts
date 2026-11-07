@@ -886,12 +886,12 @@ describe("SessionRestart background recovery", () => {
       yield* Deferred.await(resumed)
       yield* Deferred.await(parentResumed)
       yield* execution.awaitIdle(parent)
-      // Only the parent learns its subagents resumed, so it waits instead of relaunching them.
+      // Only the parent learns its subagents resumed.
       expect(Object.fromEntries(notices.map((event) => [event.data.sessionID, event.data.text]))).toEqual({
         [child]:
           "The server restarted while you were working. Continue from where you left off without repeating completed work.",
         [parent]:
-          "The server restarted while you were working. Continue from where you left off without repeating completed work. Your running subagents have resumed automatically and will report back when they finish. Do not start or resume them again.",
+          "The server restarted while you were working. Continue from where you left off without repeating completed work. Subagents have resumed automatically.",
       })
 
       yield* restart.resumeSuspendedSessions
