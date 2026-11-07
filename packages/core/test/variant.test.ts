@@ -80,6 +80,32 @@ test("spells Messages variants for each provider", () => {
   ])
 })
 
+test("spells declared MiniMax Messages effort ladders", () => {
+  expect(
+    resolve(model("@opencode/ai/providers/minimax/messages", "MiniMax-M3.1-Flash-Preview"), [
+      { type: "effort", values: ["low", "medium", "high", "xhigh", "max"] },
+    ]),
+  ).toEqual([
+    { id: "low", body: { output_config: { effort: "low" } } },
+    { id: "medium", body: { output_config: { effort: "medium" } } },
+    { id: "high", body: { output_config: { effort: "high" } } },
+    { id: "xhigh", body: { output_config: { effort: "xhigh" } } },
+    { id: "max", body: { output_config: { effort: "max" } } },
+  ])
+})
+
+test("preserves existing MiniMax Messages thinking controls", () => {
+  expect(
+    resolve(model("@opencode/ai/providers/minimax/messages", "MiniMax-M2.7"), [
+      { type: "effort", values: ["low", "high"] },
+    ]),
+  ).toEqual([])
+  expect(resolve(model("@opencode/ai/providers/minimax/messages", "MiniMax-M3"), [{ type: "effort" }])).toEqual([
+    { id: "none", settings: { thinking: { type: "disabled" } } },
+    { id: "thinking", settings: { thinking: { type: "adaptive" } } },
+  ])
+})
+
 test("recognizes Claude version spellings and future models", () => {
   for (const id of ["claude-sonnet-3.7", "claude-sonnet-3-7", "claude-3.7-sonnet", "claude-3-7-sonnet"])
     expect(resolve(model("@opencode/ai/providers/anthropic", id), [{ type: "effort" }])).toEqual([
