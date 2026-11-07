@@ -42,7 +42,7 @@ export function Companions() {
                       </Show>
                     </span>
                   </a>
-                  <span data-slot="body">{appCopy()[app.id].category}</span>
+                  <span data-slot="category">{appCopy()[app.id].category}</span>
                   {/* The same link again, so screen readers and the tab order skip it. */}
                   <a
                     data-slot="get"
