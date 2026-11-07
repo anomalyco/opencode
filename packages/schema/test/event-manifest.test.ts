@@ -124,6 +124,7 @@ describe("public event manifest", () => {
         "session.inbox.enqueued.1",
         "session.inbox.cancelled.1",
         "session.inbox.delivery.changed.1",
+        "session.inbox.resume.retired.1",
         "session.execution.started.1",
         "session.execution.succeeded.1",
         "session.execution.failed.1",
@@ -160,6 +161,7 @@ describe("public event manifest", () => {
       ...SessionEvent.Definitions.filter((definition) => definition.durability === "durable"),
       SessionEvent.UsageRecorded,
       SessionEvent.MessageContentUpdated,
+      SessionEvent.InboxResumeRetired,
     ])
     expect(SessionEvent.UsageRecorded.durability).toBe("durable")
     expect(EventManifest.Durable.get("session.usage.recorded.1")).toBe(SessionEvent.UsageRecorded)

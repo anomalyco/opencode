@@ -314,6 +314,68 @@ describe("SessionRunCoordinator", () => {
     }),
   )
 
+  it.effect("drops the interruption when the owner settles while the reason is still resolving", () =>
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>()
+      const gate = yield* Deferred.make<void>()
+      const reasonEntered = yield* Deferred.make<void>()
+      const reasonRelease = yield* Deferred.make<void>()
+      const reasons: Array<string | undefined> = []
+      const coordinator = yield* SessionRunCoordinator.make<string, never, string>({
+        drain: () =>
+          Effect.succeed(undefined).pipe(
+            Effect.andThen(Deferred.succeed(started, undefined)),
+            Effect.andThen(Deferred.await(gate)),
+          ),
+        settled: (_key, _exit, reason) => Effect.sync(() => void reasons.push(reason)),
+      })
+
+      yield* coordinator.run("session").pipe(Effect.forkChild)
+      yield* Deferred.await(started)
+
+      // The reason is an Effect that suspends, exactly like the durable boundary read in production.
+      // Hold it open across the owner's own completion.
+      const interrupted = yield* coordinator
+        .interrupt(
+          "session",
+          Deferred.succeed(reasonEntered, undefined).pipe(
+            Effect.andThen(Deferred.await(reasonRelease)),
+            Effect.as("user"),
+          ),
+        )
+        .pipe(Effect.forkChild)
+      yield* Deferred.await(reasonEntered)
+
+      // The owner finishes on its own while the reason is still held: it settles, the coordinator
+      // drops the execution, and no interrupt cause is ever produced.
+      yield* Deferred.succeed(gate, undefined)
+      yield* coordinator.awaitIdle("session")
+      yield* Deferred.succeed(reasonRelease, undefined)
+
+      // No crash from treating a departed owner as present, and no stray reason recorded for it.
+      expect(yield* Fiber.join(interrupted)).toBeFalse()
+      expect(reasons).toEqual([])
+      expect(Array.from(yield* coordinator.active)).toEqual([])
+
+      // An admission that arrived during the hold stayed eligible: it starts its own execution with
+      // the scope it asked for, rather than being swallowed by an interruption that never landed.
+      // A fresh execution for the same key, proving the admission was never bound to the dead owner.
+      const successorStarted = yield* Deferred.make<void>()
+      const successorScopes: string[] = []
+      const successor = yield* SessionRunCoordinator.make<string, never, string>({
+        drain: (_key, _force, scope) =>
+          Effect.sync(() => void successorScopes.push(scope)).pipe(
+            Effect.andThen(Deferred.succeed(successorStarted, undefined)),
+            Effect.andThen(Effect.never),
+          ),
+      })
+      yield* successor.wake("session", "steer")
+      yield* Deferred.await(successorStarted)
+      expect(successorScopes).toEqual(["steer"])
+      yield* successor.interrupt("session", "user")
+    }),
+  )
+
   it.effect("runs a wake registered during interruption cleanup", () =>
     Effect.gen(function* () {
       const firstStarted = yield* Deferred.make<void>()
