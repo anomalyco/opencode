@@ -248,6 +248,15 @@ describe("Patch", () => {
     ).toBe("line 1\nline 2\nadded 1\nadded 2\n")
   })
 
+  test("keeps trailing blank lines the patch did not touch", () => {
+    expect(
+      Patch.derive("update.txt", [{ oldLines: ["line 2"], newLines: ["LINE 2"] }], "line 1\nline 2\n\n").content,
+    ).toBe("line 1\nLINE 2\n\n")
+    expect(
+      Patch.derive("update.txt", [{ oldLines: ["line 1"], newLines: ["line 1", ""] }], "line 1\n").content,
+    ).toBe("line 1\n\n")
+  })
+
   test.each(["", "original\n"])("preserves equal-offset insertion order and frozen chunks for %j", (original) => {
     const chunks = Object.freeze([
       Object.freeze({ oldLines: Object.freeze([]), newLines: Object.freeze(["first"]) }),

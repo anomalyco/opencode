@@ -131,7 +131,10 @@ export function derive(path: string, chunks: ReadonlyArray<UpdateFileChunk>, ori
   if (lines.at(-1) === "") lines.pop()
   const replacements = computeReplacements(lines, path, chunks)
   for (const [start, remove, insert] of replacements.reverse()) lines.splice(start, remove, ...insert)
-  if (lines.at(-1) !== "") lines.push("")
+  // The split above lost the final newline as an empty element, and the file must end with one. Always
+  // restoring it keeps any other trailing blank lines the patch did not touch, which is why this is not
+  // conditional on the array's last line.
+  lines.push("")
   const next = Bom.split(lines.join("\n"))
   return { content: next.text, bom: source.bom || next.bom }
 }
