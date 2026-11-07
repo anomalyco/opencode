@@ -8,7 +8,9 @@ import { createLineCommentControllerV2 } from "@opencode/session-ui/v2/line-comm
 import { sampledChecksum } from "@opencode/util/encode"
 import { LineCommentOverflowIcon } from "@opencode/ui/line-comment"
 import { Menu } from "@opencode/ui/menu"
-import { Button } from "@opencode/ui/button"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Tooltip } from "@opencode/ui/tooltip"
 import type File from "./index"
 import { createKeyed, usePlugin, type LineRange, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
 import { artifactKind } from "@opencode/util/artifact"
@@ -577,19 +579,22 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
   const codeView = () => (
     <>
       <div class="flex shrink-0 justify-end px-3 pb-2">
-        <Button
-          variant="ghost"
-          size="small"
-          aria-pressed={ctx.stores.viewer.value.wrap}
-          onClick={() => {
-            scrollSync.interacted()
-            void ctx.stores.viewer.update((draft) => {
-              draft.wrap = !draft.wrap
-            })
-          }}
-        >
-          {ctx.t("view.wordWrap")}
-        </Button>
+        <Tooltip value={ctx.t("view.wordWrap")}>
+          <IconButton
+            variant="ghost"
+            size="large"
+            state={ctx.stores.viewer.value.wrap ? "pressed" : "rest"}
+            aria-label={ctx.t("view.wordWrap")}
+            aria-pressed={ctx.stores.viewer.value.wrap}
+            icon={<Icon name="word-wrap" size="normal" />}
+            onClick={() => {
+              scrollSync.interacted()
+              void ctx.stores.viewer.update((draft) => {
+                draft.wrap = !draft.wrap
+              })
+            }}
+          />
+        </Tooltip>
       </div>
       <div
         data-scrollable
