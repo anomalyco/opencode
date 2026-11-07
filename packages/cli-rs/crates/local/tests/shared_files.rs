@@ -130,7 +130,7 @@ fn session_json_under_contention() {
     if !available() {
         return;
     }
-    let state = tempfile::tempdir().unwrap();
+    let state = opencode_util::temp::tempdir().unwrap();
     let dir = state.path().to_owned();
     let stop = Arc::new(AtomicBool::new(false));
     let reader = watch(pins::file(&dir), stop.clone(), |text| {
@@ -184,7 +184,7 @@ fn prompt_history_under_contention() {
     if !available() {
         return;
     }
-    let state = tempfile::tempdir().unwrap();
+    let state = opencode_util::temp::tempdir().unwrap();
     let dir = state.path().to_owned();
     let file = dir.join("prompt-history.jsonl");
 
@@ -220,7 +220,7 @@ fn frecency_at_the_limit_under_contention() {
     if !available() {
         return;
     }
-    let state = tempfile::tempdir().unwrap();
+    let state = opencode_util::temp::tempdir().unwrap();
     let dir = state.path().to_owned();
     let file = dir.join("frecency.jsonl");
     let full: String = (0..jsonl::MAX_FRECENCY_ENTRIES)
@@ -272,7 +272,7 @@ fn prompt_stash_under_contention() {
     if !available() {
         return;
     }
-    let state = tempfile::tempdir().unwrap();
+    let state = opencode_util::temp::tempdir().unwrap();
     let dir = state.path().to_owned();
     let stop = Arc::new(AtomicBool::new(false));
     let reader = watch(dir.join("prompt-stash.jsonl"), stop.clone(), whole_lines);

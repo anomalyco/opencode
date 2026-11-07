@@ -201,7 +201,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_prepared_handoff_reaches_the_next_service_and_is_cleared_after_it() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let file = dir.path().join("service.json");
         std::fs::write(&file, serde_json::to_string(&info(9)).unwrap()).unwrap();
         let server = Arc::new(Server::default().reply(HANDOFF_URL, Reply::json(200, handoff_body())));
@@ -227,7 +227,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_failed_handoff_shuts_terminals_down_and_publishes_none() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let file = dir.path().join("service.json");
         let server = Arc::new(
             Server::default().reply(HANDOFF_URL, Reply::json(500, "{}")).reply(SHUTDOWN_URL, Reply::json(200, "{}")),
@@ -246,7 +246,7 @@ mod tests {
 
     #[test]
     fn expired_and_malformed_sidecars_are_ignored() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let file = dir.path().join("service.json");
         let write = |text: &str| std::fs::write(sidecar(&file), text).unwrap();
         let handoff = r#"{"directory":"/d","instanceID":"i","ticket":"t","expiresAt":1}"#;

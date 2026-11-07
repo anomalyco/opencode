@@ -316,7 +316,7 @@ mod tests {
     const HEALTH: &str = r#"{"version":"2.0.0","pid":9,"urls":[],"paths":{"tmp":"/tmp"}}"#;
 
     async fn run(server: Server, env: Env, options: Options) -> (Result<Connection, Error>, Arc<Server>) {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let paths = paths(dir.path());
         let server = Arc::new(server);
         let result = resolve(server.clone(), &paths, &env, &options).await;
@@ -372,7 +372,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_registered_service_is_used_without_flags() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let paths = paths(dir.path());
         std::fs::write(
             paths.state.join("service-oc-x.json"),
@@ -413,7 +413,7 @@ mod tests {
     // A registration of another channel whose service answers `replies` in order. The TS binary is
     // missing, so starting a service fails with "Failed to start server".
     async fn other_channel(replies: Vec<Reply>) -> Result<Connection, Error> {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let paths = paths(dir.path());
         std::fs::write(
             paths.state.join("service-oc-x.json"),

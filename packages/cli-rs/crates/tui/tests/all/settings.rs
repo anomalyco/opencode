@@ -265,7 +265,7 @@ const ORIGINAL: &str = "{\n  // my settings\n  \"$schema\": \"https://opencode.a
 
 #[test]
 fn settings_writes_match_typescript_and_typescript_reads_them() {
-    let home = tempfile::tempdir().unwrap();
+    let home = opencode_util::temp::tempdir().unwrap();
     let paths = support::xdg_paths(home.path());
     std::fs::create_dir_all(&paths.config).unwrap();
     let file = paths.config.join("cli.json");
@@ -292,7 +292,7 @@ fn settings_writes_match_typescript_and_typescript_reads_them() {
     );
 
     // TS reads what Rust wrote, then writes a setting the Rust dialog shows on its next open.
-    let twin = tempfile::tempdir().unwrap();
+    let twin = opencode_util::temp::tempdir().unwrap();
     let twin_file = support::xdg_paths(twin.path()).config.join("cli.json");
     std::fs::create_dir_all(twin_file.parent().unwrap()).unwrap();
     std::fs::write(&twin_file, ORIGINAL).unwrap();

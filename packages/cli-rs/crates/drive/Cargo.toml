@@ -18,4 +18,4 @@ tokio-tungstenite.workspace = true
 url.workspace = true
 
 [dev-dependencies]
-tempfile.workspace = true
+opencode-util.workspace = true

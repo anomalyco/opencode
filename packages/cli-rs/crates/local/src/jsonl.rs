@@ -441,7 +441,7 @@ mod tests {
 
     #[test]
     fn history_heals_appends_and_moves() {
-        let state = tempfile::tempdir().unwrap();
+        let state = opencode_util::temp::tempdir().unwrap();
         let file = state.path().join("prompt-history.jsonl");
         fs::write(&file, "{\"text\":\"a\",\"pasted\":[]}\nbroken\n{\"text\":1}\n").unwrap();
         let mut history = History::load(state.path());
@@ -463,7 +463,7 @@ mod tests {
 
     #[test]
     fn saves_keep_lines_another_client_appended() {
-        let state = tempfile::tempdir().unwrap();
+        let state = opencode_util::temp::tempdir().unwrap();
         let file = state.path().join("prompt-history.jsonl");
         save_history(state.path(), &prompt("a")).unwrap();
         save_history(state.path(), &prompt("a")).unwrap();
@@ -488,7 +488,7 @@ mod tests {
 
     #[test]
     fn stash_pushes_pops_and_removes() {
-        let state = tempfile::tempdir().unwrap();
+        let state = opencode_util::temp::tempdir().unwrap();
         let mut stash = Stash::load(state.path());
         stash.push(prompt("a"), 1);
         stash.push(prompt("b"), 2);
@@ -521,7 +521,7 @@ mod tests {
 
     #[test]
     fn stash_writes_keep_entries_another_client_stashed() {
-        let state = tempfile::tempdir().unwrap();
+        let state = opencode_util::temp::tempdir().unwrap();
         let file = state.path().join("prompt-stash.jsonl");
         ts_stash(&file, "ts-old", 1);
         let mut stash = Stash::load(state.path());
@@ -550,7 +550,7 @@ mod tests {
 
     #[test]
     fn a_frecency_update_at_the_limit_keeps_another_clients_writes() {
-        let state = tempfile::tempdir().unwrap();
+        let state = opencode_util::temp::tempdir().unwrap();
         let file = state.path().join("frecency.jsonl");
         let full: String = (0..MAX_FRECENCY_ENTRIES)
             .map(|n| format!("{{\"path\":\"/w/f{n}.rs\",\"frequency\":1,\"lastOpen\":{}}}\n", 1000 - n))
@@ -585,7 +585,7 @@ mod tests {
 
     #[test]
     fn frecency_keeps_the_latest_line_per_path() {
-        let state = tempfile::tempdir().unwrap();
+        let state = opencode_util::temp::tempdir().unwrap();
         let file = state.path().join("frecency.jsonl");
         fs::write(
             &file,

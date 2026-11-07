@@ -303,7 +303,7 @@ mod tests {
 
     #[tokio::test]
     async fn prefers_the_service_the_typescript_binary_runs() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let paths = paths(dir.path());
         // The TS binary is reached through a symlink, as `~/.local/bin/opencode` may be.
         let ts = dir.path().join("ts-real");
@@ -326,7 +326,7 @@ mod tests {
 
     #[tokio::test]
     async fn no_match_takes_the_newest_and_a_version_match_decides_without_an_executable() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let paths = paths(dir.path());
         register(&paths, "service-v2.json", 1001, 0);
         register(&paths, "service-oc-next.json", 1002, 100);
@@ -349,7 +349,7 @@ mod tests {
 
     #[tokio::test]
     async fn prefers_the_env_channel_then_the_default_channel() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let paths = paths(dir.path());
         register(&paths, "service.json", 1001, 50);
         register(&paths, "service-oc-x.json", 1002, 100);
@@ -363,7 +363,7 @@ mod tests {
 
     #[tokio::test]
     async fn falls_back_to_the_newest_answering_registration() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let paths = paths(dir.path());
         register(&paths, "service.json", 1001, 0);
         register(&paths, "service-oc-old.json", 1002, 200);
@@ -380,7 +380,7 @@ mod tests {
 
     #[tokio::test]
     async fn reports_why_an_answering_service_was_not_used() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let paths = paths(dir.path());
         assert_eq!(found(&Server::default(), &paths, None).await, Err(Missing { reason: None, pending: None }));
         register(&paths, "service.json", 1001, 0);
@@ -397,7 +397,7 @@ mod tests {
     // Paused time: the hanging probe times out without waiting.
     #[tokio::test(start_paused = true)]
     async fn a_starting_or_unresponsive_registration_is_pending() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let paths = paths(dir.path());
         register(&paths, "service-oc-x.json", 1002, 0);
         let starting = server([(

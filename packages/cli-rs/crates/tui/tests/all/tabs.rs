@@ -25,7 +25,7 @@ struct Tabs {
     harness: Harness,
     memory: Memory,
     state: PathBuf,
-    _home: tempfile::TempDir,
+    _home: opencode_util::temp::TempDir,
 }
 
 deref_harness!(Tabs);
@@ -41,7 +41,7 @@ fn routes() -> Vec<MemoryRoute> {
 }
 
 fn mount(width: u16, config: Value) -> Tabs {
-    let home = tempfile::tempdir().unwrap();
+    let home = opencode_util::temp::tempdir().unwrap();
     let paths = support::home_paths(home.path());
     std::fs::create_dir_all(&paths.state).unwrap();
     let state = paths.state.clone();

@@ -89,7 +89,7 @@ fn run(recording: &Recording) -> (bool, String) {
     // The editor context's sources (E.5): the fake IDE server and the Zed database the TS side had.
     let ide = recording.ide.as_ref().map(|_| ide::Ide::start());
     let zed = recording.zed.as_ref().map(|zed| {
-        let directory = tempfile::tempdir().expect("zed directory");
+        let directory = opencode_util::temp::tempdir().expect("zed directory");
         let db = directory.path().join("db.sqlite");
         opencode_tui::prompt::editor_context::zed::exec(&db, &zed.sql).expect("zed database");
         (directory, db)

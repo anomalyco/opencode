@@ -124,7 +124,7 @@ fn write(path: &Path, text: &str) {
 
 #[test]
 fn plugin_directories_follow_the_project_root_down_to_cwd() {
-    let root = tempfile::tempdir().unwrap();
+    let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
     let project = root.path().join("repo");
     let cwd = project.join("a/b");
@@ -145,7 +145,7 @@ fn plugin_directories_follow_the_project_root_down_to_cwd() {
 
 #[test]
 fn discover_lists_subdirectories_by_name() {
-    let root = tempfile::tempdir().unwrap();
+    let root = opencode_util::temp::tempdir().unwrap();
     let plugins = root.path().join("plugins");
     for name in ["beta", "Alpha", "gamma"] {
         fs::create_dir_all(plugins.join(name)).unwrap();
@@ -169,7 +169,7 @@ fn local_source_resolves_paths_and_urls_but_not_packages() {
 
 #[test]
 fn reconcile_loads_reloads_keeps_and_unloads() {
-    let root = tempfile::tempdir().unwrap();
+    let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
     let lib_dir = config.join("plugins/fake");
     let ts_dir = config.join("plugins/typescript");
@@ -255,7 +255,7 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
 
 #[test]
 fn a_build_that_never_loaded_is_failed_and_ids_stay_unique() {
-    let root = tempfile::tempdir().unwrap();
+    let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
     write(&config.join(format!("plugins/a/{}", entry_file())), "id=same");
     write(&config.join(format!("plugins/b/{}", entry_file())), "id=same");
@@ -286,7 +286,7 @@ const ONE: &str = "./one.dll";
 
 #[test]
 fn directives_after_an_entry_disable_an_external_plugin() {
-    let root = tempfile::tempdir().unwrap();
+    let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
     write(&config.join(format!("one.{}", std::env::consts::DLL_EXTENSION)), "id=one");
     write(&config.join(format!("plugins/two/{}", entry_file())), "id=two");
@@ -310,7 +310,7 @@ fn directives_after_an_entry_disable_an_external_plugin() {
 // `<cwd>/.opencode` is missing too and `cwd` is below the project root.
 #[test]
 fn watch_dirs_cover_a_plugins_directory_made_later() {
-    let root = tempfile::tempdir().unwrap();
+    let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
     let project = root.path().join("repo");
     let cwd = project.join("a");

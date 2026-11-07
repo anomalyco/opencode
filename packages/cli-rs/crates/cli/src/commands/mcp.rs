@@ -288,7 +288,7 @@ mod tests {
 
     #[test]
     fn config_path_prefers_existing_files_in_order() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         assert_eq!(config_path(dir.path()), dir.path().join("opencode.json"));
         std::fs::create_dir(dir.path().join(".opencode")).unwrap();
         std::fs::write(dir.path().join(".opencode/opencode.jsonc"), "{}").unwrap();

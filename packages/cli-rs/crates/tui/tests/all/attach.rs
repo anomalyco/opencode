@@ -40,17 +40,17 @@ fn fake() -> Fake {
 struct Setup {
     harness: Harness,
     seen: Log,
-    home: tempfile::TempDir,
+    home: opencode_util::temp::TempDir,
 }
 
 deref_harness!(Setup);
 
 impl Setup {
     fn new() -> Self {
-        Self::with(tempfile::tempdir().unwrap(), Info::default(), false)
+        Self::with(opencode_util::temp::tempdir().unwrap(), Info::default(), false)
     }
 
-    fn with(home: tempfile::TempDir, info: Info, local: bool) -> Self {
+    fn with(home: opencode_util::temp::TempDir, info: Info, local: bool) -> Self {
         let fake = fake();
         let seen = fake.log();
         let deps = opencode_tui::Deps {
@@ -167,7 +167,8 @@ fn short_pastes_go_in_as_they_are_and_full_turns_compaction_off() {
     setup.app.paste("short \u{1b}[31mred\u{1b}[0m\rpaste");
     setup.wait_text("short red\npaste");
 
-    let full = Setup::with(tempfile::tempdir().unwrap(), prompt_config(Some(PromptPaste::Full), false), false);
+    let full =
+        Setup::with(opencode_util::temp::tempdir().unwrap(), prompt_config(Some(PromptPaste::Full), false), false);
     full.app.paste("a\nb\nc\nd");
     full.wait_text("a\nb\nc\nd");
 }
@@ -176,7 +177,7 @@ fn short_pastes_go_in_as_they_are_and_full_turns_compaction_off() {
 fn clipboard_images_attach_preview_and_open_in_the_dialog() {
     let capture = testing::capture();
     let png = base64::engine::general_purpose::STANDARD.decode(PNG).unwrap();
-    let setup = Setup::with(tempfile::tempdir().unwrap(), prompt_config(None, true), false);
+    let setup = Setup::with(opencode_util::temp::tempdir().unwrap(), prompt_config(None, true), false);
     let read = || ClipboardOutcome::Read { mime_type: "image/png".into(), data: png.clone() };
     capture.0.clipboard.borrow_mut().extend([read(), read()]);
     setup.app.press("ctrl+v");
@@ -228,12 +229,12 @@ fn clipboard_text_pastes_and_read_errors_toast() {
 
 #[test]
 fn pasted_paths_attach_files_and_svgs_paste_their_text() {
-    let files = tempfile::tempdir().unwrap();
+    let files = opencode_util::temp::tempdir().unwrap();
     let png = files.path().join("shot one.png");
     std::fs::write(&png, base64::engine::general_purpose::STANDARD.decode(PNG).unwrap()).unwrap();
     let svg = files.path().join("logo.svg");
     std::fs::write(&svg, "<svg/>").unwrap();
-    let setup = Setup::with(tempfile::tempdir().unwrap(), prompt_config(None, true), true);
+    let setup = Setup::with(opencode_util::temp::tempdir().unwrap(), prompt_config(None, true), true);
     // A dragged path arrives quoted or escaped; both attach.
     setup.app.paste(&format!("'{}'", png.display()).replace(' ', "\\ "));
     setup.wait_text("[Image 1] ");
@@ -260,10 +261,10 @@ fn pasted_paths_attach_files_and_svgs_paste_their_text() {
 
 #[test]
 fn previews_show_above_the_prompt_and_a_click_opens_the_dialog() {
-    let files = tempfile::tempdir().unwrap();
+    let files = opencode_util::temp::tempdir().unwrap();
     let bad = files.path().join("bad.png");
     std::fs::write(&bad, b"not a png").unwrap();
-    let setup = Setup::with(tempfile::tempdir().unwrap(), prompt_config(None, true), false);
+    let setup = Setup::with(opencode_util::temp::tempdir().unwrap(), prompt_config(None, true), false);
     setup.app.paste(&bad.display().to_string());
     setup.wait_text("[Image 1] ");
     let (x, y) = setup.find("No preview");
@@ -351,7 +352,7 @@ fn stash_file_is_shared_with_typescript() {
     assert_eq!(lines.len(), 2);
 
     // A new Rust TUI reads the TypeScript file: pop gives the TypeScript entry, then the Rust one.
-    let home = tempfile::TempDir::new().unwrap();
+    let home = opencode_util::temp::TempDir::new().unwrap();
     std::fs::create_dir_all(home.path().join("state")).unwrap();
     std::fs::copy(state.join("prompt-stash.jsonl"), home.path().join("state/prompt-stash.jsonl")).unwrap();
     let again = Setup::with(home, Info::default(), false);
@@ -398,7 +399,7 @@ fn a_stash_another_tui_made_survives_pop() {
 
 #[test]
 fn a_stash_made_while_the_stash_loads_is_kept() {
-    let home = tempfile::TempDir::new().unwrap();
+    let home = opencode_util::temp::TempDir::new().unwrap();
     let state = home.path().join("state");
     ts_stash(&state, "old");
     // Broken lines keep the load busy past the first frames; it heals them away.

@@ -58,7 +58,7 @@ fn transcript() -> Vec<Value> {
 
 /// Mounts the TUI on `ses_a` with `ses_b` open as a second tab, and runs `check` with the app.
 fn with_tabs(width: u16, config: Value, check: impl FnOnce(&TestApp, &opencode_tui::Tui)) {
-    let home = tempfile::tempdir().unwrap();
+    let home = opencode_util::temp::tempdir().unwrap();
     let paths = support::home_paths(home.path());
     std::fs::create_dir_all(&paths.state).unwrap();
     let deps = Deps {

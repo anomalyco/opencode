@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn manifests_come_from_the_registry() {
-        let directory = tempfile::tempdir().unwrap();
+        let directory = opencode_util::temp::tempdir().unwrap();
         let instances = directory.path().join("opencode-drive").join("instances");
         std::fs::create_dir_all(&instances).unwrap();
         let state = directory.path().to_str().unwrap();

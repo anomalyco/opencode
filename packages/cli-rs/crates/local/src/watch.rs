@@ -196,7 +196,7 @@ mod tests {
 
     #[test]
     fn a_burst_of_writes_gives_one_callback() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let (tx, rx) = mpsc::channel();
         let _watch = watch(dir.path(), |name| name == "a.json", DEBOUNCE, move || tx.send(()).unwrap()).unwrap();
         for index in 0..5 {
@@ -213,7 +213,7 @@ mod tests {
 
     #[test]
     fn an_atomic_save_over_a_watched_file_calls_back() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         std::fs::write(dir.path().join("a.json"), "0").unwrap();
         let (tx, rx) = mpsc::channel();
         let _watch = watch(dir.path(), |name| name == "a.json", DEBOUNCE, move || tx.send(()).unwrap()).unwrap();
@@ -225,7 +225,7 @@ mod tests {
 
     #[test]
     fn a_directory_made_again_is_watched_again() {
-        let root = tempfile::tempdir().unwrap();
+        let root = opencode_util::temp::tempdir().unwrap();
         let dir = root.path().join("watched");
         std::fs::create_dir(&dir).unwrap();
         let (tx, rx) = mpsc::channel();
@@ -241,7 +241,7 @@ mod tests {
 
     #[test]
     fn dropping_the_watch_ends_its_threads() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = opencode_util::temp::tempdir().unwrap();
         let (tx, rx) = mpsc::channel::<()>();
         let watch = watch(dir.path(), |_| true, DEBOUNCE, move || tx.send(()).unwrap()).unwrap();
         drop(watch);

@@ -242,7 +242,7 @@ fn toggles_write_cli_json_as_typescript_does_and_typescript_reads_them() {
         "{{\n  // my settings\n  \"keybinds\": {},\n  \"prompt\": {{ \"image_preview\": true }}\n}}\n",
         keybinds()
     );
-    let home = tempfile::tempdir().unwrap();
+    let home = opencode_util::temp::tempdir().unwrap();
     let paths = support::xdg_paths(home.path());
     std::fs::create_dir_all(&paths.config).unwrap();
     let file = paths.config.join("cli.json");
@@ -273,7 +273,7 @@ fn toggles_write_cli_json_as_typescript_does_and_typescript_reads_them() {
     let text = std::fs::read_to_string(&file).unwrap();
 
     // TS writes the same bytes for the same updates, and reads what Rust wrote.
-    let twin = tempfile::tempdir().unwrap();
+    let twin = opencode_util::temp::tempdir().unwrap();
     let twin_file = support::xdg_paths(twin.path()).config.join("cli.json");
     std::fs::create_dir_all(twin_file.parent().unwrap()).unwrap();
     std::fs::write(&twin_file, &original).unwrap();
