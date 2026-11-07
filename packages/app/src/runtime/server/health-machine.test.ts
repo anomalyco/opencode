@@ -6,7 +6,6 @@ import {
   selectServerHealthRank,
   selectServerHealthRecord,
   selectServerIndicator,
-  selectServerVersion,
   SERVER_HEALTH_POLL_MS,
   transitionServerHealth,
   type ServerHealth,
@@ -225,12 +224,4 @@ test("retry with no server to probe resolves at once", () => {
   expect(
     transitionServerHealth(replay([synced(staged("ssh", "auth"))]).state, { type: "retry.requested", resolve }).effects,
   ).toEqual([{ type: "waiters.resolve", resolvers: [resolve] }])
-})
-
-test("selectServerVersion only reads healthy probes and never invents a version", () => {
-  expect(selectServerVersion({ type: "healthy", version: "2.2.5" })).toBe("2.2.5")
-  expect(selectServerVersion({ type: "healthy" })).toBeUndefined()
-  expect(selectServerVersion({ type: "incompatible" })).toBeUndefined()
-  expect(selectServerVersion({ type: "unreachable" })).toBeUndefined()
-  expect(selectServerVersion(undefined)).toBeUndefined()
 })

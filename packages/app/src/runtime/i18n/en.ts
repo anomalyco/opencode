@@ -473,7 +473,8 @@ export const dict = {
 
   "server.row.incompatible":
     "This server is running OpenCode {{version}}, which isn't compatible with this app. Upgrade it to OpenCode V2 to continue.",
-  "server.row.incompatible.unknown": "This server isn't compatible with this app.",
+  "server.row.incompatible.unknown":
+    "This server isn't compatible with this app. Update OpenCode on the server to match this app, then restart its service.",
 
   "dialog.project.edit.title": "Edit project",
   "dialog.project.edit.icon": "Icon",
@@ -625,7 +626,8 @@ export const dict = {
   "session.error.incompatible": "This server version isn't supported",
   "session.error.incompatible.description":
     "{{server}} is running OpenCode {{version}}, which isn't compatible with this app. Upgrade the server to OpenCode V2 to continue.",
-  "session.error.incompatible.description.unknown": "{{server}} isn't compatible with this app.",
+  "session.error.incompatible.description.unknown":
+    "{{server}} isn't compatible with this app. Update OpenCode on the server to match this app, then restart its service.",
   "session.error.unreachable": "Can't reach this server",
   "session.error.unreachable.description":
     "{{server}} isn't responding, so this session can't load. It will open automatically once the server is reachable again.",
