@@ -33,19 +33,23 @@ describe("pruneTranscript", () => {
 
   test("leaves the current turn alone", () => {
     const current = Message.user("now")
-    const out = pruneTranscript([reasoning, bigRead, current])
+    const out = pruneTranscript([reasoning, bigRead, current], 2)
     expect(out[2]).toBe(current)
   })
 
-  test("drops readable reasoning from settled turns but keeps signed blocks", () => {
+  test("drops readable reasoning from settled turns but keeps signed blocks and tool-call turns", () => {
+    const thinking = Message.assistant([
+      { type: "reasoning", text: "old thinking" },
+      { type: "text", text: "answer" },
+    ])
     const signed = Message.assistant([
       { type: "reasoning", text: "signed", providerMetadata: { anthropic: { signature: "sig" } } },
       { type: "text", text: "answer" },
     ])
-    const out = pruneTranscript([reasoning, bigRead, signed, Message.user("now")])
-    const settled = out[0]
-    expect(settled?.role).toBe("assistant")
-    expect(settled?.content.some((part) => part.type === "reasoning")).toBe(false)
+    const out = pruneTranscript([thinking, signed, reasoning, Message.user("now")], 3)
+    expect(out[0]?.content.some((part) => part.type === "reasoning")).toBe(false)
+    expect(out[1]?.content.some((part) => part.type === "reasoning")).toBe(true)
+    // providers that need reasoning_content on earlier tool-call messages still get it
     expect(out[2]?.content.some((part) => part.type === "reasoning")).toBe(true)
   })
 
@@ -58,7 +62,7 @@ describe("pruneTranscript", () => {
         value: `${"y".repeat(3000)}\n[showing lines 1-60 of 9000; full output saved to /tmp/tool_abc]`,
       },
     })
-    const out = pruneTranscript([Message.user("old"), truncated, Message.user("now")])
+    const out = pruneTranscript([Message.user("old"), truncated, Message.user("now")], 2)
     expect(text(out[1])).toContain("full output saved to /tmp/tool_abc")
   })
 
@@ -68,22 +72,22 @@ describe("pruneTranscript", () => {
       name: "read",
       result: { type: "text", value: "Read file a.ts, lines 1-400\nnew content" },
     })
-    const out = pruneTranscript([Message.user("old"), bigRead, Message.user("mid"), newer, Message.user("now")])
+    const out = pruneTranscript([Message.user("old"), bigRead, Message.user("mid"), newer, Message.user("now")], 4)
     expect(text(out[1])).toBe("[superseded by a newer read of a.ts]")
     expect(text(out[3])).toContain("new content")
   })
 
   test("counts reclaimed chars in stats", () => {
     const stats = { reclaimed: 0 }
-    pruneTranscript([Message.user("old"), reasoning, bigRead, Message.user("now")], stats)
+    pruneTranscript([Message.user("old"), reasoning, bigRead, Message.user("now")], 3, stats)
     expect(stats.reclaimed).toBeGreaterThan(0)
   })
 
   test("small results and tiny transcripts pass through", () => {
     const small = Message.tool({ id: "c3", name: "glob", result: { type: "text", value: "a.ts\nb.ts" } })
-    const out = pruneTranscript([Message.user("old"), small, Message.user("now")])
+    const out = pruneTranscript([Message.user("old"), small, Message.user("now")], 2)
     expect(text(out[1])).toBe("a.ts\nb.ts")
-    expect(pruneTranscript([Message.user("only")])).toHaveLength(1)
+    expect(pruneTranscript([Message.user("only")], 0)).toHaveLength(1)
   })
 })
 
@@ -107,6 +111,28 @@ describe("toLLMMessages prune", () => {
     )
     expect(text(messages[0])).toBe("[Skill unloaded: demo]")
     expect(text(messages[1])).toBe("now")
+  })
+
+  test("mid-turn synthetic messages do not open a new turn", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({ id: id("u1"), type: "user", text: "go", time: { created } }),
+        SessionMessage.Synthetic.make({
+          id: id("syn"),
+          type: "synthetic",
+          text: "background task finished",
+          time: { created },
+        }),
+      ],
+      model,
+      model.providerID,
+      true,
+    )
+    // boundary comes from the session messages: the synthetic one is mid-turn,
+    // so nothing before it counts as settled either
+    expect(messages).toHaveLength(2)
+    expect(text(messages[0])).toBe("go")
+    expect(text(messages[1])).toBe("background task finished")
   })
 
   test("without prune nothing changes", () => {

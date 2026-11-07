@@ -14,6 +14,7 @@ import {
 import type { Model } from "@opencode/schema/model"
 import { Option, Schema } from "effect"
 import { fileURLToPath } from "url"
+import { formatPatch, structuredPatch } from "diff"
 import { SessionMessage } from "../message.js"
 import { SessionHistory } from "../history.js"
 import { SessionRecentText } from "../recent-text.js"
@@ -325,17 +326,21 @@ export const toLLMMessages = (
   prune = false,
   stats?: GCStats,
 ) => {
-  // only kinds that emit a user-role entry count; system messages are mid-turn
-  // updates and must not move the boundary forward over a live tool call
+  // only a real user prompt (or a finished compaction, which resets context) ends a turn.
+  // synthetic inbox items, skills and user-run shells all emit user-role messages too,
+  // but they can land mid-turn and must not move the boundary over live tool calls.
   const lastBoundary = prune
-    ? messages.findLastIndex((message) =>
-        ["user", "synthetic", "skill", "shell", "location-switched", "compaction"].includes(message.type),
-      )
+    ? messages.findLastIndex((message) => ["user", "compaction"].includes(message.type))
     : -1
-  const result = messages.flatMap((message, index) =>
-    toLLMMessage(message, model, providerMetadataKey, index < lastBoundary, stats),
-  )
-  return prune ? pruneTranscript(result, stats) : result
+  // the same boundary drives both the source-side unload and the emitted pass —
+  // counting emissions so there is one definition of "current turn", not two
+  let emittedBefore = 0
+  const result = messages.flatMap((message, index) => {
+    const out = toLLMMessage(message, model, providerMetadataKey, index < lastBoundary, stats)
+    if (index < lastBoundary) emittedBefore += out.length
+    return out
+  })
+  return prune ? pruneTranscript(result, emittedBefore, stats) : result
 }
 
 const REPLAY_STUB = "[older tool output was cleared to save context; run the tool again if it is still needed]"
@@ -388,11 +393,16 @@ const gcMessage = (message: Message, index: number, latestRead: Map<string, numb
         : new ToolMessage({ ...message, content })
     }
     case "assistant": {
+      // some providers expect reasoning on earlier tool-call messages; only strip from pure text turns
+      const hasToolCalls = message.content.some((part) => part.type === "tool-call")
       const content = message.content.flatMap((part): Array<AssistantMessage["content"][number]> => {
         // readable reasoning is dead weight once the turn it produced is over;
         // signed/native blocks stay, the provider still needs them
         if (part.type === "reasoning")
-          return part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0 ? [part] : []
+          return hasToolCalls ||
+            (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
+            ? [part]
+            : []
         return [part.type === "tool-result" ? stubResult(part, index, latestRead) : part]
       })
       // an empty assistant message is worse than a kept reasoning block
@@ -417,8 +427,7 @@ const messageSize = (message: Message) =>
  * re-entered, and large tool outputs are almost never re-read. The current
  * turn is left alone so in-flight tool calls keep their full context.
  */
-export const pruneTranscript = (messages: ReadonlyArray<Message>, stats?: GCStats): Message[] => {
-  const boundary = messages.findLastIndex((m) => m.role === "user")
+export const pruneTranscript = (messages: ReadonlyArray<Message>, boundary: number, stats?: GCStats): Message[] => {
   if (boundary <= 0) return messages.slice()
   // newest read result per file, anywhere in the transcript; older copies are superseded
   const latestRead = new Map<string, number>()
@@ -439,5 +448,55 @@ export const pruneTranscript = (messages: ReadonlyArray<Message>, stats?: GCStat
     }
     return pruned
   })
-  return changed ? next : messages.slice()
+
+  // dedupe reads in the live tail against the newest intact copy of the same file.
+  // a stubbed result no longer matches READ_HEADER, so it can never be mistaken for a base.
+  const previousRead = new Map<string, string>()
+  const dedupePart = (part: ToolResultPart, fresh: boolean): ToolResultPart => {
+    const path = readPath(part)
+    const text = part.result.type === "text" && typeof part.result.value === "string" ? part.result.value : undefined
+    if (path === undefined || text === undefined) return part
+    const prev = previousRead.get(path)
+    // in the settled zone superseded/size stubs already ran; just remember the visible copy
+    if (!fresh || prev === undefined) {
+      previousRead.set(path, text)
+      return part
+    }
+    if (prev === text) {
+      if (stats) stats.reclaimed += text.length
+      return { ...part, result: { type: "text" as const, value: `[unchanged since the previous read of ${path}]` } }
+    }
+    const patch = readDiff(prev, text)
+    previousRead.set(path, text)
+    if (patch === undefined) return part
+    if (stats) stats.reclaimed += text.length - patch.length
+    return {
+      ...part,
+      result: { type: "text" as const, value: `${path} changed since the previous read; diff vs that version:\n${patch}` },
+    }
+  }
+  for (let i = 0; i < next.length; i++) {
+    const fresh = i >= boundary
+    const message = next[i]!
+    if (message.role === "assistant") {
+      const content = message.content.map((part) =>
+        part.type === "tool-result" ? dedupePart(part, fresh) : part,
+      )
+      if (content.every((part, j) => part === message.content[j])) continue
+      next[i] = new AssistantMessage({ ...message, content })
+      continue
+    }
+    if (message.role === "tool") {
+      const content = message.content.map((part) => dedupePart(part, fresh))
+      if (content.every((part, j) => part === message.content[j])) continue
+      next[i] = new ToolMessage({ ...message, content })
+    }
+  }
+  return changed || next.some((m, i) => m !== messages[i]) ? next : messages.slice()
+}
+
+// a diff that is not smaller than the new content is no saving; caller falls back to the full read
+const readDiff = (previous: string, current: string) => {
+  const patch = formatPatch(structuredPatch("before", "after", previous, current, "", "", { context: 2 }))
+  return patch.length < current.length ? patch : undefined
 }
