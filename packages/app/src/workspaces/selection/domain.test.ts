@@ -15,6 +15,8 @@ import {
   pickerParent,
   pickerRoot,
   pickerAbsoluteInput,
+  cleanPickerInput,
+  resolvePickerTarget,
 } from "./domain"
 
 type Sdk = Parameters<typeof listPickerDirectory>[0]
@@ -143,6 +145,19 @@ test.each([
   ],
 ])("uses the selected server path format for %s: %p", (_name, actual, expected) => {
   expect(actual).toBe(expected)
+})
+
+test("a resolved picker path keeps its whitespace while typed input is trimmed", () => {
+  expect(cleanPickerInput(" /home/luke/work  ")).toBe("/home/luke/work")
+  expect(cleanPickerInput(" /home/luke/work  ", { trim: false })).toBe(" /home/luke/work  ")
+  expect(
+    resolvePickerTarget(pickerMode("directory"), "/home/luke/work ", "/home/luke", "/home/luke", {
+      preserveWhitespace: true,
+    }),
+  ).toBe("/home/luke/work ")
+  expect(resolvePickerTarget(pickerMode("directory"), "/home/luke/work ", "/home/luke", "/home/luke")).toBe(
+    "/home/luke/work",
+  )
 })
 
 test("resolves directory autocomplete from the browser root without changing location", async () => {

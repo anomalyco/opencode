@@ -169,8 +169,8 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     return value ? shortenPickerRecentPath(value, home()) : ""
   })
 
-  function navigation(path: string) {
-    return { path, home: home(), fallback: start() || home(), located: Boolean(location()) }
+  function navigation(path: string, resolved = false) {
+    return { path, home: home(), fallback: start() || home(), located: Boolean(location()), resolved }
   }
 
   function dispatchTree(event: PickerTreeEvent) {
@@ -346,7 +346,11 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     if (effect.type === "selection.clear") return dispatchTree({ type: "selection.cleared" })
 
     if (effect.type === "choose.directory") {
-      return dispatchTree({ type: "directory.chosen", ...navigation(effect.path), fromInput: true })
+      return dispatchTree({
+        type: "directory.chosen",
+        ...navigation(effect.path, effect.resolved),
+        fromInput: true,
+      })
     }
 
     dispatchTree({ type: "file.chosen", absolute: effect.absolute, home: home() })
@@ -679,7 +683,11 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
                         })}
                         onClick={() => {
                           dispatchCombobox({ type: "dismissed" })
-                          dispatchTree({ type: "directory.chosen", ...navigation(project.worktree), fromInput: false })
+                          dispatchTree({
+                            type: "directory.chosen",
+                            ...navigation(project.worktree, true),
+                            fromInput: false,
+                          })
                         }}
                       >
                         <ProjectAvatar

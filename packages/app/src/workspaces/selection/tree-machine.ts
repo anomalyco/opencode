@@ -65,12 +65,16 @@ export type PickerTreeState =
   | { readonly status: "error"; readonly issued: number; readonly root: string; readonly locationDirectory?: string }
   | { readonly status: "disposed" }
 
-/** `fallback` is the base for relative paths before a root opens; `located` says whether a server location exists. */
+/**
+ * `fallback` is the base for relative paths before a root opens; `located` says whether a server location exists.
+ * `resolved` marks a path that came from a listing or suggestion, where leading and trailing spaces belong to the name.
+ */
 type PickerNavigation = {
   readonly path: string
   readonly home: string
   readonly fallback: string
   readonly located: boolean
+  readonly resolved?: boolean
 }
 
 export type PickerTreeEvent =
@@ -462,7 +466,9 @@ function select(state: ReadyTree, selected: string): PickerTreeTransition {
 }
 
 function target(state: LiveTree, event: PickerNavigation, policy: PickerPolicy) {
-  return resolvePickerTarget(policy, event.path, event.home, rootOf(state) || event.fallback)
+  return resolvePickerTarget(policy, event.path, event.home, rootOf(state) || event.fallback, {
+    preserveWhitespace: event.resolved,
+  })
 }
 
 function rootOf(state: PickerTreeState) {
