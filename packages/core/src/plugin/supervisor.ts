@@ -13,6 +13,7 @@ import { PluginModule } from "./module.js"
 import { SdkPlugins } from "./sdk.js"
 import { PluginUpdate } from "./update.js"
 import { Watcher } from "../filesystem/watcher.js"
+import { SessionParallelContext } from "../session/parallel-context.js"
 
 const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
   modules: Effect.Success<ReturnType<typeof PluginModule.make>>,
@@ -243,6 +244,7 @@ const nodeDeps = [
   Npm.node,
   Watcher.node,
   PluginInternal.requirements,
+  SessionParallelContext.node,
 ] as const
 
 export const node = makeLocationNode({ name: "plugin-supervisor", layer, deps: nodeDeps })

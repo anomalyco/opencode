@@ -32,6 +32,7 @@ import { SessionStep } from "./step.js"
 import { ToolOutput } from "../../tool-output.js"
 import { Plugin } from "../../plugin.js"
 import { PluginHooks } from "../../plugin/hooks.js"
+import { SessionParallelContext } from "../parallel-context.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
 const CONTINUE_AFTER_INCOMPLETE_STREAM =
@@ -57,6 +58,7 @@ const layer = Layer.effect(
     const jobs = yield* Job.Service
     const title = yield* SessionTitle.Service
     const steps = yield* SessionStep.make
+    const parallelContext = yield* SessionParallelContext.Service
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
 
@@ -246,6 +248,7 @@ const layer = Layer.effect(
         if (compacted.status === "failed") return yield* new StepFailedError({ error: compacted.error })
         if (compacted.status === "completed") {
           assistantMessageID = SessionMessage.ID.create()
+          yield* parallelContext.invalidateChildren(sessionID)
           continue
         }
         yield* compaction.precompute(Effect.succeed(loaded), estimate)
@@ -458,5 +461,6 @@ export const node = makeLocationNode({
     Snapshot.node,
     ToolOutput.node,
     Database.node,
+    SessionParallelContext.node,
   ],
 })
