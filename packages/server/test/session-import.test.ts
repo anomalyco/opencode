@@ -45,7 +45,10 @@ const setup = Effect.gen(function* () {
 it.live("includes the latest user and assistant message times in the session list", () =>
   Effect.gen(function* () {
     const request = yield* setup
-    const empty = Schema.decodeUnknownSync(SessionResponse)(yield* request("/api/session", { title: "Empty" }))
+    const created = yield* request("/api/session", { title: "Empty" })
+    expect(created).not.toHaveProperty("data.experimental")
+    const empty = Schema.decodeUnknownSync(SessionResponse)(created)
+    expect(yield* request(`/api/session/${empty.data.id}`)).not.toHaveProperty("data.experimental")
     const id = Session.ID.create()
     yield* request("/api/experimental/session/import", {
       info: { ...empty.data, id, title: "With messages" },

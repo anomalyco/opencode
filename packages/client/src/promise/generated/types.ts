@@ -2312,26 +2312,6 @@ export type ModelInfo = {
   limit: { context: number; input?: number; output: number }
 }
 
-export type SessionListInfo = {
-  id: SessionID
-  parentID?: SessionID
-  fork?: { sessionID: SessionID; boundary: SessionForkBoundary }
-  projectID: ProjectID
-  agent?: AgentID
-  model?: ModelRef
-  cost: MoneyUSD
-  tokens: TokenUsageInfo
-  outcome?: "succeeded" | "failed" | "interrupted"
-  time: { created: number; updated: number; busy?: number; idle?: number; viewed?: number; archived?: number }
-  title?: string
-  subpath?: RelativePath
-  metadata?: SessionMetadata
-  permissions?: PermissionRuleset
-  revert?: SessionRevert
-  location: LocationPublicRef
-  experimental?: { time: { lastUserMessage?: number | null; lastAssistantMessage?: number | null } }
-}
-
 export type SessionInfo = {
   id: SessionID
   parentID?: SessionID
@@ -2349,6 +2329,7 @@ export type SessionInfo = {
   permissions?: PermissionRuleset
   revert?: SessionRevert
   location: LocationPublicRef
+  experimental?: { time: { lastUserMessage?: number | null; lastAssistantMessage?: number | null } }
 }
 
 export type SessionCreated = {
@@ -2699,7 +2680,7 @@ export type AgentInfo = {
 }
 
 export type SessionsResponse = {
-  data: Array<SessionListInfo>
+  data: Array<SessionInfo>
   cursor: { previous?: SessionsCursor | null; next?: SessionsCursor | null }
 }
 
@@ -3867,6 +3848,9 @@ export type ExperimentalSessionImportInput = {
       }>
     }
     readonly location: { readonly directory: string }
+    readonly experimental?: {
+      readonly time: { readonly lastUserMessage?: number | null; readonly lastAssistantMessage?: number | null }
+    }
   }
   readonly messages: ReadonlyArray<JsonValue>
   readonly location?: { readonly directory: string } | null | undefined

@@ -45,30 +45,26 @@ const SessionActive = Schema.Struct({
 const PublicSessionInfo = Schema.Struct({
   ...Struct.omit(Session.Info.fields, ["location"]),
   location: Location.PublicRef,
-}).annotate({ identifier: "Session.Info" })
-
-const PublicSessionListInfo = Schema.Struct({
-  ...PublicSessionInfo.fields,
   experimental: Schema.Struct({
     time: Schema.Struct({
       lastUserMessage: optional(
         Schema.NullOr(DateTimeUtcFromMillis).annotate({
           description:
-            "Creation time in milliseconds of the last stored user message in timeline order, or null if none.",
+            "In session lists, the creation time in milliseconds of the last stored user message in timeline order, or null if none.",
         }),
       ),
       lastAssistantMessage: optional(
         Schema.NullOr(DateTimeUtcFromMillis).annotate({
           description:
-            "Creation time in milliseconds of the last stored assistant message in timeline order, including tool-only steps, or null if none.",
+            "In session lists, the creation time in milliseconds of the last stored assistant message in timeline order, including tool-only steps, or null if none.",
         }),
       ),
     }),
   }).pipe(optional),
-}).annotate({ identifier: "Session.ListInfo" })
+}).annotate({ identifier: "Session.Info" })
 
 export const SessionListResponse = Schema.Struct({
-  data: Schema.Array(PublicSessionListInfo),
+  data: Schema.Array(PublicSessionInfo),
   cursor: Schema.Struct({
     previous: Session.ListCursor.pipe(Schema.optional),
     next: Session.ListCursor.pipe(Schema.optional),
