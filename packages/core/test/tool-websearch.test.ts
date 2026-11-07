@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Context, Effect, Layer } from "effect"
 import type { HttpClientError } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -498,4 +498,12 @@ describe("WebSearchTool registration", () => {
       )
     }),
   )
+})
+
+describe("description", () => {
+  // Tool descriptions open every cached prompt. A value that changes with the
+  // clock invalidates the prompt cache for every session when it changes.
+  test("does not embed the current year", () => {
+    expect(WebSearchTool.description).not.toMatch(/\b(19|20)\d{2}\b/)
+  })
 })

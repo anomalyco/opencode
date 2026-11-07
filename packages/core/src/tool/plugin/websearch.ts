@@ -19,7 +19,7 @@ const httpErrors = new Map([
 
 export const description = `Search the web using the user's selected search integration. Use this for current information beyond knowledge cutoff.
 
-The current year is ${new Date().getFullYear()}. Use this year when searching for recent information or current events.`
+When searching for recent information or current events, take the current date from the system instructions instead of assuming one.`
 
 export const Input = Schema.Struct({
   query: Schema.String.annotate({ description: "Websearch query" }),
