@@ -1,7 +1,7 @@
 # Third-party crates in the shipped graph of opencode-cli for x86_64-unknown-linux-gnu (normal and build edges,
 # not dev), one name per line (all versions of a crate share it), sorted. Marks: `build` (has a build script), `cc`
 # (the build script compiles C with `cc`), `proc-macro`. crates/cli/tests/deps.rs fails unless this file equals the
-# graph.
+# graph. The [tests] section at the end lists what only tests and other workspace members use.
 #
 # Adding a line needs an orchestrator decision (O-58: an O- entry in decisions.md). A crate that leaves the graph
 # leaves this file in the same commit.
@@ -124,3 +124,8 @@ utf_types
 want
 zeroize
 zmij build
+
+[tests]
+# Third-party crates only the rest of the workspace reaches, over normal, build and dev edges with default features:
+# tests, examples, and members opencode-cli does not ship. The same rules apply: a new line needs an orchestrator
+# decision. Empty: tests use only crates that ship.
