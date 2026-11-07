@@ -22,8 +22,7 @@ import { docsHref, docsMarkdownHref } from "../lib/navigation"
 import type { docsSlugs, renderDocsMarkdown, renderDocsPage, renderLlmsTxt, renderSitemap } from "../render"
 import { docs } from "../vite"
 
-// check-docs.yml still passes `--mode dev`, which changes nothing; drop the option with it.
-const args = parseArgs({ options: { mode: { type: "string" }, out: { type: "string" } } })
+const args = parseArgs({ options: { out: { type: "string" } } })
 const root = path.resolve(import.meta.dir, "../../..")
 const output = path.resolve(root, args.values.out ?? ".output/public")
 const cache = path.join(root, "node_modules/.cache/docs")
