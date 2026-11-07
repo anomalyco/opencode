@@ -412,10 +412,11 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     cwd: string,
     args: string[],
     options: PatchOptions | undefined,
-    mode: { dropTruncated: boolean; noIndex?: boolean },
+    mode: { dropTruncated: boolean; noIndex?: boolean; literal?: boolean },
   ) {
     const result = yield* run(
       [
+        ...(mode.literal ? ["--literal-pathspecs"] : []),
         "diff",
         ...(mode.noIndex ? ["--no-index"] : []),
         "--patch",
@@ -435,6 +436,7 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   const patch = Effect.fn("VcsGit.patch")(function* (cwd: string, ref: string, file: string, options?: PatchOptions) {
     return yield* diffPatch(cwd, [ref, ...(options?.target ? [options.target] : []), "--", file], options, {
       dropTruncated: true,
+      literal: true,
     })
   })
 
