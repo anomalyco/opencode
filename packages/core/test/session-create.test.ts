@@ -7,6 +7,7 @@ import { TestClock } from "effect/testing"
 import { Money } from "@opencode/schema/money"
 import { Shell } from "@opencode/schema/shell"
 import { Skill } from "@opencode/schema/skill"
+import { Snapshot } from "@opencode/schema/snapshot"
 import { Agent } from "@opencode/core/agent"
 import { and, asc, eq } from "drizzle-orm"
 import { Database } from "@opencode/core/database/database"
@@ -1310,6 +1311,80 @@ describe("Session.create", () => {
 })
 
 describe("SessionTransfer", () => {
+  it.effect("preserves staged undo when continuing an imported session", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const transfer = yield* SessionTransfer.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const source = yield* session.create({ location })
+      yield* session.prompt({ sessionID: source.id, text: "Keep this request", resume: false })
+      yield* SessionInbox.promote(db, bus, source.id, "steer")
+      const undone = yield* session.prompt({ sessionID: source.id, text: "Cancelled request", resume: false })
+      yield* SessionInbox.promote(db, bus, source.id, "steer")
+      yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID: source.id,
+        revert: {
+          messageID: undone.id,
+          partID: "source-part",
+          snapshot: Snapshot.ID.make("source-workspace-snapshot"),
+          files: [{ file: "source.txt", status: "modified", additions: 1, deletions: 1, patch: "source patch" }],
+        },
+      })
+      const exported = yield* transfer.export({ sessionID: source.id })
+      yield* session.remove(source.id)
+      const imported = yield* transfer.import({ data: exported, location })
+
+      expect(imported.revert).toEqual({ messageID: undone.id })
+      expect(yield* session.messages({ sessionID: imported.id })).toHaveLength(2)
+
+      yield* session.prompt({ sessionID: imported.id, text: "Continue", resume: false })
+      yield* SessionInbox.promote(db, bus, imported.id, "steer")
+
+      expect((yield* session.context(imported.id)).map((message) => message.type === "user" && message.text)).toEqual([
+        "Keep this request",
+        "Continue",
+      ])
+      expect((yield* session.get(imported.id)).revert).toBeUndefined()
+    }),
+  )
+
+  for (const boundary of ["missing", "unsettled"]) {
+    it.effect(`rejects an imported undo boundary whose message is ${boundary}`, () =>
+      Effect.gen(function* () {
+        const session = yield* Session.Service
+        const transfer = yield* SessionTransfer.Service
+        const template = yield* session.create({ location })
+        const sessionID = Session.ID.create()
+        const messageID = SessionMessage.ID.create()
+        const error = yield* transfer
+          .import({
+            data: {
+              info: { ...template, id: sessionID, revert: { messageID } },
+              messages:
+                boundary === "missing"
+                  ? []
+                  : [
+                      {
+                        id: messageID,
+                        type: "assistant",
+                        agent: Agent.ID.make("build"),
+                        model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("test") }),
+                        content: [],
+                        time: { created: DateTime.makeUnsafe(1) },
+                      },
+                    ],
+            },
+            location,
+          })
+          .pipe(Effect.flip)
+
+        expect(error).toMatchObject({ _tag: "Session.MessageNotFoundError", sessionID, messageID })
+        expect(yield* session.get(sessionID).pipe(Effect.flip)).toBeInstanceOf(Session.NotFoundError)
+      }),
+    )
+  }
+
   it.effect("exports only settled projected messages", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
