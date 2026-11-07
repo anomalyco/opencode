@@ -308,6 +308,36 @@ test("model dialog opens Manage models from its search row with Enter", async ({
 test.describe("touch composer pickers", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
 
+  test("agent picker stays available when Show agent is off", async ({ page }) => {
+    await openPickerSession(page, "ltr", true, [
+      {
+        id: "build",
+        name: "Build",
+        mode: "primary",
+        hidden: false,
+        request: { settings: {}, headers: {}, body: {} },
+        permissions: [],
+      },
+      {
+        id: "plan",
+        name: "Plan",
+        mode: "primary",
+        hidden: false,
+        request: { settings: {}, headers: {}, body: {} },
+        permissions: [],
+      },
+    ])
+    const composer = page.locator('[data-component="composer"]')
+    const agent = composer.getByRole("button", { name: "Choose agent", exact: true })
+    await expect(agent).toHaveText("build")
+    await agent.tap()
+    const agents = page.getByRole("dialog", { name: "Choose agent", exact: true })
+    await expect(agents.getByRole("button", { name: "plan", exact: true })).toBeVisible()
+    await agents.getByRole("button", { name: "plan", exact: true }).tap()
+    await expect(agents).toBeHidden()
+    await expect(agent).toHaveText("plan")
+  })
+
   test("model and default variant open with one tap", async ({ page }) => {
     await openPickerSession(page, "ltr", true)
     expect(await page.evaluate(() => matchMedia("(hover: none)").matches)).toBe(true)
@@ -352,9 +382,10 @@ async function openDesktopPicker(page: Page, direction: "ltr" | "rtl") {
   }
 }
 
-async function openPickerSession(page: Page, direction: "ltr" | "rtl", paid: boolean) {
+async function openPickerSession(page: Page, direction: "ltr" | "rtl", paid: boolean, agents?: unknown[]) {
   await mockOpenCodeServer(page, {
     ...fixture,
+    agents,
     sessions: fixture.sessions.map((session) => ({
       ...session,
       model: { id: "mobile-a", providerID: "opencode", variant: "balanced" },
