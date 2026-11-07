@@ -296,9 +296,34 @@ export function Site(props: {
   // area from) and the browser bar colour take the bar's blue as painted, and a fixed strip under the
   // home indicator (site.css) gives Safari a blue element touching the bottom edge.
   const lettersBottom = () => lettersBarShown() && lettersBarAtEnd()
-  const [lettersBlue, setLettersBlue] = createSignal<string>()
+  // The tint comes on as the bar starts to open, so the toolbar area and the opening bar are blue
+  // together; once the bar closes it stays until the bar has finished closing (its transition, none
+  // under reduced motion), so the bottom never turns back while the bar is still on screen.
+  const [lettersTint, setLettersTint] = createSignal(false)
   createEffect(
     on(lettersBottom, (bottom) => {
+      if (bottom || lettersBarShown()) return setLettersTint(bottom)
+      const bar = document.querySelector<HTMLElement>('[data-component="letters-bar"]')
+      const timer = setTimeout(
+        () => setLettersTint(false),
+        bar ? parseFloat(getComputedStyle(bar).transitionDuration) * 1000 : 0,
+      )
+      onCleanup(() => clearTimeout(timer))
+    }),
+  )
+  // Development only: Like letters?'s bar appears at once instead of sliding open, to compare
+  // (?letters-bar=instant, kept until ?letters-bar=slide).
+  const [lettersInstant, setLettersInstant] = createSignal(false)
+  onMount(() => {
+    if (!import.meta.env.DEV) return
+    const asked = new URLSearchParams(location.search).get("letters-bar")
+    if (asked === "instant") localStorage.setItem("opencode-letters-bar", "instant")
+    if (asked === "slide") localStorage.removeItem("opencode-letters-bar")
+    setLettersInstant(localStorage.getItem("opencode-letters-bar") === "instant")
+  })
+  const [lettersBlue, setLettersBlue] = createSignal<string>()
+  createEffect(
+    on(lettersTint, (bottom) => {
       const link = document.querySelector<HTMLElement>('[data-component="letters-bar"] a')
       const blue = bottom && link ? getComputedStyle(link).backgroundColor : undefined
       setLettersBlue(blue)
@@ -317,7 +342,9 @@ export function Site(props: {
       (shown) => {
         if (!shown) return
         const root = document.documentElement
-        if (window.scrollY + window.innerHeight < root.scrollHeight - 4) return
+        // Less what the bar has already grown (all of it when it appears at once).
+        const grown = document.querySelector('[data-component="letters-bar"]')?.getBoundingClientRect().height ?? 0
+        if (window.scrollY + window.innerHeight < root.scrollHeight - grown - 4) return
         const until = performance.now() + 400
         const follow = () => {
           window.scrollTo(0, root.scrollHeight)
@@ -1205,7 +1232,8 @@ export function Site(props: {
       data-theme={theme()}
       data-popover={popoverTheme()}
       data-letters-bar={lettersBarShown() && lettersBarInView() ? "" : undefined}
-      data-letters-end={lettersBottom() ? "" : undefined}
+      data-letters-end={lettersTint() ? "" : undefined}
+      data-letters-motion={lettersInstant() ? "instant" : undefined}
       data-spacer={props.page === "home" || props.page === "product" ? siteSettings.spacer : undefined}
       data-logo={logoVariant()}
       data-hero-install={props.page === "home" ? siteSettings.heroInstall : undefined}

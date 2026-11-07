@@ -3367,9 +3367,12 @@ html:has([data-site][data-theme="dark"]) {
   grid-template-rows: 0fr;
   transition: grid-template-rows 300ms var(--ease-out);
 
+  /* The opening itself is the bar's blue, so the bar reads as one blue surface rising from the
+     bottom edge, which takes the blue at once (site.tsx), with no page colour between them. */
   [data-slot="clip"] {
     min-height: 0;
     overflow: hidden;
+    background: var(--bar-blue);
   }
 
   /* The link slides up into the bar as it opens, and back down as it closes. */
@@ -3420,6 +3423,15 @@ html:has([data-site][data-theme="dark"]) {
       transition: opacity 200ms ease;
       transition-duration: 200ms !important;
     }
+  }
+}
+
+/* Development only (site.tsx, ?letters-bar=instant): the bar appears at once, pushing the page up,
+   with the bottom's blue. */
+[data-site][data-letters-motion="instant"] [data-component="letters-bar"] {
+  &,
+  [data-slot="slide"] {
+    transition: none;
   }
 }
 
