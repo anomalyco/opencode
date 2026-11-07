@@ -7,20 +7,65 @@ on:
     branches: [dev]
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      build-deps:
+        type: boolean
+        default: false
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: check-nix-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
+  nix-deps:
+    name: nix-deps (${{ matrix.system }})
+    if: >-
+      ${{ !github.event.pull_request.draft &&
+          (inputs.build-deps || github.ref == 'refs/heads/bot/nix-hashes' ||
+           (github.head_ref == 'bot/nix-hashes' &&
+            github.event.pull_request.head.repo.full_name == github.repository)) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: blacksmith-4vcpu-ubuntu-2404
+          - system: aarch64-linux
+            runner: blacksmith-4vcpu-ubuntu-2404-arm
+          - system: aarch64-darwin
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Nix
+        uses: nixbuild/nix-quick-install-action@2c9db80fb984ceb1bcaa77cdda3fdf8cfba92035 # v34
+
+      - name: Build node_modules with the declared hash
+        env:
+          SYSTEM: ${{ matrix.system }}
+        run: nix build ".#packages.${SYSTEM}.opencode.node_modules" --no-link --print-build-logs
+
+  # A skipped matrix has no per-system checks; keep one stable check for branch protection.
   nix-eval:
-    if: ${{ !github.event.pull_request.draft }}
+    needs: nix-deps
+    if: ${{ always() && !github.event.pull_request.draft }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:
+      - name: Check dependency build results
+        env:
+          RESULT: ${{ needs.nix-deps.result }}
+        run: test "$RESULT" = success || test "$RESULT" = skipped
+
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
