@@ -1,14 +1,16 @@
 import { Deferred, Effect, Exit, Schema } from "effect"
 import type { Extension } from "./extension.js"
 import { scanTools } from "./scan.js"
-import { fromBytes, SnapshotError, SuspendError, toBytes } from "./suspend-error.js"
 import { type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Tools } from "./tools.js"
-import { VmEngine } from "./vm/index.js"
+import { fromJson } from "./vm/data.js"
+import { finishExecution, resumeProgram, type Running, type Setup, startProgram, SuspendError } from "./vm/runtime/execute.js"
+import { extensionGlobals } from "./vm/runtime/extensions.js"
+import { globalNames } from "./vm/runtime/globals.js"
+import { fromBytes, type Snapshot, SnapshotError, type SnapshotHeader, toBytes } from "./vm/snapshot/snapshot.js"
 
 export { fromBytes, scanTools, SnapshotError, SuspendError, toBytes }
-export type SnapshotHeader = VmEngine.SnapshotHeader
-export type Snapshot = VmEngine.Snapshot
+export type { Snapshot, SnapshotHeader }
 
 /** A tool call admitted during an execution. */
 export type {
@@ -143,7 +145,7 @@ export const Result = Schema.Union([Success, Failure])
 /** Result of executing a CodeMode program. Program failures are data, not Effect failures. */
 export type Result = typeof Result.Type
 
-/** A run stopped by `program.suspend`: its whole state, to resume with `VmRuntime.resume`. */
+/** A run stopped by `program.suspend`: its whole state, to resume with `Runtime.resume`. */
 export type Suspended = {
   readonly ok: "suspended"
   readonly state: Snapshot
@@ -152,14 +154,10 @@ export type Suspended = {
 /** How a run of a program ended: its result, or its saved state once suspended. */
 export type Outcome = Result | Suspended
 
-/** Reusable confined runtime over explicit tools. */
+/** Reusable confined runtime over explicit tools and extensions. */
 export type Runtime<R = never> = {
   readonly catalog: ReadonlyArray<ToolDescription>
   readonly execute: (code: string, bindings?: Readonly<Record<string, DataValue>>) => Effect.Effect<Result, never, R>
-}
-
-/** A runtime on the bytecode VM (`engine: "vm"`, experimental): it can also suspend runs and resume them. */
-export type VmRuntime<R = never> = Runtime<R> & {
   /** A program ready to run once; nothing runs until `program.run()`. */
   readonly program: (
     code: string,
@@ -215,46 +213,46 @@ export const execute = <
 export function make<
   const Provided extends Record<string, unknown> = {},
   const Extensions extends ReadonlyArray<Extension> = [],
->(options: Options<Provided, Extensions> = {}): VmRuntime<Environment<Provided, Extensions>> {
+>(options: Options<Provided, Extensions> = {}): Runtime<Environment<Provided, Extensions>> {
   type R = Environment<Provided, Extensions>
   const prepared = ToolRuntime.prepare<R>((options.tools ?? {}) as Tools<Services<Provided>>)
   const limits = resolveExecutionLimits(options.limits)
   const extensions = options.extensions ?? []
-  const bound = new Set(VmEngine.globalNames)
+  const bound = new Set(globalNames)
   for (const extension of extensions) {
     for (const name of Object.keys(extension.globals)) {
       if (bound.has(name)) throw new TypeError(`Extension "${extension.name}" global "${name}" is already defined.`)
       bound.add(name)
     }
   }
-  const setup: VmEngine.Setup<R> = {
+  const setup: Setup<R> = {
     prepared,
     limits,
     hooks: options.hooks ?? {},
-    globals: extensions.length === 0 ? undefined : (ctx) => VmEngine.extensionGlobals(ctx, extensions),
+    globals: extensions.length === 0 ? undefined : (ctx) => extensionGlobals(ctx, extensions),
     lossy: extensions.some((extension) => extension.snapshot === undefined),
   }
   const data = (bindings: Readonly<Record<string, DataValue>> | undefined) =>
     bindings === undefined
       ? undefined
-      : (ctx: Parameters<typeof VmEngine.fromJson>[0]) =>
-          Object.entries(bindings).map(([name, value]) => [name, VmEngine.fromJson(ctx, value)] as const)
+      : (ctx: Parameters<typeof fromJson>[0]) =>
+          Object.entries(bindings).map(([name, value]) => [name, fromJson(ctx, value)] as const)
   const program = (code: string, bindings?: Readonly<Record<string, DataValue>>, programOptions?: ProgramOptions) =>
-    vmProgram(() => Effect.succeed(VmEngine.startProgram(setup, code, data(bindings), programOptions?.runId)))
+    makeProgram(() => Effect.succeed(startProgram(setup, code, data(bindings), programOptions?.runId)))
   return {
     get catalog() {
       return prepared.catalog
     },
-    execute: (code, bindings) => VmEngine.finishExecution(program(code, bindings).run()),
+    execute: (code, bindings) => Effect.suspend(() => finishExecution(program(code, bindings).run())),
     program,
-    resume: (state) => vmProgram(() => VmEngine.resumeProgram(setup, state)),
-  } satisfies VmRuntime<R>
+    resume: (state) => makeProgram(() => resumeProgram(setup, state)),
+  }
 }
 
 // A program's one run: `start` makes it when `run()` is called, and a suspend waits for it.
-const vmProgram = <R, E>(start: () => Effect.Effect<VmEngine.Running<R>, E>): Program<R, E> => {
+const makeProgram = <R, E>(start: () => Effect.Effect<Running<R>, E>): Program<R, E> => {
   let claimed = false
-  const started = Deferred.makeUnsafe<VmEngine.Running<R>, SuspendError>()
+  const started = Deferred.makeUnsafe<Running<R>, SuspendError>()
   return {
     run: () =>
       Effect.suspend(() => {

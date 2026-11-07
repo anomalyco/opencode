@@ -57,6 +57,7 @@ export type ExecuteFn<Input = unknown, Output = unknown, R = never> = (
  * with the same `key` without double-counting against `maxToolCalls`.
  */
 export type Idempotent<Input = unknown, Output = unknown, R = never> = {
+  // Carries Input, Output, and R as a call signature so TypeScript infers them from Tool.make's schema options.
   (input: Input, context: ToolContext): Effect.Effect<Output, unknown, R>
   readonly _tag: "CodeModeIdempotent"
   readonly execute: ExecuteFn<Input, Output, R>
@@ -84,6 +85,7 @@ export type DurableOptions<
 
 /** A tool execution wrapper for work that keeps running across a suspend and reconnects through its JSON data. */
 export type Durable<Input = unknown, Output = unknown, R = never> = {
+  // Carries Input, Output, and R as a call signature so TypeScript infers them from Tool.make's schema options.
   (input: Input, context: ToolContext): Effect.Effect<Output, unknown, R>
   readonly _tag: "CodeModeDurable"
   readonly start: (input: Input, context: ToolContext) => Effect.Effect<Schema.Json, unknown, R>
@@ -98,8 +100,7 @@ export type Tool<R = never> = {
   readonly input: SchemaType
   readonly freeform?: boolean
   readonly output: SchemaType | undefined
-  readonly execute: (input: unknown, context?: ToolContext) => Effect.Effect<unknown, unknown, R>
-  readonly mode?: Idempotent<unknown, unknown, R> | Durable<unknown, unknown, R> | undefined
+  readonly execute: ExecuteFn<unknown, unknown, R> | Idempotent<unknown, unknown, R> | Durable<unknown, unknown, R>
 }
 
 type InputType<S> = S extends Schema.Decoder<unknown> ? S["Type"] : unknown
@@ -129,10 +130,10 @@ export const isTool = <R = never>(value: Tool<R> | Namespace<R> | Tools<R> | und
 export const idempotent = <Input, Output, R = never>(
   execute: ExecuteFn<Input, Output, R>,
 ): Idempotent<Input, Output, R> =>
-  Object.assign((input: Input, context: ToolContext) => execute(input, context), {
-    _tag: "CodeModeIdempotent" as const,
+  ({
+    _tag: "CodeModeIdempotent",
     execute,
-  })
+  }) as Idempotent<Input, Output, R>
 
 /**
  * Wraps a tool's execution as `start`, `wait`, and `cancel` so work started before a suspend keeps running and
@@ -147,20 +148,13 @@ export const durable = <
   RCancel = never,
 >(
   options: DurableOptions<Data, Input, Output, RStart, RWait, RCancel>,
-): Durable<Input, Output, RStart | RWait | RCancel> => {
-  type R = RStart | RWait | RCancel
-  const wait = options.wait as (data: Schema.Json, context: ToolContext) => Effect.Effect<Output, unknown, R>
-  return Object.assign(
-    (input: Input, context: ToolContext): Effect.Effect<Output, unknown, R> =>
-      Effect.flatMap(options.start(input, context), (data) => wait(data, context)),
-    {
-      _tag: "CodeModeDurable" as const,
-      start: options.start,
-      wait: options.wait as (data: never, context: ToolContext) => Effect.Effect<Output, unknown, R>,
-      cancel: options.cancel as (data: never) => Effect.Effect<void, unknown, R>,
-    },
-  )
-}
+): Durable<Input, Output, RStart | RWait | RCancel> =>
+  ({
+    _tag: "CodeModeDurable",
+    start: options.start,
+    wait: options.wait,
+    cancel: options.cancel,
+  }) as unknown as Durable<Input, Output, RStart | RWait | RCancel>
 
 /**
  * Declares one schema-described tool available to a CodeMode program through `tools.*`.
@@ -171,16 +165,11 @@ export const durable = <
  */
 export const make = <I extends SchemaType, const O extends SchemaType | undefined = undefined, R = never>(
   options: Options<I, O, R>,
-): Tool<R> => {
-  const spec = options.execute
-  const mode = "_tag" in spec ? (spec as Idempotent<unknown, unknown, R> | Durable<unknown, unknown, R>) : undefined
-  return {
-    _tag: "CodeModeTool",
-    description: options.description,
-    input: options.input,
-    ...(options.freeform && { freeform: true }),
-    output: options.output,
-    ...(mode === undefined ? {} : { mode }),
-    execute: (input, context = { key: crypto.randomUUID() }) => spec(input as InputType<I>, context),
-  }
-}
+): Tool<R> => ({
+  _tag: "CodeModeTool",
+  description: options.description,
+  input: options.input,
+  ...(options.freeform && { freeform: true }),
+  output: options.output,
+  execute: options.execute as Tool<R>["execute"],
+})

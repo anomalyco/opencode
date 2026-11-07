@@ -1,13 +1,9 @@
 import { parse, type Program } from "acorn"
 import { Cause, Deferred, Effect, Option, Schema } from "effect"
 import type { DataValue, Diagnostic, Outcome, ResolvedExecutionLimits, Result, Suspended } from "../../codemode.js"
-import type { Extension } from "../../extension.js"
-import { fromJson } from "../data.js"
 import { fromBytes, header, type Snapshot, SnapshotError, toBytes } from "../snapshot/snapshot.js"
 import { ToolRuntime } from "../../tool-runtime.js"
-import { SuspendError } from "../../suspend-error.js"
 import { normalizeError } from "./errors.js"
-import { extensionGlobals } from "./extensions.js"
 import { createBuiltins } from "./intrinsics.js"
 import { Interpreter } from "./interpreter.js"
 import type { Value } from "./objects.js"
@@ -16,6 +12,16 @@ import { callPath, Driver, SUSPENDED } from "./driver.js"
 import { Interruption } from "./signals.js"
 import { Source } from "./source.js"
 import type { Vm } from "../vm.js"
+
+/**
+ * A suspend that failed, leaving the run running: `running` names each host call that blocked it by its key and its
+ * path (`tools.x.y`, `search`, or an extension function's path such as `fetch`). Empty when the state couldn't be
+ * saved or was too large.
+ */
+export class SuspendError extends Schema.TaggedError<SuspendError>()("SuspendError", {
+  message: Schema.String,
+  running: Schema.Array(Schema.Struct({ key: Schema.String, path: Schema.String })),
+}) {}
 
 type Globals<R> = (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>
 
@@ -40,27 +46,6 @@ export const finishExecution = <E, R>(outcome: Effect.Effect<Outcome, E, R>): Ef
       toolCalls: outcome.state.header.toolCalls,
     }
   })
-
-/** Runs a program on the VM with `CodeMode.make`'s extensions and JSON bindings. */
-export const execute = <R>(
-  code: string,
-  prepared: ToolRuntime.Prepared<R>,
-  limits: ResolvedExecutionLimits,
-  hooks: ToolRuntime.Hooks<R>,
-  extensions: ReadonlyArray<Extension>,
-  bindings: Readonly<Record<string, DataValue>> | undefined,
-): Effect.Effect<Result, never, R> =>
-  executeProgram(
-    code,
-    prepared,
-    limits,
-    hooks,
-    extensions.length === 0 ? undefined : (ctx) => extensionGlobals(ctx, extensions),
-    bindings === undefined
-      ? undefined
-      : (ctx) => Object.entries(bindings).map(([name, value]) => [name, fromJson(ctx, value)] as const),
-    extensions.some((extension) => extension.snapshot === undefined),
-  )
 
 export const executeProgram = <R>(
   code: string,
