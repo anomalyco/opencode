@@ -51,6 +51,7 @@ notify = "8"
 percent-encoding = "2"
 rand = "0.10"
 regex = "1"
+ring = "0.17"
 # TLS is rustls on ring with the platform's roots, configured once in `opencode_api::transport`, for HTTP/1.1 only, as
 # Bun's fetch speaks.
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json", "stream"] }
@@ -60,7 +61,6 @@ rustls-platform-verifier = "0.7"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
 sha1 = "0.11"
-sha2 = "0.11"
 similar = "3"
 tempfile = "3"
 thiserror = "2"

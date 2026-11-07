@@ -12,7 +12,6 @@ use indexmap::IndexMap;
 use opencode_api::generated::SessionID;
 use opentui::native::{ProgramKind, ProgramState, ProgramStatus};
 use regex::Regex;
-use sha2::{Digest, Sha256};
 
 use crate::app::Tui;
 use crate::routes::Route;
@@ -200,8 +199,7 @@ fn record_id(id: &str) -> String {
     if valid {
         return id.to_owned();
     }
-    let hex: String = Sha256::digest(id.as_bytes()).iter().map(|byte| format!("{byte:02x}")).collect();
-    format!("ses_{}", &hex[..16])
+    format!("ses_{}", &opencode_util::hash::sha256_hex(id.as_bytes())[..16])
 }
 
 /// `clip`: records reject control characters and oversized fields, so the text becomes one line within `bytes`,
