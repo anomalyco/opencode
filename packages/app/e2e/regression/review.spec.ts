@@ -762,6 +762,82 @@ test("the file tree follows a folder the review closes and lists a recreated fol
   await expect(file).toBeVisible()
 })
 
+test("file links center rendered line ranges and support word wrap", async ({ page }) => {
+  const content = Array.from({ length: 220 }, (_, index) => `line ${index + 1}: ${"long content ".repeat(15)}`).join(
+    "\n",
+  )
+
+  await openSession(page, {
+    name: "LineReveal",
+    fileList: () => [],
+    fileContent: () => ({ type: "text", content }),
+    pageMessages: () => ({
+      items: [
+        { id: "msg_prompt", type: "user", text: "Inspect lines", time: { created: 1 } },
+        {
+          id: "msg_reply",
+          type: "assistant",
+          agent: "build",
+          model: { id: "test", providerID: "opencode" },
+          content: [
+            { type: "text", text: "[Single](long.txt#L100) [Range](long.txt#L150-L152) [Tall](long.txt#L80-L180)" },
+          ],
+          time: { created: 2, completed: 3 },
+        },
+      ],
+    }),
+  })
+  const panel = page.locator("#review-panel")
+  const code = panel.locator("[data-scrollable]", { has: page.locator('[data-component="file"]') })
+
+  const centered = async (start: number, end: number) => {
+    await expect
+      .poll(() =>
+        code.evaluate(
+          (element, range) => {
+            const root = element.querySelector("diffs-container")?.shadowRoot
+            const first = root?.querySelector(`[data-line="${range.start}"]`)?.getBoundingClientRect()
+            const last = root?.querySelector(`[data-line="${range.end}"]`)?.getBoundingClientRect()
+
+            if (!first || !last) return Infinity
+            const viewport = element.getBoundingClientRect()
+
+            return Math.abs((first.top + last.bottom) / 2 - (viewport.top + viewport.bottom) / 2)
+          },
+          { start, end },
+        ),
+      )
+      .toBeLessThan(3)
+  }
+
+  await page.getByRole("link", { name: "Single", exact: true }).click()
+  await centered(100, 100)
+  const wrap = panel.getByRole("button", { name: "Word wrap", exact: true })
+  await expect(wrap).toHaveAttribute("aria-pressed", "true")
+  await page.getByRole("link", { name: "Range", exact: true }).click()
+  await centered(150, 152)
+  await expect(code.locator("[data-line][data-selected-line]")).toHaveCount(3)
+  await expect(code.locator('[data-line="150"]')).toHaveAttribute("data-selected-line", "first")
+  await expect(code.locator('[data-line="152"]')).toHaveAttribute("data-selected-line", "last")
+  await wrap.click()
+  await expect(wrap).toHaveAttribute("aria-pressed", "false")
+  await page.getByRole("link", { name: "Single", exact: true }).click()
+  await centered(100, 100)
+  await expect(code.locator('[data-line="100"]')).toHaveCSS("white-space", "pre")
+  await page.getByRole("link", { name: "Range", exact: true }).click()
+  await centered(150, 152)
+  await page.getByRole("link", { name: "Tall", exact: true }).click()
+  await expect
+    .poll(() =>
+      code.evaluate((element) => {
+        const row = element.querySelector("diffs-container")?.shadowRoot?.querySelector('[data-line="80"]')
+
+        return row ? Math.abs(row.getBoundingClientRect().top - element.getBoundingClientRect().top) : Infinity
+      }),
+      )
+      .toBeLessThan(3)
+})
+
 test("rereads a file each time an artifact link opens it", async ({ page }) => {
   // Enough lines to scroll the code view, ending in the draft's name.
   const draft = (name: string) => [...Array.from({ length: 200 }, (_, index) => `item ${index + 1}`), name].join("\n")
