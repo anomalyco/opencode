@@ -2,13 +2,16 @@ import { expect } from "bun:test"
 import { Session } from "@opencode/schema/session"
 import { Effect, Schema } from "effect"
 import { it } from "../../core/test/lib/effect"
+import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { ServerFetch } from "../src/fetch"
 
 const SessionResponse = Schema.Struct({ data: Schema.toEncoded(Session.Info) })
 const SessionsResponse = Schema.Struct({ data: Schema.Array(Schema.toEncoded(Session.Info)) })
 
-it.live("creates a child at its parent's location and lists it under the parent", () =>
+it.live("creates children at explicit or inherited locations and lists both under the parent", () =>
   Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const other = yield* tmpdirScoped()
     const handler = yield* ServerFetch.make({
       app: { version: "test" },
       database: { path: ":memory:" },
@@ -26,8 +29,9 @@ it.live("creates a child at its parent's location and lists it under the parent"
         expect(response.status).toBe(200)
         return Schema.decodeUnknownSync(SessionResponse)(await response.json()).data
       })
-    const parent = yield* create({ title: "Parent" })
-    const child = yield* create({ parentID: parent.id, title: "Child", location: { directory: "/unused" } })
+    const parent = yield* create({ title: "Parent", location: { directory: tmp.path } })
+    const child = yield* create({ parentID: parent.id, title: "Child" })
+    const explicit = yield* create({ parentID: parent.id, location: { directory: other.path } })
     const response = yield* Effect.promise(() =>
       handler(new Request(`http://opencode.local/api/session?parentID=${parent.id}`)),
     )
@@ -35,7 +39,8 @@ it.live("creates a child at its parent's location and lists it under the parent"
     const children = Schema.decodeUnknownSync(SessionsResponse)(yield* Effect.promise(() => response.json()))
 
     expect(child).toMatchObject({ parentID: parent.id, location: parent.location })
-    expect(children.data.map((session) => session.id)).toEqual([child.id])
+    expect(explicit).toMatchObject({ parentID: parent.id, location: { directory: other.path } })
+    expect(children.data.map((session) => session.id).sort()).toEqual([child.id, explicit.id].sort())
   }).pipe(Effect.scoped),
 )
 

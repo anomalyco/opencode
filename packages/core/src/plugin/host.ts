@@ -581,7 +581,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
                   input?.location ??
                   Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
               }
-            : { parentID: input.parentID }),
+            : { parentID: input.parentID, location: input.location }),
         }),
       get: (input) => sessions.get(input.sessionID),
       remove: (input) => sessions.remove(input.sessionID),
