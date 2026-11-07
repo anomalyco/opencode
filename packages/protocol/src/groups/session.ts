@@ -1,5 +1,6 @@
 import { SessionMessage } from "@opencode/schema/session-message"
 import { SessionInbox } from "@opencode/schema/session-inbox"
+import { SessionTurn } from "@opencode/schema/session-turn"
 import { PromptInput } from "@opencode/schema/prompt-input"
 import { Session } from "@opencode/schema/session"
 import { SessionStats } from "@opencode/schema/session-stats"
@@ -351,9 +352,24 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           OpenApi.annotations({
             identifier: "session.prompt",
             summary: "Send message",
-            description: "Durably admit one session input and schedule agent-loop execution unless resume is false.",
+            description:
+              "Durably admit one session input and schedule agent-loop execution unless resume is false. Use the returned input id with experimental.session.turn to read its result.",
           }),
         ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.turn", "/api/experimental/session/:sessionID/turn/:inputID", {
+        params: { sessionID: Session.ID, inputID: SessionMessage.ID },
+        success: Schema.Struct({ data: SessionTurn.Info }),
+        error: [SessionNotFoundError, MessageNotFoundError],
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "experimental.session.turn",
+          summary: "Read input turn result",
+          description:
+            "Experimental: may change without compatibility guarantees. Read the result for an exact admitted input ID, including pending and running states. Queued inputs start separate turns; steers promoted before the idle boundary share a turn and its usage. Results survive disabled event retention and shutdown recovery. Running describes an unfinished turn, not process ownership. Usage includes assistant steps and charged failed attempts; title and compaction usage remain session overhead. Results exist only for inputs admitted after this feature was enabled; missing or older inputs return 404.",
+        }),
+      ),
     )
     .add(
       HttpApiEndpoint.post("session.command", "/api/session/:sessionID/command", {

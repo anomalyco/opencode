@@ -324,6 +324,19 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "session.turn",
+        Effect.fn(function* (ctx) {
+          const data = yield* session.turn(ctx.params).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          if (!data)
+            return yield* new MessageNotFoundError({
+              sessionID: ctx.params.sessionID,
+              messageID: ctx.params.inputID,
+              message: "Input turn result not found",
+            })
+          return { data }
+        }),
+      )
+      .handle(
         "session.command",
         Effect.fn(function* (ctx) {
           yield* session

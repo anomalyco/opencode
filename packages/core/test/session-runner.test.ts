@@ -64,7 +64,13 @@ import { Document, Info } from "@opencode/schema/config"
 import { ConfigCompaction } from "@opencode/schema/config/compaction"
 import { Tool } from "@opencode/core/tool"
 import type { Info as ToolInfo } from "@opencode/schema/tool"
-import { InstructionStateTable, SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
+import {
+  InstructionStateTable,
+  SessionInboxTable,
+  SessionMessageTable,
+  SessionTable,
+  SessionTurnTable,
+} from "@opencode/core/session/sql"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { SessionStore } from "@opencode/core/session/store"
 import { Instructions } from "@opencode/core/instructions/index"
@@ -423,6 +429,7 @@ const layer = Layer.unwrap(
       small: () => Effect.undefined,
     })
     const replacements: LayerNode.Replacements = [
+      Bus.node.replace(Bus.configured({ persist: true })),
       Snapshot.node.replace(Snapshot.noopLayer),
       LayerNodePlatform.llmClient.replace(testLLM),
       SessionRunnerModel.node.replace(models),
@@ -437,7 +444,7 @@ const layer = Layer.unwrap(
       Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.suspend(() => state.activationHook) })),
       SessionModelTransport.node.replace(modelTransport),
     ]
-    const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
+    const runnerLayer = AppNodeBuilder.build(LayerNode.group([SessionRunnerLLM.node, Bus.node]), [
       ...replacements,
       McpInstructions.node.replace(mcpInstructions),
     ])
@@ -458,15 +465,19 @@ const layer = Layer.unwrap(
               ),
             )
         }
-        const coordinator = yield* SessionRunCoordinator.make<Session.ID, SessionRunner.RunError>({
+        const bus = yield* Bus.Service
+        const coordinator = yield* SessionRunCoordinator.make<Session.ID, SessionRunner.RunError, "user">({
           drain: (sessionID, force) => drain(sessionID, force),
+          // The fixture omits execution bookkeeping; explicit stops still need its terminal event.
+          settled: (sessionID, _exit, reason) =>
+            reason === "user" ? bus.publish(SessionEvent.Execution.Interrupted, { sessionID, reason }) : Effect.void,
         })
         return SessionExecution.Service.of({
           active: coordinator.active,
           isActive: coordinator.isActive,
           resume: coordinator.run,
           wake: coordinator.wake,
-          interrupt: (sessionID) => coordinator.interrupt(sessionID),
+          interrupt: (sessionID) => coordinator.interrupt(sessionID, "user"),
           awaitIdle: coordinator.awaitIdle,
         })
       }),
@@ -501,7 +512,6 @@ const layer = Layer.unwrap(
       ]),
       [
         ...replacements,
-        Bus.node.replace(Bus.configured({ persist: true })),
         LocationServiceMap.node.replace(promptLocationNode),
         Model.node.replace(promptModels),
         SessionExecution.node.replace(execution),
@@ -582,7 +592,9 @@ const setup = Effect.gen(function* () {
     requests,
     admit,
     resume,
-    context: session.context(sessionID),
+    context: session
+      .context(sessionID)
+      .pipe(Effect.map((messages) => messages.filter((message) => message.type !== "idle"))),
     messages: session.messages({ sessionID }),
     inbox: session.inbox(sessionID),
     runPrompt: Effect.fnUntraced(function* (text: string) {
@@ -778,7 +790,15 @@ const replaySessionProjection = (id: Session.ID) =>
       .all()
       .pipe(Effect.orDie)
 
+    const turns = yield* db
+      .select()
+      .from(SessionTurnTable)
+      .where(eq(SessionTurnTable.session_id, id))
+      .orderBy(SessionTurnTable.id)
+      .all()
+      .pipe(Effect.orDie)
     yield* bus.remove(id)
+    yield* db.delete(SessionTurnTable).where(eq(SessionTurnTable.session_id, id)).run().pipe(Effect.orDie)
     yield* db.delete(InstructionStateTable).where(eq(InstructionStateTable.session_id, id)).run().pipe(Effect.orDie)
     yield* db.delete(SessionInboxTable).where(eq(SessionInboxTable.session_id, id)).run().pipe(Effect.orDie)
     yield* db.delete(SessionMessageTable).where(eq(SessionMessageTable.session_id, id)).run().pipe(Effect.orDie)
@@ -794,6 +814,15 @@ const replaySessionProjection = (id: Session.ID) =>
       (event) => bus.replay(event),
       { discard: true },
     )
+    expect(
+      yield* db
+        .select()
+        .from(SessionTurnTable)
+        .where(eq(SessionTurnTable.session_id, id))
+        .orderBy(SessionTurnTable.id)
+        .all()
+        .pipe(Effect.orDie),
+    ).toEqual(turns)
   })
 
 type FragmentKind = "text" | "reasoning" | "tool input"
@@ -1185,7 +1214,7 @@ describe("SessionRunnerLLM", () => {
         )
         yield* s.llm.push(TestLLM.text("First answer", "text-first"), TestLLM.text("Second answer", "text-second"))
 
-        yield* s.runPrompt("Start")
+        const input = yield* s.runPrompt("Start")
 
         expect(idles).toEqual([sessionID, sessionID])
         expect(s.requests).toHaveLength(2)
@@ -1199,6 +1228,15 @@ describe("SessionRunnerLLM", () => {
           { type: "synthetic", text: "Keep going", description: "Continuing", metadata: { source: "test" } },
           Expected.assistant({}, [Expected.text("Second answer")]),
         ])
+        const notice = (yield* s.context)[2]
+        expect(yield* s.session.turn({ sessionID, inputID: input.id })).toMatchObject({
+          status: "settled",
+          assistantMessageID: (yield* s.context)[1].id,
+        })
+        expect(yield* s.session.turn({ sessionID, inputID: notice.id })).toMatchObject({
+          status: "settled",
+          assistantMessageID: (yield* s.context)[3].id,
+        })
       },
     )
   }
@@ -3457,10 +3495,10 @@ describe("SessionRunnerLLM", () => {
     s.currentModel = compactModel
     s.requests.length = 0
     yield* s.llm.push(
-      TestLLM.text("## Objective\n- Preserve the task", "text-summary"),
+      TestLLM.textWithUsage("## Objective\n- Preserve the task", "text-summary", 700),
       TestLLM.textWithUsage("Continued", "text-final", 3_950),
     )
-    yield* s.runPrompt("Recent exact request ".repeat(180))
+    const input = yield* s.runPrompt("Recent exact request ".repeat(180))
 
     expect(s.requests).toHaveLength(2)
     expect(JSON.stringify(s.requests[0].messages)).toContain("Recent exact request ".repeat(180))
@@ -3471,6 +3509,12 @@ describe("SessionRunnerLLM", () => {
 
     const context = yield* store.context(sessionID)
     expect(context.map((message) => message.type)).toEqual(["compaction", "assistant"])
+    expect(yield* s.session.turn({ sessionID, inputID: input.id })).toMatchObject({
+      status: "settled",
+      assistantMessageID: context[1].id,
+      tokens: { input: 3_950 },
+    })
+    expect((yield* s.session.get(sessionID)).tokens.input).toBe(3_950 + 700 + 3_950)
     expect(context[0]).toMatchObject({
       type: "compaction",
       summary: "## Objective\n- Preserve the task",
@@ -4466,12 +4510,12 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("steers an active step with newly recorded prompts", function* (s) {
-    yield* s.admit("Start working")
+    const input = yield* s.admit("Start working")
 
     yield* s.llm.push(TestLLM.stop(), TestLLM.stop())
 
     const first = yield* s.resumePaused
-    yield* s.session.prompt({ sessionID, text: "Change direction" })
+    const steer = yield* s.session.prompt({ sessionID, text: "Change direction" })
     yield* first.finish
     yield* Effect.yieldNow
 
@@ -4479,15 +4523,20 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(s.requests[0])).toEqual(["Start working"])
     expect(userTexts(s.requests[1])).toEqual(["Start working", "Change direction"])
     expect((yield* s.context).map((message) => message.type)).toEqual(["user", "assistant", "user", "assistant"])
+    const result = yield* s.session.turn({ sessionID, inputID: input.id })
+    if (!result) throw new Error("Missing input turn")
+    expect(result).toMatchObject({ status: "settled" })
+    expect(yield* s.session.turn({ sessionID, inputID: steer.id })).toEqual({ ...result, inputID: steer.id })
+    expect(result && "assistantMessageID" in result && result.assistantMessageID).toBe((yield* s.context).at(-1)?.id)
   })
 
   scenario("promotes queued input after continuation ends", function* (s) {
-    yield* s.admit("Start working")
+    const input = yield* s.admit("Start working")
 
     yield* s.llm.push(TestLLM.toolCall("call-echo", "echo", { text: "hello" }), TestLLM.stop(), TestLLM.stop())
 
     const first = yield* s.resumePaused
-    yield* s.session.prompt({
+    const queued = yield* s.session.prompt({
       sessionID,
       text: "Wait until continuation ends",
       delivery: "queue",
@@ -4498,6 +4547,47 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(s.requests[0])).toEqual(["Start working"])
     expect(userTexts(s.requests[1])).toEqual(["Start working"])
     expect(userTexts(s.requests[2])).toEqual(["Start working", "Wait until continuation ends"])
+    expect(yield* s.session.turn({ sessionID, inputID: input.id })).toMatchObject({
+      status: "settled",
+      assistantMessageID: (yield* s.context)[2].id,
+    })
+    expect(yield* s.session.turn({ sessionID, inputID: queued.id })).toMatchObject({
+      status: "settled",
+      assistantMessageID: (yield* s.context)[4].id,
+    })
+  })
+
+  scenario("finishes a recovered turn before promoting queued input after shutdown", function* (s) {
+    const runner = yield* SessionRunner.Service
+    const input = yield* s.admit("Interrupted work")
+    yield* s.llm.push(TestLLM.stop(), TestLLM.stop(), TestLLM.stop())
+    const gate = yield* s.llm.gate()
+    const first = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
+    yield* gate.started
+    const queued = yield* s.session.prompt({ sessionID, text: "Next turn", delivery: "queue", resume: false })
+    yield* Fiber.interrupt(first)
+    yield* gate.release
+    yield* s.bus.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: "shutdown" })
+    expect(yield* s.session.turn({ sessionID, inputID: input.id })).toMatchObject({ status: "running" })
+
+    // A restarted coordinator has no in-memory continuation or stepped flag.
+    const store = yield* SessionStore.Service
+    yield* store.claim(sessionID)
+    yield* store.countResume(sessionID)
+    yield* s.resume
+    expect(s.requests.map(userTexts)).toEqual([
+      ["Interrupted work"],
+      ["Interrupted work"],
+      ["Interrupted work", "Next turn"],
+    ])
+    expect(yield* s.session.turn({ sessionID, inputID: input.id })).toMatchObject({
+      status: "settled",
+      assistantMessageID: (yield* s.context)[2].id,
+    })
+    expect(yield* s.session.turn({ sessionID, inputID: queued.id })).toMatchObject({
+      status: "settled",
+      assistantMessageID: (yield* s.context)[4].id,
+    })
   })
 
   scenario("keeps queued input parked when a steer is cancelled during preparation", function* (s) {
@@ -4559,7 +4649,7 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("preserves durable queued input for a later wake after interruption", function* (s) {
-    yield* s.admit("Interrupt current work")
+    const input = yield* s.admit("Interrupt current work")
 
     yield* s.llm.push([], TestLLM.stop())
     const stream = yield* s.llm.gate()
@@ -4573,6 +4663,10 @@ describe("SessionRunnerLLM", () => {
     })
     yield* s.session.interrupt(sessionID)
     expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
+    expect(yield* s.session.turn({ sessionID, inputID: input.id })).toMatchObject({
+      status: "interrupted",
+      reason: "user",
+    })
     expect(s.requests).toHaveLength(1)
     expect(yield* SessionInbox.has(s.db, sessionID, "queue")).toBe(true)
     const resumed = yield* s.resume.pipe(Effect.forkChild)
@@ -4583,6 +4677,10 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(2)
     expect(userTexts(s.requests[0])).toEqual(["Interrupt current work"])
     expect(userTexts(s.requests[1])).toEqual(["Interrupt current work", "Run after interrupt"])
+    expect(yield* s.session.turn({ sessionID, inputID: input.id })).toMatchObject({
+      status: "interrupted",
+      reason: "user",
+    })
   })
 
   scenario("preserves durable steering input for a later resume after interruption", function* (s) {

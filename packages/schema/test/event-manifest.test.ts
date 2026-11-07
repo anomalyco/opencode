@@ -119,6 +119,7 @@ describe("public event manifest", () => {
         "session.unarchived.1",
         "session.message.content.updated.1",
         "session.usage.recorded.1",
+        "session.turn.settled.1",
         "session.forked.2",
         "session.inbox.delivered.1",
         "session.inbox.enqueued.1",
@@ -160,6 +161,7 @@ describe("public event manifest", () => {
       ...SessionEvent.Definitions.filter((definition) => definition.durability === "durable"),
       SessionEvent.UsageRecorded,
       SessionEvent.MessageContentUpdated,
+      SessionEvent.TurnSettled,
     ])
     expect(SessionEvent.UsageRecorded.durability).toBe("durable")
     expect(EventManifest.Durable.get("session.usage.recorded.1")).toBe(SessionEvent.UsageRecorded)
@@ -167,6 +169,8 @@ describe("public event manifest", () => {
     expect(EventManifest.Definitions).not.toContain(SessionEvent.UsageRecorded)
     expect(EventManifest.ServerDefinitions).not.toContain(SessionEvent.UsageRecorded)
     expect(EventManifest.Latest.has("session.usage.recorded")).toBe(false)
+    expect(EventManifest.Server.has("session.turn.settled")).toBe(false)
+    expect(EventManifest.Durable.get("session.turn.settled.1")).toBe(SessionEvent.TurnSettled)
     expect(SessionEvent.UsageUpdated.durability).toBe("ephemeral")
     expect(SessionEvent.Compaction.Delta.durability).toBe("ephemeral")
     expect(SessionEvent.Tool.Progress.durability).toBe("ephemeral")
