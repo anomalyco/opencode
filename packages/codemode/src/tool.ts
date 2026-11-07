@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import type { Namespace } from "./namespace.js"
 import type { Tools } from "./tools.js"
 
@@ -51,11 +51,6 @@ export type ExecuteFn<Input = unknown, Output = unknown, R = never> = (
   context: ToolContext,
 ) => Effect.Effect<Output, unknown, R>
 
-/**
- * A tool execution wrapper for idempotent work that is safe to run again. If a suspend lands while the call is running
- * (`engine: "vm"`), the VM interrupts it without firing `tool.after`, keeps the call queued in the snapshot, and
- * re-runs it on resume with the same `key` without double-counting against `maxToolCalls`.
- */
 /**
  * A tool execution wrapper for idempotent work that is safe to run again. If a suspend lands while the call is running
  * (`engine: "vm"`), the VM interrupts it without firing `tool.after`, keeps the call queued in the snapshot, and
@@ -149,15 +144,9 @@ export const durable = <
 ): Durable<Input, Output, RStart | RWait | RCancel> => {
   type R = RStart | RWait | RCancel
   const wait = options.wait as (data: Schema.Json, context: ToolContext) => Effect.Effect<Output, unknown, R>
-  const cancel = options.cancel as (data: Schema.Json) => Effect.Effect<void, unknown, R>
   return Object.assign(
     (input: Input, context: ToolContext): Effect.Effect<Output, unknown, R> =>
-      Effect.acquireUseRelease(
-        options.start(input, context),
-        (data) => wait(data, context),
-        (data, exit) =>
-          Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause) ? Effect.ignore(cancel(data)) : Effect.void,
-      ),
+      Effect.flatMap(options.start(input, context), (data) => wait(data, context)),
     {
       _tag: "CodeModeDurable" as const,
       start: options.start,

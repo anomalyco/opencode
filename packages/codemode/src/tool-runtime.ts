@@ -410,7 +410,6 @@ export type ToolRuntime<R = never> = {
     args: Array<Json | undefined>,
     key: string,
     admit?: (name: string) => void,
-    onStarted?: (data: Json) => void,
   ) => Effect.Effect<Json, unknown, R>
   /**
    * Waits for a durable tool's running work: its output, as `execute` gives it. `detaching` says whether an
@@ -426,8 +425,6 @@ export type ToolRuntime<R = never> = {
   ) => Effect.Effect<Json | undefined, unknown, R>
   /** Cancels a durable tool's started work when the run is interrupted or ends. */
   readonly cancel: (path: ReadonlyArray<string>, data: Json) => Effect.Effect<void, unknown, R>
-  /** Reports a started durable call as interrupted when the run stops before `wait` begins. */
-  readonly interrupted: (key: string) => Effect.Effect<void, never, R>
 }
 
 /** Per-execution call state over tools prepared once for the runtime. */
@@ -524,30 +521,6 @@ export const make = <R>(
     return { name, tool, durable: tool.mode }
   }
 
-  // Runs `make` with interruptibility restored unless `make()` itself is `Effect.uninterruptible`, so an
-  // uninterruptible `start` returns its data into the outer mask without interrupting at its exit boundary.
-  const restoreStart = <A, E>(
-    restore: <X, Y, Z>(effect: Effect.Effect<X, Y, Z>) => Effect.Effect<X, Y, Z>,
-    make: () => Effect.Effect<A, E, R>,
-  ): Effect.Effect<A, E, R> =>
-    Effect.withFiber((fiber) => {
-      const eff = make()
-      const fn = (eff as unknown as { readonly "~effect/Effect/args"?: unknown })["~effect/Effect/args"]
-      const internal = fiber as unknown as { interruptible: boolean; readonly _stack: Array<unknown> }
-      if (typeof fn === "function") {
-        const depth = internal._stack.length
-        internal.interruptible = true
-        const next = (fn as (f: unknown) => Effect.Effect<A, E, R>)(fiber)
-        if (!internal.interruptible && internal._stack.length === depth + 1) {
-          internal._stack.pop()
-          return next
-        }
-        while (internal._stack.length > depth) internal._stack.pop()
-        internal.interruptible = false
-      }
-      return restore(eff)
-    })
-
   return {
     calls,
     hooks,
@@ -569,8 +542,8 @@ export const make = <R>(
       if (segments.length === 1 && segments[0] === "search" && lookup(root, segments) === undefined) return undefined
       return lookup(root, segments)?.tool?.mode
     },
-    start: (path, args, key, admit, onStarted) =>
-      Effect.uninterruptibleMask((restore) => {
+    start: (path, args, key, admit) =>
+      Effect.suspend(() => {
         const found = durableTool(path)
         return Effect.gen(function* () {
           const input = yield* decode(found.name, found.tool, args)
@@ -579,19 +552,18 @@ export const make = <R>(
           invocations.set(key, invocation)
           const before = hooks["tool.before"]
           const after = hooks["tool.after"]
-          const run = Effect.gen(function* () {
-            const raw = yield* failure(restoreStart(restore, () => found.durable.start(input, { key })))
-            const data = yield* Effect.try({
-              try: (): Json => {
-                const text = JSON.stringify(raw)
-                return text === undefined ? null : JSON.parse(text)
-              },
-              catch: (cause) =>
-                new ToolRuntimeError("InvalidToolOutput", `Invalid start data from tool '${found.name}': ${cause}`),
-            })
-            onStarted?.(data)
-            return data
-          })
+          const run = failure(Effect.suspend(() => found.durable.start(input, { key }))).pipe(
+            Effect.flatMap((raw) =>
+              Effect.try({
+                try: (): Json => {
+                  const text = JSON.stringify(raw)
+                  return text === undefined ? null : JSON.parse(text)
+                },
+                catch: (cause) =>
+                  new ToolRuntimeError("InvalidToolOutput", `Invalid start data from tool '${found.name}': ${cause}`),
+              }),
+            ),
+          )
           const observed =
             after === undefined
               ? run
@@ -600,9 +572,7 @@ export const make = <R>(
                   if (Cause.hasInterruptsOnly(cause)) return after(invocation, { status: "interrupted" })
                   return after(invocation, { status: "failure", error: Cause.squash(cause) })
                 })
-          if (before === undefined) return yield* observed
-          yield* restore(before(invocation)).pipe(Effect.onError(() => Effect.sync(() => void invocations.delete(key))))
-          return yield* observed
+          return yield* before === undefined ? observed : Effect.andThen(before(invocation), observed)
         })
       }),
     wait: (path, args, key, data, detaching) =>
@@ -641,14 +611,6 @@ export const make = <R>(
       Effect.suspend(() => {
         const cancel = durableTool(path).durable.cancel as (data: Json) => Effect.Effect<void, unknown, R>
         return failure(cancel(data))
-      }),
-    interrupted: (key) =>
-      Effect.suspend(() => {
-        const invocation = invocations.get(key)
-        invocations.delete(key)
-        const after = hooks["tool.after"]
-        if (invocation === undefined || after === undefined) return Effect.void
-        return after(invocation, { status: "interrupted" })
       }),
   }
 }

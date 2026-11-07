@@ -1220,48 +1220,8 @@ describe("idempotent and durable tools", () => {
     expect(afterEvents).toEqual(["sl:0:success"])
   })
 
-  test("durable.start edge cases: uninterruptible start on interrupt cancels data, invalid start JSON fires after, and wait failure rejects", async () => {
-    const events: Array<string> = []
-    const cancelled: Array<string> = []
-    const inStart = latch()
-    const startGate = latch()
-
-    // 1. An uninterruptible start that finishes while an interrupt is pending saves its data, fires after(interrupted), and runs cancel.
-    const uninterruptibleJob = Tool.make({
-      description: "Uninterruptible start",
-      input: Value,
-      output: Value,
-      execute: Tool.durable({
-        start: (input, { key }) =>
-          Effect.uninterruptible(
-            Effect.gen(function* () {
-              inStart.resolve()
-              yield* Effect.promise(() => startGate.promise)
-              return { jobId: `${key}:${input.value}` }
-            }),
-          ),
-        wait: () => Effect.never,
-        cancel: ({ jobId }) => Effect.sync(() => void cancelled.push(jobId)),
-      }),
-    })
-    const runtime1 = CodeMode.make({
-      engine: "vm",
-      tools: { job: uninterruptibleJob },
-      hooks: {
-        "tool.after": (call, res) => Effect.sync(() => void events.push(`${call.key}:${res.status}`)),
-      },
-    })
-    const prog1 = runtime1.program(`return await tools.job({ value: 9 })`, undefined, { runId: "u" })
-    const fiber1 = Effect.runFork(prog1.run())
-    await inStart.promise
-    const interruptFiber = Effect.runFork(Fiber.interrupt(fiber1))
-    await Bun.sleep(10)
-    startGate.resolve()
-    await Effect.runPromise(Fiber.join(interruptFiber))
-    expect(cancelled).toEqual(["u:0:9"])
-    expect(events).toEqual(["u:0:interrupted"])
-
-    // 2. Non-JSON data returned from start fires tool.after with failure.
+  test("invalid start JSON and wait failures fire tool.after with failure", async () => {
+    // 1. Non-JSON data returned from start fires tool.after with failure.
     const badStartEvents: Array<string> = []
     const badStart = Tool.make({
       description: "Bad start data",
@@ -1291,7 +1251,7 @@ describe("idempotent and durable tools", () => {
     expect(badOutcome).toMatchObject({ ok: false, error: { kind: "InvalidToolOutput" } })
     expect(badStartEvents).toEqual(["bad:0:failure"])
 
-    // 3. A failing wait rejects the call's promise with a catchable ToolError and fires tool.after with failure.
+    // 2. A failing wait rejects the call's promise with a catchable ToolError and fires tool.after with failure.
     const waitEvents: Array<string> = []
     const failingWait = Tool.make({
       description: "Failing wait",
@@ -1632,28 +1592,5 @@ describe("legacy engine compatibility", () => {
     })
     expect(keys).toHaveLength(2)
     expect(keys[0]).not.toBe(keys[1])
-
-    // Interrupting a durable tool on the legacy engine calls cancel(data).
-    const cancelled: Array<number> = []
-    const waiting = latch()
-    const cancellable = Tool.make({
-      description: "Cancellable on legacy",
-      input: Value,
-      output: Value,
-      execute: Tool.durable({
-        start: (input) => Effect.succeed({ n: input.value }),
-        wait: () =>
-          Effect.promise(() => {
-            waiting.resolve()
-            return new Promise(() => {})
-          }),
-        cancel: ({ n }) => Effect.sync(() => void cancelled.push(n)),
-      }),
-    })
-    const legacyRuntime = CodeMode.make({ engine: "legacy", tools: { cancellable } })
-    const fiber = Effect.runFork(legacyRuntime.execute(`return await tools.cancellable({ value: 77 })`))
-    await waiting.promise
-    await Effect.runPromise(Fiber.interrupt(fiber))
-    expect(cancelled).toEqual([77])
   })
 })

@@ -134,7 +134,6 @@ export class Driver<R> {
           const request = call.request
           if (call.status !== "started" || request.kind !== "tool") continue
           call.status = "completed"
-          yield* self.tools.interrupted(call.key).pipe(Effect.provideContext(self.services))
           yield* Effect.ignore(self.tools.cancel(request.path, call.data as Json)).pipe(
             Effect.provideContext(self.services),
           )
@@ -166,27 +165,13 @@ export class Driver<R> {
     const request = call.request
     if (request.kind === "tool") {
       if (this.tools.mode(request.path)?._tag === "CodeModeDurable") {
-        const started = this.tools.start(
-          request.path,
-          request.args,
-          call.key,
-          (name) => this.admit(call.id, name),
-          (data) => {
-            const current = this.vm.call(call.id)
-            if (current === undefined) return
-            current.status = "started"
-            current.data = data
-          },
-        )
-        return this.fork(call.id, started, () => {
+        const started = this.tools.start(request.path, request.args, call.key, (name) => this.admit(call.id, name))
+        return this.fork(call.id, started, (data) => {
           const current = this.vm.call(call.id)
           if (current === undefined) return
-          if (this.stopping || this.detached.has(call.id)) {
-            if (this.stopping && !this.suspending) {
-              Effect.runForkWith(this.services)(this.tools.interrupted(call.key))
-            }
-            return
-          }
+          current.status = "started"
+          current.data = data as Json
+          if (this.stopping || this.detached.has(call.id)) return
           this.wait(current)
         })
       }
