@@ -28,6 +28,8 @@ import { Session } from "@opencode/core/session"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import os from "node:os"
+import path from "node:path"
 import { FakeClaude } from "./lib/fake-claude"
 import { FakeIO } from "./lib/fake-io"
 import { TestSessions } from "./lib/sessions"
@@ -477,7 +479,7 @@ describe("ClaudeAgentPlugin provider config", () => {
           provider.body = { metadata: { user_id: "dan" } }
         })
         editor.models.update(ClaudeProvider.ID, haiku.id, (model) => {
-          model.settings = { baseURL: "https://haiku-gateway.example" }
+          model.settings = { baseURL: "https://haiku-gateway.example", configDir: "~/.claude-work" }
           model.headers = { "X-Model": "haiku" }
         })
       })
@@ -508,6 +510,7 @@ describe("ClaudeAgentPlugin provider config", () => {
       // Model settings override the provider's, and only configured headers are sent, not opencode's own
       const chat = claude.runs.find((run) => run.args.includes("--include-partial-messages"))!.env
       expect(chat.ANTHROPIC_BASE_URL).toBe("https://haiku-gateway.example")
+      expect(chat.CLAUDE_CONFIG_DIR).toBe(path.join(os.homedir(), ".claude-work"))
       expect(chat.ANTHROPIC_AUTH_TOKEN).toBe("config-token")
       expect(chat.ANTHROPIC_CUSTOM_HEADERS).toBe("X-Team: core\nX-Model: haiku")
       expect(chat.CLAUDE_CODE_EXTRA_BODY).toBe(JSON.stringify({ metadata: { user_id: "dan" } }))

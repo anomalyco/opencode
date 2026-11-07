@@ -2,12 +2,22 @@ export * as ClaudeAgentError from "./claude-agent-error.js"
 
 import type { SDKAssistantMessageError, SDKMessage, SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
 
+export class Failure extends Error {
+  constructor(
+    message: string,
+    // A subscription limit refused the request, rather than an API error that Claude Code already retried.
+    readonly limited: boolean,
+  ) {
+    super(message)
+  }
+}
+
 // Keep request-local diagnostics until the terminal result. A usage warning alone
 // is not a failed request, and Claude Code owns any retries before this result.
 export function make() {
   let code: SDKAssistantMessageError | undefined
   let rejected: SDKRateLimitInfo | undefined
-  return (message: SDKMessage): Error | undefined => {
+  return (message: SDKMessage): Failure | undefined => {
     if (message.type === "rate_limit_event") {
       rejected = message.rate_limit_info.status === "rejected" ? message.rate_limit_info : undefined
     }
@@ -26,16 +36,15 @@ export function make() {
         ? (status === 529 ? "Anthropic is overloaded (529)." : `Anthropic returned HTTP ${status}.`) +
           " Claude Code exhausted its retries. Try again shortly."
         : result
-    const limited = code === "rate_limit" || (rejected && status === 429)
+    const limited = code === "rate_limit" || (rejected !== undefined && status === 429)
     const window = rejected?.rateLimitType?.replaceAll("_", " ")
     const limit =
       limited && !failure ? `Claude Code subscription limit reached${window ? ` (${window})` : ""}.` : failure
     const reset = limited && rejected?.resetsAt ? ` Resets at ${new Date(rejected.resetsAt * 1000).toISOString()}.` : ""
-    const billing = code === "billing_error" ? " Check your Claude plan and extra-usage settings." : ""
-    const text = limit + reset + billing
+    const text = limit + reset
 
-    if (text) return new Error(text)
-    if (status) return new Error(`Claude Code could not finish its reply (HTTP ${status})`)
-    return new Error("Claude Code could not finish its reply")
+    if (text) return new Failure(text, limited)
+    if (status) return new Failure(`Claude Code could not finish its reply (HTTP ${status})`, limited)
+    return new Failure("Claude Code could not finish its reply", limited)
   }
 }

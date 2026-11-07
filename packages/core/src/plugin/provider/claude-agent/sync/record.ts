@@ -19,10 +19,15 @@ export interface Storage {
 
 export function make(storage: Storage) {
   return {
-    get: Effect.fn("SessionRecord.get")(function* (sessionID: string) {
-      const saved = Schema.decodeUnknownOption(Record)(yield* storage.get(`sessions/${sessionID}`))
+    get: Effect.fn("SessionRecord.get")(function* (sessionID: string, configDir?: string) {
+      const saved = Schema.decodeUnknownOption(Record)(yield* storage.get(key(sessionID, configDir)))
       return Option.getOrUndefined(saved)
     }),
-    set: (sessionID: string, record: Record) => storage.set(`sessions/${sessionID}`, record),
+    set: (sessionID: string, record: Record, configDir?: string) => storage.set(key(sessionID, configDir), record),
   }
+}
+
+// Each Claude config folder has its own transcripts, so a chat keeps one record per folder.
+function key(sessionID: string, configDir?: string) {
+  return configDir ? `sessions/${sessionID}:${configDir}` : `sessions/${sessionID}`
 }
