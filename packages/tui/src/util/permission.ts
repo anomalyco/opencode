@@ -1,4 +1,5 @@
 import { Locale } from "./locale"
+import { formatShellCommand } from "./format-command"
 import { canonicalToolName, finiteNumber, webSearchProviderLabel } from "./tool-display"
 
 type Dict = Record<string, unknown>
@@ -68,7 +69,7 @@ export function permissionPresentation(
     return {
       icon: "#",
       title: "Shell command",
-      lines: command ? [`$ ${command}`] : resources.map((item) => `- ${item}`),
+      lines: command ? [`$ ${formatShellCommand(command)}`] : resources.map((item) => `- ${item}`),
     }
   }
 

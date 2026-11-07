@@ -7,6 +7,7 @@ import { useClient } from "../context/client"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { DialogFooter, DialogHeader, DialogLayout, useDialog } from "../ui/dialog"
+import { formatShellCommand } from "../util/format-command"
 
 const PAGE_BYTES = 64 * 1024
 
@@ -127,7 +128,7 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
     >
       <box gap={1}>
         <text fg={theme.text.muted} maxHeight={3} wrapMode="word">
-          {props.shell.command}
+          {formatShellCommand(props.shell.command)}
         </text>
         <Show when={omitted()}>
           <text fg={theme.text.muted}>Earlier output omitted · showing recent output</text>

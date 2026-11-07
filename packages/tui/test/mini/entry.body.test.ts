@@ -463,6 +463,28 @@ describe("run entry body", () => {
     })
   })
 
+  test("formats long shell commands in start entries", () => {
+    expect(
+      entryBody(
+        commit({
+          kind: "tool",
+          text: "running shell",
+          phase: "start",
+          source: "tool",
+          tool: "shell",
+          partID: "shell:call-long",
+          toolState: "running",
+          shell: {
+            command: "npm run build -- --production --verbose && npm test -- --coverage --ci",
+          },
+        }),
+      ),
+    ).toEqual({
+      type: "text",
+      content: "$ npm run build -- --production --verbose &&\n  npm test -- --coverage --ci",
+    })
+  })
+
   test("hides shell tool output but not direct shell output", () => {
     const output = commit({ kind: "tool", text: "output", phase: "progress", source: "tool", tool: "shell" })
     expect(entryBody(output, { shellOutput: false })).toEqual({ type: "none" })
