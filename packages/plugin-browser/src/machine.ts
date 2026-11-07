@@ -1,8 +1,8 @@
 export * as BrowserMachine from "./machine.js"
 
-import type { Permission } from "@Mackery6969/69/schema/permission"
-import type { Session } from "@Mackery6969/69/schema/session"
-import { Tool } from "@Mackery6969/69/schema/tool"
+import type { Permission } from "@Mackery6969/schema/permission"
+import type { Session } from "@Mackery6969/schema/session"
+import { Tool } from "@Mackery6969/schema/tool"
 import type { Browser } from "./rpc.js"
 import { BrowserSkill } from "./skill.js"
 

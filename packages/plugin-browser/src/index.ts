@@ -1,4 +1,4 @@
-import { Plugin } from "@Mackery6969/69/plugin/effect"
+import { Plugin } from "@Mackery6969/plugin/effect"
 import { Effect } from "effect"
 import { BrowserConnection } from "./connection.js"
 import { BrowserTools } from "./tools.js"

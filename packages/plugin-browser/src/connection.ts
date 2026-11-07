@@ -1,9 +1,9 @@
 export * as BrowserConnection from "./connection.js"
 
-import type { Context } from "@Mackery6969/69/plugin/effect/plugin"
-import type { RpcRegistration } from "@Mackery6969/69/plugin/effect/rpc"
-import type { Session } from "@Mackery6969/69/schema/session"
-import { Tool } from "@Mackery6969/69/schema/tool"
+import type { Context } from "@Mackery6969/plugin/effect/plugin"
+import type { RpcRegistration } from "@Mackery6969/plugin/effect/rpc"
+import type { Session } from "@Mackery6969/schema/session"
+import { Tool } from "@Mackery6969/schema/tool"
 import { Cause, Deferred, Duration, Effect, Exit, Option, Schema, Scope, Semaphore, Stream } from "effect"
 import { BrowserMachine } from "./machine.js"
 import { Browser } from "./rpc.js"
