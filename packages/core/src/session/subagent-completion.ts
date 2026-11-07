@@ -2,10 +2,20 @@ export * as SubagentCompletion from "./subagent-completion.js"
 
 import { Effect } from "effect"
 import type { Job } from "../job.js"
-import type { Session } from "../session.js"
 import type { SessionMessage } from "./message.js"
+import type { SessionSchema } from "./schema.js"
 
 export const NO_TEXT = "Subagent completed without a text response."
+
+/** The Session.synthetic input a completion needs, without depending on Session.Service. */
+export type SyntheticInput = {
+  readonly id?: SessionMessage.ID
+  readonly sessionID: SessionSchema.ID
+  readonly text: string
+  readonly description?: string
+  readonly metadata?: Record<string, unknown>
+  readonly resume?: boolean
+}
 
 export function text(message: SessionMessage.Info | undefined) {
   if (message?.type !== "assistant") return NO_TEXT
@@ -18,8 +28,10 @@ export function text(message: SessionMessage.Info | undefined) {
   )
 }
 
-export const deliver = Effect.fnUntraced(function* (
-  sessions: Pick<Session.Interface, "synthetic">,
+export const deliver = Effect.fnUntraced(function* <E>(
+  sessions: {
+    readonly synthetic: (input: SyntheticInput) => Effect.Effect<unknown, E>
+  },
   jobs: Pick<Job.Interface, "completeBackground">,
   input: Pick<Job.Info, "status" | "output" | "error" | "notificationID"> & {
     recovery: Extract<Job.Recovery, { kind: "subagent" }>

@@ -185,6 +185,34 @@ describe("Job", () => {
     }),
   )
 
+  it.live("reports foreground visibility only while a session blocks on the job", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const latch = yield* Deferred.make<void>()
+      const job = yield* jobs.start({
+        id: "job_visibility",
+        type: "test",
+        run: Deferred.await(latch).pipe(Effect.as("done")),
+      })
+
+      expect(yield* jobs.isBlocked(job.id)).toBe(false)
+      expect(yield* jobs.isBlocked("job_missing")).toBe(false)
+
+      const waiting = yield* jobs
+        .block({ id: job.id, sessionID: SessionSchema.ID.make("ses_visible") })
+        .pipe(Effect.forkIn(yield* Scope.Scope, { startImmediately: true }))
+      // The registration happens in the forked fiber; yield until it is visible, never sleep.
+      yield* Effect.gen(function* () {
+        while (!(yield* jobs.isBlocked(job.id))) yield* Effect.yieldNow
+      }).pipe(Effect.timeout("1 second"))
+      expect(yield* jobs.isBlocked(job.id)).toBe(true)
+
+      yield* Deferred.succeed(latch, undefined)
+      expect(yield* Fiber.join(waiting)).toMatchObject({ type: "finished" })
+      expect(yield* jobs.isBlocked(job.id)).toBe(false)
+    }),
+  )
+
   it.live("returns backgrounded from a blocking wait when background wins", () =>
     Effect.gen(function* () {
       const jobs = yield* Job.Service

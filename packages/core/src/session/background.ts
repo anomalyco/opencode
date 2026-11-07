@@ -2,8 +2,11 @@ export * as SessionBackground from "./background.js"
 
 import type { Kind, Status } from "@opencode/schema/job"
 import { Effect } from "effect"
+import type { Database } from "../database/database.js"
 import type { Job } from "../job.js"
+import { SessionInbox } from "./inbox.js"
 import type { SessionSchema } from "./schema.js"
+import type { SessionStore } from "./store.js"
 
 export type Lookup = {
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<{ readonly parentID?: SessionSchema.ID } | undefined>
@@ -48,6 +51,29 @@ export const outstanding = Effect.fnUntraced(function* (
       description: recovery.description,
     }
   })
+})
+
+/**
+ * Whether an idle Session will be woken again by its own work: a background job of its own or a
+ * descendant's still running, completion notices awaiting admission, or admitted input not yet
+ * delivered. A subagent's report waits for this so it carries the child's final state.
+ */
+export const unsettled = Effect.fnUntraced(function* (
+  jobs: Pick<Job.Interface, "runningBackground" | "pendingBackground">,
+  store: Lookup & Pick<SessionStore.Interface, "message">,
+  db: Database.Interface["db"],
+  sessionID: SessionSchema.ID,
+) {
+  if ((yield* outstanding(jobs, store, sessionID)).length > 0) return true
+  // A job can finish before its observer admits the completion input. Keep that gap pending,
+  // but ignore markers whose input was already delivered (observer cleanup may lag behind it).
+  const parents = new Map<SessionSchema.ID, SessionSchema.ID | null>()
+  for (const job of yield* jobs.pendingBackground) {
+    const owner = job.recovery.kind === "subagent" ? job.recovery.parentSessionID : job.recovery.sessionID
+    if (!(yield* descends(store, parents, owner, sessionID))) continue
+    if (!(yield* store.message(job.notificationID))) return true
+  }
+  return yield* SessionInbox.has(db, sessionID, "input")
 })
 
 /** Active and unconsumed background jobs matching the requested Session, kind, status, and descendant scope. */

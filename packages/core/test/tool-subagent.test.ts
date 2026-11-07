@@ -65,8 +65,11 @@ const executionNode = makeGlobalNode({
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const store = yield* SessionStore.Service
+      const db = (yield* Database.Service).db
       const completed = new Set<Session.ID>()
       const complete = Effect.fn("SubagentTest.complete")(function* (sessionID: Session.ID) {
+        // Deliver admitted input like a real drain, so the child does not look unsettled.
+        yield* SessionInbox.promote(db, bus, sessionID, "input")
         if (completed.has(sessionID)) return
         if ((yield* store.get(sessionID))?.title?.includes("fail")) {
           yield* new SessionRunnerModel.ModelNotSelectedError({ sessionID })
@@ -110,7 +113,7 @@ const executionNode = makeGlobalNode({
       })
     }),
   ),
-  deps: [Bus.node, SessionStore.node],
+  deps: [Bus.node, SessionStore.node, Database.node],
 })
 
 const subagentPluginSupervisor = makeLocationNode({
@@ -237,8 +240,10 @@ describe("SubagentTool", () => {
               if (event.data.sessionID !== parent.id || event.data.item.type !== "synthetic") return
               notifications.push(event.data.inboxID)
               const marker = (yield* jobs.pendingBackground).find((job) => job.notificationID === event.data.inboxID)
-              // The marker must survive until admission commits, not merely until delivery starts.
-              expect(marker?.status).toBe("completed")
+              // The durable marker must survive until admission commits, not merely until delivery
+              // starts. Settlement now admits while the job is still running, so the marker is not
+              // yet terminal here; the job's own observer clears it with the same ID afterwards.
+              expect(marker).toBeDefined()
               if (marker) yield* Deferred.succeed(admitted, marker)
             }),
           )
@@ -271,7 +276,9 @@ describe("SubagentTool", () => {
             }),
           ])
 
-          // Reproduce a crash after admission but before acknowledgment using the real persisted row.
+          // Reproduce a crash after the job persisted its completed marker but before it was
+          // acknowledged. Admission now happens while the job is still running, so the marker
+          // captured at enqueue is not yet terminal: replay the durable row the job leaves behind.
           const database = yield* Database.Service
           yield* database.db
             .insert(JobTable)
@@ -282,9 +289,9 @@ describe("SubagentTool", () => {
               child_session_id: outputSessionID(result.metadata),
               kind: marker.recovery.kind,
               title: "background review",
-              status: marker.status,
-              output: marker.output ?? null,
-              error: marker.error ?? null,
+              status: "completed",
+              output: childText,
+              error: null,
               recovery: marker.recovery,
             })
             .run()
@@ -296,6 +303,119 @@ describe("SubagentTool", () => {
             messages,
           )
           expect(yield* jobs.pendingBackground).toEqual([])
+        }),
+      ),
+    ),
+  )
+
+  completionIt.live("replays a silent child's durable row without reporting to the parent", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({
+            location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+            model: parentModel,
+            title: "Silent recipient",
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const jobs = yield* Job.Service
+          const database = yield* Database.Service
+
+          const result = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-silent-replay",
+              name: SubagentTool.name,
+              input: {
+                agent: "reviewer",
+                description: "quiet review",
+                prompt: "review",
+                background: true,
+                notify: false,
+              },
+            },
+          })
+          const child = outputSessionID(result.metadata)
+          yield* jobs.wait({ id: child })
+          yield* jobs.pendingBackground.pipe(Effect.repeat({ until: (pending) => pending.length === 0 }))
+          const synthetic = () =>
+            sessions
+              .context(parent.id)
+              .pipe(Effect.map((messages) => messages.filter((message) => message.type === "synthetic")))
+          expect(yield* synthetic()).toEqual([])
+
+          // The crash durable row a silent child's observer leaves behind: replaying it must clear
+          // the marker without admitting a report for the parent.
+          const notificationID = SessionMessage.ID.create()
+          yield* database.db
+            .insert(JobTable)
+            .values({
+              notification_id: notificationID,
+              id: child,
+              session_id: parent.id,
+              child_session_id: child,
+              kind: "subagent",
+              title: "quiet review",
+              status: "completed",
+              output: "Silent replayed result",
+              error: null,
+              recovery: {
+                kind: "subagent",
+                parentSessionID: parent.id,
+                childSessionID: child,
+                agent: "reviewer",
+                description: "quiet review",
+              },
+            })
+            .run()
+          expect(yield* jobs.pendingBackground).toHaveLength(1)
+          const restart = yield* SessionRestart.Service
+          yield* restart.resumeSuspendedSessions
+          yield* jobs.pendingBackground.pipe(Effect.repeat({ until: (pending) => pending.length === 0 }))
+
+          expect(yield* synthetic()).toEqual([])
+          expect(yield* jobs.pendingBackground).toEqual([])
+          expect(yield* SessionInbox.list(database.db, parent.id)).toEqual([])
+        }),
+      ),
+    ),
+  )
+
+  completionIt.live("returns a foreground child inline without reporting to the parent", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({
+            location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+            model: parentModel,
+            title: "Foreground recipient",
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+
+          const result = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-foreground-completion",
+              name: SubagentTool.name,
+              input: { agent: "reviewer", description: "foreground review", prompt: "review" },
+            },
+          })
+          expect(result).toMatchObject({ status: "completed", metadata: { status: "completed" } })
+
+          // The blocked foreground caller receives the result inline, so settlement must stay quiet.
+          yield* sessions.wait(parent.id)
+          expect((yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")).toEqual([])
+          expect(yield* (yield* Job.Service).pendingBackground).toEqual([])
         }),
       ),
     ),
@@ -449,7 +569,7 @@ describe("SubagentTool", () => {
             agent: "reviewer",
             model: childModel,
           })
-          expect((yield* sessions.inbox(child.id)).find((message) => message.type === "user")?.payload.text).toBe(
+          expect((yield* sessions.context(child.id)).find((message) => message.type === "user")?.text).toBe(
             "You are a subagent spawned by another session.\nreview this",
           )
 
@@ -513,9 +633,7 @@ describe("SubagentTool", () => {
           expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(1)
           expect((yield* sessions.get(childID)).title).toBe("review")
           expect(
-            (yield* sessions.inbox(childID)).flatMap((message) =>
-              message.type === "user" ? [message.payload.text] : [],
-            ),
+            (yield* sessions.context(childID)).flatMap((message) => (message.type === "user" ? [message.text] : [])),
           ).toEqual(["You are a subagent spawned by another session.\nreview this", "continue this"])
           expect(second.content).toEqual([{ type: "text", text: completedOutput(childID) }])
         }),
@@ -873,6 +991,117 @@ describe("SubagentTool", () => {
           expect(synthetic).toHaveLength(1)
           expect(synthetic[0]?.text).toContain(`<subagent sessionID="${childID}" state="completed"`)
           expect(synthetic[0]?.text).toContain(childText)
+        }),
+      ),
+    ),
+  )
+
+  it.live("records the notify preference explicitly instead of inheriting it", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({
+            location,
+            metadata: { "subagent.notify": false, host: "keep" },
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+
+          const spawn = (id: string, input: Record<string, unknown>) =>
+            executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: { type: "tool-call", id, name: SubagentTool.name, input },
+            })
+
+          const loud = yield* spawn("call-notify-default", {
+            agent: "reviewer",
+            description: "loud review",
+            prompt: "review",
+            background: true,
+          })
+          const quiet = yield* spawn("call-notify-false", {
+            agent: "reviewer",
+            description: "quiet review",
+            prompt: "review",
+            background: true,
+            notify: false,
+          })
+
+          // The inherited false is rewritten by default, and the host key survives the merge.
+          expect((yield* sessions.get(outputSessionID(loud.metadata))).metadata).toEqual({
+            "subagent.notify": true,
+            host: "keep",
+          })
+          expect((yield* sessions.get(outputSessionID(quiet.metadata))).metadata).toEqual({
+            "subagent.notify": false,
+            host: "keep",
+          })
+        }),
+      ),
+    ),
+  )
+
+  it.live("reports only the children whose spawn asked for it", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const jobs = yield* Job.Service
+          const bus = yield* Bus.Service
+          const database = yield* Database.Service
+          const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+            Stream.filter((event) => event.data.sessionID === parent.id && event.data.item.type === "synthetic"),
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.forkScoped({ startImmediately: true }),
+          )
+
+          const spawn = (id: string, input: Record<string, unknown>) =>
+            executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: { type: "tool-call", id, name: SubagentTool.name, input },
+            })
+
+          const quiet = yield* spawn("call-silent-subagent", {
+            agent: "reviewer",
+            description: "quiet review",
+            prompt: "review",
+            background: true,
+            notify: false,
+          })
+          const loud = yield* spawn("call-loud-subagent", {
+            agent: "reviewer",
+            description: "loud review",
+            prompt: "review",
+            background: true,
+          })
+          const loudID = outputSessionID(loud.metadata)
+
+          const admission = Array.from(yield* Fiber.join(admitted))[0]
+          if (admission?.data.item.type !== "synthetic") return yield* Effect.die("Expected synthetic inbox item")
+          expect(admission.data.item.payload.metadata).toMatchObject({ childID: loudID })
+
+          // The silent child settles without a report but still clears its durable marker.
+          yield* jobs.wait({ id: outputSessionID(quiet.metadata) })
+          yield* jobs.wait({ id: loudID })
+          yield* jobs.pendingBackground.pipe(
+            Effect.repeat({ until: (pending) => pending.length === 0 }),
+            Effect.timeout("2 seconds"),
+          )
+          yield* SessionInbox.promote(database.db, bus, parent.id, "steer")
+          const synthetic = (yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")
+          expect(synthetic).toHaveLength(1)
+          expect(synthetic[0]?.text).toContain(`<subagent sessionID="${loudID}" state="completed"`)
         }),
       ),
     ),

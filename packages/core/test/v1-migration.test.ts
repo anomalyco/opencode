@@ -74,6 +74,9 @@ const session = (
   time_archived: null,
   time_suspended: null,
   resume_attempts: 0,
+  held_report_id: null,
+  held_report_at: null,
+  held_report_answer: null,
   ...overrides,
 })
 

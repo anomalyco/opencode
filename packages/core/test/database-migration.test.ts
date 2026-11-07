@@ -22,6 +22,7 @@ import sessionInboxMigration from "@opencode/core/database/migration/20260812181
 import sessionViewedStateMigration from "@opencode/core/database/migration/20260819222447_session_viewed_state"
 import azureCliCredentialMigration from "@opencode/core/database/migration/20261007190000_azure_cli_external_credential"
 import dropSessionPendingMigration from "@opencode/core/database/migration/20261025154125_drop_session_pending"
+import heldReportMigration from "@opencode/core/database/migration/20261105050139_held_report"
 import { Global } from "@opencode/util/global"
 
 const run = <A, E>(
@@ -191,6 +192,34 @@ describe("DatabaseMigration", () => {
           yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_pending'`),
         ).toBeUndefined()
         expect(yield* db.get(sql`SELECT count(*) AS count FROM migration`)).toEqual({ count: migrations.length })
+      }),
+    )
+  })
+
+  test("adds nullable held-report bookkeeping to existing sessions", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session_v2 (id text PRIMARY KEY, title text, time_updated integer)`)
+        yield* db.run(sql`INSERT INTO session_v2 VALUES ('ses_existing', 'Existing', 10)`)
+
+        yield* DatabaseMigration.applyOnly(db, [heldReportMigration])
+        yield* DatabaseMigration.applyOnly(db, [heldReportMigration])
+
+        expect(yield* db.get(sql`SELECT * FROM session_v2`)).toEqual({
+          id: "ses_existing",
+          title: "Existing",
+          time_updated: 10,
+          held_report_id: null,
+          held_report_at: null,
+          held_report_answer: null,
+        })
+        expect(
+          yield* db.get(
+            sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'session_v2_held_report_idx'`,
+          ),
+        ).toEqual({ name: "session_v2_held_report_idx" })
+        expect(yield* db.get(sql`SELECT count(*) AS count FROM migration`)).toEqual({ count: 1 })
       }),
     )
   })
