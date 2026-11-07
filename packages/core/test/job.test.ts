@@ -520,6 +520,8 @@ describe("Job", () => {
         .run()
 
       yield* db.transaction((tx) => jobMigration.up(tx))
+      // The current table also carries the column added by a later migration.
+      yield* db.run("ALTER TABLE `job` ADD `pid` integer")
 
       expect(yield* db.select().from(KVTable).where(like(KVTable.key, "job.background/%")).all()).toEqual([])
       expect(yield* jobs.pendingBackground).toMatchObject([

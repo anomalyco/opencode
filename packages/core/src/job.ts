@@ -19,6 +19,8 @@ const Background = Schema.Struct({
   status: Schema.Literals(["running", "completed", "error", "cancelled"]),
   output: Schema.optionalKey(Schema.String),
   error: Schema.optionalKey(Schema.String),
+  /** PID of the process running the job, so a restart sweep can tell an orphan from a live owner sharing the database. */
+  pid: Schema.optionalKey(Schema.Number),
 })
 
 export type Background = typeof Background.Type
@@ -218,6 +220,7 @@ export const make = Effect.gen(function* () {
       status: job.info.status,
       output: job.info.output ?? null,
       error: job.info.error ?? null,
+      pid: process.pid,
       recovery: job.recovery,
       time_created: job.info.started_at,
       time_updated: now,
@@ -507,6 +510,7 @@ export const make = Effect.gen(function* () {
         status: row.status,
         ...(row.output !== null ? { output: row.output } : {}),
         ...(row.error !== null ? { error: row.error } : {}),
+        ...(row.pid !== null ? { pid: row.pid } : {}),
       }),
     )
   }).pipe(Effect.withSpan("Job.pendingBackground"))
