@@ -484,7 +484,6 @@ export const dict = {
   "site.code.failed": "失敗",
   "site.code.copied": "クリップボードにコピーしました",
   "site.code.failedHint": "コピーできませんでした。コードを選択してください。",
-  "site.companions.free": "無料",
   "site.announcement.label": "新着。{{message}}",
   "site.announcement.aside": "OpenCodeの新着情報",
   "site.announcement.dismiss": "お知らせを閉じる",

@@ -337,7 +337,6 @@ export const dict = {
   "site.moreProducts": "More products",
   "site.contents": "Contents",
   "site.companions": "Works great with OpenCode",
-  "site.companions.free": "Free",
   "site.announcement.label": "New. {{message}}",
   "site.announcement.aside": "New in OpenCode",
   "site.announcement.dismiss": "Dismiss announcement",

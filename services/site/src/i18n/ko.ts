@@ -487,7 +487,6 @@ export const dict = {
   "site.code.failed": "실패",
   "site.code.copied": "클립보드에 복사됨",
   "site.code.failedHint": "복사하지 못했습니다. 코드를 직접 선택하세요.",
-  "site.companions.free": "무료",
   "home.openSource.star": "GitHub에서 스타",
   "home.openSource.starCount": ", 스타 {{count}}개",
   "home.openSource.contribute": "기여하기",
