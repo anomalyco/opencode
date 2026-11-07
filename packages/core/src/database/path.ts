@@ -16,6 +16,15 @@ export function storedAbsolutePath(input: string) {
   const result = storagePath(input)
   // Persisted projects and sessions can move between operating systems during migration.
   if (nodePath.posix.isAbsolute(result) || isWindowsStoragePath(result)) return result
+  // A Windows path written with backslashes (e.g. `C:\...` or a `\\server\...`
+  // UNC path left over on a non-Windows machine) is the same stored value as
+  // its slash form, so normalize it instead of rejecting it: otherwise every
+  // reader that decodes an absolute column (project list, sandboxes, the
+  // archive sweep, sessions) fails on the whole result set for one bad row.
+  if (/^[A-Za-z]:\\/.test(result) || result.startsWith("\\\\")) {
+    const normalized = result.replaceAll("\\", "/")
+    if (isWindowsStoragePath(normalized)) return normalized
+  }
 }
 
 function absolute(input: string) {
