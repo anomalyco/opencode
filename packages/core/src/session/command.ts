@@ -4,9 +4,11 @@ import type { PromptInput } from "@opencode/schema/prompt-input"
 import type { Session } from "@opencode/schema/session"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
 import { Effect } from "effect"
+import { Bus } from "../bus.js"
 import { Command } from "../command.js"
 import { Instance } from "../instance/service.js"
 import { Plugin } from "../plugin/service.js"
+import { SessionRevert } from "./revert.js"
 
 export const execute = Effect.fn("SessionCommand.execute")(function* (input: {
   session: Session.Info
@@ -20,6 +22,13 @@ export const execute = Effect.fn("SessionCommand.execute")(function* (input: {
   const instances = yield* Instance.Service
   yield* Effect.gen(function* () {
     yield* Plugin.awaitActivation
+    // Commit a staged revert before the command runs, like Session.prompt does. A command can
+    // queue work (such as a goal kickoff) that stays held behind the staged revert, and
+    // committing afterwards would delete that queued work instead.
+    if (input.session.revert) {
+      const bus = yield* Bus.Service
+      yield* SessionRevert.commit(bus, input.session)
+    }
     const commands = yield* Command.Service
     yield* commands.execute({
       name: input.command,

@@ -491,6 +491,7 @@ const layer = Layer.effect(
         const session = yield* result.get(input.sessionID)
         return yield* SessionCommand.execute({ ...input, session }).pipe(
           Effect.provideService(Instance.Service, instances),
+          Effect.provideService(Bus.Service, bus),
         )
       }),
       shell: (input) => sessions.forSession(input.sessionID).shell(input),

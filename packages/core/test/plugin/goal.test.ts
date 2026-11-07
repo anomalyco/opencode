@@ -100,6 +100,36 @@ describe("goal plugin", () => {
     }),
   )
 
+  it.live("runs a goal commanded after an undo staged a revert", () =>
+    Effect.gen(function* () {
+      const session = yield* project()
+      const sessions = yield* Session.Service
+      const verdicts = reviewer('{"verdict":"done","reason":"The report is written."}')
+      yield* serve(verdicts.respond)
+
+      yield* sessions.prompt({ sessionID: session.id, text: "first prompt" })
+      yield* sessions.wait(session.id)
+      yield* sessions.prompt({ sessionID: session.id, text: "second prompt" })
+      yield* sessions.wait(session.id)
+
+      // /undo stages a revert at the first prompt instead of deleting anything yet.
+      const boundary = (yield* sessions.messages({ sessionID: session.id, order: "asc" })).find(
+        (message) => message.type === "user",
+      )
+      if (!boundary) return yield* Effect.die("Expected a user message to stage the revert at")
+      yield* sessions.revert.stage({ sessionID: session.id, messageID: boundary.id, files: false })
+      expect((yield* sessions.get(session.id)).revert?.messageID).toBe(boundary.id)
+
+      yield* sessions.command({ sessionID: session.id, command: "goal", text: "Write the report" })
+      yield* sessions.wait(session.id)
+
+      // The command commits the staged revert first, so the kickoff it queues can run.
+      expect((yield* sessions.get(session.id)).revert).toBeUndefined()
+      expect(verdicts.asked()).toBe(1)
+      expect(yield* goal(session.id)).toMatchObject({ status: "complete", reason: "The report is written." })
+    }),
+  )
+
   for (const scenario of [
     {
       // The first round with this reason made progress; the three repeats after it did not.
