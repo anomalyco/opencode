@@ -676,7 +676,6 @@
       "name": "@opencode/stats-app",
       "version": "2.2.5",
       "dependencies": {
-        "@ibm/plex": "6.4.1",
         "@kobalte/core": "catalog:",
         "@opencode/stats-core": "workspace:*",
         "@opencode/ui": "workspace:*",
