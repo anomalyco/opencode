@@ -384,6 +384,16 @@ test("compaction prompts prohibit task execution", () => {
     expect(SessionCompaction.buildPrompt(update)).toContain("Do not continue the task or call tools")
 })
 
+test("compaction prompt asks the summary to carry loaded skills", () => {
+  const prompt = SessionCompaction.buildPrompt(false, false, [
+    { id: "effect", name: "Effect" },
+    { id: "report", name: "Report" },
+  ])
+  expect(prompt).toContain("<session_skills>")
+  expect(prompt).toContain("Effect, Report")
+  expect(SessionCompaction.buildPrompt(false)).not.toContain("<session_skills>")
+})
+
 it.effect("auto compaction estimates current content against the buffered prompt ceiling", () =>
   Effect.gen(function* () {
     const compaction = yield* SessionCompaction.Service
@@ -726,6 +736,9 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     expect(requests[0]?.maxTokens).toBe(30_000)
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("Use Effect services and generators.")
+    // The summary prompt names the skills already present in the conversation.
+    expect(JSON.stringify(requests[0]?.messages.at(-1))).toContain("<session_skills>")
+    expect(JSON.stringify(requests[0]?.messages.at(-1))).toContain("Effect")
     expect(JSON.stringify(requests[0]?.messages)).toContain("User shell pwd completed: /project")
     expect(requests[0]?.messages).toHaveLength(hooked + 1)
     expect(JSON.stringify(requests[0]?.messages.at(-1))).toContain("Summarize only what")
