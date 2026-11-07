@@ -97,3 +97,28 @@ describe("global", () => {
     fs.rmSync(root, { recursive: true, force: true })
   })
 })
+
+describe("configDirOverrideWarning", () => {
+  const base = "/home/user/.config/opencode"
+
+  test("returns undefined when the override is unset", () => {
+    expect(Global.configDirOverrideWarning(undefined, base)).toBeUndefined()
+  })
+
+  test("returns undefined when the override equals the base", () => {
+    expect(Global.configDirOverrideWarning(base, base)).toBeUndefined()
+  })
+
+  test("names both paths and the workarounds when the override differs", () => {
+    const warning = Global.configDirOverrideWarning("/custom/opencode", base)
+    expect(warning).toBeDefined()
+    expect(warning).toContain("/custom/opencode")
+    expect(warning).toContain(base)
+    expect(warning).toContain("OPENCODE_CONFIG_DIR")
+    expect(warning).toContain("Use OPENCODE_CONFIG for")
+  })
+
+  test("returns undefined for an empty override", () => {
+    expect(Global.configDirOverrideWarning("", base)).toBeUndefined()
+  })
+})
