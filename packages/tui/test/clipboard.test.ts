@@ -66,6 +66,48 @@ test("adapts OpenTUI image and text reads", async () => {
   expect(requests).toEqual([{ preferredTypes: ["image/png", "text/plain"], selection: "clipboard" }])
 })
 
+const WSL_VARIABLES = ["WSL_DISTRO_NAME", "WSL_INTEROP"] as const
+
+// The WSL fallback reads the real Windows clipboard, so these tests pin the variables that decide
+// whether it runs instead of inheriting the machine they happen to run on.
+async function withWSL(variables: Partial<Record<(typeof WSL_VARIABLES)[number], string>>, run: () => Promise<void>) {
+  const previous = WSL_VARIABLES.map((name) => [name, process.env[name]] as const)
+  for (const name of WSL_VARIABLES) {
+    const value = variables[name]
+    if (value === undefined) delete process.env[name]
+    else process.env[name] = value
+  }
+  try {
+    await run()
+  } finally {
+    for (const [name, value] of previous) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
+  }
+}
+
+test("returns undefined when the host clipboard has no representation", async () => {
+  await withWSL({}, async () => {
+    const clipboard = createClipboardAdapter(coreClipboard({ read: { status: "empty" } }))
+
+    expect(await clipboard.read()).toBeUndefined()
+  })
+})
+
+// The interop fallback needs powershell.exe, which only runs inside WSL on Linux, so this path
+// cannot be exercised on a runner that has neither.
+test.skipIf(process.platform !== "linux" || Bun.which("powershell.exe") !== null)(
+  "surfaces a missing WSL interop instead of returning undefined",
+  async () => {
+    await withWSL({ WSL_DISTRO_NAME: "Ubuntu" }, async () => {
+      const clipboard = createClipboardAdapter(coreClipboard({ read: { status: "empty" } }))
+
+      await expect(clipboard.read()).rejects.toThrow("needs powershell.exe interop")
+    })
+  },
+)
+
 test("uses all available routes but skips the process host remotely", async () => {
   const writes = { host: 0, terminal: 0 }
   const host: HostClipboardService = {
