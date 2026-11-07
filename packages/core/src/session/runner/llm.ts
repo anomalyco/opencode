@@ -22,7 +22,7 @@ import { SessionStore } from "../store.js"
 import { SessionMessageTable } from "../sql.js"
 import { SessionTitle } from "../title.js"
 import { toSessionError } from "../to-session-error.js"
-import { DrainResult, Service, type Interface } from "./index.js"
+import { DrainResult, Service, type Entry, type Interface } from "./index.js"
 import { Snapshot } from "../../snapshot.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { llmClient } from "../../effect/app-node-platform.js"
@@ -41,6 +41,20 @@ const CONTINUE_AFTER_OUTPUT_LIMIT =
   "Your last response hit the output token limit (stop reason: length). Do not apologize, recap, or repeat yourself. Break the remaining work into smaller pieces."
 
 type DrainInput = Parameters<Interface["drain"]>[0]
+
+/** Where the drain loop stands before its next step. */
+type Boundary =
+  | Entry
+  /** The previous step asked for another. */
+  | { readonly type: "continuing"; readonly step: number }
+  /** The previous step finished the turn; a pending steer still continues it. */
+  | { readonly type: "ended"; readonly step: number }
+
+/** The Entry the next drain starts from, without a pending force. */
+function handoff(at: Boundary): Entry {
+  if (at.type === "carried" || at.type === "continuing") return { type: "carried", step: at.step }
+  return { type: "boundary", force: false, stepped: at.type === "ended" || at.stepped }
+}
 
 const layer = Layer.effect(
   Service,
@@ -63,13 +77,9 @@ const layer = Layer.effect(
     // Each drain is one turn and starts its own trace, whatever fiber woke it.
     const drain = Effect.fn("SessionRunner.drain", { root: true })(function* (input: DrainInput) {
       const sessionID = input.sessionID
-      let force = input.force
-      let continuing = input.continuation !== undefined
-      let step = input.continuation?.step ?? 1
-      let entering = true
-      let stepped = input.stepped ?? false
+      let at: Boundary = input.entry
       const promotable = input.promotable ?? "input"
-      if (!force && !continuing && !stepped) {
+      if (at.type === "boundary" && !at.force && !at.stepped) {
         const pending = yield* SessionInbox.nextPromotable(db, sessionID, "input")
         if (!pending) return DrainResult.Complete()
         const control = pending.type === "compaction" || pending.type === "move"
@@ -85,21 +95,17 @@ const layer = Layer.effect(
             while (true) {
               if (lifecycle.isClosed()) {
                 yield* restore(modelTransport.close(sessionID))
-                return DrainResult.Reloaded({
-                  force,
-                  continuation: continuing ? { step } : undefined,
-                  stepped: !continuing && stepped ? true : undefined,
-                })
+                // A reload keeps a pending force; a move drops it.
+                return DrainResult.Reloaded({ entry: at.type === "boundary" ? at : handoff(at) })
               }
               // Location entry and idle boundaries allow queued controls, not necessarily queued prompts.
+              // A continuation carried into a new Location also peeks queued work, so a queued control runs
+              // before it; promotion below still takes only steers.
+              const peek = at.type === "continuing" ? "steer" : "input"
               const pending = yield* SessionInbox.serialized(
                 sessionID,
                 Effect.gen(function* () {
-                  const next = yield* SessionInbox.nextPromotable(
-                    db,
-                    sessionID,
-                    entering || !continuing ? "input" : "steer",
-                  )
+                  const next = yield* SessionInbox.nextPromotable(db, sessionID, peek)
                   if (next?.type === "compaction")
                     yield* bus.publishAll([
                       [SessionEvent.InboxDelivered, { sessionID, inboxID: next.id }],
@@ -118,15 +124,9 @@ const layer = Layer.effect(
                   return next
                 }),
               )
-              if (!continuing && pending?.delivery !== "steer") {
-                entering = true
-                step = 1
-              }
-              if (pending?.type === "move")
-                return DrainResult.Moved({
-                  continuation: continuing ? { step } : undefined,
-                  stepped: !continuing && stepped ? true : undefined,
-                })
+              // A finished step reaches an idle boundary unless a steer continues the turn.
+              if (at.type === "ended" && pending?.delivery !== "steer") at = handoff(at)
+              if (pending?.type === "move") return DrainResult.Moved({ entry: handoff(at) })
               if (pending?.type === "compaction") {
                 const compacted = yield* restore(
                   Effect.gen(function* () {
@@ -169,12 +169,16 @@ const layer = Layer.effect(
                   })
                   return yield* Effect.failCause(compacted.cause)
                 }
-                force = false
+                if (at.type === "boundary") at = { ...at, force: false }
                 continue
               }
-              if (!force && !continuing && (!pending || (pending.delivery === "queue" && promotable === "steer"))) {
+              if (
+                at.type === "boundary" &&
+                !at.force &&
+                (!pending || (pending.delivery === "queue" && promotable === "steer"))
+              ) {
                 // Control-only drains such as a manual compaction never ran the model, so they skip the hook.
-                if (pending || !stepped) return DrainResult.Complete()
+                if (pending || !at.stepped) return DrainResult.Complete()
                 // The Session would go idle; a plugin may admit input to keep this execution working.
                 yield* restore(
                   SessionBackground.outstanding(jobs, store, sessionID).pipe(
@@ -184,23 +188,24 @@ const layer = Layer.effect(
                 if (!(yield* SessionInbox.has(db, sessionID, "input"))) return DrainResult.Complete()
                 continue
               }
+              // Promoting new user input resets the step allowance; a turn boundary always starts at step 1.
+              const scope = at.type === "boundary" ? promotable : "steer"
+              const step = at.type === "boundary" ? 1 : at.step
               const ready = yield* restore(
                 Effect.gen(function* () {
                   const selected = yield* prepareContext(sessionID)
-                  const promoted = yield* SessionInbox.promote(
-                    db,
-                    bus,
-                    sessionID,
-                    entering && !continuing ? promotable : "steer",
-                  )
+                  const promoted = yield* SessionInbox.promote(db, bus, sessionID, scope)
                   // A control admitted during context preparation owns this boundary.
                   if (promoted === undefined) return undefined
                   if (promoted > 0 && !selected.session.parentID && SessionTitle.isUntitled(selected.session))
                     yield* FiberMap.run(titles, sessionID, title.generate(sessionID), {
                       onlyIfMissing: true,
                     })
-                  if (promoted > 0) step = 1
-                  return { _tag: "Ready" as const, context: yield* context.load(selected) }
+                  return {
+                    _tag: "Ready" as const,
+                    context: yield* context.load(selected),
+                    step: promoted > 0 ? 1 : step,
+                  }
                 }),
               )
               if (ready) return ready
@@ -212,11 +217,8 @@ const layer = Layer.effect(
       while (true) {
         const next = yield* advanceToStep()
         if (next._tag !== "Ready") return next
-        continuing = yield* runStep(next.context, step)
-        stepped = true
-        step++
-        force = false
-        entering = false
+        const continues = yield* runStep(next.context, next.step)
+        at = { type: continues ? "continuing" : "ended", step: next.step + 1 }
       }
     })
 
