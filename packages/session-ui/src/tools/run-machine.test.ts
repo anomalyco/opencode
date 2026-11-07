@@ -41,33 +41,16 @@ describe("transitionShellRun", () => {
       status: "completed",
       input: command,
       metadata: result,
-      output: "Exit code: 1\nOutput:\nout\n",
+      output: "out\n\nExited with code 1",
     })
 
     expect(viewShellRun(done)).toMatchObject({
       pending: false,
       basicStatus: "completed",
       follow: undefined,
-      output: "out\n",
+      output: "out\n\nExited with code 1",
     })
     expect(transitionShellRun(done, { type: "output.received", shellID: "shl_1", output: "late\n" })).toBe(done)
-  })
-
-  test("a finished agent shell drops the exit code and timeout header from its saved result", () => {
-    const props = (output: string) =>
-      shellRunProps(
-        {
-          status: "completed",
-          input: { command: "bun dev" },
-          metadata: { status: "completed", shellID: "shl_1" },
-          output,
-        },
-        running([]),
-      )
-
-    expect(props("Exit code: 143\nCommand timed out after 120s\nOutput:\nserver starting").output).toBe(
-      "server starting",
-    )
   })
 
   test("a killed user shell without saved output never reads the shell", () => {

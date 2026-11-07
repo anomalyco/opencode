@@ -271,8 +271,8 @@ describe("Session.shell", () => {
         expect(completion.payload.text).toContain(command)
         expect(completion.payload.text).toContain("user output")
         expect(completion.payload.text).toContain("user error")
-        if (exit === 0) expect(completion.payload.text).not.toContain("Exited with code")
-        if (exit !== 0) expect(completion.payload.text).toContain(`Exited with code ${exit}`)
+        if (exit === 0) expect(completion.payload.text).not.toContain("Exit code")
+        if (exit !== 0) expect(completion.payload.text).toContain(`\n\nExit code: ${exit}\n</shell>`)
         expect(fixture.control.wakes).toEqual([])
       }),
     )
@@ -285,7 +285,7 @@ describe("Session.shell", () => {
       text: "Cancelled",
       output: "Shell command output is no longer available.",
     },
-    { status: "timeout", state: "completed", text: "Timed out before completion", output: "timeout started" },
+    { status: "timeout", state: "completed", text: "\n\nCommand timed out\nExit code: ", output: "timeout started" },
   ]) {
     it.live(`records a ${outcome.status} shell and admits its completion without waking the model`, () =>
       Effect.gen(function* () {

@@ -75,8 +75,8 @@ const Output = Schema.Struct({
 type Output = typeof Output.Type
 
 const resultMessages = (output: Output, timeout?: number) => {
-  if (output.status === "running") return [...(output.output ? [output.output] : []), BACKGROUND_INSTRUCTION]
-  return [ShellResult.report(output, timeout)]
+  const notice = output.status === "running" ? BACKGROUND_INSTRUCTION : ShellResult.notice(output, timeout)
+  return [...(output.output ? [output.output] : []), ...(notice ? [notice] : [])]
 }
 
 const toolResult = (output: Output, timeout?: number) => {

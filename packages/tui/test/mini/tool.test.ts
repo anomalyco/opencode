@@ -17,16 +17,6 @@ describe("Mini tool presentation", () => {
         { type: "text", text: "Command exited with code 0." },
       ]),
     ).toBe("")
-
-    expect(toolOutputText("shell", [{ type: "text", text: "Exit code: 0\nOutput:\nmini-output\n" }])).toBe(
-      "mini-output\n",
-    )
-    expect(
-      toolOutputText("shell", [
-        { type: "text", text: "Command moved to the background (shell ID: sh_1).\nOutput is streaming to: /tmp/out" },
-        { type: "text", text: "You will be notified automatically when the command finishes." },
-      ]),
-    ).toBe("Command moved to the background (shell ID: sh_1).\nOutput is streaming to: /tmp/out")
   })
 
   test("normalizes only persisted tool aliases into current fields", () => {

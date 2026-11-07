@@ -2,7 +2,6 @@ export * as ShellResult from "./result.js"
 
 import os from "os"
 import type { Shell } from "@opencode/schema/shell"
-import { formatShellReport } from "@opencode/util/shell-report"
 
 export type Result = {
   info: Shell.Info
@@ -29,22 +28,15 @@ export function output(result: Result): Output {
   }
 }
 
-function notice(output: Pick<Output, "exit" | "signal" | "timeout">) {
-  if (output.timeout) return "Timed out before completion"
-  if (output.signal !== undefined) return `Killed by ${output.signal}`
-  if (output.exit !== undefined && output.exit !== 0) return `Exited with code ${output.exit}`
-}
-
-export function report(output: Output, timeout?: number) {
-  return formatShellReport({
-    exitCode: exitCode(output),
-    status: output.timeout ? [`Command timed out${timeout ? ` after ${timeout / 1_000}s` : ""}`] : [],
-    output: output.output,
-  })
+export function notice(output: Pick<Output, "exit" | "signal" | "timeout">, timeout?: number) {
+  if (output.timeout)
+    return `Command timed out${timeout ? ` after ${timeout / 1_000} seconds` : ""}\nExit code: ${exitCode(output)}`
+  if (output.signal !== undefined || (output.exit !== undefined && output.exit !== 0))
+    return `Exit code: ${exitCode(output)}`
 }
 
 // A signal reads as the shell's 128 + signal number convention.
-function exitCode(output: Output) {
+function exitCode(output: Pick<Output, "exit" | "signal">) {
   if (output.exit !== undefined) return output.exit
   const signal = output.signal === undefined ? undefined : os.constants.signals[output.signal as NodeJS.Signals]
   return signal === undefined ? "unknown" : 128 + signal
@@ -86,7 +78,7 @@ export function userNotification(result: Result) {
       ? "Cancelled"
       : captured.exit === 0
         ? undefined
-        : (notice(captured) ?? "Exited with code unknown")
+        : (notice(captured) ?? "Exit code: unknown")
   const message = notification({
     shellID: result.info.id,
     command: result.info.command,

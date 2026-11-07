@@ -15,7 +15,6 @@ import os from "os"
 import path from "path"
 import stripAnsi from "strip-ansi"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
-import { shellReportOutput } from "@opencode/util/shell-report"
 import { LANGUAGE_EXTENSIONS } from "../util/filetype"
 import { Locale } from "../util/locale"
 import {
@@ -159,8 +158,8 @@ function text(v: unknown): string {
 
 export function toolOutputText(name: string, content: ReadonlyArray<{ type: string; text?: string }> | undefined) {
   if (!content) return ""
-  if (canonicalToolName(name) === "shell")
-    return shellReportOutput(content.find((item) => item.type === "text")?.text ?? "")
+  // V2 shell content appends model-only status after the user-visible command output.
+  if (canonicalToolName(name) === "shell") return content.find((item) => item.type === "text")?.text ?? ""
   const joined = content.flatMap((item) => (item.type === "text" && item.text ? [item.text] : [])).join("\n")
   if (canonicalToolName(name) === "read") return readDisplayText(joined) ?? joined
   return joined
