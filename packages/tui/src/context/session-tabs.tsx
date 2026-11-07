@@ -171,7 +171,8 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         busy: members.some(
           (id) =>
             data.session.status(id) === "running" ||
-            data.session.pending.list(id).some((item) => item.type !== "synthetic"),
+            data.session.pending.list(id).some((item) => item.type !== "synthetic") ||
+            data.shell.listBySession(id).some((shell) => shell.status === "running"),
         ),
         renaming: data.session.title.pending(session),
       }
