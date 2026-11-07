@@ -10,7 +10,7 @@
 <p align="center">オープンソースのAIコーディングエージェント。</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/@opencode/cli"><img alt="npm" src="https://img.shields.io/npm/v/@opencode/cli?style=flat-square" /></a>
+  <a href="https://www.npmjs.com/package/@Mackery6969/cli"><img alt="npm" src="https://img.shields.io/npm/v/@Mackery6969/cli?style=flat-square" /></a>
   <a href="https://github.com/anomalyco/opencode/actions/workflows/release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/release.yml?style=flat-square&branch=dev" /></a>
 </p>
 
@@ -50,7 +50,7 @@
 curl -fsSL https://opencode.ai/v2/install | bash
 
 # パッケージマネージャー
-npm i -g @opencode/cli@latest      # bun/pnpm/yarn でもOK
+npm i -g @Mackery6969/cli@latest      # bun/pnpm/yarn でもOK
 brew install anomalyco/tap/opencode-v2 # macOS と Linux（推奨。常に最新）
 brew install opencode              # macOS と Linux（公式 brew formula。更新頻度は低め）
 sudo pacman -S opencode            # Arch Linux (Stable)

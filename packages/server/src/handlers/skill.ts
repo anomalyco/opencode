@@ -1,4 +1,4 @@
-import { Skill } from "@opencode/core/skill"
+import { Skill } from "@Mackery6969/core/skill"
 import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
 import { response } from "../location"

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { OpenCodeEvent, SessionInfo } from "@opencode/client/promise"
+import type { OpenCodeEvent, SessionInfo } from "@Mackery6969/client/promise"
 import { createSidebarSessionActivity, isSidebarSessionActivity, mergeSidebarSessions } from "./sidebar-sessions"
 
 const session: SessionInfo = {

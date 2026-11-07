@@ -7,7 +7,7 @@ import { supportsForeignKeyToggle } from "#sqlite"
 import { EffectDrizzleSqlite } from "./drizzle.js"
 import { migrations } from "./migration.gen.js"
 import schema from "./schema.gen.js"
-import { Global } from "@opencode/util/global"
+import { Global } from "@Mackery6969/util/global"
 
 type Database = EffectDrizzleSqlite.EffectSQLiteDatabase & { readonly $client?: SqlClient.SqlClient }
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0]

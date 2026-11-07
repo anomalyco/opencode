@@ -1,4 +1,4 @@
-import { decodePersistentPtyMessage, persistentPtyFrame, type PersistentPtyMessage } from "@opencode/client/solid"
+import { decodePersistentPtyMessage, persistentPtyFrame, type PersistentPtyMessage } from "@Mackery6969/client/solid"
 import { Option } from "effect"
 
 export type TerminalSize = { readonly cols: number; readonly rows: number }

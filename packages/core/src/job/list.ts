@@ -1,6 +1,6 @@
 export * as JobList from "./list.js"
 
-import { Job } from "@opencode/schema/job"
+import { Job } from "@Mackery6969/schema/job"
 import { asc } from "drizzle-orm"
 import { Effect, Schema, SynchronizedRef } from "effect"
 import type { Database } from "../database/database.js"

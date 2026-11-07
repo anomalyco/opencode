@@ -1,5 +1,5 @@
 import { batch, createEffect, createMemo, createSignal, getOwner, onCleanup, untrack } from "solid-js"
-import type { SessionRef } from "@opencode/plugin/gui"
+import type { SessionRef } from "@Mackery6969/plugin/gui"
 import { same } from "@/runtime/persistence/equality"
 import {
   createLocatedWritesState,

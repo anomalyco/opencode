@@ -1,16 +1,16 @@
 export * as Config from "./config.js"
 
-import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { makeLocationNode } from "@Mackery6969/util/effect/app-node"
 import path from "path"
 import { isDeepStrictEqual } from "node:util"
 import { applyEdits, modify, type ParseError, parse } from "jsonc-parser"
 import { Context, Effect, FiberMap, Layer, Option, PubSub, Ref, Schema, Semaphore, Stream } from "effect"
-import { Directory, Document, Info, type Patch, type Entry, Event } from "@opencode/schema/config"
+import { Directory, Document, Info, type Patch, type Entry, Event } from "@Mackery6969/schema/config"
 import { Credential } from "./credential.js"
 import { Bus } from "./bus.js"
 import { Watcher } from "./filesystem/watcher.js"
-import { FSUtil } from "@opencode/util/fs-util"
-import { Global } from "@opencode/util/global"
+import { FSUtil } from "@Mackery6969/util/fs-util"
+import { Global } from "@Mackery6969/util/global"
 import { Location } from "./location.js"
 import { AbsolutePath } from "./schema.js"
 import { ConfigVariable } from "./config/variable.js"
@@ -20,9 +20,9 @@ import { ConfigWatch } from "./config/watch.js"
 import { ConfigIntegration } from "./config/integration.js"
 import { ConfigManaged } from "./config/managed.js"
 import { ManagedPolicy } from "./managed-policy.js"
-import { Connection } from "@opencode/schema/connection"
+import { Connection } from "@Mackery6969/schema/connection"
 import { WellKnown } from "./wellknown.js"
-import { AppProcess } from "@opencode/util/process"
+import { AppProcess } from "@Mackery6969/util/process"
 import { ChildProcess } from "effect/process"
 
 export function latest<K extends keyof Info>(entries: readonly Entry[], key: K): Info[K] | undefined {
@@ -70,7 +70,7 @@ export const Options = Schema.Struct({
 })
 export type Options = typeof Options.Type
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Config") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/Config") {}
 
 export interface TestInterface extends Interface {
   /** Replaces the entries returned by subsequent entries() calls. */
@@ -79,7 +79,7 @@ export interface TestInterface extends Interface {
   readonly emitChange: (update: Watcher.Update) => Effect.Effect<void>
 }
 
-export class Test extends Context.Service<Test, TestInterface>()("@opencode/Config/Test") {}
+export class Test extends Context.Service<Test, TestInterface>()("@Mackery6969/Config/Test") {}
 
 /** In-memory config for tests: static entries with replaceable state and a test-driven change feed. */
 export const testLayer = (

@@ -1,4 +1,4 @@
-import { Button } from "@opencode/ui/button"
+import { Button } from "@Mackery6969/ui/button"
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js"
 import { useServerSDK } from "@/runtime/server/client"
 import {

@@ -13,11 +13,11 @@ import {
 } from "solid-js"
 import { createStore, produce, type Store } from "solid-js/store"
 import type { Schema } from "effect"
-import { useDialog } from "@opencode/ui/context/dialog"
-import { useTheme } from "@opencode/ui/theme/context"
-import { toaster } from "@opencode/ui/toast"
-import { base64Encode } from "@opencode/util/encode"
-import { uuid } from "@opencode/util/uuid"
+import { useDialog } from "@Mackery6969/ui/context/dialog"
+import { useTheme } from "@Mackery6969/ui/theme/context"
+import { toaster } from "@Mackery6969/ui/toast"
+import { base64Encode } from "@Mackery6969/util/encode"
+import { uuid } from "@Mackery6969/util/uuid"
 import {
   type App,
   type Layout,
@@ -34,8 +34,8 @@ import {
   type Storage,
   type StorageScope,
   type Tabs,
-} from "@opencode/plugin/gui"
-import { BuiltinPanel, type BuiltinStoreFrom, type BuiltinStoreOptions } from "@opencode/plugin/gui/builtin"
+} from "@Mackery6969/plugin/gui"
+import { BuiltinPanel, type BuiltinStoreFrom, type BuiltinStoreOptions } from "@Mackery6969/plugin/gui/builtin"
 import { usePlatform } from "@/runtime/platform/platform"
 import { same } from "@/runtime/persistence/equality"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"

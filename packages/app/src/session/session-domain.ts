@@ -1,4 +1,4 @@
-import type { SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageInfo, SessionMessageUser } from "@Mackery6969/client/promise"
 
 export function selectSessionUserMessages(messages: SessionMessageInfo[]) {
   return messages.filter((message): message is SessionMessageUser => message.type === "user")

@@ -1,5 +1,5 @@
 import { Show } from "solid-js"
-import { Menu } from "@opencode/ui/menu"
+import { Menu } from "@Mackery6969/ui/menu"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import type { ServerConnection } from "@/runtime/server/registry"

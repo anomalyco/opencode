@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { describe, expect, test } from "bun:test"
-import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client"
+import type { OpenCodeClient, OpenCodeEvent } from "@Mackery6969/client"
 import { testRender } from "@opentui/solid"
 import { onMount } from "solid-js"
 import { ClientProvider, useClient } from "../../../src/context/client"

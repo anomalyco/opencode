@@ -1,15 +1,15 @@
 export * as Voice from "./voice.js"
 
-import { type AIError } from "@opencode/ai/effect"
+import { type AIError } from "@Mackery6969/ai/effect"
 import {
   Realtime,
   type RealtimeSession,
   type RealtimeTransport,
   type RealtimeTransportInput,
   type RealtimeTransportType,
-} from "@opencode/ai/experimental"
-import { RequestExecutor } from "@opencode/ai/route"
-import { makeLocationNode } from "@opencode/util/effect/app-node"
+} from "@Mackery6969/ai/experimental"
+import { RequestExecutor } from "@Mackery6969/ai/route"
+import { makeLocationNode } from "@Mackery6969/util/effect/app-node"
 import { Context, Effect, Layer, Redacted, Schema } from "effect"
 import { Credential } from "./credential.js"
 import { requestExecutor } from "./effect/app-node-platform.js"
@@ -49,7 +49,7 @@ export interface Interface {
   readonly session: (input: SessionInput) => Effect.Effect<RealtimeTransport, Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Voice") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/Voice") {}
 
 export const layer = Layer.effect(
   Service,

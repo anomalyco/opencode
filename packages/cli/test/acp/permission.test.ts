@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { AnyRequest, CreateElicitationResponse, RequestPermissionResponse } from "@agentclientprotocol/sdk"
-import type { OpenCodeEventEncoded } from "@opencode/protocol/groups/event"
+import type { OpenCodeEventEncoded } from "@Mackery6969/protocol/groups/event"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { tmpdir } from "../fixture/tmpdir"

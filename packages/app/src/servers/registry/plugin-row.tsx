@@ -1,5 +1,5 @@
 import { untrack } from "solid-js"
-import type { ServerRow } from "@opencode/plugin/gui"
+import type { ServerRow } from "@Mackery6969/plugin/gui"
 import { Contribution } from "@/runtime/plugin/render"
 import { usePluginServers } from "@/runtime/plugin/servers"
 import type { ServerHealth } from "@/runtime/server/health-machine"

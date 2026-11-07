@@ -1,4 +1,4 @@
-import { pluginEnabled } from "@opencode/plugin/gui/host"
+import { pluginEnabled } from "@Mackery6969/plugin/gui/host"
 import type { Database } from "../storage/database"
 import { plugin } from "../storage/schema"
 import { readEnableState } from "./enable-state"

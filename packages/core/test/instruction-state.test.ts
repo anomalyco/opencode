@@ -1,26 +1,26 @@
 import { describe, expect } from "bun:test"
 import { and, asc, eq } from "drizzle-orm"
 import { Effect, Schema } from "effect"
-import { Database } from "@opencode/core/database/database"
-import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
-import { LayerNode } from "@opencode/util/effect/layer-node"
-import { Bus } from "@opencode/core/bus"
-import { Event } from "@opencode/schema/event"
-import { EventTable } from "@opencode/core/event/sql"
-import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
-import { Instructions } from "@opencode/core/instructions/index"
-import { Project } from "@opencode/core/project"
-import { ProjectTable } from "@opencode/core/project/sql"
-import { AbsolutePath } from "@opencode/core/schema"
-import { InstructionState } from "@opencode/core/session/instruction-state"
-import { SessionProjector } from "@opencode/core/session/projector"
-import { SessionSchema } from "@opencode/core/session/schema"
+import { Database } from "@Mackery6969/core/database/database"
+import { AppNodeBuilder } from "@Mackery6969/core/effect/app-node-builder"
+import { LayerNode } from "@Mackery6969/util/effect/layer-node"
+import { Bus } from "@Mackery6969/core/bus"
+import { Event } from "@Mackery6969/schema/event"
+import { EventTable } from "@Mackery6969/core/event/sql"
+import { InstructionDiscovery } from "@Mackery6969/core/instruction-discovery"
+import { Instructions } from "@Mackery6969/core/instructions/index"
+import { Project } from "@Mackery6969/core/project"
+import { ProjectTable } from "@Mackery6969/core/project/sql"
+import { AbsolutePath } from "@Mackery6969/core/schema"
+import { InstructionState } from "@Mackery6969/core/session/instruction-state"
+import { SessionProjector } from "@Mackery6969/core/session/projector"
+import { SessionSchema } from "@Mackery6969/core/session/schema"
 import {
   InstructionBlobTable,
   InstructionStateTable,
   SessionMessageTable,
   SessionTable,
-} from "@opencode/core/session/sql"
+} from "@Mackery6969/core/session/sql"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(

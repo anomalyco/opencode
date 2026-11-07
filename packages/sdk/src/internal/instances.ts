@@ -1,12 +1,12 @@
 export * as SdkInstances from "./instances"
 
-import { Instance } from "@opencode/core/instance"
-import { LocationServiceMap } from "@opencode/core/location-service-map"
-import { Plugin } from "@opencode/core/plugin"
-import type { InstancePlugins } from "@opencode/core/plugin/instance"
-import type { Session } from "@opencode/schema/session"
-import { makeGlobalNode } from "@opencode/util/effect/app-node"
-import type { LayerNode } from "@opencode/util/effect/layer-node"
+import { Instance } from "@Mackery6969/core/instance"
+import { LocationServiceMap } from "@Mackery6969/core/location-service-map"
+import { Plugin } from "@Mackery6969/core/plugin"
+import type { InstancePlugins } from "@Mackery6969/core/plugin/instance"
+import type { Session } from "@Mackery6969/schema/session"
+import { makeGlobalNode } from "@Mackery6969/util/effect/app-node"
+import type { LayerNode } from "@Mackery6969/util/effect/layer-node"
 import { Context, Duration, Effect, Layer, LayerMap, RcMap, Scope } from "effect"
 
 export interface Configuration {

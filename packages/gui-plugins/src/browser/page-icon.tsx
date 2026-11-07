@@ -1,5 +1,5 @@
 import { createSignal, Show } from "solid-js"
-import { Icon } from "@opencode/ui/icon"
+import { Icon } from "@Mackery6969/ui/icon"
 
 /**
  * A page's icon, or the globe while it has none or its image fails to decode. Clicks pass through to what holds it, so

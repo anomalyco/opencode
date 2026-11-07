@@ -1,6 +1,6 @@
 import { readdir, stat } from "node:fs/promises"
 import path from "node:path"
-import { localSource } from "@opencode/plugin/source"
+import { localSource } from "@Mackery6969/plugin/source"
 import { isMissingPath, localProjectDirectory, projectConfigDirectories } from "../util/config-directories"
 
 export { localSource }

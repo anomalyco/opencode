@@ -1,13 +1,13 @@
-import { base64Encode } from "@opencode/util/encode"
+import { base64Encode } from "@Mackery6969/util/encode"
 import type {
   JsonValue,
   OpenCodeEvent,
   SessionMessageAssistant,
   SessionMessageAssistantTool,
   SessionMessageInfo,
-} from "@opencode/client/promise"
+} from "@Mackery6969/client/promise"
 import type { Page } from "@playwright/test"
-import { timelinePresets } from "@opencode/session-ui/timeline/detail"
+import { timelinePresets } from "@Mackery6969/session-ui/timeline/detail"
 import { createTwoFilesPatch } from "diff"
 import { mockOpenCodeServer } from "../../e2e/utils/mock-server"
 import { eventSource } from "./events"

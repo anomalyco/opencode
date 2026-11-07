@@ -1,5 +1,5 @@
-import type { ChangeKind } from "@opencode/plugin/gui/review"
-import type { FileNode } from "@opencode/plugin/gui"
+import type { ChangeKind } from "@Mackery6969/plugin/gui/review"
+import type { FileNode } from "@Mackery6969/plugin/gui"
 import {
   buildGitStatusMap,
   buildKindsStatus,

@@ -1,9 +1,9 @@
 import type { QueryClient } from "@tanstack/solid-query"
-import type { WorktreeDirectory } from "@opencode/client/promise"
+import type { WorktreeDirectory } from "@Mackery6969/client/promise"
 import type { ServerApi } from "@/runtime/server/api"
 import type { ServerScope } from "@/runtime/server/scope"
 import type { Project } from "@/runtime/server/types"
-import { sameDirectory } from "@opencode/util/path"
+import { sameDirectory } from "@Mackery6969/util/path"
 
 export function worktreeInventoryKey(scope: ServerScope, projectID: string) {
   return [scope, "worktree", projectID] as const

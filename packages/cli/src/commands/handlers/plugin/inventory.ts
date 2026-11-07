@@ -1,8 +1,8 @@
 import { EOL } from "node:os"
 import { Cause, Effect, Exit } from "effect"
-import { OpenCode } from "@opencode/client"
-import { Service } from "@opencode/client/effect/service"
-import { Npm } from "@opencode/util/npm"
+import { OpenCode } from "@Mackery6969/client"
+import { Service } from "@Mackery6969/client/effect/service"
+import { Npm } from "@Mackery6969/util/npm"
 import { Config } from "../../../config"
 import { ServerConnection } from "../../../services/server-connection"
 

@@ -1,4 +1,4 @@
-import type { ModelRef, SessionInboxInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { ModelRef, SessionInboxInfo, SessionMessageInfo } from "@Mackery6969/client/promise"
 import type { SessionMessageHandoff } from "@/session/handoff"
 
 // Projects a submitted prompt, and the agent and model switches it makes, until the server's echoes replace them.

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessageInfo } from "@Mackery6969/client/promise"
 import { timelinePresets } from "./detail"
 import { Timeline } from "./projection"
 import { userMessageRuns, type UserRunMember } from "./user-runs"

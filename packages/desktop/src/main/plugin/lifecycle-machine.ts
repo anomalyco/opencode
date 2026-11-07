@@ -1,4 +1,4 @@
-import type { Scope } from "@opencode/plugin/gui/host"
+import type { Scope } from "@Mackery6969/plugin/gui/host"
 
 /** One running copy of a plugin's main code; the machine only compares its scope. */
 export type Managed = { readonly instance: { readonly scope: Scope } }

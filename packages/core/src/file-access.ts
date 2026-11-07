@@ -1,8 +1,8 @@
 export * as FileAccess from "./file-access.js"
 
-import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { FSUtil } from "@opencode/util/fs-util"
-import { Global } from "@opencode/util/global"
+import { makeLocationNode } from "@Mackery6969/util/effect/app-node"
+import { FSUtil } from "@Mackery6969/util/fs-util"
+import { Global } from "@Mackery6969/util/global"
 import { Array, Context, Effect, Layer, Schema } from "effect"
 import path from "path"
 import { Environment } from "./environment/index.js"
@@ -62,7 +62,7 @@ export interface Interface {
   ) => Effect.Effect<Target, Environment.Failed | Permission.Error | SessionErrors.NotFoundError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/FileAccess") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/FileAccess") {}
 
 /** Expand a leading ~ and normalize Windows shell paths before lexical resolution. */
 export const resolvePath = (directory: string, input: string, home = Global.Path.home) => {

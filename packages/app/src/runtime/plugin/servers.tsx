@@ -12,7 +12,7 @@ import {
 } from "solid-js"
 import { reconcile } from "solid-js/store"
 import { Schema } from "effect"
-import { MenuItem, Server, type ServerEntry } from "@opencode/plugin/gui"
+import { MenuItem, Server, type ServerEntry } from "@Mackery6969/plugin/gui"
 import { Persistence } from "@/runtime/persistence/schema"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import {

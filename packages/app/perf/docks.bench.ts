@@ -2,7 +2,7 @@
 // composer into its dock, an MCP elicitation grows in above it and closes, and the answered permission morphs back
 // to the composer. Every frame of the four flights steps the docks' springs and writes their styles.
 import { bench, web } from "@hona/strobe"
-import type { OpenCodeEvent } from "@opencode/client/promise"
+import type { OpenCodeEvent } from "@Mackery6969/client/promise"
 import { cached } from "./fixtures/mock"
 import { composer, mockTimelineSession, timeline } from "./fixtures/timeline"
 

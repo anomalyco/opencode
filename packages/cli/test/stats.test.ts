@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ClientError, type SessionStatsInfo } from "@opencode/client"
+import { ClientError, type SessionStatsInfo } from "@Mackery6969/client"
 import { Effect } from "effect"
 import { renderStats, request } from "../src/commands/handlers/stats"
 

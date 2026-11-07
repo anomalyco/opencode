@@ -1,11 +1,11 @@
-import { useDialog } from "@opencode/ui/context/dialog"
-import { uuid } from "@opencode/util/uuid"
+import { useDialog } from "@Mackery6969/ui/context/dialog"
+import { uuid } from "@Mackery6969/util/uuid"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { ServerProvider } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
 import { usePlatform } from "@/runtime/platform/platform"
 import { createEffect, lazy, Suspense } from "solid-js"
-import type { LocationRef } from "@opencode/client/promise"
+import type { LocationRef } from "@Mackery6969/client/promise"
 import { directoryPickerKind } from "./policy"
 
 const DirectoryPickerDialog = lazy(() =>

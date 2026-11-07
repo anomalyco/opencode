@@ -1,5 +1,5 @@
-import type { FileContent } from "@opencode/plugin/gui"
-import { getFilename } from "@opencode/util/path"
+import type { FileContent } from "@Mackery6969/plugin/gui"
+import { getFilename } from "@Mackery6969/util/path"
 import type { FileState } from "./types"
 
 // One normalized path's content lifecycle in the provider's directory. An unloaded or evicted file has no entry.

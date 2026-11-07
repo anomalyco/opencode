@@ -1,11 +1,11 @@
 export * as LocationWatcher from "./location-watcher.js"
 
-import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { makeLocationNode } from "@Mackery6969/util/effect/app-node"
 import { Cause, Context, Effect, Exit, Layer, Scope, Semaphore, Stream } from "effect"
-import { FileSystem } from "@opencode/schema/filesystem"
+import { FileSystem } from "@Mackery6969/schema/filesystem"
 import path from "path"
 import { Bus } from "../bus.js"
-import { FSUtil } from "@opencode/util/fs-util"
+import { FSUtil } from "@Mackery6969/util/fs-util"
 import { Git } from "../git.js"
 import { Location } from "../location.js"
 import { Plugin } from "../plugin.js"
@@ -14,7 +14,7 @@ import { Watcher } from "./watcher.js"
 
 export interface Interface {}
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/LocationWatcher") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/LocationWatcher") {}
 
 const layer = Layer.effect(
   Service,

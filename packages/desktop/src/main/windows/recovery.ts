@@ -1,7 +1,7 @@
 import { app, dialog } from "electron"
 import type { BrowserWindow } from "electron"
 import { Effect } from "effect"
-import type { DesktopNativeKey } from "@opencode/app/i18n/desktop-native"
+import type { DesktopNativeKey } from "@Mackery6969/app/i18n/desktop-native"
 import { DesktopLogging, scoped } from "../native/logging"
 import { nativeT } from "../native/translations"
 import {

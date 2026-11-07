@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
-import { Command } from "@opencode/core/command"
-import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
-import { Session } from "@opencode/schema/session"
+import { Command } from "@Mackery6969/core/command"
+import { AppNodeBuilder } from "@Mackery6969/core/effect/app-node-builder"
+import { Session } from "@Mackery6969/schema/session"
 import { Effect } from "effect"
 import { testEffect } from "./lib/effect"
 

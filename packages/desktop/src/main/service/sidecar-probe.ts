@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import { app } from "electron"
-import type { Endpoint } from "@opencode/client/service"
+import type { Endpoint } from "@Mackery6969/client/service"
 import { CHANNEL } from "../constants"
 
 // The main thread idles between showing the first window and evaluating the main bundle, waiting
@@ -16,7 +16,7 @@ export function startSidecarProbe() {
   const version = CHANNEL === "beta" ? undefined : bundledVersion()
 
   if (version === "") return
-  probe = import("@opencode/client/service").then(({ Service }) => Service.discover({ version })).catch(() => undefined)
+  probe = import("@Mackery6969/client/service").then(({ Service }) => Service.discover({ version })).catch(() => undefined)
 }
 
 /** The probe's result, once: a later connect must not adopt a service that may have exited since boot. */

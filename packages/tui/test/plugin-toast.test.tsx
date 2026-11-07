@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { Route } from "@opencode/plugin/tui/context"
+import type { Route } from "@Mackery6969/plugin/tui/context"
 import { createPluginContext, type Registry, type usePluginHost } from "../src/plugin/api"
 
 type Host = ReturnType<typeof usePluginHost>

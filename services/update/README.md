@@ -78,7 +78,7 @@ channel transparently resolves to `beta` for older clients.
 
 Choose a minimum that older clients can install and that can itself consume the active
 release. For the CLI package migration, retain a package-aware release published as
-`@opencode-ai/cli` as the minimum before activating releases under `@opencode/cli`.
+`@opencode-ai/cli` as the minimum before activating releases under `@Mackery6969/cli`.
 
 Both admin mounts must be protected by the same Cloudflare Access self-hosted application:
 

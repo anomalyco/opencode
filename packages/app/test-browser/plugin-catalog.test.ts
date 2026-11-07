@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
-import type { MountedSession } from "@opencode/plugin/gui"
+import type { MountedSession } from "@Mackery6969/plugin/gui"
 import { syncCatalog } from "../../gui-plugins/src/context/catalog"
 
 function setup() {

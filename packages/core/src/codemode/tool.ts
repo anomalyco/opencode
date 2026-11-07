@@ -1,7 +1,7 @@
 export * as CodeModeTool from "./tool.js"
 
-import { ToolFailure } from "@opencode/ai/effect"
-import { CodeMode, Namespace, Tool } from "@opencode/codemode"
+import { ToolFailure } from "@Mackery6969/ai/effect"
+import { CodeMode, Namespace, Tool } from "@Mackery6969/codemode"
 import type {
   Content,
   Context as ToolContext,
@@ -10,7 +10,7 @@ import type {
   Metadata,
   Namespace as ToolNamespace,
   Result,
-} from "@opencode/schema/tool"
+} from "@Mackery6969/schema/tool"
 import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
 import { Flag } from "../flag.js"
 import { toSessionError } from "../session/to-session-error.js"
@@ -65,7 +65,7 @@ class Run extends Context.Service<
     readonly executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<unknown, unknown>
     readonly hooks: CodeMode.Hooks
   }
->()("@opencode/CodeModeTool/Run") {}
+>()("@Mackery6969/CodeModeTool/Run") {}
 
 export type Inventory = {
   readonly tools: ReadonlyMap<string, Info>

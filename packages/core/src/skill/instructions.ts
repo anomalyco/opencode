@@ -1,6 +1,6 @@
 export * as SkillInstructions from "./instructions.js"
 
-import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { makeLocationNode } from "@Mackery6969/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Permission } from "../permission.js"
 import { Skill } from "../skill.js"
@@ -50,7 +50,7 @@ export interface Interface {
   readonly load: (permissions: Permission.Ruleset) => Effect.Effect<Instructions.List>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/SkillInstructions") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/SkillInstructions") {}
 
 const layer = Layer.effect(
   Service,

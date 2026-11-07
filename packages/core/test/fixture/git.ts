@@ -4,7 +4,7 @@ import fs from "fs/promises"
 import path from "path"
 import { promisify } from "util"
 import { pathToFileURL } from "url"
-import { Repository } from "@opencode/core/repository"
+import { Repository } from "@Mackery6969/core/repository"
 import { Effect } from "effect"
 import { tmpdir } from "./tmpdir"
 

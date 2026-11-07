@@ -1,4 +1,4 @@
-import { Plugin } from "@opencode/plugin/tui"
+import { Plugin } from "@Mackery6969/plugin/tui"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { DialogMcp } from "../../component/dialog-mcp"
 

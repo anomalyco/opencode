@@ -3,8 +3,8 @@ import { mkdir, readFile, rename } from "node:fs/promises"
 import net from "node:net"
 import path from "node:path"
 import { Cause, Data, Duration, Effect, Schema, Semaphore } from "effect"
-import type { Handoff } from "@opencode/schema/persistent-pty"
-import { Session } from "@opencode/schema/session"
+import type { Handoff } from "@Mackery6969/schema/persistent-pty"
+import { Session } from "@Mackery6969/schema/session"
 
 const ProtocolVersion = 7
 const MaxFrameBytes = 8 * 1024 * 1024

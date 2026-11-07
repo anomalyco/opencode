@@ -22,37 +22,37 @@ export function resolveChannel(): Channel {
 export const CLI_BINARIES: Array<{ target: string; package: string; os: string; cpu: string }> = [
   {
     target: "darwin-arm64",
-    package: "@opencode/cli-darwin-arm64",
+    package: "@Mackery6969/cli-darwin-arm64",
     os: "darwin",
     cpu: "arm64",
   },
   {
     target: "darwin-x64",
-    package: "@opencode/cli-darwin-x64-baseline",
+    package: "@Mackery6969/cli-darwin-x64-baseline",
     os: "darwin",
     cpu: "x64",
   },
   {
     target: "windows-arm64",
-    package: "@opencode/cli-windows-arm64",
+    package: "@Mackery6969/cli-windows-arm64",
     os: "win32",
     cpu: "arm64",
   },
   {
     target: "windows-x64",
-    package: "@opencode/cli-windows-x64-baseline",
+    package: "@Mackery6969/cli-windows-x64-baseline",
     os: "win32",
     cpu: "x64",
   },
   {
     target: "linux-x64",
-    package: "@opencode/cli-linux-x64-baseline",
+    package: "@Mackery6969/cli-linux-x64-baseline",
     os: "linux",
     cpu: "x64",
   },
   {
     target: "linux-arm64",
-    package: "@opencode/cli-linux-arm64",
+    package: "@Mackery6969/cli-linux-arm64",
     os: "linux",
     cpu: "arm64",
   },
@@ -100,7 +100,7 @@ export async function downloadCliToResources(version = CLI_VERSION, dest = windo
 
 export async function copyBuiltCliToResources(root: string, dest = windowsify("resources/opencode-cli")) {
   const cli = getCurrentCli()
-  const directory = cli.package.replace("@opencode/", "")
+  const directory = cli.package.replace("@Mackery6969/", "")
   await copyCliToResources(join(root, directory), dest)
 }
 

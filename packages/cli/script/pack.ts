@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 import { $ } from "bun"
 import pkg from "../package.json"
-import { Script } from "@opencode/script"
-import { archiveDir, npmDir } from "@opencode/script/pack"
+import { Script } from "@Mackery6969/script"
+import { archiveDir, npmDir } from "@Mackery6969/script/pack"
 import { existsSync } from "fs"
 import { chmod, mkdir, rm, utimes } from "node:fs/promises"
 import path from "node:path"
@@ -21,16 +21,16 @@ await packDistribution({
   command: "opencode",
   legacyCommand: "opencode2",
   binary: "opencode",
-  packagePrefix: "@opencode/cli-",
+  packagePrefix: "@Mackery6969/cli-",
   archive: (target) => target.startsWith("linux-"),
 })
 if (existsSync(path.join(root, "node"))) {
   await packDistribution({
     root: path.join(root, "node"),
-    name: "@opencode/cli-node",
+    name: "@Mackery6969/cli-node",
     command: "opencode2-node",
     binary: "opencode2-node",
-    packagePrefix: "@opencode/cli-node-",
+    packagePrefix: "@Mackery6969/cli-node-",
     archive: () => true,
   })
 }
@@ -91,7 +91,7 @@ async function packDistribution(input: {
     ),
   )
 
-  await Promise.all(Object.keys(binaries).map((name) => pack(`${input.root}/${name.replace("@opencode/", "")}`)))
+  await Promise.all(Object.keys(binaries).map((name) => pack(`${input.root}/${name.replace("@Mackery6969/", "")}`)))
   await pack(`${input.root}/${input.name}`)
   await Promise.all(
     Object.keys(binaries)
@@ -99,7 +99,7 @@ async function packDistribution(input: {
       .filter(input.archive)
       .map((target) =>
         archive(
-          path.join(input.root, `${input.packagePrefix.replace("@opencode/", "")}${target}`, "bin"),
+          path.join(input.root, `${input.packagePrefix.replace("@Mackery6969/", "")}${target}`, "bin"),
           target,
           input.binary,
         ),

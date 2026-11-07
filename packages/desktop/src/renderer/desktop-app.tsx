@@ -14,8 +14,8 @@ import {
   useTabs,
   type LayoutRoute,
   type Platform,
-} from "@opencode/app/desktop"
-import { useTheme } from "@opencode/ui/theme/context"
+} from "@Mackery6969/app/desktop"
+import { useTheme } from "@Mackery6969/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, lazy, onCleanup, Show, Suspense, untrack } from "solid-js"
 import type { ElectronAPI } from "./api-types"

@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "bun:test"
-import type { ShellOutputInput, ShellOutputOutput } from "@opencode/client/promise"
+import type { ShellOutputInput, ShellOutputOutput } from "@Mackery6969/client/promise"
 import { createShellFollower, followShellOutput } from "./shell-output"
 import { SHELL_OUTPUT_TAIL_BYTES, SHELL_READ_TIMEOUT_MS } from "./shell-output-machine"
 

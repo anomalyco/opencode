@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { ExperimentalMigrationV1StatusOutput } from "@opencode/client/promise"
+import type { ExperimentalMigrationV1StatusOutput } from "@Mackery6969/client/promise"
 import {
   createMigrationState,
   selectMigrationProgress,

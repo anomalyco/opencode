@@ -144,7 +144,7 @@ export const content = {
       features: {
         "typescript-client": {
           title: "TypeScriptクライアント",
-          body: "型付きのリクエストとイベント。@opencode/client と同じ値を使います。",
+          body: "型付きのリクエストとイベント。@Mackery6969/client と同じ値を使います。",
         },
         "sessions-from-code": {
           title: "コードでセッション",
@@ -153,7 +153,7 @@ export const content = {
         "any-model": { title: "任意のモデル", body: "OpenCodeの設定にあるモデルをそのまま使います。" },
         "npm-or-bun": {
           title: "npmまたはbun",
-          body: "npm i @opencode/sdk または bun add @opencode/sdk でインストールできます。",
+          body: "npm i @Mackery6969/sdk または bun add @Mackery6969/sdk でインストールできます。",
         },
         "in-process-host": {
           title: "インプロセスホスト",

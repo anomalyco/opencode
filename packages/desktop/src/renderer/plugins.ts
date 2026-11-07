@@ -1,5 +1,5 @@
 import { Predicate } from "effect"
-import type { Bridge, BridgeMessage } from "@opencode/plugin/gui/host"
+import type { Bridge, BridgeMessage } from "@Mackery6969/plugin/gui/host"
 import type { PluginFailure } from "../shared/ipc-rpc/plugins"
 import { getOwner, onCleanup } from "solid-js"
 import { api } from "./api"

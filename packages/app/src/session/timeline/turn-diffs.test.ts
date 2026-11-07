@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, jest, test } from "bun:test"
-import type { FileDiffInfo } from "@opencode/client/promise"
+import type { FileDiffInfo } from "@Mackery6969/client/promise"
 import { createRoot } from "solid-js"
 import {
   createTurnDiffCacheState,

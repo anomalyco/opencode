@@ -1,9 +1,9 @@
-import { chooseIconName } from "@opencode/ui/icons/file-type-name"
+import { chooseIconName } from "@Mackery6969/ui/icons/file-type-name"
 import { For, Show } from "solid-js"
 import { docsFileIcons } from "./docs-file-icons"
 
 /**
- * The desktop app's icon for a file or folder (the shared mapping in @opencode/ui), from the docs'
+ * The desktop app's icon for a file or folder (the shared mapping in @Mackery6969/ui), from the docs'
  * subset (docs-file-icons.ts), drawn inline so the folders' currentColor takes the label grey.
  * Coloured, with the _light variant in light mode where there is one; inside
  * [data-file-icons="mono"] every fill is currentColor instead (docs-variants.css).

@@ -1,7 +1,7 @@
 export * as TodoTool from "./todo.js"
 
-import { ToolFailure } from "@opencode/ai/effect"
-import type { Context } from "@opencode/plugin/effect/plugin"
+import { ToolFailure } from "@Mackery6969/ai/effect"
+import type { Context } from "@Mackery6969/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"

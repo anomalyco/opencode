@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionInfo } from "@opencode/client/promise"
+import type { SessionInfo } from "@Mackery6969/client/promise"
 import { errorMessage, projectForSession, toggleHomeProjectSelection } from "./helpers"
 import { ServerConnection } from "@/runtime/server/registry"
 

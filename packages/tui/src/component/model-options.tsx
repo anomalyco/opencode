@@ -1,4 +1,4 @@
-import type { ModelInfo } from "@opencode/client"
+import type { ModelInfo } from "@Mackery6969/client"
 import { For, Show } from "solid-js"
 import { useTheme } from "../context/theme"
 import { modelPreferenceKey } from "../model-preference"

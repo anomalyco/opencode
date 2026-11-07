@@ -1,7 +1,7 @@
 export * as McpConnection from "./connection.js"
 
 import type { OAuthClientProvider } from "@modelcontextprotocol/client"
-import type { Mcp } from "@opencode/schema/mcp"
+import type { Mcp } from "@Mackery6969/schema/mcp"
 import { Cause, Effect, Exit, Scope } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { Environment } from "../environment/index.js"

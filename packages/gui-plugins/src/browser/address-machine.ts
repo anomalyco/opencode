@@ -2,7 +2,7 @@
 // submitted address stays in the field until the page reports where it went. The page's reports are counted by
 // `nextAddressEpoch`, and a submit keeps the counts it saw, so the next URL change, finished load or rejection ends
 // the hold, even one that repeats a value, while focusing and leaving the field in between keeps it.
-import type { Browser } from "@opencode/plugin-browser/rpc"
+import type { Browser } from "@Mackery6969/plugin-browser/rpc"
 import { resolveAddress, searches } from "./address"
 import { completes, suggest, type Visit } from "./history"
 

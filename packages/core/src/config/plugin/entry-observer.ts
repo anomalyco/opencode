@@ -1,8 +1,8 @@
 export * as ConfigEntryObserver from "./entry-observer.js"
 
-import type { EventDomain } from "@opencode/plugin/effect/event"
-import type { Entry } from "@opencode/schema/config"
-import { FSUtil } from "@opencode/util/fs-util"
+import type { EventDomain } from "@Mackery6969/plugin/effect/event"
+import type { Entry } from "@Mackery6969/schema/config"
+import { FSUtil } from "@Mackery6969/util/fs-util"
 import { Effect, PubSub, Stream } from "effect"
 import path from "path"
 import { Config } from "../../config.js"

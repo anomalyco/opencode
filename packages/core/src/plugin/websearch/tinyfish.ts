@@ -1,6 +1,6 @@
 export * as WebSearchTinyFish from "./tinyfish.js"
 
-import { define } from "@opencode/plugin/effect/plugin"
+import { define } from "@Mackery6969/plugin/effect/plugin"
 import { Duration, Effect, Option, Schema, Scope } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import { App } from "../../app.js"

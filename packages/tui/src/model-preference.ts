@@ -1,7 +1,7 @@
 import { readJson, writeJsonAtomic } from "./util/persistence"
 import { isRecord } from "./util/record"
 import { safeWatch } from "./util/watch"
-import { Flock } from "@opencode/util/flock"
+import { Flock } from "@Mackery6969/util/flock"
 import path from "node:path"
 
 export type ModelPreferenceModel = {

@@ -1,4 +1,4 @@
-import type { BuiltinPanel } from "@opencode/plugin/gui/builtin"
+import type { BuiltinPanel } from "@Mackery6969/plugin/gui/builtin"
 
 /** The key the host stores a panel tab under. */
 export function panelKey(plugin: string, id: string) {

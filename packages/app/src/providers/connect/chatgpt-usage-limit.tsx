@@ -1,7 +1,7 @@
-import { Button } from "@opencode/ui/button"
-import { useDialog } from "@opencode/ui/context/dialog"
-import { Dialog, DialogTitle } from "@opencode/ui/dialog"
-import { ProviderIcon } from "@opencode/ui/provider-icon"
+import { Button } from "@Mackery6969/ui/button"
+import { useDialog } from "@Mackery6969/ui/context/dialog"
+import { Dialog, DialogTitle } from "@Mackery6969/ui/dialog"
+import { ProviderIcon } from "@Mackery6969/ui/provider-icon"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 

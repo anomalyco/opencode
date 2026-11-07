@@ -1,8 +1,8 @@
 export * as WorktreeGit from "./git.js"
 
 import { Effect } from "effect"
-import { Worktree } from "@opencode/schema/worktree"
-import { FSUtil } from "@opencode/util/fs-util"
+import { Worktree } from "@Mackery6969/schema/worktree"
+import { FSUtil } from "@Mackery6969/util/fs-util"
 import { Git } from "../git.js"
 import { canonical, DirectoryUnavailableError } from "./directory.js"
 import type { Strategy } from "./strategies.js"

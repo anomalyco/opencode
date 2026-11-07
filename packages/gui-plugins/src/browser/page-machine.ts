@@ -1,4 +1,4 @@
-import type { Browser } from "@opencode/plugin-browser/rpc"
+import type { Browser } from "@Mackery6969/plugin-browser/rpc"
 import { destinationOrigin } from "./policy"
 
 // The document a browser page shows, folded from Electron's navigation events. Electron-free so it stays

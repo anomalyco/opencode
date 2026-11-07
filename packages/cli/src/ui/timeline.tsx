@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { createCliRenderer, RGBA, type CliRenderer, type ColorInput, type ScrollbackWriter } from "@opentui/core"
 import { createScrollbackWriter, render, useKeyboard } from "@opentui/solid"
-import "@opencode/tui/component/spinner-renderable"
+import "@Mackery6969/tui/component/spinner-renderable"
 import { Show, createSignal } from "solid-js"
 
 export type TimelineHost = {

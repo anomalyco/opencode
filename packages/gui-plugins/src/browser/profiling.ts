@@ -1,5 +1,5 @@
 import type { WebContents } from "electron"
-import { Browser } from "@opencode/plugin-browser/rpc"
+import { Browser } from "@Mackery6969/plugin-browser/rpc"
 import { gzipSync, gunzipSync } from "node:zlib"
 import { Schema } from "effect"
 import type { Cdp } from "./cdp"

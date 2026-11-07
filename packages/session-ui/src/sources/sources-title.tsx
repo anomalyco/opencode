@@ -1,5 +1,5 @@
-import { useI18n } from "@opencode/ui/context/i18n"
-import { Icon } from "@opencode/ui/icon"
+import { useI18n } from "@Mackery6969/ui/context/i18n"
+import { Icon } from "@Mackery6969/ui/icon"
 import { Show } from "solid-js"
 
 /** The Sources panel's title in its side-panel tab: "Sources · 87". */

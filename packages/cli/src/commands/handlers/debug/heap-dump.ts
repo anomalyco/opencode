@@ -1,5 +1,5 @@
-import { ClientError, OpenCode } from "@opencode/client"
-import { Service } from "@opencode/client/effect/service"
+import { ClientError, OpenCode } from "@Mackery6969/client"
+import { Service } from "@Mackery6969/client/effect/service"
 import { Effect, Option, Predicate } from "effect"
 import { EOL } from "node:os"
 import path from "node:path"

@@ -1,12 +1,12 @@
 export * as SessionParallelContext from "./parallel-context.js"
 
 import { Context, Effect, Layer } from "effect"
-import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { makeLocationNode } from "@Mackery6969/util/effect/app-node"
 import { SessionCompaction } from "./compaction.js"
 import { SessionContext } from "./context.js"
 import { Config } from "../config.js"
 import { Model } from "../model.js"
-import { Session } from "@opencode/schema/session"
+import { Session } from "@Mackery6969/schema/session"
 import { SessionStore } from "./store.js"
 
 export type ChildAgent = {
@@ -37,7 +37,7 @@ export interface Interface {
   readonly reserveSpawn: (sessionID: Session.ID, parentID: Session.ID) => Effect.Effect<boolean>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/SessionParallelContext") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/SessionParallelContext") {}
 
 const NEAR_LIMIT_SHARE = 0.8
 const DEFAULT_CONTEXT_SHARE = 0.8

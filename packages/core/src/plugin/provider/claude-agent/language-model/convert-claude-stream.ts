@@ -2,7 +2,7 @@ export * as ConvertClaudeStream from "./convert-claude-stream.js"
 
 import type { LanguageModelV3FunctionTool, LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import type { SDKMessage, SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
-import { Provider } from "@opencode/schema/provider"
+import { Provider } from "@Mackery6969/schema/provider"
 import { ClaudeUsage } from "./usage.js"
 import { ToolNames } from "../tools/names.js"
 import { ClaudeAgentError } from "./claude-agent-error.js"

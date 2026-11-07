@@ -1,6 +1,6 @@
 export * as Integration from "./integration.js"
 
-import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { makeLocationNode } from "@Mackery6969/util/effect/app-node"
 import {
   Cause,
   Clock,
@@ -18,12 +18,12 @@ import {
   SynchronizedRef,
   Types,
 } from "effect"
-import { Integration } from "@opencode/schema/integration"
+import { Integration } from "@Mackery6969/schema/integration"
 import { Credential } from "./credential.js"
 import { State } from "./state.js"
 import { Bus } from "./bus.js"
 import { IntegrationConnection } from "./integration/connection.js"
-import { AppProcess } from "@opencode/util/process"
+import { AppProcess } from "@Mackery6969/util/process"
 import { ChildProcess } from "effect/process"
 import { Form } from "./form.js"
 
@@ -142,7 +142,7 @@ export class AttemptNotFoundError extends Schema.TaggedError<AttemptNotFoundErro
 
 export type Error = CodeRequiredError | AuthorizationError | AttemptNotFoundError
 
-export { Event } from "@opencode/schema/integration"
+export { Event } from "@Mackery6969/schema/integration"
 
 export const Ref = Integration.Ref
 export type Ref = Integration.Ref
@@ -258,7 +258,7 @@ export interface Interface extends State.Transformable<Editor> {
   }
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Integration") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/Integration") {}
 
 const attemptLifetime = Duration.toMillis(Duration.minutes(10))
 const terminalRetention = Duration.toMillis(Duration.minutes(1))

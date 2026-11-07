@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { Failed, NotFound, WrongKind, type Files } from "@opencode/core/environment/index"
+import { Failed, NotFound, WrongKind, type Files } from "@Mackery6969/core/environment/index"
 
 export interface EnvironmentHarness {
   readonly files: Files

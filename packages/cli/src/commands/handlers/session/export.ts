@@ -1,6 +1,6 @@
 import { autocomplete, cancel, intro, isCancel, log, outro } from "@clack/prompts"
-import { OpenCode } from "@opencode/client"
-import { Service } from "@opencode/client/effect/service"
+import { OpenCode } from "@Mackery6969/client"
+import { Service } from "@Mackery6969/client/effect/service"
 import { Effect, Option } from "effect"
 import { EOL } from "node:os"
 import { Commands } from "../../commands"

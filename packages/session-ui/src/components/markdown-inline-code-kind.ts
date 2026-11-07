@@ -1,4 +1,4 @@
-import { parsePathLineSuffix } from "@opencode/util/path"
+import { parsePathLineSuffix } from "@Mackery6969/util/path"
 
 // Common files with no extension. Anything else needs a `.` or `/` to look like a file.
 const fileNames = new Set([

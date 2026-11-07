@@ -1,4 +1,4 @@
-import type { PluginInfo } from "@opencode/client"
+import type { PluginInfo } from "@Mackery6969/client"
 
 export function pluginLabel(plugin: PluginInfo) {
   if (plugin.id) return plugin.id

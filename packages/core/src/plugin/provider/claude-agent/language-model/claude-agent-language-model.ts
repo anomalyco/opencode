@@ -8,7 +8,7 @@ import type {
 } from "@ai-sdk/provider"
 import type { ClaudeSessions } from "../claude/sessions.js"
 import type { EffortLevel } from "@anthropic-ai/claude-agent-sdk"
-import { Provider } from "@opencode/schema/provider"
+import { Provider } from "@Mackery6969/schema/provider"
 import { ConvertClaudeStream } from "./convert-claude-stream.js"
 import { RequestKind } from "./request-kind.js"
 import { ClaudeSystemPrompt } from "./system-prompt.js"

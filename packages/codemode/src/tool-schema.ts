@@ -23,7 +23,7 @@ const effectNumberSentinel = (schema: JsonSchema) =>
   schema.enum.every((value) => value === "NaN" || value === "Infinity" || value === "-Infinity")
 
 // Effect emits `{ not: { type: "null" } }` only for a struct with no properties or index signatures. With nothing but
-// annotations beside it, it is TypeScript's `{}`. Mirrors `emptyInputJsonSchema` in `@opencode/ai`, which this
+// annotations beside it, it is TypeScript's `{}`. Mirrors `emptyInputJsonSchema` in `@Mackery6969/ai`, which this
 // standalone package cannot import.
 const annotationKeywords = new Set(["title", "description", "default", "examples", "readOnly", "writeOnly"])
 const isEffectEmptyStruct = (schema: JsonSchema) =>

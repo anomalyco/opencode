@@ -1,5 +1,5 @@
 import { makeEventListener } from "@solid-primitives/event-listener"
-import type { Entry } from "@opencode/plugin/gui/host"
+import type { Entry } from "@Mackery6969/plugin/gui/host"
 import { BUILTINS_UPDATED } from "./builtins"
 import { usePluginHost } from "./host"
 

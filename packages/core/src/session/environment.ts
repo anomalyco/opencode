@@ -1,7 +1,7 @@
 export * as SessionEnvironment from "./environment.js"
 
 import { Context, Effect, Layer } from "effect"
-import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { makeGlobalNode } from "@Mackery6969/util/effect/app-node"
 import { SessionSchema } from "./schema.js"
 
 export type Variables = Readonly<Record<string, string>>
@@ -12,7 +12,7 @@ export interface Interface {
   readonly clear: (sessionID: SessionSchema.ID) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/SessionEnvironment") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/SessionEnvironment") {}
 
 const layer = Layer.sync(Service, () => {
   const environments = new Map<SessionSchema.ID, Variables>()

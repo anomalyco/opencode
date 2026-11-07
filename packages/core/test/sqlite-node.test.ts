@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Effect } from "effect"
 import { SqlClient } from "effect/sql"
-import { sqliteLayer } from "@opencode/core/database/sqlite.bun"
+import { sqliteLayer } from "@Mackery6969/core/database/sqlite.bun"
 
 const node = Bun.which("node")
 

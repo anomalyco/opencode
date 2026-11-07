@@ -1,4 +1,4 @@
-import { Permission } from "@opencode/core/permission"
+import { Permission } from "@Mackery6969/core/permission"
 import { Effect, Layer } from "effect"
 
 export const permissionLayer = (overrides: Partial<Permission.Interface> = {}) =>

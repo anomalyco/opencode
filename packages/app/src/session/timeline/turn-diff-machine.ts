@@ -1,5 +1,5 @@
-import type { FileDiffInfo } from "@opencode/client/promise"
-import type { TurnDiffState } from "@opencode/session-ui/context"
+import type { FileDiffInfo } from "@Mackery6969/client/promise"
+import type { TurnDiffState } from "@Mackery6969/session-ui/context"
 
 /**
  * A request's headers are bounded by the server queue (60 s), but a body that stalls after them is not, so each load

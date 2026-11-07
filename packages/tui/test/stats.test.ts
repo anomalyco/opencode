@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionStatsInfo } from "@opencode/client"
+import type { SessionStatsInfo } from "@Mackery6969/client"
 import { statsMetrics, statsNumber } from "../src/feature-plugins/system/stats-data"
 
 const stats: SessionStatsInfo = {

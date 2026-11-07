@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
-import { Store } from "@opencode/plugin/gui"
-import type { Entry } from "@opencode/plugin/gui/host"
+import { Store } from "@Mackery6969/plugin/gui"
+import type { Entry } from "@Mackery6969/plugin/gui/host"
 import {
   createPluginHostState,
   selectPluginDefinitions,

@@ -4,12 +4,12 @@ import { EffectDrizzleSqlite } from "./drizzle.js"
 import { sqliteLayer, supportsForeignKeyToggle, supportsTuningPragmas } from "#sqlite"
 import { Context, Effect, Layer, Schema, Semaphore } from "effect"
 import type { SqlClient } from "effect/sql"
-import { Global } from "@opencode/util/global"
+import { Global } from "@Mackery6969/util/global"
 import { closeSync, existsSync, openSync } from "node:fs"
 import { chmod } from "node:fs/promises"
 import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration.js"
-import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { makeGlobalNode } from "@Mackery6969/util/effect/app-node"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
 type DatabaseShape = Effect.Success<typeof makeDatabase>
@@ -23,7 +23,7 @@ export const Options = Schema.Struct({
 })
 export type Options = typeof Options.Type
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/storage/Database") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/storage/Database") {}
 
 // The bootstrap lock is scoped to the database being built, never to this
 // module: on workerd every Durable Object in an isolate shares module state, and

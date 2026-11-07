@@ -11,8 +11,8 @@ import Notifications from "../feature-plugins/system/notifications"
 import Plugins from "../feature-plugins/system/plugins"
 import Storybook from "../feature-plugins/system/storybook"
 import Stats from "../feature-plugins/system/stats"
-import Latex from "@opencode/latex/plugin"
-import Merman from "@opencode/merman/plugin"
+import Latex from "@Mackery6969/latex/plugin"
+import Merman from "@Mackery6969/merman/plugin"
 
 export const builtins = [
   HomeFooter,

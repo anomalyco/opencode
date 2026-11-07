@@ -11,13 +11,13 @@ import {
   type Accessor,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Button } from "@opencode/ui/button"
-import { Icon } from "@opencode/ui/icon"
-import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@opencode/session-ui/v2/session-file-panel-v2"
-import { SessionReviewV2Sidebar, SessionReviewV2SidebarToggle } from "@opencode/session-ui/v2/session-review-v2"
-import { getFilename } from "@opencode/util/path"
-import { artifactKind } from "@opencode/util/artifact"
-import type { ChangeKind } from "@opencode/plugin/gui/review"
+import { Button } from "@Mackery6969/ui/button"
+import { Icon } from "@Mackery6969/ui/icon"
+import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@Mackery6969/session-ui/v2/session-file-panel-v2"
+import { SessionReviewV2Sidebar, SessionReviewV2SidebarToggle } from "@Mackery6969/session-ui/v2/session-review-v2"
+import { getFilename } from "@Mackery6969/util/path"
+import { artifactKind } from "@Mackery6969/util/artifact"
+import type { ChangeKind } from "@Mackery6969/plugin/gui/review"
 import {
   createKeyed,
   usePlugin,
@@ -26,7 +26,7 @@ import {
   type PanelSidebar,
   type PanelTab,
   type SessionScreen,
-} from "@opencode/plugin/gui"
+} from "@Mackery6969/plugin/gui"
 import { current, useShared } from "./context"
 import SessionFileList, { applyFileListKeyDown } from "./list"
 import OpenInAppButton, { useOpenInApp } from "./open-in-app"

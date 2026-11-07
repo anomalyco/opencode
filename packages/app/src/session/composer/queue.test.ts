@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionInboxInfo } from "@opencode/client/promise"
+import type { SessionInboxInfo } from "@Mackery6969/client/promise"
 import { extractPromptFromMessage } from "@/composer/prompt"
 import { blobDataUrl, setMediaBlobLoader } from "@/runtime/persistence/drafts"
 import { undoQueuedPrompt } from "./queue"

@@ -1,4 +1,4 @@
-import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@Mackery6969/client/promise"
 import type { SessionDocument } from "../document"
 import { SessionTimeline, type SessionUserPresentation } from "./session-timeline"
 import { CurrentSessionProviders } from "../storybook/current-session-story"

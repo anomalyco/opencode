@@ -1,11 +1,11 @@
 export * as FileSystemSearch from "./search.js"
 
-import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { makeLocationNode } from "@Mackery6969/util/effect/app-node"
 import path from "path"
 import { Clock, Context, Deferred, Duration, Effect, Layer, Scope } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
-import { FileSystem } from "@opencode/schema/filesystem"
+import { FileSystem } from "@Mackery6969/schema/filesystem"
 import { Location } from "../location.js"
 import { Ripgrep } from "../ripgrep.js"
 import { RelativePath } from "../schema.js"
@@ -19,7 +19,7 @@ export interface Options {
   readonly fff?: boolean
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem/Search") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/FileSystem/Search") {}
 
 const REFRESH_INTERVAL = Duration.toMillis("10 seconds")
 type Prepared = ReturnType<typeof fuzzysort.prepare>

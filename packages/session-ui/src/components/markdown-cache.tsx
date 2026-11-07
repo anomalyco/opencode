@@ -1,5 +1,5 @@
-import { checksum } from "@opencode/util/encode"
-import { parseSmallMarkdown } from "@opencode/ui/context/marked-base"
+import { checksum } from "@Mackery6969/util/encode"
+import { parseSmallMarkdown } from "@Mackery6969/ui/context/marked-base"
 import DOMPurify from "dompurify"
 import {
   INITIAL_MARKDOWN_CACHE_STATE,

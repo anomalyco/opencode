@@ -1,10 +1,10 @@
 export * as Skill from "./skill.js"
 
-import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { FSUtil } from "@opencode/util/fs-util"
+import { makeLocationNode } from "@Mackery6969/util/effect/app-node"
+import { FSUtil } from "@Mackery6969/util/fs-util"
 import path from "path"
 import { Context, Effect, Layer, Types } from "effect"
-import { Skill } from "@opencode/schema/skill"
+import { Skill } from "@Mackery6969/schema/skill"
 import { Bus } from "./bus.js"
 import { Permission } from "./permission.js"
 import { State } from "./state.js"
@@ -28,7 +28,7 @@ export type ID = Skill.ID
 export const Name = Skill.Name
 export type Name = Skill.Name
 
-export { Event } from "@opencode/schema/skill"
+export { Event } from "@Mackery6969/schema/skill"
 
 export const available = (skills: ReadonlyArray<Info>, permissions: Permission.Ruleset) =>
   skills.filter((skill) => Permission.evaluate("skill", skill.id, permissions).effect !== "deny")
@@ -112,7 +112,7 @@ export interface Interface extends State.Transformable<Editor> {
   readonly list: () => Effect.Effect<Info[]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Skill") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/Skill") {}
 
 const layer = Layer.effect(
   Service,

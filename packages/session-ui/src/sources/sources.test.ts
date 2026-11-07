@@ -1,4 +1,4 @@
-import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@Mackery6969/client/promise"
 import { describe, expect, test } from "bun:test"
 import { turnMessages, turnSources } from "./sources"
 

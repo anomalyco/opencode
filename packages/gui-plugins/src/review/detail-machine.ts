@@ -1,4 +1,4 @@
-import type { FileDiffInfo } from "@opencode/client/promise"
+import type { FileDiffInfo } from "@Mackery6969/client/promise"
 import type { ReviewDiffFailure } from "./machine"
 
 /** How many times a failed bounded request runs again, after 1 s and then 2 s, before the preview shows the failure. */

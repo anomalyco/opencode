@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@Mackery6969/client/promise"
 import {
   createTimelineSyncState,
   DISPOSED_TIMELINE_SYNC_EVENT,

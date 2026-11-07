@@ -4,8 +4,8 @@ import type {
   SessionStatus,
   ShellOutputInput,
   ShellOutputOutput,
-} from "@opencode/client/promise"
-import { createSimpleContext } from "@opencode/ui/context"
+} from "@Mackery6969/client/promise"
+import { createSimpleContext } from "@Mackery6969/ui/context"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 
 export type SessionSummary = Pick<SessionInfo, "id" | "parentID" | "title" | "time">

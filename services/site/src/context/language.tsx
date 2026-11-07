@@ -2,7 +2,7 @@ import { createEffect, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { getRequestEvent } from "solid-js/web"
 import { useLocation } from "@solidjs/router"
-import { createSimpleContext } from "@opencode/ui/context"
+import { createSimpleContext } from "@Mackery6969/ui/context"
 import {
   LOCALES,
   type Locale,

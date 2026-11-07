@@ -102,7 +102,7 @@ From the owning package (`packages/session-ui` or `packages/app`):
    - Do not skip on Windows, and do not raise `config.ts` timeouts, retries or the `mount` wait.
    - If one test does genuinely expensive work, call `story.setTimeout(...)` in that test, with a comment that names the work.
 6. **Confirm CI ran the component legs.** E2E never runs on pushes to dev (`check-test.yml:28`), so no post-merge run catches a regression.
-   - The `affected` gate filters on `@opencode/app` and `@opencode/stories` (`check-test.yml:60-61`). `ui`, `session-ui` and `gui-plugins` count through app's dependencies. `workflow_dispatch` forces the legs on (`check-test.yml:56-59`).
+   - The `affected` gate filters on `@Mackery6969/app` and `@Mackery6969/stories` (`check-test.yml:60-61`). `ui`, `session-ui` and `gui-plugins` count through app's dependencies. `workflow_dispatch` forces the legs on (`check-test.yml:56-59`).
    - `check-test.yml` is listed in `globalDependencies` (`turbo.json:8`), so editing it marks every package affected.
    - The required `e2e (linux)` and `e2e (windows)` checks also pass when no leg was needed (`check-test.yml:329-352`). Look for `e2e (<os>, session-ui-components)` and `e2e (<os>, app-components)`.
    - If CI skipped them, report your local cold run in the PR.

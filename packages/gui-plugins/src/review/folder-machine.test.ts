@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { FileDiffInfo } from "@opencode/client/promise"
+import type { FileDiffInfo } from "@Mackery6969/client/promise"
 import {
   INITIAL_REVIEW_FOLDER_STATE,
   REVIEW_FOLDER_RETRIES,

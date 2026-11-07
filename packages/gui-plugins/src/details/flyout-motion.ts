@@ -1,6 +1,6 @@
 import { createSignal, onCleanup } from "solid-js"
-import { observeReducedMotion, prefersReducedMotion } from "@opencode/ui/motion"
-import { motionTuning } from "@opencode/ui/motion-tuning"
+import { observeReducedMotion, prefersReducedMotion } from "@Mackery6969/ui/motion"
+import { motionTuning } from "@Mackery6969/ui/motion-tuning"
 
 // The Extensions submenu's motion (fading in beside its row, gliding between rows and resizing to each list) is off
 // unless this knob is on. Off, the submenu shows, moves and resizes on the frame it changes.

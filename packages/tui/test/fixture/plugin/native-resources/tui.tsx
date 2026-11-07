@@ -1,4 +1,4 @@
-import { Plugin } from "@opencode/plugin/tui"
+import { Plugin } from "@Mackery6969/plugin/tui"
 import { SyntaxStyle, Yoga, type BoxRenderable } from "@opentui/core"
 import { createSignal, onMount } from "solid-js"
 

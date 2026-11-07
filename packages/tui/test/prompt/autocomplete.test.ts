@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { measureEditText } from "@opentui/core"
 import path from "path"
-import type { KeymapCommand } from "@opencode/plugin/tui/context"
+import type { KeymapCommand } from "@Mackery6969/plugin/tui/context"
 import {
   directoryAutocomplete,
   directoryAutocompleteExactValue,

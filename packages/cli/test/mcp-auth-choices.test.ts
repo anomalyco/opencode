@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import path from "node:path"
-import type { IntegrationInfo, McpServer } from "@opencode/client"
+import type { IntegrationInfo, McpServer } from "@Mackery6969/client"
 import { mcpAuthChoices } from "../src/commands/handlers/mcp/auth"
 
 const server = (

@@ -4,18 +4,18 @@ import path from "path"
 import { Context, Deferred, Duration, Effect, Fiber, Latch, Layer, Schema, Schedule, Stream } from "effect"
 import { ChildProcess } from "effect/process"
 import { produce } from "immer"
-import { Shell } from "@opencode/schema/shell"
-import { AppProcess } from "@opencode/util/process"
-import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
-import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
-import { FSUtil } from "@opencode/util/fs-util"
+import { Shell } from "@Mackery6969/schema/shell"
+import { AppProcess } from "@Mackery6969/util/process"
+import { CrossSpawnSpawner } from "@Mackery6969/util/cross-spawn-spawner"
+import { makeGlobalNode, makeLocationNode } from "@Mackery6969/util/effect/app-node"
+import { FSUtil } from "@Mackery6969/util/fs-util"
 import { Bus } from "./bus.js"
 import { Environment } from "./environment/index.js"
 import { FileRetention } from "./file-retention.js"
 import { Location } from "./location.js"
-import { Global } from "@opencode/util/global"
+import { Global } from "@Mackery6969/util/global"
 import { ShellSelect } from "./shell/select.js"
-import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
+import type { ShellCreateBefore } from "@Mackery6969/plugin/effect/shell"
 import { PluginHooks } from "./plugin/hooks.js"
 import { SessionEnvironment } from "./session/environment.js"
 import { SessionSchema } from "./session/schema.js"
@@ -86,7 +86,7 @@ export interface Interface {
   readonly remove: (id: Shell.ID) => Effect.Effect<void, NotFoundError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Shell") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/Shell") {}
 
 export const cleanup = Effect.fn("Shell.cleanup")(function* () {
   const fs = yield* FSUtil.Service

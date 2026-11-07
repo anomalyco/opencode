@@ -1,4 +1,4 @@
-import { compose, type Entry } from "@opencode/plugin/gui/host"
+import { compose, type Entry } from "@Mackery6969/plugin/gui/host"
 import context from "./context"
 import contextRenderer from "./context/renderer"
 import btw from "./btw"

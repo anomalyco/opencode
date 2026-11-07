@@ -1,4 +1,4 @@
-import { compose } from "@opencode/plugin/gui/host"
+import { compose } from "@Mackery6969/plugin/gui/host"
 import context from "./context"
 import btw from "./btw"
 import debug from "./debug"

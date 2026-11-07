@@ -1,5 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { Global } from "@opencode/util/global"
+import { Global } from "@Mackery6969/util/global"
 import { Effect, Option } from "effect"
 import { expect, mock, test } from "bun:test"
 import { mkdir, rm } from "node:fs/promises"

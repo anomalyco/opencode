@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import type { SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageUser } from "@Mackery6969/client/promise"
 import { extractPromptContext, extractPromptFromMessage, type PromptSource } from "./prompt"
 import { buildPromptRequest } from "./request"
 import { contextItemKey, Prompt } from "./schema"

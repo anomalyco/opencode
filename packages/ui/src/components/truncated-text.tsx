@@ -1,7 +1,7 @@
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createEffect, on } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Tooltip } from "@opencode/ui/tooltip"
+import { Tooltip } from "@Mackery6969/ui/tooltip"
 import "./truncated-text.css"
 
 /** Reveals an ellipsized name on hover or focus; touch layouts wrap the complete name instead. */

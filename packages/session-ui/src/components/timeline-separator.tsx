@@ -1,5 +1,5 @@
-import { ProviderIcon } from "@opencode/ui/provider-icon"
-import { Tooltip } from "@opencode/ui/tooltip"
+import { ProviderIcon } from "@Mackery6969/ui/provider-icon"
+import { Tooltip } from "@Mackery6969/ui/tooltip"
 import { Show } from "solid-js"
 
 export function TimelineSeparator(props: {

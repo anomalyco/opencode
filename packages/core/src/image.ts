@@ -1,6 +1,6 @@
 export * as Image from "./image.js"
 
-import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { makeLocationNode } from "@Mackery6969/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { FileSystem } from "./filesystem.js"
 import { State } from "./state.js"
@@ -53,7 +53,7 @@ export interface Interface extends State.Transformable<Editor> {
   >
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Image") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/Image") {}
 
 const layer = Layer.effect(
   Service,

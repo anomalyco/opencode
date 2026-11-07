@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { Service } from "@opencode/client/effect/service"
+import { Service } from "@Mackery6969/client/effect/service"
 import path from "node:path"
 import { Standalone } from "../../src/services/standalone"
 

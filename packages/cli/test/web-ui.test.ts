@@ -1,5 +1,5 @@
 import { NodeFileSystem, NodeHttpServer } from "@effect/platform-node"
-import { ServerProcess } from "@opencode/server/process"
+import { ServerProcess } from "@Mackery6969/server/process"
 import { afterAll, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { HttpServer, HttpServerError, HttpServerRequest, HttpServerResponse } from "effect/http"

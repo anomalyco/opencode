@@ -1,5 +1,5 @@
-import type { LocationGetOutput, OpenCodeClient } from "@opencode/client/promise"
-import type { Data } from "@opencode/client/solid"
+import type { LocationGetOutput, OpenCodeClient } from "@Mackery6969/client/promise"
+import type { Data } from "@Mackery6969/client/solid"
 
 export async function createWorktree(input: {
   api: Pick<OpenCodeClient, "location" | "worktree">

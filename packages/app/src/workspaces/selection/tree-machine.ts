@@ -1,4 +1,4 @@
-import { getFilename } from "@opencode/util/path"
+import { getFilename } from "@Mackery6969/util/path"
 import {
   pickerFileSearchQuery,
   pickerParent,

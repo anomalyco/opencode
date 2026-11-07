@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { which } from "@opencode/core/util/which"
+import { which } from "@Mackery6969/core/util/which"
 import { appExecutionAlias } from "../fixture/app-execution-alias"
 import { tmpdir } from "../fixture/tmpdir"
 

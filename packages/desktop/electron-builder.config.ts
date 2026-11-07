@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url"
 
 import { Arch, type Configuration } from "electron-builder"
 import { NativeArch } from "../../script/native-arch"
-import { DESKTOP_NATIVE_ENGLISH } from "@opencode/app/i18n/desktop-native"
+import { DESKTOP_NATIVE_ENGLISH } from "@Mackery6969/app/i18n/desktop-native"
 import { CLI_BINARIES, getCurrentCli, nodePtyPackage } from "./script/utils"
 
 const packageDir = path.dirname(fileURLToPath(import.meta.url))

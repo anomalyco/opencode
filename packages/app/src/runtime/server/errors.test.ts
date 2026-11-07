@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { FileNotFoundError, SessionNotFoundError } from "@opencode/client/promise"
+import type { FileNotFoundError, SessionNotFoundError } from "@Mackery6969/client/promise"
 import type { ConfigInvalidError, ProviderModelNotFoundError } from "./errors"
 import { formatServerError, isSessionNotFoundError, parseReadableConfigInvalidError } from "./errors"
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { PromptFileAttachment } from "@opencode/client/promise"
+import type { PromptFileAttachment } from "@Mackery6969/client/promise"
 import { attached, imageAttachmentPlaceholderStyle, MIN_IMAGE_PLACEHOLDER_PX, typeLabel } from "./message-file"
 
 function file(source: PromptFileAttachment["source"], mention = false): PromptFileAttachment {

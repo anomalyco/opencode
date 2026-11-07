@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test"
 import { createRequire } from "node:module"
 import { createComponent, render } from "solid-js/web"
-import type { GeneratedProjectIcon, ProjectIconStore } from "@opencode/ui/project-avatar"
+import type { GeneratedProjectIcon, ProjectIconStore } from "@Mackery6969/ui/project-avatar"
 
 // Bun does not compile Solid JSX. Compile the real avatar with the same presets as Vite.
 const require = createRequire(import.meta.url)
@@ -26,9 +26,9 @@ Bun.plugin({
   },
 })
 
-const { ProjectAvatar, ProjectIconStoreProvider, generateProjectIcon } = await import("@opencode/ui/project-avatar")
+const { ProjectAvatar, ProjectIconStoreProvider, generateProjectIcon } = await import("@Mackery6969/ui/project-avatar")
 
-const { motionTuning } = await import("@opencode/ui/motion-tuning")
+const { motionTuning } = await import("@Mackery6969/ui/motion-tuning")
 
 // Generated avatars are opt-in under Knobs → Experiments.
 motionTuning.list().forEach((knob) => {

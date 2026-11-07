@@ -2,7 +2,7 @@ import { createMemo, For, Show, createEffect, onMount, onCleanup } from "solid-j
 import { createStore } from "solid-js/store"
 import { TextAttributes, ScrollBoxRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
-import type { SessionInfo } from "@opencode/client"
+import type { SessionInfo } from "@Mackery6969/client"
 import { useRoute, useRouteData } from "../../../context/route"
 import { useData } from "../../../context/data"
 import { useClient } from "../../../context/client"
@@ -11,7 +11,7 @@ import { useStorage } from "../../../context/storage"
 import { Locale } from "../../../util/locale"
 import { Keymap } from "../../../context/keymap"
 import { useComposerTab } from "./context"
-import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
+import { withTimestampedFallback } from "@Mackery6969/util/session-title-fallback"
 import { sessionFamily } from "../../../util/session"
 
 interface SubagentEntry {

@@ -1,12 +1,12 @@
-import { useI18n } from "@opencode/ui/context/i18n"
-import { Icon } from "@opencode/ui/icon"
+import { useI18n } from "@Mackery6969/ui/context/i18n"
+import { Icon } from "@Mackery6969/ui/icon"
 import {
   frameLoop,
   observeReducedMotion,
   prefersReducedMotion,
   Spring,
   type DurationOptions,
-} from "@opencode/ui/motion"
+} from "@Mackery6969/ui/motion"
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { sourcesExpand, type SiteIconMode } from "./experiment"
 import {

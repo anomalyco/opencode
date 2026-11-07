@@ -1,4 +1,4 @@
-import { OpenCode, type OpenCodeEvent } from "@opencode/client"
+import { OpenCode, type OpenCodeEvent } from "@Mackery6969/client"
 
 export const worktree = "/tmp/opencode"
 export const directory = `${worktree}/packages/tui`

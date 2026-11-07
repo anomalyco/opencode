@@ -2,7 +2,7 @@
 // through `SharedTrace`, and the page's own CPU profile and heap snapshot. Each start claims its phase in the same
 // event, before any CDP call, and takes the next attempt number, so a second start, a stop or a disposal that arrives
 // while Chromium is still starting sees the claim, and a result whose attempt the state no longer holds is stale.
-import type { Browser } from "@opencode/plugin-browser/rpc"
+import type { Browser } from "@Mackery6969/plugin-browser/rpc"
 
 /** How long Chromium may take to flush a trace once tracing ended. */
 export const TRACE_STOP_TIMEOUT_MS = 10_000

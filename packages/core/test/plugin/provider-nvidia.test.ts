@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { Plugin } from "@opencode/core/plugin"
-import { PluginHost } from "@opencode/core/plugin/host"
-import { ProviderPlugins } from "@opencode/core/plugin/provider"
-import { NvidiaPlugin } from "@opencode/core/plugin/provider/nvidia"
-import { Provider } from "@opencode/core/provider"
+import { Plugin } from "@Mackery6969/core/plugin"
+import { PluginHost } from "@Mackery6969/core/plugin/host"
+import { ProviderPlugins } from "@Mackery6969/core/plugin/provider"
+import { NvidiaPlugin } from "@Mackery6969/core/plugin/provider/nvidia"
+import { Provider } from "@Mackery6969/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -26,7 +26,7 @@ describe("NvidiaPlugin", () => {
       const catalog = yield* Provider.Service
       yield* catalog.transform((catalog) => {
         catalog.update(Provider.ID.make("nvidia"), (provider) => {
-          provider.package = "@opencode/ai/providers/openai-compatible"
+          provider.package = "@Mackery6969/ai/providers/openai-compatible"
           provider.settings = { baseURL: "https://integrate.api.nvidia.com/v1" }
           provider.headers = { Existing: "value" }
         })
@@ -48,7 +48,7 @@ describe("NvidiaPlugin", () => {
       const catalog = yield* Provider.Service
       yield* catalog.transform((catalog) => {
         catalog.update(Provider.ID.make("nvidia"), (provider) => {
-          provider.package = "@opencode/ai/providers/openai-compatible"
+          provider.package = "@Mackery6969/ai/providers/openai-compatible"
           provider.settings = { baseURL: "https://integrate.api.nvidia.com/v1" }
         })
       })
@@ -67,7 +67,7 @@ describe("NvidiaPlugin", () => {
       const catalog = yield* Provider.Service
       yield* catalog.transform((catalog) => {
         catalog.update(Provider.ID.make("nvidia"), (provider) => {
-          provider.package = "@opencode/ai/providers/openai-compatible"
+          provider.package = "@Mackery6969/ai/providers/openai-compatible"
           provider.settings = { baseURL: "https://integrate.api.nvidia.com/v1" }
           provider.headers = { "X-BILLING-INVOKE-ORIGIN": "CustomOrigin" }
         })

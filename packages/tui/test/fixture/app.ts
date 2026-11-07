@@ -1,7 +1,7 @@
 import { createTestRenderer, type TestRendererSetup } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import path from "node:path"
-import { Global } from "@opencode/util/global"
+import { Global } from "@Mackery6969/util/global"
 import type { TuiInput } from "../../src/app"
 import type { Config } from "../../src/config"
 import { tmpdir } from "./fixture"

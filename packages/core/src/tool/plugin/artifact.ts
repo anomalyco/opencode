@@ -1,8 +1,8 @@
 export * as ArtifactTools from "./artifact.js"
 
-import { ToolFailure } from "@opencode/ai/effect"
-import type { Context } from "@opencode/plugin/effect/plugin"
-import { optional } from "@opencode/schema/schema"
+import { ToolFailure } from "@Mackery6969/ai/effect"
+import type { Context } from "@Mackery6969/plugin/effect/plugin"
+import { optional } from "@Mackery6969/schema/schema"
 import { Effect, Schema, Stream } from "effect"
 import { Artifact } from "../../artifact.js"
 import { Config } from "../../config.js"

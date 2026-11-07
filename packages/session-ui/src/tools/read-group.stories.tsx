@@ -1,4 +1,4 @@
-import type { JsonValue, SessionMessageAssistant } from "@opencode/client/promise"
+import type { JsonValue, SessionMessageAssistant } from "@Mackery6969/client/promise"
 import { createSignal } from "solid-js"
 import { CurrentSessionProviders } from "../storybook/current-session-story"
 import { STORY_TIME } from "../storybook/current-session-fixtures"

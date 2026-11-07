@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { dict } from "@opencode/ui/i18n/en"
+import { dict } from "@Mackery6969/ui/i18n/en"
 import en from "@/runtime/i18n/en"
 import { settingsSearchIndex, type SettingsSearchServer } from "./search-index"
 import { rankSettings } from "./search-results"

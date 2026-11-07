@@ -1,6 +1,6 @@
 export * as ModalModels from "./models.js"
 
-import { Money } from "@opencode/schema/money"
+import { Money } from "@Mackery6969/schema/money"
 import { Effect, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Model } from "../model.js"
@@ -106,7 +106,7 @@ function build(id: Model.ID, remote: RemoteModel, baseURL: string, previous?: Mo
       remote.interleaved === undefined
         ? previous?.compatibility
         : (Model.compatibility(remote.interleaved) ?? previous?.compatibility),
-    package: "@opencode/ai/providers/openai-compatible",
+    package: "@Mackery6969/ai/providers/openai-compatible",
     settings: Provider.mergeOverlay(previous?.settings, { baseURL, provider: providerID }),
     headers: previous?.headers,
     body: previous?.body,

@@ -6,8 +6,8 @@ import { chmod, copyFile, mkdir, mkdtemp, readFile, realpath, rename, rm, stat, 
 import os from "node:os"
 import path from "node:path"
 import { build } from "vite"
-import { Script } from "@opencode/script"
-import { embed } from "@opencode/script/highlights"
+import { Script } from "@Mackery6969/script"
+import { embed } from "@Mackery6969/script/highlights"
 import pkg from "../package.json"
 import { collectNodeAssets, copyNodeAssets, hashNodeAssets, seaAssetMap } from "./node-assets"
 import { appArchiveAsset, mainConfig } from "../vite.node.config"
@@ -146,7 +146,7 @@ for (const target of targets) {
     path.join(outdir, name, "package.json"),
     `${JSON.stringify(
       {
-        name: `@opencode/${name}`,
+        name: `@Mackery6969/${name}`,
         version: Script.version,
         license: pkg.license,
         repository: { type: "git", url: "git+https://github.com/anomalyco/opencode.git" },

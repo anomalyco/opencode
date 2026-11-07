@@ -4,7 +4,7 @@ import os from "os"
 import path from "path"
 import { Effect } from "effect"
 import { type ParseError, parse } from "jsonc-parser"
-import { FSUtil } from "@opencode/util/fs-util"
+import { FSUtil } from "@Mackery6969/util/fs-util"
 
 type ParseSource =
   | {

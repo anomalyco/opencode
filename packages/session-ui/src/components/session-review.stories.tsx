@@ -3,7 +3,7 @@ import { parseDiffFromFile } from "@pierre/diffs"
 import { CurrentSessionProviders } from "../storybook/current-session-story"
 import { editThenTestDocument, reviewDiffs } from "../storybook/current-session-fixtures"
 import { File } from "./file"
-import { Button } from "@opencode/ui/button"
+import { Button } from "@Mackery6969/ui/button"
 import { SessionReview, type SessionReviewComment, type SessionReviewFocus } from "./session-review"
 
 function ReviewStory(props: { split?: boolean }) {

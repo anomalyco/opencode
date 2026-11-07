@@ -1,5 +1,5 @@
-import { builtinCatalog } from "@opencode/plugin/gui/builtin"
-import { Plugin, Store } from "@opencode/plugin/gui"
+import { builtinCatalog } from "@Mackery6969/plugin/gui/builtin"
+import { Plugin, Store } from "@Mackery6969/plugin/gui"
 import { History } from "./history"
 import en from "./i18n/en"
 

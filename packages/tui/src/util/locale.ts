@@ -26,7 +26,7 @@ export function number(num: number): string {
   return num.toString()
 }
 
-export { duration } from "@opencode/util/duration"
+export { duration } from "@Mackery6969/util/duration"
 
 export function truncate(str: string, len: number): string {
   if (str.length <= len) return str

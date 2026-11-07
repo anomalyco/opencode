@@ -1,6 +1,6 @@
 export * as AgentPlugin from "./agent.js"
 
-import { define } from "@opencode/plugin/effect/plugin"
+import { define } from "@Mackery6969/plugin/effect/plugin"
 import { Effect } from "effect"
 import { Agent } from "../agent.js"
 

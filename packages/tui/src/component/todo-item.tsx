@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core"
-import type { ResolvedTheme } from "@opencode/theme/tui"
+import type { ResolvedTheme } from "@Mackery6969/theme/tui"
 import { todoMarker, type Todo } from "../util/todo"
 
 export function TodoItem(props: { theme: ResolvedTheme; todo: Todo }) {

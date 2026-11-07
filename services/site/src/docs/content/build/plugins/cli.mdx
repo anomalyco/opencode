@@ -1,6 +1,6 @@
 ---
 title: "TUI"
-description: "Build the TUI part of an OpenCode plugin for the terminal UI using @opencode/plugin/tui."
+description: "Build the TUI part of an OpenCode plugin for the terminal UI using @Mackery6969/plugin/tui."
 ---
 
 TUI plugins extend the terminal UI with commands, routes, slots, Markdown renderers, notifications, and local state. A
@@ -8,7 +8,7 @@ TUI plugin is the `./tui` part of a [plugin package](/build/plugins), usually be
 part](/build/plugins/server).
 
 ```ts title="src/tui.tsx"
-import { Plugin } from "@opencode/plugin/tui"
+import { Plugin } from "@Mackery6969/plugin/tui"
 
 export default Plugin.define({
   id: "acme.cli",
@@ -18,7 +18,7 @@ export default Plugin.define({
 })
 ```
 
-Import `@opencode/plugin/tui` directly. OpenCode resolves this import at runtime, so local TUI plugins do not need an
+Import `@Mackery6969/plugin/tui` directly. OpenCode resolves this import at runtime, so local TUI plugins do not need an
 absolute path to an OpenCode checkout.
 
 ## Context
@@ -113,7 +113,7 @@ context.data.session.permission.invalidate(sessionID)
 Forms can be listed, refreshed, replied to, or cancelled at a location.
 
 ```ts
-import type { SessionFormCancelInput, SessionFormReplyInput } from "@opencode/client"
+import type { SessionFormCancelInput, SessionFormReplyInput } from "@Mackery6969/client"
 
 async function handleForm(reply: SessionFormReplyInput, cancel: SessionFormCancelInput) {
   const location = context.location
@@ -244,8 +244,8 @@ OpenCode runs plugins with its own OpenTUI. Since OpenTUI 0.6:
   `EditBuffer.create()` take an owner as their last argument. `OptimizedBuffer.create()` takes it in the `owner` option.
   Pass `context.renderer.nativeScene`. OpenTUI 0.5 ignores the extra argument, so the plugin still runs on older
   OpenCode releases.
-- `generateSyntax()` from `@opencode/theme/tui` takes the owner as its second argument:
-  `generateSyntax(context.theme, context.renderer.nativeScene)`. Older `@opencode/theme` versions build the style
+- `generateSyntax()` from `@Mackery6969/theme/tui` takes the owner as its second argument:
+  `generateSyntax(context.theme, context.renderer.nativeScene)`. Older `@Mackery6969/theme` versions build the style
   without an owner, so update the package too.
 - `getLayoutNode()` is removed. Replace `getLayoutNode().getMaxWidth()` and the other style getters with the
   renderable method of the same name, on OpenTUI 0.6.5 or later. Replace `getComputedLayout()` and the other computed
@@ -261,7 +261,7 @@ The [OpenTUI 0.6.0 release notes](https://opentui.com/docs/releases/0.6.0) list 
 Use `usePlugin` to access the current context inside JSX rendered by a route, dialog, or slot.
 
 ```tsx
-import { usePlugin } from "@opencode/plugin/tui"
+import { usePlugin } from "@Mackery6969/plugin/tui"
 
 function Status() {
   const context = usePlugin()
@@ -595,8 +595,8 @@ The slot receives reactive `name`, `sessionID`, `width`, `presentation`, and `fo
 until there is enough room for a side panel.
 
 ```tsx
-import type { PanelInput } from "@opencode/plugin/tui/context"
-import { usePlugin } from "@opencode/plugin/tui"
+import type { PanelInput } from "@Mackery6969/plugin/tui/context"
+import { usePlugin } from "@Mackery6969/plugin/tui"
 
 function ReviewPanel(props: { panel: PanelInput }) {
   const context = usePlugin()
@@ -643,7 +643,7 @@ Expose the TUI plugin through `./tui`; add OpenTUI peers when the plugin renders
     "./tui": "./src/tui.tsx"
   },
   "dependencies": {
-    "@opencode/plugin": "latest"
+    "@Mackery6969/plugin": "latest"
   },
   "peerDependencies": {
     "@opentui/core": ">=0.6.6",
@@ -656,7 +656,7 @@ Expose the TUI plugin through `./tui`; add OpenTUI peers when the plugin renders
 Export `./tui` beside a [server part](/build/plugins/server) or [GUI part](/build/plugins/gui) for automatic loading.
 
 ```ts title="src/index.ts"
-import { Plugin } from "@opencode/plugin"
+import { Plugin } from "@Mackery6969/plugin"
 
 export default Plugin.define({
   id: "acme.server",

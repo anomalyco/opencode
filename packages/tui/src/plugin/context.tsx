@@ -1,5 +1,5 @@
-import type { PluginInfo } from "@opencode/client"
-import type { Plugin } from "@opencode/plugin/tui"
+import type { PluginInfo } from "@Mackery6969/client"
+import type { Plugin } from "@Mackery6969/plugin/tui"
 import type { MarkdownCodeBlockRenderer, MarkdownOptions } from "@opentui/core"
 import {
   batch,
@@ -16,8 +16,8 @@ import {
 import path from "path"
 import { stat } from "fs/promises"
 import { fileURLToPath } from "url"
-import type { Page } from "@opencode/plugin/tui/context"
-import { Host } from "@opencode/plugin/host"
+import type { Page } from "@Mackery6969/plugin/tui/context"
+import { Host } from "@Mackery6969/plugin/host"
 import { resolveSlots, type Claim } from "./structure"
 import { createStore, produce, reconcile as reconcileStore, unwrap } from "solid-js/store"
 import { isDeepEqual } from "remeda"

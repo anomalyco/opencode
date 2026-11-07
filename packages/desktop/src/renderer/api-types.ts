@@ -1,5 +1,5 @@
-import type { DesktopMenuAction, DesktopZoomLevel } from "@opencode/app/desktop-menu"
-import type { DesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
+import type { DesktopMenuAction, DesktopZoomLevel } from "@Mackery6969/app/desktop-menu"
+import type { DesktopNativeBundle } from "@Mackery6969/app/i18n/desktop-native"
 import type { StorageSnapshot } from "../shared/ipc-transport"
 import type { WindowBootstrap } from "../shared/window-bootstrap"
 import type {

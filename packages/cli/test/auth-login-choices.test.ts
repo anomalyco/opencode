@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { IntegrationInfo } from "@opencode/client"
+import type { IntegrationInfo } from "@Mackery6969/client"
 import { loginChoices } from "../src/commands/handlers/auth/login"
 
 const integration = (value: Partial<IntegrationInfo> & Pick<IntegrationInfo, "id" | "name">): IntegrationInfo => ({

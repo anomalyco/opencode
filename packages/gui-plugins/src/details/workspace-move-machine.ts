@@ -1,4 +1,4 @@
-import { containsDirectory, sameDirectory } from "@opencode/util/path"
+import { containsDirectory, sameDirectory } from "@Mackery6969/util/path"
 import { workspaceDirectories, type WorkspaceProject } from "./paths"
 
 /** How long `worktree.list` may run before the menu keeps the worktrees it already shows. */

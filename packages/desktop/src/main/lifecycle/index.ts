@@ -8,7 +8,7 @@ import { DesktopLogging, scoped } from "../native/logging"
 import { DesktopStorage } from "../storage"
 import { safeWebContentsURL } from "../windows/state"
 import { getLastFocusedWindow, mainWindows } from "../windows"
-import type { Scope } from "@opencode/plugin/gui/host"
+import type { Scope } from "@Mackery6969/plugin/gui/host"
 import { marks } from "./marks"
 import {
   createDriver,

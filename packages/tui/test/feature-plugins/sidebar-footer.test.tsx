@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
 import { testRender } from "@opentui/solid"
-import type { Context } from "@opencode/plugin/tui/context"
+import type { Context } from "@Mackery6969/plugin/tui/context"
 import { createStore, produce } from "solid-js/store"
 import { SidebarOnboarding } from "../../src/feature-plugins/sidebar/footer"
 

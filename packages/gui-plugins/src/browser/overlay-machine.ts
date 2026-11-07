@@ -1,4 +1,4 @@
-import type { Browser } from "@opencode/plugin-browser/rpc"
+import type { Browser } from "@Mackery6969/plugin-browser/rpc"
 import type { PaneElement } from "./ipc"
 
 // What the browser pane lays over its page: the element picker, a comment on a picked element, or a note on the whole

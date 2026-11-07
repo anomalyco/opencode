@@ -19,10 +19,10 @@ import {
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT,
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX,
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN,
-} from "@opencode/session-ui/v2/session-review-v2"
-import type { PanelFrame, PanelSidebar, MountedSession, SessionScreen } from "@opencode/plugin/gui"
-import { BuiltinPanel, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
-import { PanelContext } from "@opencode/plugin/gui/host"
+} from "@Mackery6969/session-ui/v2/session-review-v2"
+import type { PanelFrame, PanelSidebar, MountedSession, SessionScreen } from "@Mackery6969/plugin/gui"
+import { BuiltinPanel, type BuiltinPanelTab } from "@Mackery6969/plugin/gui/builtin"
+import { PanelContext } from "@Mackery6969/plugin/gui/host"
 import { same } from "@/runtime/persistence/equality"
 import { sessionTabPane, type SessionPane, type SessionTabs } from "@/shell/state/session-tabs"
 import { Persist, persisted } from "@/runtime/persistence/storage"

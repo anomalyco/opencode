@@ -3,7 +3,7 @@ import type {
   SessionMessageAssistant,
   SessionMessageInfo,
   SessionMessageUser,
-} from "@opencode/client/promise"
+} from "@Mackery6969/client/promise"
 import { createMemo, For, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"

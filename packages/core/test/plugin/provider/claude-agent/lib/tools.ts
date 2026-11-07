@@ -7,10 +7,10 @@ import type {
   LanguageModelV3StreamPart,
   LanguageModelV3ToolResultPart,
 } from "@ai-sdk/provider"
-import type { SessionRequestKind } from "@opencode/plugin/effect/session"
+import type { SessionRequestKind } from "@Mackery6969/plugin/effect/session"
 import { Effect } from "effect"
-import type { ClaudeAgentLanguageModel } from "@opencode/core/plugin/provider/claude-agent/language-model/claude-agent-language-model"
-import { RequestKind } from "@opencode/core/plugin/provider/claude-agent/language-model/request-kind"
+import type { ClaudeAgentLanguageModel } from "@Mackery6969/core/plugin/provider/claude-agent/language-model/claude-agent-language-model"
+import { RequestKind } from "@Mackery6969/core/plugin/provider/claude-agent/language-model/request-kind"
 import { TestSessions } from "./sessions"
 
 export const tools: LanguageModelV3FunctionTool[] = [

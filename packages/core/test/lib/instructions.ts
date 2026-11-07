@@ -1,5 +1,5 @@
 import { Effect, Option, Schema } from "effect"
-import { Instructions } from "@opencode/core/instructions/index"
+import { Instructions } from "@Mackery6969/core/instructions/index"
 
 export interface State {
   readonly values: Readonly<Record<string, Schema.Json>>

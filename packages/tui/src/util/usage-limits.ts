@@ -1,4 +1,4 @@
-import type { UsageLimitsBudget, UsageLimitsInfo } from "@opencode/client"
+import type { UsageLimitsBudget, UsageLimitsInfo } from "@Mackery6969/client"
 
 /** A model as the usage limits read it: its OpenCode IDs, its price and context window, and its provider. */
 export type LimitedModel = {

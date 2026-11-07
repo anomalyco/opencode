@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { terminalToggleCommand } from "@opencode/gui-plugins/terminal"
+import { terminalToggleCommand } from "@Mackery6969/gui-plugins/terminal"
 import { settingsOpenCommand } from "@/settings/command"
 import { sidebarToggleCommand } from "@/shell/shell"
 import { previousSessionCommand, nextSessionCommand } from "@/shell/titlebar/tab-strip"

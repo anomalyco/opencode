@@ -1,6 +1,6 @@
 import { createEffect, createSignal, on, onCleanup, type Accessor } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
-import { base64Encode } from "@opencode/util/encode"
+import { base64Encode } from "@Mackery6969/util/encode"
 import { useComposerState } from "@/composer/persistence"
 import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
 import { useLanguage } from "@/runtime/i18n/language"

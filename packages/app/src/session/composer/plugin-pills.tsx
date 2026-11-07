@@ -1,5 +1,5 @@
-import { Icon } from "@opencode/ui/icon"
-import { Menu } from "@opencode/ui/menu"
+import { Icon } from "@Mackery6969/ui/icon"
+import { Menu } from "@Mackery6969/ui/menu"
 import { Popover } from "@kobalte/core/popover"
 import { createMemo, For, Match, Show, Switch, untrack, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -11,7 +11,7 @@ import {
   type IconName,
   type MountedSession,
   type SessionScreen,
-} from "@opencode/plugin/gui"
+} from "@Mackery6969/plugin/gui"
 import { usePluginHost } from "@/runtime/plugin/host"
 import { Contribution } from "@/runtime/plugin/render"
 import { composerLanePlacement, type useComposerLaneAlignment } from "./composer-lane"

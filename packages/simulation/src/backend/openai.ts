@@ -1,7 +1,7 @@
 import { Effect, Schema, Stream } from "effect"
 import { HttpClientResponse } from "effect/http"
 import { HttpClientError, TransportError } from "effect/http/HttpClientError"
-import { OpenAIChatEvent, DEFAULT_BASE_URL, PATH } from "@opencode/ai/protocols/openai-chat"
+import { OpenAIChatEvent, DEFAULT_BASE_URL, PATH } from "@Mackery6969/ai/protocols/openai-chat"
 import { SimulationNetwork } from "./network"
 import { SimulatedProvider } from "./simulated-provider"
 

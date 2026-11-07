@@ -1,9 +1,9 @@
-import type { OpenCodeClient } from "@opencode/client/effect"
-import { AbsolutePath } from "@opencode/schema/schema"
-import { Session } from "@opencode/schema/session"
-import { FSUtil } from "@opencode/util/fs-util"
+import type { OpenCodeClient } from "@Mackery6969/client/effect"
+import { AbsolutePath } from "@Mackery6969/schema/schema"
+import { Session } from "@Mackery6969/schema/session"
+import { FSUtil } from "@Mackery6969/util/fs-util"
 import { DateTime, Effect, Ref, Schema } from "effect"
-import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
+import { withTimestampedFallback } from "@Mackery6969/util/session-title-fallback"
 import type {
   AuthenticateRequest,
   AuthenticateResponse,

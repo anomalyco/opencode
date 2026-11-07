@@ -6,7 +6,7 @@ import type { ProjectMeta, State } from "./types"
 import { createDirectoryCacheState, transitionDirectoryCache, type DirectoryCacheEvent } from "./machine"
 import { directoryKey, type DirectoryKey } from "./utils"
 import type { ServerScope } from "@/runtime/server/scope"
-import type { Data } from "@opencode/client/solid"
+import type { Data } from "@Mackery6969/client/solid"
 import { normalizeAgentList, normalizeProviderList } from "./utils"
 import { ProjectState, VcsState } from "../persistence"
 

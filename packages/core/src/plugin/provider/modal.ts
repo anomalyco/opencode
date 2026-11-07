@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { HttpClient } from "effect/http"
-import { define } from "@opencode/plugin/effect/plugin"
+import { define } from "@Mackery6969/plugin/effect/plugin"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { ModalModels } from "../../modal/models.js"
 import { Provider } from "../../provider.js"

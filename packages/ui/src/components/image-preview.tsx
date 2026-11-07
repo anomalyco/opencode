@@ -5,9 +5,9 @@ import { createEffect, createMemo, createSignal, on, onCleanup, Show, untrack } 
 import { createStore } from "solid-js/store"
 import { useDialogLayer } from "../context/dialog"
 import { useI18n } from "../context/i18n"
-import { Button } from "@opencode/ui/button"
-import { Icon } from "@opencode/ui/icon"
-import { IconButton } from "@opencode/ui/icon-button"
+import { Button } from "@Mackery6969/ui/button"
+import { Icon } from "@Mackery6969/ui/icon"
+import { IconButton } from "@Mackery6969/ui/icon-button"
 import { frameLoop, prefersReducedMotion, Spring, type DurationOptions } from "../motion"
 import {
   createFlight,

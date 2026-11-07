@@ -197,7 +197,7 @@ export function DocsSamples(props: {
                 {
                   [
                     "curl -fsSL https://opencode.ai/v2/install | bash",
-                    "npm install -g @opencode/cli",
+                    "npm install -g @Mackery6969/cli",
                     "brew install anomalyco/tap/opencode-v2",
                   ][tab()]
                 }
@@ -207,7 +207,7 @@ export function DocsSamples(props: {
                 text={
                   [
                     "curl -fsSL https://opencode.ai/v2/install | bash",
-                    "npm install -g @opencode/cli",
+                    "npm install -g @Mackery6969/cli",
                     "brew install anomalyco/tap/opencode-v2",
                   ][tab()]
                 }

@@ -1,7 +1,7 @@
 export * as ClaudeSessionHooks from "./session.js"
 
-import { AssistantMessage, ToolMessage, type ToolResultPart } from "@opencode/ai/effect"
-import type { Context } from "@opencode/plugin/effect/plugin"
+import { AssistantMessage, ToolMessage, type ToolResultPart } from "@Mackery6969/ai/effect"
+import type { Context } from "@Mackery6969/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
 import { RequestKind } from "./language-model/request-kind.js"
 import { ClaudeProvider } from "./provider.js"

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { LanguageModelV3FunctionTool, LanguageModelV3Prompt } from "@ai-sdk/provider"
-import { ToolNames } from "@opencode/core/plugin/provider/claude-agent/tools/names"
-import { ToolResult } from "@opencode/core/plugin/provider/claude-agent/tools/result"
+import { ToolNames } from "@Mackery6969/core/plugin/provider/claude-agent/tools/names"
+import { ToolResult } from "@Mackery6969/core/plugin/provider/claude-agent/tools/result"
 
 describe("tool bridge conversion", () => {
   test("names round-trip within Claude's limit, including names that need sanitizing", () => {

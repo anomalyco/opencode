@@ -3,7 +3,7 @@ declare module "*.mp3" {
   export default path
 }
 
-declare module "@opencode/ui/audio/*.mp3" {
+declare module "@Mackery6969/ui/audio/*.mp3" {
   const path: string
   export default path
 }

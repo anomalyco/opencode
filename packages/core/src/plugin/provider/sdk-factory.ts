@@ -1,6 +1,6 @@
 import { Effect } from "effect"
-import { Npm } from "@opencode/util/npm"
-import { importModule, resolveModule } from "@opencode/util/runtime-import"
+import { Npm } from "@Mackery6969/util/npm"
+import { importModule, resolveModule } from "@Mackery6969/util/runtime-import"
 
 export const loadSDKFactory = Effect.fnUntraced(function* (npm: Npm.Interface, packageName: string) {
   const installedPath = packageName.startsWith("file://")

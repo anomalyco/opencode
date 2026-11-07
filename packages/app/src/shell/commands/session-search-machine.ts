@@ -1,4 +1,4 @@
-import type { SessionInfo } from "@opencode/client/promise"
+import type { SessionInfo } from "@Mackery6969/client/promise"
 import type { ServerConnection } from "@/runtime/server/registry"
 
 /** How long the dialog waits for a restore before it gives control back. The request itself keeps running. */

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
+import type { SessionMessageAssistant, SessionMessageInfo } from "@Mackery6969/client"
 import { findMessageBoundary, messageNavigationSlack } from "../../../src/routes/session/message-navigation"
 
 const messages: SessionMessageInfo[] = [

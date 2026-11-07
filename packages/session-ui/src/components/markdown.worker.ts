@@ -1,8 +1,8 @@
 /// <reference lib="webworker" />
 
 import { codeToTokens, isSupportedLanguage, LiveTokenizer, type ThemedToken } from "@pierre/highlights"
-import { createMarkdownParser } from "@opencode/ui/context/marked-parser"
-import { OpenCodeTheme } from "@opencode/ui/context/highlight-theme"
+import { createMarkdownParser } from "@Mackery6969/ui/context/marked-parser"
+import { OpenCodeTheme } from "@Mackery6969/ui/context/highlight-theme"
 import {
   diffProjectionBlocks,
   type MarkdownToken,

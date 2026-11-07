@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { MountedSession, Panel, PanelProps, PanelTab, SessionRef, SessionScreen } from "@opencode/plugin/gui"
+import type { MountedSession, Panel, PanelProps, PanelTab, SessionRef, SessionScreen } from "@Mackery6969/plugin/gui"
 import { CLOSED_TABS_LIMIT, closedEntry, createClosedTabs } from "./closed-tabs"
 
 // SAFETY: the in-memory store reads only `key`; the rest of a session reference is never touched.

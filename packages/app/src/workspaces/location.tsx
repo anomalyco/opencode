@@ -1,5 +1,5 @@
-import { createSimpleContext } from "@opencode/ui/context"
-import { isLocationNotFoundError, type LocationGetOutput, type LocationRef } from "@opencode/client/promise"
+import { createSimpleContext } from "@Mackery6969/ui/context"
+import { isLocationNotFoundError, type LocationGetOutput, type LocationRef } from "@Mackery6969/client/promise"
 import { type Accessor, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { type LocationContext, useServerSDK } from "@/runtime/server/client"
 import { useData, useServer } from "@/runtime/server/current"

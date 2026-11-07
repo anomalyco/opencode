@@ -1,17 +1,17 @@
-import { PersistentPty } from "@opencode/core/persistent-pty"
-import { PtyTicket } from "@opencode/core/pty/ticket"
+import { PersistentPty } from "@Mackery6969/core/persistent-pty"
+import { PtyTicket } from "@Mackery6969/core/pty/ticket"
 import {
   ForbiddenError,
   InvalidRequestError,
   PtyFeatureUnsupportedError,
   PtyNotFoundError,
   ServiceUnavailableError,
-} from "@opencode/protocol/errors"
+} from "@Mackery6969/protocol/errors"
 import {
   PTY_CONNECT_TICKET_QUERY,
   PTY_CONNECT_TOKEN_HEADER,
   PTY_CONNECT_TOKEN_HEADER_VALUE,
-} from "@opencode/protocol/groups/persistent-pty"
+} from "@Mackery6969/protocol/groups/persistent-pty"
 import { Effect, Queue } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"

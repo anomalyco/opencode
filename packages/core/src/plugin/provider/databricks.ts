@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { define } from "@opencode/plugin/effect/plugin"
+import { define } from "@Mackery6969/plugin/effect/plugin"
 
 export const DatabricksPlugin = define({
   id: "opencode.provider.databricks",

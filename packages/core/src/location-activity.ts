@@ -1,7 +1,7 @@
 export * as LocationActivity from "./location-activity.js"
 
 import { Clock, Context, Duration, Effect, Layer, Option, RcMap, Schema } from "effect"
-import type { Document } from "@opencode/schema/config"
+import type { Document } from "@Mackery6969/schema/config"
 import { Bus } from "./bus.js"
 import { Config } from "./config.js"
 import { Job } from "./job.js"
@@ -11,11 +11,11 @@ import { LocationServiceMap } from "./location-service-map.js"
 import { SessionEvent } from "./session/event.js"
 import { SessionExecution } from "./session/execution.js"
 import { SessionStore } from "./session/store.js"
-import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { makeGlobalNode } from "@Mackery6969/util/effect/app-node"
 
 const isSessionEvent = Schema.is(SessionEvent.Durable)
 
-export class Service extends Context.Service<Service, {}>()("@opencode/LocationActivity") {}
+export class Service extends Context.Service<Service, {}>()("@Mackery6969/LocationActivity") {}
 
 export function layer(options: { readonly timeToLive?: Duration.Input; readonly sweepInterval?: Duration.Input } = {}) {
   return Layer.effect(

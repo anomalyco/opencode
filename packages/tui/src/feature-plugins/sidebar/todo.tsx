@@ -1,4 +1,4 @@
-import { Plugin } from "@opencode/plugin/tui"
+import { Plugin } from "@Mackery6969/plugin/tui"
 import { createMemo, For, Show } from "solid-js"
 import { TodoItem } from "../../component/todo-item"
 import { sessionTodos } from "../../util/todo"

@@ -1,17 +1,17 @@
-import { Generate } from "@opencode/core/generate"
-import { Location } from "@opencode/core/location"
-import { LocationServiceMap } from "@opencode/core/location-services"
-import { AbsolutePath } from "@opencode/core/schema"
+import { Generate } from "@Mackery6969/core/generate"
+import { Location } from "@Mackery6969/core/location"
+import { LocationServiceMap } from "@Mackery6969/core/location-services"
+import { AbsolutePath } from "@Mackery6969/core/schema"
 import {
   InvalidRequestError,
   ModelNotFoundError,
   ProviderRequestError,
   ServiceUnavailableError,
   UnsupportedModelError,
-} from "@opencode/protocol/errors"
-import type { DecisionRequest, ImageRequest } from "@opencode/schema/generate"
-import { Global } from "@opencode/util/global"
-import { Model } from "@opencode/schema/model"
+} from "@Mackery6969/protocol/errors"
+import type { DecisionRequest, ImageRequest } from "@Mackery6969/schema/generate"
+import { Global } from "@Mackery6969/util/global"
+import { Model } from "@Mackery6969/schema/model"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"

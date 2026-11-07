@@ -2,11 +2,11 @@ import { createMemo, createSignal, onCleanup, Show } from "solid-js"
 import { Portal } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { Button } from "@opencode/ui/button"
-import { Keybind } from "@opencode/ui/keybind"
-import { Tooltip } from "@opencode/ui/tooltip"
+import { Button } from "@Mackery6969/ui/button"
+import { Keybind } from "@Mackery6969/ui/keybind"
+import { Tooltip } from "@Mackery6969/ui/tooltip"
 import type { Terminal as Term } from "ghostty-web"
-import { usePlugin, type ComposerQuoteAnchor } from "@opencode/plugin/gui"
+import { usePlugin, type ComposerQuoteAnchor } from "@Mackery6969/plugin/gui"
 import {
   createQuoteDispatch,
   createQuoteState,

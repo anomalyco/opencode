@@ -382,17 +382,17 @@ instruction-set extensions from CI runners (Windows builds set
 `OPENCODE_ZIG_CPU=baseline`, since the Unix Zig wrapper is a shell script).
 Linux GNU artifacts support glibc 2.30 and newer.
 
-Tagged releases also publish `@opencode/pty` to npm with optional,
+Tagged releases also publish `@Mackery6969/pty` to npm with optional,
 platform-specific binary packages. Installing the npm package selects the native
 binary for the current platform (`opencode-pty.exe` on Windows) and exposes
 its path as `binaryPath`:
 
 ```js
-import { binaryPath } from "@opencode/pty"
+import { binaryPath } from "@Mackery6969/pty"
 ```
 
 npm publishing uses trusted publishing with provenance. Each of the nine
-packages (`@opencode/pty` and the eight `@opencode/pty-<platform>`
+packages (`@Mackery6969/pty` and the eight `@Mackery6969/pty-<platform>`
 packages) must list anomalyco/opencode with workflow
 `release-process-daemon.yml` as its trusted publisher, with no environment
 (the release job does not use one).

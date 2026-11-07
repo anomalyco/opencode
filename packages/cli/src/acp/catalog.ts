@@ -1,8 +1,8 @@
-import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
-import type { Agent } from "@opencode/schema/agent"
-import type { Command } from "@opencode/schema/command"
-import type { Model } from "@opencode/schema/model"
-import { FSUtil } from "@opencode/util/fs-util"
+import type { OpenCodeClient, OpenCodeEvent } from "@Mackery6969/client/effect"
+import type { Agent } from "@Mackery6969/schema/agent"
+import type { Command } from "@Mackery6969/schema/command"
+import type { Model } from "@Mackery6969/schema/model"
+import { FSUtil } from "@Mackery6969/util/fs-util"
 import { Cause, Deferred, Effect, Exit, Schedule, Semaphore, Stream, SubscriptionRef } from "effect"
 import { ACPError } from "./error"
 

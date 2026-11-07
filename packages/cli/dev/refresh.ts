@@ -2,7 +2,7 @@
 import { createComponent, createSignal, ErrorBoundary, onCleanup, Show, type JSX } from "solid-js"
 import { $$component, $$refresh, type Registry } from "solid-refresh/dist/solid-refresh.mjs"
 import type { ErrorOverlay } from "./error-overlay"
-import { host } from "@opencode/cli/vite-host"
+import { host } from "@Mackery6969/cli/vite-host"
 
 let overlay: typeof ErrorOverlay
 const [activeError, setActiveError] = createSignal<symbol>()

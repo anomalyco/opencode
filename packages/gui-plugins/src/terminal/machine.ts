@@ -1,4 +1,4 @@
-import type { PersistentPtyInfo } from "@opencode/client"
+import type { PersistentPtyInfo } from "@Mackery6969/client"
 
 /**
  * How long one terminal request may take before it fails: the support check, a list, a create (including the wait

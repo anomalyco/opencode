@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { Integration } from "@opencode/core/integration"
-import { Plugin } from "@opencode/core/plugin"
-import { PluginHost } from "@opencode/core/plugin/host"
-import { ProviderPlugins } from "@opencode/core/plugin/provider"
-import { LLMGatewayPlugin } from "@opencode/core/plugin/provider/llmgateway"
-import { Provider } from "@opencode/core/provider"
+import { Integration } from "@Mackery6969/core/integration"
+import { Plugin } from "@Mackery6969/core/plugin"
+import { PluginHost } from "@Mackery6969/core/plugin/host"
+import { ProviderPlugins } from "@Mackery6969/core/plugin/provider"
+import { LLMGatewayPlugin } from "@Mackery6969/core/plugin/provider/llmgateway"
+import { Provider } from "@Mackery6969/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -32,7 +32,7 @@ describe("LLMGatewayPlugin", () => {
       })
       yield* catalog.transform((catalog) => {
         catalog.update(Provider.ID.make("llmgateway"), (provider) => {
-          provider.package = "@opencode/ai/providers/openai-compatible"
+          provider.package = "@Mackery6969/ai/providers/openai-compatible"
           provider.settings = { baseURL: "https://api.llmgateway.io/v1" }
           provider.headers = { Existing: "value" }
         })
@@ -59,7 +59,7 @@ describe("LLMGatewayPlugin", () => {
       yield* catalog.transform((catalog) => {
         catalog.update(Provider.ID.make("llmgateway"), (provider) => {
           provider.activation = "disabled"
-          provider.package = "@opencode/ai/providers/openai-compatible"
+          provider.package = "@Mackery6969/ai/providers/openai-compatible"
           provider.settings = { baseURL: "https://api.llmgateway.io/v1" }
         })
       })

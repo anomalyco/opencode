@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { selectTheme, selectThemeMode, supportsThemeMode, themeModes } from "@opencode/theme/tui"
+import { selectTheme, selectThemeMode, supportsThemeMode, themeModes } from "@Mackery6969/theme/tui"
 import { getOpenCodeTheme } from "../../../src/theme"
 
 test("selects complete light and dark themes independently", () => {

@@ -1,7 +1,7 @@
 import { Overlay, Portal, Root, Trigger } from "@kobalte/core/dialog"
 import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle, DialogTitleGroup } from "./dialog"
-import { Button } from "@opencode/ui/button"
-import { useDialog, useDialogLayer } from "@opencode/ui/context/dialog"
+import { Button } from "@Mackery6969/ui/button"
+import { useDialog, useDialogLayer } from "@Mackery6969/ui/context/dialog"
 import { onMount, type JSX, type ParentProps } from "solid-js"
 
 const docs = `### Overview

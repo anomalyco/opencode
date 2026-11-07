@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessageInfo } from "@Mackery6969/client/promise"
 import { messageExcerpts } from "./messages"
 
 test("voice reads cap each message at 400 characters and exclude non-conversational content", () => {

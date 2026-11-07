@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
-import { resolveThemeDocument } from "@opencode/theme/tui"
+import { resolveThemeDocument } from "@Mackery6969/theme/tui"
 import { ConfigProvider, useConfig, type Info } from "../../src/config"
 import { ThemeProvider, useTheme, useThemes } from "../../src/context/theme"
 import { getOpenCode2Theme, getOpenCodeTheme } from "../../src/theme"

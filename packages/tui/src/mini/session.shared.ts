@@ -1,4 +1,4 @@
-import type { SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageInfo, SessionMessageUser } from "@Mackery6969/client/promise"
 import { projectedPromptInput } from "../prompt/codec"
 import { requestOptions } from "./catalog.shared"
 import { promptCopy, promptSame } from "./prompt.shared"

@@ -1,4 +1,4 @@
-import { activeQuestionRequest, questionPendingDocument } from "@opencode/session-ui/storybook"
+import { activeQuestionRequest, questionPendingDocument } from "@Mackery6969/session-ui/storybook"
 import { SessionPreview } from "./story-model"
 import { SettingsExperimental } from "@/settings/experimental/experimental"
 

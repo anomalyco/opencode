@@ -1,4 +1,4 @@
-import type { FileDiffInfo } from "@opencode/client/promise"
+import type { FileDiffInfo } from "@Mackery6969/client/promise"
 
 /** How long a diff request may run before the review shows it failed, so a wedged server never loads forever. */
 export const REVIEW_DIFF_TIMEOUT_MS = 30_000

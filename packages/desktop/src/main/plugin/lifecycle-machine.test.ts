@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Scope } from "@opencode/plugin/gui/host"
+import { Scope } from "@Mackery6969/plugin/gui/host"
 import {
   createLifecycleState,
   selectHasPluginScope,

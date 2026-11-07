@@ -1,4 +1,4 @@
-import { Spring, type DurationOptions } from "@opencode/ui/motion"
+import { Spring, type DurationOptions } from "@Mackery6969/ui/motion"
 
 /** Faces present on mount rest immediately: a change this soon after mount swaps without a flight. */
 export const MORPH_MOUNT_GRACE_MS = 250

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { SessionSystemPrompt } from "@opencode/core/session/system-prompt"
+import { SessionSystemPrompt } from "@Mackery6969/core/session/system-prompt"
 
 test("renders the default system prompt instructions", () => {
   const prompt = SessionSystemPrompt.make(["edit", "read", "shell"])

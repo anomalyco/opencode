@@ -1,4 +1,4 @@
-import type { ConfigEntry } from "@opencode/client/promise"
+import type { ConfigEntry } from "@Mackery6969/client/promise"
 
 type ConfiguredServer = { name: string; disabled: boolean; extensions: readonly string[] }
 

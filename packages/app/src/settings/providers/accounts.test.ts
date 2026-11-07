@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { IntegrationInfo } from "@opencode/client/promise"
+import type { IntegrationInfo } from "@Mackery6969/client/promise"
 import { activeProviderAccount, providerAccounts } from "./accounts"
 
 const integration = (connections: IntegrationInfo["connections"]): IntegrationInfo => ({

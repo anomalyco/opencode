@@ -1,4 +1,4 @@
-import type { ModelRef, SessionMessageUser } from "@opencode/client/promise"
+import type { ModelRef, SessionMessageUser } from "@Mackery6969/client/promise"
 
 /** How long a connected stream may lag a settled send before the client syncs instead of waiting for its echo. */
 export const HANDOFF_ECHO_TIMEOUT_MS = 1_000

@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { Model } from "@opencode/core/model"
-import { Plugin } from "@opencode/core/plugin"
-import { PluginHost } from "@opencode/core/plugin/host"
-import { ProviderPlugins } from "@opencode/core/plugin/provider"
-import { OpenRouterPlugin } from "@opencode/core/plugin/provider/openrouter"
-import { Provider } from "@opencode/core/provider"
+import { Model } from "@Mackery6969/core/model"
+import { Plugin } from "@Mackery6969/core/plugin"
+import { PluginHost } from "@Mackery6969/core/plugin/host"
+import { ProviderPlugins } from "@Mackery6969/core/plugin/provider"
+import { OpenRouterPlugin } from "@Mackery6969/core/plugin/provider/openrouter"
+import { Provider } from "@Mackery6969/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -27,7 +27,7 @@ describe("OpenRouterPlugin", () => {
       const catalog = yield* Provider.Service
       yield* catalog.transform((catalog) => {
         catalog.update(Provider.ID.openrouter, (provider) => {
-          provider.package = "@opencode/ai/providers/openrouter"
+          provider.package = "@Mackery6969/ai/providers/openrouter"
           provider.headers = { Existing: "value" }
         })
         catalog.update(Provider.ID.make("nvidia"), () => {})
@@ -49,7 +49,7 @@ describe("OpenRouterPlugin", () => {
       const models = yield* Model.Service
       yield* catalog.transform((catalog) => {
         catalog.update(Provider.ID.openrouter, (provider) => {
-          provider.package = "@opencode/ai/providers/openrouter"
+          provider.package = "@Mackery6969/ai/providers/openrouter"
         })
         catalog.update(Provider.ID.openai, () => {})
         catalog.models.update(Provider.ID.openrouter, Model.ID.make("openai/gpt-5-chat"), () => {})

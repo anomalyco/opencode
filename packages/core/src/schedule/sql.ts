@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm"
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import type { Schema } from "effect"
-import type { Schedule } from "@opencode/schema/schedule"
+import type { Schedule } from "@Mackery6969/schema/schedule"
 import { Timestamps } from "../database/schema.sql.js"
 import type { SessionMessage } from "../session/message.js"
 import type { SessionSchema } from "../session/schema.js"

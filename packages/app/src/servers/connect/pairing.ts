@@ -1,4 +1,4 @@
-import { isUnauthorizedError, OpenCode } from "@opencode/client/promise"
+import { isUnauthorizedError, OpenCode } from "@Mackery6969/client/promise"
 import { Option, Schema } from "effect"
 import { checkServerHealth } from "@/runtime/server/health"
 import { normalizeServerUrl } from "@/runtime/server/registry"

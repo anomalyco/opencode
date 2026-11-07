@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ConfigMarkdown } from "@opencode/core/config/markdown"
+import { ConfigMarkdown } from "@Mackery6969/core/config/markdown"
 
 const invalidYaml = `---
 description: Use when the user needs to crawl pages. Keywords: crawl, scrape

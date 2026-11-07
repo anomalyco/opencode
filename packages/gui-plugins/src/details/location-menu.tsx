@@ -1,10 +1,10 @@
-import { DiffChanges } from "@opencode/ui/diff-changes"
-import { Icon } from "@opencode/ui/icon"
-import { Menu } from "@opencode/ui/menu"
+import { DiffChanges } from "@Mackery6969/ui/diff-changes"
+import { Icon } from "@Mackery6969/ui/icon"
+import { Menu } from "@Mackery6969/ui/menu"
 import { createMemo, Match, onCleanup, Show, Switch } from "solid-js"
-import { createKeyed, usePlugin, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
+import { createKeyed, usePlugin, type MountedSession, type SessionScreen } from "@Mackery6969/plugin/gui"
 import type Details from "./index"
-import { Changes } from "@opencode/plugin/gui/review"
+import { Changes } from "@Mackery6969/plugin/gui/review"
 import { ReviewDetails } from "../review/contract"
 
 export default function SessionLocationMenu(props: { session: MountedSession; screen: SessionScreen; shown: boolean }) {

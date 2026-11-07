@@ -1,19 +1,19 @@
 import { Popover } from "@kobalte/core/popover"
-import { Button } from "@opencode/ui/button"
-import { Icon, newIcons } from "@opencode/ui/icon"
-import type { IconName } from "@opencode/ui/icons/catalog"
-import { IconButton } from "@opencode/ui/icon-button"
-import { LineCommentEditor } from "@opencode/ui/line-comment"
-import { Loader } from "@opencode/ui/loader"
-import { Keybind } from "@opencode/ui/keybind"
-import { Menu } from "@opencode/ui/menu"
-import { MenuScroll } from "@opencode/ui/menu-scroll"
-import { showToast } from "@opencode/ui/toast"
-import { Tooltip } from "@opencode/ui/tooltip"
+import { Button } from "@Mackery6969/ui/button"
+import { Icon, newIcons } from "@Mackery6969/ui/icon"
+import type { IconName } from "@Mackery6969/ui/icons/catalog"
+import { IconButton } from "@Mackery6969/ui/icon-button"
+import { LineCommentEditor } from "@Mackery6969/ui/line-comment"
+import { Loader } from "@Mackery6969/ui/loader"
+import { Keybind } from "@Mackery6969/ui/keybind"
+import { Menu } from "@Mackery6969/ui/menu"
+import { MenuScroll } from "@Mackery6969/ui/menu-scroll"
+import { showToast } from "@Mackery6969/ui/toast"
+import { Tooltip } from "@Mackery6969/ui/tooltip"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMemo, createSignal, For, onCleanup, Show, untrack, type Accessor, type JSX } from "solid-js"
-import type { Browser } from "@opencode/plugin-browser/rpc"
+import type { Browser } from "@Mackery6969/plugin-browser/rpc"
 import {
   createKeyed,
   usePlugin,
@@ -21,7 +21,7 @@ import {
   type PanelTab,
   type MountedSession,
   type SessionScreen,
-} from "@opencode/plugin/gui"
+} from "@Mackery6969/plugin/gui"
 import { addressParts, connection, loopback } from "./address"
 import {
   ADDRESS_HINT_MAX_LENGTH,

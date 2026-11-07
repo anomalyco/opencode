@@ -22,7 +22,7 @@ import type {
   Page,
   SlotClaim,
   Route,
-} from "@opencode/plugin/tui/context"
+} from "@Mackery6969/plugin/tui/context"
 import { ThemeProvider, useThemes } from "../../../src/context/theme"
 import { emptyThemeSource, tmpdir } from "../../fixture/fixture"
 import { StorageProvider, useStorage } from "../../../src/context/storage"

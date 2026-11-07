@@ -2,8 +2,8 @@ export * as SharedCache from "./shared-cache.js"
 
 import { Cause, Clock, Context, Duration, Effect, Exit, Fiber, FiberSet, Layer, Schedule } from "effect"
 import { HttpClientError } from "effect/http"
-import { Hash } from "@opencode/util/hash"
-import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { Hash } from "@Mackery6969/util/hash"
+import { makeGlobalNode } from "@Mackery6969/util/effect/app-node"
 
 /** How long a result stays fresh, and how often callers refresh, unless a caller passes its own. */
 export const interval = Duration.minutes(10)
@@ -28,7 +28,7 @@ export interface Interface {
   readonly get: <A, E>(input: Input<A, E>) => Effect.Effect<A, E>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/SharedCache") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/SharedCache") {}
 
 /** A short, one-way stand-in for a secret in a cache key, so a secret changed in place loads again. */
 export const fingerprint = (secret: string) => Hash.sha256(secret).slice(0, 16)

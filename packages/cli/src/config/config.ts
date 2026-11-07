@@ -1,7 +1,7 @@
 export * as Config from "./config"
 
-import { Global } from "@opencode/util/global"
-import { Flock } from "@opencode/util/flock"
+import { Global } from "@Mackery6969/util/global"
+import { Flock } from "@Mackery6969/util/flock"
 import { Context, Effect, FileSystem, Layer, Option, Schema } from "effect"
 import { produce, type Draft } from "immer"
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser"
@@ -17,7 +17,7 @@ export interface Interface {
   readonly update: (update: (draft: Draft<Info>) => void) => Effect.Effect<Info, Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/cli/config/Config") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/cli/config/Config") {}
 
 const decode = Schema.decodeUnknownOption(Info)
 const decodeRecord = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.Unknown))

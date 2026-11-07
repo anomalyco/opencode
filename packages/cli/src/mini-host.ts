@@ -1,5 +1,5 @@
-import type { MiniFrontendInput } from "@opencode/tui/mini"
-import { createModelPreferenceRepository } from "@opencode/tui/model-preference"
+import type { MiniFrontendInput } from "@Mackery6969/tui/mini"
+import { createModelPreferenceRepository } from "@Mackery6969/tui/model-preference"
 import fs from "node:fs"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
@@ -151,7 +151,7 @@ export function createMiniHost(input: {
     },
     editor: {
       async open(options) {
-        const { openEditor } = await import("@opencode/tui/editor")
+        const { openEditor } = await import("@Mackery6969/tui/editor")
         return openEditor(options)
       },
     },

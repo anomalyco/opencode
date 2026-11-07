@@ -16,7 +16,7 @@ export function requireInteractive(message: string) {
 }
 
 export const openUrl = Effect.fn("cli.prompt.open-url")(function* (url: string) {
-  const browser = yield* Effect.promise(() => import("@opencode/util/open"))
+  const browser = yield* Effect.promise(() => import("@Mackery6969/util/open"))
   // Best effort: headless environments may lack a browser opener, and the caller already printed the URL.
   yield* Effect.tryPromise(() => browser.openUrl(url)).pipe(Effect.ignore)
 })

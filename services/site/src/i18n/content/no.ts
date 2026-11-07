@@ -145,7 +145,7 @@ export const content = {
       features: {
         "typescript-client": {
           title: "TypeScript-klient",
-          body: "Typede forespørsler og hendelser, med de samme verdiene som @opencode/client.",
+          body: "Typede forespørsler og hendelser, med de samme verdiene som @Mackery6969/client.",
         },
         "sessions-from-code": {
           title: "Sesjoner fra kode",
@@ -154,7 +154,7 @@ export const content = {
         "any-model": { title: "Alle modeller", body: "Bruker modellene OpenCode-oppsettet ditt har." },
         "npm-or-bun": {
           title: "npm eller bun",
-          body: "Installer med npm i @opencode/sdk eller bun add @opencode/sdk.",
+          body: "Installer med npm i @Mackery6969/sdk eller bun add @Mackery6969/sdk.",
         },
         "in-process-host": { title: "In-process-vert", body: "Kjører OpenCode i minnet, uten nettverkshopp." },
         "your-plugins": { title: "Dine plugins", body: "Send inn egne plugins når du oppretter in-process-verten." },

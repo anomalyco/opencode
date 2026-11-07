@@ -1,8 +1,8 @@
 import { Effect } from "effect"
 import path from "node:path"
-import { define } from "@opencode/plugin/effect/plugin"
-import { FSUtil } from "@opencode/util/fs-util"
-import { Global } from "@opencode/util/global"
+import { define } from "@Mackery6969/plugin/effect/plugin"
+import { FSUtil } from "@Mackery6969/util/fs-util"
+import { Global } from "@Mackery6969/util/global"
 import { Provider } from "../../provider.js"
 import { credentialSettings, metadataSettings } from "./credential-settings.js"
 
@@ -18,7 +18,7 @@ const CHAIN_ENV = [
 ]
 
 const isBedrock = (item: { readonly package: string }) =>
-  item.package.startsWith("@opencode/ai/providers/amazon-bedrock")
+  item.package.startsWith("@Mackery6969/ai/providers/amazon-bedrock")
 
 export const AmazonBedrockPlugin = define({
   id: "opencode.provider.amazon.bedrock",

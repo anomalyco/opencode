@@ -1,4 +1,4 @@
-import type { SessionMessageAssistant, SessionMessageShell } from "@opencode/client/promise"
+import type { SessionMessageAssistant, SessionMessageShell } from "@Mackery6969/client/promise"
 import { Match } from "effect"
 import { createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"

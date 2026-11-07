@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { PromptAttachment } from "@opencode/client/promise"
+import type { PromptAttachment } from "@Mackery6969/client/promise"
 import {
   ATTACHMENT_MEDIA_TIMEOUT_MS,
   DISPOSED_ATTACHMENT_MEDIA_EVENT,

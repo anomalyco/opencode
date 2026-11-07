@@ -1,5 +1,5 @@
 import { createRoot, createSignal, onCleanup, untrack, type Accessor } from "solid-js"
-import { createKeyed, type IpcClient } from "@opencode/plugin/gui"
+import { createKeyed, type IpcClient } from "@Mackery6969/plugin/gui"
 import type { Ssh, SshConfig, SshHttp, SshItem } from "./contract"
 import {
   createSshWindowState,

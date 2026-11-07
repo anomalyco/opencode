@@ -1,34 +1,34 @@
 import { expect, test } from "bun:test"
-import { EnvironmentDriver } from "@opencode/core/environment/driver"
-import { EnvironmentFiles } from "@opencode/core/environment/files"
-import { Location as CoreLocation } from "@opencode/core/location"
-import { WorkspaceDriver } from "@opencode/core/workspace/driver"
-import { SessionInbox as CoreSessionInbox } from "@opencode/core/session/inbox"
-import { SessionMessage as CoreSessionMessage } from "@opencode/core/session/message"
-import { Agent } from "@opencode/schema/agent"
-import { Config } from "@opencode/schema/config"
-import { Event } from "@opencode/schema/event"
-import { Location } from "@opencode/schema/location"
-import { Model } from "@opencode/schema/model"
-import { Project } from "@opencode/schema/project"
-import { Provider } from "@opencode/schema/provider"
-import { WebSearch } from "@opencode/schema/websearch"
-import { Session } from "@opencode/schema/session"
-import { SessionInbox } from "@opencode/schema/session-inbox"
-import { SessionMessage } from "@opencode/schema/session-message"
-import { Workspace } from "@opencode/schema/workspace"
-import { Worktree } from "@opencode/schema/worktree"
-import { Api } from "@opencode/server/api"
-import { ClientApi, clientNamespace, groupNames, promiseOmitEndpoints } from "@opencode/protocol/client"
-import { compile, emitPromise } from "@opencode/httpapi-codegen"
+import { EnvironmentDriver } from "@Mackery6969/core/environment/driver"
+import { EnvironmentFiles } from "@Mackery6969/core/environment/files"
+import { Location as CoreLocation } from "@Mackery6969/core/location"
+import { WorkspaceDriver } from "@Mackery6969/core/workspace/driver"
+import { SessionInbox as CoreSessionInbox } from "@Mackery6969/core/session/inbox"
+import { SessionMessage as CoreSessionMessage } from "@Mackery6969/core/session/message"
+import { Agent } from "@Mackery6969/schema/agent"
+import { Config } from "@Mackery6969/schema/config"
+import { Event } from "@Mackery6969/schema/event"
+import { Location } from "@Mackery6969/schema/location"
+import { Model } from "@Mackery6969/schema/model"
+import { Project } from "@Mackery6969/schema/project"
+import { Provider } from "@Mackery6969/schema/provider"
+import { WebSearch } from "@Mackery6969/schema/websearch"
+import { Session } from "@Mackery6969/schema/session"
+import { SessionInbox } from "@Mackery6969/schema/session-inbox"
+import { SessionMessage } from "@Mackery6969/schema/session-message"
+import { Workspace } from "@Mackery6969/schema/workspace"
+import { Worktree } from "@Mackery6969/schema/worktree"
+import { Api } from "@Mackery6969/server/api"
+import { ClientApi, clientNamespace, groupNames, promiseOmitEndpoints } from "@Mackery6969/protocol/client"
+import { compile, emitPromise } from "@Mackery6969/httpapi-codegen"
 
 const SDK = await import("../src/index")
 const SDKEffect = await import("../src/effect")
-const CoreAgent = await import("@opencode/core/agent")
-const CoreModel = await import("@opencode/core/model")
-const CoreProject = await import("@opencode/core/project")
-const CoreSession = await import("@opencode/core/session")
-const CoreWorktree = await import("@opencode/core/worktree")
+const CoreAgent = await import("@Mackery6969/core/agent")
+const CoreModel = await import("@Mackery6969/core/model")
+const CoreProject = await import("@Mackery6969/core/project")
+const CoreSession = await import("@Mackery6969/core/session")
+const CoreWorktree = await import("@Mackery6969/core/worktree")
 
 test("re-exports canonical contracts directly from Schema", () => {
   expect(SDK.Agent).toBe(Agent)
@@ -103,7 +103,7 @@ test("client and Server contracts generate identically", () => {
   expect(emitPromise(client)).toEqual(emitPromise(server))
 })
 
-test("re-exports workspace and environment driver contracts from @opencode/sdk/effect", () => {
+test("re-exports workspace and environment driver contracts from @Mackery6969/sdk/effect", () => {
   expect(SDKEffect.WorkspaceDriver).toBe(WorkspaceDriver)
   expect(SDKEffect.EnvironmentDriver).toBe(EnvironmentDriver)
   expect(SDKEffect.EnvironmentFiles).toBe(EnvironmentFiles)

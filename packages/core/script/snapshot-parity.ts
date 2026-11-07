@@ -15,7 +15,7 @@ import { AppNodeBuilder } from "../src/effect/app-node-builder"
 import { Location } from "../src/location"
 import { AbsolutePath, RelativePath } from "../src/schema"
 import { Snapshot } from "../src/snapshot"
-import { Global } from "@opencode/util/global"
+import { Global } from "@Mackery6969/util/global"
 
 const root = path.join(process.env.SNAPSHOT_BENCH_ROOT ?? os.tmpdir(), "opencode-snapshot-parity")
 

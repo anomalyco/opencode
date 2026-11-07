@@ -1,4 +1,4 @@
-import type { LayoutRoute, Locale } from "@opencode/app/desktop"
+import type { LayoutRoute, Locale } from "@Mackery6969/app/desktop"
 import type { ServerReadyData } from "../../shared/ipc-contract"
 import { localServerStartupError } from "./initialization"
 

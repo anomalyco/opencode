@@ -1,4 +1,4 @@
-import type { OpenCodeEvent } from "@opencode/client/promise"
+import type { OpenCodeEvent } from "@Mackery6969/client/promise"
 import type { Page } from "@playwright/test"
 
 /**

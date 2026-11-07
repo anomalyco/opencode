@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { Command, type Registry } from "@opencode/plugin/gui"
+import { Command, type Registry } from "@Mackery6969/plugin/gui"
 import { pluginDefinition } from "./module"
 
 // One `./gui-experimental` bundle for both processes, as a bundler emits it: requires hoisted to module scope,
 // including Electron and Node built-ins that only the main setup uses.
 const bundle = `
-const sdk = require("@opencode/plugin/gui")
-const mainSdk = require("@opencode/plugin/gui/main")
+const sdk = require("@Mackery6969/plugin/gui")
+const mainSdk = require("@Mackery6969/plugin/gui/main")
 const solid = require("solid-js")
 const electron = require("electron")
 const fs = require("node:fs")

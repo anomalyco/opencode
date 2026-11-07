@@ -1,9 +1,9 @@
 import { Clock, Effect, Equal, FiberHandle, Option, Schema, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ChildProcess } from "effect/process"
-import { define } from "@opencode/plugin/effect/plugin"
-import { Form } from "@opencode/schema/form"
-import { AppProcess } from "@opencode/util/process"
+import { define } from "@Mackery6969/plugin/effect/plugin"
+import { Form } from "@Mackery6969/schema/form"
+import { AppProcess } from "@Mackery6969/util/process"
 import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
@@ -498,7 +498,7 @@ function expandResourceName(baseURL: string, resourceName: string) {
 }
 
 function azureProvider(provider: { readonly id: string; readonly package: string }) {
-  return provider.id === Provider.ID.azure || provider.package.startsWith("@opencode/ai/providers/azure/")
+  return provider.id === Provider.ID.azure || provider.package.startsWith("@Mackery6969/ai/providers/azure/")
 }
 
 // API keys and Azure CLI sessions can list deployments; other sign-ins cannot.
@@ -559,7 +559,7 @@ function catalogModel<T>(models: ReadonlyMap<string, T>, deployment: Deployment)
 }
 
 function responsesWebSocketCapable(provider: Provider.Info) {
-  if (provider.package !== "@opencode/ai/providers/azure/responses") return false
+  if (provider.package !== "@Mackery6969/ai/providers/azure/responses") return false
   const settings = provider.settings
   if (settings?.useDeploymentBasedUrls === true) return false
   if (settings?.apiVersion !== undefined && settings.apiVersion !== "v1") return false

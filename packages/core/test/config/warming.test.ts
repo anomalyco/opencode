@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Duration, Schema } from "effect"
-import { Info } from "@opencode/schema/config"
+import { Info } from "@Mackery6969/schema/config"
 
 const decode = Schema.decodeUnknownSync(Info)
 

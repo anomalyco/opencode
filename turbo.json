@@ -23,20 +23,20 @@
     "typecheck:tsc": {
       "dependsOn": ["transit"]
     },
-    "@opencode/cli#typecheck:tsc": {
-      "dependsOn": ["transit", "@opencode/core#typecheck:tsc"]
+    "@Mackery6969/cli#typecheck:tsc": {
+      "dependsOn": ["transit", "@Mackery6969/core#typecheck:tsc"]
     },
-    "@opencode/sdk#typecheck:tsc": {
-      "dependsOn": ["transit", "@opencode/core#typecheck:tsc"]
+    "@Mackery6969/sdk#typecheck:tsc": {
+      "dependsOn": ["transit", "@Mackery6969/core#typecheck:tsc"]
     },
-    "@opencode/server#typecheck:tsc": {
-      "dependsOn": ["transit", "@opencode/core#typecheck:tsc"]
+    "@Mackery6969/server#typecheck:tsc": {
+      "dependsOn": ["transit", "@Mackery6969/core#typecheck:tsc"]
     },
-    "@opencode/simulation#typecheck:tsc": {
-      "dependsOn": ["transit", "@opencode/core#typecheck:tsc"]
+    "@Mackery6969/simulation#typecheck:tsc": {
+      "dependsOn": ["transit", "@Mackery6969/core#typecheck:tsc"]
     },
-    "@opencode/tui#typecheck:tsc": {
-      "dependsOn": ["transit", "@opencode/core#typecheck:tsc"]
+    "@Mackery6969/tui#typecheck:tsc": {
+      "dependsOn": ["transit", "@Mackery6969/core#typecheck:tsc"]
     },
     "test:components": {
       "outputs": [],
@@ -57,11 +57,11 @@
       "dependsOn": ["transit"],
       "outputs": []
     },
-    "@opencode/desktop#test": {
+    "@Mackery6969/desktop#test": {
       "outputs": [],
       "cache": false
     },
-    "@opencode/sdk#verify:package": {
+    "@Mackery6969/sdk#verify:package": {
       "outputs": []
     }
   }

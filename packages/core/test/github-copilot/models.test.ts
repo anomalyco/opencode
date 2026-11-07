@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test"
-import { CopilotModels } from "@opencode/core/github-copilot/models"
+import { CopilotModels } from "@Mackery6969/core/github-copilot/models"
 import { Effect } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/http"
-import { Model } from "@opencode/core/model"
-import { Provider } from "@opencode/core/provider"
+import { Model } from "@Mackery6969/core/model"
+import { Provider } from "@Mackery6969/core/provider"
 
 const run = <A, E>(effect: (http: HttpClient.HttpClient) => Effect.Effect<A, E>) =>
   Effect.runPromise(HttpClient.HttpClient.pipe(Effect.flatMap(effect), Effect.provide(FetchHttpClient.layer)))
@@ -110,7 +110,7 @@ test("defensively syncs advertised Copilot models", async () => {
       Model.VariantID.make("high"),
     ])
     expect(model?.capabilities.input).toEqual(["text", "image", "pdf"])
-    expect(models.get(Model.ID.make("claude-sonnet"))?.package).toBe("@opencode/ai/providers/anthropic")
+    expect(models.get(Model.ID.make("claude-sonnet"))?.package).toBe("@Mackery6969/ai/providers/anthropic")
     expect(models.get(Model.ID.make("claude-sonnet"))?.settings).toMatchObject({
       baseURL: `${server.url.origin}/v1`,
       endpoint: "messages",

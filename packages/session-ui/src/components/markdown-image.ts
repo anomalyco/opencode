@@ -1,5 +1,5 @@
-import { abort } from "@opencode/util/abort"
-import { isLineRangeHash, parsePathLineSuffix } from "@opencode/util/path"
+import { abort } from "@Mackery6969/util/abort"
+import { isLineRangeHash, parsePathLineSuffix } from "@Mackery6969/util/path"
 import type { ReadMarkdownImage } from "../context/markdown"
 import {
   INITIAL_MARKDOWN_IMAGES_STATE,

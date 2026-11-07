@@ -208,7 +208,7 @@ export const content = {
       features: {
         "typescript-client": {
           title: "Klient TypeScript",
-          body: "Typowane żądania i zdarzenia, z tymi samymi wartościami co @opencode/client.",
+          body: "Typowane żądania i zdarzenia, z tymi samymi wartościami co @Mackery6969/client.",
         },
         "sessions-from-code": {
           title: "Sesje z kodu",
@@ -220,7 +220,7 @@ export const content = {
         },
         "npm-or-bun": {
           title: "npm lub bun",
-          body: "Zainstaluj przez npm i @opencode/sdk lub bun add @opencode/sdk.",
+          body: "Zainstaluj przez npm i @Mackery6969/sdk lub bun add @Mackery6969/sdk.",
         },
         "in-process-host": {
           title: "Host w procesie",

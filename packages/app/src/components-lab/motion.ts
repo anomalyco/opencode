@@ -1,5 +1,5 @@
-import { motionGlobals, motionPresets, motionTuning, type MotionKnob } from "@opencode/ui/motion-tuning"
-import { applyMotion, motionField } from "@opencode/ui/motion-tuning-fields"
+import { motionGlobals, motionPresets, motionTuning, type MotionKnob } from "@Mackery6969/ui/motion-tuning"
+import { applyMotion, motionField } from "@Mackery6969/ui/motion-tuning-fields"
 import { action, type Field, type Values } from "knobs"
 
 /**

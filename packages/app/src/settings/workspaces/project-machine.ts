@@ -1,5 +1,5 @@
-import type { ProjectUpdateInput } from "@opencode/client/promise"
-import { getFilename } from "@opencode/util/path"
+import type { ProjectUpdateInput } from "@Mackery6969/client/promise"
+import { getFilename } from "@Mackery6969/util/path"
 
 /** How long one save may take before its request is aborted and the queue moves on. */
 export const PROJECT_SAVE_TIMEOUT_MS = 15_000

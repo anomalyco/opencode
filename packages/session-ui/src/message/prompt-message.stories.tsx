@@ -1,6 +1,6 @@
 import { createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageUser } from "@Mackery6969/client/promise"
 import type { SessionUserActions } from "../actions"
 import { CurrentUserMessageDisplay } from "./message-content"
 import { CurrentSessionProviders } from "../storybook/current-session-story"

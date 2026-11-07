@@ -1,4 +1,4 @@
-import type { EnableState } from "@opencode/plugin/gui/host"
+import type { EnableState } from "@Mackery6969/plugin/gui/host"
 
 export const IpcTransportPort = "desktop-rpc-port"
 

@@ -1,4 +1,4 @@
-import type { Browser } from "@opencode/plugin-browser/rpc"
+import type { Browser } from "@Mackery6969/plugin-browser/rpc"
 
 /** How long a registration waits for main's answer, above main's own 15 s attach timeout. */
 export const REGISTER_TIMEOUT_MS = 20_000

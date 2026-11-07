@@ -1,4 +1,4 @@
-import { Plugin, Skill } from "@opencode/plugin"
+import { Plugin, Skill } from "@Mackery6969/plugin"
 import { readFile } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 import matter from "gray-matter"

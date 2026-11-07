@@ -1,4 +1,4 @@
-import type { LocationRef } from "@opencode/client/promise"
+import type { LocationRef } from "@Mackery6969/client/promise"
 
 export function newSessionLocation(
   mode: "launch" | "inherit",

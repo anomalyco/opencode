@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { SessionMessage } from "@opencode/schema/session-message"
+import { SessionMessage } from "@Mackery6969/schema/session-message"
 import { claimRetry, retryFingerprint, type ComposerRetryPayload } from "./retry"
 import { contextItemKey, durableNote, type ContextItem, type ImageAttachmentPart } from "./schema"
 

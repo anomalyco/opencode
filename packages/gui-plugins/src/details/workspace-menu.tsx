@@ -1,11 +1,11 @@
-import { Button } from "@opencode/ui/button"
-import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
-import { ErrorDetails } from "@opencode/ui/error-details"
-import { Icon } from "@opencode/ui/icon"
-import { Loader } from "@opencode/ui/loader"
-import { Menu } from "@opencode/ui/menu"
-import { MenuScroll } from "@opencode/ui/menu-scroll"
-import { getFilename } from "@opencode/util/path"
+import { Button } from "@Mackery6969/ui/button"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitleGroup } from "@Mackery6969/ui/dialog"
+import { ErrorDetails } from "@Mackery6969/ui/error-details"
+import { Icon } from "@Mackery6969/ui/icon"
+import { Loader } from "@Mackery6969/ui/loader"
+import { Menu } from "@Mackery6969/ui/menu"
+import { MenuScroll } from "@Mackery6969/ui/menu-scroll"
+import { getFilename } from "@Mackery6969/util/path"
 import {
   createMemo,
   createRoot,
@@ -24,7 +24,7 @@ import {
   type MountedSession,
   type Project,
   type ServerRef,
-} from "@opencode/plugin/gui"
+} from "@Mackery6969/plugin/gui"
 import {
   createWorkspaceMoveState,
   transitionWorkspaceMove,

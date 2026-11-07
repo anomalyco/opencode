@@ -9,7 +9,7 @@ import type {
   SessionMessageInfo,
   SessionMessageUser,
   SessionStatus,
-} from "@opencode/client/promise"
+} from "@Mackery6969/client/promise"
 import type { SessionDocument } from "../document"
 import type { SessionUserPresentation } from "../timeline/session-timeline"
 

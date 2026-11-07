@@ -1,4 +1,4 @@
-import { convertToOpenAICompatibleChatMessages } from "@opencode/core/github-copilot/chat/convert-to-openai-compatible-chat-messages"
+import { convertToOpenAICompatibleChatMessages } from "@Mackery6969/core/github-copilot/chat/convert-to-openai-compatible-chat-messages"
 import { describe, test, expect } from "bun:test"
 
 describe("system messages", () => {

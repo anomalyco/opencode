@@ -3,9 +3,9 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
-import { Global } from "@opencode/util/global"
-import { Npm } from "@opencode/util/npm"
+import { AppNodeBuilder } from "@Mackery6969/core/effect/app-node-builder"
+import { Global } from "@Mackery6969/util/global"
+import { Npm } from "@Mackery6969/util/npm"
 import { tmpdir } from "./fixture/tmpdir"
 
 const win = process.platform === "win32"
@@ -113,8 +113,8 @@ async function createRegistryFixture(directory: string) {
 
 describe("Npm.sanitize", () => {
   test("keeps normal scoped package specs unchanged", () => {
-    expect(Npm.sanitize("@opencode/acme")).toBe("@opencode/acme")
-    expect(Npm.sanitize("@opencode/acme@1.0.0")).toBe("@opencode/acme@1.0.0")
+    expect(Npm.sanitize("@Mackery6969/acme")).toBe("@Mackery6969/acme")
+    expect(Npm.sanitize("@Mackery6969/acme@1.0.0")).toBe("@Mackery6969/acme@1.0.0")
     expect(Npm.sanitize("prettier")).toBe("prettier")
   })
 
@@ -155,9 +155,9 @@ describe("Npm.isInstallablePackage", () => {
 
 describe("Npm.cacheKey", () => {
   test("canonicalizes registry keys and hashes Git specs", async () => {
-    expect(await Npm.cacheKey("@opencode/acme@1.0.0")).toBe(Npm.sanitize("@opencode/acme@1.0.0"))
+    expect(await Npm.cacheKey("@Mackery6969/acme@1.0.0")).toBe(Npm.sanitize("@Mackery6969/acme@1.0.0"))
     expect(await Npm.cacheKey("plugin")).toBe(Npm.sanitize("plugin@latest"))
-    expect(await Npm.cacheKey("@opencode/acme")).toBe(Npm.sanitize("@opencode/acme@latest"))
+    expect(await Npm.cacheKey("@Mackery6969/acme")).toBe(Npm.sanitize("@Mackery6969/acme@latest"))
     const spec = "git+ssh://git@github.com/acme/plugin.git#main"
     expect(await Npm.cacheKey(spec)).toMatch(/^git-plugin-[a-f0-9]{12}$/)
     expect(await Npm.cacheKey(spec)).toBe(await Npm.cacheKey(spec))

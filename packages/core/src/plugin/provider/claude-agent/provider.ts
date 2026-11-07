@@ -1,7 +1,7 @@
 export * as ClaudeProvider from "./provider.js"
 
 import type { AccountInfo } from "@anthropic-ai/claude-agent-sdk"
-import type { Context } from "@opencode/plugin/effect/plugin"
+import type { Context } from "@Mackery6969/plugin/effect/plugin"
 import { Effect, Option, Schema, Stream, SubscriptionRef } from "effect"
 import { Model } from "../../../model.js"
 import { Provider } from "../../../provider.js"
@@ -11,7 +11,7 @@ import { ClaudeQueryOptions } from "./claude/query-options.js"
 import type { ClaudeStatus } from "./claude/status.js"
 
 export const ID = Provider.ID.claudeAgent
-export const PACKAGE = "@opencode/claude-agent"
+export const PACKAGE = "@Mackery6969/claude-agent"
 
 // The model list we keep between starts, so opencode can list models without running `claude`
 const CatalogModel = Schema.Struct({

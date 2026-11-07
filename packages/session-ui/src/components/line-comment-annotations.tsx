@@ -1,7 +1,7 @@
 import { type DiffLineAnnotation, type SelectedLineRange } from "@pierre/diffs"
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack, type Accessor, type JSX } from "solid-js"
 import { render as renderSolid } from "solid-js/web"
-import { useI18n } from "@opencode/ui/context/i18n"
+import { useI18n } from "@Mackery6969/ui/context/i18n"
 import { createHoverComment, type HoverComment, type HoverCommentLine } from "../pierre/comment-hover"
 import { cloneSelectedLineRange, formatSelectedLineLabel, lineInSelectedRange } from "../pierre/selection-bridge"
 import { LineComment, LineCommentEditor, type LineCommentEditorProps } from "./line-comment"

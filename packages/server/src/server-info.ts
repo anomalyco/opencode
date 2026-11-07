@@ -9,7 +9,7 @@ export class Service extends Context.Service<
     readonly app: NonNullable<ServerOptions["app"]>
     readonly paths: { readonly tmp: string }
   }
->()("@opencode/server/ServerInfo") {}
+>()("@Mackery6969/server/ServerInfo") {}
 
 export function layer(urls: () => ReadonlyArray<string>, tmp: string, app: ServerOptions["app"] = {}) {
   return Layer.succeed(Service, Service.of({ urls, app, paths: { tmp } }))

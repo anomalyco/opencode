@@ -1,16 +1,16 @@
-import type { PluginInfo } from "@opencode/client"
-import { Button } from "@opencode/ui/button"
-import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
-import { ErrorDetails } from "@opencode/ui/error-details"
-import { Icon } from "@opencode/ui/icon"
-import { Loader } from "@opencode/ui/loader"
-import { createMcpSignIn, type McpSignInFailure } from "@opencode/ui/mcp-sign-in"
-import { MenuScroll } from "@opencode/ui/menu-scroll"
-import { Switch } from "@opencode/ui/switch"
-import { TextInput } from "@opencode/ui/text-input"
-import { showToast } from "@opencode/ui/toast"
-import { Tooltip } from "@opencode/ui/tooltip"
-import { TruncatedText } from "@opencode/ui/truncated-text"
+import type { PluginInfo } from "@Mackery6969/client"
+import { Button } from "@Mackery6969/ui/button"
+import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@Mackery6969/ui/dialog"
+import { ErrorDetails } from "@Mackery6969/ui/error-details"
+import { Icon } from "@Mackery6969/ui/icon"
+import { Loader } from "@Mackery6969/ui/loader"
+import { createMcpSignIn, type McpSignInFailure } from "@Mackery6969/ui/mcp-sign-in"
+import { MenuScroll } from "@Mackery6969/ui/menu-scroll"
+import { Switch } from "@Mackery6969/ui/switch"
+import { TextInput } from "@Mackery6969/ui/text-input"
+import { showToast } from "@Mackery6969/ui/toast"
+import { Tooltip } from "@Mackery6969/ui/tooltip"
+import { TruncatedText } from "@Mackery6969/ui/truncated-text"
 import {
   children,
   createMemo,
@@ -27,9 +27,9 @@ import {
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createKeyed, useDrawer, usePlugin, type MountedSession, type ServerRef } from "@opencode/plugin/gui"
+import { createKeyed, useDrawer, usePlugin, type MountedSession, type ServerRef } from "@Mackery6969/plugin/gui"
 import { globalConfigDirectory, serviceConfigFile } from "./config-file"
-import { builtinContext } from "@opencode/plugin/gui/builtin"
+import { builtinContext } from "@Mackery6969/plugin/gui/builtin"
 import { createFlyoutMotion } from "./flyout-motion"
 import {
   configActionView,

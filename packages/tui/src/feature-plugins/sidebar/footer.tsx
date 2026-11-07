@@ -1,4 +1,4 @@
-import { Plugin } from "@opencode/plugin/tui"
+import { Plugin } from "@Mackery6969/plugin/tui"
 import { createMemo, Show } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import { FilePath } from "../../ui/file-path"

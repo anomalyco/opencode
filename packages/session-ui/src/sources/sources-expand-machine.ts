@@ -1,4 +1,4 @@
-import type { DurationOptions } from "@opencode/ui/motion"
+import type { DurationOptions } from "@Mackery6969/ui/motion"
 
 /** Reduced motion trades the height for a short fade. */
 export const SOURCES_FADE_CURVE: DurationOptions = Object.freeze({ duration: 0.15, bounce: 0 })

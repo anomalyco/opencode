@@ -1,4 +1,4 @@
-import type { IntegrationInfo } from "@opencode/client/promise"
+import type { IntegrationInfo } from "@Mackery6969/client/promise"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import type { ParentProps } from "solid-js"
 import { LocalProvider } from "@/providers/models/selection"

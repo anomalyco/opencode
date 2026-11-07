@@ -1,4 +1,4 @@
-import { Teardown } from "@opencode/util/teardown"
+import { Teardown } from "@Mackery6969/util/teardown"
 import { Duration, Effect } from "effect"
 
 /** After SIGTERM or SIGINT, teardown gets this long before the process reports what it is stuck on and exits. */

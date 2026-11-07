@@ -1,7 +1,7 @@
-import { Job } from "@opencode/core/job"
-import { Session } from "@opencode/core/session"
-import { SessionBackground } from "@opencode/core/session/background"
-import type { ListQuery } from "@opencode/protocol/groups/job"
+import { Job } from "@Mackery6969/core/job"
+import { Session } from "@Mackery6969/core/session"
+import { SessionBackground } from "@Mackery6969/core/session/background"
+import type { ListQuery } from "@Mackery6969/protocol/groups/job"
 import { Effect, Option } from "effect"
 import { missingSession } from "./session-error"
 

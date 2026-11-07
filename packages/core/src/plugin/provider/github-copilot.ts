@@ -1,6 +1,6 @@
-import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
-import type { SessionRequestKind, SessionTitle } from "@opencode/plugin/effect/session"
-import { isRecord } from "@opencode/util/record"
+import type { IntegrationOAuthMethodRegistration } from "@Mackery6969/plugin/effect/integration"
+import type { SessionRequestKind, SessionTitle } from "@Mackery6969/plugin/effect/session"
+import { isRecord } from "@Mackery6969/util/record"
 import { Effect, Option, Schema } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/http"
 import { IntegrationConnection } from "../../integration/connection.js"
@@ -10,7 +10,7 @@ import { App } from "../../app.js"
 import { Integration } from "../../integration.js"
 import { Model } from "../../model.js"
 import { Agent } from "../../agent.js"
-import { define } from "@opencode/plugin/effect/plugin"
+import { define } from "@Mackery6969/plugin/effect/plugin"
 import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
 import { SharedCache } from "../../shared-cache.js"
@@ -227,12 +227,12 @@ export const GithubCopilotPlugin = define({
       // else goes through the bundled Copilot SDK's model ID fallback.
       for (const id of item.models.keys()) {
         evt.models.update(item.provider.id, id, (model) => {
-          if (model.package === "@opencode/ai/providers/anthropic") {
+          if (model.package === "@Mackery6969/ai/providers/anthropic") {
             if (loaded.baseURL)
               model.settings = Provider.mergeOverlay(model.settings, { baseURL: `${loaded.baseURL}/v1` })
             return
           }
-          const responses = model.package === "@opencode/ai/providers/openai"
+          const responses = model.package === "@Mackery6969/ai/providers/openai"
           model.package = Provider.aisdk("@ai-sdk/github-copilot")
           model.settings = Provider.mergeOverlay(model.settings, {
             ...(loaded.baseURL ? { baseURL: loaded.baseURL } : {}),

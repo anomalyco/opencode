@@ -1,8 +1,8 @@
 /** @jsxImportSource @opentui/solid */
-import type { FileDiffInfo, LocationRef } from "@opencode/client"
-import type { Vcs } from "@opencode/schema/vcs"
-import { Plugin } from "@opencode/plugin/tui"
-import type { KeymapCommand, PanelInput, Route } from "@opencode/plugin/tui/context"
+import type { FileDiffInfo, LocationRef } from "@Mackery6969/client"
+import type { Vcs } from "@Mackery6969/schema/vcs"
+import { Plugin } from "@Mackery6969/plugin/tui"
+import type { KeymapCommand, PanelInput, Route } from "@Mackery6969/plugin/tui/context"
 import {
   MouseButton,
   TextAttributes,

@@ -8,7 +8,7 @@ hooks, integrations, commands, and agents. See the [Overview](/build/plugins) fo
 loaded, and published.
 
 ```ts title=".opencode/plugins/example/index.ts"
-import { Plugin } from "@opencode/plugin"
+import { Plugin } from "@Mackery6969/plugin"
 
 export default Plugin.define({
   id: "example",
@@ -23,7 +23,7 @@ export default Plugin.define({
 `setup` runs when the plugin loads. It may return a cleanup function that runs when the plugin unloads.
 
 ```ts
-import { Plugin } from "@opencode/plugin"
+import { Plugin } from "@Mackery6969/plugin"
 
 export default Plugin.define({
   id: "example",
@@ -80,7 +80,7 @@ Pass plugin options with the object form in `opencode.json(c)`.
 Read those values from `ctx.options` during `setup`.
 
 ```ts title="plugins/company/index.ts"
-import { Plugin } from "@opencode/plugin"
+import { Plugin } from "@Mackery6969/plugin"
 
 export default Plugin.define({
   id: "company",
@@ -101,7 +101,7 @@ completed.
 Sources contribute providers and immutable model definitions through `ctx.provider.transform`.
 
 ```ts title="plugins/models/index.ts"
-import { Model, Plugin, Provider } from "@opencode/plugin"
+import { Model, Plugin, Provider } from "@Mackery6969/plugin"
 
 export default Plugin.define({
   id: "company.models",
@@ -114,7 +114,7 @@ export default Plugin.define({
           ...Provider.Info.empty(providerID),
           name: "Acme",
           activation: "enabled",
-          package: "@opencode/ai/providers/openai-compatible",
+          package: "@Mackery6969/ai/providers/openai-compatible",
           settings: { baseURL: "http://127.0.0.1:8000/v1" },
         },
         models,
@@ -135,7 +135,7 @@ every model transform in order. A model policy can inspect the whole candidate c
 sources.
 
 ```ts title="plugins/model-budget/index.ts"
-import { Plugin } from "@opencode/plugin"
+import { Plugin } from "@Mackery6969/plugin"
 
 export default Plugin.define({
   id: "company.model-budget",
@@ -157,7 +157,7 @@ Captured inputs are not watched automatically. Load external data before the syn
 `{ info: Provider.Info, models: readonly Model.Info[] }` entries.
 
 ```ts title="plugins/models/index.ts"
-import { Plugin } from "@opencode/plugin"
+import { Plugin } from "@Mackery6969/plugin"
 
 export default Plugin.define({
   id: "company.models",
@@ -879,7 +879,7 @@ Register a transform to inspect, add, update, or remove skills. `get(id)` return
 when the skill is absent.
 
 ```ts
-import { Skill } from "@opencode/plugin"
+import { Skill } from "@Mackery6969/plugin"
 
 await ctx.skill.transform((editor) => {
   const skills = editor.list()
@@ -1144,7 +1144,7 @@ Register a local worktree strategy using the normal plugin lifecycle. The implem
 option validation and the backend's `create`, `remove`, and `list` operations.
 
 ```ts title="plugins/worktrees/index.ts"
-import { Plugin } from "@opencode/plugin"
+import { Plugin } from "@Mackery6969/plugin"
 import { makeStrategy } from "./strategy"
 
 export default Plugin.define({
@@ -1210,7 +1210,7 @@ await ctx.worktree.remove({
 ```
 
 Missing owners fail removal rather than falling back to Git. A strategy can throw `new Worktree.OperationError({
-message: "Uncommitted changes", forceRequired: true })`, importing `Worktree` from `@opencode/plugin`, to request
+message: "Uncommitted changes", forceRequired: true })`, importing `Worktree` from `@Mackery6969/plugin`, to request
 force confirmation without depending on Core or Git errors.
 
 Refresh loads canonical configuration and asks all available strategies to find worktrees across known checkout roots.
@@ -1583,7 +1583,7 @@ Retry decisions follow these rules:
 #### Session reference
 
 ```ts
-import type { SessionPrompt } from "@opencode/plugin/promise/session"
+import type { SessionPrompt } from "@Mackery6969/plugin/promise/session"
 
 interface SessionHooks {
   prompt: SessionPrompt
@@ -1785,7 +1785,7 @@ A plugin can support V1 and V2 from the same package entrypoint. Default export
 one object with a V1 `server()` function and a V2 `setup()` function:
 
 ```ts title="src/index.ts"
-import { Plugin } from "@opencode/plugin"
+import { Plugin } from "@Mackery6969/plugin"
 
 export default {
   ...Plugin.define({

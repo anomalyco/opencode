@@ -1,5 +1,5 @@
 import { Show } from "solid-js"
-import type { FormInfo } from "@opencode/client/promise"
+import type { FormInfo } from "@Mackery6969/client/promise"
 import { useSettings } from "@/settings/model"
 import { SessionQuestionDockClassic } from "./session-question-dock-classic"
 import { SessionQuestionDockExperimental } from "./session-question-dock-experimental"

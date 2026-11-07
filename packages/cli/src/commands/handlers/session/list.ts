@@ -1,5 +1,5 @@
-import { OpenCode, type SessionInfo } from "@opencode/client"
-import { Service } from "@opencode/client/effect/service"
+import { OpenCode, type SessionInfo } from "@Mackery6969/client"
+import { Service } from "@Mackery6969/client/effect/service"
 import { Effect, Option, Stream } from "effect"
 import { EOL } from "node:os"
 import { Commands } from "../../commands"
@@ -56,8 +56,8 @@ const handler = Effect.fn("cli.session.list")(function* (
     return
   }
 
-  const { AppProcess } = yield* Effect.promise(() => import("@opencode/util/process"))
-  const { LayerNode } = yield* Effect.promise(() => import("@opencode/util/effect/layer-node"))
+  const { AppProcess } = yield* Effect.promise(() => import("@Mackery6969/util/process"))
+  const { LayerNode } = yield* Effect.promise(() => import("@Mackery6969/util/effect/layer-node"))
   const { ChildProcess } = yield* Effect.promise(() => import("effect/process"))
   yield* Effect.gen(function* () {
     const processService = yield* AppProcess.Service

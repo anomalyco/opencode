@@ -1,4 +1,4 @@
-import type { PromptAttachment } from "@opencode/client/promise"
+import type { PromptAttachment } from "@Mackery6969/client/promise"
 
 /** A media read that never settles shows the failed tile after this long, as file and markdown images do. */
 export const ATTACHMENT_MEDIA_TIMEOUT_MS = 15_000

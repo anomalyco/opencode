@@ -7,13 +7,13 @@
  */
 import path from "path"
 import { Clock, Context, Duration, Effect, Layer, Option, Schema } from "effect"
-import { FSUtil } from "@opencode/util/fs-util"
+import { FSUtil } from "@Mackery6969/util/fs-util"
 import { Git } from "./git.js"
-import { Global } from "@opencode/util/global"
+import { Global } from "@Mackery6969/util/global"
 import { Repository } from "./repository.js"
 import { AbsolutePath } from "./schema.js"
-import { makeGlobalNode } from "@opencode/util/effect/app-node"
-import { EffectFlock } from "@opencode/util/effect-flock"
+import { makeGlobalNode } from "@Mackery6969/util/effect/app-node"
+import { EffectFlock } from "@Mackery6969/util/effect-flock"
 import { KV } from "./kv.js"
 
 const Refresh = Schema.Struct({
@@ -91,7 +91,7 @@ export interface Interface {
   readonly ensure: (input: EnsureInput) => Effect.Effect<Result, Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/RepositoryCache") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/RepositoryCache") {}
 
 export const isError: (error: unknown) => error is Error = Schema.is(
   Schema.Union([

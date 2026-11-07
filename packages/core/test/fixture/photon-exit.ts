@@ -1,6 +1,6 @@
 import photon from "@silvia-odwyer/photon-node"
 import { Effect } from "effect"
-import { Photon } from "@opencode/core/image/photon"
+import { Photon } from "@Mackery6969/core/image/photon"
 
 // Runs one photon worker job, then lets the process exit on its own. The test
 // times how long that takes, so nothing here may hold the event loop open.

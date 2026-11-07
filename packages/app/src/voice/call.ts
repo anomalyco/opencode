@@ -1,4 +1,4 @@
-import type { SessionInfo } from "@opencode/client/promise"
+import type { SessionInfo } from "@Mackery6969/client/promise"
 import type { ServerCtx } from "@/runtime/server/runtime"
 import type { Platform } from "@/runtime/platform/platform"
 import { TranscriptTail } from "./tail"

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, jest, test } from "bun:test"
-import type { OpenCodeClient } from "@opencode/client/promise"
+import type { OpenCodeClient } from "@Mackery6969/client/promise"
 import { CLOSE_TIMEOUT, DISCONNECT_GRACE, JOIN_TIMEOUT } from "./transport-machine"
 import { VoiceFailure, VoiceTransport } from "./transport"
 

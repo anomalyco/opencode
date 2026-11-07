@@ -1,4 +1,4 @@
-import type { SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessageInfo } from "@Mackery6969/client/promise"
 
 // A first sync that never settles reveals the timeline instead of hiding it forever.
 export const TIMELINE_SYNC_TIMEOUT_MS = 30_000

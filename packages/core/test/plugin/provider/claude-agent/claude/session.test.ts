@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { ClaudeQueryOptions } from "@opencode/core/plugin/provider/claude-agent/claude/query-options"
-import { ClaudeSession } from "@opencode/core/plugin/provider/claude-agent/claude/session"
+import { ClaudeQueryOptions } from "@Mackery6969/core/plugin/provider/claude-agent/claude/query-options"
+import { ClaudeSession } from "@Mackery6969/core/plugin/provider/claude-agent/claude/session"
 import { FakeClaude } from "../lib/fake-claude"
 import { FakeIO } from "../lib/fake-io"
 

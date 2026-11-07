@@ -1,5 +1,5 @@
-import { Integration } from "@opencode/core/integration"
-import { Plugin } from "@opencode/core/plugin"
+import { Integration } from "@Mackery6969/core/integration"
+import { Plugin } from "@Mackery6969/core/plugin"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Api } from "../api"
@@ -8,11 +8,11 @@ import {
   IntegrationMethodNotFoundError,
   IntegrationNotFoundError,
   InvalidRequestError,
-} from "@opencode/protocol/errors"
+} from "@Mackery6969/protocol/errors"
 import { response } from "../location"
-import { WellKnown } from "@opencode/core/wellknown"
-import { Config } from "@opencode/core/config"
-import { ManagedPolicy } from "@opencode/core/managed-policy"
+import { WellKnown } from "@Mackery6969/core/wellknown"
+import { Config } from "@Mackery6969/core/config"
+import { ManagedPolicy } from "@Mackery6969/core/managed-policy"
 
 const statements = Effect.fnUntraced(function* () {
   const config = yield* Config.Service

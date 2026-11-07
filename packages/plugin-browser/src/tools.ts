@@ -1,7 +1,7 @@
 export * as BrowserTools from "./tools.js"
 
-import type { Context } from "@opencode/plugin/effect/plugin"
-import { Tool } from "@opencode/schema/tool"
+import type { Context } from "@Mackery6969/69/plugin/effect/plugin"
+import { Tool } from "@Mackery6969/69/schema/tool"
 import { Effect, Result, Schema } from "effect"
 import { Base64 } from "effect/encoding"
 import type { BrowserConnection } from "./connection.js"

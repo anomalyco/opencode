@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test"
-import { dict } from "@opencode/ui/i18n/en"
+import { dict } from "@Mackery6969/ui/i18n/en"
 
 const t = (key: keyof typeof dict, params: Record<string, string>) =>
   dict[key].replace(/{{(\w+)}}/g, (_, name: string) => params[name])

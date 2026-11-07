@@ -7,7 +7,7 @@ import type {
   LanguageModelV3ToolResultPart,
 } from "@ai-sdk/provider"
 import type { CallToolResult } from "@modelcontextprotocol/server"
-import { Provider } from "@opencode/schema/provider"
+import { Provider } from "@Mackery6969/schema/provider"
 import { ConvertToClaudeMessage } from "../language-model/convert-to-claude-message.js"
 import { Fingerprint } from "../sync/fingerprint.js"
 

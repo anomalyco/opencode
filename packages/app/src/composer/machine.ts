@@ -1,4 +1,4 @@
-import type { SessionMessage } from "@opencode/schema/session-message"
+import type { SessionMessage } from "@Mackery6969/schema/session-message"
 import type { ComposerDelivery, ComposerSelection, ComposerSession } from "./adapter"
 import { parseSlashCommand } from "./client-slash-command"
 import type { PromptHistoryComment } from "./history/entry"

@@ -3,13 +3,13 @@ import {
   activeQuestionRequest,
   CurrentSessionProviders,
   editThenTestDocument,
-} from "@opencode/session-ui/storybook"
-import { SessionTimeline } from "@opencode/session-ui/timeline"
-import { motionTuning } from "@opencode/ui/motion-tuning"
+} from "@Mackery6969/session-ui/storybook"
+import { SessionTimeline } from "@Mackery6969/session-ui/timeline"
+import { motionTuning } from "@Mackery6969/ui/motion-tuning"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { createEffect, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { FormInfo } from "@opencode/client/promise"
+import type { FormInfo } from "@Mackery6969/client/promise"
 import { Composer } from "@/composer/composer"
 import { createPromptController } from "@/session/story-model"
 import type { WebSearchRequestModel } from "@/session/requests/websearch"

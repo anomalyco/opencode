@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
-import { Location } from "@opencode/core/location"
-import { Project } from "@opencode/core/project"
-import { AbsolutePath } from "@opencode/core/schema"
-import { Workspace } from "@opencode/core/workspace"
+import { AppNodeBuilder } from "@Mackery6969/core/effect/app-node-builder"
+import { Location } from "@Mackery6969/core/location"
+import { Project } from "@Mackery6969/core/project"
+import { AbsolutePath } from "@Mackery6969/core/schema"
+import { Workspace } from "@Mackery6969/core/workspace"
 import { testEffect } from "./lib/effect"
 
 const workspaceID = Workspace.ID.make("wrk_test")

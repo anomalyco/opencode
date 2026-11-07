@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Mime } from "@opencode/core/mime"
+import { Mime } from "@Mackery6969/core/mime"
 
 const ftyp = (hex: string) => Uint8Array.from(Buffer.from(hex, "hex"))
 

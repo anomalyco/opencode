@@ -3,7 +3,7 @@
 // their first await, so a dialog or a cancellation that arrives while one still inspects its target interrupts it too.
 // Each dialog event moves `revision`, and handling a dialog closes only the revision it answered: a dialog the page
 // opens right after stays open.
-import type { Browser } from "@opencode/plugin-browser/rpc"
+import type { Browser } from "@Mackery6969/plugin-browser/rpc"
 
 export type DialogInfo = { readonly type: string; readonly message: string; readonly defaultValue: string }
 

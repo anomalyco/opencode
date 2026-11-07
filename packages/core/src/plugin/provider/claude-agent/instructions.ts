@@ -1,7 +1,7 @@
 export * as ClaudeInstructions from "./instructions.js"
 
-import type { SystemPart } from "@opencode/ai/effect"
-import type { Context } from "@opencode/plugin/effect/plugin"
+import type { SystemPart } from "@Mackery6969/ai/effect"
+import type { Context } from "@Mackery6969/plugin/effect/plugin"
 import { Effect, Option, Schema } from "effect"
 import { ClaudeSystemPrompt } from "./language-model/system-prompt.js"
 import { ClaudeProvider } from "./provider.js"

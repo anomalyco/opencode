@@ -1,8 +1,8 @@
 export * as SubagentJob from "./subagent-job.js"
 
 import { Context, Effect, Layer, Scope } from "effect"
-import { Node } from "@opencode/util/effect/app-node"
-import type { LayerNode } from "@opencode/util/effect/layer-node"
+import { Node } from "@Mackery6969/util/effect/app-node"
+import type { LayerNode } from "@Mackery6969/util/effect/layer-node"
 import { Job } from "../job.js"
 import { Session } from "../session.js"
 import { SubagentCompletion } from "./subagent-completion.js"
@@ -15,7 +15,7 @@ export interface Interface {
   notify: (recovery: Recovery, startedAt: number) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/SubagentJob") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/SubagentJob") {}
 
 const make: Effect.Effect<Interface, never, Session.Service | Job.Service | Scope.Scope> = Effect.gen(function* () {
   const sessions = yield* Session.Service

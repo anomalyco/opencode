@@ -1,4 +1,4 @@
-import { useDialog } from "@opencode/ui/context/dialog"
+import { useDialog } from "@Mackery6969/ui/context/dialog"
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js"
 import { consoleCatalogLoaded, consoleProviderGroup } from "@/providers/catalog/console"
 import { createConsoleCatalogSettler } from "@/providers/catalog/console-settle"

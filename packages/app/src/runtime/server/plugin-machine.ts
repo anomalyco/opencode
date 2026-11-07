@@ -1,4 +1,4 @@
-import type { ServerState } from "@opencode/plugin/gui"
+import type { ServerState } from "@Mackery6969/plugin/gui"
 import type { ServerConnection } from "./registry"
 
 /** How long a sign-in may run before the server shows what its plugin reports again. */

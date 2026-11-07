@@ -1,4 +1,4 @@
-import { Button } from "@opencode/ui/button"
+import { Button } from "@Mackery6969/ui/button"
 import { onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import {

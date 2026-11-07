@@ -1,8 +1,8 @@
 export * as WebSearchProvider from "./provider.js"
 
-import type { Context } from "@opencode/plugin/effect/plugin"
-import type { Credential } from "@opencode/schema/credential"
-import type { WebSearch } from "@opencode/schema/websearch"
+import type { Context } from "@Mackery6969/plugin/effect/plugin"
+import type { Credential } from "@Mackery6969/schema/credential"
+import type { WebSearch } from "@Mackery6969/schema/websearch"
 import { Effect } from "effect"
 
 /** Registers a web search provider backed by an API key integration with the same ID and name. */

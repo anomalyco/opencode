@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Prompt } from "@opencode/schema"
+import type { Prompt } from "@Mackery6969/schema"
 import { projectedPromptInput, restoredPromptInput } from "../../src/prompt/codec"
 
 describe("prompt codec", () => {
