@@ -553,6 +553,21 @@ describe("DatabaseMigration", () => {
     )
   })
 
+  test("bootstraps a fresh database when the legacy credential file is malformed", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "auth.json"), "not json")
+
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.apply(db)
+
+        expect(yield* db.all(sql`SELECT id FROM credential`)).toEqual([])
+      }),
+      Global.make({ data: tmp.path }),
+    )
+  })
+
   test("skips legacy credential import when the source file is absent", async () => {
     await using tmp = await tmpdir()
 
