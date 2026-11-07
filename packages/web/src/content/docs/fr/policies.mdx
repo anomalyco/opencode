@@ -1,0 +1,137 @@
+---
+title: Politiques
+description: Contrôlez les ressources configurées qu'OpenCode peut utiliser.
+---
+
+Les politiques déterminent si OpenCode peut effectuer une action sur une ressource nommée. Cette fonctionnalité est expérimentale et se configure avec le tableau `experimental.policies` dans `opencode.json`.
+
+Les politiques sont distinctes des [autorisations](/docs/permissions). Les autorisations contrôlent ce que les outils peuvent faire pendant une session, tandis que les politiques contrôlent si OpenCode peut utiliser une ressource telle qu'un fournisseur de LLM.
+
+---
+
+## Configuration
+
+Chaque déclaration de politique comporte trois champs :
+
+- `effect` - `"allow"` ou `"deny"`.
+- `action` - L'opération contrôlée.
+- `resource` - L'ID de ressource ou le motif générique auquel la déclaration s'applique.
+
+Par exemple, pour refuser l'utilisation du fournisseur `openai` :
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "openai"
+      }
+    ]
+  }
+}
+```
+
+Un fournisseur refusé par une politique n'est disponible ni pour la sélection ni pour l'utilisation d'un modèle, même s'il possède des identifiants ou est configuré correctement par ailleurs.
+
+---
+
+## Politiques disponibles
+
+OpenCode prend actuellement en charge une seule action de politique :
+
+| Action         | Ressource                       | Description                                     |
+| -------------- | ------------------------------- | ----------------------------------------------- |
+| `provider.use` | ID de fournisseur, comme `openai` | Autoriser ou refuser l'usage d'un fournisseur de LLM. |
+
+D'autres actions de politique pourront être ajoutées à l'avenir.
+
+---
+
+## Correspondance
+
+Le champ `resource` prend en charge la correspondance générique. Utilisez `*` pour correspondre à zéro ou plusieurs caractères et `?` pour correspondre à un seul caractère.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "company-*"
+      }
+    ]
+  }
+}
+```
+
+Cela refuse les fournisseurs tels que `company-us` et `company-eu`.
+
+---
+
+## Ordre des règles
+
+Lorsque plusieurs déclarations correspondent, c'est la dernière déclaration correspondante qui l'emporte. Placez d'abord les règles générales, puis les exceptions plus spécifiques après elles.
+
+Par exemple, pour n'autoriser qu'Anthropic :
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "*"
+      },
+      {
+        "effect": "allow",
+        "action": "provider.use",
+        "resource": "anthropic"
+      }
+    ]
+  }
+}
+```
+
+Si aucune politique ne correspond à un fournisseur, son utilisation est autorisée par défaut.
+
+Les politiques peuvent être définies à la fois dans votre configuration globale et dans la configuration du projet. Si des politiques des deux emplacements correspondent au même fournisseur, votre politique globale est prioritaire sur celle du projet. Cela empêche un dépôt de réactiver un fournisseur que vous refusez globalement.
+
+---
+
+## Listes de fournisseurs
+
+Utilisez les politiques plutôt que les anciens paramètres `disabled_providers` et `enabled_providers` pour contrôler l'accès aux fournisseurs.
+
+Pour remplacer `disabled_providers` :
+
+```json title="opencode.json"
+{
+  "experimental": {
+    "policies": [
+      { "effect": "deny", "action": "provider.use", "resource": "openai" },
+      { "effect": "deny", "action": "provider.use", "resource": "google" }
+    ]
+  }
+}
+```
+
+Pour remplacer `enabled_providers`, refusez d'abord tous les fournisseurs puis autorisez les fournisseurs sélectionnés après :
+
+```json title="opencode.json"
+{
+  "experimental": {
+    "policies": [
+      { "effect": "deny", "action": "provider.use", "resource": "*" },
+      { "effect": "allow", "action": "provider.use", "resource": "anthropic" },
+      { "effect": "allow", "action": "provider.use", "resource": "openai" }
+    ]
+  }
+}
+```
