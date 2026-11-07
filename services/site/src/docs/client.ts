@@ -233,10 +233,20 @@ on("click", (event) => {
 
 on("keydown", (event) => {
   const target = event.target as HTMLElement
-  const root = target.closest?.<HTMLElement>('[data-component="docs-lockup"]')
-  if (!root) return
   const key =
     html.dir === "rtl" ? ({ ArrowLeft: "ArrowRight", ArrowRight: "ArrowLeft" }[event.key] ?? event.key) : event.key
+  // Escape closes the lockup wherever focus is: a click on its trigger may leave focus on the trigger (or,
+  // in Safari, on the page), and keyboard opening moves it into the menu, so it can't wait for a keydown
+  // that started inside the menu.
+  if (key === "Escape" && lockup) {
+    event.preventDefault()
+    const inSub = !!target.closest?.("[data-slot=submenu]") && menuOf(lockup).dataset.submenu === "flyout"
+    if (!inSub) return closeLockup(true)
+    toggleSub(lockup, false)
+    return $("[data-slot=parent] > [role=menuitem]", lockup)?.focus()
+  }
+  const root = target.closest?.<HTMLElement>('[data-component="docs-lockup"]')
+  if (!root) return
   if (target.matches("[data-slot=toggle], [data-slot=trigger]")) {
     if (key === "ArrowDown" || key === "Enter" || key === " ") openLockup(root, "current")
     else if (key === "ArrowUp") openLockup(root, "last")
@@ -262,13 +272,10 @@ on("keydown", (event) => {
   } else if (key === "ArrowRight" && target.closest("[data-slot=parent]") && !inSub) {
     event.preventDefault()
     toggleSub(root, true, true)
-  } else if ((key === "ArrowLeft" && inSub) || (key === "Escape" && inSub)) {
+  } else if (key === "ArrowLeft" && inSub) {
     event.preventDefault()
     toggleSub(root, false)
     $("[data-slot=parent] > [role=menuitem]", root)?.focus()
-  } else if (key === "Escape") {
-    event.preventDefault()
-    closeLockup(true)
   } else if (key === "Tab") closeLockup()
 })
 
@@ -521,10 +528,14 @@ dialog.addEventListener("keydown", (event) => {
     choose(option)
     if (mod) open(option.href, "_blank", "noopener")
     else location.assign(option.href)
-  } else if (event.key === "Escape") {
-    event.preventDefault()
-    void closeSearch()
   } else if (event.key === "Tab") event.preventDefault()
+})
+// Escape closes search wherever focus is: a click inside the panel but not in its field moves focus to
+// the page, and the dialog's own listener then never sees the key.
+on("keydown", (event) => {
+  if (event.key !== "Escape" || dialog.hidden) return
+  event.preventDefault()
+  void closeSearch()
 })
 dialog.addEventListener("pointermove", (event) => {
   const option = (event.target as Element).closest<HTMLAnchorElement>("[role=option]")
