@@ -34,6 +34,7 @@ import { SubagentJob } from "@opencode/core/session/subagent-job"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
+import { SessionParallelContext } from "@opencode/core/session/parallel-context"
 import { Permission } from "@opencode/core/permission"
 import { SubagentTool } from "@opencode/core/tool/plugin/subagent"
 import { Tool } from "@opencode/core/tool"
@@ -131,6 +132,7 @@ const subagentPluginSupervisor = makeLocationNode({
     SubagentJob.node,
     Tool.node,
     PluginHooks.node,
+    SessionParallelContext.node,
   ],
 })
 

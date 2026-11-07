@@ -67,6 +67,7 @@ import { Session } from "../session.js"
 import { SessionCompaction } from "../session/compaction.js"
 import { SessionInstructions } from "../session/instructions.js"
 import { SubagentJob } from "../session/subagent-job.js"
+import { SessionParallelContext } from "../session/parallel-context.js"
 import { SharedCache } from "../shared-cache.js"
 import { Shell } from "../shell.js"
 import { ShellSelect } from "../shell/select.js"
@@ -161,6 +162,7 @@ const services = [
   Session.Service,
   SessionCompaction.Service,
   SessionInstructions.Service,
+  SessionParallelContext.Service,
   SubagentJob.Service,
   SharedCache.Service,
   Shell.Service,

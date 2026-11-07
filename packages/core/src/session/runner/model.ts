@@ -4,6 +4,7 @@ import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { LanguageModel } from "@opencode/ai/effect"
 import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/schema/provider"
+import { Model as ModelService } from "../../model.js"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Agent } from "../../agent.js"
 import { ModelResolver } from "../../model-resolver.js"
@@ -73,6 +74,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const resolver = yield* ModelResolver.Service
     const agents = yield* Agent.Service
+    const models = yield* ModelService.Service
     return Service.of({
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session, available) {
         // Location plugins populate and filter the catalog asynchronously during layer startup.
@@ -85,6 +87,9 @@ const layer = Layer.effect(
             ? yield* resolver.resolveModel(preferred, agent.variant)
             : yield* resolver.resolve()
           if (resolved) return resolved
+          // Fall back to the smallest available chat model for low-end device compatibility.
+          const smallest = yield* models.smallest()
+          if (smallest) return yield* resolver.resolveModel(smallest)
           return yield* new ModelNotSelectedError({ sessionID: session.id })
         }
         const selected = (yield* available()).find(
@@ -101,4 +106,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [ModelResolver.node, Agent.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [ModelResolver.node, Agent.node, ModelService.node] })

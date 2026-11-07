@@ -11,6 +11,7 @@ import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
+import { SessionParallelContext } from "../../session/parallel-context.js"
 import { SubagentCompletion } from "../../session/subagent-completion.js"
 import { SubagentJob } from "../../session/subagent-job.js"
 
@@ -71,6 +72,7 @@ export const Plugin = {
     const permission = yield* Permission.Service
     const models = yield* Model.Service
     const subagents = yield* SubagentJob.Service
+    const parallelContext = yield* SessionParallelContext.Service
 
     const resolveModel = Effect.fn("SubagentTool.resolveModel")(function* (input: string) {
       const ref = yield* Effect.try({
@@ -182,6 +184,25 @@ export const Plugin = {
               }
 
               const model = override ?? agent.model ?? parent.model
+
+              // Check context budget before spawning a new child session.
+              if (existing === undefined) {
+                const estimatedChildTokens = Math.max(
+                  4_000,
+                  input.prompt.length / 2.5,
+                )
+                const canSpawn = yield* parallelContext.canSpawn(context.sessionID, estimatedChildTokens)
+                if (!canSpawn) {
+                  const childID = Session.ID.create()
+                  const queued = yield* parallelContext.reserveSpawn(childID, context.sessionID)
+                  if (queued)
+                    return backgroundResult(childID)
+                  return yield* new ToolFailure({
+                    message: `Context budget is full. The parent session already has active children consuming its context window, and the spawn queue is at capacity. Wait for children to finish before spawning more.`,
+                  })
+                }
+              }
+
               const child =
                 existing ??
                 (yield* sessions
@@ -225,6 +246,11 @@ export const Plugin = {
                 description: input.description,
               }
               yield* subagents.start(recovery)
+              yield* parallelContext.registerChild({
+                sessionID: child.id,
+                agent: agent.id,
+                description: input.description,
+              })
 
               if (background) {
                 yield* subagents.background(recovery)
@@ -246,14 +272,20 @@ export const Plugin = {
               if (result?.info.status === "error")
                 return yield* new ToolFailure({
                   message: `Subagent failed (sessionID: ${child.id}): ${result.info.error ?? "unknown error"}`,
-                })
+                }).pipe(
+                  Effect.tap(() => parallelContext.unregisterChild(child.id)),
+                )
               if (result?.info.status === "cancelled")
-                return yield* new ToolFailure({ message: `Subagent cancelled (sessionID: ${child.id})` })
-              return {
+                return yield* new ToolFailure({ message: `Subagent cancelled (sessionID: ${child.id})` }).pipe(
+                  Effect.tap(() => parallelContext.unregisterChild(child.id)),
+                )
+              const output = {
                 sessionID: child.id,
                 status: "completed" as const,
                 output: result?.info.output ?? SubagentCompletion.NO_TEXT,
               }
+              yield* parallelContext.unregisterChild(child.id)
+              return output
             }).pipe(
               Effect.map((output) => ({
                 output,

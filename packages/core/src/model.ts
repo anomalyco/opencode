@@ -81,6 +81,8 @@ export interface Interface extends State.Transformable<Editor> {
   readonly available: (types?: readonly Model.Type[]) => Effect.Effect<readonly Info[]>
   readonly default: () => Effect.Effect<Info | undefined>
   readonly small: (providerID: Provider.ID) => Effect.Effect<Info | undefined>
+  /** Smallest available chat model, optionally scoped to a provider, for low-end device fallbacks. */
+  readonly smallest: (providerID?: Provider.ID) => Effect.Effect<Info | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Model") {}
@@ -316,6 +318,18 @@ const layer = Layer.effect(
           (family) => models.find((model) => model.family === family) ?? [],
         )[0]
       }),
+      smallest: Effect.fn("Model.smallest")((providerID) =>
+        read().pipe(
+          Effect.map((value) => {
+            const models = providerID
+              ? value.available.filter((m) => m.providerID === providerID)
+              : value.available
+            if (models.length === 0) return undefined
+            const byContext = models.toSorted((a, b) => a.limit.context - b.limit.context)
+            return byContext[0]
+          }),
+        ),
+      ),
     })
   }),
 )

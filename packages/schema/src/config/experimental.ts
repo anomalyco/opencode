@@ -1,7 +1,7 @@
 export * as ConfigExperimental from "./experimental.js"
 
 import { Record, Schema } from "effect"
-import { NonNegativeInt, optional } from "../schema.js"
+import { NonNegativeInt, PositiveInt, optional } from "../schema.js"
 import { ConfigFlag } from "./flag.js"
 import { ConfigModel } from "./model.js"
 import { ConfigPolicy } from "./policy.js"
@@ -39,6 +39,14 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     }),
   subagent_depth: NonNegativeInt.pipe(optional).annotate({
     description: "Maximum subagent nesting depth. Defaults to 1.",
+  }),
+  max_concurrent_agents: PositiveInt.pipe(optional).annotate({
+    description:
+      "Maximum number of concurrently running subagent sessions per parent session. Spawns beyond this are queued until a child finishes. Defaults to 5.",
+  }),
+  subagent_queue_size: NonNegativeInt.pipe(optional).annotate({
+    description:
+      "Maximum number of subagent spawns that can be queued when the concurrent limit is reached. A full queue rejects new spawns. Defaults to 10.",
   }),
   location_idle_timeout: Schema.Union([Schema.DurationFromString, Schema.Literal(false)])
     .pipe(optional)

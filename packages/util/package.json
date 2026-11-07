@@ -56,9 +56,9 @@
     "@opentelemetry/sdk-trace-node": "2.8.0",
     "cross-spawn": "catalog:",
     "effect": "catalog:",
-    "glob": "13.0.5",
+    "glob": "14.0.2",
     "mime-types": "3.0.2",
-    "minimatch": "10.2.5",
+    "minimatch": "11.0.1",
     "npm-package-arg": "13.0.2",
     "open": "11.0.4",
     "pacote": "21.5.1"
