@@ -1,7 +1,7 @@
 export * as SkillDiscovery from "./discovery.js"
 
 import path from "path"
-import { Context, Effect, Layer, Schedule, Schema } from "effect"
+import { Context, Effect, Layer, Option, Schedule, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
@@ -88,11 +88,33 @@ const layer = Layer.effect(
       )
     })
 
+    // Names of the skills returned by the last successful pull, in index order. When the catalog is
+    // unreachable, serve exactly these: folders for skills since removed from the index stay on disk
+    // but are not listed here.
+    const manifest = (sourceRoot: string) => path.join(sourceRoot, ".opencode-skills.json")
+    const decodeManifest = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Array(Schema.String)))
+
+    const lastPulled = Effect.fn("SkillDiscovery.lastPulled")(function* (sourceRoot: string) {
+      const text = yield* fs.readFileStringSafe(manifest(sourceRoot)).pipe(Effect.orElseSucceed(() => undefined))
+      const names = text === undefined ? [] : Option.getOrElse(decodeManifest(text), () => [] as readonly string[])
+      const directories = yield* Effect.forEach(names.filter(isSafeSegment), (name) =>
+        Effect.gen(function* () {
+          const root = path.resolve(sourceRoot, name)
+          if (!FSUtil.contains(sourceRoot, root) || root === sourceRoot) return []
+          const exists =
+            (yield* fs.existsSafe(path.join(root, "SKILL.md"))) || (yield* fs.existsSafe(path.join(root, `${name}.md`)))
+          return exists ? [AbsolutePath.make(root)] : []
+        }),
+      )
+      return directories.flat()
+    })
+
     return Service.of({
       pull: Effect.fn("SkillDiscovery.pull")(function* (url) {
         const base = url.endsWith("/") ? url : `${url}/`
         const source = new URL(base)
         const index = new URL("index.json", source).href
+        const sourceRoot = path.resolve(global.cache, "skills", Hash.fast(base))
         const data = yield* HttpClientRequest.get(index).pipe(
           HttpClientRequest.acceptJson,
           http.execute,
@@ -101,10 +123,10 @@ const layer = Layer.effect(
             Effect.logError("failed to fetch skill index", { url: index, error }).pipe(Effect.as(undefined)),
           ),
         )
-        if (!data) return []
-
-        const sourceRoot = path.resolve(global.cache, "skills", Hash.fast(base))
-        return yield* Effect.forEach(
+        // Keep serving the last good copy when the catalog is unreachable, so an offline start or
+        // a catalog outage does not remove skills that were already downloaded.
+        if (!data) return yield* lastPulled(sourceRoot)
+        const published = yield* Effect.forEach(
           data.skills.flatMap((skill) => {
             if (!isSafeSegment(skill.name)) {
               return []
@@ -196,7 +218,25 @@ const layer = Layer.effect(
               return exists ? [AbsolutePath.make(root)] : []
             }),
           { concurrency: skillConcurrency },
-        ).pipe(Effect.map((directories) => directories.flat()))
+        )
+        const directories = published.flat()
+        // Skip the write when nothing was published and nothing was recorded before, so a catalog
+        // that never yielded a skill leaves no cache behind.
+        if (directories.length > 0 || (yield* fs.existsSafe(manifest(sourceRoot)))) {
+          // Write then rename so a concurrent pull of the same catalog never reads a partial file.
+          const staging = `${manifest(sourceRoot)}.tmp-${crypto.randomUUID()}`
+          yield* fs
+            .writeWithDirs(staging, JSON.stringify(directories.map((directory) => path.basename(directory))))
+            .pipe(
+              Effect.andThen(fs.rename(staging, manifest(sourceRoot))),
+              Effect.catch((error) =>
+                Effect.logWarning("failed to record cached skills", { url: index, error }).pipe(
+                  Effect.andThen(fs.remove(staging, { force: true }).pipe(Effect.ignore)),
+                ),
+              ),
+            )
+        }
+        return directories
       }),
     })
   }),
