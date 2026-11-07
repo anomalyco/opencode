@@ -36,6 +36,8 @@ export function NewSessionBranch(props: { workspace: NewSessionWorkspaceControll
   let trigger: HTMLButtonElement | undefined
 
   const creating = () => props.workspace.selection.value() === "create"
+  // Keep Kobalte's event-time reads from creating a new, unowned memo for an inline &&.
+  const tooltipDisabled = () => !creating() && !layout.truncated
 
   const dispatch = (event: BranchPickerEvent) =>
     untrack(() => {
@@ -141,7 +143,7 @@ export function NewSessionBranch(props: { workspace: NewSessionWorkspaceControll
             </div>
           </Show>
         }
-        disabled={!creating() && !layout.truncated}
+        disabled={tooltipDisabled()}
         class="flex min-w-0 max-w-[220px]"
         contentClass="max-w-[calc(100vw-32px)] break-all"
       >

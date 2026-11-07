@@ -3,6 +3,7 @@ import type { OpenCodeEvent, SessionMessageInfo, WorktreeDirectory } from "@open
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { draftHref, expectPath, NO_PROVIDER, project, provider, seed, sessionHref, T0 } from "../utils/app"
 import { mockOpenCodeServer } from "../utils/mock-server"
+import { captureConsoleWarnings } from "../utils/command-palette"
 import {
   newSessionLocation,
   newSessionWorktree,
@@ -255,8 +256,10 @@ for (const row of [
     const path = page.locator('[data-slot="new-session-location-path"]')
     await expect(path).toHaveText(row.pattern)
     await expect.poll(() => path.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+    const warnings = captureConsoleWarnings(page)
     await path.hover()
     await expect(page.getByRole("tooltip")).toHaveText(row.directory)
+    expect(warnings.filter((warning) => warning.includes("computations created outside"))).toEqual([])
 
     if (row.name !== "POSIX") return
     await expect(path).toHaveCSS("user-select", "text")
@@ -456,9 +459,11 @@ test("the branch shortcut chooses a base branch and stays inactive on Local", as
 
   const search = page.getByRole("combobox", { name: "Search branches", exact: true })
 
+  const warnings = captureConsoleWarnings(page)
   await base.hover()
   await expect(page.getByRole("tooltip")).toContainText("Choose base branch")
   await expect(page.getByRole("tooltip").locator('[data-component="keybind-v2"]')).toContainText("B")
+  expect(warnings.filter((warning) => warning.includes("computations created outside"))).toEqual([])
   await expect(view.editor).toBeFocused()
   await view.editor.press(shortcut)
   await expect(search).toBeFocused()
