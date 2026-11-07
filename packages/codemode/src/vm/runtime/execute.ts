@@ -59,7 +59,7 @@ export const execute = <R>(
     bindings === undefined
       ? undefined
       : (ctx) => Object.entries(bindings).map(([name, value]) => [name, fromJson(ctx, value)] as const),
-    extensions.length > 0,
+    extensions.some((extension) => extension.snapshot === undefined),
   )
 
 export const executeProgram = <R>(
@@ -74,7 +74,12 @@ export const executeProgram = <R>(
   finishExecution(startProgram({ prepared, limits, hooks, globals, lossy }, code, bindings).run())
 
 /** A program ready to run on the VM: nothing runs until `run`. */
-export const startProgram = <R>(setup: Setup<R>, code: string, bindings?: Globals<R>): Running<R> =>
+export const startProgram = <R>(
+  setup: Setup<R>,
+  code: string,
+  bindings?: Globals<R>,
+  runId: string = crypto.randomUUID(),
+): Running<R> =>
   new Running(setup, 0, () => {
     if (code.trim().length === 0) {
       return { ok: false, error: { kind: "ParseError", message: "Code cannot be empty." }, toolCalls: [] }
@@ -82,6 +87,7 @@ export const startProgram = <R>(setup: Setup<R>, code: string, bindings?: Global
     const parsed = parseProgram(code)
     if (!parsed.ok) return { ok: false, error: parsed.error, toolCalls: [] }
     const runtime = instantiate(setup, bindings)
+    runtime.vm.hosts.runId = runId
     runtime.vm.start(parsed.source)
     return runtime
   })
@@ -315,6 +321,12 @@ export class Running<R> {
         running,
       })
     }
+    // Rerun calls in flight are saved as queued so they run again on resume under the same key.
+    const rerun = vm.calls().filter((call) => call.status === "running")
+    for (const call of rerun) call.status = "queued"
+    const restoreRerun = () => {
+      for (const call of rerun) call.status = "running"
+    }
     const limits = this.setup.limits
     const saved = attempt(() =>
       vm.capture({
@@ -328,6 +340,7 @@ export class Running<R> {
       }),
     )
     if (!saved.ok) {
+      restoreRerun()
       const error = saved.error
       return new SuspendError({
         message: `The run's state couldn't be saved: ${error instanceof Error ? error.message : String(error)}`,
@@ -338,6 +351,7 @@ export class Running<R> {
     if (maxBytes !== undefined) {
       const size = toBytes(snapshot).byteLength
       if (size > maxBytes) {
+        restoreRerun()
         return new SuspendError({
           message: `The run's state takes ${size} bytes, more than the ${maxBytes}-byte limit, so it couldn't be suspended.`,
           running: [],
@@ -348,8 +362,8 @@ export class Running<R> {
   }
 
   // The round-trip test mode's checkpoint: saves the state to bytes and continues in a brand-new runtime. States that
-  // hold live host values (an extension call in flight, a function an extension returned) can't round-trip, so they
-  // are skipped; a lost value anywhere else is a codec gap and fails the run.
+  // hold live host values (an extension call in flight, a function an extension without `snapshot` hooks returned)
+  // can't round-trip, so they are skipped; a lost value anywhere else is a codec gap and fails the run.
   private trip(): void {
     const driver = this.driver
     if (this.trips >= ROUND_TRIP_MAX) {
@@ -362,12 +376,20 @@ export class Running<R> {
     }
     if (driver.holdsHostValues) return
     this.trips++
-    const saved = this.ctx.vm.capture({ strict: !this.setup.lossy })
+    const attempted = attempt(() => this.ctx.vm.capture({ strict: !this.setup.lossy }))
+    // An extension's `snapshot` hooks may refuse to save a value, which fails a suspend, not the run.
+    if (!attempted.ok) {
+      const error = attempted.error
+      if (error instanceof SnapshotError && error.message.startsWith("The extension ")) return
+      throw error
+    }
+    const saved = attempted.value
     const bytes = toBytes(saved.snapshot)
     this.skip = Math.floor(saved.snapshot.records.length / 200 + bytes.byteLength / 100_000)
     if (saved.lost.length > 0) return
     const fresh = instantiate(this.setup)
     restoreInto(fromBytes(bytes), fresh.vm)
+    for (const [key, invocation] of this.ctx.tools.invocations) fresh.tools.invocations.set(key, invocation)
     this.ctx = fresh
     driver.vm = fresh.vm
     driver.tools = fresh.tools

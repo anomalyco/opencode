@@ -38,11 +38,9 @@ const manual = () => {
     input: Value,
     output: Value,
     execute: (input) =>
-      Effect.promise(() => {
-        const answer = latch<number>()
-        calls.push({ input: input.value, answer: answer.resolve })
+      Effect.callback<{ value: number }>((resume) => {
+        calls.push({ input: input.value, answer: (value) => resume(Effect.succeed({ value })) })
         called.resolve()
-        return answer.promise.then((value) => ({ value }))
       }),
   })
   return {
@@ -73,6 +71,98 @@ const stepTool = () => {
     called: () => called.promise,
     reset: () => {
       called = latch()
+    },
+  }
+}
+
+/** A `"rerun"` tool that announces each attempt and waits for the test to answer it. */
+const rerunManual = () => {
+  const attempts: Array<{
+    input: number
+    key: string
+    interrupted: boolean
+    answer: (value: number) => void
+  }> = []
+  let called = latch()
+  const tool = Tool.make({
+    description: "Safe to rerun",
+    input: Value,
+    output: Value,
+    durable: "rerun",
+    execute: (input, { key }) =>
+      Effect.callback<{ value: number }>((resume) => {
+        const entry = {
+          input: input.value,
+          key,
+          interrupted: false,
+          answer: (value: number) => resume(Effect.succeed({ value })),
+        }
+        attempts.push(entry)
+        called.resolve()
+        return Effect.sync(() => {
+          entry.interrupted = true
+        })
+      }),
+  })
+  return {
+    tool,
+    attempts,
+    called: () => called.promise,
+    reset: () => {
+      called = latch()
+    },
+  }
+}
+
+/** A reconnectable tool over an in-memory job table that outlives any one run, as a subagent or job supervisor would. */
+const reconnectableJobs = (options: { startGate?: Promise<void> } = {}) => {
+  const jobs = new Map<
+    string,
+    { input: number; result: ReturnType<typeof latch<number>>; cancelled: number; handles: Array<unknown> }
+  >()
+  const log: Array<string> = []
+  let started = latch()
+  let attached = latch()
+  const tool = Tool.make({
+    description: "Runs a reconnectable job",
+    input: Value,
+    output: Value,
+    durable: {
+      start: (input, { key }) =>
+        Effect.gen(function* () {
+          log.push(`start ${key}`)
+          jobs.set(key, { input: input.value, result: latch<number>(), cancelled: 0, handles: [] })
+          started.resolve()
+          if (options.startGate !== undefined) yield* Effect.promise(() => options.startGate!)
+          return { job: key, meta: { input: input.value, tags: ["a", "b"] } }
+        }),
+      attach: (handle, { key }) =>
+        Effect.promise(() => {
+          const id = (handle as { job: string }).job
+          log.push(`attach ${key} ${id}`)
+          const job = jobs.get(id)!
+          job.handles.push(handle)
+          attached.resolve()
+          return job.result.promise.then((value) => ({ value }))
+        }),
+      cancel: (handle) =>
+        Effect.sync(() => {
+          const id = (handle as { job: string }).job
+          log.push(`cancel ${id}`)
+          jobs.get(id)!.cancelled += 1
+        }),
+    },
+  })
+  return {
+    tool,
+    jobs,
+    log,
+    started: () => started.promise,
+    attached: () => attached.promise,
+    finish: (key: string, value: number) => jobs.get(key)!.result.resolve(value),
+    reset: () => {
+      started = latch()
+      attached = latch()
     },
   }
 }
@@ -260,11 +350,11 @@ describe("suspend", () => {
       ],
     ]
     for (const [name, code, running, release, path, value] of cases) {
-      const run = background(runtime.program(code))
+      const run = background(runtime.program(code, undefined, { runId: "b" }))
       await running()
       const error = await blocked(run)
       expect(error, name).toBeInstanceOf(CodeMode.SuspendError)
-      expect(error.running, name).toEqual([{ path }])
+      expect(error.running, name).toEqual([{ key: "b:0", path }])
       expect(error.message, name).toBe(`The run can't be suspended while ${path} is running.`)
       release()
       expect(await Effect.runPromise(run.result), name).toMatchObject({ ok: true, value })
@@ -276,10 +366,15 @@ describe("suspend", () => {
     const run = background(
       CodeMode.make({ engine: "vm", tools: { slow: slow.tool, "a-b": { work: slow.tool } } }).program(
         `return await Promise.all([tools["a-b"].work({ value: 1 }), tools.slow({ value: 2 })])`,
+        undefined,
+        { runId: "n" },
       ),
     )
     while (slow.calls.length < 2) await Bun.sleep(1)
-    expect((await blocked(run)).running).toEqual([{ path: 'tools["a-b"].work' }, { path: "tools.slow" }])
+    expect((await blocked(run)).running).toEqual([
+      { key: "n:0", path: 'tools["a-b"].work' },
+      { key: "n:1", path: "tools.slow" },
+    ])
   })
 
   test("a suspend after the run ended gives its result", async () => {
@@ -631,5 +726,547 @@ describe("resume", () => {
         untouched: "function",
       },
     })
+  })
+})
+
+describe("durable tools", () => {
+  test("a rerun tool in flight can be suspended, is interrupted without firing after, and reruns on resume with the same key", async () => {
+    const read = rerunManual()
+    const events: Array<string> = []
+    const hooks: CodeMode.Hooks = {
+      "tool.before": (call) => Effect.sync(() => void events.push(`before ${call.name} ${call.key}`)),
+      "tool.after": (call, result) =>
+        Effect.sync(() => void events.push(`after ${call.name} ${call.key} ${result.status}`)),
+    }
+    const code = `
+      const a = await tools.read({ value: 20 })
+      const b = await tools.read({ value: 22 })
+      return a.value + b.value`
+    const run = background(
+      CodeMode.make({ engine: "vm", tools: { read: read.tool }, hooks }).program(code, undefined, { runId: "rr" }),
+    )
+    await read.called()
+    expect(read.attempts).toHaveLength(1)
+    expect(read.attempts[0]!.key).toBe("rr:0")
+
+    const suspended = suspendedOf(await Effect.runPromise(run.suspend))
+    expect(suspendedOf(await Effect.runPromise(run.result))).toBe(suspended)
+    expect(read.attempts[0]!.interrupted).toBe(true)
+    // Detaching to suspend does not fire tool.after with interrupted.
+    expect(events).toEqual(["before read rr:0"])
+
+    read.reset()
+    const resumed = background(
+      CodeMode.make({ engine: "vm", tools: { read: read.tool }, hooks }).resume(CodeMode.toBytes(suspended.state)),
+    )
+    await read.called()
+    expect(read.attempts).toHaveLength(2)
+    expect(read.attempts[1]!.key).toBe("rr:0")
+
+    read.reset()
+    read.attempts[1]!.answer(20)
+    await read.called()
+    expect(read.attempts[2]!.key).toBe("rr:1")
+    read.attempts[2]!.answer(22)
+
+    const outcome = await Effect.runPromise(resumed.result)
+    expect(outcome).toEqual({
+      ok: true,
+      value: 42,
+      toolCalls: [{ name: "read" }, { name: "read" }],
+    })
+    expect(events).toEqual([
+      "before read rr:0",
+      "before read rr:0",
+      "after read rr:0 success",
+      "before read rr:1",
+      "after read rr:1 success",
+    ])
+  })
+
+  test("maxToolCalls is not double-counted when a rerun call runs again on resume", async () => {
+    const read = rerunManual()
+    const runtime = () =>
+      CodeMode.make({
+        engine: "vm",
+        tools: { read: read.tool },
+        limits: { maxToolCalls: 1 },
+      })
+    const run = background(
+      runtime().program(`return (await tools.read({ value: 7 })).value`, undefined, { runId: "lim" }),
+    )
+    await read.called()
+    const suspended = suspendedOf(await Effect.runPromise(run.suspend))
+    expect(suspended.state.header.budget.toolCalls).toBe(1)
+
+    read.reset()
+    const resumed = background(runtime().resume(CodeMode.toBytes(suspended.state)))
+    await read.called()
+    read.attempts[1]!.answer(7)
+    expect(await Effect.runPromise(resumed.result)).toEqual({
+      ok: true,
+      value: 7,
+      toolCalls: [{ name: "read" }],
+    })
+
+    // A second call after the rerun call completes still trips the limit of 1.
+    read.reset()
+    const twoCalls = background(
+      runtime().program(
+        `const first = await tools.read({ value: 1 }); const second = await tools.read({ value: 2 }); return first.value + second.value`,
+        undefined,
+        { runId: "lim2" },
+      ),
+    )
+    await read.called()
+    const suspendedTwo = suspendedOf(await Effect.runPromise(twoCalls.suspend))
+    read.reset()
+    const resumedTwo = background(runtime().resume(CodeMode.toBytes(suspendedTwo.state)))
+    await read.called()
+    read.attempts[read.attempts.length - 1]!.answer(1)
+    expect(await Effect.runPromise(resumedTwo.result)).toMatchObject({
+      ok: false,
+      error: { kind: "ToolCallLimitExceeded" },
+      toolCalls: [{ name: "read" }],
+    })
+  })
+
+  test("a reconnectable tool refuses suspend during start, allows it once started, and calls attach(handle) on resume", async () => {
+    const gate = latch()
+    const jobs = reconnectableJobs({ startGate: gate.promise })
+    const events: Array<string> = []
+    const hooks: CodeMode.Hooks = {
+      "tool.before": (call) => Effect.sync(() => void events.push(`before ${call.key}`)),
+      "tool.after": (call, result) => Effect.sync(() => void events.push(`after ${call.key} ${result.status}`)),
+    }
+    const code = `
+      const log = ["before"]
+      const a = await tools.job({ value: 41 })
+      log.push("after " + a.value)
+      return { log, total: a.value + 1 }`
+    const run = background(
+      CodeMode.make({ engine: "vm", tools: { job: jobs.tool }, hooks }).program(code, undefined, { runId: "rec" }),
+    )
+    await jobs.started()
+    const duringStart = await blocked(run)
+    expect(duringStart.running).toEqual([{ key: "rec:0", path: "tools.job" }])
+
+    gate.resolve()
+    await jobs.attached()
+    const suspended = suspendedOf(await Effect.runPromise(run.suspend))
+    expect(suspendedOf(await Effect.runPromise(run.result))).toBe(suspended)
+    expect(jobs.jobs.get("rec:0")!.cancelled).toBe(0)
+    expect(events).toEqual(["before rec:0"])
+
+    jobs.reset()
+    const bytes = CodeMode.toBytes(suspended.state)
+    const resumed = background(CodeMode.make({ engine: "vm", tools: { job: jobs.tool }, hooks }).resume(bytes))
+    await jobs.attached()
+    // The handle survived serialization to bytes and was passed to attach(handle) without running start again.
+    expect(jobs.log).toEqual(["start rec:0", "attach rec:0 rec:0", "attach rec:0 rec:0"])
+    expect(jobs.jobs.get("rec:0")!.handles).toEqual([
+      { job: "rec:0", meta: { input: 41, tags: ["a", "b"] } },
+      { job: "rec:0", meta: { input: 41, tags: ["a", "b"] } },
+    ])
+    jobs.finish("rec:0", 41)
+    expect(await Effect.runPromise(resumed.result)).toEqual({
+      ok: true,
+      value: { log: ["before", "after 41"], total: 42 },
+      toolCalls: [{ name: "job" }],
+    })
+    expect(events).toEqual(["before rec:0", "after rec:0 success"])
+  })
+
+  test("attach runs right after start and right at resume regardless of how the program uses the promise", async () => {
+    const jobs = reconnectableJobs()
+    const read = rerunManual()
+    const tools = { job: jobs.tool, read: read.tool }
+    // One reconnectable call is in Promise.all with another call, one is chained with .then, and one is stored
+    // unawaited in a variable and only awaited after the others settle on resume.
+    const code = `
+      const stored = tools.job({ value: 1 })
+      const chained = tools.job({ value: 2 }).then((res) => res.value * 10)
+      const [allJob, allRead] = await Promise.all([tools.job({ value: 3 }), tools.read({ value: 4 })])
+      const chainedValue = await chained
+      const storedValue = (await stored).value
+      return [storedValue, chainedValue, allJob.value, allRead.value]`
+    const run = background(CodeMode.make({ engine: "vm", tools }).program(code, undefined, { runId: "p" }))
+    await read.called()
+    // All three reconnectable calls ran start and attach before the suspend, even though `stored` has not been awaited.
+    expect(jobs.log).toEqual([
+      "start p:0",
+      "attach p:0 p:0",
+      "start p:1",
+      "attach p:1 p:1",
+      "start p:2",
+      "attach p:2 p:2",
+    ])
+
+    const suspended = suspendedOf(await Effect.runPromise(run.suspend))
+    read.reset()
+    jobs.reset()
+    const resumed = background(CodeMode.make({ engine: "vm", tools }).resume(CodeMode.toBytes(suspended.state)))
+    await read.called()
+    // Right at resume, the VM re-attaches all three `started` calls before any of them settles.
+    expect(jobs.log.slice(6)).toEqual(["attach p:0 p:0", "attach p:1 p:1", "attach p:2 p:2"])
+
+    // Even if the unawaited `stored` job finishes first on resume, its result waits on the promise until awaited later.
+    jobs.finish("p:0", 10)
+    jobs.finish("p:1", 2)
+    jobs.finish("p:2", 30)
+    read.attempts[1]!.answer(40)
+    expect(await Effect.runPromise(resumed.result)).toEqual({
+      ok: true,
+      value: [10, 20, 30, 40],
+      toolCalls: [{ name: "job" }, { name: "job" }, { name: "job" }, { name: "read" }],
+    })
+  })
+
+  test("a reconnectable tool calls cancel(handle) on a real interrupt, not on suspend", async () => {
+    const jobs = reconnectableJobs()
+    const events: Array<string> = []
+    const hooks: CodeMode.Hooks = {
+      "tool.after": (call, result) => Effect.sync(() => void events.push(`${call.key} ${result.status}`)),
+    }
+    const runtime = CodeMode.make({ engine: "vm", tools: { job: jobs.tool }, hooks })
+
+    // 1. Background work left running when the program returns is interrupted and cancelled once.
+    const leftRunning = background(
+      runtime.program(`tools.job({ value: 1 }); return "left"`, undefined, { runId: "c1" }),
+    )
+    expect(await Effect.runPromise(leftRunning.result)).toMatchObject({ ok: true, value: "left" })
+    expect(jobs.jobs.get("c1:0")!.cancelled).toBe(1)
+    expect(events).toEqual(["c1:0 interrupted"])
+
+    // 2. Interrupting the running fiber cancels the started job once.
+    jobs.reset()
+    const program = runtime.program(`return (await tools.job({ value: 2 })).value`, undefined, { runId: "c2" })
+    const fiber = Effect.runFork(program.run())
+    await jobs.attached()
+    await Effect.runPromise(Fiber.interrupt(fiber))
+    expect(jobs.jobs.get("c2:0")!.cancelled).toBe(1)
+    expect(events).toEqual(["c1:0 interrupted", "c2:0 interrupted"])
+
+    // 3. Suspending does not cancel, and interrupting after resume cancels.
+    jobs.reset()
+    const run = background(runtime.program(`return (await tools.job({ value: 3 })).value`, undefined, { runId: "c3" }))
+    await jobs.attached()
+    const suspended = suspendedOf(await Effect.runPromise(run.suspend))
+    expect(jobs.jobs.get("c3:0")!.cancelled).toBe(0)
+
+    jobs.reset()
+    const resumedProgram = runtime.resume(CodeMode.toBytes(suspended.state))
+    const resumedFiber = Effect.runFork(resumedProgram.run())
+    await jobs.attached()
+    await Effect.runPromise(Fiber.interrupt(resumedFiber))
+    expect(jobs.jobs.get("c3:0")!.cancelled).toBe(1)
+  })
+
+  test("a Promise.all combining not-durable, rerun, and reconnectable tools suspends once safe and finishes on resume", async () => {
+    const slow = manual()
+    const read = rerunManual()
+    const jobs = reconnectableJobs()
+    const tools = { slow: slow.tool, read: read.tool, job: jobs.tool }
+    const code = `
+      const [a, b, c] = await Promise.all([
+        tools.slow({ value: 10 }),
+        tools.read({ value: 20 }),
+        tools.job({ value: 30 }),
+      ])
+      return [a.value, b.value, c.value]`
+    const run = background(CodeMode.make({ engine: "vm", tools }).program(code, undefined, { runId: "mix" }))
+    await Promise.all([slow.called(), read.called(), jobs.attached()])
+
+    // While `slow` (durable: false) is still running, suspend is refused and lists only `tools.slow`.
+    const error = await blocked(run)
+    expect(error.running).toEqual([{ key: "mix:0", path: "tools.slow" }])
+
+    // Once `slow` finishes, only `read` (rerun) and `job` (reconnectable in started) remain in flight.
+    slow.calls[0]!.answer(10)
+    await Promise.resolve()
+    const suspended = suspendedOf(await Effect.runPromise(run.suspend))
+    expect(read.attempts[0]!.interrupted).toBe(true)
+    expect(jobs.jobs.get("mix:2")!.cancelled).toBe(0)
+
+    read.reset()
+    jobs.reset()
+    const resumed = background(CodeMode.make({ engine: "vm", tools }).resume(CodeMode.toBytes(suspended.state)))
+    await Promise.all([read.called(), jobs.attached()])
+    // `slow` was not called again; `read` reran with key `mix:1`; `job` attached to handle `mix:2`.
+    expect(slow.calls).toHaveLength(1)
+    expect(read.attempts.map((a) => a.key)).toEqual(["mix:1", "mix:1"])
+    expect(jobs.log).toEqual(["start mix:2", "attach mix:2 mix:2", "attach mix:2 mix:2"])
+
+    read.attempts[1]!.answer(20)
+    jobs.finish("mix:2", 30)
+    expect(await Effect.runPromise(resumed.result)).toEqual({
+      ok: true,
+      value: [10, 20, 30],
+      toolCalls: [{ name: "slow" }, { name: "read" }, { name: "job" }],
+    })
+  })
+
+  test("call keys use runId (or a generated UUID), are unique per call, and stay stable across suspend and resume", async () => {
+    const read = rerunManual()
+    const seenKeys: Array<string> = []
+    const echo = Tool.make({
+      description: "Echoes key",
+      input: Value,
+      output: Schema.String,
+      execute: (_, { key }) => Effect.succeed(key),
+    })
+    const runtime = CodeMode.make({
+      engine: "vm",
+      tools: { read: read.tool, echo },
+      hooks: {
+        "tool.before": (call) => Effect.sync(() => void seenKeys.push(`hook:${call.name}:${call.key}`)),
+      },
+    })
+    const code = `
+      const k0 = await tools.echo({ value: 1 })
+      const v1 = await tools.read({ value: 2 })
+      const k2 = await tools.echo({ value: v1.value })
+      return [k0, v1.value, k2]`
+    const run = background(runtime.program(code, undefined, { runId: "custom-run" }))
+    await read.called()
+    const suspended = suspendedOf(await Effect.runPromise(run.suspend))
+    expect(suspended.state.header.runId).toBe("custom-run")
+
+    read.reset()
+    const resumed = background(runtime.resume(CodeMode.toBytes(suspended.state)))
+    await read.called()
+    read.attempts[1]!.answer(42)
+    expect(await Effect.runPromise(resumed.result)).toEqual({
+      ok: true,
+      value: ["custom-run:0", 42, "custom-run:2"],
+      toolCalls: [{ name: "echo" }, { name: "read" }, { name: "echo" }],
+    })
+    expect(seenKeys).toEqual([
+      "hook:echo:custom-run:0",
+      "hook:read:custom-run:1",
+      "hook:read:custom-run:1",
+      "hook:echo:custom-run:2",
+    ])
+
+    // Without an explicit runId, a generated UUID prefixes every key.
+    const auto = await Effect.runPromise(runtime.program(`return await tools.echo({ value: 1 })`).run())
+    expect(auto).toMatchObject({ ok: true, value: expect.stringMatching(/^[0-9a-f-]{36}:0$/) })
+  })
+})
+
+describe("extension snapshot hooks", () => {
+  type Saved = {
+    readonly url: string
+    readonly status: number
+    readonly headers: ReadonlyArray<readonly [string, string]>
+    readonly body: Uint8Array
+  }
+  const savedSymbol = Symbol("saved")
+
+  /** A fetch-like extension whose resolved responses save and restore their methods through `snapshot` hooks. */
+  const web = (snapshot: Partial<Extension.Snapshot> = {}) => {
+    const counts = { encode: 0, decode: 0 }
+    const makeResponse = (saved: Saved) => {
+      const headers = Object.fromEntries(saved.headers)
+      const text = () => new TextDecoder().decode(saved.body)
+      return {
+        [savedSymbol]: saved,
+        url: saved.url,
+        status: saved.status,
+        ok: saved.status >= 200 && saved.status <= 299,
+        headers: {
+          get: (name: string) => headers[name.toLowerCase()] ?? null,
+          has: (name: string) => name.toLowerCase() in headers,
+        },
+        text: async () => text(),
+        json: async () => JSON.parse(text()) as unknown,
+        bytes: async () => saved.body,
+      }
+    }
+    const extension = Extension.make({
+      name: "fetch",
+      globals: {
+        fetch: Extension.async(async (url: string) =>
+          makeResponse({
+            url,
+            status: 200,
+            headers: [["x-id", "7"]],
+            body: new TextEncoder().encode(JSON.stringify({ url, ok: true })),
+          }),
+        ),
+      },
+      snapshot: {
+        encode: (value) => (counts.encode++, (value as { readonly [savedSymbol]: Saved })[savedSymbol]),
+        decode: (data) => (counts.decode++, makeResponse(data as Saved)),
+        ...snapshot,
+      },
+    })
+    return { extension, counts }
+  }
+
+  const code = `
+    const res = await fetch("https://a.test/")
+    const text = res.text
+    const header = res.headers.get
+    await tools.job({ value: 1 })
+    return [await text(), await res.json(), header("x-id"), res.headers.has("x-id"), [...(await res.bytes())].length, res.url, res.ok]`
+
+  const suspendWith = async (extension: Extension.Extension) => {
+    const jobs = reconnectableJobs()
+    const run = background(
+      CodeMode.make({ engine: "vm", tools: { job: jobs.tool }, extensions: [extension] }).program(code, undefined, {
+        runId: "h",
+      }),
+    )
+    await jobs.attached()
+    return { jobs, run }
+  }
+
+  test("methods on an extension-returned response survive suspend and resume in a fresh runtime", async () => {
+    const { extension, counts } = web()
+    const { jobs, run } = await suspendWith(extension)
+    const encodedBefore = counts.encode
+    const suspended = suspendedOf(await Effect.runPromise(run.suspend))
+    expect(suspended.state.records.filter((record) => record.t === "HostValue")).toHaveLength(1)
+    expect(counts.encode - encodedBefore).toBe(1)
+
+    jobs.reset()
+    const fresh = web()
+    const resumed = background(
+      CodeMode.make({ engine: "vm", tools: { job: jobs.tool }, extensions: [fresh.extension] }).resume(
+        CodeMode.toBytes(suspended.state),
+      ),
+    )
+    await jobs.attached()
+    expect(fresh.counts).toEqual({ encode: 0, decode: 1 })
+    jobs.finish("h:1", 1)
+    const outcome = await Effect.runPromise(resumed.result)
+    expect(outcome).toEqual({
+      ok: true,
+      value: [
+        '{"url":"https://a.test/","ok":true}',
+        { url: "https://a.test/", ok: true },
+        "7",
+        true,
+        35,
+        "https://a.test/",
+        true,
+      ],
+      toolCalls: [{ name: "job" }],
+    })
+  })
+
+  test("a suspend fails, and the run goes on, when encode throws or returns non-plain data", async () => {
+    const cases: ReadonlyArray<readonly [Partial<Extension.Snapshot>, string]> = [
+      [
+        { encode: () => ({ when: new Date(0) }) },
+        "The run's state couldn't be saved: The extension \"fetch\" saved a value it returned as data holding a Date; snapshot.encode must give plain data (JSON values and Uint8Arrays).",
+      ],
+      [
+        { encode: () => ({ run: () => 1 }) },
+        "The run's state couldn't be saved: The extension \"fetch\" saved a value it returned as data holding a function; snapshot.encode must give plain data (JSON values and Uint8Arrays).",
+      ],
+      [
+        {
+          encode: () => {
+            throw new Error("no")
+          },
+        },
+        "The run's state couldn't be saved: The extension \"fetch\" couldn't save a value it returned: no",
+      ],
+    ]
+    for (const [snapshot, message] of cases) {
+      const { jobs, run } = await suspendWith(web(snapshot).extension)
+      const error = await blocked(run)
+      expect(error.message).toBe(message)
+      expect(error.running).toEqual([])
+      jobs.finish("h:1", 1)
+      expect(await Effect.runPromise(run.result)).toMatchObject({
+        ok: true,
+        value: [
+          '{"url":"https://a.test/","ok":true}',
+          { url: "https://a.test/", ok: true },
+          "7",
+          true,
+          35,
+          "https://a.test/",
+          true,
+        ],
+      })
+    }
+  })
+
+  test("a state that holds a hooked value is refused without that extension or without its hooks", async () => {
+    const { extension } = web()
+    const { jobs, run } = await suspendWith(extension)
+    const suspended = suspendedOf(await Effect.runPromise(run.suspend))
+    const unhooked = Extension.make({ name: "fetch", globals: extension.globals })
+    const other = Extension.make({ name: "other", globals: extension.globals, snapshot: extension.snapshot })
+    for (const extensions of [[], [unhooked], [other]]) {
+      expect(
+        (await refusal(CodeMode.make({ engine: "vm", tools: { job: jobs.tool }, extensions }).resume(suspended.state)))
+          .message,
+      ).toBe("This state was saved by a runtime with other host globals (extensions); resume it with the same ones.")
+    }
+  })
+})
+
+describe("legacy engine compatibility", () => {
+  test("tools with durable set and extensions with snapshot hooks behave the same as before on legacy", async () => {
+    const keys: Array<string> = []
+    const rerunTool = Tool.make({
+      description: "Rerun tool",
+      input: Value,
+      output: Value,
+      durable: "rerun",
+      execute: (input, { key }) =>
+        Effect.sync(() => {
+          keys.push(key)
+          return { value: input.value * 2 }
+        }),
+    })
+    const reconnectableTool = Tool.make({
+      description: "Reconnectable tool",
+      input: Value,
+      output: Value,
+      durable: {
+        start: (input, { key }) =>
+          Effect.sync(() => {
+            keys.push(key)
+            return { n: input.value + 1 }
+          }),
+        attach: (handle) => Effect.succeed({ value: (handle as { n: number }).n * 10 }),
+        cancel: () => Effect.void,
+      },
+    })
+    const extension = Extension.make({
+      name: "ext",
+      globals: {
+        greet: (name: string) => ({ text: () => `hi ${name}` }),
+      },
+      snapshot: {
+        encode: (value) => value,
+        decode: (data) => data,
+      },
+    })
+    const runtime = CodeMode.make({
+      engine: "legacy",
+      tools: { rerun: rerunTool, reconnectable: reconnectableTool },
+      extensions: [extension],
+    })
+    const result = await Effect.runPromise(
+      runtime.execute(`
+        const a = await tools.rerun({ value: 3 })
+        const b = await tools.reconnectable({ value: 4 })
+        return [a.value, b.value, greet("kit").text()]
+      `),
+    )
+    expect(result).toEqual({
+      ok: true,
+      value: [6, 50, "hi kit"],
+      toolCalls: [{ name: "rerun" }, { name: "reconnectable" }],
+    })
+    expect(keys).toHaveLength(2)
+    expect(keys[0]).not.toBe(keys[1])
   })
 })

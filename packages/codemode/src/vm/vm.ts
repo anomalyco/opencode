@@ -430,7 +430,7 @@ export class Vm {
    * A synchronous extension call the program is in the middle of, from its `before` hook until its result is a
    * program value or its concurrent call is running: it holds live host values.
    */
-  get activeExtension(): { readonly path: string } | undefined {
+  get activeExtension(): { readonly key: string; readonly path: string } | undefined {
     return this.hosts.extension
   }
 

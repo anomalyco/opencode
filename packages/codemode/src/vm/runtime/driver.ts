@@ -1,4 +1,5 @@
 import { Cause, type Context, Effect, Exit, Fiber } from "effect"
+import type { Json } from "../data.js"
 import type { HostCall } from "../scheduler.js"
 import { type ToolRuntime, toolExpression } from "../../tool-runtime.js"
 import { locate } from "./errors.js"
@@ -15,11 +16,15 @@ export const SUSPENDED: unique symbol = Symbol("codemode.suspended")
  * calls the VM queued, as fibers with the caller's services, reporting each outcome back with `vm.complete`.
  * Fibers live only here, by host call id, and never become part of the VM's state.
  *
- * The VM and tool bridge can be swapped for restored ones between stops (the round-trip test mode does); a fiber's
- * outcome goes to whichever VM is current, by host call id.
+ * A reconnectable durable tool's call runs as two fibers, `start` then `attach`, so suspending can detach the second
+ * and keep the handle `start` gave. A `"rerun"` tool's running fiber is detached and interrupted on suspend, and its
+ * call is saved as queued to run again on resume. The VM and tool bridge can be swapped for restored ones between
+ * stops (the round-trip test mode does); a fiber's outcome goes to whichever VM is current, by host call id.
  */
 export class Driver<R> {
   private readonly fibers = new Map<number, Fiber.Fiber<unknown, unknown>>()
+  // Calls whose fibers were interrupted to suspend or end the run: their outcomes are not reported.
+  private readonly detached = new Set<number>()
   private wake: (() => void) | undefined
   private stopping = false
   private suspending = false
@@ -80,13 +85,19 @@ export class Driver<R> {
   }
 
   /**
-   * The host calls that block a suspend now: every call in progress, and a queued or synchronous extension call the
-   * program is in the middle of, which holds live host values. A tool call queued but not started starts on resume.
+   * The host calls that block a suspend now: every call in progress except a `"rerun"` tool call or a reconnectable
+   * tool call in `started`, plus any queued or synchronous extension call the program is in the middle of, which holds
+   * live host values. A tool call queued but not started starts on resume.
    */
-  blocking(): Array<{ readonly path: string }> {
+  blocking(): Array<{ readonly key: string; readonly path: string }> {
     const vm = this.vm
-    const calls = vm.calls().filter((call) => call.status !== "queued" || call.request.kind === "extension")
-    const running = calls.map((call) => ({ path: callPath(call) }))
+    const calls = vm.calls().filter((call) => {
+      if (call.request.kind === "extension") return true
+      if (call.status === "queued" || call.status === "started") return false
+      if (call.request.kind === "tool" && this.tools.durable(call.request.path) === "rerun") return false
+      return true
+    })
+    const running = calls.map((call) => ({ key: call.key, path: callPath(call) }))
     const active = vm.activeExtension
     if (active !== undefined && !calls.some((call) => call.blocking && call.request.kind === "extension")) {
       running.push(active)
@@ -99,26 +110,48 @@ export class Driver<R> {
     return this.vm.calls().some((call) => call.request.kind === "extension") || this.vm.activeExtension !== undefined
   }
 
-  /** Stops the run to suspend it, once its state is saved: `run` returns `SUSPENDED` at its next step. */
+  /**
+   * Stops the run to suspend it, once its state is saved: `run` returns `SUSPENDED` at its next step, and running
+   * durable calls' fibers are detached, so ending them reports nothing.
+   */
   detach(): void {
     this.suspending = true
+    for (const id of this.fibers.keys()) this.detached.add(id)
     this.wake?.()
   }
 
-  /** Stops host work still running, waiting for its cleanup. */
+  /** Stops host work still running, waiting for its cleanup; a reconnectable tool's work is cancelled unless detached. */
   interrupt(): Effect.Effect<void> {
     const self = this
     return Effect.gen(function* () {
       self.stopping = true
       while (self.fibers.size > 0) yield* Fiber.interruptAll([...self.fibers.values()])
+      // A suspended run's reconnectable work keeps running, to be attached on resume.
+      if (self.suspending) return
+      for (const call of self.vm.calls()) {
+        const request = call.request
+        if (call.status !== "started" || request.kind !== "tool") continue
+        call.status = "completed"
+        yield* Effect.ignore(self.tools.cancel(request.path, call.handle as Json)).pipe(
+          Effect.provideContext(self.services),
+        )
+      }
     })
   }
 
-  /** Starts any tool calls that were queued when the VM was saved. */
+  /** Starts tool calls that were queued (including `"rerun"` calls) and attaches reconnectable calls in `started`. */
   resume(): void {
     for (const call of this.vm.calls()) {
       if (call.status === "queued") this.launch(call)
+      else if (call.status === "started") this.attach(call)
     }
+  }
+
+  private admit(id: number, name: string): void {
+    const call = this.vm.call(id)
+    if (call?.admitted) return
+    this.tools.record(name)
+    if (call !== undefined) call.admitted = true
   }
 
   // Starts host work now; its outcome goes back to the VM: a blocking call's continues the job that made it, a
@@ -126,21 +159,60 @@ export class Driver<R> {
   private launch(call: HostCall): void {
     call.status = "running"
     const request = call.request
-    if (request.kind === "tool") return this.fork(call.id, this.tools.execute(request.path, request.args))
-    if (request.kind === "search") return this.fork(call.id, this.tools.search(request.args))
+    if (request.kind === "tool") {
+      const durable = this.tools.durable(request.path)
+      if (typeof durable === "object") {
+        const started = this.tools.start(request.path, request.args, call.key, (name) => this.admit(call.id, name))
+        return this.fork(call.id, started, (handle) => {
+          const current = this.vm.call(call.id)
+          if (current === undefined) return
+          current.status = "started"
+          current.handle = handle as Json
+          if (this.stopping || this.detached.has(call.id)) return
+          this.attach(current)
+        })
+      }
+      return this.fork(
+        call.id,
+        this.tools.execute(request.path, request.args, {
+          key: call.key,
+          admit: (name) => this.admit(call.id, name),
+          detaching: () => this.suspending,
+        }),
+      )
+    }
+    if (request.kind === "search") {
+      return this.fork(
+        call.id,
+        this.tools.search(request.args, {
+          key: call.key,
+          admit: (name) => this.admit(call.id, name),
+        }),
+      )
+    }
     // An extension's work, made by the extension bridge with the program's services in its requirements.
     return this.fork(call.id, this.vm.ctx.extensionWork!(request.call) as Effect.Effect<unknown, unknown, R>)
   }
 
+  private attach(call: HostCall): void {
+    const request = call.request
+    if (request.kind !== "tool") return
+    this.fork(
+      call.id,
+      this.tools.attach(request.path, request.args, call.key, call.handle as Json, () => this.suspending),
+    )
+  }
+
   // Forks `work` with the caller's services; it starts synchronously, so admission and hooks happen before the VM
-  // runs another job.
-  private fork(id: number, work: Effect.Effect<unknown, unknown, R>): void {
+  // runs another job. A success goes to `next` when given, otherwise to the VM.
+  private fork(id: number, work: Effect.Effect<unknown, unknown, R>, next?: (value: unknown) => void): void {
     const fiber = Effect.runForkWith(this.services)(work)
     this.fibers.set(id, fiber)
     fiber.addObserver((exit) => {
       if (this.fibers.get(id) === fiber) this.fibers.delete(id)
-      // Interrupted to end the run: nothing is left to settle.
-      if (this.stopping) return
+      if (next !== undefined && Exit.isSuccess(exit)) return next(exit.value)
+      // Interrupted to end or suspend the run: nothing is left to settle.
+      if (this.stopping || this.detached.has(id)) return
       const call = this.vm.call(id)
       if (call === undefined) return
       if (call.blocking) {

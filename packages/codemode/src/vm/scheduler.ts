@@ -84,6 +84,7 @@ export type HostRequest =
 export type ExtensionRequest = {
   readonly stage: "before" | "settle" | "run"
   readonly label: string
+  readonly extension?: string | undefined
   invocation: ExtensionInvocation | undefined
   host: unknown
   args: ReadonlyArray<unknown>
@@ -96,10 +97,19 @@ export type ExtensionRequest = {
  * later job; a blocking call stops the VM, and no other job runs until it ends.
  */
 export class HostCall {
-  /** Where the call is: `queued` (written ahead, not started), `running`, or `completed`. */
-  status: "queued" | "running" | "completed" = "queued"
+  /**
+   * Where the call is: `queued` (written ahead, not started), `running` (or in `start` for a reconnectable tool),
+   * `started` (a reconnectable tool whose `start` returned its `handle`, now in `attach`), or `completed`.
+   */
+  status: "queued" | "running" | "started" | "completed" = "queued"
+  /** The handle a reconnectable tool's `start` returned, saved so a resumed run can `attach` to it. */
+  handle: Json | undefined = undefined
+  /** Whether a tool call has already been counted against `maxToolCalls` and recorded in `toolCalls`. */
+  admitted = false
   constructor(
     readonly id: number,
+    /** The call's stable idempotency key, `<runId>:<callId>`. */
+    readonly key: string,
     readonly request: HostRequest,
     /** What runs: a tool path, or an extension function's label. */
     readonly label: string,
