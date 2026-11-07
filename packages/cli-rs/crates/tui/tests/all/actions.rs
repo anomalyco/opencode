@@ -505,10 +505,7 @@ fn export_saves_markdown_or_sanitized_json_and_shows_the_path() {
 fn dialogs_match_typescript() {
     let mut failed = Vec::new();
     // The TS fixtures render in UTC; the Rust footers use local time, so shift the prompts by the local offset.
-    let offset = {
-        use chrono::{Local, Offset, TimeZone};
-        Local.timestamp_millis_opt(1_772_539_200_000).unwrap().offset().fix().local_minus_utc() as i64 * 1000
-    };
+    let offset = i64::from(opencode_util::time::Zone::Local.offset(1_772_539_200_000)) * 1000;
     let shifted: Vec<Value> = turns()
         .into_iter()
         .map(|mut message| {

@@ -164,7 +164,7 @@ fn try_acquire(lock_dir: &Path, options: &Options) -> Result<Option<Lock>, Error
         token: token.clone(),
         pid: std::process::id(),
         hostname: hostname(),
-        created_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        created_at: opencode_util::time::iso(opencode_util::time::now_ms()).unwrap_or_default(),
     })
     .expect("meta serializes");
     if create_new(&heartbeat, b"").is_err() {

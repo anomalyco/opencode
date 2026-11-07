@@ -5,7 +5,6 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use chrono::{Local as Clock, TimeZone, Timelike};
 use opencode_api::generated::{
     ModelInfo, ProviderInfo, UsageLimitsBudget, UsageLimitsBudgetCoverage, UsageLimitsBudgetPer,
     UsageLimitsBudgetScope, UsageLimitsInfo,
@@ -14,6 +13,7 @@ use opencode_api::js::locale_compare;
 use opencode_ui::bind;
 use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogCx, DialogOptions, HeaderProps, header, layout};
 use opencode_ui::select::{self, Select, SelectOption, SelectProps};
+use opencode_util::time::{self, Zone};
 use opentui::prelude::*;
 
 use crate::local::Local;
@@ -130,19 +130,19 @@ pub fn format_dollars(value: f64) -> String {
 
 /// `formatReset`: the time today, else the day with the time unless it is midnight here.
 pub fn format_reset(at: f64) -> String {
-    format_reset_at(at, chrono::Local::now())
+    format_reset_at(at, time::now_ms())
 }
 
-fn format_reset_at(at: f64, now: chrono::DateTime<Clock>) -> String {
-    let Some(date) = Clock.timestamp_millis_opt(at as i64).single() else {
+fn format_reset_at(at: f64, now: i64) -> String {
+    let Some(date) = Zone::Local.at(at as i64) else {
         return "Invalid Date".into();
     };
-    let time = date.format("%-I:%M %p").to_string();
-    if date.date_naive() == now.date_naive() {
+    let time = date.short_time(" ");
+    if Zone::Local.at(now).is_some_and(|now| now.date == date.date) {
         return format!("{time} today");
     }
-    let day = date.format("%b %-d").to_string();
-    if date.hour() == 0 && date.minute() == 0 {
+    let day = date.month_day();
+    if date.hour == 0 && date.minute == 0 {
         return day;
     }
     format!("{day}, {time}")
@@ -388,8 +388,11 @@ mod tests {
 
     #[test]
     fn resets_name_today_or_the_day() {
-        let now = Clock.with_ymd_and_hms(2026, 11, 4, 9, 0, 0).unwrap();
-        let at = |h, m, d| Clock.with_ymd_and_hms(2026, 11, d, h, m, 0).unwrap().timestamp_millis() as f64;
+        let local = |hour: i64, minute: i64, day| {
+            Zone::Local.instant(time::Date { year: 2026, month: 11, day }, hour * 3600 + minute * 60).unwrap()
+        };
+        let now = local(9, 0, 4);
+        let at = |hour, minute, day| local(hour, minute, day) as f64;
         assert_eq!(format_reset_at(at(15, 5, 4), now), "3:05 PM today");
         assert_eq!(format_reset_at(at(0, 0, 6), now), "Nov 6");
         assert_eq!(format_reset_at(at(0, 30, 6), now), "Nov 6, 12:30 AM");

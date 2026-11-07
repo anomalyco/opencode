@@ -1,8 +1,8 @@
 //! `@opencode/util/activity-calendar` for `stats` (C.3) and the TUI's `/stats` poster (E.14): Monday-first weeks
 //! of activity levels with month labels, and the time zone both send with the stats request.
 
-use chrono::{DateTime, Datelike, NaiveDate, TimeZone};
 use opencode_api_types::SessionStatsActivity;
+use opencode_util::time::{Date, MONTHS, Zone};
 
 /// `Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"` as Bun resolves it: `TZ` (an empty
 /// value is UTC), else the zone `/etc/localtime` links to. ICU's names for UTC become `UTC`, and a
@@ -66,25 +66,20 @@ pub struct Calendar {
     pub clipped: bool,
 }
 
-const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
 /// `activityCalendar`: Monday-first weeks covering `[from, to)` in `zone`'s local dates, the latest
 /// `max_weeks` of them (at most 53), with month labels.
-pub fn activity_calendar<Tz: TimeZone>(
-    zone: &Tz,
+pub fn activity_calendar(
+    zone: Zone,
     activity: &[SessionStatsActivity],
     from: i64,
     to: i64,
     max_weeks: f64,
 ) -> Calendar {
     // Local dates first, then day ordinals, so DST cannot add or drop cells.
-    let ordinal = |time: i64| {
-        DateTime::from_timestamp_millis(time)
-            .map_or(0, |time| i64::from(time.with_timezone(zone).date_naive().num_days_from_ce()) - EPOCH_DAYS)
-    };
+    let ordinal = |time: i64| zone.at(time).map_or(0, |time| time.date.days());
     let first = ordinal(from);
     let last = ordinal(to - 1);
-    let monday = first - i64::from(date(first).weekday().num_days_from_monday());
+    let monday = first - i64::from(Date::from_days(first).weekday_from_monday());
     let total = if to <= from { 0 } else { (last - monday).div_euclid(7) + 1 };
     let count = total.min(53).min((max_weeks.floor() as i64).max(1));
     let start = monday + (total - count).max(0) * 7;
@@ -102,7 +97,7 @@ pub fn activity_calendar<Tz: TimeZone>(
         .map(|week| {
             std::array::from_fn(|day| {
                 let ordinal = start + week * 7 + day as i64;
-                let key = date(ordinal).format("%Y-%m-%d").to_string();
+                let key = Date::from_days(ordinal).to_string();
                 let steps = values.iter().find(|(date, _)| *date == key).map_or(0, |(_, steps)| *steps);
                 let level = if ordinal < first || ordinal > last {
                     -1
@@ -120,7 +115,7 @@ pub fn activity_calendar<Tz: TimeZone>(
     // Thursday names the month that owns most of a week; edge weeks stay inside the range.
     let mut months: Vec<Month> = Vec::new();
     for week in 0..count {
-        let label = MONTHS[date((start + week * 7 + 3).clamp(first, last.max(first))).month0() as usize];
+        let label = MONTHS[Date::from_days((start + week * 7 + 3).clamp(first, last.max(first))).month as usize - 1];
         if months.last().is_none_or(|month| month.label != label) {
             months.push(Month { week: week as usize, label, span: 0 });
         }
@@ -132,17 +127,9 @@ pub fn activity_calendar<Tz: TimeZone>(
     Calendar { weeks, months, clipped: count < total }
 }
 
-// Days from 0001-01-01 to 1970-01-01, as `num_days_from_ce` counts them.
-const EPOCH_DAYS: i64 = 719_163;
-
-fn date(ordinal: i64) -> NaiveDate {
-    NaiveDate::from_num_days_from_ce_opt((ordinal + EPOCH_DAYS) as i32).unwrap_or_default()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::FixedOffset;
     use serde_json::{Value, json};
 
     fn calendar_json(calendar: &Calendar) -> Value {
@@ -163,11 +150,11 @@ mod tests {
         let cases = fixture["calendar"].as_array().unwrap();
         assert!(cases.len() > 40);
         for case in cases {
-            let zone = FixedOffset::east_opt(case["offset"].as_i64().unwrap() as i32).unwrap();
+            let zone = Zone::Fixed(case["offset"].as_i64().unwrap() as i32);
             let input = &case["input"];
             let activity: Vec<SessionStatsActivity> = serde_json::from_value(input["activity"].clone()).unwrap();
             let calendar = activity_calendar(
-                &zone,
+                zone,
                 &activity,
                 input["from"].as_i64().unwrap(),
                 input["to"].as_i64().unwrap(),

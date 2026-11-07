@@ -502,10 +502,7 @@ fn with_diff(output: Output, source: &DiffSource) -> Output {
 fn iso_time(at: Option<&Value>) -> Value {
     let millis = at.and_then(Value::as_f64).unwrap_or_default();
     #[allow(clippy::cast_possible_truncation)]
-    match chrono::DateTime::from_timestamp_millis(millis as i64) {
-        Some(time) => json!(time.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()),
-        None => Value::Null,
-    }
+    opencode_util::time::iso(millis as i64).map_or(Value::Null, Value::from)
 }
 
 fn new_tool(session_id: &str, id: &str, name: Option<&str>) -> Tool {

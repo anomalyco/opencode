@@ -5,7 +5,6 @@ use std::future::Future;
 use std::io::IsTerminal;
 use std::time::Duration;
 
-use chrono::{DateTime, Datelike, Local, NaiveDate, TimeZone};
 use opencode_api::client::Client;
 use opencode_api::error::Error as ApiError;
 use opencode_api::generated::types::{
@@ -13,6 +12,7 @@ use opencode_api::generated::types::{
     SessionStatsTools,
 };
 use opencode_ui::activity_calendar::{activity_calendar, time_zone};
+use opencode_util::time::{self, Date, Zone};
 use serde_json::Value;
 
 use super::Context;
@@ -33,7 +33,7 @@ fn stats(context: &Context, args: &StatsArgs) -> anyhow::Result<()> {
     if [args.days.is_some(), args.year.is_some(), args.all].iter().filter(|set| **set).count() > 1 {
         anyhow::bail!("--days, --year, and --all cannot be combined");
     }
-    let range = Range::new(args, Local::now());
+    let range = Range::new(args, Zone::Local, time::now_ms());
     let details = args.models || args.tools || args.cost || args.full;
     let stats = block_on(async {
         let server = connect(context).await?;
@@ -89,7 +89,7 @@ fn stats(context: &Context, args: &StatsArgs) -> anyhow::Result<()> {
         width: columns().unwrap_or(80),
     };
     let palette = Palette::from_colorfgbg(std::env::var("COLORFGBG").ok().as_deref());
-    print(&(render_stats(&info, &options, &palette, &Local) + "\n"))
+    print(&(render_stats(&info, &options, &palette, Zone::Local) + "\n"))
 }
 
 // `request`: each call gets 30 seconds, and a call that cannot reach the server names it.
@@ -130,16 +130,16 @@ struct Range {
 }
 
 impl Range {
-    fn new<Tz: TimeZone>(args: &StatsArgs, now: DateTime<Tz>) -> Self {
-        let zone = now.timezone();
-        let to = now.timestamp_millis() + 1;
+    fn new(args: &StatsArgs, zone: Zone, now: i64) -> Self {
+        let today = zone.at(now).unwrap_or_default().date;
+        let to = now + 1;
         if args.all {
             return Self { from: None, to, label: "all time".to_owned() };
         }
         if let Some(days) = args.days {
-            let from = now.date_naive() - chrono::Days::new(u64::from(days.max(1) - 1));
+            let from = Date::from_days(today.days() - i64::from(days.max(1) - 1));
             return Self {
-                from: Some(local_midnight(&zone, from)),
+                from: Some(local_midnight(zone, from)),
                 to,
                 label: match days {
                     0 | 1 => "today".to_owned(),
@@ -147,9 +147,9 @@ impl Range {
                 },
             };
         }
-        let current = now.year();
+        let current = today.year;
         let year = args.year.map_or(current, i32::from);
-        let start = |year| local_midnight(&zone, NaiveDate::from_ymd_opt(year, 1, 1).unwrap());
+        let start = |year| local_midnight(zone, Date { year, month: 1, day: 1 });
         Self {
             from: Some(start(year)),
             to: if year == current { to } else { start(year + 1) },
@@ -159,11 +159,8 @@ impl Range {
 }
 
 // `new Date(y, m, d).getTime()`: local midnight, or the first instant after a gap that skips it.
-fn local_midnight<Tz: TimeZone>(zone: &Tz, date: NaiveDate) -> i64 {
-    let midnight = date.and_hms_opt(0, 0, 0).unwrap();
-    (0..=24)
-        .find_map(|hours| zone.from_local_datetime(&(midnight + chrono::Duration::hours(hours))).earliest())
-        .map_or(0, |time| time.timestamp_millis())
+fn local_midnight(zone: Zone, date: Date) -> i64 {
+    (0..=24).find_map(|hours| zone.instant(date, hours * 3600)).unwrap_or(0)
 }
 
 /// The stats palette, which `terminalPalette` picks from `COLORFGBG`'s background.
@@ -205,12 +202,7 @@ pub struct RenderOptions {
 
 /// `renderStats`: the summary card, or the detail sections that `--models`, `--tools`, and
 /// `--cost` ask for. Lines are joined with `\n`, without a final one.
-pub fn render_stats<Tz: TimeZone>(
-    stats: &SessionStatsInfo,
-    options: &RenderOptions,
-    palette: &Palette,
-    zone: &Tz,
-) -> String {
+pub fn render_stats(stats: &SessionStatsInfo, options: &RenderOptions, palette: &Palette, zone: Zone) -> String {
     let color = options.color;
     let style = |value: &str, code: &str| style(value, code, color);
     let primary = format!("1;{}", palette.primary);
@@ -285,12 +277,7 @@ pub fn render_stats<Tz: TimeZone>(
     lines.join("\n")
 }
 
-fn render_activity<Tz: TimeZone>(
-    stats: &SessionStatsInfo,
-    options: &RenderOptions,
-    palette: &Palette,
-    zone: &Tz,
-) -> Vec<String> {
+fn render_activity(stats: &SessionStatsInfo, options: &RenderOptions, palette: &Palette, zone: Zone) -> Vec<String> {
     let color = options.color;
     let calendar = activity_calendar(
         zone,
@@ -599,7 +586,6 @@ fn paint_activity(level: usize, palette: &Palette, color: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{FixedOffset, Utc};
 
     fn fixture() -> Value {
         serde_json::from_str(include_str!("../../../../parity/fixtures/C.3/stats.json")).unwrap()
@@ -626,7 +612,7 @@ mod tests {
                     width: options["width"].as_u64().unwrap() as usize,
                 };
                 assert_eq!(
-                    render_stats(&stats, &options, &palette, &Utc),
+                    render_stats(&stats, &options, &palette, time::UTC),
                     case["output"].as_str().unwrap(),
                     "{} / {} / color {} / COLORFGBG {}",
                     case["stats"],
@@ -686,10 +672,10 @@ mod tests {
 
     #[test]
     fn ranges_follow_stats_range() {
-        let zone = FixedOffset::east_opt(3600).unwrap();
-        let now = zone.with_ymd_and_hms(2026, 11, 4, 15, 30, 0).unwrap();
-        let ms = |y, m, d| zone.with_ymd_and_hms(y, m, d, 0, 0, 0).unwrap().timestamp_millis();
-        let to = now.timestamp_millis() + 1;
+        let zone = Zone::Fixed(3600);
+        let ms = |year, month, day| zone.instant(Date { year, month, day }, 0).unwrap();
+        let now = ms(2026, 11, 4) + (15 * 60 + 30) * 60_000;
+        let to = now + 1;
         let args = |days: Option<u32>, year: Option<u16>, all: bool| StatsArgs {
             days,
             year,
@@ -703,7 +689,7 @@ mod tests {
             json: false,
             server: Default::default(),
         };
-        let range = |args: StatsArgs| Range::new(&args, now);
+        let range = |args: StatsArgs| Range::new(&args, zone, now);
         let want = |from: Option<i64>, to: i64, label: &str| Range { from, to, label: label.to_owned() };
         assert_eq!(range(args(None, None, true)), want(None, to, "all time"));
         assert_eq!(range(args(Some(0), None, false)), want(Some(ms(2026, 11, 4)), to, "today"));
