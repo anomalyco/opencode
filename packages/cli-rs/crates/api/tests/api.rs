@@ -45,6 +45,22 @@ fn client(script: &Arc<Script>) -> Client {
 }
 
 #[test]
+fn hosts_must_be_ascii_or_punycode() {
+    let script = Script::new(200, "application/json", "{}");
+    for url in ["https://example.com", "https://xn--bcher-kva.example"] {
+        let client = Client::with_transport(url, script.clone()).unwrap();
+        assert_eq!(client.base_url().as_str(), format!("{url}/"));
+    }
+    let Err(Error::Transport(message)) = Client::with_transport("https://bücher.example", script) else {
+        panic!("a Unicode host parsed");
+    };
+    assert_eq!(
+        message,
+        "https://bücher.example: a host name must be ASCII; write an international name in its punycode (xn--) form"
+    );
+}
+
+#[test]
 fn tagged_union_decodes_known_rpc_and_unknown_members() {
     let connected: V2Event =
         serde_json::from_value(json!({ "id": "evt_1", "type": "server.connected", "data": {} })).unwrap();
