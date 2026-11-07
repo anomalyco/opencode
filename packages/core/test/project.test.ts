@@ -551,6 +551,20 @@ describe("Project.resolve", () => {
     }),
   )
 
+  it.live("ignores a cached id with control characters", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true }))
+      yield* Effect.promise(() => Bun.write(path.join(tmp.path, ".git", "opencode"), "\u0000".repeat(40)))
+      const project = yield* Project.Service
+
+      const result = yield* project.resolve(abs(tmp.path))
+
+      expect(result.previous).toBeUndefined()
+      expect(result.id).toBe(Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
+    }),
+  )
+
   it.live("does not write the cache while resolving", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
