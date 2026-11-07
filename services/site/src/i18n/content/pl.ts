@@ -390,7 +390,7 @@ export const content = {
         },
       },
       install:
-        "Najpierw zainstaluj rozszerzenie Chrome. Przeprowadzi cię przez pozostałe kroki. Aby zainstalować CLI bezpośrednio, użyj jednego z tych poleceń.",
+        "Najpierw zainstaluj [rozszerzenie Chrome]. Przeprowadzi cię przez pozostałe kroki. Aby zainstalować CLI bezpośrednio (nie powinno to być potrzebne), użyj jednego z tych poleceń.",
     },
   },
   apps: {

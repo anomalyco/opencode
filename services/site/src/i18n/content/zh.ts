@@ -194,7 +194,7 @@ export const content = {
         allowlists: { title: "允许列表", body: "将会话的标签页限制在您指定的网站内。" },
       },
       install:
-        "请先安装 Chrome 扩展，它会引导你完成其余步骤。如需直接安装 CLI，可使用以下任一命令。",
+        "请先安装 [Chrome 扩展]，它会引导你完成其余步骤。如需直接安装 CLI（通常不需要），可使用以下任一命令。",
     },
   },
   apps: {
