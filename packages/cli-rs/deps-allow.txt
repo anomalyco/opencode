@@ -7,10 +7,6 @@
 # leaves this file in the same commit.
 
 aho-corasick
-anstream
-anstyle
-anstyle-parse
-anstyle-query
 anyhow build
 atomic-waker
 base64
@@ -20,12 +16,6 @@ bytes
 cc
 cfg-if
 chacha20
-clap
-clap_builder
-clap_complete
-clap_derive proc-macro
-clap_lex
-colorchoice
 const-oid
 cpufeatures
 crypto-common
@@ -43,7 +33,6 @@ futures-task
 futures-util
 getrandom build
 hashbrown
-heck
 html-escape
 http
 http-body
@@ -57,7 +46,6 @@ idna
 idna_adapter
 indexmap
 ipnet
-is_terminal_polyfill
 itoa
 libc build
 libloading
@@ -97,11 +85,9 @@ slab
 smallvec
 socket2
 streaming-iterator
-strsim
 subtle
 syn
 sync_wrapper
-terminal_size
 thiserror build
 thiserror-impl proc-macro
 tokio
@@ -139,7 +125,6 @@ unicode-width
 untrusted
 url
 utf8_iter
-utf8parse
 utf_types
 want
 zeroize
