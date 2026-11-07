@@ -36,8 +36,6 @@ opentui = { path = "/home/simon/src/opentui-rust/crates/opentui", features = ["s
 # `name.workspace = true` and adds features with `features = [...]`.
 base64 = "0.23"
 bytes = "1"
-# Only a dev-dependency of opencode-util, for the differential test of its time module.
-chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 futures-util = { version = "0.3", default-features = false, features = ["std", "sink"] }
 # The IDNA stub: `url` rejects non-ASCII hosts instead of pulling ICU4X (deviation A10-ascii-hosts). Pinned so a
 # `cargo update` cannot bring 1.2 back.
