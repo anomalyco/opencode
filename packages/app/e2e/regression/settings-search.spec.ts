@@ -1,9 +1,9 @@
 import { expect, test, type Page } from "@playwright/test"
 import en from "../../src/runtime/i18n/en"
 import { clientSettings } from "../../src/settings/search-catalog"
-import { NO_PROVIDER, REMOTE_SERVER, holdRoute, project, type SeedInput } from "../utils/app"
+import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, type SeedInput } from "../utils/app"
 import { mockOpenCodeServer } from "../utils/mock-server"
-import { openSettings } from "../utils/workspace"
+import { mockWorkspace, openSettings } from "../utils/workspace"
 
 const directory = "/projects/opencode"
 
@@ -513,4 +513,17 @@ test("multi-server results follow the selected server and keep the query on retu
   await expect(view.results.getByRole("option")).toHaveCount(1)
   await view.results.getByRole("option").click()
   await expect(view.settings.getByRole("textbox", { name: "Project name", exact: true })).toHaveValue("Remote app")
+})
+
+test("finds translated updater settings by their English titles", async ({ page }) => {
+  await mockWorkspace(page, { name: "Updates", sessions: [], seed: { locale: "zh" } })
+  await page.goto(
+    `/e2e/utils/settings-wsl.html?${new URLSearchParams({ server: SERVER, mode: "stopped", updater: "" })}`,
+  )
+  const settings = page.getByTestId("settings-screen")
+  const search = settings.getByRole("combobox", { name: "搜索", exact: true })
+  await search.fill("Release notes")
+  await expect(settings.getByRole("option", { name: /^发行说明/ })).toBeVisible()
+  await search.fill("Check for updates")
+  await expect(settings.getByRole("option", { name: /^检查更新/ })).toBeVisible()
 })

@@ -6,6 +6,7 @@ import { onIdle } from "@opencode/plugin/gui/builtin"
 import { startWebUpdater } from "./web-driver"
 import { initialWebUpdate, webUpdateAction, webUpdatePending, type WebUpdateState } from "./web-machine"
 import type definition from "./index"
+import en from "./i18n/en"
 
 type Offer = { toast?: number }
 
@@ -85,9 +86,9 @@ export function webUpdates(ctx: SetupContext<typeof definition>) {
         },
         get entries() {
           return [
-            { id: "settings-release-notes", title: ctx.t("releaseNotes.title") },
-            { id: "settings-check-updates", title: ctx.t("check.title") },
-            { id: "settings-reload-from-server", title: ctx.t("web.reset.title") },
+            { id: "settings-release-notes", title: ctx.t("releaseNotes.title"), keywords: en["releaseNotes.title"] },
+            { id: "settings-check-updates", title: ctx.t("check.title"), keywords: en["check.title"] },
+            { id: "settings-reload-from-server", title: ctx.t("web.reset.title"), keywords: en["web.reset.title"] },
           ]
         },
         render: () => (

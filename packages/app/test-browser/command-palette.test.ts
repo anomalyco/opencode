@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 import type { Project } from "@/runtime/server/types"
 import type { SessionInfo } from "@opencode/client/promise"
 import { createRoot } from "solid-js"
+import zh from "@/runtime/i18n/zh"
+import { commandLabels } from "@/shell/commands/command"
 import { createCommandPaletteCommandEntry, createServerSessionEntries } from "@/shell/commands/palette"
 import { matchesCommandPaletteEntry } from "@/shell/commands/dialog"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -216,13 +218,16 @@ describe("command palette commands", () => {
   })
 
   test("match the English source of a translated title, description and category", () => {
+    const strings = new Map(Object.entries(zh))
+
     const entry = createCommandPaletteCommandEntry(
       {
         id: "session.compact",
-        title: "压缩会话",
-        titleKey: "command.session.compact",
-        description: "总结会话以减少上下文大小",
-        descriptionKey: "command.session.compact.description",
+        ...commandLabels(
+          (key) => strings.get(key) ?? key,
+          "command.session.compact",
+          "command.session.compact.description",
+        ),
       },
       "命令",
       "Commands",

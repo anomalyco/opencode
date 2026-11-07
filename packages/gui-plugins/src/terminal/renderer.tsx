@@ -14,6 +14,7 @@ import {
 } from "@opencode/plugin/gui"
 import type Terminal from "./index"
 import { terminalToggleCommand } from "./index"
+import en from "./i18n/en"
 import { createTerminalModel, type TerminalSession } from "./model"
 import { tabHidden, tabTargetable } from "./machine"
 import { terminalTabLabel } from "./title"
@@ -85,7 +86,7 @@ const setup: Plugin.Setup<typeof Terminal> = (ctx) => {
       ...terminalToggleCommand,
       title: ctx.t("command.toggle"),
       group: ctx.t("command.category.view"),
-      keywords: "toggle terminal console shell panel",
+      keywords: `${en["command.toggle"]} console shell panel`,
       section: "terminal",
       featured: true,
       slash: { name: "terminal", after: "open" },
@@ -120,7 +121,7 @@ const setup: Plugin.Setup<typeof Terminal> = (ctx) => {
       title: ctx.t("command.new"),
       description: ctx.t("command.new.description"),
       group: ctx.t("command.category"),
-      keywords: "new terminal console shell create tab",
+      keywords: `${en["command.new"]} console shell create tab ${en["command.new.description"]}`,
       section: "terminal",
       bind: "ctrl+alt+t",
       editable: true,

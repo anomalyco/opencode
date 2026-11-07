@@ -21,6 +21,7 @@ import {
   type WhatsNewEvent,
 } from "./whats-new-machine"
 import type definition from "./index"
+import en from "./i18n/en"
 
 const setup: Plugin.Setup<typeof definition> = (ctx) => {
   whatsNew(ctx)
@@ -99,8 +100,8 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     },
     get entries() {
       return [
-        { id: "settings-release-notes", title: ctx.t("releaseNotes.title") },
-        { id: "settings-check-updates", title: ctx.t("check.title") },
+        { id: "settings-release-notes", title: ctx.t("releaseNotes.title"), keywords: en["releaseNotes.title"] },
+        { id: "settings-check-updates", title: ctx.t("check.title"), keywords: en["check.title"] },
       ]
     },
     render: () => (
@@ -141,7 +142,9 @@ function betaNotes(ctx: SetupContext<typeof definition>) {
       return ctx.t("beta.title")
     },
     get entries() {
-      return [{ id: "whats-new", title: ctx.t("beta.title"), keywords: "changelog release notes beta" }]
+      return [
+        { id: "whats-new", title: ctx.t("beta.title"), keywords: `changelog release notes beta ${en["beta.title"]}` },
+      ]
     },
     render: () => (
       <Suspense>

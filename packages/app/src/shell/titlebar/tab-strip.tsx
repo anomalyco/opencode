@@ -22,7 +22,7 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { DraftTabItem, TabNavItem, type TabCloseActions } from "@/shell/titlebar/tab-nav"
 import { useGlobal, useServerCtx, type ServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useCommand } from "@/shell/commands/command"
+import { commandLabels, useCommand } from "@/shell/commands/command"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { createTabComposerState } from "@/composer/persistence"
@@ -566,30 +566,26 @@ export function TitlebarTabStrip(props: {
     {
       ...previousSessionCommand,
       category: language.t("command.category.session"),
-      title: language.t("command.session.previous"),
-      titleKey: "command.session.previous",
+      ...commandLabels(language.t, "command.session.previous"),
       onSelect: () => selectAdjacentTab(-1),
     },
     {
       ...nextSessionCommand,
       category: language.t("command.category.session"),
-      title: language.t("command.session.next"),
-      titleKey: "command.session.next",
+      ...commandLabels(language.t, "command.session.next"),
       onSelect: () => selectAdjacentTab(1),
     },
     {
       id: "session.previous.unseen",
       category: language.t("command.category.session"),
-      title: language.t("command.session.previous.unseen"),
-      titleKey: "command.session.previous.unseen",
+      ...commandLabels(language.t, "command.session.previous.unseen"),
       keybind: "shift+alt+arrowup",
       onSelect: () => selectAdjacentTab(-1, (key) => !!unread[key]),
     },
     {
       id: "session.next.unseen",
       category: language.t("command.category.session"),
-      title: language.t("command.session.next.unseen"),
-      titleKey: "command.session.next.unseen",
+      ...commandLabels(language.t, "command.session.next.unseen"),
       keybind: "shift+alt+arrowdown",
       onSelect: () => selectAdjacentTab(1, (key) => !!unread[key]),
     },

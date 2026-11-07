@@ -1,4 +1,4 @@
-import { useCommand, type CommandOption } from "@/shell/commands/command"
+import { commandLabels, useCommand, type CommandOption } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { DialogSelectModel } from "@/providers/models/select-dialog"
 import { useLocal, type ModelSelection } from "@/providers/models/selection"
@@ -109,55 +109,37 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
   command.register("composer", () => [
     modelCommand({
       id: "model.choose",
-      title: language.t("command.model.choose"),
-      titleKey: "command.model.choose",
-      description: language.t("command.model.choose.description"),
-      descriptionKey: "command.model.choose.description",
+      ...commandLabels(language.t, "command.model.choose", "command.model.choose.description"),
       keybind: "mod+'",
       slash: "model",
       onSelect: chooseModel,
     }),
     modelCommand({
       id: "model.variant.cycle",
-      title: language.t("command.model.variant.cycle"),
-      titleKey: "command.model.variant.cycle",
-      description: language.t("command.model.variant.cycle.description"),
-      descriptionKey: "command.model.variant.cycle.description",
+      ...commandLabels(language.t, "command.model.variant.cycle", "command.model.variant.cycle.description"),
       keybind: "shift+mod+d",
       onSelect: () => model.variant.cycle(),
     }),
     viewCommand({
       id: "usage.view",
-      title: language.t("command.usage.view"),
-      titleKey: "command.usage.view",
-      description: language.t("command.usage.view.description"),
-      descriptionKey: "command.usage.view.description",
+      ...commandLabels(language.t, "command.usage.view", "command.usage.view.description"),
       onSelect: () => void viewUsage(),
     }),
     providerCommand({
       id: "provider.connect",
-      title: language.t("command.provider.connect"),
-      titleKey: "command.provider.connect",
-      description: language.t("command.provider.connect.description"),
-      descriptionKey: "command.provider.connect.description",
+      ...commandLabels(language.t, "command.provider.connect", "command.provider.connect.description"),
       slash: "connect",
       onSelect: connectProvider,
     }),
     serverCommand({
       id: "config.reload",
-      title: language.t("command.config.reload"),
-      titleKey: "command.config.reload",
-      description: language.t("command.config.reload.description"),
-      descriptionKey: "command.config.reload.description",
+      ...commandLabels(language.t, "command.config.reload", "command.config.reload.description"),
       slash: "reload",
       onSelect: () => reloadConfig({ type: "reload.requested" }),
     }),
     agentCommand({
       id: "agent.cycle",
-      title: language.t("command.agent.cycle"),
-      titleKey: "command.agent.cycle",
-      description: language.t("command.agent.cycle.description"),
-      descriptionKey: "command.agent.cycle.description",
+      ...commandLabels(language.t, "command.agent.cycle", "command.agent.cycle.description"),
       keybind: "mod+.",
       slash: "agent",
       disabled: !local.agent.visible(),
@@ -165,10 +147,7 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
     }),
     agentCommand({
       id: "agent.cycle.reverse",
-      title: language.t("command.agent.cycle.reverse"),
-      titleKey: "command.agent.cycle.reverse",
-      description: language.t("command.agent.cycle.reverse.description"),
-      descriptionKey: "command.agent.cycle.reverse.description",
+      ...commandLabels(language.t, "command.agent.cycle.reverse", "command.agent.cycle.reverse.description"),
       keybind: "shift+mod+.",
       disabled: !local.agent.visible(),
       onSelect: () => local.agent.move(-1),

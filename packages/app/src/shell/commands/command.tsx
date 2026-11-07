@@ -100,6 +100,11 @@ type KeybindConfig = string
 /** A typed i18n key, as `language.t` accepts it. */
 type Label = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
 
+/** The visible command labels and their searchable English sources always use the same keys. */
+export function commandLabels(t: (key: Label) => string, titleKey: Label, descriptionKey?: Label) {
+  return { title: t(titleKey), titleKey, description: descriptionKey && t(descriptionKey), descriptionKey }
+}
+
 export interface Keybind {
   key: string
   ctrl: boolean

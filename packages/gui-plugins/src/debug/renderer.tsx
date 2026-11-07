@@ -2,6 +2,7 @@ import { showToast, toaster } from "@opencode/ui/toast"
 import { createMemo, createSignal, lazy, onCleanup, Show, Suspense } from "solid-js"
 import { createKeyed, Command, Slot, type Plugin } from "@opencode/plugin/gui"
 import type Debug from "./index"
+import en from "./i18n/en"
 import { HeapSnapshots, MemoryDiagnostics } from "./contract"
 import {
   createHeapCommandState,
@@ -71,7 +72,7 @@ const setup: Plugin.Setup<typeof Debug> = (ctx) => {
       id: "toggle",
       title: ctx.t("command.toggle"),
       group: ctx.t("command.category.view"),
-      keywords: "toggle debug bar dev developer tools diagnostics",
+      keywords: `dev bar developer tools diagnostics ${en["command.toggle"]}`,
       // Running diagnostics keep the bar open.
       enabled: barView().togglable,
       run: toggle,

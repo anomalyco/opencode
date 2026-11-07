@@ -7,9 +7,20 @@ import {
   paletteSession,
 } from "../utils/command-palette"
 import { REMOTE_SERVER, SERVER } from "../utils/app"
-import { mockRemoteServer, mockWorkspace } from "../utils/workspace"
+import { mockRemoteServer, mockWorkspace, openSession } from "../utils/workspace"
 
 test.use({ serviceWorkers: "block", permissions: ["clipboard-read", "clipboard-write"] })
+
+test("finds translated plugin commands by existing keywords and English description", async ({ page }) => {
+  const { editor } = await openSession(page, { name: "Palette", seed: { locale: "zh" }, persistentPty: {} })
+  await editor.press("ControlOrMeta+Shift+P")
+  const dialog = page.getByRole("dialog")
+  const input = dialog.getByRole("combobox")
+  await input.fill("dev bar")
+  await expect(dialog.getByRole("option", { name: /^切换调试栏/ })).toBeVisible()
+  await input.fill("terminal tab")
+  await expect(dialog.getByRole("option", { name: /^新建终端/ })).toBeVisible()
+})
 
 test("copies the session ID while file and session searches are still pending", async ({ page }) => {
   const warnings = captureConsoleWarnings(page)

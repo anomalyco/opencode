@@ -3,6 +3,7 @@ import { Command, SettingsPage, type Plugin } from "@opencode/plugin/gui"
 import { onIdle } from "@opencode/plugin/gui/builtin"
 import { Pairing } from "./contract"
 import type definition from "./index"
+import en from "./i18n/en"
 
 const setup: Plugin.Setup<typeof definition> = (ctx) => {
   if (!ctx.desktop) return
@@ -27,7 +28,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       return ctx.t("title")
     },
     get entries() {
-      const pairingEntry = { id: "pairing", title: ctx.t("title"), keywords: "pair device qr phone remote" }
+      const pairingEntry = { id: "pairing", title: ctx.t("title"), keywords: `pair device qr phone remote ${en.title}` }
 
       // Remote access and the display setting exist only while pairing's main side answers.
       if (pairing().status !== "active") return [pairingEntry]
@@ -38,13 +39,13 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
           id: "settings-remote-access",
           title: ctx.t("remote.title"),
           description: ctx.t("remote.description"),
-          keywords: "internet tunnel opentunnel",
+          keywords: `internet tunnel opentunnel ${en["remote.title"]}`,
         },
         {
           id: "settings-keep-screen-active",
           title: ctx.t("screenActive.title"),
           description: ctx.t("screenActive.description"),
-          keywords: "display sleep awake local",
+          keywords: `display sleep awake local ${en["screenActive.title"]}`,
         },
       ]
     },

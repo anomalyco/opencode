@@ -16,6 +16,7 @@ import { Command, createKeyed, LinkHandler, MenuItem, Style, type Plugin } from 
 import { BuiltinCommand, BuiltinPanel, onIdle, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import { Browser } from "@opencode/plugin/gui/browser"
 import type definition from "./index"
+import en from "./i18n/en"
 import type { Model } from "./model"
 import {
   BROWSER_MODEL_LOAD_TIMEOUT_MS,
@@ -218,7 +219,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       id: "inspect",
       title: ctx.t("command.inspect"),
       group: ctx.t("command.category.view"),
-      keywords: "select element browser page devtools inspect picker",
+      keywords: `${en["command.inspect"]} select element browser page devtools inspect picker`,
       bind: "mod+shift+c",
       scope: "#browser-panel",
       editable: true,

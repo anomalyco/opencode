@@ -27,7 +27,7 @@ import { containsDirectory } from "@opencode/util/path"
 import { isWorkspaceDirectory } from "@/workspaces/paths"
 import { parseCommentNote, readPromptPresentation } from "@/composer/comment-note"
 import { parseVoiceDelegation } from "./voice-delegation"
-import { useCommand } from "@/shell/commands/command"
+import { commandLabels, useCommand } from "@/shell/commands/command"
 import { usePluginScoped } from "@/runtime/plugin/commands"
 import {
   SessionAncestorTrail,
@@ -258,8 +258,7 @@ function MessageTimelineView(
           {
             id: "session.rename",
             category: language.t("command.category.session"),
-            title: language.t("command.session.rename"),
-            titleKey: "command.session.rename",
+            ...commandLabels(language.t, "command.session.rename"),
             keybind: "ctrl+r",
             disabled: !sessionID() || !!parentID() || title().editing,
             skip: (event) => pluginScoped(event.target),
@@ -268,8 +267,7 @@ function MessageTimelineView(
           {
             id: "session.delete",
             category: language.t("command.category.session"),
-            title: language.t("command.session.delete"),
-            titleKey: "command.session.delete",
+            ...commandLabels(language.t, "command.session.delete"),
             disabled: !sessionID() || !!parentID(),
             onSelect: () => {
               const id = sessionID()

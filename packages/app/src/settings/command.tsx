@@ -1,4 +1,4 @@
-import { useCommand } from "@/shell/commands/command"
+import { commandLabels, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettingsSurface } from "./surface"
 import type { SettingsRootTab } from "./surface"
@@ -19,8 +19,7 @@ export function useSettingsCommand() {
   command.register("settings", () => [
     {
       ...settingsOpenCommand,
-      title: language.t("command.settings.open"),
-      titleKey: "command.settings.open",
+      ...commandLabels(language.t, "command.settings.open"),
       category: language.t("command.category.settings"),
       onSelect: show,
     },

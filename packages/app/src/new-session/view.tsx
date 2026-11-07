@@ -3,7 +3,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { Icon } from "@opencode/ui/icon"
 import { Slash } from "@opencode/ui/slash"
 import { Keybind } from "@opencode/ui/keybind"
-import { useCommand } from "@/shell/commands/command"
+import { commandLabels, useCommand } from "@/shell/commands/command"
 import { Show, createMemo, createSignal, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
@@ -293,8 +293,7 @@ function NewSessionLocation(props: {
   command.register("new-session-worktree", () => [
     {
       id: "session.location.select",
-      title: language.t("session.location.worktree"),
-      titleKey: "session.location.worktree",
+      ...commandLabels(language.t, "session.location.worktree"),
       category: language.t("command.category.workspace"),
       keybind: "mod+alt+o",
       disabled: !props.onWorktree,

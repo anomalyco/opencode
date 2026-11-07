@@ -1,6 +1,6 @@
 import { useDialog } from "@opencode/ui/context/dialog"
 import { useSettingsCommand } from "@/settings/command"
-import { useCommand } from "@/shell/commands/command"
+import { commandLabels, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { projectSearchCommand } from "@/shell/titlebar/titlebar"
 
@@ -34,16 +34,14 @@ export function useNewSessionCommands(input: {
   command.register("new-session", () => [
     {
       id: "input.focus",
-      title: language.t("command.input.focus"),
-      titleKey: "command.input.focus",
+      ...commandLabels(language.t, "command.input.focus"),
       category: language.t("command.category.view"),
       keybind: "ctrl+l",
       onSelect: input.restoreFocus,
     },
     {
       id: "session.location.cycle",
-      title: language.t("command.session.location.cycle"),
-      titleKey: "command.session.location.cycle",
+      ...commandLabels(language.t, "command.session.location.cycle"),
       category: language.t("command.category.workspace"),
       keybind: "mod+alt+l",
       disabled: !input.workspace.enabled(),
@@ -54,8 +52,7 @@ export function useNewSessionCommands(input: {
   command.register(projectSearchCommand.id, () => [
     {
       ...projectSearchCommand,
-      title: language.t("session.new.project.search"),
-      titleKey: "session.new.project.search",
+      ...commandLabels(language.t, "session.new.project.search"),
       category: language.t("command.category.project"),
       disabled: input.project.empty(),
       onSelect: input.project.open,

@@ -8,7 +8,7 @@ import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Typeahead } from "@opencode/ui/typeahead"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useCommand } from "@/shell/commands/command"
+import { commandLabels, useCommand } from "@/shell/commands/command"
 import {
   BRANCH_PRELOAD_TIMEOUT_MS,
   INITIAL_BRANCH_PICKER_STATE,
@@ -85,8 +85,7 @@ export function NewSessionBranch(props: { workspace: NewSessionWorkspaceControll
   command.register("new-session-branch", () => [
     {
       id: "session.branch.choose",
-      title: language.t("command.session.branch.choose"),
-      titleKey: "command.session.branch.choose",
+      ...commandLabels(language.t, "command.session.branch.choose"),
       category: language.t("command.category.workspace"),
       keybind: "mod+alt+b",
       disabled: !creating() || !props.workspace.bar.branch(),

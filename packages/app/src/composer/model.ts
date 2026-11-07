@@ -8,7 +8,7 @@ import type { ComposerSuggestion } from "./types"
 import { createComposerEditor, type ComposerEditorModel } from "./editor/interaction"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/workspaces/files/model"
 import { useComments } from "@/composer/comments"
-import { useCommand } from "@/shell/commands/command"
+import { commandLabels, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePluginHost } from "@/runtime/plugin/host"
 import { usePluginAttachment } from "@/runtime/plugin/host-apis"
@@ -569,8 +569,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   command.register("composer-editor", () => [
     {
       id: "file.attach",
-      title: language.t("prompt.action.attachFile"),
-      titleKey: "prompt.action.attachFile",
+      ...commandLabels(language.t, "prompt.action.attachFile"),
       category: language.t("command.category.file"),
       keybind: "mod+u",
       editable: true,
@@ -579,24 +578,21 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     },
     {
       id: "prompt.mode.toggle",
-      title: language.t("command.prompt.mode.toggle"),
-      titleKey: "command.prompt.mode.toggle",
+      ...commandLabels(language.t, "command.prompt.mode.toggle"),
       category: language.t("command.category.session"),
       keybind: "mod+shift+x",
       onSelect: () => void controller.dispatch({ type: mode() === "normal" ? "mode.shell" : "mode.normal" }),
     },
     {
       id: "prompt.mode.shell",
-      title: language.t("command.prompt.mode.shell"),
-      titleKey: "command.prompt.mode.shell",
+      ...commandLabels(language.t, "command.prompt.mode.shell"),
       category: language.t("command.category.session"),
       disabled: mode() === "shell",
       onSelect: () => void controller.dispatch({ type: "mode.shell" }),
     },
     {
       id: "prompt.mode.normal",
-      title: language.t("command.prompt.mode.normal"),
-      titleKey: "command.prompt.mode.normal",
+      ...commandLabels(language.t, "command.prompt.mode.normal"),
       category: language.t("command.category.session"),
       disabled: mode() === "normal",
       onSelect: () => void controller.dispatch({ type: "mode.normal" }),

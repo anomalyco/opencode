@@ -22,7 +22,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
-import { useCommand } from "@/shell/commands/command"
+import { commandLabels, useCommand } from "@/shell/commands/command"
 import { workspaceSelectionDirectories } from "@/workspaces/paths"
 import "@/shell/commands/dialog.css"
 import "@/shell/palette-menu.css"
@@ -196,8 +196,7 @@ function NewSessionLocationDialog(props: {
   command.register("new-session-location", () => [
     {
       id: "project.open",
-      title: language.t("command.project.open"),
-      titleKey: "command.project.open",
+      ...commandLabels(language.t, "command.project.open"),
       category: language.t("command.category.project"),
       keybind: "mod+o",
       onSelect: () => choose({ id: "add", type: "add" }),
