@@ -229,6 +229,49 @@ describe("Claude sessions", () => {
     }),
   )
 
+  it.effect("deleting a session stops its process and drops its record at once, and other sessions keep theirs", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make([
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectTurn({ index: 1 }),
+        FakeClaude.expectInterrupt(),
+      ])
+      const test = yield* TestSessions.start(claude)
+      const records = SessionRecord.make(test.storage)
+      yield* TestSessions.reply(test.model, first)
+      yield* TestSessions.reply(test.model, first, "session-b")
+      expect(yield* records.get("session-a")).toBeDefined()
+      // No clock adjustment: the process must not wait out IDLE_MS.
+      yield* test.sessions.remove("session-a")
+      yield* Effect.promise(() => claude.runs[0]!.closed)
+      expect(yield* records.get("session-a")).toBeUndefined()
+      expect(TestSessions.text(yield* TestSessions.reply(test.model, TestSessions.followup(), "session-b"))).toBe(
+        "COPPER-OTTER",
+      )
+      expect(claude.runs).toHaveLength(2)
+      expect(yield* records.get("session-b")).toBeDefined()
+      yield* test.registry.close()
+      claude.check()
+    }),
+  )
+
+  it.effect("deleting a session with no process in this registry still drops its saved record", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make([])
+      const test = yield* TestSessions.start(claude)
+      // Saved by an earlier opencode process, as after a restart.
+      yield* SessionRecord.make(test.storage).set("session-a", { claudeSessionID: "earlier" })
+      yield* test.sessions.remove("session-a")
+      yield* test.sessions.remove("session-a")
+      expect(test.storage.data.size).toBe(0)
+      claude.check()
+    }),
+  )
+
   it.effect("cancelling during startup closes it and does not save a nonexistent session", () =>
     Effect.gen(function* () {
       const startup = FakeClaude.expectStartup({ hold: new Promise(() => {}) })

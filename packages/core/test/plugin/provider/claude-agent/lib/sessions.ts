@@ -20,6 +20,10 @@ export function storage() {
       Effect.sync(() => {
         data.set(key, value)
       }),
+    remove: (key: string) =>
+      Effect.sync(() => {
+        data.delete(key)
+      }),
   }
 }
 
