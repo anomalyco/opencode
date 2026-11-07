@@ -2,10 +2,11 @@ export * as McpConnection from "./connection.js"
 
 import type { OAuthClientProvider } from "@modelcontextprotocol/client"
 import type { Mcp } from "@opencode/schema/mcp"
-import { Cause, Effect, Exit, Scope } from "effect"
+import { Cause, Effect, Exit, Fiber, Scope } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { Environment } from "../environment/index.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
+import type { McpRecovery } from "./recovery.js"
 import type { McpClient } from "./client.js"
 
 export type Failure = Extract<Mcp.Status, { readonly status: "failed" | "needs_auth" }>
@@ -22,12 +23,12 @@ const endpointLoads = KeyedMutex.makeUnsafe<string>()
  * state and publish in step with the connection.
  */
 export interface Events {
-  /** An attempt is about to connect. */
-  readonly connecting: Effect.Effect<void>
+  /** An attempt is about to connect; background attempts must not reopen the startup grace window. */
+  readonly connecting: (background: boolean) => Effect.Effect<void>
   /** The attempt connected and listed its tools. */
   readonly connected: Effect.Effect<void>
-  /** `answered` is true when the server was reached but refused or broke the handshake. */
-  readonly failed: (failure: Failure, answered: boolean) => Effect.Effect<void>
+  /** The attempt failed. `Failure` carries why it may be retried; the owner schedules any retry. */
+  readonly failed: (failure: Failure, report: McpRecovery.Report) => Effect.Effect<void>
   /** The attempt ended, however it ended. */
   readonly settled: Effect.Effect<void>
   /** The live connection closed on its own. Runs under the lock; the owner decides how to stop. */
@@ -65,7 +66,7 @@ export interface Input {
   /** Runs callbacks from the live connection. */
   readonly callbacks: (effect: Effect.Effect<void>) => unknown
   /** Runs recovery that a background request triggered. */
-  readonly fork: (effect: Effect.Effect<void>) => unknown
+  readonly fork: (effect: Effect.Effect<void>) => Fiber.Fiber<void>
   readonly events: Events
 }
 
@@ -134,7 +135,7 @@ export function make(input: Input): Connection {
       if (state.client !== client) return
       yield* Effect.logInfo("mcp session expired, reconnecting", { server: input.name })
       yield* stop
-      yield* start
+      yield* start(false)
     }).pipe(input.lock)
 
   const recovering = <A, E extends Error>(
@@ -151,7 +152,14 @@ export function make(input: Input): Connection {
 
   const watch = (client: McpClient.Connection) => {
     const live = whenLive(client)
-    client.onClose((reason) => live(input.events.closed(reason)))
+    client.onClose((reason) =>
+      live(
+        Effect.gen(function* () {
+          yield* halt
+          yield* input.events.closed(reason)
+        }),
+      ),
+    )
     // Background refreshes (list-changed) can observe the expiry too; they do not retry, so
     // reconnect here for them. Foreground calls reconnect through `recovering`.
     client.onSessionExpired(() => input.fork(recover(client)))
@@ -160,74 +168,82 @@ export function make(input: Input): Connection {
     client.onResourcesChanged(() => live(input.events.changed("resources")))
   }
 
-  const start: Effect.Effect<void> = Effect.suspend(() =>
-    Effect.gen(function* () {
-      yield* input.events.connecting
-      // Checked before the OAuth provider is built, which parses the URL too.
-      if (input.config.type === "remote" && !URL.canParse(input.config.url))
-        return yield* input.events.failed(
-          { status: "failed", error: `Invalid MCP server URL: ${input.config.url}` },
-          false,
+  const start = (background: boolean): Effect.Effect<void> =>
+    Effect.suspend(() =>
+      Effect.gen(function* () {
+        yield* input.events.connecting(background)
+        // Checked before the OAuth provider is built, which parses the URL too.
+        if (input.config.type === "remote" && !URL.canParse(input.config.url))
+          return yield* input.events.failed(
+            { status: "failed", error: `Invalid MCP server URL: ${input.config.url}` },
+            { retryable: false },
+          )
+        const scope = yield* Scope.fork(input.scope)
+        state.scope = scope
+        const authProvider = yield* input.authProvider
+        const { McpClient } = yield* Effect.promise(() => import("./client.js"))
+        // List tools as part of connect so a failure here marks the server failed rather than
+        // leaving it connected with a silently empty tool list and no path to recover. A shared connection
+        // decides first: it can only be shared on 2026-07-28, so an older server is never asked to list.
+        const config = input.config
+        const result = yield* McpClient.connect({
+          server: input.name,
+          config,
+          directory: input.directory,
+          authProvider,
+          elicitation: input.elicitation,
+          clientInfo: input.clientInfo,
+          roots: !input.shared,
+        }).pipe(
+          Effect.flatMap(
+            (client): Effect.Effect<{ client: McpClient.Connection; tools?: ReadonlyArray<McpClient.Tool> }, Error> =>
+              input.shared && !client.modern
+                ? Effect.succeed({ client })
+                : client.tools().pipe(Effect.map((tools) => ({ client, tools }))),
+          ),
+          Effect.provideService(Environment.Service, input.environment),
+          Effect.provideService(FetchHttpClient.Fetch, input.fetch),
+          Scope.provide(scope),
+          (effect) => (config.type === "remote" && !input.shared ? endpointLoads.withLock(config.url)(effect) : effect),
+          Effect.exit,
         )
-      const scope = yield* Scope.fork(input.scope)
-      state.scope = scope
-      const authProvider = yield* input.authProvider
-      const { McpClient } = yield* Effect.promise(() => import("./client.js"))
-      // List tools as part of connect so a failure here marks the server failed rather than
-      // leaving it connected with a silently empty tool list and no path to recover. A shared connection
-      // decides first: it can only be shared on 2026-07-28, so an older server is never asked to list.
-      const config = input.config
-      const result = yield* McpClient.connect({
-        server: input.name,
-        config,
-        directory: input.directory,
-        authProvider,
-        elicitation: input.elicitation,
-        clientInfo: input.clientInfo,
-        roots: !input.shared,
-      }).pipe(
-        Effect.flatMap(
-          (client): Effect.Effect<{ client: McpClient.Connection; tools?: ReadonlyArray<McpClient.Tool> }, Error> =>
-            input.shared && !client.modern
-              ? Effect.succeed({ client })
-              : client.tools().pipe(Effect.map((tools) => ({ client, tools }))),
-        ),
-        Effect.provideService(Environment.Service, input.environment),
-        Effect.provideService(FetchHttpClient.Fetch, input.fetch),
-        Scope.provide(scope),
-        (effect) => (config.type === "remote" && !input.shared ? endpointLoads.withLock(config.url)(effect) : effect),
-        Effect.exit,
-      )
-      if (Exit.isSuccess(result) && !result.value.tools) {
+        if (Exit.isSuccess(result) && !result.value.tools) {
+          yield* Scope.close(scope, Exit.void)
+          state.scope = undefined
+          return yield* input.events.legacy?.(result.value.client.protocolVersion) ?? Effect.void
+        }
+        if (Exit.isSuccess(result)) {
+          state.client = result.value.client
+          state.tools = result.value.tools
+          state.prompts = []
+          watch(result.value.client)
+          yield* input.events.connected
+          whenLive(result.value.client)(refreshPrompts(result.value.client))
+          return
+        }
         yield* Scope.close(scope, Exit.void)
         state.scope = undefined
-        return yield* input.events.legacy?.(result.value.client.protocolVersion) ?? Effect.void
-      }
-      if (Exit.isSuccess(result)) {
-        state.client = result.value.client
-        state.tools = result.value.tools
-        state.prompts = []
-        watch(result.value.client)
-        yield* input.events.connected
-        whenLive(result.value.client)(refreshPrompts(result.value.client))
-        return
-      }
-      yield* Scope.close(scope, Exit.void)
-      state.scope = undefined
-      const error = Cause.squash(result.cause)
-      yield* input.events.failed(
-        error instanceof McpClient.NeedsAuthError
-          ? { status: "needs_auth", error: error.message }
-          : { status: "failed", error: error instanceof Error ? error.message : String(error) },
-        error instanceof McpClient.ConnectError && error.answered === true,
-      )
-    }).pipe(
-      Effect.ensuring(input.events.settled),
-      Effect.annotateLogs({ server: input.name, directory: input.directory, connectionID: crypto.randomUUID() }),
-    ),
-  )
+        const error = Cause.squash(result.cause)
+        const retryAfter = McpClient.retryAfter(error)
+        // A server that answered but refused this handshake can be told from one never reached.
+        const report: McpRecovery.Report = {
+          answered: error instanceof McpClient.ConnectError && error.answered === true,
+          retryable: error instanceof McpClient.NeedsAuthError ? false : McpClient.isTransient(error),
+          ...(retryAfter === undefined ? {} : { retryAfter }),
+        }
+        yield* input.events.failed(
+          error instanceof McpClient.NeedsAuthError
+            ? { status: "needs_auth", error: error.message }
+            : { status: "failed", error: error instanceof Error ? error.message : String(error) },
+          report,
+        )
+      }).pipe(
+        Effect.ensuring(input.events.settled),
+        Effect.annotateLogs({ server: input.name, directory: input.directory, connectionID: crypto.randomUUID() }),
+      ),
+    )
 
-  const stop = Effect.gen(function* () {
+  const halt = Effect.gen(function* () {
     const scope = state.scope
     if (!scope) return
     state.scope = undefined
@@ -240,6 +256,8 @@ export function make(input: Input): Connection {
     yield* input.events.changed("prompts")
   })
 
+  const stop = halt
+
   return {
     get client() {
       return state.client
@@ -250,7 +268,7 @@ export function make(input: Input): Connection {
     get prompts() {
       return state.prompts
     },
-    start,
+    start: start(false),
     stop,
     recovering,
     catalog: (client) =>

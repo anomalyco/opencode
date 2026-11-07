@@ -1,11 +1,14 @@
 import { afterAll, describe, expect, test } from "bun:test"
-import { auth, refreshAuthorization } from "@modelcontextprotocol/client"
+import { auth, OAuthError, refreshAuthorization } from "@modelcontextprotocol/client"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { McpClient } from "@opencode/core/mcp/client"
 import { McpOAuth } from "@opencode/core/mcp/oauth"
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Clock, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { FetchHttpClient } from "effect/http"
+import { TestClock } from "effect/testing"
+import { testEffect } from "./lib/effect"
 import { hostEnvironmentLayer } from "./fixture/environment"
 
 const authServer = Bun.serve({ port: 0, fetch: () => new Response(null, { status: 404 }) })
@@ -13,6 +16,126 @@ afterAll(() => authServer.stop(true))
 
 const integrationID = Integration.ID.make("mcp_test")
 const methodID = Integration.MethodID.make("oauth")
+
+const it = testEffect(Layer.empty)
+
+it.effect("times out a half-open refresh and releases the authorization server queue", () =>
+  Effect.gen(function* () {
+    const entered = yield* Deferred.make<void>()
+    let aborted = false
+    const fetch: typeof globalThis.fetch = Object.assign(
+      async (_url: string | URL | Request, init?: RequestInit) => {
+        if (!(init?.body instanceof URLSearchParams) || init.body.get("refresh_token") !== "hung")
+          return Response.json({ access_token: "next", token_type: "Bearer" })
+        return new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener(
+            "abort",
+            () => {
+              aborted = true
+              reject(init.signal?.reason)
+            },
+            { once: true },
+          )
+          Deferred.doneUnsafe(entered, Exit.void)
+        })
+      },
+      { preconnect: globalThis.fetch.preconnect },
+    )
+    const fetchFn = yield* McpOAuth.loggedFetch({ server: "test" }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, fetch),
+    )
+    const request = (token: string) =>
+      fetchFn("https://timeout.example.test/token", {
+        method: "POST",
+        body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: token }),
+      })
+    const first = yield* Effect.tryPromise({ try: () => request("hung"), catch: (error) => error }).pipe(
+      Effect.exit,
+      Effect.forkChild({ startImmediately: true }),
+    )
+    yield* Deferred.await(entered)
+    const second = request("queued")
+    yield* Effect.yieldNow
+    yield* TestClock.adjust("30 seconds")
+    const exit = yield* Fiber.join(first)
+    expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toMatchObject({ code: "temporarily_unavailable" })
+    expect(aborted).toBe(true)
+    expect((yield* Effect.promise(() => second)).status).toBe(200)
+  }),
+)
+
+for (const format of ["seconds", "date", "invalid"] as const) {
+  it.effect(`respects refresh Retry-After in ${format} form`, () =>
+    Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis
+      const header = format === "seconds" ? "30" : format === "date" ? new Date(now + 30_000).toUTCString() : "invalid"
+      const fetch: typeof globalThis.fetch = Object.assign(
+        async () =>
+          Response.json({ error: "temporarily_unavailable" }, { status: 503, headers: { "Retry-After": header } }),
+        { preconnect: globalThis.fetch.preconnect },
+      )
+      const fetchFn = yield* McpOAuth.loggedFetch({ server: "test" }).pipe(
+        Effect.provideService(FetchHttpClient.Fetch, fetch),
+      )
+      const error = yield* Effect.tryPromise({
+        try: () =>
+          fetchFn("https://auth.example.test/token", {
+            method: "POST",
+            body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: "test" }),
+          }),
+        catch: (error) => error,
+      }).pipe(Effect.flip)
+      expect(error).toMatchObject({
+        code: "temporarily_unavailable",
+        retryAfter: format === "invalid" ? undefined : 30_000,
+      })
+    }),
+  )
+}
+
+it.effect("serializes refreshes per origin across callers without blocking other origins", () =>
+  Effect.gen(function* () {
+    const release = Promise.withResolvers<Response>()
+    const entered = Promise.withResolvers<void>()
+    const requests: string[] = []
+    const response = () => Response.json({ access_token: "next", token_type: "Bearer" })
+    yield* Effect.addFinalizer(() => Effect.sync(() => release.resolve(response())))
+    const fetch: typeof globalThis.fetch = Object.assign(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const token = init?.body instanceof URLSearchParams ? init.body.get("refresh_token") : undefined
+        requests.push(`${new URL(String(url)).hostname}:${token}`)
+        if (token !== "first") return response()
+        entered.resolve()
+        return release.promise
+      },
+      { preconnect: globalThis.fetch.preconnect },
+    )
+    const firstFetch = yield* McpOAuth.loggedFetch({ server: "first" }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, fetch),
+    )
+    const secondFetch = yield* McpOAuth.loggedFetch({ server: "second" }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, fetch),
+    )
+    const options = (token: string) => ({
+      method: "POST",
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: token }),
+    })
+    const first = firstFetch("https://auth.example.test/token", options("first"))
+    const shared = secondFetch("https://auth.example.test/token", options("first"))
+    const second = secondFetch("https://auth.example.test/token", options("second"))
+    const other = firstFetch("https://other.example.test/token", options("other"))
+    yield* Effect.promise(() => Promise.all([entered.promise, other]))
+    expect(requests).toEqual(["auth.example.test:first", "other.example.test:other"])
+    release.resolve(response())
+    const responses = yield* Effect.promise(() => Promise.all([first, shared, second]))
+    expect(yield* Effect.promise(() => Promise.all(responses.map((response) => response.json())))).toEqual([
+      { access_token: "next", token_type: "Bearer" },
+      { access_token: "next", token_type: "Bearer" },
+      { access_token: "next", token_type: "Bearer" },
+    ])
+    expect(requests).toEqual(["auth.example.test:first", "other.example.test:other", "auth.example.test:second"])
+  }),
+)
 
 const remote = (url: string) => new ConfigMCP.Remote({ type: "remote", url, oauth: { client_id: "client" } })
 
@@ -169,7 +292,12 @@ describe("MCP OAuth", () => {
       async fetch(request) {
         if (request.method !== "POST" || new URL(request.url).pathname !== "/token")
           return new Response(null, { status: 404 })
-        return Response.json({ access_token: "access", token_type: "Bearer", refresh_token: "refresh", expires_in: 3600 })
+        return Response.json({
+          access_token: "access",
+          token_type: "Bearer",
+          refresh_token: "refresh",
+          expires_in: 3600,
+        })
       },
     })
 
@@ -235,10 +363,7 @@ describe("MCP OAuth", () => {
       fetch(request) {
         if (request.method !== "POST" || new URL(request.url).pathname !== "/token")
           return new Response(null, { status: 404 })
-        return Response.json(
-          { error: "invalid_client", error_description: "bad_client_secret" },
-          { status: 400 },
-        )
+        return Response.json({ error: "invalid_client", error_description: "bad_client_secret" }, { status: 400 })
       },
     })
 
@@ -366,6 +491,71 @@ describe("MCP OAuth", () => {
       `MCP server "${config.url}" requires a login before it can register a client`,
     )
     expect(registrations).toBe(0)
+  })
+
+  test.each([408, 429, 500, 502, 503])("preserves the login after a transient refresh HTTP %s", async (status) => {
+    let requests = 0
+    const server = Bun.serve({
+      port: 0,
+      fetch(request) {
+        if (new URL(request.url).pathname !== "/token") return new Response(null, { status: 404 })
+        requests++
+        return Response.json({ error: "server_error" }, { status, headers: { "Retry-After": "30" } })
+      },
+    })
+    const store = memoryCredentials([credential({ access: "expired", refresh: "refresh", url: server.url.href })])
+    const oauthProvider = await connectProvider(remote(server.url.href), store)
+
+    const fetchFn = await Effect.runPromise(McpOAuth.loggedFetch({ server: "test" }))
+    const error = await auth(oauthProvider, { serverUrl: server.url.href, fetchFn })
+      .catch((error: unknown) => error)
+      .finally(() => server.stop(true))
+
+    expect(error).toBeInstanceOf(OAuthError)
+    expect(error instanceof OAuthError && error.code).toBe("temporarily_unavailable")
+    expect(error).toMatchObject({ retryAfter: 30_000 })
+    expect(requests).toBe(1)
+    expect(store.rows.get(Credential.ID.make("cred_test"))?.value).toMatchObject({ refresh: "refresh" })
+  })
+
+  test("preserves the login when the network drops during refresh", async () => {
+    const { server } = authorizationServer({})
+    const store = memoryCredentials([credential({ access: "expired", refresh: "refresh", url: server.url.href })])
+    const fetch: typeof globalThis.fetch = Object.assign(
+      (url: string | URL | Request, init?: RequestInit) =>
+        String(url).endsWith("/token")
+          ? Promise.reject(Object.assign(new Error("VPN disconnected"), { code: "ECONNRESET" }))
+          : globalThis.fetch(url, init),
+      { preconnect: globalThis.fetch.preconnect },
+    )
+    const oauthProvider = await connectProvider(remote(server.url.href), store)
+    const fetchFn = await Effect.runPromise(
+      McpOAuth.loggedFetch({ server: "test" }).pipe(Effect.provideService(FetchHttpClient.Fetch, fetch)),
+    )
+    const error = await auth(oauthProvider, { serverUrl: server.url.href, fetchFn })
+      .catch((error: unknown) => error)
+      .finally(() => server.stop(true))
+
+    expect(error).toBeInstanceOf(OAuthError)
+    expect(error instanceof OAuthError && error.code).toBe("temporarily_unavailable")
+    expect(store.rows.get(Credential.ID.make("cred_test"))?.value).toMatchObject({ refresh: "refresh" })
+  })
+
+  test("still requests sign-in for a genuinely rejected refresh token", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch: (request) =>
+        new URL(request.url).pathname === "/token"
+          ? Response.json({ error: "invalid_grant" }, { status: 400 })
+          : new Response(null, { status: 404 }),
+    })
+    const store = memoryCredentials([credential({ access: "expired", refresh: "revoked", url: server.url.href })])
+    const oauthProvider = await connectProvider(remote(server.url.href), store)
+    const fetchFn = await Effect.runPromise(McpOAuth.loggedFetch({ server: "test" }))
+    await expect(
+      auth(oauthProvider, { serverUrl: server.url.href, fetchFn }).finally(() => server.stop(true)),
+    ).rejects.toThrow("requires user authorization")
+    expect(store.rows.size).toBe(0)
   })
 
   test("drops an invalidated credential only while it still holds the presented token", async () => {

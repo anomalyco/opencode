@@ -12,6 +12,7 @@ import { Environment } from "../environment/index.js"
 import { SharedCache } from "../shared-cache.js"
 import type { McpClient } from "./client.js"
 import { McpConnection } from "./connection.js"
+import type { McpRecovery } from "./recovery.js"
 
 export interface Input extends McpConnection.Input {
   /**
@@ -97,7 +98,7 @@ interface Holder {
 type Outcome = "connected" | "private" | McpConnection.Failure
 
 interface Slot {
-  readonly connection: McpConnection.Connection
+  connection: McpConnection.Connection
   readonly holders: Set<Holder>
   readonly lock: Semaphore.Semaphore
   readonly outcome: Deferred.Deferred<Outcome>
@@ -114,6 +115,9 @@ export const layer = Layer.effect(
     const host = Environment.Service.of({ files: Environment.makeFiles(driver), spawner: driver.spawner })
     const fetch = yield* FetchHttpClient.Fetch
     const slots = new Map<string, Slot>()
+    // The last attempt's recovery report per key, kept across a failed slot's detach so the
+    // joining Location's entry learns whether the failure was temporary.
+    const lastReports = new Map<string, McpRecovery.Report>()
     // Keys whose server negotiated legacy or refused the pooled handshake. Kept for the life of the process.
     const unpoolable = new Set<string>()
     // The subset that negotiated legacy. Their private connections skip the 2026-07-28 probe; a refusal
@@ -123,82 +127,89 @@ export const layer = Layer.effect(
     const unfixed = new Set<string>()
 
     // Takes only data from the Location that opens it: the connection outlives that Location's claim.
-    const open = (key: string, input: Pick<Input, "name" | "config" | "directory" | "clientInfo">) => {
+    const open = (key: string, full: Pick<Input, "name" | "config" | "directory" | "clientInfo">) => {
+      // Only the data the connection needs: closures below would otherwise retain the whole
+      // wrapper Input — including the opening Location's entry and its services.
+      const input = { name: full.name, config: full.config, directory: full.directory, clientInfo: full.clientInfo }
       const slot: Slot = {
         holders: new Set(),
         lock: Semaphore.makeUnsafe(1),
         outcome: Deferred.makeUnsafe(),
         connected: false,
-        connection: McpConnection.make({
-          name: input.name,
-          config: input.config,
-          directory: input.directory,
-          shared: true,
-          clientInfo: input.clientInfo,
-          // Every holder of a key presents the same credential, so any of them can build the provider.
-          authProvider: Effect.suspend(() => slot.holders.values().next().value?.authProvider ?? Effect.undefined),
-          elicitation: {
-            // Elicitations a request carries reach that request's Location. Any other one, which the
-            // server could not tie to a request, goes to every holder and the first answer wins; the
-            // others are interrupted, which cancels their forms.
-            create: (request) =>
-              Effect.suspend(() => {
-                const holders = Array.from(slot.holders)
-                if (holders.length === 0) return Effect.succeed({ action: "cancel" as const })
-                return Effect.raceAll(holders.map((holder) => holder.elicitation(request)))
-              }),
-            complete: () => Effect.void,
-          },
-          environment: host,
-          fetch,
-          scope,
-          lock: (effect) => slot.lock.withPermit(effect),
-          callbacks: run,
-          fork: run,
-          events: {
-            connecting: Effect.void,
-            connected: Effect.void,
-            // A server that answered but refused the pooled handshake, such as one that wants roots, may
-            // still accept the Location's own connection; anything unreachable would only fail again.
-            failed: (failure, answered) =>
-              Effect.gen(function* () {
-                detach(key, slot)
-                if (answered) {
-                  unpoolable.add(key)
-                  yield* Effect.logWarning("mcp pool ignored: server refused the shared connection", {
-                    server: input.name,
-                    error: failure.error,
-                  })
-                }
-                yield* Deferred.succeed(slot.outcome, answered ? "private" : failure)
-              }),
-            legacy: (version) =>
-              Effect.gen(function* () {
-                detach(key, slot)
-                unpoolable.add(key)
-                legacy.add(key)
-                yield* Effect.logWarning("mcp pool ignored: server speaks an older protocol", {
-                  server: input.name,
-                  version,
-                })
-                yield* Deferred.succeed(slot.outcome, "private")
-              }),
-            settled: Effect.void,
-            closed: (reason) =>
-              Effect.gen(function* () {
-                detach(key, slot)
-                const holders = Array.from(slot.holders)
-                slot.holders.clear()
-                yield* slot.connection.stop
-                for (const holder of holders) holder.closed(reason)
-              }),
-            changed: (kind) =>
-              Effect.sync(() => {
-                if (slot.connected) for (const holder of slot.holders) holder.changed(kind)
-              }),
-          },
-        }),
+        connection: undefined!,
       }
+      slot.connection = McpConnection.make({
+        name: input.name,
+        config: input.config,
+        directory: input.directory,
+        shared: true,
+        clientInfo: input.clientInfo,
+        // Every holder of a key presents the same credential, so any of them can build the provider.
+        authProvider: Effect.suspend(() => slot.holders.values().next().value?.authProvider ?? Effect.undefined),
+        elicitation: {
+          // Elicitations a request carries reach that request's Location. Any other one, which the
+          // server could not tie to a request, goes to every holder and the first answer wins; the
+          // others are interrupted, which cancels their forms.
+          create: (request) =>
+            Effect.suspend(() => {
+              const holders = Array.from(slot.holders)
+              if (holders.length === 0) return Effect.succeed({ action: "cancel" as const })
+              return Effect.raceAll(holders.map((holder) => holder.elicitation(request)))
+            }),
+          complete: () => Effect.void,
+        },
+        environment: host,
+        fetch,
+        scope,
+        lock: (effect) => slot.lock.withPermit(effect),
+        callbacks: run,
+        fork: run,
+        events: {
+          connecting: () => Effect.void,
+          connected: Effect.void,
+          // A server that answered but refused the pooled handshake, such as one that wants roots, may
+          // still accept the Location's own connection; anything unreachable would only fail again.
+          failed: (failure, report) =>
+            Effect.gen(function* () {
+              // Kept for the wrapper's outcome read below: the attempt's own report says
+              // whether the failure was temporary, and detach drops the slot from the map.
+              lastReports.set(key, report)
+              detach(key, slot)
+              if (report.answered) {
+                unpoolable.add(key)
+                yield* Effect.logWarning("mcp pool ignored: server refused the shared connection", {
+                  server: input.name,
+                  error: failure.error,
+                })
+              }
+              yield* Deferred.succeed(slot.outcome, report.answered ? "private" : failure)
+            }),
+          legacy: (version) =>
+            Effect.gen(function* () {
+              detach(key, slot)
+              unpoolable.add(key)
+              legacy.add(key)
+              yield* Effect.logWarning("mcp pool ignored: server speaks an older protocol", {
+                server: input.name,
+                version,
+              })
+              yield* Deferred.succeed(slot.outcome, "private")
+            }),
+          settled: Effect.void,
+          closed: (reason) =>
+            Effect.gen(function* () {
+              detach(key, slot)
+              const holders = Array.from(slot.holders)
+              slot.holders.clear()
+              yield* slot.connection.stop
+              for (const holder of holders) holder.closed(reason)
+            }),
+          changed: (kind) =>
+            Effect.sync(() => {
+              if (slot.connected) for (const holder of slot.holders) holder.changed(kind)
+            }),
+        },
+      })
       slots.set(key, slot)
       return slot
     }
@@ -239,9 +250,7 @@ export const layer = Layer.effect(
 
     const acquire = Effect.fnUntraced(function* (key: string, input: Input, holder: Holder) {
       if (unpoolable.has(key)) return "private" as const
-      const slot =
-        slots.get(key) ??
-        open(key, { name: input.name, config: input.config, directory: input.directory, clientInfo: input.clientInfo })
+      const slot = slots.get(key) ?? open(key, input)
       yield* Effect.acquireRelease(
         Effect.sync(() => slot.holders.add(holder)),
         () => release(key, slot, holder),
@@ -290,14 +299,37 @@ export const layer = Layer.effect(
         return claim ? Scope.close(claim, Exit.void) : Effect.void
       })
 
+      // Restarts this wrapper: joins the shared connection again, or starts the private one. Runs
+      // under the caller's lock; the owner serializes it against stop.
+      const restart = Effect.suspend(() =>
+        Effect.gen(function* () {
+          if (input.config.type === "local" && input.config.cwd === undefined && !unfixed.has(input.name)) {
+            unfixed.add(input.name)
+            yield* Effect.logWarning(
+              "mcp pool ignored: local server has no fixed cwd, so each directory runs its own",
+              {
+                server: input.name,
+              },
+            )
+          }
+          const selected = yield* input.select
+          state.selected = selected
+          if (!unpoolable.has(selected.key) && (yield* join(selected))) return
+          state.own = legacy.has(selected.key) ? older : configured
+          yield* state.own.start
+        }),
+      )
+
       // Resolves false when the key can't be shared, leaving the start to the Location's own connection.
       const join = (selected: Selection) =>
         Effect.gen(function* () {
-          yield* input.events.connecting
+          yield* input.events.connecting(false)
           const claim = yield* Scope.fork(input.scope)
           const holder: Holder = {
             authProvider: selected.authProvider,
             elicitation: elicit,
+            // The pool ferries the shared connection's recovery to the entry, which owns the
+            // status and the backoff: a closed or failed shared attempt reads here like its own.
             closed: (reason) => current(holder, () => input.events.closed(reason)),
             changed: (kind) => current(holder, () => input.events.changed(kind)),
           }
@@ -313,7 +345,12 @@ export const layer = Layer.effect(
           }
           if ("status" in outcome) {
             yield* clear
-            yield* input.events.failed(outcome, false)
+            // The shared attempt's failure carries whether it can be retried, so the entry's
+            // recovery schedules the next join; a permanent one stops until a user connects.
+            yield* input.events.failed(
+              outcome,
+              lastReports.get(selected.key) ?? { retryable: outcome.status === "failed" },
+            )
             return true
           }
           state.shared = outcome
@@ -339,22 +376,7 @@ export const layer = Layer.effect(
         get prompts() {
           return live().prompts
         },
-        start: Effect.gen(function* () {
-          if (input.config.type === "local" && input.config.cwd === undefined && !unfixed.has(input.name)) {
-            unfixed.add(input.name)
-            yield* Effect.logWarning(
-              "mcp pool ignored: local server has no fixed cwd, so each directory runs its own",
-              {
-                server: input.name,
-              },
-            )
-          }
-          const selected = yield* input.select
-          state.selected = selected
-          if (!unpoolable.has(selected.key) && (yield* join(selected))) return
-          state.own = legacy.has(selected.key) ? older : configured
-          yield* state.own.start
-        }),
+        start: restart,
         stop: Effect.gen(function* () {
           if (!state.claim) return yield* (state.own ?? configured).stop
           yield* clear

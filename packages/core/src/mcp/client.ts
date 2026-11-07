@@ -9,6 +9,8 @@ import {
   SdkHttpError,
   StreamableHTTPClientTransport,
   UnauthorizedError,
+  OAuthError,
+  OAuthErrorCode,
   UnsupportedProtocolVersionError,
   type CallToolRequestOptions,
   type CallToolResult as SdkCallToolResult,
@@ -54,12 +56,41 @@ const describe = (error: unknown) => {
 }
 
 // Overloaded or restarting servers and dropped connections usually recover within a second.
-// Fetch reports network failures as a TypeError carrying a system error code.
+// Bun and Node expose network failures through system error codes or a TypeError's cause.
 // 501 means the server will never support the request.
-const isTransient = (error: unknown) =>
-  error instanceof SdkHttpError
-    ? error.status === 408 || error.status === 429 || (error.status >= 500 && error.status !== 501)
-    : error instanceof TypeError && "code" in error
+const networkErrors = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ETIMEDOUT",
+  "EPIPE",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+])
+export const isTransient = (error: unknown): boolean =>
+  error instanceof ConnectError
+    ? error.retryable === true
+    : error instanceof SdkHttpError
+      ? error.status === 408 || error.status === 429 || (error.status >= 500 && error.status !== 501)
+      : error instanceof SdkError
+        ? error.code === SdkErrorCode.RequestTimeout
+        : error instanceof OAuthError
+          ? error.code === OAuthErrorCode.TemporarilyUnavailable
+          : error instanceof Error &&
+            ((error instanceof TypeError && "code" in error) ||
+              ("code" in error && typeof error.code === "string" && networkErrors.has(error.code)) ||
+              (error instanceof TypeError && /fetch|network/i.test(error.message)) ||
+              isTransient(error.cause))
+
+export const retryAfter = (error: unknown): number | undefined =>
+  (error instanceof OAuthError || error instanceof ConnectError) &&
+  "retryAfter" in error &&
+  typeof error.retryAfter === "number"
+    ? error.retryAfter
+    : error instanceof Error
+      ? retryAfter(error.cause)
+      : undefined
 
 export type { GetPromptResult, Prompt, ReadResourceResult, Resource }
 export type ResourceTemplate = ResourceTemplateType
@@ -91,6 +122,8 @@ export class ConnectError extends Schema.TaggedError<ConnectError>()("MCP.Connec
   message: Schema.String,
   /** The server was reached but refused or broke the handshake, so different connect options might succeed. */
   answered: Schema.optional(Schema.Boolean),
+  retryable: Schema.optional(Schema.Boolean),
+  retryAfter: Schema.optional(Schema.Number),
 }) {}
 
 /** A legacy Streamable HTTP server no longer recognizes this connection's session; the lifecycle reconnects. */
@@ -241,7 +274,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       Schedule.max([Schedule.exponential("250 millis", 4), Schedule.recurs(2)]).pipe(
         Schedule.setInputType<E>(),
         Schedule.while(({ input, now, duration }) =>
-          !isTransient(input) || now + Duration.toMillis(duration) >= deadline
+          !isTransient(input) || (retryAfter(input) ?? 0) > 0 || now + Duration.toMillis(duration) >= deadline
             ? Effect.succeed(false)
             : Effect.logWarning(`retrying ${what}`, { server, error: describe(input) }).pipe(Effect.as(true)),
         ),
@@ -308,13 +341,14 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   const failure = (error: unknown) => {
     // A tool call that relists first can fail with the list's already mapped expiry.
     if (error instanceof SessionExpiredError) return error
-    if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined) return new Error(explain(error))
+    if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined)
+      return new Error(explain(error), { cause: error })
     const expired =
       error.status === 404 ||
       (error.status === 400 &&
         typeof error.data.text === "string" &&
         error.data.text.includes("Bad Request: Server not initialized"))
-    if (!expired) return new Error(explain(error))
+    if (!expired) return new Error(explain(error), { cause: error })
     if (!session.reported) {
       session.reported = true
       session.expired?.()
@@ -569,7 +603,12 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       server,
       message: `${error.message}; the server supports ${error.supported.join(", ")}. Set "protocol" for this server to one of those or to "legacy".`,
     })
-  return yield* new ConnectError({ server, message: explain(error), answered: !repeats(error) })
+  return yield* new ConnectError({
+    server,
+    message: explain(error),
+    answered: !repeats(error),
+    ...(isTransient(error) ? { retryable: true, retryAfter: retryAfter(error) } : {}),
+  })
 })
 
 // Connecting again would fail the same way: the server could not be spawned or reached, did not answer in

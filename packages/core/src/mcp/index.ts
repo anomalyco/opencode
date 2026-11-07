@@ -37,6 +37,7 @@ import { State } from "../state.js"
 import type { McpClient } from "./client.js"
 import { McpConnection } from "./connection.js"
 import { McpPool } from "./pool.js"
+import { McpRecovery } from "./recovery.js"
 
 export const ServerName = Schema.String.pipe(Schema.brand("MCP.ServerName"))
 export type ServerName = typeof ServerName.Type
@@ -100,7 +101,13 @@ type ServerEntry = {
   readonly startup: Latch.Latch
   // The connection attempt in flight: when it began and a latch that opens once it settles.
   attempt?: { readonly started: number; readonly settled: Latch.Latch }
-  readonly connection: McpConnection.Connection
+  connection: McpConnection.Connection
+  // Schedules the next attempt after a failed start or a dropped connection, for private and pooled alike.
+  // Both are assigned by `makeEntry` after the objects that read this entry back exist.
+  recovery: ReturnType<typeof McpRecovery.make>
+  // True while a recovery attempt's start runs, so its events stay background: no pending flip,
+  // no startup-grace reopening, and a repeat failure publishes no second event.
+  recovering: boolean
   // The connection's tool list tagged for this server, rebuilt only when the connection lists again.
   tagged?: { readonly source: ReadonlyArray<McpClient.Tool>; readonly tools: ReadonlyArray<Tool> }
   // Set when a remote server is registered as an OAuth integration; the credential lives in the global store.
@@ -389,6 +396,37 @@ export const layer = (options?: Options) =>
           config.pool === true &&
           config.protocol !== "legacy" &&
           (config.type === "remote" || location.workspaceID === undefined)
+        // One recovery controller per server entry, for private and pooled connections alike: it
+        // schedules the next attempt after a failed start or a dropped connection, and an explicit
+        // disconnect, remove, replace or shutdown cancels it. Built before the connection, whose
+        // events and attempts call back into it.
+        const entry: ServerEntry = {
+          config,
+          status: { status: "pending" },
+          startup: Latch.makeUnsafe(),
+          attempt: { started, settled: Latch.makeUnsafe() },
+          connection: undefined!,
+          recovering: false,
+          // Assigned below, once the recovery that reads `entry` back exists.
+          recovery: undefined!,
+        }
+        // A replaced or removed entry never reconnects on its own; a disabled one waits for a user connect.
+        const stale = () =>
+          entries.get(name) !== entry || entry.status.status === "disabled" || config.disabled === true
+        // Recovery attempts are background: they keep a failed status instead of reopening pending,
+        // so a server that stays down flips no visible state per retry.
+        const recovery = McpRecovery.make({
+          name,
+          fork,
+          stale,
+          attempt: Effect.gen(function* () {
+            if (stale()) return
+            entry.recovering = true
+            yield* entry.connection.stop
+            yield* entry.connection.start.pipe(Effect.ensuring(Effect.sync(() => (entry.recovering = false))))
+          }).pipe(locks.withLock(name)),
+        })
+        entry.recovery = recovery
         const share = (input: McpConnection.Input) =>
           pool.connection({
             ...input,
@@ -408,29 +446,28 @@ export const layer = (options?: Options) =>
               }
             }),
           })
-        const entry: ServerEntry = {
-          config,
-          status: { status: "pending" },
-          startup: Latch.makeUnsafe(),
-          attempt: { started, settled: Latch.makeUnsafe() },
-          connection: (pooled ? share : McpConnection.make)({
-            name,
-            // Pooling offers 2026-07-28, the only revision a connection can be shared on.
-            config: config.pool && config.protocol === undefined ? { ...config, protocol: "auto" } : config,
-            directory: location.directory,
-            clientInfo: options?.clientInfo,
-            authProvider: Effect.suspend(() =>
-              selectCredential(entry).pipe(Effect.flatMap((credential) => connectProvider(entry, credential))),
-            ),
-            elicitation,
-            environment,
-            fetch,
-            scope: servers,
-            lock: locks.withLock(name),
-            callbacks,
-            fork,
-            events: {
-              connecting: Effect.gen(function* () {
+        entry.connection = (pooled ? share : McpConnection.make)({
+          name,
+          // Pooling offers 2026-07-28, the only revision a connection can be shared on.
+          config: config.pool && config.protocol === undefined ? { ...config, protocol: "auto" } : config,
+          directory: location.directory,
+          clientInfo: options?.clientInfo,
+          authProvider: Effect.suspend(() =>
+            selectCredential(entry).pipe(Effect.flatMap((credential) => connectProvider(entry, credential))),
+          ),
+          elicitation,
+          environment,
+          fetch,
+          scope: servers,
+          lock: locks.withLock(name),
+          callbacks,
+          fork,
+          events: {
+            connecting: (background) =>
+              Effect.gen(function* () {
+                // A recovery attempt is background too: it keeps the failed status instead of
+                // reopening pending and the startup grace window.
+                if (background || entry.recovering) return
                 // A server still pending from creation keeps the window that started with its entry.
                 if (!entry.attempt || entry.status.status !== "pending")
                   entry.attempt = { started: yield* Clock.currentTimeMillis, settled: Latch.makeUnsafe() }
@@ -439,39 +476,46 @@ export const layer = (options?: Options) =>
                 entry.status = { status: "pending" }
                 yield* bus.publish(McpEvent.StatusChanged, { server: name })
               }),
-              connected: Effect.gen(function* () {
-                entry.status = { status: "connected" }
-                yield* Effect.logInfo("mcp connected", { server: name, tools: entry.connection.tools?.length })
-                // Announce every list a consumer may read, since each reads them only on these events. A
-                // connection another Location already holds has loaded its prompts, and no later change
-                // would tell this one; prompts still loading read empty now and announce themselves later.
-                yield* bus.publish(McpEvent.ToolsChanged, { server: name })
-                yield* bus.publish(McpEvent.ResourcesChanged, { server: name })
-                yield* bus.publish(PromptsChanged, { server: name })
+            connected: Effect.gen(function* () {
+              entry.status = { status: "connected" }
+              entry.recovering = false
+              yield* recovery.notifyConnected()
+              yield* Effect.logInfo("mcp connected", { server: name, tools: entry.connection.tools?.length })
+              // Announce every list a consumer may read, since each reads them only on these events. A
+              // connection another Location already holds has loaded its prompts, and no later change
+              // would tell this one; prompts still loading read empty now and announce themselves later.
+              yield* bus.publish(McpEvent.ToolsChanged, { server: name })
+              yield* bus.publish(McpEvent.ResourcesChanged, { server: name })
+              yield* bus.publish(PromptsChanged, { server: name })
+              yield* bus.publish(McpEvent.StatusChanged, { server: name })
+            }),
+            failed: (failure, report) =>
+              Effect.gen(function* () {
+                const background = entry.recovering
+                // Recovery must hear every failure, including a repeat: the dedup only
+                // silences the visible status, never the retry schedule.
+                yield* recovery.notifyFailure(report)
+                if (background && isDeepStrictEqual(entry.status, failure)) return
+                entry.status = failure
+                const log = background ? Effect.logDebug : Effect.logWarning
+                yield* log("mcp connect failed", { server: name, status: entry.status })
                 yield* bus.publish(McpEvent.StatusChanged, { server: name })
               }),
-              failed: (failure) =>
-                Effect.gen(function* () {
-                  entry.status = failure
-                  yield* Effect.logWarning("mcp connect failed", { server: name, status: entry.status })
-                  yield* bus.publish(McpEvent.StatusChanged, { server: name })
-                }),
-              // Every start runs under the server lock, so the attempt read here is the one it began.
-              settled: Effect.suspend(() => {
-                const attempt = entry.attempt
-                entry.attempt = undefined
-                return (attempt ? attempt.settled.open : Effect.void).pipe(Effect.ensuring(entry.startup.open))
+            // Every start runs under the server lock, so the attempt read here is the one it began.
+            settled: Effect.suspend(() => {
+              const attempt = entry.attempt
+              entry.attempt = undefined
+              return (attempt ? attempt.settled.open : Effect.void).pipe(Effect.ensuring(entry.startup.open))
+            }),
+            closed: (reason) =>
+              Effect.gen(function* () {
+                entry.status = { status: "failed", error: reason }
+                yield* bus.publish(McpEvent.StatusChanged, { server: name })
+                yield* recovery.notifyClosed()
               }),
-              closed: (reason) =>
-                Effect.gen(function* () {
-                  entry.status = { status: "failed", error: reason }
-                  yield* entry.connection.stop
-                  yield* bus.publish(McpEvent.StatusChanged, { server: name })
-                }),
-              changed: (kind) => bus.publish(changes[kind], { server: name }),
-            },
-          }),
-        }
+            changed: (kind) => bus.publish(changes[kind], { server: name }),
+          },
+        })
         return entry
       }
 
@@ -518,6 +562,7 @@ export const layer = (options?: Options) =>
 
       const disposeServer = Effect.fnUntraced(function* (entry: ServerEntry) {
         yield* entry.connection.stop
+        yield* entry.recovery.cancel()
         if (entry.registration) yield* entry.registration.dispose
       })
 
@@ -759,6 +804,8 @@ export const layer = (options?: Options) =>
           yield* transition(
             Effect.gen(function* () {
               const entry = yield* requireServer(name)
+              // A user-driven connect restarts recovery: its next failure backs off from the start.
+              yield* entry.recovery.reset()
               yield* entry.connection.stop
               yield* entry.connection.start
             }).pipe(locks.withLock(name)),
@@ -769,6 +816,9 @@ export const layer = (options?: Options) =>
           yield* transition(
             Effect.gen(function* () {
               const entry = yield* requireServer(name)
+              // Cancel the recovery worker first: a retry that fires while the stop below holds the
+              // lock would otherwise reconnect a server the user just disabled.
+              yield* entry.recovery.cancel()
               yield* entry.connection.stop
               entry.status = { status: "disabled" }
               yield* bus.publish(McpEvent.StatusChanged, { server: name })
