@@ -21,24 +21,12 @@ export function objects(value: Json | undefined): JsonObject[] {
   return array(value).filter(isObject)
 }
 
-export function num(value: Json | undefined, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback
-}
-
 export function optionalNum(value: Json | undefined): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
 
 export function str(value: Json | undefined, fallback: string): string {
   return typeof value === "string" && value.length > 0 ? value : fallback
-}
-
-export function optionalStr(value: Json | undefined): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined
-}
-
-export function bool(value: Json | undefined, fallback: boolean): boolean {
-  return typeof value === "boolean" ? value : fallback
 }
 
 export function pair(value: Json | undefined): [number, number] | undefined {
@@ -56,16 +44,4 @@ export function pairs(value: Json | undefined, limit = 4000): Array<[number, num
     .slice(0, limit)
     .map(pair)
     .filter((item): item is [number, number] => item !== undefined)
-}
-
-/** Keeps a number inside a closed interval. */
-export function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
-}
-
-/** Rounds to a number of decimals without trailing zeros. */
-export function round(value: number, decimals = 2): number {
-  const factor = 10 ** decimals
-
-  return Math.round(value * factor) / factor
 }
