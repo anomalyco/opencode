@@ -1,5 +1,5 @@
 name: release
-run-name: "${{ format('release {0}{1}', inputs.bump, inputs.version) }}"
+run-name: "${{ inputs.channel == 'beta' && format('release {0} (beta)', '0.0.0-beta-' + github.run_number) || format('release {0}{1}', inputs.bump, inputs.version) }}"
 
 # Builds are separated from signing and publishing.
 # - build-* jobs run repository code (`bun run build`, `bun run pack`) with no environment, secrets or id-token.
@@ -12,6 +12,7 @@ run-name: "${{ format('release {0}{1}', inputs.bump, inputs.version) }}"
 on:
   push:
     branches: [dev, beta]
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       bump:
@@ -23,6 +24,11 @@ on:
         description: "Override version (optional)"
         required: false
         type: string
+      channel:
+        description: "Release channel (beta)"
+        required: false
+        type: choice
+        options: [beta]
       release_notes:
         description: "Reviewed V2 release notes for CHANGELOG.md and the GitHub release (required with bump or version)"
         required: false
@@ -72,6 +78,7 @@ jobs:
           GH_TOKEN: ${{ github.token }} # reads the triggering actor's repository role for stable releases
           INPUT_BUMP: ${{ inputs.bump }}
           INPUT_VERSION: ${{ inputs.version }}
+          INPUT_CHANNEL: ${{ inputs.channel }}
           INPUT_RELEASE_NOTES: ${{ inputs.release_notes }}
 
   # A versioned release builds from a commit with its versions and changelog on the dispatched dev commit,
