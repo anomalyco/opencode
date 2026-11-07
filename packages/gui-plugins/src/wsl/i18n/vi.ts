@@ -52,4 +52,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} đã hết thời gian chờ sau {{timeout}}ms",
   "error.failedPort": "Không lấy được cổng",
   "menu.remove": "Xóa",
+  "error.busy": "{{distro}} đang bận tác vụ khác. Hãy thử lại khi tác vụ đó hoàn tất.",
 }

@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "Tiếp theo",
   "releaseNotes.action.hideFuture": "Không hiển thị lại",
   "releaseNotes.media.alt": "Xem trước bản phát hành",
+  "beta.title": "Có gì mới",
+  "beta.since.other": "Từ bản dựng {{build}} · {{count}} thay đổi",
+  "beta.added": "Mới",
+  "beta.fixed": "Sửa lỗi",
+  "beta.viewAll": "Xem tất cả",
+  "beta.page.description": "Mọi thay đổi trong bản dựng này.",
+  "beta.github": "Lịch sử trên GitHub",
+  "beta.done": "Đã hiểu",
 }
