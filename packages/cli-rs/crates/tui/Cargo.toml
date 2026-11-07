@@ -17,7 +17,7 @@ opencode-ui.workspace = true
 opencode-store.workspace = true
 opencode-plugin.workspace = true
 opencode-drive.workspace = true
-opencode-util.workspace = true
+opencode-util = { workspace = true, features = ["ring"] }
 base64.workspace = true
 futures-util.workspace = true
 indexmap.workspace = true
@@ -25,7 +25,6 @@ log.workspace = true
 regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sha2.workspace = true
 tokio.workspace = true
 tokio-tungstenite.workspace = true
 unicode-width.workspace = true

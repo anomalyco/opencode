@@ -76,7 +76,6 @@ serde_core build
 serde_derive proc-macro
 serde_json build
 sha1
-sha2
 shlex
 signal-hook-registry
 similar

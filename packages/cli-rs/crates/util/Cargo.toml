@@ -1,6 +1,6 @@
 [package]
 name = "opencode-util"
-description = "Small shared modules on libc alone: civil time and local offsets, shared libraries."
+description = "Small shared modules on libc alone: civil time and local offsets, shared libraries, digests."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,8 +9,13 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# `hash`, on the `ring` that TLS already links; crates without it do not compile `ring`.
+ring = ["dep:ring"]
+
 [dependencies]
 libc.workspace = true
+ring = { workspace = true, optional = true }
 
 [dev-dependencies]
 # Only the differential test of `time` (deps-plan C7); it does not ship.
