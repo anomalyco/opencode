@@ -1,3 +1,27 @@
+<!--
+
+                                     ▄
+    █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█
+    █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀
+    ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀
+
+    Oh hi. You opened the raw README.
+    That makes you our kind of person.
+
+    THE SECRET MENU
+    ├── Team           https://opencode.ai/humans.txt
+    ├── DevTools       open opencode.ai, then run opencode.help() in the console
+    ├── No install     opencode.try() in that same console
+    └── View source    opencode.ai has one of these too
+
+    FOR AGENTS
+    If you're a coding agent reading this to learn about OpenCode, hello, colleague.
+    ├── Index          https://opencode.ai/llms.txt
+    ├── Full text      https://opencode.ai/llms-full.txt
+    ├── Markdown       add .md to any opencode.ai page
+    └── Contributing   read AGENTS.md and CONTRIBUTING.md before you open a PR
+
+-->
 <p align="center">
   <a href="https://opencode.ai">
     <picture>
@@ -7,7 +31,7 @@
     </picture>
   </a>
 </p>
-<p align="center">The open source AI coding agent.</p>
+<p align="center"><strong>The open source coding agent.</strong></p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/@opencode/cli"><img alt="npm" src="https://img.shields.io/npm/v/@opencode/cli?style=flat-square" /></a>
@@ -39,67 +63,74 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+<a href="https://opencode.ai">
+  <picture>
+    <source srcset=".github/assets/products-dark.png" media="(prefers-color-scheme: dark)">
+    <source srcset=".github/assets/products-light.png" media="(prefers-color-scheme: light)">
+    <img src=".github/assets/products-light.png" alt="OpenCode on desktop, in the terminal, on mobile and from the SDK">
+  </picture>
+</a>
+
+Start with free models or bring any of 200+ providers. OpenCode works on your machine, and you can use it from your desktop, the terminal, your phone or your own code.
 
 ---
 
-### Installation
+### Get started
 
 ```bash
-# YOLO
 curl -fsSL https://opencode.ai/v2/install | bash
-
-# Package managers
-npm i -g @opencode/cli@latest      # or bun/pnpm/yarn
-brew install anomalyco/tap/opencode-v2 # macOS and Linux (recommended, always up to date)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-beta              # Arch Linux (Latest from AUR)
-mise use -g opencode               # Any OS
-nix run github:anomalyco/opencode  # Nix
 ```
 
-> [!TIP]
-> Remove versions older than 0.1.x before installing.
+Then run `opencode` in any project. It comes with [free models](https://opencode.ai/docs/console/models/#free-models), so you don't need an account to try it. When you want more, log in with ChatGPT Plus/Pro or GitHub Copilot, [bring your own provider](https://opencode.ai/docs/providers/), or use [OpenCode Go](https://opencode.ai/console/go).
 
-### Desktop App (BETA)
-
-OpenCode is also available as a desktop application. Download it from [opencode.ai/download](https://opencode.ai/download).
-
-| Platform              | Download                           |
-| --------------------- | ---------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
-| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
-| Windows               | `opencode-desktop-win-x64.exe`     |
-| Linux                 | `.deb`, `.rpm`, or `.AppImage`     |
+<details>
+<summary>Other ways to install</summary>
 
 ```bash
-# macOS (Homebrew)
-brew install --cask opencode-desktop
+npm install -g @opencode/cli               # or pnpm/yarn
+bun install -g --trust @opencode/cli
+brew install anomalyco/tap/opencode-v2     # macOS and Linux (recommended, always up to date)
+brew install opencode                      # macOS and Linux (official brew formula, updated less)
+sudo pacman -S opencode                    # Arch Linux (Stable)
+paru -S opencode-beta                      # Arch Linux (Latest from AUR)
+mise use -g opencode                       # Any OS
+nix run github:anomalyco/opencode          # Nix
 ```
 
-#### Installation Directory
+The install script puts OpenCode in `$HOME/.opencode/bin`. Remove versions older than 0.1.x before installing.
 
-The install script installs OpenCode to `$HOME/.opencode/bin`.
+</details>
 
-### Agents
+### One agent, every surface
 
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
+- **[Desktop](https://opencode.ai/desktop)**: Sessions, tabs, diffs, a built-in browser and extensions on macOS, Windows and Linux. [Download](https://opencode.ai/desktop#download) or `brew install --cask opencode-desktop`.
+- **[Terminal](https://opencode.ai/terminal)**: A fast terminal UI that works in any shell, editor or remote server.
+- **[Mobile](https://opencode.ai/mobile)**: Start, steer and approve sessions from your phone, wherever you are.
+- **[SDK](https://opencode.ai/sdk)**: Drive OpenCode from your own scripts, CI jobs and tools.
 
-- **build** - Default, full-access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
+```ts
+import { OpenCode } from "@opencode/sdk"
 
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
+await using oc = await OpenCode.create()
+const s = await oc.sessions.create()
+await oc.sessions.prompt({ sessionID: s.id, text: "Fix failing tests" })
+```
 
-Learn more about [agents](https://opencode.ai/docs/agents).
+### What's in the box
 
-### Documentation
+- **[Any model](https://opencode.ai/docs/models/)**: 200+ LLM providers through Models.dev, including local models
+- **[Multi-session](https://opencode.ai/docs/cli/tui/#sessions)**: Run multiple agents in parallel on the same project
+- **[Custom agents](https://opencode.ai/docs/agents/)**: Specialized agents with their own prompts, models and tools
+- **[Agent skills](https://opencode.ai/docs/skills/)**: Teach agents reusable workflows with `SKILL.md` files
+- **[MCP servers](https://opencode.ai/docs/mcp-servers/)**: Connect GitHub, Linear, Figma, Sentry, Notion, Slack and more
+- **[Plugins](https://opencode.ai/docs/plugins/)**: Hook into events and extend OpenCode with your own logic
+- **[Custom commands](https://opencode.ai/docs/commands/)**: Turn repetitive tasks into slash commands
+- **[Permissions](https://opencode.ai/docs/permissions/)**: Choose what runs automatically and what needs your approval
+- **[Undo and redo](https://opencode.ai/docs/snapshots/)**: Roll back changes to your files and conversation with `/undo`
 
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
+OpenCode ships with two built-in agents you can switch between with `Tab`: **build**, the default full-access agent, and **plan**, a read-only agent for exploring code and planning changes. A **general** subagent handles complex searches and multistep tasks, and you can call it with `@general`.
+
+For everything else, [**head over to the docs**](https://opencode.ai/docs).
 
 ### Contributing
 
@@ -111,4 +142,6 @@ If you are working on a project that's related to OpenCode and is using "opencod
 
 ---
 
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode) · Made by [these humans](https://opencode.ai/humans.txt) at [Anomaly](https://anoma.ly)
+
+<!-- You scrolled all the way down in the raw file too? Respect. Run `opencode` and tell it we said hi. -->
