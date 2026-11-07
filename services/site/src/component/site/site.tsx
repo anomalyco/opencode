@@ -144,13 +144,7 @@ const speculationRules = JSON.stringify({
   ],
 })
 
-// Labels and headlines match status.opencode.ai.
-const statusLabel = {
-  operational: "site.status.operational",
-  degraded: "site.status.degraded",
-  outage: "site.status.outage",
-  unknown: "site.status.unknown",
-} as const satisfies Record<ServiceStatus, Key>
+// The tooltips match status.opencode.ai's headlines. The label is only "Normal" or "Status".
 const statusHeadline = {
   operational: "site.status.operationalHeadline",
   degraded: "site.status.degradedHeadline",
@@ -201,6 +195,11 @@ export function Site(props: {
    * for a reference page that must always show the locked set (/dev/docs).
    */
   docsVariants?: string
+  /**
+   * Stands in for the status API's answer (`undefined` as a failed fetch), for the gallery of status
+   * states (/dev/components#sidebar-status). Overrides Settings › Status preview.
+   */
+  status?: () => ServiceStatus[] | undefined
 }) {
   const i18n = useI18n()
   const language = useLanguage()
@@ -290,9 +289,34 @@ export function Site(props: {
   // area from) and the browser bar colour take the bar's blue as painted, and a fixed strip under the
   // home indicator (site.css) gives Safari a blue element touching the bottom edge.
   const lettersBottom = () => lettersBarShown() && lettersBarAtEnd()
-  const [lettersBlue, setLettersBlue] = createSignal<string>()
+  // The tint comes on as the bar starts to open, so the toolbar area and the opening bar are blue
+  // together; once the bar closes it stays until the bar has finished closing (its transition, none
+  // under reduced motion), so the bottom never turns back while the bar is still on screen.
+  const [lettersTint, setLettersTint] = createSignal(false)
   createEffect(
     on(lettersBottom, (bottom) => {
+      if (bottom || lettersBarShown()) return setLettersTint(bottom)
+      const bar = document.querySelector<HTMLElement>('[data-component="letters-bar"]')
+      const timer = setTimeout(
+        () => setLettersTint(false),
+        bar ? parseFloat(getComputedStyle(bar).transitionDuration) * 1000 : 0,
+      )
+      onCleanup(() => clearTimeout(timer))
+    }),
+  )
+  // Development only: Like letters?'s bar appears at once instead of sliding open, to compare
+  // (?letters-bar=instant, kept until ?letters-bar=slide).
+  const [lettersInstant, setLettersInstant] = createSignal(false)
+  onMount(() => {
+    if (!import.meta.env.DEV) return
+    const asked = new URLSearchParams(location.search).get("letters-bar")
+    if (asked === "instant") localStorage.setItem("opencode-letters-bar", "instant")
+    if (asked === "slide") localStorage.removeItem("opencode-letters-bar")
+    setLettersInstant(localStorage.getItem("opencode-letters-bar") === "instant")
+  })
+  const [lettersBlue, setLettersBlue] = createSignal<string>()
+  createEffect(
+    on(lettersTint, (bottom) => {
       const link = document.querySelector<HTMLElement>('[data-component="letters-bar"] a')
       const blue = bottom && link ? getComputedStyle(link).backgroundColor : undefined
       setLettersBlue(blue)
@@ -311,7 +335,9 @@ export function Site(props: {
       (shown) => {
         if (!shown) return
         const root = document.documentElement
-        if (window.scrollY + window.innerHeight < root.scrollHeight - 4) return
+        // Less what the bar has already grown (all of it when it appears at once).
+        const grown = document.querySelector('[data-component="letters-bar"]')?.getBoundingClientRect().height ?? 0
+        if (window.scrollY + window.innerHeight < root.scrollHeight - grown - 4) return
         const until = performance.now() + 400
         const follow = () => {
           window.scrollTo(0, root.scrollHeight)
@@ -336,12 +362,13 @@ export function Site(props: {
   const navVariant = () => siteSettings.nav
   const logoVariant = () => siteSettings.logo
   const popoverTheme = () => siteSettings.popover
-  const statusPreview = () => siteSettings.status
-  const liveStatus = createAsync(() => status())
-  const statusView = () => {
+  const statusPreview = () => (props.status ? "live" : siteSettings.status)
+  const liveStatus = props.status ?? createAsync(() => status())
+  const statusBars = () => {
     const preview = statusPreview()
-    const bars = preview === "live" ? (liveStatus() ?? statusSamples.operational) : statusSamples[preview]
-    return { bars, current: bars[bars.length - 1] }
+    if (preview !== "live") return statusSamples[preview]
+    // A failed or slow fetch has no answer, and a state this site doesn't know reads as unknown.
+    return (liveStatus() ?? statusSamples.unknown).map((bar) => (bar in statusHeadline ? bar : "unknown"))
   }
 
   // Follows the locale, so a client-side language switch relabels the nav and footer.
@@ -561,6 +588,19 @@ export function Site(props: {
       resize.disconnect()
       nav.removeEventListener("scroll", update)
     })
+  })
+
+  // In the docs layout the sidebar leaves with the article at the page's end, but the logo and the
+  // docs lockup stay fixed (site.css): while the sidebar is on its way out, its items pass under
+  // them, and data-under fades them out there.
+  onMount(() => {
+    if (!props.aside) return
+    const sidebar = document.querySelector<HTMLElement>('[data-component="sidebar"]')
+    if (!sidebar) return
+    const update = () => sidebar.toggleAttribute("data-under", sidebar.getBoundingClientRect().top < -0.5)
+    window.addEventListener("scroll", update, { passive: true })
+    update()
+    onCleanup(() => window.removeEventListener("scroll", update))
   })
 
   // Dark plates, videos and banners scroll under the fixed marks (the GitHub mark, the product pages'
@@ -1120,34 +1160,51 @@ export function Site(props: {
       </bdi>
     </span>
   )
-  const statusLink = () => (
-    // Its own boundary, so a page change (and a card growing into a product page) does not wait
-    // for the status API.
-    <Suspense>
+  // "Normal" only while the current status is operational; anything else, including no answer yet,
+  // a failed fetch or a state this site doesn't know, is "Status". The bars keep the real history.
+  const statusAnchor = (bars: () => ServiceStatus[]) => {
+    const current = () => bars()[bars().length - 1]
+    return (
       <a
         href="https://status.opencode.ai"
         target="_blank"
         rel="noopener"
         data-component="status"
         data-design="statusBars"
-        data-state={statusView().current}
-        title={i18n.t(statusHeadline[statusView().current])}
+        data-state={current()}
+        title={i18n.t(statusHeadline[current()])}
       >
         <span data-slot="bars" aria-hidden="true">
-          <For each={statusView().bars}>{(bar) => <span data-state={bar} />}</For>
+          <For each={bars()}>{(bar) => <span data-state={bar} />}</For>
         </span>
         <span data-slot="status-label">
-          <span data-slot="sr-only">{i18n.t("site.status.prefix")}</span>
-          <Show when={statusView().current === "operational"} fallback={i18n.t(statusLabel[statusView().current])}>
+          <Show
+            when={current() === "operational"}
+            fallback={
+              <>
+                <span data-slot="sr-only">
+                  {i18n.t("site.status.prefix")}
+                  {i18n.t(statusHeadline[current()])}
+                </span>
+                <span aria-hidden="true">{i18n.t("site.footer.status")}</span>
+              </>
+            }
+          >
+            <span data-slot="sr-only">{i18n.t("site.status.prefix")}</span>
             <span data-design-copy="footer.status.ok">
-              {designCopy("footer.status.ok", i18n.t(statusLabel.operational))}
+              {designCopy("footer.status.ok", i18n.t("site.status.operational"))}
             </span>
           </Show>
         </span>
         <ExternalArrow />
         <NewTab />
       </a>
-    </Suspense>
+    )
+  }
+  const statusLink = () => (
+    // Its own boundary, so a page change (and a card growing into a product page) does not wait
+    // for the status API. Until the answer arrives the same link holds the row, as "Status".
+    <Suspense fallback={statusAnchor(() => statusSamples.unknown)}>{statusAnchor(statusBars)}</Suspense>
   )
 
   return (
@@ -1164,7 +1221,8 @@ export function Site(props: {
       data-theme={theme()}
       data-popover={popoverTheme()}
       data-letters-bar={lettersBarShown() && lettersBarInView() ? "" : undefined}
-      data-letters-end={lettersBottom() ? "" : undefined}
+      data-letters-end={lettersTint() ? "" : undefined}
+      data-letters-motion={lettersInstant() ? "instant" : undefined}
       data-spacer={props.page === "home" || props.page === "product" ? siteSettings.spacer : undefined}
       data-logo={logoVariant()}
       data-hero-install={props.page === "home" ? siteSettings.heroInstall : undefined}

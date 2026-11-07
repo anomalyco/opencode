@@ -249,6 +249,7 @@ export default function Press() {
       </Show>
 
       <Section title={content().about.title} design="pressBoilerplate pressCopyStyle">
+        <p data-slot="text">{content().about.body}</p>
         {/* OpenCode first, then the company's other products, each a row of the site's FAQ accordion
             with its long and short text. OpenCode starts open; any number of rows can be open. */}
         <ul data-component="faq" data-slot="boilerplate-accordion" data-ready={accordionReady() ? "" : undefined}>

@@ -253,9 +253,7 @@
       border-top: 1px solid var(--border);
     }
 
-    /* The first row is padded like the others now that a line sits above it; the list moves up
-       8px so the title-to-line gap (16px) matches the line-to-text gap. */
-    margin-top: -0.5rem;
+    /* The first row is padded like the others now that a line sits above it. */
 
     && > li:first-child [data-slot="faq-question"] {
       --padding-top: 1rem;
