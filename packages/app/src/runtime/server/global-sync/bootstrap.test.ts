@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { QueryClient } from "@tanstack/solid-query"
-import { OpenCode } from "@opencode/client/promise"
+import { OpenCode, type LocationGetInput } from "@opencode/client/promise"
 import { createStore } from "solid-js/store"
-import { bootstrapGlobal, loadPathQuery, loadProjectsQuery } from "./bootstrap"
+import { bootstrapGlobal, inferHomeDirectory, loadPathQuery, loadProjectsQuery } from "./bootstrap"
 import { ServerScope } from "@/runtime/server/scope"
 import type { ServerApi } from "@/runtime/server/api"
 import { createServerTransport } from "@/runtime/server/client"
@@ -35,7 +35,6 @@ test("bootstraps projects through the native store setter and preserves subseque
     project: [],
     provider_auth: {},
     config: {},
-    reload: undefined,
   })
 
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -114,14 +113,16 @@ describe("query keys", () => {
   test("partitions identical directories by server scope and loads current location metadata", async () => {
     const calls: unknown[] = []
 
+    // SAFETY: the path query reads only `directory` and `project.directory` from the location it gets.
     const location = {
-      get: async (input: unknown) => {
+      get: async (input?: LocationGetInput) => {
         calls.push(input)
 
         return { directory: "/repo/subpath", project: { id: "project", directory: "/repo" } }
       },
     } as ServerApi["location"]
 
+    // SAFETY: a remote server's scope is its origin string, which is how the app scopes it.
     const remote = "https://debian.example" as typeof ServerScope.local
 
     expect([...loadPathQuery(ServerScope.local, "/repo", location).queryKey]).toEqual(["local", "/repo", "path"])
@@ -131,9 +132,13 @@ describe("query keys", () => {
 
     expect(calls).toEqual([{ location: { directory: "/repo/subpath" } }])
     expect(result).toMatchObject({ directory: "/repo/subpath", worktree: "/repo" })
+    expect(inferHomeDirectory("/Users/kamil/Developer/opencode")).toBe("/Users/kamil")
+    expect(inferHomeDirectory("/home/ubuntu/workspace/repo")).toBe("/home/ubuntu")
+    expect(inferHomeDirectory("C:\\Users\\luke\\repo")).toBe("C:\\Users\\luke")
+    expect(inferHomeDirectory("/repo/subpath")).toBe("")
   })
 
-  test("loads project metadata without enumerating any project's worktrees", async () => {
+  test("loads project metadata in server order without enumerating any project's worktrees", async () => {
     const requests: string[] = []
 
     const api = OpenCode.make({
@@ -164,11 +169,11 @@ describe("query keys", () => {
     const result = await new QueryClient().fetchQuery(loadProjectsQuery(ServerScope.local, api.project))
 
     expect(requests).toEqual(["/api/project"])
-    expect(result).toHaveLength(302)
-    expect(result.slice(0, 2)).toMatchObject([
-      { id: "a", worktree: "/a", sandboxes: ["/a/legacy"], worktrees: [{ directory: "/a" }] },
+    expect(result).toHaveLength(303)
+    expect(result.slice(300)).toMatchObject([
       { id: "b", worktree: "/b", sandboxes: [], worktrees: [{ directory: "/b" }] },
+      { id: "a", worktree: "/a", sandboxes: ["/a/legacy"], worktrees: [{ directory: "/a" }] },
+      { id: "test", worktree: "/tmp/opencode-test-1" },
     ])
-    expect(result.some((project) => project.id === "test")).toBe(false)
   })
 })

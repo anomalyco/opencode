@@ -1,5 +1,6 @@
 import { Argument, Flag, GlobalFlag } from "effect/cli"
 import { Schema } from "effect"
+import { CliFlag } from "../framework/flag"
 import { Spec } from "../framework/spec"
 import { Updater } from "../services/updater"
 
@@ -418,6 +419,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           Flag.withDescription("Fork the session before continuing"),
           Flag.withDefault(false),
         ),
+        worktree: CliFlag.optionalValue("worktree", "name").pipe(
+          Flag.withAlias("w"),
+          Flag.withDescription("Start a new session in a new git worktree, optionally with this name"),
+        ),
         model: Flag.String("model").pipe(
           Flag.withAlias("m"),
           Flag.withDescription("Model to use in the format provider/model#variant"),
@@ -434,6 +439,12 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           Flag.atMost(100),
         ),
         title: Flag.String("title").pipe(Flag.withDescription("Session title"), Flag.optional),
+        archived: Flag.Boolean("archived").pipe(
+          Flag.withDescription(
+            "Create the session archived so it stays out of session lists (useful for scripted or CI runs)",
+          ),
+          Flag.withDefault(false),
+        ),
         thinking: Flag.Boolean("thinking").pipe(Flag.withDescription("Show thinking blocks"), Flag.withDefault(false)),
         ...PermissionParams,
       },

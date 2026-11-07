@@ -9,19 +9,31 @@ import { SessionEvent } from "@opencode/schema/session-event"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Bus } from "@opencode/core/bus"
+import { DatabaseBatch } from "@opencode/core/database/batch"
 import { Database } from "@opencode/core/database/database"
+import { sqliteLayer } from "@opencode/core/database/sqlite.workerd"
 import { ProjectTable } from "@opencode/core/project/sql"
-import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
+import { SessionMessageTable, SessionPartTable, SessionTable } from "@opencode/core/session/sql"
+import { SessionHistory } from "@opencode/core/session/history"
 import { SessionStats } from "@opencode/core/session/stats"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { DateTime, Effect, Schema } from "effect"
+import { DateTime, Effect, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
+import { makeDurableObjectStorage } from "./fixture/durable-object-storage"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
     Bus.node.replace(Bus.configured({ persist: true })),
+  ]),
+)
+const durableIt = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+    Bus.node.replace(Bus.configured({ persist: true })),
+    Database.node.replace(
+      Database.configuredClient(Layer.suspend(() => sqliteLayer({ storage: makeDurableObjectStorage() }))),
+    ),
   ]),
 )
 const projectID = Project.ID.make("stats-project")
@@ -244,6 +256,145 @@ describe("SessionStats", () => {
 
       const future = yield* Effect.flip(SessionStats.get({ from: Number.MAX_SAFE_INTEGER, tools: "none" }))
       expect(future._tag).toBe("SessionStats.InvalidRangeError")
+    }),
+  )
+
+  it.effect("counts tool calls in both session_part rows and inline content an older build left on one message", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: projectID, worktree: AbsolutePath.make("/stats"), name: "stats", sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({ id: sessionID, project_id: projectID, slug: "root", directory: "/stats", version: "test" })
+        .run()
+        .pipe(Effect.orDie)
+      const created = Date.UTC(2026, 0, 2, 10)
+      const time = { created: DateTime.makeUnsafe(created), completed: DateTime.makeUnsafe(created + 1_000) }
+      const row = messageRow(
+        sessionID,
+        1,
+        assistant("msg_stats_hybrid", created, [
+          SessionMessage.AssistantTool.make({
+            type: "tool",
+            id: "call_inline",
+            name: "edit",
+            state: SessionMessage.ToolStateError.make({
+              status: "error",
+              input: {},
+              error: { type: "tool", message: "failed" },
+            }),
+            time,
+          }),
+        ]),
+      )
+      yield* db.insert(SessionMessageTable).values(row).run().pipe(Effect.orDie)
+      yield* db
+        .insert(SessionPartTable)
+        .values({
+          message_id: row.id,
+          session_id: sessionID,
+          ordinal: 0,
+          type: "tool",
+          call_id: "call_part",
+          time_created: created,
+          time_updated: created,
+          data: SessionHistory.encodePart(
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "call_part",
+              name: "read",
+              state: SessionMessage.ToolStateCompleted.make({
+                status: "completed",
+                input: {},
+                content: [{ type: "text", text: "ok" }],
+              }),
+              time,
+            }),
+          ),
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const range = { from: Date.UTC(2026, 0, 1), to: Date.UTC(2026, 1, 1), timezone: "UTC" }
+      expect((yield* SessionStats.get(range)).tools).toEqual({
+        mode: "summary",
+        totals: { calls: 2, succeeded: 1, failed: 1, unfinished: 0 },
+      })
+      const detail = (yield* SessionStats.get({ ...range, tools: "detail" })).tools
+      if (detail.mode !== "detail") throw new Error("Expected detailed tool statistics")
+      expect(detail.usage.map((tool) => tool.name).toSorted()).toEqual(["edit", "read"])
+    }),
+  )
+
+  durableIt.effect("aggregates compaction usage across more than 100 sessions under the 100-parameter limit", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const bus = yield* Bus.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: projectID, worktree: AbsolutePath.make("/stats"), name: "stats", sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+
+      const ids = Array.from({ length: 120 }, (_, i) => Session.ID.make(`ses_stats_${String(i).padStart(3, "0")}`))
+      const created = Date.UTC(2026, 0, 2, 10)
+      yield* Effect.forEach(
+        DatabaseBatch.insertBatches(
+          SessionTable,
+          ids.map((id, i) => ({
+            id,
+            project_id: projectID,
+            slug: `session-${i}`,
+            directory: "/stats",
+            version: "test",
+          })),
+        ),
+        (batch) => db.insert(SessionTable).values(batch).run().pipe(Effect.orDie),
+        { discard: true },
+      )
+      yield* Effect.forEach(
+        DatabaseBatch.insertBatches(
+          SessionMessageTable,
+          ids.map((id, i) => messageRow(id, 1, assistant(`msg_stats_${i}`, created, []))),
+        ),
+        (batch) => db.insert(SessionMessageTable).values(batch).run().pipe(Effect.orDie),
+        { discard: true },
+      )
+
+      yield* TestClock.setTime(created + 1_000)
+      yield* bus.publish(SessionEvent.UsageRecorded, {
+        sessionID: ids[0]!,
+        source: "compaction",
+        cost: Money.USD.make(0.25),
+        tokens: { input: 2, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+      })
+      yield* bus.publish(SessionEvent.UsageRecorded, {
+        sessionID: ids.at(-1)!,
+        source: "compaction",
+        cost: Money.USD.make(0.75),
+        tokens: { input: 3, output: 4, reasoning: 0, cache: { read: 0, write: 0 } },
+      })
+
+      const stats = yield* SessionStats.get({
+        from: Date.UTC(2026, 0, 1),
+        to: Date.UTC(2026, 1, 1),
+        projectID,
+        timezone: "UTC",
+        tools: "none",
+      })
+      expect(stats.sessions).toBe(120)
+      expect(stats.steps).toBe(120)
+      expect(stats.tokens).toEqual({
+        input: 120 * 10 + 5,
+        output: 120 * 5 + 5,
+        reasoning: 120 * 2,
+        cache: { read: 120 * 4, write: 120 },
+      })
+      expect(stats.cost).toBe(Money.USD.make(120 * 1.5 + 1))
     }),
   )
 })

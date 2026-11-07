@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image, Media } from "../../src/index.js"
+import { ai, Media } from "../../src/effect.js"
 import { Alibaba } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 
@@ -17,13 +17,13 @@ const recorded = recordedTests({
 describe("Alibaba Images recorded", () => {
   recorded.effect("generates Qwen-Image images", () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model: alibaba.image("qwen-image-2.0"),
         prompt: "A simple flat red circle centered on a plain white background.",
         n: 2,
-        size: "512x512",
-        seed: 7,
-        providerOptions: { promptExtend: false, watermark: false },
+        aspect: "1:1",
+        resolution: "0.5K",
+        providerOptions: { seed: 7, promptExtend: false, watermark: false },
       })
 
       expect(response.images).toHaveLength(2)
@@ -34,11 +34,11 @@ describe("Alibaba Images recorded", () => {
 
   recorded.effect("generates Wan images", () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model: alibaba.image("wan2.7-image"),
         prompt: "A simple flat blue square centered on a plain white background.",
         n: 2,
-        size: "768x768",
+        resolution: "0.75K",
         providerOptions: { thinkingMode: false },
       })
 
@@ -51,7 +51,7 @@ describe("Alibaba Images recorded", () => {
     "edits an image",
     () =>
       Effect.gen(function* () {
-        const response = yield* Image.generate({
+        const response = yield* ai.image.generate({
           model: alibaba.image("qwen-image-2.0"),
           prompt: "Keep the simple shape and change it from black to bright purple.",
           images: [
@@ -60,7 +60,7 @@ describe("Alibaba Images recorded", () => {
               "image/jpeg",
             ),
           ],
-          size: "512x512",
+          providerOptions: { size: "512*512" },
         })
 
         expect(response.images).toHaveLength(1)

@@ -34,6 +34,25 @@ export const CompactResult = {
   ),
 }
 
+export const Table = {
+  render: () => (
+    <div class="mx-auto max-w-[760px] rounded-lg border border-border-weak-base bg-background-base px-5 py-4">
+      <Markdown
+        text={[
+          "Crops on the outside, kitchen in the middle, farms at the bottom next to it.",
+          "",
+          "| | West | Centre | East |",
+          "| --- | --- | --- | --- |",
+          "| North | Lettuce ×2 | Tomato ×2 | Berry ×1 (pal food) |",
+          "| Middle | Wheat ×1 + Mill | Palbox + Feed Box | Hot Spring + Pal Beds |",
+          "| South | Ranch | Refrigerator · Electric Kitchen · Generator | Chest (overflow) |",
+          "| Far south | Breeding Farm A | (walkway) | Breeding Farm B |",
+        ].join("\n")}
+      />
+    </div>
+  ),
+}
+
 const streamed =
   "Streaming Markdown now keeps existing elements alive while each newly arriving word fades into the response."
 

@@ -1,16 +1,34 @@
-import { onMount, type ComponentProps, splitProps } from "solid-js"
+import { createSignal, onMount, type ComponentProps, splitProps } from "solid-js"
 import { iconNames, isIconName, getIcon, type IconName } from "../catalog"
+import { getNewIcon, newIconViewBox } from "../new-icons"
 import "./icon.css"
 
 const spriteID = "opencode-v2-icon-sprite"
 
 const symbol = (name: IconName) => `opencode-v2-icon-${name}`
 
+const newSymbol = (name: IconName) => `opencode-v2-icon-new-${name}`
+
 let spriteInserted = false
+
+// The "New icons" experiment, set by the app from its settings.
+const [newIconsEnabled, setNewIconsEnabled] = createSignal(false)
+
+export function setNewIcons(enabled: boolean) {
+  setNewIconsEnabled(enabled)
+}
+
+/** Whether the "New icons" experiment is on, for call sites that pick a different icon under it. */
+export const newIcons = newIconsEnabled
 
 function spriteContent() {
   return iconNames()
-    .map((name) => `<symbol id="${symbol(name)}" viewBox="${getIcon(name).viewBox}">${getIcon(name).body}</symbol>`)
+    .map((name) => {
+      const current = `<symbol id="${symbol(name)}" viewBox="${getIcon(name).viewBox}">${getIcon(name).body}</symbol>`
+      const next = getNewIcon(name)
+
+      return next ? `${current}<symbol id="${newSymbol(name)}" viewBox="${newIconViewBox}">${next}</symbol>` : current
+    })
     .join("")
 }
 
@@ -53,7 +71,10 @@ export function Icon(props: IconProps) {
   }
 
   const icon = () => getIcon(iconName())
-  const pixelSize = split.size === "small" ? 14 : split.size === "large" ? 20 : 16
+  // Names without new artwork keep today's under the experiment.
+  const next = () => newIconsEnabled() && getNewIcon(iconName()) !== undefined
+  // New artwork is drawn on a 16px grid, so it stays at 16px where today's small icons shrink to 14px.
+  const pixelSize = () => (split.size === "large" ? 20 : split.size === "small" && !next() ? 14 : 16)
   onMount(ensureSprite)
 
   return (
@@ -65,19 +86,20 @@ export function Icon(props: IconProps) {
         iconName() === "arrow-right" ||
         iconName() === "outline-arrow-left" ||
         iconName() === "outline-arrow-right" ||
+        iconName() === "outline-chevron-right" ||
         iconName() === "chevron-left" ||
         iconName() === "chevron-right"
           ? ""
           : undefined
       }
-      width={pixelSize}
-      height={pixelSize}
-      viewBox={icon().viewBox}
+      width={pixelSize()}
+      height={pixelSize()}
+      viewBox={next() ? newIconViewBox : icon().viewBox}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden={rest["aria-hidden"] ?? "true"}
     >
-      <use href={`#${symbol(iconName())}`} />
+      <use href={`#${next() ? newSymbol(iconName()) : symbol(iconName())}`} />
     </svg>
   )
 }

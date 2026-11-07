@@ -26,6 +26,8 @@ const permission = Layer.succeed(
       if (input.action === "declined") return Effect.die(new Permission.DeclinedError())
       return Effect.void
     },
+    assertNotDenied: () => Effect.void,
+    allows: () => Effect.succeed(false),
     reply: () => Effect.void,
     get: () => Effect.succeed(undefined),
     forSession: () => Effect.succeed([]),
@@ -38,7 +40,7 @@ const sessionID = Session.ID.make("ses_plugin_permission")
 
 it.live("Effect plugins assert permissions and receive outcomes as tool errors", () =>
   Effect.gen(function* () {
-    const host = yield* PluginHost.make(yield* Plugin.Service)
+    const host = yield* PluginHost.make(yield* Plugin.Service, "test")
     const assert = (action: string) =>
       host.permission.assert({ sessionID, action, resources: ["prod"], save: ["*"] }).pipe(Effect.exit)
 
@@ -73,7 +75,7 @@ it.live("Promise plugins assert permissions with plain input", () =>
       async setup(context) {
         assertPermission = context.permission.assert
       },
-    }).effect(yield* PluginHost.make(yield* Plugin.Service))
+    }).effect(yield* PluginHost.make(yield* Plugin.Service, "test"))
     const assert = (action: string) =>
       Effect.promise(() =>
         assertPermission({ sessionID: "ses_plugin_permission", action, resources: ["prod"] }).then(

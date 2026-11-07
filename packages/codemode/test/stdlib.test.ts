@@ -16,7 +16,7 @@
  */
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import { CodeMode, Tool } from "../src/index.js"
+import { CodeMode, Tool } from "./lib/index.js"
 
 // Standard-library value types: Date, RegExp, Map, Set. Programs use them as ordinary JS;
 // intra-CodeMode checkpoints (Object.* helpers, spread, coercion inputs) preserve the live
@@ -1176,6 +1176,15 @@ describe("Uint8Array", () => {
 })
 
 describe("TextEncoder and TextDecoder", () => {
+  test("encodes null as text while omitted and undefined inputs stay empty", async () => {
+    expect(
+      await value(`
+        const encoder = new TextEncoder()
+        return [[...encoder.encode(null)], [...encoder.encode()], [...encoder.encode(undefined)]]
+      `),
+    ).toEqual([[110, 117, 108, 108], [], []])
+  })
+
   test("round-trips UTF-8 and exposes the standard fields", async () => {
     expect(
       await value(`

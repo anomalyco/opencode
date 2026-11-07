@@ -1,10 +1,12 @@
 import { Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
-import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
+import { ImageModel, ImageResponse, type ImageRequest } from "../image.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import type { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords } from "../schema/index.js"
+import { ProviderShared } from "./shared.js"
+import { ImageSizing } from "./utils/image-sizing.js"
 import { MediaInput } from "./utils/media-input.js"
 
 const route = MediaProtocol.identity({
@@ -20,15 +22,21 @@ const RESERVED_FORM_FIELDS = new Set(["prompt"])
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-/** Native Run API inputs. Step counts are `steps` on FLUX and Lucid Origin and `num_steps` on the other models. */
+/**
+ * Native Run API inputs. Step counts are `steps` on FLUX and Lucid Origin and `num_steps` on the other models;
+ * `aspect` and `resolution` lower to `width` and `height`.
+ */
 export type CloudflareWorkersAIImageOptions = {
+  readonly width?: number
+  readonly height?: number
+  readonly seed?: number
   readonly steps?: number
   readonly num_steps?: number
   readonly guidance?: number
   readonly negative_prompt?: string
 } & Record<string, unknown>
 
-export type Request = ImageRequestFor<CloudflareWorkersAIImageOptions>
+export type Request = ImageRequest<ImageModel<CloudflareWorkersAIImageOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Response schema
@@ -50,14 +58,26 @@ const fromRequest = Effect.fn("CloudflareWorkersAIImages.fromRequest")(function*
     return yield* route.unsupported("media.n", `${route.name} generates one image per request; call it once per image`)
   const fields = {
     prompt: request.prompt,
-    ...(request.size === undefined ? {} : MediaInput.dimensions(request.size)),
-    seed: request.seed,
+    ...(yield* ImageSizing.exact(route, request, { multiple: 16, minEdge: 256, maxEdge: 2048 })),
   }
   const native = mergeJsonRecords(request.providerOptions, request.http?.body)
-  if (!request.model.id.startsWith(MULTIPART_MODEL_PREFIX))
-    return MediaProtocol.json(mergeJsonRecords(fields, native) ?? {})
+  const images = request.images ?? []
+  if (!request.model.id.startsWith(MULTIPART_MODEL_PREFIX)) {
+    if (images.length > 1)
+      return yield* route.unsupported("media.images", `${request.model.id} takes one input image as image_b64`)
+    const image = images[0]?.inline()
+    if (images[0] !== undefined && image === undefined) return yield* ProviderShared.inlineRequired(route.id, images[0])
+    return MediaProtocol.json(mergeJsonRecords({ ...fields, image_b64: image?.base64 }, native) ?? {})
+  }
   const body = new FormData()
   MediaInput.appendFields(body, fields, { overlay: native, reserved: RESERVED_FORM_FIELDS })
+  yield* Effect.forEach(images, (image, index) =>
+    MediaInput.inlineBytes(route.id, image).pipe(
+      Effect.map((bytes) =>
+        body.append(`input_image_${index}`, MediaInput.blob(bytes, image.mediaType), `image_${index}`),
+      ),
+    ),
+  )
   return MediaProtocol.multipart(body)
 })
 
@@ -88,7 +108,6 @@ const decodeResponse = Effect.fn("CloudflareWorkersAIImages.decodeResponse")(fun
 // ---------------------------------------------------------------------------
 
 export const protocol = MediaProtocol.inline<Request, ImageResponse>(route, {
-  unsupported: ["images", "mask", "aspectRatio", "format"],
   body: { from: fromRequest },
   response: { decode: decodeResponse },
 })

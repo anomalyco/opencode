@@ -26,6 +26,7 @@ describe("settings store", () => {
     expect(existsSync(file)).toBe(false)
     store.set("ready", { version: "1.0.0" })
     // Like electron-store, undefined is refused instead of treated as a delete.
+    // @ts-expect-error undefined is not a JSON value; an untyped caller still gets the TypeError.
     expect(() => store.set("ready", undefined)).toThrow(TypeError)
     expect(store.get("ready")).toEqual({ version: "1.0.0" })
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ ready: { version: "1.0.0" } })

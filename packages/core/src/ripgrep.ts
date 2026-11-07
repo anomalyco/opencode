@@ -18,6 +18,7 @@ import { RipgrepBinary } from "./ripgrep/binary.js"
 
 const ERROR_BYTES = 8 * 1024
 const MAX_SUBMATCHES = 100
+const MAX_LINE_CHARS = 2_000
 
 const RawMatch = Schema.Struct({
   type: Schema.Literal("match"),
@@ -241,6 +242,12 @@ const layer = Layer.effect(
                 return Schema.decodeUnknownEffect(RawMatch)(json).pipe(
                   Effect.map((match) => ({
                     ...match.data,
+                    lines: {
+                      text:
+                        match.data.lines.text.length > MAX_LINE_CHARS
+                          ? Buffer.from(match.data.lines.text.slice(0, MAX_LINE_CHARS), "utf8").toString() + "..."
+                          : match.data.lines.text,
+                    },
                     path: { text: normalizePath(match.data.path.text) },
                     submatches: match.data.submatches.slice(0, MAX_SUBMATCHES),
                   })),
@@ -258,7 +265,7 @@ const layer = Layer.effect(
                 }),
                 line: match.line_number,
                 offset: match.absolute_offset,
-                text: match.lines.text.length > 2_000 ? match.lines.text.slice(0, 2_000) + "..." : match.lines.text,
+                text: match.lines.text,
                 submatches: match.submatches.map((submatch) => ({
                   text: submatch.match.text,
                   start: submatch.start,

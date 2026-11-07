@@ -6,15 +6,18 @@ import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
-import { LLMRequest, type ToolDefinition, type ToolEntry } from "../schema/index.js"
+import type { LLMRequest, ToolDefinition, ToolEntry } from "../schema/index.js"
+import { requestTTL } from "../cache-policy.js"
 import { resolveEffortUpdates } from "../effort-updates.js"
 import { OpenResponses } from "./open-responses.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
-import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
+import { JsonObject, lenient, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
 import { OpenResponsesChannel } from "./open-responses-channel.js"
 import { ResponsesCompaction } from "./utils/responses-compaction.js"
 import { ResponsesCheckpoint } from "./utils/responses-checkpoint.js"
+import * as Cache from "./utils/cache.js"
+import { OpenAIFreeform } from "./openai-freeform.js"
 
 const ADAPTER = "openai-responses"
 const NAME = "OpenAI Responses"
@@ -30,6 +33,16 @@ export const ContextManagement = Schema.Array(
   }),
 )
 export type ContextManagement = typeof ContextManagement.Type
+
+export const ReasoningMode = ProviderShared.knownString<"standard" | "pro">()
+export type ReasoningMode = typeof ReasoningMode.Type
+export const ReasoningContext = ProviderShared.knownString<"auto" | "current_turn" | "all_turns">()
+export type ReasoningContext = typeof ReasoningContext.Type
+
+const ReasoningOptions = Schema.Struct({
+  reasoningMode: lenient(ReasoningMode),
+  reasoningContext: lenient(ReasoningContext),
+})
 
 const OpenAIResponsesImageGenerationTool = Schema.Struct({
   type: Schema.tag("image_generation"),
@@ -95,6 +108,7 @@ const OpenAIResponsesNamespace = Schema.Struct({
 
 const OpenAIResponsesTools = Schema.Union([
   OpenResponses.Tool,
+  OpenResponses.CustomTool,
   OpenAIResponsesNamespace,
   OpenAIResponsesImageGenerationTool,
 ])
@@ -106,8 +120,18 @@ const OpenAIResponsesToolChoice = Schema.Union([
 
 const OpenAIResponsesCoreFields = {
   ...OpenResponses.coreFields,
+  prompt_cache_retention: Schema.optional(Schema.String),
+  prompt_cache_options: Schema.optional(Schema.Struct({ ttl: Schema.optional(Schema.String) })),
   tools: optionalArray(OpenAIResponsesTools),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
+  reasoning: Schema.optional(
+    Schema.Struct({
+      effort: Schema.optional(OpenResponsesOptions.ReasoningEffort),
+      summary: Schema.optional(Schema.Literals(["auto", "concise", "detailed"])),
+      mode: Schema.optional(ReasoningMode),
+      context: Schema.optional(ReasoningContext),
+    }),
+  ),
   context_management: Schema.optional(
     Schema.Array(
       Schema.Struct({
@@ -141,8 +165,9 @@ const adapter = {
 // or alongside automatic `context_management` compaction.
 const supportsEffortUpdates = (request: LLMRequest) => {
   if (request.providerOptions?.contextManagement !== undefined) return false
+  if (request.providerOptions?.reasoningMode === "pro") return false
   if (Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(request.http?.body?.reasoning)) return false
-  const override = request.model.compatibility?.supportsEffortUpdates
+  const override = request.model.capabilities?.reasoning?.updates
   if (override !== undefined) return override
   const match = /(?:^|\/)gpt-(\d+)(?:\.\d+)?(?:-|$)/i.exec(request.model.id)
   return match !== null && Number(match[1]) >= 6
@@ -158,19 +183,27 @@ const nativeImageTool = (tool: ToolDefinition) => {
   return Schema.is(OpenAIResponsesImageGenerationTool)(native) ? native : undefined
 }
 
-const lowerTool = Effect.fnUntraced(function* (tool: ToolDefinition) {
+const lowerTool = Effect.fnUntraced(function* (
+  tool: ToolDefinition,
+  custom: ReadonlyMap<string, OpenAIFreeform.Custom>,
+) {
   const native = nativeImageToolInput(tool)
   if (native !== undefined) {
     if (Schema.is(OpenAIResponsesImageGenerationTool)(native)) return native
     return yield* ProviderShared.invalidRequest("OpenAI Responses image generation tool options are invalid")
   }
+  const definition = custom.get(tool.name)
+  if (definition) return OpenResponses.lowerCustomTool(tool, definition)
   return yield* OpenResponses.lowerTool(NAME, tool)
 })
 
 // Native namespaces hold only function tools, so deeper levels flatten into
 // the leaf names the same way non-native protocols flatten the whole tree.
-const lowerToolEntry = Effect.fnUntraced(function* (tool: ToolEntry) {
-  if (tool.type === "tool") return yield* lowerTool(tool)
+const lowerToolEntry = Effect.fnUntraced(function* (
+  tool: ToolEntry,
+  custom: ReadonlyMap<string, OpenAIFreeform.Custom>,
+) {
+  if (tool.type === "tool") return yield* lowerTool(tool, custom)
   // OpenAI requires a namespace description; fall back to a generic one so a
   // missing description never blocks the request.
   return {
@@ -183,9 +216,16 @@ const lowerToolEntry = Effect.fnUntraced(function* (tool: ToolEntry) {
   }
 })
 
-const lowerTools = (request: LLMRequest) => Effect.forEach(request.tools, lowerToolEntry)
+const lowerTools = (request: LLMRequest) => {
+  const custom = OpenAIFreeform.tools(request)
+  return Effect.forEach(request.tools, (tool) => lowerToolEntry(tool, custom))
+}
 
-const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tools: ReadonlyArray<ToolEntry>) =>
+const lowerToolChoice = (
+  toolChoice: NonNullable<LLMRequest["toolChoice"]>,
+  tools: ReadonlyArray<ToolEntry>,
+  custom: ReadonlyMap<string, OpenAIFreeform.Custom>,
+) =>
   ProviderShared.matchToolChoice(NAME, toolChoice, {
     auto: () => "auto" as const,
     none: () => "none" as const,
@@ -193,7 +233,7 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tool
     tool: (name) =>
       tools.some((tool) => tool.type === "tool" && tool.name === name && nativeImageTool(tool) !== undefined)
         ? ({ type: "image_generation" } as const)
-        : { type: "function" as const, name },
+        : OpenResponses.namedTool(name, custom),
   })
 
 const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request: LLMRequest) {
@@ -201,17 +241,30 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
     Schema.decodeUnknownEffect(Schema.UndefinedOr(ContextManagement)),
   )(request.providerOptions?.contextManagement)
   const options = OpenResponsesOptions.resolve(request)
+  const reasoning = Schema.decodeUnknownSync(ReasoningOptions)(request.providerOptions ?? {})
   const updates = resolveEffortUpdates(request, options.reasoningEffort)
+  const generation = OpenResponses.lowerGeneration(request, { ...options, reasoningEffort: updates.effort })
+  const custom = OpenAIFreeform.tools(request)
   return {
     ...(yield* OpenResponses.lowerConversation(updates.request, adapter)),
-    ...OpenResponses.lowerGeneration(request, { ...options, reasoningEffort: updates.effort }),
+    ...generation,
+    ...Cache.openAIRequestTTL(requestTTL(request)),
+    ...(generation.reasoning || reasoning.reasoningMode || reasoning.reasoningContext
+      ? {
+          reasoning: {
+            ...generation.reasoning,
+            mode: reasoning.reasoningMode,
+            context: reasoning.reasoningContext,
+          },
+        }
+      : {}),
     context_management: management?.map((edit) => ({ type: edit.type, compact_threshold: edit.compactThreshold })),
     tools: request.tools.length === 0 ? undefined : yield* lowerTools(request),
     tool_choice:
       request.tools.length === 0
         ? undefined
-        : (OpenResponses.allowedToolChoice(request, options) ??
-          (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined)),
+        : (OpenResponses.allowedToolChoice(options, custom) ??
+          (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools, custom) : undefined)),
   }
 })
 
@@ -262,31 +315,11 @@ const hostedToolResult = Effect.fnUntraced(function* (item: ResponsesHostedTools
 })
 
 const HOSTED_TOOLS = {
-  web_search_call: { name: "web_search", input: (item) => item.action ?? {} },
+  ...ResponsesHostedTools.common,
   web_search_preview_call: { name: "web_search_preview", input: (item) => item.action ?? {} },
-  file_search_call: { name: "file_search", input: (item) => ({ queries: item.queries ?? [] }) },
-  code_interpreter_call: {
-    name: "code_interpreter",
-    input: (item) => ({ code: item.code, container_id: item.container_id }),
-  },
   computer_call: { name: "computer_use", input: (item) => item.action ?? {} },
   image_generation_call: { name: "image_generation", input: () => ({}), result: hostedToolResult },
-  mcp_call: {
-    name: "mcp",
-    input: (item) => ({ server_label: item.server_label, name: item.name, arguments: item.arguments }),
-  },
 } as const satisfies ResponsesHostedTools.Definitions
-
-const step = (state: OpenResponses.ParserState, input: OpenResponses.Event) => {
-  const event = OpenResponses.normalize(state, input)
-  if (event.type === "response.reasoning_text.delta")
-    return event.item_id !== undefined
-      ? Effect.succeed(OpenResponses.onReasoningDelta(state, event, event.item_id))
-      : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)
-  if (event.type === "response.output_item.done" && event.item && ResponsesHostedTools.isItem(event.item, HOSTED_TOOLS))
-    return ResponsesHostedTools.onDone(state, event.item, HOSTED_TOOLS)
-  return OpenResponses.step(state, event)
-}
 
 export const protocol = Protocol.make({
   id: ADAPTER,
@@ -294,12 +327,12 @@ export const protocol = Protocol.make({
     schema: OpenAIResponsesBody,
     from: fromRequest,
   },
-  stream: {
-    event: OpenResponses.protocol.stream.event,
-    initial: (request) => OpenResponses.initial(request, adapter),
-    step,
-    terminal: OpenResponses.terminal,
-  },
+  stream: ResponsesHostedTools.stream(adapter, HOSTED_TOOLS, (state, event) => {
+    if (event.type !== "response.reasoning_text.delta") return undefined
+    return event.item_id !== undefined
+      ? Effect.succeed(OpenResponses.onReasoningDelta(state, event, event.item_id))
+      : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)
+  }),
   supportsEffortUpdates,
 })
 
@@ -327,7 +360,7 @@ export const route = Route.make({
   endpoint,
   auth,
   transport,
-  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
 export * as OpenAIResponses from "./openai-responses.js"
