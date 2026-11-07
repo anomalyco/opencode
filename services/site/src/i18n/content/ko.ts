@@ -232,7 +232,7 @@ export const content = {
         allowlists: { title: "허용 목록", body: "세션의 탭을 지정한 사이트로만 제한하세요." },
       },
       install:
-        "한 줄로 Browse를 설치하고, 찾은 에이전트에 추가하고 확장 프로그램과 페어링합니다. Windows에서는 irm https://opencode.ai/browse/install.ps1 | iex 를 실행하세요. 에이전트에게 설정을 맡겨도 됩니다.",
+        "먼저 Chrome 확장 프로그램을 설치하세요. 나머지 단계는 확장 프로그램이 안내합니다. CLI를 직접 설치하려면 아래 명령 중 하나를 사용하세요.",
     },
   },
   apps: {

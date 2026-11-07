@@ -198,7 +198,7 @@ export const content = {
         allowlists: { title: "允許清單", body: "將工作階段的分頁限制在你指定的網站內。" },
       },
       install:
-        "一行指令安裝 Browse，將它加入找到的代理並配對擴充功能。在 Windows 上執行 irm https://opencode.ai/browse/install.ps1 | iex。也可以請代理幫你設定。",
+        "請先安裝 Chrome 擴充功能，它會引導你完成其餘步驟。如需直接安裝 CLI，可使用以下任一指令。",
     },
   },
   apps: {

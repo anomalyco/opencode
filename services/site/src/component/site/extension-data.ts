@@ -18,7 +18,7 @@ type Extension = {
   intro: string
   features: { title: string; body: string }[]
   /** How to get it: a command to copy, or where to find it in the desktop app. */
-  install: { lead: string; command?: string }
+  install: { lead: string; command?: string; commands?: { method: string; command: string }[] }
   /** The Chrome Web Store listing, when there is one. The page's main action. */
   store?: string
   source: string
@@ -51,8 +51,13 @@ export const extensionPages: readonly Extension[] = [
       { title: "Allowlists", body: "Limit a session's tabs to the sites you name." },
     ],
     install: {
-      lead: "One line installs Browse, adds it to the agents it finds and pairs the extension. On Windows, run irm https://opencode.ai/browse/install.ps1 | iex. Or ask your agent to set it up.",
-      command: "curl -fsSL https://opencode.ai/browse/install | bash",
+      lead: "Install the Chrome extension first. It walks you through the rest of the steps. To install the CLI directly, use any of these.",
+      commands: [
+        { method: "curl", command: "curl -fsSL https://opencode.ai/browse/install | bash" },
+        { method: "powershell", command: "irm https://opencode.ai/browse/install.ps1 | iex" },
+        { method: "npm", command: "npm install -g @opencode/browse && browse install" },
+        { method: "bun", command: "bun add -g @opencode/browse && browse install" },
+      ],
     },
     store: "https://chromewebstore.google.com/detail/mfnicocicmmlkpjnaffgihfjhdgjkdjg",
     product: true,

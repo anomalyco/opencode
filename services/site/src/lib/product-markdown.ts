@@ -152,6 +152,7 @@ export function extensionMarkdown(slug: ExtensionSlug) {
       extension.store && `Add to Chrome from the ${link("Chrome Web Store", extension.store)}.`,
       extension.install.lead,
       extension.install.command && codeFence("bash", extension.install.command),
+      extension.install.commands && codeFence("bash", extension.install.commands.map((item) => item.command).join("\n")),
       `Source: ${link(extension.source.replace("https://", ""), extension.source)}`,
       "## More from Anomaly",
       anomalyProducts

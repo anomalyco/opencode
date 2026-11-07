@@ -367,7 +367,11 @@ export function ProductDownload(props: { slug: PageSlug }) {
 }
 
 /** The extension pages' Install section, in the product pages' Download style, at #download. */
-export function ExtensionDownload(props: { lead: string; command?: string }) {
+export function ExtensionDownload(props: {
+  lead: string
+  command?: string
+  commands?: { method: string; command: string }[]
+}) {
   const i18n = useI18n()
   const state = useCopy()
   let root!: HTMLDivElement
@@ -377,15 +381,19 @@ export function ExtensionDownload(props: { lead: string; command?: string }) {
       <SectionHeading id="download" title={i18n.t("download.action.install")} label />
       <div data-slot="body" ref={root}>
         <p data-slot="lead">{props.lead}</p>
-        <Show when={props.command}>
-          {(command) => (
+        <Show when={props.commands ?? (props.command ? [{ method: props.command.split(" ")[0], command: props.command }] : undefined)}>
+          {(commands) => (
             <ul data-component="download-list">
-              <CopyRow
-                item={{ id: "install", command: command() }}
-                method={command().split(" ")[0]}
-                copies="extension"
-                state={state}
-              />
+              <For each={commands()}>
+                {(item) => (
+                  <CopyRow
+                    item={{ id: item.method, command: item.command }}
+                    method={item.method}
+                    copies="extension"
+                    state={state}
+                  />
+                )}
+              </For>
             </ul>
           )}
         </Show>
