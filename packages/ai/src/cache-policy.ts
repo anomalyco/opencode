@@ -126,28 +126,30 @@ const markSystemBoundaries = (system: LLMRequest["system"], hint: CacheHint, bud
   return changed ? next : system
 }
 
-const lastIndexOfRole = (messages: ReadonlyArray<Message>, role: Message["role"]): number =>
-  messages.findLastIndex((m) => m.role === role)
+const lastIndexOfRole = (messages: ReadonlyArray<Message>, role: Message["role"], before: number): number =>
+  messages.findLastIndex((m, i) => i < before && m.role === role)
 
 type CacheablePart = Exclude<ContentPart, { readonly type: "compaction" | "effort" }>
 
 const isCacheablePart = (part: ContentPart): part is CacheablePart =>
   part.type !== "compaction" && part.type !== "effort"
 
-// Mark the last text part of `messages[index]`. If no text part exists, mark
-// the last cacheable content part — that's the breakpoint position
+// Mark the last text part of `messages[index]`, among its first `parts` parts when given. If no text part
+// exists, mark the last cacheable content part — that's the breakpoint position
 // in tool-result-only messages too.
 const markMessageAt = (
   messages: ReadonlyArray<Message>,
   index: number,
   hint: CacheHint,
   budget: Budget,
+  parts?: number,
 ): ReadonlyArray<Message> => {
   if (index < 0 || index >= messages.length) return messages
   const target = messages[index]!
-  if (target.content.length === 0) return messages
-  const lastTextIndex = target.content.findLastIndex((part) => part.type === "text")
-  const markAt = lastTextIndex >= 0 ? lastTextIndex : target.content.findLastIndex(isCacheablePart)
+  const content = parts === undefined ? target.content : target.content.slice(0, parts)
+  if (content.length === 0) return messages
+  const lastTextIndex = content.findLastIndex((part) => part.type === "text")
+  const markAt = lastTextIndex >= 0 ? lastTextIndex : content.findLastIndex(isCacheablePart)
   const existing = target.content[markAt]
   if (!existing || !isCacheablePart(existing) || existing.cache || budget.remaining === 0) return messages
   budget.remaining -= 1
@@ -176,26 +178,44 @@ const cachePartAt = (message: Message, index: number, hint: CacheHint): Message 
 const cacheContentAt = <Part extends ContentPart>(content: ReadonlyArray<Part>, index: number, hint: CacheHint) =>
   content.map((part, i) => (i === index ? { ...part, cache: hint } : part))
 
+const isTransient = (part: ContentPart) => part.type === "text" && part.transient === true
+
+// Where request-local content starts: the message holding the first transient part, and that part's index in it.
+// The next request no longer sends that content, so a breakpoint on or after it would write an entry nothing reads.
+const requestLocalStart = (messages: ReadonlyArray<Message>) => {
+  const message = messages.findIndex((item) => item.content.some(isTransient))
+  if (message < 0) return { message: messages.length, part: 0 }
+  const part = messages[message]!.content.findIndex(isTransient)
+  if (part > 0 && messages[message]!.role !== "system") return { message, part }
+  // Anthropic lowers a system update that user content follows differently from one that a reply follows, so the
+  // next request sends it in another form. End before such an update so the next request still reads this tail.
+  const previous = messages.findLastIndex((item, i) => i < message && effortUpdate(item) === undefined)
+  if (messages[previous]?.role !== "system") return { message, part: 0 }
+  return { message: messages.findLastIndex((item, i) => i < message && item.role !== "system") + 1, part: 0 }
+}
+
 const markMessages = (
   messages: ReadonlyArray<Message>,
   strategy: NonNullable<CachePolicyObject["messages"]>,
   hint: CacheHint,
   budget: Budget,
 ): ReadonlyArray<Message> => {
-  if (messages.length === 0) return messages
-  if (strategy === "latest-user-message")
-    return markMessageAt(messages, lastIndexOfRole(messages, "user"), hint, budget)
-  if (strategy === "latest-assistant")
-    return markMessageAt(messages, lastIndexOfRole(messages, "assistant"), hint, budget)
-  let start = messages.length
+  const local = requestLocalStart(messages)
+  // Messages before `end` repeat in later requests; so does the start of a message whose tail is request-local.
+  const end = local.part > 0 ? local.message + 1 : local.message
+  const mark = (next: ReadonlyArray<Message>, index: number) =>
+    markMessageAt(next, index, hint, budget, index === local.message ? local.part : undefined)
+  if (end === 0) return messages
+  if (strategy === "latest-user-message") return mark(messages, lastIndexOfRole(messages, "user", end))
+  if (strategy === "latest-assistant") return mark(messages, lastIndexOfRole(messages, "assistant", end))
+  let start = end
   let remaining = strategy.tail
   while (remaining > 0 && start > 0) {
     start -= 1
     if (effortUpdate(messages[start]!) === undefined) remaining -= 1
   }
   let next = messages
-  for (let i = start; i < messages.length; i++)
-    if (effortUpdate(messages[i]!) === undefined) next = markMessageAt(next, i, hint, budget)
+  for (let i = start; i < end; i++) if (effortUpdate(messages[i]!) === undefined) next = mark(next, i)
   return next
 }
 

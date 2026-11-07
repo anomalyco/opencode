@@ -1,6 +1,6 @@
 export * as GoalPlugin from "./goal.js"
 
-import { isContextOverflowFailure, Message } from "@opencode/ai/effect"
+import { isContextOverflowFailure, Message, UserMessage } from "@opencode/ai/effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionIdleBackground } from "@opencode/plugin/effect/session"
 import { Goal } from "@opencode/schema/goal"
@@ -215,16 +215,20 @@ export const Plugin = define({
       ),
     )
 
-    // Until the next continuation restates the objective, a compacted history may not show it. Add it near the tail,
-    // without persisting it, so the cached prefix stays warm and the reminder stops once a continuation lands.
+    // Until the next continuation restates the objective, a compacted history may not show it. Append it at the tail,
+    // without persisting it, so the reminder stops once a continuation lands. It is request-local text: cache
+    // breakpoints stay on the history before it, which the next request repeats.
     yield* ctx.session.hook("context", (event) =>
       read(event.sessionID).pipe(
         Effect.map((goal) => {
           if (goal?.status !== "active") return
           const objective = objectiveBlock(goal.objective)
           if (event.messages.some((message) => message.role === "user" && textOf(message).includes(objective))) return
-          const at = event.messages.at(-1)?.role === "user" ? event.messages.length - 1 : event.messages.length
-          event.messages.splice(at, 0, Message.user(render(REMINDER, { objective: escape(goal.objective) })))
+          const part = { ...Message.text(render(REMINDER, { objective: escape(goal.objective) })), transient: true }
+          const last = event.messages.at(-1)
+          if (last?.role === "user")
+            event.messages[event.messages.length - 1] = new UserMessage({ ...last, content: [...last.content, part] })
+          else event.messages.push(Message.user([part]))
         }),
         Effect.catchCause((cause) => Effect.logWarning("failed to remind the model of the goal", { cause })),
       ),

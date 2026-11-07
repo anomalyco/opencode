@@ -167,16 +167,30 @@ describe("plan plugin reminders", () => {
     }),
   )
 
-  it.effect("reconciles a missing enter reminder into the request and persists it", () =>
+  it.effect("reconciles a missing enter reminder after the cached prefix and persists it", () =>
     Effect.gen(function* () {
       const { persisted, contextHook } = yield* run()
       const messages = [Message.user("what agent are you?")]
       yield* contextHook(request(plan, messages))
-      expect(messages).toHaveLength(2)
-      // Inserted before the user's prompt, matching where agent-switch reminders land.
-      const first = messages[0]?.content[0]
-      expect(first?.type === "text" && first.text).toContain("You are in Plan mode")
       expect(persisted).toHaveLength(1)
+      expect(persisted[0]).toContain("You are in Plan mode")
+      // The persisted copy lands after this step, so the request's copy stays out of the cached prefix.
+      expect(messages).toHaveLength(1)
+      expect(messages[0]?.content).toEqual([
+        Message.text("what agent are you?"),
+        { ...Message.text(persisted[0]!), transient: true },
+      ])
+    }),
+  )
+
+  it.effect("appends a reconciled reminder after a reply as its own transient message", () =>
+    Effect.gen(function* () {
+      const { persisted, contextHook } = yield* run()
+      const messages = [Message.user("plan it"), Message.assistant("Reading the code first.")]
+      yield* contextHook(request(plan, messages))
+      expect(messages).toHaveLength(3)
+      expect(messages[2]?.role).toBe("user")
+      expect(messages[2]?.content).toEqual([{ ...Message.text(persisted[0]!), transient: true }])
     }),
   )
 
@@ -197,10 +211,13 @@ describe("plan plugin reminders", () => {
       const { persisted, contextHook } = yield* run()
       const messages = [Message.user(enter), Message.user("ok implement it")]
       yield* contextHook(request(build, messages))
-      expect(messages).toHaveLength(3)
-      const middle = messages[1]?.content[0]
-      expect(middle?.type === "text" && middle.text).toContain("NO LONGER in Plan mode")
       expect(persisted).toHaveLength(1)
+      expect(persisted[0]).toContain("NO LONGER in Plan mode")
+      expect(messages).toHaveLength(2)
+      expect(messages[1]?.content).toEqual([
+        Message.text("ok implement it"),
+        { ...Message.text(persisted[0]!), transient: true },
+      ])
     }),
   )
 
@@ -232,7 +249,7 @@ describe("plan plugin reminders", () => {
       // Mirrors a compaction checkpoint quoting the reminder inside <recent-context>.
       const messages = [Message.user(`<conversation-checkpoint>\n${enter}\n</conversation-checkpoint>`)]
       yield* contextHook(request(plan, messages))
-      expect(messages).toHaveLength(2)
+      expect(messages[0]?.content).toHaveLength(2)
       expect(persisted).toHaveLength(1)
     }),
   )

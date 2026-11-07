@@ -40,6 +40,8 @@ export const SystemPart = withStatics(systemPartSchema, {
 export const TextPart = Schema.Struct({
   type: Schema.Literal("text"),
   text: Schema.String,
+  /** Request-local text, such as a reminder later requests won't repeat; automatic cache breakpoints stop before it. */
+  transient: Schema.optional(Schema.Boolean),
   cache: Schema.optional(CacheHint),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Content.Text" })

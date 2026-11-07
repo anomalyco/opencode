@@ -1,6 +1,6 @@
 export * as PlanPlugin from "./plan.js"
 
-import { Message, ToolFailure } from "@opencode/ai/effect"
+import { Message, ToolFailure, UserMessage } from "@opencode/ai/effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Agent } from "@opencode/schema/agent"
 import type { SessionEvent } from "@opencode/schema/session-event"
@@ -53,16 +53,19 @@ export const Plugin = define({
     })
 
     // Compaction and committed reverts can strip reminders while the session's agent stays
-    // put. Reconcile per request, appending near the tail so the cached prefix stays warm.
+    // put. Reconcile per request. The persisted copy lands after this step, so the request's
+    // copy is request-local text at the tail: cache breakpoints stay on the history before it.
     yield* ctx.session.hook("context", (event) => {
       const reminder = lastReminder(event.messages, enterReminder)
       const missing = event.agent === plan && reminder !== enterReminder
       const stale = event.agent !== plan && reminder === enterReminder
       const text = missing ? enterReminder : stale ? leave : undefined
       if (!text) return Effect.void
-      // Before the user's prompt, matching where agent-switch reminders land.
-      const at = event.messages.at(-1)?.role === "user" ? event.messages.length - 1 : event.messages.length
-      event.messages.splice(at, 0, Message.user(text))
+      const part = { ...Message.text(text), transient: true }
+      const last = event.messages.at(-1)
+      if (last?.role === "user")
+        event.messages[event.messages.length - 1] = new UserMessage({ ...last, content: [...last.content, part] })
+      else event.messages.push(Message.user([part]))
       return ctx.session
         .synthetic({ sessionID: event.sessionID, text, resume: false })
         .pipe(

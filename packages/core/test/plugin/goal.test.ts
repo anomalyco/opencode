@@ -319,9 +319,14 @@ describe("goal plugin", () => {
       yield* sessions.prompt({ sessionID: session.id, text: "Carry on" })
       yield* sessions.wait(session.id)
       const next = (yield* llm.requests()).slice(before).find((request) => !summarize(request) && !isReview(request))
-      expect(JSON.stringify(next?.messages)).toContain("A goal is active for this session. Keep working toward it.")
-      // The reminder goes before the user's prompt and is not saved to the Session.
+      // The reminder follows the user's prompt as request-local text, so cache breakpoints stay before it, and it is
+      // not saved to the Session.
       expect(JSON.stringify(next?.messages.at(-1))).toContain("Carry on")
+      expect(next?.messages.at(-1)?.content.at(-1)).toMatchObject({
+        type: "text",
+        text: expect.stringContaining("A goal is active for this session. Keep working toward it."),
+        transient: true,
+      })
       expect(
         (yield* sessions.messages({ sessionID: session.id, order: "asc" })).some(
           (message) => message.type === "synthetic" && message.text.includes("Keep working toward it."),
