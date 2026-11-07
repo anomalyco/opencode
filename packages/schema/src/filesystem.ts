@@ -40,6 +40,10 @@ export class FindInput extends Schema.Class<FindInput>("FileSystem.FindInput")({
   query: Schema.String,
   type: Schema.Literals(["file", "directory"]).pipe(optional),
   limit: PositiveInt.pipe(optional),
+  path: Schema.String.pipe(optional).annotate({
+    description:
+      "An absolute path, a `~/`-prefixed path, or a path relative to the requested location to search within. When provided, matching applies to the direct children of that directory.",
+  }),
 }) {}
 
 export interface Write extends Schema.Schema.Type<typeof Write> {}

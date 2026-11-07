@@ -9,6 +9,8 @@ import {
   directoryAutocompleteResultValue,
   directoryAutocompleteSearch,
   directoryRecentValue,
+  mentionFileSearch,
+  mentionFileName,
   slashArgumentAutocomplete,
 } from "../../src/prompt/directory-completion"
 
@@ -214,5 +216,87 @@ describe("directoryRecentValue", () => {
 
   test("keeps paths outside home absolute", () => {
     expect(directoryRecentValue("/project/recent", "/home/user")).toBe("/project/recent")
+  })
+})
+
+describe("mentionFileSearch", () => {
+  test("keeps the home form unexpanded for the server", () => {
+    expect(mentionFileSearch("~")).toEqual({
+      path: "~",
+      prefix: "~/",
+      fragment: "",
+    })
+    expect(mentionFileSearch("~/")).toEqual({
+      path: "~",
+      prefix: "~/",
+      fragment: "",
+    })
+    expect(mentionFileSearch("~/sub/file")).toEqual({
+      path: "~/sub",
+      prefix: "~/sub/",
+      fragment: "file",
+    })
+    expect(mentionFileSearch("~/sub/fra")).toEqual({
+      path: "~/sub",
+      prefix: "~/sub/",
+      fragment: "fra",
+    })
+    expect(mentionFileSearch("~/sub/")).toEqual({
+      path: "~/sub",
+      prefix: "~/sub/",
+      fragment: "",
+    })
+  })
+
+  test("parses absolute queries", () => {
+    expect(mentionFileSearch("/")).toEqual({
+      path: "/",
+      prefix: "/",
+      fragment: "",
+    })
+    expect(mentionFileSearch("/etc/nginx/fra")).toEqual({
+      path: "/etc/nginx",
+      prefix: "/etc/nginx/",
+      fragment: "fra",
+    })
+  })
+
+  test("parses parent queries without resolving", () => {
+    expect(mentionFileSearch("..")).toEqual({
+      path: "..",
+      prefix: "../",
+      fragment: "",
+    })
+    expect(mentionFileSearch("../")).toEqual({
+      path: "..",
+      prefix: "../",
+      fragment: "",
+    })
+    expect(mentionFileSearch("../sib/fra")).toEqual({
+      path: "../sib",
+      prefix: "../sib/",
+      fragment: "fra",
+    })
+    expect(mentionFileSearch("../..")).toEqual({
+      path: "../..",
+      prefix: "../../",
+      fragment: "",
+    })
+  })
+
+  test("returns undefined for in-location queries", () => {
+    expect(mentionFileSearch("")).toBeUndefined()
+    expect(mentionFileSearch("file")).toBeUndefined()
+    expect(mentionFileSearch("src/file")).toBeUndefined()
+    expect(mentionFileSearch("./file")).toBeUndefined()
+  })
+})
+
+describe("mentionFileName", () => {
+  test("uses the entry's own basename instead of the relative path", () => {
+    // The location's parent is returned as `../`, so basename("../") would render as "..".
+    expect(mentionFileName("/", "/home", true)).toBe("/home/")
+    expect(mentionFileName("../", "/project/sibling", true)).toBe("../sibling/")
+    expect(mentionFileName("~/", "/home/user/notes.md", false)).toBe("~/notes.md")
   })
 })

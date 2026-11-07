@@ -30,6 +30,10 @@ const FindQuery = Schema.Struct({
   query: FileSystem.FindInput.fields.query,
   type: FileSystem.FindInput.fields.type,
   limit: Schema.NumberFromString.pipe(Schema.decodeTo(PositiveInt), Schema.optional),
+  path: Schema.String.pipe(Schema.optional).annotate({
+    description:
+      "An absolute path, a `~/`-prefixed path, or a path relative to the requested location to search within. When provided, matching applies to the direct children of that directory.",
+  }),
 })
 
 export const FileSystemGroup = HttpApiGroup.make("server.fs")
