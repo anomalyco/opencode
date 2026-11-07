@@ -28,6 +28,7 @@ export const emptyWellknownNode = makeGlobalNode({
     WellKnown.Service.of({
       entries: () => Effect.succeed([]),
       snapshot: () => [],
+      has: () => Effect.succeed(false),
       refresh: () => Effect.succeed(false),
       add: () => Effect.die("unused Wellknown.add"),
       remove: () => Effect.die("unused Wellknown.remove"),
