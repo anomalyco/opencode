@@ -48,9 +48,13 @@ const watchEvent = (
   occurredAt: new Date(0).toISOString(),
 })
 
+/** Console's page size for `snapshot` frames and poll answers. */
+const PAGE = 200
+
 /**
  * Console's event watch routes, in-process: the config fetch advertises watches with the header while `watches` is on,
- * the stream sends unacknowledged events as a snapshot in one frame per event, and polls page by an opaque cursor.
+ * the stream sends unacknowledged events as `snapshot` frames of at most `PAGE` events, and polls page by a cursor
+ * shaped like Console's `<batch>.<seq>`.
  */
 function fakeConsole(options: { readonly upgrade?: boolean } = {}) {
   const state = {
@@ -61,8 +65,7 @@ function fakeConsole(options: { readonly upgrade?: boolean } = {}) {
     opens: 0,
     acks: new Array<string[]>(),
     polls: new Array<string | null>(),
-    paged: new Set<string>(),
-    pages: 0,
+    seqs: new Map<string, number>(),
     requests: new Array<{ method: string; path: string; body?: unknown }>(),
   }
   const server = Bun.serve({
@@ -81,15 +84,14 @@ function fakeConsole(options: { readonly upgrade?: boolean } = {}) {
       if (url.pathname === "/api/event-watches/events") {
         const cursor = url.searchParams.get("cursor")
         state.polls.push(cursor)
-        // Each page carries what earlier pages didn't, under a new opaque cursor; with nothing new a poll waits, as
-        // Console's do, then comes back empty.
-        const fresh = [...state.inbox.values()].filter((event) => !state.paged.has(event.id))
-        if (fresh.length > 0) {
-          fresh.forEach((event) => state.paged.add(event.id))
-          return Response.json({ cursor: `page:${++state.pages}`, events: fresh })
-        }
+        // A page holds the unacknowledged events after the cursor; with none a poll waits, as Console's do, then comes
+        // back empty with the same cursor.
+        const after = Number(cursor?.split(".")[1] ?? 0)
+        const fresh = [...state.inbox.values()].filter((event) => seq(event.id) > after).slice(0, PAGE)
+        const last = fresh.at(-1)
+        if (last) return Response.json({ cursor: `1.${seq(last.id)}`, events: fresh })
         await Bun.sleep(50)
-        return Response.json({ cursor: cursor ?? "page:0", events: [] })
+        return Response.json({ cursor: cursor ?? "0.0", events: [] })
       }
       if (url.pathname === "/api/event-watches/ack") {
         const ids = (body as { ids: string[] }).ids
@@ -127,7 +129,10 @@ function fakeConsole(options: { readonly upgrade?: boolean } = {}) {
       open(socket) {
         state.opens++
         state.sockets.add(socket)
-        state.inbox.forEach((event) => socket.send(JSON.stringify({ type: "snapshot", events: [event] })))
+        const events = [...state.inbox.values()]
+        Array.from({ length: Math.max(1, Math.ceil(events.length / PAGE)) }, (_, index) =>
+          socket.send(JSON.stringify({ type: "snapshot", events: events.slice(index * PAGE, (index + 1) * PAGE) })),
+        )
       },
       message(_socket, message) {
         const ack = JSON.parse(String(message)) as { ids: string[] }
@@ -139,6 +144,11 @@ function fakeConsole(options: { readonly upgrade?: boolean } = {}) {
       },
     },
   })
+  // Events are numbered in the order Console first holds them, like its `seq`.
+  const seq = (id: string) => {
+    if (!state.seqs.has(id)) state.seqs.set(id, state.seqs.size + 1)
+    return state.seqs.get(id) ?? 0
+  }
   const push = (...events: WatchEvent[]) => {
     events.forEach((event) => state.inbox.set(event.id, event))
     state.sockets.forEach((socket) => socket.send(JSON.stringify({ type: "events", events })))
@@ -303,31 +313,35 @@ describe("OpencodePlugin event watches", () => {
         yield* waitUntil(Effect.sync(() => console.state.sockets.size === 0))
         // Arrives while no socket is open; the next connection's snapshot carries it. The test clock never moves, so
         // a backoff would leave the client disconnected.
-        console.state.inbox.set("evt_missed", watchEvent(session.id, "evt_missed"))
-        yield* waitUntil(Effect.sync(() => console.state.acks.length > 0))
+        // More than a page, so the snapshot comes in two frames.
+        Array.from({ length: PAGE + 1 }, (_, index) =>
+          console.state.inbox.set(`evt_missed_${index}`, watchEvent(session.id, `evt_missed_${index}`, { body: "" })),
+        )
+        yield* waitUntil(Effect.sync(() => console.state.acks.flat().length === PAGE + 1))
 
         expect(console.state.opens).toBe(2)
-        expect(console.state.acks).toEqual([["evt_missed"]])
-        expect(wakes.map((wake) => wake.sessionID)).toEqual([session.id])
+        expect(console.state.acks.map((ids) => ids.length)).toEqual([PAGE, 1])
+        expect(wakes.map((wake) => wake.sessionID)).toEqual([session.id, session.id])
       }),
     ),
   )
 
-  it.effect("reconnects after a backoff when the socket drops for another reason", () =>
-    withConsole({}, (console) =>
-      Effect.gen(function* () {
-        yield* start(console)
-        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
-        console.state.sockets.forEach((socket) => socket.close(1011, "restarting"))
-        yield* waitUntil(Effect.sync(() => console.state.sockets.size === 0))
-        yield* Effect.promise(() => Bun.sleep(100))
-        expect(console.state.opens).toBe(1)
+  for (const code of [1011, OpencodeWatches.OVERSIZED_CLOSE_CODE])
+    it.effect(`reconnects after a backoff when Console closes the socket with ${code}`, () =>
+      withConsole({}, (console) =>
+        Effect.gen(function* () {
+          yield* start(console)
+          yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+          console.state.sockets.forEach((socket) => socket.close(code, "closing"))
+          yield* waitUntil(Effect.sync(() => console.state.sockets.size === 0))
+          yield* Effect.promise(() => Bun.sleep(100))
+          expect(console.state.opens).toBe(1)
 
-        yield* TestClock.adjust("1 second")
-        yield* waitUntil(Effect.sync(() => console.state.opens === 2))
-      }),
-    ),
-  )
+          yield* TestClock.adjust("1 second")
+          yield* waitUntil(Effect.sync(() => console.state.opens === 2))
+        }),
+      ),
+    )
 
   it.effect("admits the sixth wake in a row without resuming until a person prompts", () =>
     withConsole({}, (console) =>
@@ -362,13 +376,29 @@ describe("OpencodePlugin event watches", () => {
         const session = yield* host.session.create({})
         console.state.inbox.set("evt_polled", watchEvent(session.id, "evt_polled"))
         console.state.inbox.set("evt_other", watchEvent("ses_other_machine", "evt_other"))
-        yield* waitUntil(Effect.sync(() => console.state.polls.includes("page:1")))
+        yield* waitUntil(Effect.sync(() => console.state.polls.includes("1.2")))
 
         expect(console.state.opens).toBe(0)
         expect(console.state.polls[0]).toBeNull()
         expect(console.state.acks).toEqual([["evt_polled"]])
         expect(wakes[0]).toMatchObject({ sessionID: session.id, delivery: "steer", resume: true })
         expect(wakes).toHaveLength(1)
+      }),
+    ),
+  )
+
+  it.effect("polls again with each answer's cursor while answers come back full", () =>
+    withConsole({ upgrade: false }, (console) =>
+      Effect.gen(function* () {
+        const { host } = yield* start(console)
+        const session = yield* host.session.create({})
+        Array.from({ length: PAGE + 1 }, (_, index) =>
+          console.state.inbox.set(`evt_${index}`, watchEvent(session.id, `evt_${index}`, { body: "" })),
+        )
+        yield* waitUntil(Effect.sync(() => console.state.acks.flat().length === PAGE + 1))
+
+        expect(console.state.acks.map((ids) => ids.length)).toEqual([PAGE, 1])
+        expect(console.state.polls).toContain(`1.${PAGE}`)
       }),
     ),
   )

@@ -12,11 +12,16 @@ import { WebSocketConstructor } from "../../effect/websocket-constructor.js"
 
 /** The `GET /api/v2/config` response header Console sends while the workspace has event watches. */
 export const header = "x-opencode-event-watches"
-/** The close code Console ends each socket's lease with. The client reconnects at once, without backoff. */
-export const LEASE_CLOSE_CODE = 4000
-/** A socket silent for longer than Console's lease has died unnoticed, such as across a laptop's sleep. */
+/**
+ * The close code Console ends each socket's lease with, after 9.5 minutes or at the sign-in's expiry if sooner. The
+ * client reconnects at once, without backoff, through the same authenticated upgrade.
+ */
+export const LEASE_CLOSE_CODE = 4401
+/** The close code for a client message Console found too long; the client logs it and reconnects with backoff. */
+export const OVERSIZED_CLOSE_CODE = 1009
+/** A socket silent for longer than Console's longest lease has died unnoticed, such as across a laptop's sleep. */
 const SILENCE = Duration.minutes(11)
-/** The most event IDs Console takes in one acknowledgement. */
+/** The most event IDs Console takes in one acknowledgement, each at most 128 characters. */
 export const ACK_LIMIT = 1000
 /** How long a poll waits for events, in seconds; Console's maximum. */
 const POLL_WAIT = 25
@@ -60,8 +65,8 @@ type WatchEvent = typeof WatchEvent.Type
 // Snapshots may arrive over several frames; each frame is handled on its own, like a live batch.
 const ServerMessage = Schema.Struct({ type: Schema.Literals(["snapshot", "events"]), events: Schema.Array(WatchEvent) })
 const decodeServerMessage = Schema.decodeUnknownOption(Schema.fromJsonString(ServerMessage))
-// The cursor is opaque: it is sent back exactly as it came.
-const Poll = Schema.Struct({ cursor: Schema.Union([Schema.String, Schema.Number]), events: Schema.Array(WatchEvent) })
+// The cursor is opaque: it is sent back exactly as it came. Each answer holds at most 200 events.
+const Poll = Schema.Struct({ cursor: Schema.String, events: Schema.Array(WatchEvent) })
 const Problem = Schema.Struct({ message: Schema.optional(Schema.String), limit: Schema.optional(Schema.Number) })
 const ShellInput = Schema.Struct({ command: Schema.String })
 const ShellOutput = Schema.Struct({ exit: Schema.optional(Schema.Number), output: Schema.String })
@@ -375,15 +380,18 @@ function stream(hub: Hub) {
         ),
       ),
       Effect.forever,
-      Effect.catch((error) =>
-        Effect.succeed(
-          error instanceof Socket.SocketError &&
-            error.reason._tag === "SocketCloseError" &&
-            error.reason.code === LEASE_CLOSE_CODE
-            ? ("lease" as const)
-            : ("closed" as const),
-        ),
-      ),
+      Effect.catch((error) => {
+        const code =
+          error instanceof Socket.SocketError && error.reason._tag === "SocketCloseError"
+            ? error.reason.code
+            : undefined
+        if (code === LEASE_CLOSE_CODE) return Effect.succeed("lease" as const)
+        if (code === OVERSIZED_CLOSE_CODE)
+          return Effect.logWarning("Console closed the event stream: a message this client sent was too long").pipe(
+            Effect.as("closed" as const),
+          )
+        return Effect.succeed("closed" as const)
+      }),
     )
   }).pipe(Effect.scoped, Effect.provide(WebSocketConstructor.layer))
 }
@@ -417,7 +425,7 @@ function poll(hub: Hub) {
       ).pipe(Effect.option)
       if (Option.isNone(acked)) return "polled" as const
       // A full page means more is waiting: the next poll after its cursor answers at once.
-      cursor = String(page.value.cursor)
+      cursor = page.value.cursor
     }
   })
 }
