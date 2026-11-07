@@ -1,7 +1,7 @@
 {
   "id": "locked",
   "label": "Real UI · locked-off",
-  "tool": "Real OpenCode UI (Desktop app, iOS app, TUI 2.2.5 via VHS, SDK in nvim): every shot locked off (camera drift removed by registration, or a fixed-frame capture), joined by hard cuts. product-videos/cinematic/{lock.py,autocut.py} next to the checkout",
+  "tool": "Real OpenCode UI (Desktop app, TUI 2.2.5 via VHS, iOS app, SDK in nvim): every shot locked off (camera drift removed by registration, or a fixed-frame capture), joined by hard cuts. product-videos/cinematic/{lock.py,autocut.py} next to the checkout",
   "style": "straight",
   "products": {
     "desktop": {
@@ -10,17 +10,17 @@
       "portraitPoster": "desktop-portrait.jpg",
       "landscapePoster": "desktop-landscape.jpg"
     },
-    "mobile": {
-      "portrait": "mobile-portrait.mp4",
-      "landscape": "mobile-landscape.mp4",
-      "portraitPoster": "mobile-portrait.jpg",
-      "landscapePoster": "mobile-landscape.jpg"
-    },
     "terminal": {
       "portrait": "terminal-portrait.mp4",
       "landscape": "terminal-landscape.mp4",
       "portraitPoster": "terminal-portrait.jpg",
       "landscapePoster": "terminal-landscape.jpg"
+    },
+    "mobile": {
+      "portrait": "mobile-portrait.mp4",
+      "landscape": "mobile-landscape.mp4",
+      "portraitPoster": "mobile-portrait.jpg",
+      "landscapePoster": "mobile-landscape.jpg"
     },
     "sdk": {
       "portrait": "sdk-portrait.mp4",

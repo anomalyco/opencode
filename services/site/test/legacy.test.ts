@@ -65,6 +65,35 @@ describe("legacy redirects", () => {
     expect(share?.headers.get("Location")).toBe("https://opncd.ai/share/abc123")
   })
 
+  test("the V2 docs' old /v2 URLs move to /docs permanently, keeping the path and query", () => {
+    const moved = {
+      "/v2": "/docs/",
+      "/v2/": "/docs/",
+      "/v2/docs": "/docs/",
+      "/v2/docs/": "/docs/",
+      "/v2/docs/config/": "/docs/config/",
+      "/v2/docs/cli/keybinds": "/docs/cli/keybinds",
+      "/v2/docs/config.md": "/docs/config.md",
+      "/v2/docs.md": "/docs/index.md",
+      "/v2/docs/pagefind/pagefind.js": "/docs/pagefind/pagefind.js",
+      "/v2/llms.txt": "/docs/llms.txt",
+      "/v2/sitemap.xml": "/docs/sitemap.xml",
+      "/v2/openapi.json": "/docs/openapi.json",
+    }
+    for (const [path, location] of Object.entries(moved)) {
+      const response = get(path)
+      expect(response?.status).toBe(301)
+      expect(response?.headers.get("Location")).toBe(location)
+    }
+    expect(get("/v2/docs/config/", { search: "?x=1" })?.headers.get("Location")).toBe("/docs/config/?x=1")
+    expect(get("/v2/docs/agents/", { method: "HEAD" })?.headers.get("Location")).toBe("/docs/agents/")
+    expect(get("/v2/docs/agents/", { method: "POST" })).toBeUndefined()
+  })
+
+  test("the V2 install script and config schema stay at /v2", () => {
+    for (const path of ["/v2/install", "/v2/cli.json", "/v2docs", "/v22/docs"]) expect(get(path)).toBeUndefined()
+  })
+
   test("site pages pass through", () => {
     for (const path of ["/", "/product", "/download", "/brand", "/changelog", "/legal/privacy-policy"])
       expect(get(path)).toBeUndefined()

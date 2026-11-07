@@ -1,7 +1,6 @@
-// Extensions: things you add to OpenCode, listed on /product under the products, each with a light
-// page at /extensions/<slug>. Only real ones, with copy from their READMEs and source:
-// - Browse: anomalyco/browse (an MCP server and a Chromium extension).
-// - SSH and WSL: built-in desktop app extensions (anomalyco/opencode packages/gui-extensions).
+// Light product pages with copy from their READMEs and source. Browse is a product, listed on
+// /product with the others and served at /product/browse. SSH and WSL, built-in desktop app extensions
+// (anomalyco/opencode packages/gui-extensions), were listed under /extensions.
 
 // SSH and WSL are left out for now, like Isocast in links.ts: to bring them back, restore "ssh" |
 // "wsl" here, uncomment their entries below and their pages in routes/extensions (now redirects).
@@ -19,10 +18,16 @@ type Extension = {
   intro: string
   features: { title: string; body: string }[]
   /** How to get it: a command to copy, or where to find it in the desktop app. */
-  install: { lead: string; command?: string }
+  install: { lead: string; command?: string; commands?: { method: string; command: string }[] }
+  /** The Chrome Web Store listing, when there is one. The page's main action. */
+  store?: string
   source: string
+  /** Listed with the products on /product, at /<slug>, instead of under Extensions. */
+  product?: boolean
   /** For the page's structured data; every OS when left out. */
   operatingSystem?: string
+  /** A hero still per theme (product-hero.tsx heroStills); the hero stays black when left out. */
+  hero?: boolean
 }
 
 export const extensionPages: readonly Extension[] = [
@@ -42,13 +47,21 @@ export const extensionPages: readonly Extension[] = [
       { title: "Lend a tab", body: "Click the toolbar button to hand an agent a tab you have open." },
       { title: "Record and capture", body: "Screenshots, screen recordings and network traffic as a HAR." },
       { title: "Any MCP client", body: "OpenCode, Claude Code, Cursor, Codex, Zed and many more." },
-      { title: "Named sessions", body: "Each session keeps its own tabs, across restarts." },
+      { title: "All your logins", body: "Agents use the sites you're already signed into. No keys, no setup." },
       { title: "Allowlists", body: "Limit a session's tabs to the sites you name." },
     ],
     install: {
-      lead: "Run this once. It adds the browse MCP server to the agents you choose and pairs the extension from the Chrome Web Store. Needs Node.js 22.19 or newer.",
-      command: "npx @opencode/browse install",
+      lead: "Install the [Chrome extension] first. It walks you through the rest of the steps. To install the CLI directly (you should not need to do this), use any of these.",
+      commands: [
+        { method: "curl", command: "curl -fsSL https://opencode.ai/browse/install | bash" },
+        { method: "pwsh", command: "irm https://opencode.ai/browse/install.ps1 | iex" },
+        { method: "npm", command: "npm install -g @opencode/browse && browse install" },
+        { method: "bun", command: "bun add -g @opencode/browse && browse install" },
+      ],
     },
+    store: "https://chromewebstore.google.com/detail/mfnicocicmmlkpjnaffgihfjhdgjkdjg",
+    product: true,
+    hero: true,
     source: "https://github.com/anomalyco/browse",
   },
   // {

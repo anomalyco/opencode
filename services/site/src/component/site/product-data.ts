@@ -1,5 +1,5 @@
 // Product copy shared by the carousel, the product pages and the Markdown versions of the pages.
-// Product order rule: copy that lists the products names them as desktop, mobile, terminal, SDK.
+// Product order rule: copy that lists the products names them as desktop, terminal, mobile, SDK.
 
 import { docsUrl } from "~/lib/docs"
 import { isMobile, requestPlatform } from "~/lib/platform"
@@ -26,7 +26,7 @@ export const sdkSnippet = [
   `<span data-p>})</span>`,
 ].join("\n")
 
-export type ProductSlug = "desktop" | "mobile" | "terminal" | "sdk"
+export type ProductSlug = "desktop" | "terminal" | "mobile" | "sdk"
 /** The products after the carousel's four, with pages of their own and cards on /product. */
 export type MoreSlug = "ide" | "mini"
 /** Every product with a page. */
@@ -34,7 +34,7 @@ export type PageSlug = ProductSlug | MoreSlug
 
 /**
  * The products, in the order the carousel shows them. This is the site-wide product order: any copy
- * that lists the products names them as desktop, mobile, terminal, SDK.
+ * that lists the products names them as desktop, terminal, mobile, SDK.
  */
 export const products = [
   {
@@ -44,17 +44,17 @@ export const products = [
     action: "Download",
   },
   {
+    slug: "terminal",
+    name: "Terminal",
+    body: "A fast terminal UI that works in any shell, editor or remote server.",
+    action: "Install",
+  },
+  {
     slug: "mobile",
     name: "Mobile",
     body: "Start, steer and approve sessions from your phone, wherever you are.",
     isNew: true,
     action: "Download",
-  },
-  {
-    slug: "terminal",
-    name: "Terminal",
-    body: "A fast terminal UI that works in any shell, editor or remote server.",
-    action: "Install",
   },
   {
     slug: "sdk",
@@ -159,7 +159,7 @@ export const mobileStores = [
 
 /**
  * The product page below the intro: the showcase clips (the fourth only with Settings › Feature
- * clips count "4"), then six short feature points.
+ * clips count "4"), then short feature points (none on Desktop and Mobile).
  */
 export const productDetails: Record<
   PageSlug,
@@ -181,90 +181,32 @@ export const productDetails: Record<
   desktop: {
     title: "OpenCode | Desktop app for macOS, Windows and Linux",
     description:
-      "Run several OpenCode agents at once, each in its own tab. Review every change as a diff, comment on any line and preview results in the built-in browser.",
+      "Run as many OpenCode agents as you want in parallel, see every change in a browser beside them and pick them up on any device. For macOS, Windows and Linux.",
     operatingSystem: "macOS, Windows, Linux",
     intro:
       "Run several agents at once, each session in its own tab. Review every change as a diff, comment on any line, and check the result in the built-in browser. For macOS, Windows and Linux.",
-    features: [
-      { title: "Built-in terminal", body: "Run commands in a terminal tab beside the session." },
-      { title: "SSH servers", body: "Connect to another machine over SSH and work on its projects." },
-      { title: "Extensions", body: "Manage MCP servers, plugins and skills in one menu." },
-      { title: "All your projects", body: "Switch between projects and their sessions in one window." },
-      { title: "WSL", body: "On Windows, run sessions in a WSL 2 distro instead of natively." },
-      { title: "Office files", body: "Open Word, Excel and PowerPoint files beside the session." },
-      { title: "Keyboard shortcuts", body: "Every action has a keyboard shortcut, and you can change any of them." },
-      { title: "Updates itself", body: "New versions download and install from the app." },
-    ],
+    // The page shows only its four key features (6 Nov 2026), with no feature points below them.
+    features: [],
     showcase: [
       {
-        title: "Sessions in tabs",
+        title: "Parallel agents",
         clip: "/product-videos/features/desktop-1",
-        body: "Keep several agents working at once, each session in its own tab.",
-      },
-      {
-        title: "Review and comment",
-        clip: "/product-videos/features/desktop-2",
-        body: "Read each change as a diff, comment on a line and send it back.",
+        body: "Start as many agents as you want and let them all work in parallel. Jump between them as they finish.",
       },
       {
         title: "See it in the browser",
         clip: "/product-videos/features/desktop-3",
-        body: "The agent's work opens in a browser beside the session as it lands.",
+        body: "Your app opens in a browser beside the agent, so you both see every change land.",
       },
       {
-        title: "Pair your phone",
+        title: "On every device",
         clip: "/product-videos/features/desktop-4",
-        body: "Scan a QR code in OpenCode Mobile to steer sessions from your iPhone.",
+        body: "Start agents across all your devices, and pick them up from the desktop app, the terminal or your phone.",
       },
-    ],
-  },
-  mobile: {
-    title: "OpenCode | Mobile, your coding sessions on your phone",
-    description:
-      "Start, steer and approve OpenCode sessions from your phone. Talk to the agent, review its changes and allow what it needs, while it runs on your computer.",
-    // Android joins when it is available (androidStatus).
-    operatingSystem: androidSoon ? "iOS" : "iOS, Android",
-    intro:
-      "Start, steer and approve sessions from your phone, wherever you are. Call a session and talk to the agent, review its changes, and allow what it needs, all on OpenCode running on your own computer.",
-    // The page shows only its four clips for now (5 Nov 2026). The grid's points, checked against
-    // the iOS app's What's New entries (anomalyco/opencode-ios), are kept here to bring back:
-    // "Every computer" takes two taps (the drawer title, then the server), and muting leaves
-    // notifications on (it skips Catch Up, the unread dot and the badge), so both need new copy.
-    // { title: "Notify when done", body: "Get a short summary when a session you started finishes." },
-    // { title: "Pair from anywhere", body: "Connect from any network with opencode pair --remote." },
-    // { title: "Every computer", body: "Switch between the computers you've paired in one tap." },
-    // { title: "Siri and Shortcuts", body: "Start a call or a session from Siri or Control Center." },
-    // { title: "Follow along", body: "Watch the timeline update as the agent works." },
-    // { title: "Your computer", body: "Connects to OpenCode running on your own machine." },
-    // { title: "Share sheet", body: "Share anything to a session without opening the app." },
-    // { title: "Mute sessions", body: "Keep a session in your list without getting its notifications." },
-    features: [],
-    showcase: [
+      // No footage yet: the row shows a placeholder until its clip lands.
       {
-        title: "Voice",
-        clip: "/product-videos/features/mobile-1",
-        body: "Call a session and say what you need. The agent answers out loud.",
-      },
-      {
-        title: "Approvals",
-        clip: "/product-videos/features/mobile-2",
-        body: "Review the change and allow it from your phone when the agent asks.",
-      },
-      {
-        title: "Sessions",
-        clip: "/product-videos/features/mobile-3",
-        body: "Open any session to see where it is, then pick up where you left off.",
-      },
-      // Steer is true (Steer While It Works, 11 Oct 2026) but has no footage yet; it returns here
-      // with a capture of a follow-up sent mid-run.
-      // {
-      //   title: "Steer",
-      //   body: "Send a follow-up to change direction mid-session.",
-      // },
-      {
-        title: "Results",
-        clip: "/product-videos/features/mobile-4",
-        body: "The call tells you what changed once the work you asked for is done.",
+        title: "Extend it",
+        body: "Connect your tools and services so the agent can work with anything. Or have OpenCode build plugins for itself, with their own UI in the sidebar.",
       },
     ],
   },
@@ -305,6 +247,51 @@ export const productDetails: Record<
         title: "Mini",
         clip: "/product-videos/features/terminal-4",
         body: "Run opencode mini and replies print into your own scrollback.",
+      },
+    ],
+  },
+  mobile: {
+    title: "OpenCode | Mobile, your coding sessions on your phone",
+    description:
+      "Start and steer OpenCode sessions from your phone. Talk to the agent while it runs on your computer.",
+    // Android joins when it is available (androidStatus).
+    operatingSystem: androidSoon ? "iOS" : "iOS, Android",
+    intro:
+      "Start and steer sessions from your phone, wherever you are. Call a session and talk to the agent, or open any session to pick up where you left off, all on OpenCode running on your own computer.",
+    // The page shows only its four clips for now (5 Nov 2026). The grid's points, checked against
+    // the iOS app's What's New entries (anomalyco/opencode-ios), are kept here to bring back:
+    // "Every computer" takes two taps (the drawer title, then the server), and muting leaves
+    // notifications on (it skips Catch Up, the unread dot and the badge), so both need new copy.
+    // { title: "Notify when done", body: "Get a short summary when a session you started finishes." },
+    // { title: "Pair from anywhere", body: "Connect from any network with opencode pair --remote." },
+    // { title: "Every computer", body: "Switch between the computers you've paired in one tap." },
+    // { title: "Siri and Shortcuts", body: "Start a call or a session from Siri or Control Center." },
+    // { title: "Follow along", body: "Watch the timeline update as the agent works." },
+    // { title: "Your computer", body: "Connects to OpenCode running on your own machine." },
+    // { title: "Share sheet", body: "Share anything to a session without opening the app." },
+    // { title: "Mute sessions", body: "Keep a session in your list without getting its notifications." },
+    features: [],
+    showcase: [
+      {
+        title: "Voice",
+        clip: "/product-videos/features/mobile-1",
+        body: "Call a session and say what you need. The agent answers out loud.",
+      },
+      {
+        title: "Sessions",
+        clip: "/product-videos/features/mobile-3",
+        body: "Open any session to see where it is, then pick up where you left off.",
+      },
+      // Steer is true (Steer While It Works, 11 Oct 2026) but has no footage yet; it returns here
+      // with a capture of a follow-up sent mid-run.
+      // {
+      //   title: "Steer",
+      //   body: "Send a follow-up to change direction mid-session.",
+      // },
+      {
+        title: "Results",
+        clip: "/product-videos/features/mobile-4",
+        body: "The call tells you what changed once the work you asked for is done.",
       },
     ],
   },
@@ -399,8 +386,8 @@ export const productDetails: Record<
  */
 export const productAreas: Partial<Record<PageSlug, string[]>> = {
   desktop: ["desktop"],
-  mobile: ["mobile"],
   terminal: ["terminal"],
+  mobile: ["mobile"],
   sdk: ["sdk"],
 }
 
@@ -410,11 +397,6 @@ export const productAreas: Partial<Record<PageSlug, string[]>> = {
  * request's platform (requestPlatform), so the server and the first render agree.
  */
 export function deviceOrder<T extends { slug: string }>(items: readonly T[]): T[] {
-  const order = [...items]
-  if (!isMobile(requestPlatform())) return order
-  const desktop = order.findIndex((item) => item.slug === "desktop")
-  const mobile = order.findIndex((item) => item.slug === "mobile")
-  if (desktop < 0 || mobile < 0) return order
-  ;[order[desktop], order[mobile]] = [order[mobile], order[desktop]]
-  return order
+  if (!isMobile(requestPlatform())) return [...items]
+  return [...items.filter((item) => item.slug === "mobile"), ...items.filter((item) => item.slug !== "mobile")]
 }

@@ -193,7 +193,6 @@ export const OpencodePlugin = define<
     const skills = yield* Skill.Service
     const cache = yield* SharedCache.Service
     const scope = yield* Scope.Scope
-    const settings = yield* ConsoleAccess.Options
     const loading = Semaphore.makeUnsafe(1)
     type ActiveConnection = Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
     let snapshot: {
@@ -201,9 +200,7 @@ export const OpencodePlugin = define<
       remote: typeof ConsoleConfig.Type | undefined
       connection: ActiveConnection
       organization: string | undefined
-      // Fingerprint of an API key, so a key replaced in place counts as a new sign-in.
-      access: string | undefined
-    } = { remote: undefined, connection: undefined, organization: undefined, access: undefined }
+    } = { remote: undefined, connection: undefined, organization: undefined }
     let instructions: InstructionDiscovery.File[] = []
     // Tagged with the account and workspace they were downloaded for, so a switch hides them right away.
     let librarySkills: { owner: string; items: LibrarySkill[] } = { owner: "", items: [] }
@@ -216,18 +213,11 @@ export const OpencodePlugin = define<
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
 
     // Every project signed in to the same workspace shares one fetch, reused while it is younger than `maxAge`.
-    // A failed load reports only its connection: what it falls back to depends on the snapshot, which is read under
-    // `loading` when the outcome is applied.
-    const load = Effect.fn("OpencodePlugin.load")(function* (
-      maxAge: Duration.Input = Duration.minutes(1),
-    ): Effect.fn.Return<
-      | { readonly _tag: "Loaded"; readonly next: typeof snapshot }
-      | { readonly _tag: "Failed"; readonly connection: ActiveConnection }
-    > {
+    const load = Effect.fn("OpencodePlugin.load")(function* (maxAge: Duration.Input = Duration.minutes(1)) {
       const connection = yield* ctx.integration.connection.active("opencode")
       if (!connection) {
         reported = undefined
-        return { _tag: "Loaded", next: { remote: undefined, connection, organization: undefined, access: undefined } }
+        return { remote: undefined, connection, organization: undefined }
       }
       const status = (status: IntegrationConnection.Status | undefined) => {
         reported = status
@@ -236,7 +226,7 @@ export const OpencodePlugin = define<
       return yield* ctx.integration.connection.resolve(connection).pipe(
         Effect.flatMap((credential) => {
           if (!credential || credential.type === "external")
-            return Effect.succeed({ remote: undefined, connection, organization: undefined, access: undefined })
+            return Effect.succeed({ remote: undefined, connection, organization: undefined })
           return cache
             .get({
               key: `opencode-console:${workspaceKey(connection, credential)}`,
@@ -258,29 +248,25 @@ export const OpencodePlugin = define<
                 remote,
                 connection,
                 organization: organizationName(credential),
-                access: accessFingerprint(credential),
               })),
             )
         }),
         Effect.tap(() => status(undefined)),
-        Effect.map((next) => ({ _tag: "Loaded" as const, next })),
         Effect.catch((cause) =>
           Effect.gen(function* () {
             // Only well-formed Console errors change the connection status; anything else may be transient.
             const next = connectionStatus(cause)
             if (next) yield* status(next)
             yield* Effect.logWarning("failed to load OpenCode provider config", { cause })
-            return { _tag: "Failed" as const, connection }
+            // A load that fails for the connection already in place keeps its last config: dropping it
+            // would lift organization policy while personal credentials keep working.
+            return IntegrationConnection.key(connection) === IntegrationConnection.key(snapshot.connection)
+              ? { remote: snapshot.remote, connection, organization: snapshot.organization }
+              : { remote: undefined, connection, organization: undefined }
           }),
         ),
       )
     })
-    // A load that fails for the connection already in place keeps its last config: dropping it would lift
-    // organization policy while personal credentials keep working.
-    const fallback = (connection: ActiveConnection): typeof snapshot =>
-      IntegrationConnection.key(connection) === IntegrationConnection.key(snapshot.connection)
-        ? { ...snapshot, connection }
-        : { remote: undefined, connection, organization: undefined, access: undefined }
     // The Console document as config layered it. Its providers apply at this plugin's position in the provider chain,
     // while the rest of the document merges through config.
     let integrated: ConfigIntegration.Document | undefined
@@ -422,8 +408,7 @@ export const OpencodePlugin = define<
       editor.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
     })
 
-    const initial = yield* load()
-    snapshot = initial._tag === "Loaded" ? initial.next : fallback(initial.connection)
+    snapshot = yield* load()
     yield* publish(snapshot)
     yield* ctx.provider.transform((providers) => {
       if (integrated) ConfigProviderPlugin.integrate(providers, integrated)
@@ -478,27 +463,15 @@ export const OpencodePlugin = define<
         { concurrency: 5, discard: true },
       )
     })
+    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(apply)))
     // Annotated: `apply` re-registers the hooks that call `check`, which would otherwise make inference circular.
-    // Loads run outside `loading`, so a slow one never holds up another check. `wait` bounds the load: one still
-    // running carries on in `SharedCache`, retries included, for the next check, while the current snapshot stays.
-    const check = (maxAge?: Duration.Input, wait?: Duration.Input): Effect.Effect<void> =>
-      Effect.gen(function* () {
-        const outcome =
-          wait === undefined
-            ? yield* load(maxAge)
-            : Option.getOrUndefined(yield* load(maxAge).pipe(Effect.timeoutOption(wait)))
-        if (!outcome) return
-        yield* loading.withPermit(
-          Effect.gen(function* () {
-            // A switch while this load ran makes it stale; the switch's own check applies the new connection.
-            const loaded = outcome._tag === "Loaded" ? outcome.next.connection : outcome.connection
-            const active = yield* ctx.integration.connection.active("opencode")
-            if (IntegrationConnection.key(loaded) !== IntegrationConnection.key(active)) return
-            const next = outcome._tag === "Loaded" ? outcome.next : fallback(outcome.connection)
-            if (!Equal.equals(snapshot, next)) yield* apply(next)
-          }),
-        )
-      })
+    const check = (maxAge?: Duration.Input): Effect.Effect<void> =>
+      loading.withPermit(
+        Effect.gen(function* () {
+          const next = yield* load(maxAge)
+          if (!Equal.equals(snapshot, next)) yield* apply(next)
+        }),
+      )
 
     // Console inference rejects a missing SSO sign-in with a generic 401/403. Re-check the Console config, which
     // reports the reason, and replace the response with instructions when the connection needs the user.
@@ -529,24 +502,18 @@ export const OpencodePlugin = define<
       )
     })
     yield* guard(snapshot)
-    // A prompt after the machine slept or the host suspended refreshes stale Console config, and the MCP gateway
-    // tokens it carries, before the turn's tool calls run. An unreachable Console delays the prompt by at most
-    // 3 seconds; the turn then runs on the config it has.
-    yield* ctx.session.hook("prompt", () => check(Duration.minutes(1), Duration.seconds(3)))
 
     // Console config can change independently of local credential activity, so re-fetch
     // periodically and only rebuild the catalog and search providers when the snapshot differs.
-    // Only while connected: a signed-out location runs no timer and no credential lookups. Hosts that suspend
-    // between prompts turn the timer off with the `console.poll` server option and rely on the prompt hook.
+    // Only while connected: a signed-out location runs no timer and no credential lookups.
     const polling = yield* FiberHandle.make<void, never>()
     const poll = Effect.fnUntraced(function* () {
-      if (!snapshot.connection || !settings.poll) return yield* FiberHandle.clear(polling)
+      if (!snapshot.connection) return yield* FiberHandle.clear(polling)
       yield* FiberHandle.run(polling, Effect.sleep(Duration.minutes(1)).pipe(Effect.andThen(check()), Effect.forever), {
         onlyIfMissing: true,
       })
     })
-    // A switch applies only a changed snapshot, so one a prompt already applied doesn't reload MCP servers mid-turn.
-    yield* ProviderRefresh.onSwitch("opencode", check().pipe(Effect.andThen(poll())))
+    yield* ProviderRefresh.onSwitch("opencode", refresh().pipe(Effect.andThen(poll())))
     yield* poll()
   }),
 })
@@ -581,7 +548,8 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
         }),
       ),
       Effect.scoped,
-      // A transient failure, which `SharedCache` retries.
+      // A Console that accepts the connection but never answers would otherwise hold the load, including the one at
+      // startup, indefinitely. A timeout is a transient failure, which `SharedCache` retries.
       Effect.timeout(Duration.seconds(5)),
     )
 }
@@ -620,12 +588,7 @@ function workspaceKey(
     ConsoleAccess.server(credential),
     IntegrationConnection.key(connection),
     credential.metadata?.orgID,
-    accessFingerprint(credential),
   ])
-}
-
-function accessFingerprint(credential: Credential.Key | Credential.OAuth) {
-  return credential.type === "key" ? SharedCache.fingerprint(credential.key) : undefined
 }
 
 function organizationName(credential: Credential.Value) {

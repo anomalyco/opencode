@@ -44,7 +44,7 @@ export function getStarted(route: (path: string) => string) {
       { name: "OpenCode Go Plus", amount: "$40", href: "/console/go#console-go-plan-go-plus" },
     ],
     steps: [
-      { title: "Download", line: "Desktop, mobile or terminal." },
+      { title: "Download", line: "Desktop, terminal or mobile." },
       { title: "Use free models", line: "OpenCode comes with a set of free models. No account needed." },
       {
         title: "Add more models",

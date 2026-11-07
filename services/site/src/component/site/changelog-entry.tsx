@@ -16,9 +16,10 @@ import {
   type ChangelogNote,
   type ChangelogView,
 } from "~/lib/changelog-notes"
+import { CarouselArrows } from "./carousel-arrows"
 import { Chevron, ExternalArrow, NewTab } from "./icons"
 import { Inline, ReleaseItem } from "./release"
-import { prefersReducedMotion } from "./products"
+import { prefersReducedMotion } from "./media"
 import {
   changelogCarousels,
   changelogFilters,
@@ -168,7 +169,6 @@ function ChangelogSubscribe(props: { filter: string[] }) {
     <div data-slot="subscribe">
       <SiteMenu
         label={i18n.t("changelog.subscribe")}
-        placement="below"
         align="end"
         trigger={
           <>
@@ -573,18 +573,13 @@ function EntryCarousel(props: { slides: Slide[]; title: string }) {
             </span>
           </Show>
           <Show when={siteSettings.changelogCarousel === "bars + arrows"}>
-            <span data-slot="arrows">
-              <button type="button" aria-label={i18n.t("changelog.media.previous")} onClick={() => go(current() - 1)}>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                  <path d="M7.5 3L4.5 6L7.5 9" stroke="currentColor" />
-                </svg>
-              </button>
-              <button type="button" aria-label={i18n.t("changelog.media.next")} onClick={() => go(current() + 1)}>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                  <path d="M4.5 3L7.5 6L4.5 9" stroke="currentColor" />
-                </svg>
-              </button>
-            </span>
+            <CarouselArrows
+              data-slot="arrows"
+              previous={i18n.t("changelog.media.previous")}
+              next={i18n.t("changelog.media.next")}
+              onPrevious={() => go(current() - 1)}
+              onNext={() => go(current() + 1)}
+            />
           </Show>
         </div>
       </Show>

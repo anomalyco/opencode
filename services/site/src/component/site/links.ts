@@ -10,11 +10,12 @@ export function siteLinks(t: Translate, route: (path: string) => string) {
     // show by default). Design mode reorders, hides and renames them (settings navConfig); the links
     // stay fixed. Items that leave the site carry the arrow.
     nav: [
-      // Demo: points at the docs mock in this branch instead of the live docs site.
-      { id: "docs", label: t("nav.docs"), href: route(docsUrl()), arrow: true },
+      // The docs live on this site under /docs, so no arrow.
+      { id: "docs", label: t("nav.docs"), href: route(docsUrl()) },
       { id: "products", label: t("site.nav.product"), href: route("/product") },
-      // Settings › Product nav demo sends Data and Console to their header demos instead.
-      { id: "data", label: t("nav.data"), href: route("/data"), demo: route("/data-demo"), arrow: true },
+      // Data lives on this site under /data, so no arrow. Settings › Product nav demo sends Data and
+      // Console to their header demos instead.
+      { id: "data", label: t("nav.data"), href: route("/data"), demo: route("/data-demo") },
       // Anomaly's commercial products: the Console, its models list, its subscriptions page (OpenCode
       // Go, which the home page's subscriptions section links) and its enterprise page ("Talk to our
       // team"). Settings › Nav groups moves them under an "Anomaly" label.
@@ -80,7 +81,7 @@ export function siteLinks(t: Translate, route: (path: string) => string) {
       },
       {
         title: t("site.footer.moreOpenSource"),
-        links: anomalyApps.map((app) => ({ label: app.name, href: app.href, external: true })),
+        links: anomalyApps.map((app) => ({ label: app.name, ...appLink(app, route) })),
       },
       {
         title: "Anomaly",
@@ -99,8 +100,17 @@ export function siteLinks(t: Translate, route: (path: string) => string) {
 
 // Anomaly's shipped open source apps, as listed in Abattoir (content/projects/*.md with
 // `stage: shipped` and a public repo). A category line sits under each name, like an app store.
-// The description and icon (public/apps) are for /product.
+// The description and icon (public/apps) are for /product. Browse has a page on this site, so its
+// href is a path (see appLink); the others are other sites.
 export const anomalyApps = [
+  {
+    id: "browse",
+    name: "Browse",
+    category: "Browser control for agents",
+    body: "Let your agent use your real browser, with your logins and tabs.",
+    icon: "/apps/browse.png",
+    href: "/product/browse",
+  },
   {
     id: "hex",
     name: "Hex",
@@ -130,7 +140,7 @@ export const anomalyApps = [
 ] as const
 
 /**
- * "More from Anomaly" on /product: the apps above, then OpenTUI from the press kit
+ * "More from Anomaly" on the product pages: the apps above, then OpenTUI from the press kit
  * (lib/press-content.ts), which has no app icon (the list draws its logo mark).
  */
 export const anomalyProducts = [
@@ -143,3 +153,9 @@ export const anomalyProducts = [
     href: "https://opentui.com",
   },
 ] as const
+
+/** Where an app links: a page on this site in the reader's language, or another site in a new tab. */
+export function appLink(app: { href: string }, route: (path: string) => string) {
+  const external = !app.href.startsWith("/")
+  return { href: external ? app.href : route(app.href), external }
+}
