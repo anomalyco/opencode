@@ -152,7 +152,6 @@ export const docsIntro = {
       { code: "opencode" },
       " binary for your platform. The Bun and pnpm commands explicitly allow the required script; Vite+ requires no additional flag. The mise command requires mise 2026.10.9 or later; older versions install OpenCode 1.",
     ],
-    ["Windows package managers are not supported."],
     ["Download a standalone CLI binary for your platform."],
   ] satisfies RichText[],
   desktop: "Download the latest OpenCode Desktop build for your platform.",
