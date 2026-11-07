@@ -13,8 +13,9 @@ export function siteLinks(t: Translate, route: (path: string) => string) {
       // The docs live on this site under /docs, so no arrow.
       { id: "docs", label: t("nav.docs"), href: route(docsUrl()) },
       { id: "products", label: t("site.nav.product"), href: route("/product") },
-      // Settings › Product nav demo sends Data and Console to their header demos instead.
-      { id: "data", label: t("nav.data"), href: route("/data"), demo: route("/data-demo"), arrow: true },
+      // Data lives on this site under /data, so no arrow. Settings › Product nav demo sends Data and
+      // Console to their header demos instead.
+      { id: "data", label: t("nav.data"), href: route("/data"), demo: route("/data-demo") },
       // Anomaly's commercial products: the Console, its models list, its subscriptions page (OpenCode
       // Go, which the home page's subscriptions section links) and its enterprise page ("Talk to our
       // team"). Settings › Nav groups moves them under an "Anomaly" label.
