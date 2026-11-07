@@ -24,7 +24,7 @@ import { extensionCardSource, productsSource } from "~/i18n/content/areas/produc
 import type { DownloadPlatform } from "~/routes/download/types"
 import {
   desktopBuilds,
-  detectDesktopBuild,
+  detectDesktopDownload,
   detectOS,
   getDownloadHref,
   getDownloadPlatform,
@@ -962,7 +962,7 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
   const platform = useDevicePlatform()
   const mobile = () => isMobile(platform())
   const [os, setOS] = createSignal<OS>(requestOS())
-  // The exact build for this computer, once the browser has said (the Mac's chip; detectDesktopBuild).
+  // The build for this computer, once the browser has said (the Mac's chip, Windows or Linux on ARM64; detectDesktopDownload).
   const [build, setBuild] = createSignal<DownloadPlatform>()
   const [open, setOpen] = createSignal(false)
   onCloseMenus(() => setOpen(false))
@@ -1002,7 +1002,7 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
   onMount(() => {
     setOS(detectOS())
     setSheet(prefersSheet())
-    if (props.slug === "desktop") void detectDesktopBuild().then(setBuild)
+    if (props.slug === "desktop") void detectDesktopDownload().then(setBuild)
     const close = (event: Event) => {
       if (event instanceof KeyboardEvent && event.key !== "Escape") return
       if (event instanceof MouseEvent && menu?.contains(event.target as Node)) return
