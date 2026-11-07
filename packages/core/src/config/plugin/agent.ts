@@ -135,7 +135,7 @@ function expandHome(resource: string, home: string) {
 function discover(fs: FSUtil.Interface, directory: string) {
   return Effect.forEach(legacySources, (source) =>
     fs
-      .scan(source.pattern, { cwd: directory, absolute: true, dot: true, symlink: true })
+      .scan(source.pattern, { cwd: directory, absolute: true, dot: true, symlink: true, ignore: FSUtil.ignoreGlobs })
       .pipe(
         Effect.map((files) => files.toSorted().map((filepath) => ({ directory, filepath, primary: source.primary }))),
       ),
