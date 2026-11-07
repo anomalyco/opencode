@@ -380,9 +380,9 @@ export const content = {
           title: "Każdy klient MCP",
           body: "OpenCode, Claude Code, Cursor, Codex, Zed i wiele innych.",
         },
-        "named-sessions": {
-          title: "Nazwane sesje",
-          body: "Każda sesja zachowuje swoje karty, także po restarcie.",
+        "all-your-logins": {
+          title: "Wszystkie twoje logowania",
+          body: "Agenci korzystają ze stron, na których już jesteś zalogowany. Bez kluczy, bez konfiguracji.",
         },
         allowlists: {
           title: "Listy stron",

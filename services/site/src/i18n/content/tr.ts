@@ -380,9 +380,9 @@ export const content = {
           title: "Her MCP istemcisi",
           body: "OpenCode, Claude Code, Cursor, Codex, Zed ve çok daha fazlası.",
         },
-        "named-sessions": {
-          title: "Adlı oturumlar",
-          body: "Her oturum, yeniden başlatmalarda da kendi sekmelerini korur.",
+        "all-your-logins": {
+          title: "Tüm oturum açmalarınız",
+          body: "Ajanlar zaten oturum açtığınız siteleri kullanır. Anahtar yok, kurulum yok.",
         },
         allowlists: {
           title: "İzin listeleri",

@@ -268,7 +268,10 @@ export const content = {
           title: "Будь-який MCP-клієнт",
           body: "OpenCode, Claude Code, Cursor, Codex, Zed і багато інших.",
         },
-        "named-sessions": { title: "Іменовані сесії", body: "Кожна сесія зберігає свої вкладки після перезапуску." },
+        "all-your-logins": {
+          title: "Усі ваші входи",
+          body: "Агенти використовують сайти, на яких ви вже ввійшли. Без ключів і налаштування.",
+        },
         allowlists: { title: "Списки доступу", body: "Обмежте вкладки сесії вказаними сайтами." },
       },
       install:

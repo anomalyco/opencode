@@ -45,7 +45,7 @@ export const extensionPages: readonly Extension[] = [
       { title: "Lend a tab", body: "Click the toolbar button to hand an agent a tab you have open." },
       { title: "Record and capture", body: "Screenshots, screen recordings and network traffic as a HAR." },
       { title: "Any MCP client", body: "OpenCode, Claude Code, Cursor, Codex, Zed and many more." },
-      { title: "Named sessions", body: "Each session keeps its own tabs, across restarts." },
+      { title: "All your logins", body: "Agents use the sites you're already signed into. No keys, no setup." },
       { title: "Allowlists", body: "Limit a session's tabs to the sites you name." },
     ],
     install: {

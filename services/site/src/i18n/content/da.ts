@@ -262,9 +262,9 @@ export const content = {
           title: "Enhver MCP-klient",
           body: "OpenCode, Claude Code, Cursor, Codex, Zed og mange flere.",
         },
-        "named-sessions": {
-          title: "Navngivne sessioner",
-          body: "Hver session beholder sine egne faner, også efter genstart.",
+        "all-your-logins": {
+          title: "Alle dine logins",
+          body: "Agenter bruger de sites, du allerede er logget ind på. Ingen nøgler, ingen opsætning.",
         },
         allowlists: { title: "Hvidlister", body: "Begræns en sessions faner til de sites, du angiver." },
       },

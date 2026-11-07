@@ -295,9 +295,9 @@ export const content = {
           title: "Jeder MCP-Client",
           body: "OpenCode, Claude Code, Cursor, Codex, Zed und viele mehr.",
         },
-        "named-sessions": {
-          title: "Benannte Sessions",
-          body: "Jede Session behält ihre eigenen Tabs, auch nach Neustarts.",
+        "all-your-logins": {
+          title: "Alle deine Logins",
+          body: "Agents nutzen die Websites, bei denen du schon angemeldet bist. Keine Keys, kein Setup.",
         },
         allowlists: { title: "Allowlists", body: "Beschränke die Tabs einer Session auf die Websites, die du nennst." },
       },

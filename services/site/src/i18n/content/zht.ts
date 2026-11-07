@@ -191,7 +191,10 @@ export const content = {
           title: "任何 MCP 用戶端",
           body: "OpenCode、Claude Code、Cursor、Codex、Zed 等眾多用戶端。",
         },
-        "named-sessions": { title: "具名工作階段", body: "每個工作階段都保留自己的分頁，重新啟動後依然存在。" },
+        "all-your-logins": {
+          title: "沿用你的所有登入",
+          body: "代理直接使用你已登入的網站。無需金鑰，無需設定。",
+        },
         allowlists: { title: "允許清單", body: "將工作階段的分頁限制在你指定的網站內。" },
       },
       install:
