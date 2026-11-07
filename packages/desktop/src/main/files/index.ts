@@ -8,6 +8,7 @@ import { scoped } from "../native/logging"
 import { nativeT } from "../native/translations"
 import { assertAttachmentBudget, createPickedFileAuthorizations, readAttachment } from "./attachment-picker"
 import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
+import { ShellEnv } from "../service/shell-env"
 
 export type Interface = ReturnType<typeof make>
 
@@ -145,6 +146,7 @@ function make(
         )
       }
 
+      yield* ShellEnv.ready
       yield* Effect.tryPromise(() =>
         new Promise<void>((resolve, reject) => {
           const command =

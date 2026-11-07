@@ -11,6 +11,7 @@ import { BUNDLED_CLI_VERSION_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
 import { parseCliVersion, stageName } from "./cli-version"
 import { DesktopCliState } from "./desktop-cli-state"
+import { ShellEnv } from "./shell-env"
 
 const execFileAsync = promisify(execFile)
 
@@ -197,6 +198,7 @@ const run = Effect.fn("DesktopCli.run")(function* (binary: string, args: string[
 const INSTALL_TIMEOUT_MS = 60_000
 
 const runInstaller = Effect.fn("DesktopCli.installForUser")(function* (binary: string, home: string) {
+  yield* ShellEnv.ready
   yield* Effect.callback<void, Error>((resume) => {
     const child = spawn("/bin/bash", ["-s", "--", "--binary", binary], {
       env: { ...process.env, HOME: home },

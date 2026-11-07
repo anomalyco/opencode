@@ -3,7 +3,7 @@ import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import { app } from "electron"
 import { Effect, Path } from "effect"
 import { DesktopPaths } from "../paths"
-import { getUserShell, loadShellEnv } from "../service/shell-env"
+import { ShellEnv } from "../service/shell-env"
 import { registerRendererProtocol, setDockIcon, setProtocolReporter } from "../windows"
 import { scoped } from "../native/logging"
 import { applySpellcheck, spellcheckMenuItems } from "../native/spellcheck"
@@ -42,17 +42,19 @@ export const prepareApplicationEnvironment = Effect.gen(function* () {
 })
 
 export const preferApplicationEnvironment = Effect.gen(function* () {
-  const shell = process.platform === "win32" ? null : getUserShell()
-  const shellEnv = shell ? yield* loadShellEnv(shell) : null
-  yield* Effect.sync(() => {
-    if (!shellEnv?.XDG_STATE_HOME) delete process.env.XDG_STATE_HOME
-    Object.assign(process.env, {
-      ...shellEnv,
-      OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
-      OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
-      OPENCODE_CLIENT: "desktop",
-    })
-  })
+  const overrides = {
+    OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
+    OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
+    OPENCODE_CLIENT: "desktop",
+  }
+  // The shell's own XDG_STATE_HOME, if it sets one, is restored when its environment arrives.
+  delete process.env.XDG_STATE_HOME
+  Object.assign(process.env, overrides)
+  const shell = process.platform === "win32" ? null : ShellEnv.getUserShell()
+
+  if (!shell) return
+  const runPromise = Effect.runPromiseWith(yield* Effect.context<Path.Path>())
+  ShellEnv.applyInBackground(runPromise(ShellEnv.loadShellEnv(shell)), overrides)
 })
 
 export const prepareDesktop = Effect.gen(function* () {

@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process"
 import util from "node:util"
 import { Effect, FileSystem, Path } from "effect"
+import { ShellEnv } from "../service/shell-env"
 
 const execFilePromise = util.promisify(execFile)
 
@@ -29,6 +30,8 @@ const checkMacosApp = Effect.fn("DesktopFiles.checkMacosApp")(function* (appName
   for (const location of locations) {
     if (yield* exists(fs, location)) return true
   }
+
+  yield* ShellEnv.ready
 
   return yield* Effect.tryPromise(() => execFilePromise("which", [appName])).pipe(
     Effect.as(true),

@@ -1,6 +1,8 @@
-import { spawnSync } from "node:child_process"
+export * as ShellEnv from "./shell-env"
+
+import { spawn } from "node:child_process"
 import { userInfo } from "node:os"
-import { Effect, Path } from "effect"
+import { Effect, Option, Path } from "effect"
 
 const TIMEOUT = 5_000
 
@@ -34,29 +36,42 @@ export function parseShellEnv(out: Buffer) {
   return env
 }
 
+const run = (shell: string, mode: "-il" | "-l") =>
+  Effect.callback<{ type: "Exited"; status: number | null; stdout: Buffer } | { type: "Failed"; error: Error }>(
+    (resume) => {
+      const child = spawn(shell, [mode, "-c", "env -0"], {
+        stdio: ["ignore", "pipe", "ignore"],
+        windowsHide: true,
+      })
+      const chunks: Buffer[] = []
+      child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk))
+      child.on("error", (error) => resume(Effect.succeed({ type: "Failed", error })))
+      child.on("close", (status) => resume(Effect.succeed({ type: "Exited", status, stdout: Buffer.concat(chunks) })))
+
+      return Effect.sync(() => {
+        if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL")
+      })
+    },
+  )
+
 const probe = Effect.fn("ShellEnv.probe")(function* (shell: string, mode: "-il" | "-l") {
-  const out = spawnSync(shell, [mode, "-c", "env -0"], {
-    stdio: ["ignore", "pipe", "ignore"],
-    timeout: TIMEOUT,
-    windowsHide: true,
-  })
+  const out = yield* run(shell, mode).pipe(Effect.timeoutOption(TIMEOUT))
 
-  const err = out.error as NodeJS.ErrnoException | undefined
+  if (Option.isNone(out)) return { type: "Timeout" } satisfies Probe
 
-  if (err) {
-    if (err.code === "ETIMEDOUT") return { type: "Timeout" } satisfies Probe
-    yield* Effect.logWarning(`[server] Shell env probe failed for ${shell} ${mode}: ${err.message}`)
+  if (out.value.type === "Failed") {
+    yield* Effect.logWarning(`[server] Shell env probe failed for ${shell} ${mode}: ${out.value.error.message}`)
 
     return { type: "Unavailable" } satisfies Probe
   }
 
-  if (out.status !== 0) {
+  if (out.value.status !== 0) {
     yield* Effect.logWarning(`[server] Shell env probe exited with non-zero status for ${shell} ${mode}`)
 
     return { type: "Unavailable" } satisfies Probe
   }
 
-  const env = parseShellEnv(out.stdout)
+  const env = parseShellEnv(out.value.stdout)
 
   if (Object.keys(env).length === 0) {
     yield* Effect.logWarning(`[server] Shell env probe returned empty env for ${shell} ${mode}`)
@@ -108,3 +123,15 @@ export const loadShellEnv = Effect.fn("ShellEnv.load")(function* (shell: string)
 
   return null
 })
+
+// The probe runs the user's rc files, which can take seconds. Only processes this app starts need its
+// result, so it resolves in the background and they wait for it here instead of holding up startup.
+let applied = Promise.resolve()
+
+export function applyInBackground(env: Promise<Record<string, string> | null>, overrides: Record<string, string>) {
+  applied = env.then((value) => {
+    if (value) Object.assign(process.env, value, overrides)
+  })
+}
+
+export const ready = Effect.promise(() => applied)
