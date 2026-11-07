@@ -426,6 +426,17 @@ it.live("blocks a local plugin before module initialization and honors replaceme
   }),
 )
 
+it.live("names a configured local plugin path that no longer exists instead of dying on it", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    const missing = path.join(directory.path, "missing-plugin")
+    const modules = yield* PluginModule.make()
+    // A deleted or misspelled configured path is the same failure as a directory without an entrypoint.
+    const error = yield* modules.load({ type: "add", target: missing, options: {} }).pipe(Effect.flip)
+    expect(error.message).toBe(`Plugin entrypoint not found: ${missing}`)
+  }),
+)
+
 it.live("loads a GUI-only package under its package name without running it, and leaves a TUI-only one to the TUI", () =>
   Effect.gen(function* () {
     const directory = yield* tmpdirScoped()
