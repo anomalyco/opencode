@@ -1,0 +1,800 @@
+#compdef opencode
+###-begin-opencode-completions-###
+#
+# Static completion script for Zsh
+#
+# Installation:
+#   opencode --completions zsh > ~/.zsh/completions/_opencode
+#   then add ~/.zsh/completions to your fpath
+#
+
+_opencode() {
+  local context state state_descr line
+  typeset -A opt_args
+
+  local -a commands
+  commands=(
+    'upgrade:Upgrade OpenCode to the latest or a specific version'
+    'update:Upgrade OpenCode to the latest or a specific version'
+    'uninstall:Uninstall OpenCode, keeping session data, configuration, and state'
+    'acp:Start an Agent Client Protocol server'
+    'api:Make a request to the running server'
+    'debug:Debugging and troubleshooting tools'
+    'auth:manage integrations and credentials'
+    'mcp:Manage MCP (Model Context Protocol) servers'
+    'plugin:Manage plugins'
+    'models:List all available models'
+    'stats:Show shareable usage statistics'
+    'mini:Start the minimal interactive interface'
+    'run:Run OpenCode with a message'
+    'session:Manage sessions'
+    'service:Manage the background server'
+    'reload:Reload configuration'
+    'pair:Print one-time links to connect a browser or app'
+    'serve:Start the v2 API and web server'
+  )
+
+  local -a specs
+  specs=(
+    '(--standalone --no-standalone)--standalone[Run with a private server instead of the background service]'
+    '(--standalone --no-standalone)--no-standalone[Disable standalone]'
+    '(--server)--server[Connect to a server URL instead of the background service]:value:'
+    '(--auto --no-auto)--auto[Auto-approve permissions that are not explicitly denied]'
+    '(--auto --no-auto)--no-auto[Disable auto]'
+    '(--continue -c --no-continue)--continue[Continue the last session]'
+    '(--continue -c --no-continue)-c[Continue the last session]'
+    '(--continue -c --no-continue)--no-continue[Disable continue]'
+    '(--session -s)--session[Session ID to continue, or to create if it does not exist]:value:'
+    '(--session -s)-s[Session ID to continue, or to create if it does not exist]:value:'
+    '(--prompt)--prompt[Prompt to use]:value:'
+    -
+    parent-arguments
+    ':Directory to start OpenCode in:'
+    -
+    subcommands
+    '1:command:->command'
+    '*::arg:->args'
+  )
+
+  _arguments -C "${specs[@]}"
+
+  case "$state" in
+    command)
+      _describe -t commands 'commands' commands
+      ;;
+    args)
+      case "$words[1]" in
+        upgrade)
+          _opencode_upgrade
+          ;;
+        update)
+          _opencode_update
+          ;;
+        uninstall)
+          _opencode_uninstall
+          ;;
+        acp)
+          _opencode_acp
+          ;;
+        api)
+          _opencode_api
+          ;;
+        debug)
+          _opencode_debug
+          ;;
+        auth)
+          _opencode_auth
+          ;;
+        mcp)
+          _opencode_mcp
+          ;;
+        plugin)
+          _opencode_plugin
+          ;;
+        models)
+          _opencode_models
+          ;;
+        stats)
+          _opencode_stats
+          ;;
+        mini)
+          _opencode_mini
+          ;;
+        run)
+          _opencode_run
+          ;;
+        session)
+          _opencode_session
+          ;;
+        service)
+          _opencode_service
+          ;;
+        reload)
+          _opencode_reload
+          ;;
+        pair)
+          _opencode_pair
+          ;;
+        serve)
+          _opencode_serve
+          ;;
+      esac
+      ;;
+  esac
+}
+
+_opencode_upgrade() {
+  local -a specs
+  specs=(
+    '(--method -m)--method[Installation method to use]:value:(curl npm pnpm bun yarn vp brew winget)'
+    '(--method -m)-m[Installation method to use]:value:(curl npm pnpm bun yarn vp brew winget)'
+    ':Version to upgrade to (with or without a leading v):'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_update() {
+  local -a specs
+  specs=(
+    '(--method -m)--method[Installation method to use]:value:(curl npm pnpm bun yarn vp brew winget)'
+    '(--method -m)-m[Installation method to use]:value:(curl npm pnpm bun yarn vp brew winget)'
+    ':Version to upgrade to (with or without a leading v):'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_uninstall() {
+  local -a specs
+  specs=(
+    '(--dry-run --no-dry-run)--dry-run[Show what would be removed without removing]'
+    '(--dry-run --no-dry-run)--no-dry-run[Disable dry-run]'
+    '(--force -f --no-force)--force[Skip confirmation prompts]'
+    '(--force -f --no-force)-f[Skip confirmation prompts]'
+    '(--force -f --no-force)--no-force[Disable force]'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_acp() {
+  local -a specs
+  specs=(
+    '(--login --no-login)--login[Run auth login instead of starting the server]'
+    '(--login --no-login)--no-login[Disable login]'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_api() {
+  local -a specs
+  specs=(
+    '(--data -d)--data[Request body]:value:'
+    '(--data -d)-d[Request body]:value:'
+    '(--header -H)--header[Request header in name\:value form]:value:'
+    '(--header -H)-H[Request header in name\:value form]:value:'
+    '(--param)--param[OpenAPI path or query parameter]:value:'
+    '*:OpenAPI operation ID, or an HTTP method followed by a path:'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_debug() {
+  local context state state_descr line
+  typeset -A opt_args
+
+  local -a commands
+  commands=(
+    'agents:List all agents'
+    'config:List configuration sources'
+    'heap-dump:Write a heap snapshot of the running server and print its path'
+    'paths:Show global paths (data, config, cache, state)'
+  )
+
+  local -a specs
+  specs=(
+    '1:command:->command'
+    '*::arg:->args'
+  )
+
+  _arguments -C "${specs[@]}"
+
+  case "$state" in
+    command)
+      _describe -t commands 'commands' commands
+      ;;
+    args)
+      case "$words[1]" in
+        agents)
+          _opencode_debug_agents
+          ;;
+        config)
+          _opencode_debug_config
+          ;;
+        heap-dump)
+          _opencode_debug_heap_dump
+          ;;
+        paths)
+          _opencode_debug_paths
+          ;;
+      esac
+      ;;
+  esac
+}
+
+_opencode_debug_agents() {
+}
+
+_opencode_debug_config() {
+}
+
+_opencode_debug_heap_dump() {
+  local -a specs
+  specs=(
+    '(--directory)--directory[Directory to write the snapshot into instead of the server'\''s log directory]:value:'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_debug_paths() {
+  local -a specs
+  specs=(
+    ':Print only one path\: db, home, data, config, cache, state, tmp, bin, log, repos:(db home data config cache state tmp bin log repos)'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_auth() {
+  local context state state_descr line
+  typeset -A opt_args
+
+  local -a commands
+  commands=(
+    'list:list integrations and credentials'
+    'login:connect an integration'
+    'logout:log out of a saved account'
+    'export:print stored credentials, including secrets, as JSON'
+    'import:import credentials exported by auth export'
+    'switch:switch the active account for an integration'
+  )
+
+  local -a specs
+  specs=(
+    '1:command:->command'
+    '*::arg:->args'
+  )
+
+  _arguments -C "${specs[@]}"
+
+  case "$state" in
+    command)
+      _describe -t commands 'commands' commands
+      ;;
+    args)
+      case "$words[1]" in
+        list)
+          _opencode_auth_list
+          ;;
+        login)
+          _opencode_auth_login
+          ;;
+        logout)
+          _opencode_auth_logout
+          ;;
+        export)
+          _opencode_auth_export
+          ;;
+        import)
+          _opencode_auth_import
+          ;;
+        switch)
+          _opencode_auth_switch
+          ;;
+      esac
+      ;;
+  esac
+}
+
+_opencode_auth_list() {
+  local -a specs
+  specs=(
+    '(--format)--format[Output format]:value:(default json)'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_auth_login() {
+  local -a specs
+  specs=(
+    '(--method)--method[Authentication method ID]:value:'
+    '(--answer)--answer[Provider form answer (key=value; repeat for multiple fields)]:value:'
+    ':Integration ID, name, or well-known provider URL:'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_auth_logout() {
+  local -a specs
+  specs=(
+    ':Integration ID or name:'
+    ':Credential ID or label (opens an account picker when omitted):'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_auth_export() {
+  local -a specs
+  specs=(
+    ':Integration ID or name (exports every integration when omitted):'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_auth_import() {
+  local -a specs
+  specs=(
+    ':JSON file to import (reads stdin when omitted):'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_auth_switch() {
+  local -a specs
+  specs=(
+    ':Integration ID or name:'
+    ':Credential ID or label (opens an account picker when omitted):'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_mcp() {
+  local context state state_descr line
+  typeset -A opt_args
+
+  local -a commands
+  commands=(
+    'list:List configured MCP servers and their status'
+    'add:Add an MCP server to your configuration'
+    'auth:Authenticate with an OAuth-capable remote MCP server'
+    'logout:Remove stored OAuth credentials for an MCP server'
+  )
+
+  local -a specs
+  specs=(
+    '1:command:->command'
+    '*::arg:->args'
+  )
+
+  _arguments -C "${specs[@]}"
+
+  case "$state" in
+    command)
+      _describe -t commands 'commands' commands
+      ;;
+    args)
+      case "$words[1]" in
+        list)
+          _opencode_mcp_list
+          ;;
+        add)
+          _opencode_mcp_add
+          ;;
+        auth)
+          _opencode_mcp_auth
+          ;;
+        logout)
+          _opencode_mcp_logout
+          ;;
+      esac
+      ;;
+  esac
+}
+
+_opencode_mcp_list() {
+}
+
+_opencode_mcp_add() {
+  local -a specs
+  specs=(
+    '(--url)--url[URL for a remote MCP server]:value:'
+    '(--header)--header[HTTP header for a remote server, as name=value]:value:'
+    '(--env)--env[Environment variable for a local server, as name=value]:value:'
+    '(--global --no-global)--global[Write to the global config instead of the project config]'
+    '(--global --no-global)--no-global[Disable global]'
+    ':Name of the MCP server:'
+    '*:Command and arguments for a local server, passed after --:'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_mcp_auth() {
+  local -a specs
+  specs=(
+    ':Name of the MCP server:'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_mcp_logout() {
+  local -a specs
+  specs=(
+    ':Name of the MCP server:'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_plugin() {
+  local context state state_descr line
+  typeset -A opt_args
+
+  local -a commands
+  commands=(
+    'list:List plugins'
+    'add:Install a plugin and add it to the global configuration'
+    'check:Check package plugins for updates'
+    'update:Update package plugins'
+    'remove:Remove a plugin from global configuration'
+  )
+
+  local -a specs
+  specs=(
+    '1:command:->command'
+    '*::arg:->args'
+  )
+
+  _arguments -C "${specs[@]}"
+
+  case "$state" in
+    command)
+      _describe -t commands 'commands' commands
+      ;;
+    args)
+      case "$words[1]" in
+        list)
+          _opencode_plugin_list
+          ;;
+        add)
+          _opencode_plugin_add
+          ;;
+        check)
+          _opencode_plugin_check
+          ;;
+        update)
+          _opencode_plugin_update
+          ;;
+        remove)
+          _opencode_plugin_remove
+          ;;
+      esac
+      ;;
+  esac
+}
+
+_opencode_plugin_list() {
+  local -a specs
+  specs=(
+    '(--builtin --no-builtin)--builtin[Include built-in server plugins]'
+    '(--builtin --no-builtin)--no-builtin[Disable builtin]'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_plugin_add() {
+  local -a specs
+  specs=(
+    ':npm registry or Git package specifier:'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_plugin_check() {
+  local -a specs
+  specs=(
+    ':Configured package target:'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_plugin_update() {
+  local -a specs
+  specs=(
+    ':Configured package target; omit to update all outdated plugins:'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_plugin_remove() {
+  local -a specs
+  specs=(
+    ':configured package specifier:'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_models() {
+}
+
+_opencode_stats() {
+  local -a specs
+  specs=(
+    '(--days)--days[Show the last N days; 0 means today]:integer:'
+    '(--year)--year[Show a calendar year]:integer:'
+    '(--all --no-all)--all[Show lifetime statistics]'
+    '(--all --no-all)--no-all[Disable all]'
+    '(--project)--project[Filter by project ID, or use "." for the current project]:value:'
+    '(--models --no-models)--models[Show model usage]'
+    '(--models --no-models)--no-models[Disable models]'
+    '(--tools --no-tools)--tools[Show tool reliability]'
+    '(--tools --no-tools)--no-tools[Disable tools]'
+    '(--cost --no-cost)--cost[Show cost and token details]'
+    '(--cost --no-cost)--no-cost[Disable cost]'
+    '(--full --no-full)--full[Show every detailed section]'
+    '(--full --no-full)--no-full[Disable full]'
+    '(--limit)--limit[Number of rows in detailed sections]:integer:'
+    '(--json --no-json)--json[Output statistics as JSON]'
+    '(--json --no-json)--no-json[Disable json]'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_mini() {
+  local -a specs
+  specs=(
+    '(--continue -c --no-continue)--continue[Continue the last session]'
+    '(--continue -c --no-continue)-c[Continue the last session]'
+    '(--continue -c --no-continue)--no-continue[Disable continue]'
+    '(--session -s)--session[Session ID to continue, or to create if it does not exist]:value:'
+    '(--session -s)-s[Session ID to continue, or to create if it does not exist]:value:'
+    '(--fork --no-fork)--fork[Fork the session when continuing]'
+    '(--fork --no-fork)--no-fork[Disable fork]'
+    '(--replay --no-replay)--replay[Restore session history on resume and resize (disable with --no-replay)]'
+    '(--replay --no-replay)--no-replay[Disable replay]'
+    '(--replay-limit)--replay-limit[Limit replay to the newest N messages (default\: 200)]:integer:'
+    '(--model -m)--model[Model to use in the format provider/model]:value:'
+    '(--model -m)-m[Model to use in the format provider/model]:value:'
+    '(--agent)--agent[Agent to use]:value:'
+    '(--prompt)--prompt[Prompt to use]:value:'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_run() {
+  local -a specs
+  specs=(
+    '(--continue -c --no-continue)--continue[Continue the last session]'
+    '(--continue -c --no-continue)-c[Continue the last session]'
+    '(--continue -c --no-continue)--no-continue[Disable continue]'
+    '(--session -s)--session[Session ID to continue, or to create if it does not exist]:value:'
+    '(--session -s)-s[Session ID to continue, or to create if it does not exist]:value:'
+    '(--fork --no-fork)--fork[Fork the session before continuing]'
+    '(--fork --no-fork)--no-fork[Disable fork]'
+    '(--worktree -w)--worktree=-[Start a new session in a new git worktree, optionally with this name]::value:'
+    '(--worktree -w)-w=-[Start a new session in a new git worktree, optionally with this name]::value:'
+    '(--model -m)--model[Model to use in the format provider/model#variant]:value:'
+    '(--model -m)-m[Model to use in the format provider/model#variant]:value:'
+    '(--agent)--agent[Agent to use]:value:'
+    '(--format)--format[Output format]:value:(default json)'
+    '(--file -f)--file[File to attach to the message]:value:'
+    '(--file -f)-f[File to attach to the message]:value:'
+    '(--title)--title[Session title]:value:'
+    '(--archived --no-archived)--archived[Create the session archived so it stays out of session lists (useful for scripted or CI runs)]'
+    '(--archived --no-archived)--no-archived[Disable archived]'
+    '(--thinking --no-thinking)--thinking[Show thinking blocks]'
+    '(--thinking --no-thinking)--no-thinking[Disable thinking]'
+    '(--auto --no-auto)--auto[Auto-approve permissions that are not explicitly denied]'
+    '(--auto --no-auto)--no-auto[Disable auto]'
+    '*:Message to send:'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_session() {
+  local context state state_descr line
+  typeset -A opt_args
+
+  local -a commands
+  commands=(
+    'list:List top-level sessions in the current project, newest first'
+    'delete:Delete a session and its child sessions'
+    'export:Export session data as JSON'
+    'import:Import session data from a JSON file or URL'
+  )
+
+  local -a specs
+  specs=(
+    '1:command:->command'
+    '*::arg:->args'
+  )
+
+  _arguments -C "${specs[@]}"
+
+  case "$state" in
+    command)
+      _describe -t commands 'commands' commands
+      ;;
+    args)
+      case "$words[1]" in
+        list)
+          _opencode_session_list
+          ;;
+        delete)
+          _opencode_session_delete
+          ;;
+        export)
+          _opencode_session_export
+          ;;
+        import)
+          _opencode_session_import
+          ;;
+      esac
+      ;;
+  esac
+}
+
+_opencode_session_list() {
+  local -a specs
+  specs=(
+    '(--max-count -n)--max-count[Limit to N most recent sessions (default\: 100)]:integer:'
+    '(--max-count -n)-n[Limit to N most recent sessions (default\: 100)]:integer:'
+    '(--format)--format[Output format]:value:(table json)'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_session_delete() {
+  local -a specs
+  specs=(
+    ':Session ID to delete:'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_session_export() {
+  local -a specs
+  specs=(
+    '(--sanitize --no-sanitize)--sanitize[Redact sensitive transcript and file data]'
+    '(--sanitize --no-sanitize)--no-sanitize[Disable sanitize]'
+    ':Session ID to export:'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_session_import() {
+  local -a specs
+  specs=(
+    '(--directory)--directory[Directory in which to import the session]:value:'
+    ':JSON file or URL to import:'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_service() {
+  local context state state_descr line
+  typeset -A opt_args
+
+  local -a commands
+  commands=(
+    'start:Start the background server'
+    'restart:Restart the background server'
+    'status:Show background server status'
+    'stop:Stop the background server'
+    'get:Get service configuration'
+    'set:Set service configuration'
+    'unset:Unset service configuration'
+  )
+
+  local -a specs
+  specs=(
+    '1:command:->command'
+    '*::arg:->args'
+  )
+
+  _arguments -C "${specs[@]}"
+
+  case "$state" in
+    command)
+      _describe -t commands 'commands' commands
+      ;;
+    args)
+      case "$words[1]" in
+        start)
+          _opencode_service_start
+          ;;
+        restart)
+          _opencode_service_restart
+          ;;
+        status)
+          _opencode_service_status
+          ;;
+        stop)
+          _opencode_service_stop
+          ;;
+        get)
+          _opencode_service_get
+          ;;
+        set)
+          _opencode_service_set
+          ;;
+        unset)
+          _opencode_service_unset
+          ;;
+      esac
+      ;;
+  esac
+}
+
+_opencode_service_start() {
+}
+
+_opencode_service_restart() {
+}
+
+_opencode_service_status() {
+}
+
+_opencode_service_stop() {
+}
+
+_opencode_service_get() {
+  local -a specs
+  specs=(
+    ':Service setting or env:'
+    ':Environment variable name:'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_service_set() {
+  local -a specs
+  specs=(
+    ':Service setting or env:'
+    ':Setting value or environment variable name:'
+    ':Environment variable value:'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_service_unset() {
+  local -a specs
+  specs=(
+    ':Service setting or env:'
+    ':Environment variable name:'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_reload() {
+}
+
+_opencode_pair() {
+  local -a specs
+  specs=(
+    '(--url)--url[Use an external HTTP(S) server URL in pairing links]:value:'
+    '(--remote --no-remote)--remote[Pair through the OpenTunnel remote address, enabling remote access if needed (exposes the server to the internet)]'
+    '(--remote --no-remote)--no-remote[Disable remote]'
+    '(--yes -y --no-yes)--yes[Accept exposing the server to the internet when --remote enables remote access for the first time (required without an interactive terminal)]'
+    '(--yes -y --no-yes)-y[Accept exposing the server to the internet when --remote enables remote access for the first time (required without an interactive terminal)]'
+    '(--yes -y --no-yes)--no-yes[Disable yes]'
+  )
+  _arguments "${specs[@]}"
+}
+
+_opencode_serve() {
+  local -a specs
+  specs=(
+    '(--hostname)--hostname:value:'
+    '(--port)--port:integer:'
+    '(--cors)--cors[Additional allowed CORS origin (repeat for multiple origins)]:value:'
+    '(--service --no-service)--service'
+    '(--service --no-service)--no-service'
+    '(--stdio --no-stdio)--stdio'
+    '(--stdio --no-stdio)--no-stdio'
+  )
+  _arguments "${specs[@]}"
+}
+
+# Handle both direct invocation and autoload
+if [[ "${zsh_eval_context[-1]}" == "loadautofunc" ]]; then
+  _opencode "$@"
+else
+  compdef _opencode opencode
+fi
+###-end-opencode-completions-###
