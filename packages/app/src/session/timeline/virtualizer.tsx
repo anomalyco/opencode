@@ -895,8 +895,9 @@ export function createTimelineVirtualizer(input: Input) {
     if (active()) input.setScrollRef(root)
     viewportObserver?.observe(root)
     dispatchCold(CHECK_REQUESTED)
-    // The scrollbar thumb sits beside the viewport and stops its pointerdown from propagating, so
-    // listen on the ScrollView root in the capture phase: thumb drags are user scrolls too.
+    // A press held inside the viewport (drag-selecting past the edge, middle-button autoscroll) scrolls without a
+    // wheel or key, so listen on the ScrollView root in the capture phase. The thumb is mounted in the visible-area
+    // track instead, which has its own listener below.
     const scrollView = root.parentElement
 
     if (!scrollView) return
@@ -1021,6 +1022,16 @@ export function createTimelineVirtualizer(input: Input) {
     window.removeEventListener("pointercancel", releasePointer)
     window.removeEventListener("blur", loseContact)
     document.removeEventListener("visibilitychange", loseHiddenContact)
+  })
+
+  // The thumb is mounted in the visible-area track, outside the ScrollView root, so its pointerdown never reaches the
+  // root's capture listener. Without this a thumb drag keeps following, and every resize pulls the view to the end.
+  createEffect(() => {
+    const track = visibleArea()
+
+    if (!track) return
+    track.addEventListener("pointerdown", handleListPointerDown, { capture: true })
+    onCleanup(() => track.removeEventListener("pointerdown", handleListPointerDown, { capture: true }))
   })
 
   const handleListKeyDown = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
