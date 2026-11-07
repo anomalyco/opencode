@@ -110,7 +110,11 @@ export function Answer(props: {
 
   Keymap.createLayer(() => ({
     mode: "modal",
-    commands: [{ bind: "c", title: "Copy answer", group: "Dialog", run: copy }],
+    commands: [
+      { bind: "c", title: "Copy answer", group: "Dialog", run: copy },
+      { id: "session.page.up", title: "Page up", group: "Dialog", run: () => scroll?.scrollBy(-maxHeight()) },
+      { id: "session.page.down", title: "Page down", group: "Dialog", run: () => scroll?.scrollBy(maxHeight()) },
+    ],
   }))
 
   useKeyboard((event) => {
