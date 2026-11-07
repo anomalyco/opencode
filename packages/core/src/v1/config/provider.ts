@@ -7,6 +7,10 @@ export const ModelStatus = Schema.Literals(["alpha", "beta", "deprecated", "acti
 
 export const Model = Schema.Struct({
   id: Schema.optional(Schema.String),
+  base: Schema.optional(Schema.String).annotate({
+    description:
+      "Catalog model this model inherits capabilities, limits, cost, and variants from, while requests keep using this model's own ID",
+  }),
   name: Schema.optional(Schema.String),
   family: Schema.optional(Schema.String),
   release_date: Schema.optional(Schema.String),
