@@ -198,6 +198,8 @@ export const dict = {
 
   "ui.message.expand": "Nachricht ausklappen",
   "ui.message.collapse": "Nachricht einklappen",
+  "ui.message.readMore": "Mehr anzeigen",
+  "ui.message.showLess": "Weniger anzeigen",
   "ui.message.copy": "Kopieren",
   "ui.message.copyMessage": "Nachricht kopieren",
   "ui.message.forkMessage": "In neue Sitzung abzweigen",
