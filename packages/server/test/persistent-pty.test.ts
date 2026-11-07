@@ -498,6 +498,50 @@ smoke(
 )
 
 smoke(
+  "uses the configured shell for terminals created without a command",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* testDirectory()
+      const configured = path.join(fixture.root, "configured-shell")
+      yield* Effect.promise(async () => {
+        await fs.writeFile(configured, "#!/bin/sh\nprintf configured-shell; exec cat\n")
+        await fs.chmod(configured, 0o755)
+        await fs.writeFile(path.join(fixture.root, "opencode.json"), JSON.stringify({ shell: configured }))
+        await fs.writeFile(path.join(fixture.root, "catalog.json"), JSON.stringify({}))
+      })
+      const server = yield* ServerProcess.start<never, never>({
+        hostname: "127.0.0.1",
+        port: 0,
+        password: "secret",
+        app: { version: "test-version" },
+        database: { path: fixture.database },
+        fs: { filewatcher: false },
+        models: { fetch: false, file: path.join(fixture.root, "catalog.json") },
+      })
+      const base = HttpServer.formatAddress(server.address)
+      // Shell resolution goes through the terminal's session location, so create a session rooted at the fixture.
+      const sessionID = Schema.decodeUnknownSync(Session.ID)(
+        ((yield* request(base, "POST", "/api/session", { location: { directory: fixture.root } })) as {
+          data: { id: unknown }
+        }).data.id,
+      )
+      expect((yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
+      const terminal = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
+          args: [],
+          cwd: fixture.root,
+          title: "configured shell",
+          env: {},
+        })).data,
+      )
+      expect(terminal.command).toBe(configured)
+      expect(yield* waitForText(base, terminal.id, "configured-shell")).toContain("configured-shell")
+      yield* request(base, "DELETE", `/api/experimental/persistent-pty/${terminal.id}`)
+    }),
+  20_000,
+)
+
+smoke(
   "isolates servers sharing a database and preserves terminals only through explicit restart handoff",
   () =>
     Effect.gen(function* () {

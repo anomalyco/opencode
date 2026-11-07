@@ -1,5 +1,8 @@
+import { Instance } from "@opencode/core/instance/service"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { PtyTicket } from "@opencode/core/pty/ticket"
+import { Session } from "@opencode/core/session"
+import { ShellSelect } from "@opencode/core/shell/select"
 import {
   ForbiddenError,
   InvalidRequestError,
@@ -12,12 +15,13 @@ import {
   PTY_CONNECT_TOKEN_HEADER,
   PTY_CONNECT_TOKEN_HEADER_VALUE,
 } from "@opencode/protocol/groups/persistent-pty"
-import { Effect, Queue } from "effect"
+import { Effect, Option, Queue } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
+import { awaitPlugins, sessionInfo } from "../location"
 import { makeArtifact } from "./artifact"
 import { makeJob } from "./job"
 import { makeMediaGet } from "./media"
@@ -27,12 +31,36 @@ import { makeSchedule } from "./schedule"
 export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experimental", (handlers) =>
   Effect.gen(function* () {
     const tickets = yield* PtyTicket.Service
+    const sessions = yield* Session.Service
+    const instances = yield* Instance.Service
     const cors = yield* CorsConfig
     const pty = yield* PersistentPty.Service
     const artifact = yield* makeArtifact
     const job = yield* makeJob
     const mediaGet = yield* makeMediaGet
     const schedule = yield* makeSchedule
+
+    // Resolves the configured shell in the terminal's session location. The experimental endpoints carry no
+    // location middleware, so the session's instance services are provided here, the same way
+    // middleware/session-location.ts provides them. Resolution is best effort: terminals whose session or
+    // location cannot be resolved keep the process-global environment shell, as before this change.
+    const configuredShell = Effect.fn("PersistentPty.configuredShell")(function* (sessionID: Session.ID) {
+      const session = yield* sessionInfo(sessions, sessionID).pipe(Effect.option)
+      if (Option.isNone(session)) return undefined
+      const shell = yield* instances
+        .provide(session.value)(
+          awaitPlugins.pipe(
+            Effect.andThen(
+              Effect.gen(function* () {
+                const shellSelect = yield* ShellSelect.Service
+                return yield* shellSelect.resolve({ priority: "config" })
+              }),
+            ),
+          ),
+        )
+        .pipe(Effect.option)
+      return Option.isSome(shell) ? shell.value : undefined
+    })
 
     return handlers
       .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
@@ -68,7 +96,11 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
           return {
             data: yield* pty
               .create(ctx.params.sessionID, {
-                command: ctx.payload.command,
+                // PersistentPty is process-global and cannot access the
+                // Location-scoped shell service, so resolve the configured
+                // shell in the session's location for terminals created
+                // without an explicit command.
+                command: ctx.payload.command ?? (yield* configuredShell(ctx.params.sessionID)),
                 args: ctx.payload.args,
                 cwd: ctx.payload.cwd,
                 title: ctx.payload.title,
