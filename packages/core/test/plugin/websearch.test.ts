@@ -5,6 +5,7 @@ import { WebSearch } from "@opencode/core/websearch"
 import { WebSearchExa } from "@opencode/core/plugin/websearch/exa"
 import { WebSearchFirecrawl } from "@opencode/core/plugin/websearch/firecrawl"
 import { WebSearchParallel } from "@opencode/core/plugin/websearch/parallel"
+import { WebSearchSerpApi } from "@opencode/core/plugin/websearch/serpapi"
 import { WebSearchTavily } from "@opencode/core/plugin/websearch/tavily"
 import { WebSearchTinyFish } from "@opencode/core/plugin/websearch/tinyfish"
 import { host, integrationHost, webSearchHost } from "./host"
@@ -40,6 +41,7 @@ describe("built-in web search providers", () => {
   ;[
     WebSearchExa.Plugin,
     WebSearchParallel.Plugin,
+    WebSearchSerpApi.Plugin,
     WebSearchFirecrawl.Plugin,
     WebSearchTavily.Plugin,
     WebSearchTinyFish.Plugin,
@@ -217,6 +219,132 @@ describe("built-in web search providers", () => {
         },
       })
       expect(JSON.stringify(output)).not.toContain("parallel-secret")
+    }),
+  )
+
+  it.effect("registers SerpApi and maps Google Light MCP results", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            content: [{ type: "text", text: "search results" }],
+            structuredContent: {
+              result: JSON.stringify({
+                organic_results: [
+                  {
+                    link: "https://effect.website",
+                    title: "Effect",
+                    snippet: "Effect documentation",
+                  },
+                ],
+              }),
+            },
+          },
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchSerpApi.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+      expect(yield* integrations.get(Integration.ID.make("serpapi"))).toMatchObject({
+        id: "serpapi",
+        name: "SerpApi",
+        methods: [{ type: "key" }, { type: "env", names: ["SERPAPI_API_KEY"] }],
+      })
+      yield* integrations.connection.key({
+        integrationID: Integration.ID.make("serpapi"),
+        key: "serpapi-secret",
+      })
+
+      const output = yield* websearch.query({
+        query: "effect layers",
+        providerID: WebSearch.ID.make("serpapi"),
+      })
+      expect(output).toEqual(
+        new WebSearch.Response({
+          providerID: WebSearch.ID.make("serpapi"),
+          results: [
+            {
+              url: "https://effect.website",
+              title: "Effect",
+              content: "Effect documentation",
+              time: {},
+            },
+          ],
+        }),
+      )
+      expect(requests[0]).toMatchObject({
+        url: WebSearchSerpApi.endpoint,
+        headers: { authorization: "Bearer serpapi-secret" },
+        body: {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: {
+            name: "search",
+            arguments: { params: { q: "effect layers", engine: "google_light" } },
+          },
+        },
+      })
+      expect(JSON.stringify(output)).not.toContain("serpapi-secret")
+    }),
+  )
+
+  it.effect("surfaces SerpApi MCP tool errors", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            content: [{ type: "text", text: "Error: Invalid SerpApi API key" }],
+            structuredContent: { result: "Error: Invalid SerpApi API key" },
+            isError: true,
+          },
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchSerpApi.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+
+      expect(
+        yield* websearch.query({ query: "effect layers", providerID: WebSearch.ID.make("serpapi") }).pipe(Effect.flip),
+      ).toMatchObject({
+        providerID: WebSearch.ID.make("serpapi"),
+        cause: { message: "Error: Invalid SerpApi API key" },
+      })
+    }),
+  )
+
+  it.effect("fails when SerpApi search result JSON cannot be decoded", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            content: [{ type: "text", text: "invalid result" }],
+            structuredContent: { result: "not JSON" },
+          },
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchSerpApi.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+
+      expect(
+        yield* websearch.query({ query: "effect layers", providerID: WebSearch.ID.make("serpapi") }).pipe(Effect.flip),
+      ).toMatchObject({
+        providerID: WebSearch.ID.make("serpapi"),
+        cause: { message: "SerpApi returned an invalid search response" },
+      })
     }),
   )
 
