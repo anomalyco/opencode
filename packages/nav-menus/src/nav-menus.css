@@ -240,8 +240,11 @@
   }
 }
 
-/* The product menu's chevron after the name, for touch screens (no hover): 8px after the name's highlight, a 44px
-   target, flipped while the menu is open. Hidden where a pointer can hover, where the name opens the menu. */
+/* The product menu's chevron after the name, for touch screens (no hover), the same as the docs' split chevron after
+   DOCS (services/site docs-lockup.css reads these tokens too): --nav-chevron-width wide and --nav-chevron-gap after the
+   name's highlight, a --nav-chevron-glyph chevron that flips at once while the menu is open, a 44px tall target that
+   reaches --nav-chevron-reach further into the empty bar, the name fill on hover and the mark's inner grey pressed or
+   open. Hidden where a pointer can hover, where the name opens the menu. */
 [data-nav-product-toggle] {
   all: unset;
   position: relative;
@@ -250,28 +253,40 @@
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  width: 28px;
+  width: var(--nav-chevron-width);
   height: 100%;
   min-height: 25px;
-  margin-inline-start: 8px;
-  color: var(--nav-menu-weak, light-dark(hsl(0 0% 40%), hsl(0 0% 64%)));
+  margin-inline-start: var(--nav-chevron-gap);
+  color: var(--nav-chevron-ink);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
 
   &::before {
     content: "";
     position: absolute;
-    inset: calc(50% - 22px) -8px;
+    inset-block: calc(50% - 22px);
+    inset-inline: 0 calc(-1 * var(--nav-chevron-reach));
   }
 
   svg {
     display: block;
-    transition: scale 120ms ease;
+    width: var(--nav-chevron-glyph);
+    height: var(--nav-chevron-glyph);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      background: var(--nav-chevron-hover);
+      color: var(--nav-menu-ink, light-dark(hsl(0 0% 8%), hsl(0 0% 95%)));
+    }
   }
 
   &:active,
   &[aria-expanded="true"] {
-    background: var(--nav-menu-press, light-dark(#d2d2d2, #4b4b4b));
+    background: var(--nav-chevron-press);
     color: var(--nav-menu-ink, light-dark(hsl(0 0% 8%), hsl(0 0% 95%)));
   }
 
@@ -304,6 +319,15 @@
   /* The product name's one fill (hover, open and pressed), opencode.ai's lockup hover: half the mark's inner grey on
      the docs page (#d2d2d2 over #fbfbfb, #4b4b4b over #0c0c0c). Fixed, so it is the same on every page background. */
   --nav-name-hover: light-dark(#e7e7e7, #2c2c2c);
+  /* The chevron after a product name (and the docs' after DOCS): its box, the gap after the name's highlight, the glyph,
+     how far its touch target reaches past it, and its colours. */
+  --nav-chevron-width: 20px;
+  --nav-chevron-gap: 2px;
+  --nav-chevron-glyph: 10px;
+  --nav-chevron-reach: 24px;
+  --nav-chevron-ink: light-dark(hsl(0 0% 8%), hsl(0 0% 95%));
+  --nav-chevron-hover: var(--nav-name-hover);
+  --nav-chevron-press: light-dark(#d2d2d2, #4b4b4b);
   --nav-logo-box-w: calc(15px * 1.492);
   --nav-logo-box-h: 25px;
 
