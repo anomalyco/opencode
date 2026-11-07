@@ -44,6 +44,9 @@ export const MiniWorkSpinner = Schema.Literals([
 ])
 export type MiniWorkSpinner = Schema.Schema.Type<typeof MiniWorkSpinner>
 
+export const DateFormat = Schema.Literals(["locale", "friendly", "dd-mon-yyyy", "iso"])
+export type DateFormat = Schema.Schema.Type<typeof DateFormat>
+
 export const Plugin = Schema.Union([
   Schema.String,
   Schema.Struct({
@@ -174,6 +177,12 @@ export const Info = Schema.Struct({
       tps: Schema.optional(Schema.Boolean).annotate({
         description: "Show average tokens per second",
       }),
+      timestamps: Schema.optional(Schema.Boolean).annotate({
+        description: "Show the reply completion time and date",
+      }),
+      date_format: Schema.optional(DateFormat).annotate({
+        description: "Date format for reply timestamps",
+      }),
       markdown: Schema.optional(Schema.Literals(["source", "rendered"])).annotate({
         description: "Show Markdown syntax markers or conceal them in rendered transcript content",
       }),
@@ -274,10 +283,15 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
     style: "block" | "underline" | "line" | "default"
     blinking: boolean
   }
-  session: Omit<NonNullable<Info["session"]>, "new_location" | "permissions" | "tps"> & {
+  session: Omit<
+    NonNullable<Info["session"]>,
+    "new_location" | "permissions" | "tps" | "timestamps" | "date_format"
+  > & {
     new_location: "launch" | "inherit"
     permissions: "prompt" | "autoaccept"
     tps: boolean
+    timestamps: boolean
+    date_format: DateFormat
   }
   tabs: {
     mode: "auto" | "on" | "off"
@@ -327,6 +341,8 @@ export function resolve(
       new_location: input.session?.new_location ?? "launch",
       permissions: input.session?.permissions ?? "prompt",
       tps: input.session?.tps ?? true,
+      timestamps: input.session?.timestamps ?? false,
+      date_format: input.session?.date_format ?? "locale",
     },
     tabs: {
       ...input.tabs,

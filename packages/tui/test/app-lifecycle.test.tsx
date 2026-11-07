@@ -6,6 +6,7 @@ import { Global } from "@opencode/util/global"
 import * as Open from "@opencode/util/open"
 import { waitForGoUpsellConnect } from "../src/component/dialog-go-upsell"
 import { GoUpsellArtRenderable } from "../src/component/go-upsell-art"
+import { Locale } from "../src/util/locale"
 import { SimulationRenderer } from "@opencode/simulation/frontend/renderer"
 import path from "node:path"
 import { Writable } from "node:stream"
@@ -728,7 +729,11 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
     width: 100,
     height: 40,
     state: state.path,
-    config: { animations: false, tabs: { mode: "off" }, session: { sidebar: "hide", tps: true } },
+    config: {
+      animations: false,
+      tabs: { mode: "off" },
+      session: { sidebar: "hide", tps: true, timestamps: true, date_format: "dd-mon-yyyy" },
+    },
     args: { sessionID: session.id },
     fetch: (url) => {
       if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
@@ -796,6 +801,7 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
   )
   expect(initial).toContain("Current input")
   expect(initial).toContain("4.0s \u00b7 20.0 tok/s")
+  expect(initial).toContain(Locale.datetime(5000, "dd-mon-yyyy"))
   expect(initial).not.toContain("Prepended input")
 
   setup.mockInput.pressKey("g", { ctrl: true })
@@ -843,6 +849,76 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
   expect(reverted).toContain("Current input")
   expect(reverted).toContain("4.0s \u00b7 20.0 tok/s")
   expect(reverted).not.toContain("50.0 tok/s")
+})
+
+test("drops assistant footer timestamp parts as the terminal narrows", async () => {
+  await using state = await tmpdir()
+  const completed = new Date(2026, 10, 6, 21, 41).getTime()
+  const session = {
+    id: "ses_footer_width",
+    title: "Footer width fixture",
+    projectID: "project",
+    location: { directory },
+    agent: "build",
+    model: { providerID: "fixture", id: "model" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: completed - 4000, updated: completed },
+  }
+  const message = {
+    id: "msg_footer_width",
+    type: "assistant",
+    agent: session.agent,
+    model: session.model,
+    time: { created: completed - 3000, streamed: completed - 2000, completed },
+    finish: "stop",
+    cost: 0,
+    tokens: { ...session.tokens, output: 20 },
+    content: [{ type: "text", text: "Footer width answer" }],
+  }
+  await using setup = await createAppFixture({
+    width: 100,
+    height: 40,
+    state: state.path,
+    config: {
+      animations: false,
+      tabs: { mode: "off" },
+      session: { sidebar: "hide", tps: true, timestamps: true, date_format: "dd-mon-yyyy" },
+    },
+    args: { sessionID: session.id },
+    fetch: (url) => {
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (url.pathname === `/api/session/${session.id}/message`) return json({ data: [message], cursor: {} })
+      if (
+        url.pathname === `/api/session/${session.id}/inbox` ||
+        url.pathname === `/api/session/${session.id}/permission`
+      )
+        return json({ data: [] })
+      return undefined
+    },
+  })
+
+  const wide = await setup.waitForFrame((frame) => frame.includes("Footer width answer"))
+  expect(wide).toContain(Locale.datetime(completed, "dd-mon-yyyy"))
+
+  setup.resize(66, 40)
+  await setup.flush()
+  const medium = await setup.waitForFrame(
+    (frame) =>
+      frame.includes("Footer width answer") &&
+      frame.includes(Locale.time(completed)) &&
+      !frame.includes(Locale.date(completed, "dd-mon-yyyy")),
+  )
+  expect(medium).not.toContain("Nov")
+  expect(medium).not.toContain("2026")
+
+  setup.resize(48, 40)
+  await setup.flush()
+  const narrow = await setup.waitForFrame(
+    (frame) => frame.includes("Footer width answer") && !frame.includes(Locale.time(completed)),
+  )
+  expect(narrow).not.toContain("Nov")
+  expect(narrow).not.toContain("2026")
 })
 
 test("session startup prompt is submitted exactly once", async () => {
