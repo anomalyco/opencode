@@ -149,12 +149,18 @@ export const mainWindows = Effect.fn("Window.make")(function* (input: {
         },
       })
 
+    const reportStateError = (error: Error) =>
+      runFork(scoped("window", Effect.logWarning("failed to save window state", { file: stateFile, error })))
+
+    // Upgrade the early window's reporter once the logging layer is available.
+    if (early) early.reportStateError = reportStateError
+
     // The early window was secured and loaded when it was created.
     if (!early) {
       allowRendererPermissions(win)
       wireNavigationPolicy(win, (url) => runFork(openExternalURL(url)))
       wireRendererHeaders(win)
-      manageWindowState(win, stateFile, state, displays)
+      manageWindowState(win, stateFile, state, displays, reportStateError)
     }
 
     const focusForTests = () => {
