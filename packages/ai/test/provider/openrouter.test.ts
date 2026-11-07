@@ -431,6 +431,34 @@ describe("OpenRouter", () => {
     ),
   )
 
+  it.effect("reports upstream BYOK spend on the Responses route when the OpenRouter fee is zero", () =>
+    Effect.gen(function* () {
+      const model = OpenRouter.configure({ apiKey: "test-key" }).responses("openai/gpt-5.4")
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "response.completed",
+              response: {
+                id: "resp_1",
+                usage: {
+                  input_tokens: 33,
+                  output_tokens: 5,
+                  total_tokens: 38,
+                  cost: 0,
+                  is_byok: true,
+                  cost_details: { upstream_inference_cost: 0.000232 },
+                },
+              },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.usage?.cost).toBeCloseTo(0.000232, 10)
+    }),
+  )
+
   it.effect("omits the prompt cache key when caching is disabled", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -482,6 +510,53 @@ describe("OpenRouter", () => {
       expect(prepared.body).not.toHaveProperty("prompt_cache_key")
     }),
   )
+  ;[
+    {
+      name: "reports upstream BYOK spend when the OpenRouter fee is zero",
+      usage: {
+        prompt_tokens: 33,
+        completion_tokens: 5,
+        total_tokens: 38,
+        cost: 0,
+        is_byok: true,
+        cost_details: {
+          upstream_inference_cost: 0.000232,
+          upstream_inference_prompt_cost: 0.000132,
+          upstream_inference_completions_cost: 0.0001,
+        },
+      },
+      cost: 0.000232,
+    },
+    {
+      name: "does not add upstream spend for non-BYOK requests",
+      usage: { cost: 0.01, is_byok: false, cost_details: { upstream_inference_cost: 0.2 } },
+      cost: 0.01,
+    },
+    {
+      name: "adds the OpenRouter fee to upstream BYOK spend",
+      usage: { cost: 0.01, is_byok: true, cost_details: { upstream_inference_cost: 0.2 } },
+      cost: 0.21,
+    },
+  ].forEach((fixture) => {
+    it.effect(fixture.name, () =>
+      Effect.gen(function* () {
+        const model = OpenRouter.configure({ apiKey: "test-key" }).model("openai/gpt-4o-mini")
+        const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
+          Effect.provide(
+            fixedResponse(
+              sseEvents(
+                { choices: [{ delta: { content: "Hello" }, finish_reason: "stop" }] },
+                { choices: [], usage: fixture.usage },
+              ),
+            ),
+          ),
+        )
+
+        expect(response.usage?.cost).toBeCloseTo(fixture.cost, 10)
+        expect(response.usage?.providerMetadata?.openrouter).toEqual(fixture.usage)
+      }),
+    )
+  })
 
   it.effect("preserves the upstream provider finish reason", () =>
     Effect.gen(function* () {

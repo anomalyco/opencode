@@ -536,7 +536,7 @@ const mapUsage = (
 // Continued requests retain the first request's input instead of summing re-billed prompts.
 // Complete billed counts, including tool-use prompts from later requests, remain in provider metadata.
 const mapContinuedUsage = (requests: ReadonlyArray<GeminiUsage>, metadataKey: string) => {
-  const sum = (field: keyof GeminiUsage) =>
+  const sum = (field: Exclude<keyof GeminiUsage, "is_byok" | "cost_details">) =>
     ProviderShared.sumTokens(...requests.map((usage) => usage[field] ?? undefined))
   return mapUsage(
     {

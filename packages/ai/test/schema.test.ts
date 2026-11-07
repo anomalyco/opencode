@@ -109,6 +109,46 @@ describe("ToolResultValue", () => {
 })
 
 describe("AI.Usage", () => {
+  test("reportedBilling includes upstream cost only for BYOK", () => {
+    expect(ProviderShared.reportedBilling({ is_byok: true, cost_details: { upstream_inference_cost: 0.2 } })).toEqual({
+      cost: 0.2,
+    })
+    expect(
+      ProviderShared.reportedBilling({ cost: 0, is_byok: true, cost_details: { upstream_inference_cost: 0 } }),
+    ).toEqual({
+      cost: 0,
+    })
+    expect(ProviderShared.reportedBilling({ cost: 0.01, cost_details: { upstream_inference_cost: 0.2 } })).toEqual({
+      cost: 0.01,
+    })
+  })
+
+  test("reportedBilling ignores malformed optional BYOK fields", () => {
+    const decode = Schema.decodeUnknownSync(ProviderShared.ReportedBilling)
+    ;[undefined, null, "true", 1, {}, []].forEach((is_byok) => {
+      expect(decode({ cost: 0.01, is_byok }).is_byok).toBeUndefined()
+      expect(
+        ProviderShared.reportedBilling({ cost: 0.01, is_byok, cost_details: { upstream_inference_cost: 0.2 } }),
+      ).toEqual({
+        cost: 0.01,
+      })
+    })
+    ;[undefined, null, "0.2", -1, NaN, Infinity, {}, []].forEach((upstream_inference_cost) => {
+      expect(
+        decode({ cost_details: { upstream_inference_cost } }).cost_details?.upstream_inference_cost,
+      ).toBeUndefined()
+      expect(
+        ProviderShared.reportedBilling({ cost: 0.01, is_byok: true, cost_details: { upstream_inference_cost } }),
+      ).toEqual({
+        cost: 0.01,
+      })
+    })
+    ;[undefined, null, "invalid", 1, []].forEach((cost_details) => {
+      expect(decode({ cost_details }).cost_details).toBeUndefined()
+      expect(ProviderShared.reportedBilling({ cost: 0.01, is_byok: true, cost_details })).toEqual({ cost: 0.01 })
+    })
+  })
+
   test("subtractTokens clamps non-sensical breakdowns to zero", () => {
     // Defense against a provider reporting cached_tokens > prompt_tokens or
     // reasoning_tokens > completion_tokens — the negative would otherwise
