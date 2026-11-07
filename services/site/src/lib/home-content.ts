@@ -4,7 +4,6 @@ import { logoMetrics } from "~/component/site/logo-metrics"
 import type { Translate } from "~/i18n"
 import { rich } from "~/i18n/rich"
 import type { RichText } from "~/lib/markdown"
-import { homeFaq } from "~/lib/faq-content"
 
 // Product order rule: whenever copy lists the products, name them in this order: desktop, mobile,
 // terminal, SDK (the order of `products` in component/site/product-data.ts).
@@ -208,6 +207,5 @@ export function homeContent(t: Translate, route: (path: string) => string) {
       slimHeadline: t("home.console.slimHeadline"),
       sales: { text: t("home.console.sales"), href: "/console/enterprise" },
     },
-    faq: homeFaq(t, route),
   }
 }

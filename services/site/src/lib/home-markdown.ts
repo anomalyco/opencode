@@ -44,8 +44,6 @@ export function homeMarkdown(context: MarkdownContext) {
     `## ${content.openSource.title}`,
     inlineHtmlToMarkdown(content.openSource.lead),
     content.openSource.stats.map((stat) => `- ${stat.label}: ${stat.value}`).join("\n"),
-    `## ${content.faq.title}`,
-    ...content.faq.items.map((item) => blocks(`### ${item.question}`, richToMarkdown(item.answer)).trimEnd()),
     `## ${content.console.title}`,
     `**${content.console.headline}**`,
     content.console.body,

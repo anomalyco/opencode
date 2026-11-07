@@ -20,7 +20,6 @@ import {
   Suspense,
   Switch,
 } from "solid-js"
-import { Faq } from "~/component/faq"
 import { ConsoleField } from "~/component/site/console-field"
 import { ChevronRight, ExternalArrow } from "~/component/site/icons"
 import { LogoWall } from "~/component/site/logo-wall"
@@ -49,7 +48,7 @@ import { isMobile } from "~/lib/platform"
 import { LocaleLinks } from "~/component/locale-links"
 import { ShareMeta } from "~/component/share-meta"
 import { ogImage } from "~/lib/og"
-import { faqData, JsonLd, organizationData, softwareData, websiteData } from "~/component/structured-data"
+import { JsonLd, organizationData, softwareData, websiteData } from "~/component/structured-data"
 import { Rich } from "~/component/site/rich-text"
 import { homeOrderDefaultCss, homeOrderScript, homeOrderStyleId, useHomeOrder } from "~/component/site/home-order"
 import { designCopy, designEditing } from "~/component/site/design-copy"
@@ -217,7 +216,6 @@ export default function Home() {
           operatingSystem: "macOS, Windows, Linux",
         })}
       />
-      <JsonLd data={faqData(content().faq.items)} />
 
       {/* The default section order from the server; a saved one (Design mode, development only)
           replaces it before the sections paint. */}
@@ -448,37 +446,6 @@ export default function Home() {
           </div>
         </section>
       </Show>
-
-      <section
-        data-component="block"
-        data-section="faq"
-        data-design="faqColumns spacer spacerLength spacerCount spacerStartDash spacerStartGap spacerCurve ditherHeight ditherOrientation ditherDirection ditherLength ditherPixel ditherPattern ditherDensity ditherOpacity ditherCurve ditherLine"
-        data-columns={siteSettings.faqColumns.charAt(0)}
-      >
-        <h2 data-slot="label">{content().faq.title}</h2>
-        <div data-slot="body">
-          <ul data-component="faq">
-            <For each={content().faq.items}>
-              {(item) => (
-                <li>
-                  <Faq question={item.question}>
-                    <Show
-                      when={"copy" in item && item.copy ? (item.copy as CopyId) : undefined}
-                      fallback={<Rich value={item.answer} />}
-                    >
-                      {(copy) => (
-                        <span data-design-copy={copy()}>
-                          <Rich value={richCopy(copy(), item.answer, content().copyLinks)} />
-                        </span>
-                      )}
-                    </Show>
-                  </Faq>
-                </li>
-              )}
-            </For>
-          </ul>
-        </div>
-      </section>
 
       <section
         data-component="block"

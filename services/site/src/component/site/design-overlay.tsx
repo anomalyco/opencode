@@ -271,7 +271,6 @@ const settingControls: Record<string, Control> = {
   whatColumns: setting("whatColumns", "Body columns", () => sectionColumns),
   toolsColumns: setting("toolsColumns", "Body columns", () => sectionColumns),
   openSourceColumns: setting("openSourceColumns", "Body columns", () => sectionColumns),
-  faqColumns: setting("faqColumns", "FAQ width", () => sectionColumns),
   consoleColumns: setting("consoleColumns", "Body columns", () => sectionColumns),
   whatCopyColumns: setting("whatCopyColumns", "Copy columns", () => sectionColumns),
   toolsCopyColumns: setting("toolsCopyColumns", "Copy columns", () => sectionColumns),

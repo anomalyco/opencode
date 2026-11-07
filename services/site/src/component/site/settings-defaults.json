@@ -312,7 +312,6 @@
     "byos",
     "tools",
     "openSource",
-    "faq",
     "console"
   ],
   "toolTiles": "logo",
@@ -346,7 +345,6 @@
   "whatColumns": "2 columns",
   "toolsColumns": "2 columns",
   "openSourceColumns": "2 columns",
-  "faqColumns": "2 columns",
   "consoleColumns": "2 columns",
   "whatCopyColumns": "2 columns",
   "toolsCopyColumns": "2 columns",

@@ -5,9 +5,8 @@ import { rich } from "~/i18n/rich"
 import type { RichText } from "~/lib/markdown"
 
 /**
- * The home page FAQ, which the product pages' download section shows too (lib/download-content.ts).
- * A module of its own, so the download section, on every page, doesn't take the rest of the home
- * page copy with it.
+ * The FAQ in the product pages' download section (lib/download-content.ts). A module of its own, so
+ * the download section, on every page, doesn't take the home page copy with it.
  */
 export function homeFaq(t: Translate, route: (path: string) => string) {
   const docs = (path: string) => `https://opencode.ai${docsUrl(path)}`
@@ -24,7 +23,6 @@ export function homeFaq(t: Translate, route: (path: string) => string) {
       },
       {
         question: t("home.faq.q3"),
-        copy: "home.faq.a3",
         answer: rich(
           `${t("home.faq.a3.p1")} ${t("home.faq.a3.p4.beforeLocal")} ${t("home.faq.a3.providers")} ${t("home.faq.a3.models.after")}`,
           { local: docs("/models/#local"), models: "https://opencode.ai/console/models" },
@@ -32,7 +30,6 @@ export function homeFaq(t: Translate, route: (path: string) => string) {
       },
       {
         question: t("home.faq.q4"),
-        copy: "home.faq.a4",
         answer: [`${t("home.faq.a4.p1")} `, { text: t("common.learnMore"), href: docs("/providers/") }, "."],
       },
       {
@@ -43,10 +40,9 @@ export function homeFaq(t: Translate, route: (path: string) => string) {
           sdk: route("/sdk"),
         }),
       },
-      { question: t("home.faq.q6"), copy: "home.faq.a6", answer: [t("home.faq.a6")] },
+      { question: t("home.faq.q6"), answer: [t("home.faq.a6")] },
       {
         question: t("home.faq.q7"),
-        copy: "home.faq.a7",
         answer: [
           `${t("home.faq.a7.p1")} ${t("home.faq.a7.p2.beforeModels")} `,
           { text: t("home.faq.a7.p2.modelsLink"), href: docs("/console/models/#privacy") },
@@ -67,6 +63,6 @@ export function homeFaq(t: Translate, route: (path: string) => string) {
           t("home.faq.a8.p3"),
         ],
       },
-    ] satisfies { question: string; copy?: string; answer: RichText }[],
+    ] satisfies { question: string; answer: RichText }[],
   }
 }
