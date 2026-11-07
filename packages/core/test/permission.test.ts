@@ -7,6 +7,8 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { TestClock } from "effect/testing"
 import { PermissionTable } from "@opencode/core/permission/sql"
 import { PermissionSaved } from "@opencode/core/permission/saved"
 import { Project } from "@opencode/core/project"
@@ -26,7 +28,15 @@ const current = Layer.succeed(
 )
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionStore.node, PermissionSaved.node, Agent.node, Permission.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionStore.node,
+      PermissionSaved.node,
+      Agent.node,
+      Permission.node,
+      PluginHooks.node,
+    ]),
     [Location.node.replace(current)],
   ),
 )
@@ -98,6 +108,166 @@ function waitForRequest(input: Partial<Permission.AssertInput> = {}) {
 }
 
 describe("Permission", () => {
+  it.effect("reviews actual requests once each without saving approvals or reviewing probes", () =>
+    Effect.gen(function* () {
+      yield* setup([])
+      const hooks = yield* PluginHooks.Service
+      const service = yield* Permission.Service
+      const requests: Permission.Request[] = []
+      yield* hooks.register("permission", "experimental.review", (event) =>
+        Effect.sync(() => {
+          requests.push(event.request)
+          event.result = { decision: "approve", reason: "Authorized local read" }
+        }),
+      )
+      expect(yield* service.allows(assertion())).toBe(false)
+      yield* service.assertNotDenied(assertion())
+      expect(requests).toEqual([])
+      yield* service.assert(assertion())
+      expect(yield* service.ask(assertion())).toMatchObject({ effect: "allow" })
+      expect(requests).toHaveLength(2)
+      expect(yield* service.allows(assertion())).toBe(false)
+      expect(yield* service.list()).toEqual([])
+      yield* setRules([{ action: "read", resource: "*", effect: "deny" }])
+      expect(yield* service.ask(assertion())).toMatchObject({ effect: "deny" })
+      yield* setRules([{ action: "read", resource: "*", effect: "allow" }])
+      expect(yield* service.ask(assertion())).toMatchObject({ effect: "allow" })
+      expect(requests).toHaveLength(2)
+      yield* setRules([])
+      yield* hooks.register("permission", "evaluate", (event) =>
+        Effect.sync(() => {
+          event.effect = "deny"
+          event.message = "Managed policy forbids this action"
+        }),
+      )
+      expect(yield* service.ask(assertion())).toMatchObject({ effect: "deny" })
+      expect(requests).toHaveLength(2)
+    }),
+  )
+
+  it.effect("returns reviewer denials to the tool with their reason", () =>
+    Effect.gen(function* () {
+      yield* setup([])
+      const hooks = yield* PluginHooks.Service
+      const service = yield* Permission.Service
+      yield* hooks.register("permission", "experimental.review", (event) =>
+        Effect.sync(() => {
+          event.result = { decision: "deny", reason: "The user prohibited this operation" }
+        }),
+      )
+      expect(yield* service.assert(assertion()).pipe(Effect.flip)).toMatchObject({
+        _tag: "Permission.BlockedError",
+        reason: "The user prohibited this operation",
+      })
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
+  it.effect("reviewer denial leaves other pending requests in the session intact", () =>
+    Effect.gen(function* () {
+      yield* setup([])
+      const pending = yield* waitForRequest()
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("permission", "experimental.review", (event) =>
+        Effect.sync(() => {
+          event.result = { decision: "deny", reason: "Only this request is prohibited" }
+        }),
+      )
+      expect(
+        yield* pending.service.assert(assertion({ id: Permission.ID.create("per_other") })).pipe(Effect.flip),
+      ).toMatchObject({ _tag: "Permission.BlockedError", reason: "Only this request is prohibited" })
+      expect(yield* pending.service.list()).toEqual([pending.request])
+      yield* pending.service.reply({ requestID: pending.request.id, reply: "once" })
+      yield* Fiber.join(pending.fiber)
+    }),
+  )
+
+  it.effect("settles unattended permissions before calling a reviewer", () =>
+    Effect.gen(function* () {
+      yield* setup([])
+      const service = yield* Permission.Service
+      const hooks = yield* PluginHooks.Service
+      const reviewed: Permission.Request[] = []
+      yield* hooks.register("permission", "experimental.review", (event) =>
+        Effect.sync(() => {
+          reviewed.push(event.request)
+          event.result = { decision: "approve", reason: "Should not be called" }
+        }),
+      )
+      expect(yield* service.ask(assertion()).pipe(Effect.provideService(Permission.Unattended, []))).toMatchObject({
+        effect: "deny",
+      })
+      expect(
+        yield* service
+          .ask(assertion())
+          .pipe(Effect.provideService(Permission.Unattended, [{ action: "read", resource: "*", effect: "allow" }])),
+      ).toMatchObject({ effect: "allow" })
+      expect(reviewed).toEqual([])
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
+  it.effect("escalates to the normal prompt with the reviewer's reason", () =>
+    Effect.gen(function* () {
+      yield* setup([])
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("permission", "experimental.review", (event) =>
+        Effect.sync(() => {
+          event.result = { decision: "escalate", reason: "Destination is unclear" }
+        }),
+      )
+      const pending = yield* waitForRequest()
+      expect(pending.request.message).toBe("Destination is unclear")
+      yield* pending.service.reply({ requestID: pending.request.id, reply: "once" })
+      yield* Fiber.join(pending.fiber)
+    }),
+  )
+
+  it.effect("escalates invalid results and reviewer defects", () =>
+    Effect.gen(function* () {
+      yield* setup([])
+      const hooks = yield* PluginHooks.Service
+      const service = yield* Permission.Service
+      const invalid = yield* hooks.register("permission", "experimental.review", (event) =>
+        Effect.sync(() => {
+          Object.assign(event, { result: { decision: "always", reason: "Trust me" } })
+        }),
+      )
+      expect(yield* service.ask(assertion())).toMatchObject({ effect: "ask" })
+      expect((yield* service.list())[0]?.message).toContain("unavailable")
+      yield* service.reply({ requestID: assertion().id, reply: "reject" })
+      yield* invalid.dispose
+      yield* hooks.register("permission", "experimental.review", () => Effect.die(new Error("offline")))
+      expect(yield* service.ask(assertion())).toMatchObject({ effect: "ask" })
+    }),
+  )
+
+  it.effect("bounds review time and preserves cancellation", () =>
+    Effect.gen(function* () {
+      yield* setup([])
+      const hooks = yield* PluginHooks.Service
+      const service = yield* Permission.Service
+      const started = yield* Deferred.make<void>()
+      const reviewer = yield* hooks.register("permission", "experimental.review", () =>
+        Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
+      )
+      const timed = yield* service.ask(assertion()).pipe(Effect.forkScoped)
+      yield* Deferred.await(started)
+      yield* TestClock.adjust("30 seconds")
+      expect(yield* Fiber.join(timed)).toMatchObject({ effect: "ask" })
+      yield* service.reply({ requestID: assertion().id, reply: "reject" })
+      yield* reviewer.dispose
+      const cancelStarted = yield* Deferred.make<void>()
+      yield* hooks.register("permission", "experimental.review", () =>
+        Deferred.succeed(cancelStarted, undefined).pipe(Effect.andThen(Effect.never)),
+      )
+      const cancelled = yield* service.assert(assertion()).pipe(Effect.forkScoped({ startImmediately: true }))
+      yield* Deferred.await(cancelStarted)
+      yield* Fiber.interrupt(cancelled)
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
   it.effect("returns the evaluated effect and only queues prompts", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])
@@ -764,10 +934,7 @@ describe("shell scanner permission impact", () => {
       name: "assignment redirect prefix",
       shell: "bash",
       command: "FOO=bar > output; printf done",
-      grants: [
-        ["printf *"],
-        ["FOO=bar > *", "printf *"],
-      ],
+      grants: [["printf *"], ["FOO=bar > *", "printf *"]],
       repeat: [
         ["ask", "allow"],
         ["ask", "allow"],
@@ -779,10 +946,7 @@ describe("shell scanner permission impact", () => {
       name: "PowerShell method prefix",
       shell: "pwsh",
       command: '[IO.File]::Delete("C:\\first")',
-      grants: [
-        ["[IO.File]::Delete(*"],
-        ["[IO.File]::Delete(*"],
-      ],
+      grants: [["[IO.File]::Delete(*"], ["[IO.File]::Delete(*"]],
       repeat: [
         ["allow", "allow"],
         ["allow", "allow"],

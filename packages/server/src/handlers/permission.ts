@@ -2,6 +2,7 @@ import { Instance } from "@opencode/core/instance/service"
 import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
 import { PermissionSaved } from "@opencode/core/permission/saved"
+import { Plugin } from "@opencode/core/plugin"
 import { Session } from "@opencode/core/session"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
@@ -39,6 +40,8 @@ export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", 
       .handle(
         "session.permission.create",
         Effect.fn(function* (ctx) {
+          // Configured rules and review hooks are installed during plugin activation.
+          yield* Plugin.awaitActivation
           const permission = yield* Permission.Service
           return {
             data: yield* permission
