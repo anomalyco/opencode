@@ -65,11 +65,11 @@ export const copyVariants = {
       "Free models included or connect any model from any provider,\nincluding Claude, GPT, Gemini and more.",
       // From the coding-agents review (positioningRec), adjusted to the site copy rules: no "no
       // account", no plan names, "OpenCode" rather than "It", products in the site's order.
-      "Start with free models or bring any of 200+ providers.\nOpenCode runs on your machine, and you can control it from the desktop, your phone, the terminal or your own code.",
-      "OpenCode is an open source coding agent. Use the free models or any of 200+ providers,\nand steer your sessions from the desktop, your phone or the terminal.",
+      "Start with free models or bring any of 200+ providers.\nOpenCode runs on your machine, and you can control it from the desktop, the terminal, your phone or your own code.",
+      "OpenCode is an open source coding agent. Use the free models or any of 200+ providers,\nand steer your sessions from the desktop, the terminal or your phone.",
       "Start a session in the desktop app, approve it from your phone and pick it up in the terminal.\nUse any model, including the free models.",
       "Use the plan you already pay for, any of 200+ providers or the free models.\nOpenCode is open source and runs on your machine.",
-      "Open source, any model, and sessions that stay on your computer.\nControl OpenCode from the desktop, your phone, the terminal or the SDK.",
+      "Open source, any model, and sessions that stay on your computer.\nControl OpenCode from the desktop, the terminal, your phone or the SDK.",
     ],
   },
   // The button above the product carousel that copies an install prompt. Short labels; its
@@ -97,12 +97,12 @@ export const copyVariants = {
     label: "What is OpenCode? intro",
     lines: 3,
     options: [
-      "OpenCode is an open source coding agent that works with any model. Run it as a desktop app, from your phone, in the terminal or inside your own tools with the SDK.",
-      "OpenCode is an open source coding agent. Use it in the desktop app, on your phone, in your terminal, or from your own code with the SDK.",
-      "OpenCode writes, edits and explains code with the model of your choice. It's open source, and runs on your desktop, your phone, your terminal and your own code.",
+      "OpenCode is an open source coding agent that works with any model. Run it as a desktop app, in the terminal, from your phone or inside your own tools with the SDK.",
+      "OpenCode is an open source coding agent. Use it in the desktop app, in your terminal, on your phone, or from your own code with the SDK.",
+      "OpenCode writes, edits and explains code with the model of your choice. It's open source, and runs on your desktop, your terminal, your phone and your own code.",
       "One open source coding agent for every place you work: a desktop app, a terminal interface, a phone app and an SDK.",
       // From the coding-agents review (positioningRec), adjusted to the site copy rules.
-      "OpenCode is an open source coding agent. It runs on your computer, and the desktop app, phone, terminal and SDK all connect to the same sessions.",
+      "OpenCode is an open source coding agent. It runs on your computer, and the desktop app, terminal, phone and SDK all connect to the same sessions.",
     ],
   },
   "home.logos.label": {
@@ -130,7 +130,7 @@ export const copyVariants = {
   "home.feature.anyDevice.body": {
     label: "Any device feature",
     lines: 1,
-    options: ["Desktop, phone, terminal and web, all connected to one OpenCode server"],
+    options: ["Desktop, terminal, phone and web, all connected to one OpenCode server"],
   },
   "home.tools.lead": {
     label: "Bring your own tools intro",
