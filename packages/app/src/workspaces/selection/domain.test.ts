@@ -11,6 +11,7 @@ import {
   createPriorityTaskQueue,
   listPickerDirectory,
   displayPickerPath,
+  pickerDisplaySeparator,
   shortenPickerRecentPath,
   pickerParent,
   pickerRoot,
@@ -564,4 +565,12 @@ test("wraps autocomplete keyboard navigation", () => {
   expect(nextSuggestionIndex(3, 1, 4)).toBe(0)
   expect(nextSuggestionIndex(0, -1, 4)).toBe(3)
   expect(nextSuggestionIndex(0, 1, 0)).toBe(-1)
+})
+
+test.each([
+  ["C:\\Users\\luke\\src", "\\"],
+  ["/home/luke/src", "/"],
+  ["~/src", "/"],
+])("matches the directory suffix to the displayed path (%p -> %p)", (displayed, expected) => {
+  expect(pickerDisplaySeparator(displayed)).toBe(expected)
 })

@@ -27,6 +27,7 @@ import {
   createPriorityTaskQueue,
   createDirectorySearch,
   displayPickerPath,
+  pickerDisplaySeparator,
   shortenPickerRecentPath,
   pickerParent,
   pickerRoot,
@@ -650,7 +651,9 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
                     onClick={() => dispatchCombobox({ type: "item.clicked", index: index() })}
                   >
                     {displayPickerPath(suggestion.absolute, comboboxView().input, home())}
-                    {suggestion.type === "directory" ? "/" : ""}
+                    {suggestion.type === "directory"
+                      ? pickerDisplaySeparator(displayPickerPath(suggestion.absolute, comboboxView().input, home()))
+                      : ""}
                   </button>
                 )}
               </For>
