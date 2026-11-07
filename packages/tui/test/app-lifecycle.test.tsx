@@ -12,6 +12,7 @@ import { Writable } from "node:stream"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 import { createAppFixture } from "./fixture/app"
+import { agent, model, session } from "./fixture/local"
 import { waitForHighlightedFrame } from "./fixture/frame"
 import type { PluginInfo } from "@opencode/client"
 
@@ -922,6 +923,169 @@ test("session startup prompt is submitted exactly once", async () => {
   }
 })
 
+test("malformed startup model keeps the prompt on the requested session", async () => {
+  const existing = session("dummy", { providerID: "provider", id: "model" })
+  const location = existing.location
+  const observed = Promise.withResolvers<void>()
+  const prompts: { path: string; body: unknown }[] = []
+  let created = 0
+  await using setup = await createAppFixture({
+    args: { sessionID: existing.id, model: "provider/", prompt: "RESUME_READY" },
+    fetch: async (url, request) => {
+      if (url.pathname === "/api/session") {
+        if (request.method === "POST") {
+          created++
+          observed.resolve()
+          return json({ data: { ...existing, id: "unexpected" } })
+        }
+        return json({ data: [existing], cursor: {} })
+      }
+      if (url.pathname === "/api/session/dummy") return json({ data: existing })
+      if (/^\/api\/session\/dummy\/(message|inbox|permission)$/.test(url.pathname))
+        return json({ data: [], cursor: {} })
+      if (url.pathname === "/api/agent")
+        return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+      if (url.pathname === "/api/model")
+        return json({ location, data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }] })
+      if (url.pathname.endsWith("/prompt")) {
+        prompts.push({ path: url.pathname, body: await request.json() })
+        observed.resolve()
+        return json({ data: {} })
+      }
+    },
+  })
+  await setup.ready
+  await Promise.race([
+    observed.promise,
+    Bun.sleep(2000).then(() => {
+      throw new Error("startup prompt was not submitted")
+    }),
+  ])
+  expect(created).toBe(0)
+  expect(prompts).toEqual([
+    { path: "/api/session/dummy/prompt", body: expect.objectContaining({ text: "RESUME_READY" }) },
+  ])
+  await setup.renderOnce()
+  expect(setup.captureCharFrame()).toContain("Invalid model format")
+})
+
+test("delayed continuation submits only to the resumed session with its saved model", async () => {
+  const existing = session("existing", { providerID: "provider", id: "first" })
+  const location = existing.location
+  const lookup = Promise.withResolvers<Response>()
+  const requested = Promise.withResolvers<void>()
+  const submitted = Promise.withResolvers<void>()
+  const prompts: string[] = []
+  const selections: unknown[] = []
+  let created = 0
+  let placeholders = 0
+  await using setup = await createAppFixture({
+    args: { continue: true, model: "provider/second", prompt: "RESUME_ONLY" },
+    fetch: async (url, request) => {
+      if (url.pathname === "/api/session") {
+        if (request.method === "POST") {
+          created++
+          return json({ data: { ...existing, id: "unexpected" } })
+        }
+        if (url.searchParams.get("limit") === "1") {
+          requested.resolve()
+          return lookup.promise
+        }
+        return json({ data: [existing], cursor: {} })
+      }
+      if (url.pathname === "/api/session/dummy") {
+        placeholders++
+        return json({})
+      }
+      if (url.pathname === "/api/session/existing") return json({ data: existing })
+      if (/^\/api\/session\/[^/]+\/(message|inbox|permission)$/.test(url.pathname))
+        return json({ data: [], cursor: {} })
+      if (url.pathname === "/api/agent") return json({ location, data: [agent("build", existing.model)] })
+      if (url.pathname === "/api/model") {
+        return json({ location, data: [model("first"), model("second")] })
+      }
+      if (url.pathname.endsWith("/model") && request.method === "POST") {
+        selections.push(await request.json())
+        return new Response(null, { status: 204 })
+      }
+      if (url.pathname.endsWith("/prompt")) {
+        prompts.push(url.pathname)
+        submitted.resolve()
+        return json({ data: {} })
+      }
+    },
+  })
+  await setup.ready
+  try {
+    await requested.promise
+    await setup.renderOnce()
+    expect(created).toBe(0)
+    expect(prompts).toHaveLength(0)
+  } finally {
+    lookup.resolve(json({ data: [existing], cursor: {} }))
+  }
+  await Promise.race([
+    submitted.promise,
+    Bun.sleep(2000).then(() => {
+      throw new Error("resumed prompt was not submitted")
+    }),
+  ])
+  expect(created).toBe(0)
+  expect(placeholders).toBe(0)
+  expect(prompts).toEqual(["/api/session/existing/prompt"])
+  expect(selections).toEqual([{ model: { providerID: "provider", id: "first" } }])
+})
+
+test.each(["lookup", "fork"] as const)("continuation %s failure shows the error and returns home", async (stage) => {
+  const existing = session("existing", { providerID: "provider", id: "first" })
+  const message = `Continuation ${stage} failed`
+  let forks = 0
+  await using setup = await createAppFixture({
+    args: { continue: true, fork: stage === "fork", model: "provider/startup" },
+    fetch: (url) => {
+      if (url.pathname === "/api/session" && url.searchParams.get("limit") === "1")
+        return stage === "lookup" ? json({ message }, { status: 500 }) : json({ data: [existing], cursor: {} })
+      if (url.pathname === "/api/session/existing/fork") {
+        forks++
+        return json({ message }, { status: 500 })
+      }
+      if (url.pathname === "/api/session/dummy") return json({})
+      if (/^\/api\/session\/dummy\/(message|inbox|permission)$/.test(url.pathname))
+        return json({ data: [], cursor: {} })
+      if (url.pathname === "/api/agent")
+        return json({ location: existing.location, data: [agent("build", existing.model)] })
+      if (url.pathname === "/api/model")
+        return json({ location: existing.location, data: [model("first"), model("startup")] })
+    },
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("UnexpectedStatus: 500"))
+  await setup.waitForFrame((frame) => frame.includes("commands"))
+  await setup.mockInput.typeText("RECOVERED_INPUT")
+  await setup.waitForFrame((frame) => frame.includes("UnexpectedStatus: 500") && frame.includes("RECOVERED_INPUT"))
+  expect(forks).toBe(stage === "fork" ? 1 : 0)
+  setup.mockInput.pressKey("u", { ctrl: true })
+  await setup.waitForFrame((frame) => !frame.includes("RECOVERED_INPUT"))
+})
+
+test("empty continuation applies the startup model when it returns home", async () => {
+  const location = { directory }
+  await using setup = await createAppFixture({
+    args: { continue: true, model: "provider/startup" },
+    fetch: (url) => {
+      if (url.pathname === "/api/session/dummy") return json({})
+      if (/^\/api\/session\/dummy\/(message|inbox|permission)$/.test(url.pathname))
+        return json({ data: [], cursor: {} })
+      if (url.pathname === "/api/agent")
+        return json({ location, data: [agent("build", { providerID: "provider", id: "first" })] })
+      if (url.pathname === "/api/model")
+        return json({ location, data: [model("first"), { ...model("startup"), name: "Explicit Model" }] })
+    },
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("Explicit Model"))
+})
+
 test("home startup prompt is submitted exactly once", async () => {
   await using state = await tmpdir()
   const cwd = process.cwd()
@@ -931,15 +1095,32 @@ test("home startup prompt is submitted exactly once", async () => {
   let session: unknown
   await using setup = await createAppFixture({
     state: state.path,
-    args: { prompt: "HOME_READY" },
+    args: { prompt: "HOME_READY", model: "provider/startup" },
     config: { animations: false, tabs: { mode: "off" } },
     fetch: async (url, request) => {
       if (url.pathname === "/api/location") return json(location)
       if (url.pathname === "/api/fs/list") return json({ location, data: [] })
       if (url.pathname === "/api/agent")
-        return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+        return json({
+          location,
+          data: [
+            {
+              id: "build",
+              mode: "primary",
+              hidden: false,
+              permissions: [],
+              model: { providerID: "provider", id: "model" },
+            },
+          ],
+        })
       if (url.pathname === "/api/model")
-        return json({ location, data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }] })
+        return json({
+          location,
+          data: [
+            { id: "model", providerID: "provider", name: "Model", variants: [] },
+            { id: "startup", providerID: "provider", name: "Startup Model", variants: [] },
+          ],
+        })
       if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
       if (url.pathname === "/api/session" && request.method === "POST") {
         const input: unknown = await request.json()
@@ -975,6 +1156,7 @@ test("home startup prompt is submitted exactly once", async () => {
   await Bun.sleep(20)
   expect(bodies).toHaveLength(1)
   expect(bodies[0]).toMatchObject({ text: "HOME_READY" })
+  expect(session).toMatchObject({ model: { providerID: "provider", id: "startup" } })
 })
 
 test.each([false, true])("uses the resolved launch directory for new prompts (fallback: %s)", async (fallback) => {
@@ -1217,7 +1399,7 @@ test("new session inherits the active session model", async () => {
   await using setup = await createAppFixture({
     width: 80,
     height: 24,
-    args: { sessionID: "dummy" },
+    args: { sessionID: "dummy", model: "provider/home-model" },
     fetch: (url) => {
       if (url.pathname === "/api/fs/list") return json({ location, data: [] })
       if (url.pathname === "/api/location") return json(location)
@@ -1227,7 +1409,19 @@ test("new session inherits the active session model", async () => {
       if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
       if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
       if (url.pathname === "/api/agent")
-        return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+        return json({
+          location,
+          data: [
+            { id: "build", mode: "primary", hidden: false, permissions: [] },
+            {
+              id: "plan",
+              mode: "primary",
+              hidden: false,
+              permissions: [],
+              model: { providerID: "provider", id: "plan-model" },
+            },
+          ],
+        })
       if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
       if (url.pathname === "/api/model")
         return json({
@@ -1235,6 +1429,7 @@ test("new session inherits the active session model", async () => {
           data: [
             { id: "home-model", providerID: "provider", name: "Home Model", variants: [] },
             { id: "session-model", providerID: "provider", name: "Session Model", variants: [] },
+            { id: "plan-model", providerID: "provider", name: "Plan Model", variants: [] },
           ],
         })
     },
@@ -1247,6 +1442,11 @@ test("new session inherits the active session model", async () => {
   await setup.renderOnce()
   const frame = setup.captureCharFrame()
   expect(frame).toContain("Session Model")
+  setup.mockInput.pressTab({ shift: true })
+  await setup.waitForFrame((frame) => frame.includes("Plan Model"))
+  await setup.mockInput.typeText("/new")
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => frame.includes("Plan Model"))
 })
 
 test("keeps the prompt display stable while a new location catalog loads", async () => {

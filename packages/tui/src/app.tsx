@@ -668,12 +668,11 @@ function App() {
       if (args.model) {
         const { providerID, modelID } = Model.parse(args.model)
         if (!providerID || !modelID)
-          return toast.show({
+          toast.show({
             variant: "warning",
             message: `Invalid model format: ${args.model}`,
             duration: 3000,
           })
-        local.model.set({ providerID, modelID }, { recent: true })
       }
       if (args.sessionID && !args.fork) {
         route.navigate({
@@ -700,17 +699,22 @@ function App() {
       })
       .then((response) => {
         const match = response.data[0]?.id
-        if (!match) return
+        if (!match) {
+          route.navigate({ type: "home" })
+          return
+        }
         if (!args.fork) {
           route.navigate({ type: "session", sessionID: match, prompt: startupPrompt })
           return
         }
-        void client.api.session
+        return client.api.session
           .fork({ sessionID: match })
           .then((result) => route.navigate({ type: "session", sessionID: result.id, prompt: startupPrompt }))
-          .catch(toast.error)
       })
-      .catch(toast.error)
+      .catch((error) => {
+        toast.error(error)
+        route.navigate({ type: "home" })
+      })
   })
 
   // Handle --session with --fork once.
