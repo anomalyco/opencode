@@ -24,4 +24,15 @@ describe("pty protocol", () => {
     expect(frames[0].length).toBe(PtyProtocol.REPLAY_CHUNK)
     expect(frames.join("")).toBe(big)
   })
+
+  test("keeps both halves of a surrogate pair in one frame", () => {
+    // Frames travel as UTF-8, where a lone surrogate encodes as U+FFFD. Here the emoji straddles the
+    // first chunk boundary, because the prefix is one UTF-16 unit short of it.
+    const data = `${"a".repeat(PtyProtocol.REPLAY_CHUNK - 1)}😀${"b".repeat(8)}`
+    const decode = (value: string) => new TextDecoder().decode(new TextEncoder().encode(value))
+    const frames = PtyProtocol.chunks(data)
+    expect(frames.length).toBe(2)
+    expect(frames.join("")).toBe(data)
+    for (const frame of frames) expect(decode(frame)).toBe(frame)
+  })
 })
