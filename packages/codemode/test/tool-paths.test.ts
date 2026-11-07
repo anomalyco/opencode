@@ -75,6 +75,27 @@ describe("dotted tool names", () => {
       "tools.slack.admin.users.list",
     ])
   })
+
+  test("search scopes a `tools.` prefix even when a namespace is named tools", async () => {
+    const runtime = CodeMode.make({
+      tools: {
+        tools: { ping: echo("Ping the service", "pong") },
+        slack: { read: echo("Read Slack", "read") },
+      },
+    })
+
+    const prefixed = await value(runtime, `return search({ query: "", namespace: "tools.slack" })`)
+    expect((prefixed as { items: Array<{ path: string }> }).items.map((item) => item.path)).toEqual([
+      "tools.slack.read",
+    ])
+    // The literal namespace still wins when that is what the caller meant.
+    const literal = await value(runtime, `return search({ query: "", namespace: "tools.tools" })`)
+    expect((literal as { items: Array<{ path: string }> }).items.map((item) => item.path)).toEqual(["tools.tools.ping"])
+    const exact = await value(runtime, `return search({ query: "tools.tools.ping" })`)
+    expect((exact as { items: Array<{ path: string }> }).items.map((item) => item.path)).toEqual([
+      "tools.tools.ping",
+    ])
+  })
 })
 
 describe("callable namespaces", () => {
