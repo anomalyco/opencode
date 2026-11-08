@@ -6,7 +6,7 @@ New content does not touch the text buffer. The block keeps showing the previous
 lines, until the worker's highlight of the new content lands. A block's first content shows nothing until its first
 highlight lands. A result whose snapshot changed in the meantime is dropped, and the highlight runs again.
 
-Rust: opentui-rust's `Code` (`rust:crates/opentui/src/widget/code.rs`) highlights a view's first content, and any
+Rust: opentui-rust's `Code` (`opentui:packages/rust/crates/opentui/src/widget/code.rs`) highlights a view's first content, and any
 replaced text, before the frame paints. Once the view shows a highlight, appended text appears at once, unhighlighted
 after the old highlight. A worker thread then highlights the whole text, one highlight at a time per view. When the
 highlight lands, it styles the text it covered, and text appended since stays unhighlighted until the next highlight.
