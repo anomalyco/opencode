@@ -149,7 +149,7 @@
     /* Docs: the chevron beside "Docs" is 20px wide; its target reaches 24px further right, into the
        empty bar. */
     [data-component="docs-lockup"] [data-split] [data-slot="toggle"]::before {
-      inset-inline-end: -24px;
+      inset-inline-end: calc(-1 * var(--nav-chevron-reach));
     }
 
     [data-component="code-tabs"] [data-slot="tabs"] button::before {
