@@ -91,9 +91,7 @@ export const loadShellEnv = Effect.fn("ShellEnv.load")(function* (shell: string)
   }
 
   if (interactive.type === "Timeout") {
-    yield* Effect.logInfo(`[server] Interactive shell env probe timed out: ${shell}`)
-
-    return null
+    yield* Effect.logInfo(`[server] Interactive shell env probe timed out, trying login shell probe: ${shell}`)
   }
 
   const login = yield* probe(shell, "-l")
