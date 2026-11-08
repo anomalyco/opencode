@@ -236,13 +236,42 @@ body {
   box-sizing: border-box;
 }
 
+[data-page="stats"] {
+  /* opencode.ai's bar (packages/nav-menus): the logo where the site has it, the last item at its GitHub mark's edge. */
+  --stats-header-height: var(--nav-bar-height);
+}
+
 [data-page="stats"] [data-slot="header-bar"] {
   display: flex;
   align-items: center;
   gap: 16px;
-  min-height: 72px;
-  padding: 20px 20px 20px 24px;
-  overflow: hidden;
+  box-sizing: border-box;
+  height: var(--nav-bar-height);
+  padding: 0 var(--nav-end) 0 var(--nav-edge);
+  border-bottom: 1px solid var(--nav-rule);
+}
+
+[data-page="stats"] [data-component="product-lockup"] {
+  margin-inline-end: auto;
+}
+
+[data-page="stats"] [data-slot="github-mark"] {
+  --github-ink: var(--stats-text);
+  --github-page: var(--stats-bg);
+  --github-focus: var(--stats-accent);
+}
+
+/* Phones: the rule is drawn inside the 56px bar, as opencode.ai's top bar does, and the menu button's centre is where
+   the site's is (its 32px box 6px further in than the site's 44px one). */
+@media (max-width: 60rem) {
+  [data-page="stats"] [data-slot="header-bar"] {
+    border-bottom: 0;
+    box-shadow: inset 0 -1px 0 var(--nav-rule);
+  }
+
+  [data-page="stats"] [data-slot="menu-button"] {
+    margin-inline-end: 6px;
+  }
 }
 
 [data-page="stats"] [data-component="top"] a {
@@ -251,22 +280,6 @@ body {
 
 [data-page="stats"] [data-component="top"] a:hover {
   text-decoration: none;
-}
-
-[data-page="stats"] [data-slot="brand"] {
-  flex: 0 0 auto;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  margin-right: auto;
-  color: var(--stats-text);
-}
-
-[data-page="stats"] [data-slot="stats-wordmark"] {
-  display: block;
-  flex-shrink: 0;
-  width: 66px;
-  height: 20px;
 }
 
 [data-page="stats"] [data-component="section-nav"] {
@@ -355,23 +368,6 @@ body {
   white-space: nowrap;
 }
 
-[data-page="stats"] [data-slot="header-button"][data-variant="neutral"] {
-  display: none;
-  gap: 6px;
-  color: #161616;
-  background: #ffffff;
-  box-shadow:
-    0 0 0 0 #00000024,
-    0 0 0 0.5px #00000024,
-    0 1px 1.5px 0 #0000001a;
-}
-
-[data-page="stats"] [data-slot="header-button"][data-variant="neutral"] span {
-  color: #5c5c5c;
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
-}
-
 [data-page="stats"] [data-slot="header-button"][data-variant="contrast"] {
   gap: 8px;
   color: #ffffff;
@@ -399,15 +395,14 @@ body {
 [data-page="stats"] [data-slot="header-button"]:focus-visible,
 [data-page="stats"] [data-slot="menu-button"]:focus-visible,
 [data-page="stats"] [data-component="section-nav"] a:focus-visible,
-[data-page="stats"] [data-slot="mobile-menu-item"]:focus-visible,
-[data-page="stats"] [data-slot="brand"]:focus-visible {
+[data-page="stats"] [data-slot="mobile-menu-item"]:focus-visible {
   outline: 2px solid var(--stats-accent);
   outline-offset: 2px;
 }
 
 [data-page="stats"] [data-slot="mobile-menu"] {
   position: fixed;
-  top: 72px;
+  top: var(--stats-header-height);
   right: 0;
   bottom: 0;
   left: 0;
@@ -6406,7 +6401,7 @@ body {
 
 [data-page="stats"] [data-component="compare-detail-heading-scroll"] {
   position: sticky;
-  top: 72px;
+  top: var(--stats-header-height);
   z-index: 9;
   overflow-x: auto;
   overscroll-behavior-x: none;
@@ -7409,11 +7404,7 @@ body {
   background: #ffffff0d;
 }
 
-[data-page="stats"][data-theme="dark"] [data-slot="header-button"][data-variant="neutral"],
 [data-page="stats"][data-theme="dark"] [data-slot="menu-button"],
-:root[data-stats-theme="dark"]
-  [data-page="stats"]:not([data-theme="light"])
-  [data-slot="header-button"][data-variant="neutral"],
 :root[data-stats-theme="dark"] [data-page="stats"]:not([data-theme="light"]) [data-slot="menu-button"] {
   color: #fafafa;
   background: #ffffff0f;
@@ -7421,14 +7412,6 @@ body {
     0 -0.5px 0 0 #ffffff33,
     0 0 0 0.5px #ffffff33,
     0 1px 2px 0 #00000066;
-}
-
-[data-page="stats"][data-theme="dark"] [data-slot="header-button"][data-variant="neutral"] span,
-:root[data-stats-theme="dark"]
-  [data-page="stats"]:not([data-theme="light"])
-  [data-slot="header-button"][data-variant="neutral"]
-  span {
-  color: #aeaeae;
 }
 
 [data-page="stats"][data-theme="dark"] [data-slot="header-button"][data-variant="contrast"],
@@ -7555,9 +7538,6 @@ body {
     opacity: 0.78;
   }
 
-  :root:not([data-stats-theme="light"])
-    [data-page="stats"]:not([data-theme="light"])
-    [data-slot="header-button"][data-variant="neutral"],
   :root:not([data-stats-theme="light"]) [data-page="stats"]:not([data-theme="light"]) [data-slot="menu-button"] {
     color: #fafafa;
     background: #ffffff0f;
@@ -7565,13 +7545,6 @@ body {
       0 -0.5px 0 0 #ffffff33,
       0 0 0 0.5px #ffffff33,
       0 1px 2px 0 #00000066;
-  }
-
-  :root:not([data-stats-theme="light"])
-    [data-page="stats"]:not([data-theme="light"])
-    [data-slot="header-button"][data-variant="neutral"]
-    span {
-    color: #aeaeae;
   }
 
   :root:not([data-stats-theme="light"])
@@ -7613,12 +7586,6 @@ body {
   background: var(--stats-bg);
 }
 
-@media (min-width: 48rem) {
-  [data-page="stats"] [data-slot="header-button"][data-variant="neutral"] {
-    display: inline-flex;
-  }
-}
-
 @media (min-width: 90rem) {
   [data-page="stats"] [data-slot="header-bar"] {
     display: grid;
@@ -7626,14 +7593,14 @@ body {
     gap: 32px;
   }
 
-  [data-page="stats"] [data-slot="brand"],
+  [data-page="stats"] [data-component="product-lockup"],
   [data-page="stats"] [data-component="section-nav"],
   [data-page="stats"] [data-slot="header-actions"] {
     min-width: 0;
   }
 
-  [data-page="stats"] [data-slot="brand"] {
-    margin-right: 0;
+  [data-page="stats"] [data-component="product-lockup"] {
+    margin-inline-end: 0;
   }
 
   [data-page="stats"] [data-component="section-nav"] {

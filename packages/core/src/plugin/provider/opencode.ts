@@ -29,6 +29,7 @@ import { SharedCache } from "../../shared-cache.js"
 import { Skill } from "../../skill.js"
 import { SkillDiscovery } from "../../skill/discovery.js"
 import { WebSearch } from "../../websearch.js"
+import { OpencodeWatches } from "./opencode-watches.js"
 import { ProviderRefresh } from "./refresh.js"
 
 const clientID = "opencode-cli"
@@ -209,6 +210,7 @@ export const OpencodePlugin = define<
     // Status last reported for the active connection, so inference failures can name the fix.
     let reported: IntegrationConnection.Status | undefined
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
+    const watches = yield* OpencodeWatches.make(ctx, http)
 
     // Every project signed in to the same workspace shares one fetch, reused while it is younger than `maxAge`.
     const load = Effect.fn("OpencodePlugin.load")(function* (maxAge: Duration.Input = Duration.minutes(1)) {
@@ -292,13 +294,34 @@ export const OpencodePlugin = define<
           info: next.remote,
         })
       yield* integrate(document)
-      // Managed `integration.use: deny` makes config layer a policies-only copy, which withholds instructions and
-      // skills too. Config keeps the document it holds when handed a deep-equal one, so compare by content.
-      yield* syncInstructionsAndSkills(
-        next,
-        document !== undefined && (!config.integration || isDeepStrictEqual(integrated, document)),
-      )
+      // Managed `integration.use: deny` makes config layer a policies-only copy, which withholds instructions,
+      // skills and event watches too. Config keeps the document it holds when handed a deep-equal one, so compare by
+      // content.
+      const allowed = document !== undefined && (!config.integration || isDeepStrictEqual(integrated, document))
+      yield* syncInstructionsAndSkills(next, allowed)
+      yield* syncWatches(allowed && next.remote?.watches === true ? next.connection : undefined)
     })
+    // Watching starts when the Console's config says the workspace has event watches, and stops when it no longer does.
+    const syncWatches = Effect.fnUntraced(
+      function* (connection: ActiveConnection) {
+        const credential = connection && (yield* ctx.integration.connection.resolve(connection))
+        if (!connection || !credential || credential.type === "external") return yield* watches.sync(undefined)
+        yield* watches.sync({
+          key: workspaceKey(connection, credential),
+          server: yield* normalizeServer(ConsoleAccess.server(credential)),
+          headers: ctx.integration.connection
+            .resolve(connection)
+            .pipe(
+              Effect.flatMap((current) =>
+                current && current.type !== "external"
+                  ? Effect.succeed(ConsoleAccess.headers(current))
+                  : Effect.fail(new Error("OpenCode Console is not connected")),
+              ),
+            ),
+        })
+      },
+      Effect.catch((cause) => Effect.logWarning("failed to start Console event watches", { cause })),
+    )
     const syncInstructionsAndSkills = (next: typeof snapshot, allowed: boolean) => {
       const remote = allowed ? next.remote : undefined
       instructions = (remote?.instructions ?? []).map(
@@ -543,6 +566,7 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
                 url: yield* ssoUrl(ConsoleAccess.server(value), body.value.connectionId),
               })
           }
+          const watches = response.headers[OpencodeWatches.header] !== undefined
           const body = yield* HttpClientResponse.filterStatusOk(response).pipe(Effect.flatMap((ok) => ok.json))
           const remote = yield* Schema.decodeUnknownEffect(ConfigIntegration.Remote)(body)
           // Instructions and skills have their own endpoints. A 404 (none in the workspace) or a 403 other than SSO
@@ -571,9 +595,11 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
                   }),
                 ),
               )
-          const instructions = yield* list("/api/v2/instructions", ConsoleInstructions)
-          const skills = yield* list("/api/v2/skills", ConsoleSkills)
-          return { ...remote, instructions: instructions?.instructions ?? [], skills: skills?.skills ?? [] }
+          const [instructions, skills] = yield* Effect.all(
+            [list("/api/v2/instructions", ConsoleInstructions), list("/api/v2/skills", ConsoleSkills)],
+            { concurrency: 2 },
+          )
+          return { ...remote, instructions: instructions?.instructions ?? [], skills: skills?.skills ?? [], watches }
         }),
       ),
       Effect.scoped,

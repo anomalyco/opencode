@@ -5,6 +5,8 @@
 import { Funnel } from "../lib/funnel"
 import { downloadOf, surfaceOf, targetOf } from "../lib/funnel-config"
 import { base } from "./config"
+import { closeNavMenus, installNavMenus } from "@opencode/nav-menus"
+import { fanMotion } from "../component/site/fan-motion"
 
 // The page reports to the Console's funnel like the site's (lib/funnel.ts). The docs are English, at the host's root
 // like the site; their config is built in, as a chunk would bring Vite's preload helper with it.
@@ -160,6 +162,22 @@ phone.addEventListener("change", () => {
   closeLockup()
 })
 
+// The logo menu and the product menu (on DOCS), shared with the site and the other OpenCode sites (packages/nav-menus).
+// Opening one closes the lockup's own menus.
+installNavMenus({ link: (path) => path })
+on("opencode-nav-menu-open" as keyof DocumentEventMap, () => closeLockup())
+
+// The sections menu and its V2/V1 flyout come in as one panel with the nav menus' motion (packages/nav-menus).
+// Reduced motion shows them at once.
+function enter(menu: HTMLElement) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return
+  menu.animate([{ transform: fanMotion.start(0) }, { transform: fanMotion.rest }], {
+    duration: 450,
+    easing: fanMotion.spring,
+  })
+  menu.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: "ease-out" })
+}
+
 // The docs lockup (component/site/docs-lockup.tsx): the chevron opens the sections menu, where "Docs"
 // has its versions in a flyout beside it, or nested under it on phones and touch screens.
 let lockup: HTMLElement | undefined
@@ -175,6 +193,7 @@ const rows = (root: HTMLElement) =>
 
 function openLockup(root: HTMLElement, focus?: "first" | "last" | "current") {
   closeLockup()
+  closeNavMenus()
   lockup = root
   const menu = menuOf(root)
   const word = $("[data-slot=word]", root)!
@@ -184,7 +203,8 @@ function openLockup(root: HTMLElement, focus?: "first" | "last" | "current") {
     ? "nested"
     : "flyout"
   menu.hidden = false
-  $$("[aria-haspopup=menu]:not([role=menuitem])", root).forEach((button) =>
+  enter(menu)
+  $$("[aria-haspopup=menu]:not([role=menuitem], [data-nav-product])", root).forEach((button) =>
     button.setAttribute("aria-expanded", "true"),
   )
   const items = rows(root)
@@ -203,7 +223,7 @@ function closeLockup(refocus?: boolean) {
   lockup = undefined
   menuOf(root).hidden = true
   toggleSub(root, false)
-  $$("[aria-haspopup=menu]:not([role=menuitem])", root).forEach((button) =>
+  $$("[aria-haspopup=menu]:not([role=menuitem], [data-nav-product])", root).forEach((button) =>
     button.setAttribute("aria-expanded", "false"),
   )
   if (refocus) $("[data-slot=toggle]", root)?.focus()
@@ -213,8 +233,11 @@ function toggleSub(root: HTMLElement, open: boolean, focus?: boolean) {
   clearTimeout(subTimer)
   const parent = $("[data-slot=parent]", root)
   if (!parent) return
+  const opening = open && !parent.hasAttribute("data-open")
   parent.toggleAttribute("data-open", open)
-  $("[data-slot=submenu]", parent)!.hidden = !open
+  const submenu = $("[data-slot=submenu]", parent)!
+  submenu.hidden = !open
+  if (opening && menuOf(root).dataset.submenu === "flyout") enter(submenu)
   $$("[aria-expanded]", parent).forEach((item) => item.setAttribute("aria-expanded", String(open)))
   if (open && focus)
     ($('[aria-current="page"]', $("[data-slot=submenu]", parent)!) ?? $("[data-slot=submenu] a", parent))?.focus()

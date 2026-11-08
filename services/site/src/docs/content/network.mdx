@@ -72,6 +72,26 @@ opencode service set env NODE_EXTRA_CA_CERTS /etc/company/ca.pem
 opencode service start
 ```
 
+## Antivirus and HTTPS inspection
+
+Antivirus "HTTPS scanning" or "encrypted connection scanning" (Kaspersky, Avast, ESET and others) and corporate
+SSL-inspection proxies replace the server's certificate with their own. OpenCode rejects it and requests fail with
+errors such as:
+
+```text
+self signed certificate in certificate chain
+SELF_SIGNED_CERT_IN_CHAIN
+CERT_NOT_YET_VALID
+CERT_SIGNATURE_FAILURE
+```
+
+Fix it in one of two ways:
+
+- Exclude `opencode.ai` and `*.opencode.ai` from HTTPS scanning in the antivirus settings. Add your provider's API host
+  too, such as `api.anthropic.com`, if you connect to a provider directly.
+- Export the inspection certificate authority as a PEM file and trust it with `NODE_EXTRA_CA_CERTS`, as shown in
+  [Certificates](#certificates).
+
 ## Foreground
 
 `--standalone` and `serve` use the environment of their own process. `opencode service set env` does not configure these
