@@ -126,15 +126,15 @@ export function SearchIcon() {
   return (
     <svg data-slot="search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <circle
-        cx="7.58"
-        cy="7.58"
+        cx="7.43"
+        cy="7.43"
         r="5.06"
         stroke="currentColor"
         stroke-width="1.5"
         vector-effect="non-scaling-stroke"
       />
       <path
-        d="M11.15 11.15L13.48 13.48"
+        d="M11 11L13.33 13.33"
         stroke="currentColor"
         stroke-width="1.5"
         stroke-linecap="square"

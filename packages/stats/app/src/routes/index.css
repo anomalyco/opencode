@@ -404,14 +404,14 @@ body {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 
-  margin-inline-start: 7px;
+  margin-inline-start: 6px;
 
-  /* A 44px target, reaching 5px towards the GitHub mark's and 7px past the lines' end. */
+  /* A 44px target, reaching 4px towards the GitHub mark's (they meet) and 8px past the lines' end. */
   &::after {
     content: "";
     position: absolute;
     inset-block: -8px;
-    inset-inline: -5px -7px;
+    inset-inline: -4px -8px;
   }
 
   @media (max-width: 60rem) {
