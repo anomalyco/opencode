@@ -114,6 +114,16 @@ split-debuginfo = "unpacked"
 [profile.dev.package."*"]
 debug = "line-tables-only"
 
+# The idna_adapter stub debug-asserts that an ASCII host character is lowercase, and `idna` instantiates it.
+# tower-http resolves a redirect's `Location` with `Url::join` before reqwest consults its redirect policy, so
+# with `Policy::none()` a `Location` such as `https://B%C3%BCcher.example` still reaches the stub
+# (A10-ascii-hosts). Every other parse goes through `js::parse_url`/`join_url` first.
+[profile.dev.package.idna]
+debug-assertions = false
+
+[profile.dev.package.idna_adapter]
+debug-assertions = false
+
 [profile.release]
 debug = "line-tables-only"
 

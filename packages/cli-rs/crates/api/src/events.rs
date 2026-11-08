@@ -1346,15 +1346,14 @@ mod tests {
         impl Source<serde_json::Value> for Live {
             type Error = crate::sse::Error;
             fn open(&mut self, activity: Activity) -> BoxStream<'static, Result<serde_json::Value, Self::Error>> {
-                let request = self.client.get(&self.url).basic_auth("opencode", Some(&self.password)).send();
+                let request =
+                    crate::transport::fetch(self.client.get(&self.url).basic_auth("opencode", Some(&self.password)));
                 futures_util::stream::once(async move {
-                    match request.await.and_then(reqwest::Response::error_for_status) {
+                    let response = request.await.map_err(|error| error.to_string());
+                    match response.and_then(|response| response.error_for_status().map_err(|error| error.to_string())) {
                         Ok(response) => crate::sse::events(response.bytes_stream(), move || activity()).boxed(),
                         Err(error) => {
-                            futures_util::stream::once(
-                                async move { Err(crate::sse::Error::Transport(error.to_string())) },
-                            )
-                            .boxed()
+                            futures_util::stream::once(async move { Err(crate::sse::Error::Transport(error)) }).boxed()
                         }
                     }
                 })

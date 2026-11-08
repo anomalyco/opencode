@@ -248,7 +248,7 @@ async fn read(file: &str) -> error::Result<String> {
     if let Err(error @ opencode_api::js::UrlError::NonAsciiHost(_)) = opencode_api::js::parse_url(file) {
         return Err(error.into());
     }
-    let response = opencode_api::transport::http_client().get(file).send().await?;
+    let response = opencode_api::transport::fetch(opencode_api::transport::http_client().get(file)).await?;
     if !response.status().is_success() {
         bail!("Failed to fetch session data: {}", response.status().canonical_reason().unwrap_or_default());
     }
