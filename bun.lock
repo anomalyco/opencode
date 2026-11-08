@@ -115,7 +115,7 @@
       "dependencies": {
         "@Mackery6969/client": "workspace:*",
         "@Mackery6969/plugin": "workspace:*",
-        "@Mackery6969/pty": "0.4.0",
+        "@Mackery6969/pty": "file:../process-daemon/npm",
         "@Mackery6969/schema": "workspace:*",
         "@Mackery6969/server": "workspace:*",
         "@Mackery6969/tui": "workspace:*",
@@ -217,7 +217,7 @@
         "@Mackery6969/codemode": "workspace:*",
         "@Mackery6969/plugin": "workspace:*",
         "@Mackery6969/plugin-browser": "workspace:*",
-        "@Mackery6969/pty": "0.4.0",
+        "@Mackery6969/pty": "file:../process-daemon/npm",
         "@Mackery6969/schema": "workspace:*",
         "@Mackery6969/util": "workspace:*",
         "@ai-sdk/provider": "3.0.19",
@@ -449,6 +449,17 @@
         "@typescript/native": "catalog:",
       },
     },
+    "packages/nav-menus": {
+      "name": "@Mackery6969/nav-menus",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@happy-dom/global-registrator": "20.0.11",
+        "@types/bun": "catalog:",
+        "@typescript/native": "catalog:",
+        "happy-dom": "21.0.4",
+        "typescript": "catalog:",
+      },
+    },
     "packages/patchmark": {
       "name": "@Mackery6969/patchmark",
       "version": "2.2.5",
@@ -614,7 +625,7 @@
       "devDependencies": {
         "@Mackery6969/client": "workspace:*",
         "@Mackery6969/plugin": "workspace:*",
-        "@Mackery6969/pty": "0.4.0",
+        "@Mackery6969/pty": "file:../process-daemon/npm",
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
         "@typescript/native": "catalog:",
@@ -679,7 +690,6 @@
       "dependencies": {
         "@Mackery6969/stats-core": "workspace:*",
         "@Mackery6969/ui": "workspace:*",
-        "@ibm/plex": "6.4.1",
         "@kobalte/core": "catalog:",
         "@solidjs/meta": "catalog:",
         "@solidjs/router": "catalog:",
@@ -1035,7 +1045,7 @@
     "@effect/platform-node-shared": "4.1.0",
     "@effect/sql-sqlite-bun": "4.1.0",
     "@effect/sql-sqlite-node": "4.1.0",
-    "@hona/strobe": "0.16.0",
+    "@hona/strobe": "0.19.0",
     "@kobalte/core": "0.13.13",
     "@lydell/node-pty": "1.2.0-beta.12",
     "@npmcli/arborist": "9.4.0",
@@ -1123,6 +1133,8 @@
 
     "@Mackery6969/merman": ["@Mackery6969/merman@workspace:packages/merman"],
 
+    "@Mackery6969/nav-menus": ["@Mackery6969/nav-menus@workspace:packages/nav-menus"],
+
     "@Mackery6969/patchmark": ["@Mackery6969/patchmark@workspace:packages/patchmark"],
 
     "@Mackery6969/plugin": ["@Mackery6969/plugin@workspace:packages/plugin"],
@@ -1132,24 +1144,6 @@
     "@Mackery6969/plugin-figma": ["@Mackery6969/plugin-figma@workspace:packages/plugins/figma"],
 
     "@Mackery6969/protocol": ["@Mackery6969/protocol@workspace:packages/protocol"],
-
-    "@Mackery6969/pty": ["@Mackery6969/pty@0.4.0", "https://npm.pkg.github.com/@Mackery6969/pty/-/pty-0.4.0.tgz", { "optionalDependencies": { "@Mackery6969/pty-darwin-arm64": "0.4.0", "@Mackery6969/pty-darwin-x64": "0.4.0", "@Mackery6969/pty-linux-arm64-gnu": "0.4.0", "@Mackery6969/pty-linux-arm64-musl": "0.4.0", "@Mackery6969/pty-linux-x64-gnu": "0.4.0", "@Mackery6969/pty-linux-x64-musl": "0.4.0", "@Mackery6969/pty-win32-arm64": "0.4.0", "@Mackery6969/pty-win32-x64": "0.4.0" }, "bin": { "opencode-pty": "bin/opencode-pty.js" } }, "sha512-v7cLT71yfoNM5FlyPGwMjeqIJbr0DneGq4NpoOY5iAKpsevzOIcsI2E0fiDWajuk5xAFRxwyv4CpGqow7cu79Q=="],
-
-    "@Mackery6969/pty-darwin-arm64": ["@Mackery6969/pty-darwin-arm64@0.4.0", "https://npm.pkg.github.com/@Mackery6969/pty-darwin-arm64/-/pty-darwin-arm64-0.4.0.tgz", { "os": "darwin", "cpu": "arm64" }, "sha512-XzZZJcQeR42IRpxHbbPEo4AK7jdp9SpgPx234DZ6uLnl6yclXcixH70G2U88EhKtGAMyCPIXdBfvQf4OQTDvbQ=="],
-
-    "@Mackery6969/pty-darwin-x64": ["@Mackery6969/pty-darwin-x64@0.4.0", "https://npm.pkg.github.com/@Mackery6969/pty-darwin-x64/-/pty-darwin-x64-0.4.0.tgz", { "os": "darwin", "cpu": "x64" }, "sha512-NvQfygGcsGmDCIUJ/VHLcS6SduC93Y/qP2hrHjtBpiL2sSQyeCDcifNhLvqY/wxGFNNZ4GeZwwZqe7rMEuBJbQ=="],
-
-    "@Mackery6969/pty-linux-arm64-gnu": ["@Mackery6969/pty-linux-arm64-gnu@0.4.0", "https://npm.pkg.github.com/@Mackery6969/pty-linux-arm64-gnu/-/pty-linux-arm64-gnu-0.4.0.tgz", { "os": "linux", "cpu": "arm64", "libc": "glibc" }, "sha512-VZXkYD+CT+zdodmTnKn9/VlmswksLPBLJryeBsG4IXUFXTsATr7+PVygJk96FxCh5nq68H3a/UJgyiIUMl1XCQ=="],
-
-    "@Mackery6969/pty-linux-arm64-musl": ["@Mackery6969/pty-linux-arm64-musl@0.4.0", "https://npm.pkg.github.com/@Mackery6969/pty-linux-arm64-musl/-/pty-linux-arm64-musl-0.4.0.tgz", { "os": "linux", "cpu": "arm64", "libc": "musl" }, "sha512-hCx25Hn9sALdnkx2Y4aPGVw3glTbX61XRiJs+XETPPIO9QTaav4OS4k2JR2uHC6/u161xKdN82iJ+OYfwcGUSg=="],
-
-    "@Mackery6969/pty-linux-x64-gnu": ["@Mackery6969/pty-linux-x64-gnu@0.4.0", "https://npm.pkg.github.com/@Mackery6969/pty-linux-x64-gnu/-/pty-linux-x64-gnu-0.4.0.tgz", { "os": "linux", "cpu": "x64", "libc": "glibc" }, "sha512-Xal/d0+xp6XE4iCGUAw4JTQ4uf5l8V0EIbeKq+e03cHJewOMKZk4fooQjxpZvQIToBHRtnCJAmd+EEhVxXiDDw=="],
-
-    "@Mackery6969/pty-linux-x64-musl": ["@Mackery6969/pty-linux-x64-musl@0.4.0", "https://npm.pkg.github.com/@Mackery6969/pty-linux-x64-musl/-/pty-linux-x64-musl-0.4.0.tgz", { "os": "linux", "cpu": "x64", "libc": "musl" }, "sha512-dBVtKZoVKAN6/E+65GrJksgRKzPkPHUjWZBzf3mRANXt2adpdbV+/M1AMfPCZSju2mN1j9rNu8MCrxwr+ugEig=="],
-
-    "@Mackery6969/pty-win32-arm64": ["@Mackery6969/pty-win32-arm64@0.4.0", "https://npm.pkg.github.com/@Mackery6969/pty-win32-arm64/-/pty-win32-arm64-0.4.0.tgz", { "os": "win32", "cpu": "arm64" }, "sha512-IKJMUnS2aluWqRj13enMWomYtwbXq8rStcf/mUbxBoAGTDMtWR/ZrRmKb2ptR7KUqDjdSEa+8C8rczS7uGFl9g=="],
-
-    "@Mackery6969/pty-win32-x64": ["@Mackery6969/pty-win32-x64@0.4.0", "https://npm.pkg.github.com/@Mackery6969/pty-win32-x64/-/pty-win32-x64-0.4.0.tgz", { "os": "win32", "cpu": "x64" }, "sha512-P1QJLUX918/y8he8VEBSYoiN5bYhUnJtEaEpiE5fxoYsDP9nqAHXqIrGxTNNnda5jOBcCalxxy0WhL8qgeKOqQ=="],
 
     "@Mackery6969/schema": ["@Mackery6969/schema@workspace:packages/schema"],
 
@@ -1775,17 +1769,17 @@
 
     "@happy-dom/global-registrator": ["@happy-dom/global-registrator@20.0.11", "", { "dependencies": { "@types/node": "^20.0.0", "happy-dom": "^20.0.11" } }, "sha512-GqNqiShBT/lzkHTMC/slKBrvN0DsD4Di8ssBk4aDaVgEn+2WMzE6DXxq701ndSXj7/0cJ8mNT71pM7Bnrr6JRw=="],
 
-    "@hona/strobe": ["@hona/strobe@0.16.0", "", { "optionalDependencies": { "@hona/strobe-darwin-arm64": "0.16.0", "@hona/strobe-darwin-x64": "0.16.0", "@hona/strobe-linux-arm64": "0.16.0", "@hona/strobe-linux-x64": "0.16.0", "@hona/strobe-win32-x64": "0.16.0" }, "bin": { "strobe": "bin/strobe.js" } }, "sha512-G2EoecbtwiWPzGiPs+kj2r0FAfnOl7YIUhL3e3Cmn9cKQ4MFJ9oziMV3WL9MdB9xbSQDvBsxM2phRORQ8GzkGg=="],
+    "@hona/strobe": ["@hona/strobe@0.19.0", "", { "optionalDependencies": { "@hona/strobe-darwin-arm64": "0.19.0", "@hona/strobe-darwin-x64": "0.19.0", "@hona/strobe-linux-arm64": "0.19.0", "@hona/strobe-linux-x64": "0.19.0", "@hona/strobe-win32-x64": "0.19.0" }, "bin": { "strobe": "bin/strobe.js" } }, "sha512-8SdOid4mXn3E088sD1SSYJg5cFQUFiP7iMbpNz8KWOe4z6dCVHn/ygrgMGswEV+M0vTz+ODvGyxC4GG3vXM0GA=="],
 
-    "@hona/strobe-darwin-arm64": ["@hona/strobe-darwin-arm64@0.16.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-yYG5YFuBmiIhbGAgInNZ9Z7DwDjhBtLcpWItSHk28fpRe1QcBZHdyHtgMCSYiuXUadOAWCOzD9e3MFUjA81yPA=="],
+    "@hona/strobe-darwin-arm64": ["@hona/strobe-darwin-arm64@0.19.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-4AMRUel+uHkeuTzKvV5SRBeuwkHRPFKerq0Vxh6icEPdUbulBvhztdO6U1IEDZnA1FjK87s2ELk5ZmqxMFTDyg=="],
 
-    "@hona/strobe-darwin-x64": ["@hona/strobe-darwin-x64@0.16.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-/idrUVcg2OnSrFWs9hQN5P3lZYhrlEKoea5d6evVKWSP0TQ7URdRoeQbF/A9xv8wbj0oAxx+FYao4lhi4ECrtQ=="],
+    "@hona/strobe-darwin-x64": ["@hona/strobe-darwin-x64@0.19.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-hjaoWLWS96aTE5iowBbOExNM3AI/ZdX4bl8EArW1ToQW+KvzQhJIGQclUaDeTQujru81jgFnC7JeOlWA/7UQuA=="],
 
-    "@hona/strobe-linux-arm64": ["@hona/strobe-linux-arm64@0.16.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-XvgYQ+AKjTHrRG3vyxJQSznqVY/jtFL837EW+MkLGQFLDLpZgf80CTz9QfxnFFVFSWA8Ttqrvhu3fvrdZo8EEA=="],
+    "@hona/strobe-linux-arm64": ["@hona/strobe-linux-arm64@0.19.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-HnYjBnZImlPjye1Tx7lyvR16pYjZ4TYXHz+5ADnxXj82I9SNXvYBIpb70Mk0m/B5Xqms4QatWU+mO4ZTHfA8lw=="],
 
-    "@hona/strobe-linux-x64": ["@hona/strobe-linux-x64@0.16.0", "", { "os": "linux", "cpu": "x64" }, "sha512-d5SAEc1KT/s5UQT+xrR1IONGeVbaPza0NjvhEdCIurYri/gLYExWIAsJflUefcJh5z74MRKl5vBnn71JtNIAvg=="],
+    "@hona/strobe-linux-x64": ["@hona/strobe-linux-x64@0.19.0", "", { "os": "linux", "cpu": "x64" }, "sha512-TxKqzbm735jOvY7PHXWEHuFXx+zt0lMVtZbC4q6WfBnDgy9y3jYNajlGPXFeN3rwhk38gBZ5wbWnmOVdx1SI8g=="],
 
-    "@hona/strobe-win32-x64": ["@hona/strobe-win32-x64@0.16.0", "", { "os": "win32", "cpu": "x64" }, "sha512-xXMFlWa4zUR/jsnlqc3ZW0P0mfXqjEp2+sqw7JyxLXtTJnjt+M+FvmlnjZUwKpnN4AZ1+e2CutNKNJg+QC+UgA=="],
+    "@hona/strobe-win32-x64": ["@hona/strobe-win32-x64@0.19.0", "", { "os": "win32", "cpu": "x64" }, "sha512-2PAEDhOs439I66wHn3Cfx2LDsOMTNZA9aTWTzvxtbFiTG5oHYbdGFENOFe7Q70ylzgL3qu13KLWWGg8wIZamSw=="],
 
     "@hono/node-server": ["@hono/node-server@2.1.5", "", { "peerDependencies": { "hono": "^4 || ^5.0.0-0" } }, "sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q=="],
 
@@ -4867,9 +4861,13 @@
 
     "zwitch": ["zwitch@2.0.4", "", {}, "sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A=="],
 
+    "@Mackery6969/cli/@Mackery6969/pty": ["@Mackery6969/pty@file:packages/process-daemon/npm", { "optionalDependencies": { "@Mackery6969/pty-darwin-arm64": "0.5.0", "@Mackery6969/pty-darwin-x64": "0.5.0", "@Mackery6969/pty-linux-arm64-gnu": "0.5.0", "@Mackery6969/pty-linux-arm64-musl": "0.5.0", "@Mackery6969/pty-linux-x64-gnu": "0.5.0", "@Mackery6969/pty-linux-x64-musl": "0.5.0", "@Mackery6969/pty-win32-arm64": "0.5.0", "@Mackery6969/pty-win32-x64": "0.5.0" }, "bin": { "opencode-pty": "./bin/opencode-pty.js" } }],
+
     "@Mackery6969/cli/vite": ["vite@7.3.7", "", { "dependencies": { "esbuild": "^0.27.0 || ^0.28.0", "fdir": "^6.5.0", "picomatch": "^4.0.3", "postcss": "^8.5.6", "rollup": "^4.43.0", "tinyglobby": "^0.2.15" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^20.19.0 || >=22.12.0", "jiti": ">=1.21.0", "less": "^4.0.0", "lightningcss": "^1.21.0", "sass": "^1.70.0", "sass-embedded": "^1.70.0", "stylus": ">=0.54.8", "sugarss": "^5.0.0", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "jiti", "less", "lightningcss", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-AHEzTORMbi7/7aXp7w7KZ5+DCUdSeLsJz0grY8xHpc9DHdYb0vQu6DqJfm2tOw3gDExNgPgnJTXxM6syYFHaCA=="],
 
     "@Mackery6969/cli/vite-plugin-solid": ["vite-plugin-solid@2.11.10", "", { "dependencies": { "@babel/core": "^7.23.3", "@types/babel__core": "^7.20.4", "babel-preset-solid": "^1.8.4", "merge-anything": "^5.1.7", "solid-refresh": "^0.6.3", "vitefu": "^1.0.4" }, "peerDependencies": { "@testing-library/jest-dom": "^5.16.6 || ^5.17.0 || ^6.*", "solid-js": "^1.7.2", "vite": "^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0" }, "optionalPeers": ["@testing-library/jest-dom"] }, "sha512-Yr1dQybmtDtDAHkii6hXuc1oVH9CPcS/Zb2jN/P36qqcrkNnVPsMTzQ06jyzFPFjj3U1IYKMVt/9ZqcwGCEbjw=="],
+
+    "@Mackery6969/core/@Mackery6969/pty": ["@Mackery6969/pty@file:packages/process-daemon/npm", { "optionalDependencies": { "@Mackery6969/pty-darwin-arm64": "0.5.0", "@Mackery6969/pty-darwin-x64": "0.5.0", "@Mackery6969/pty-linux-arm64-gnu": "0.5.0", "@Mackery6969/pty-linux-arm64-musl": "0.5.0", "@Mackery6969/pty-linux-x64-gnu": "0.5.0", "@Mackery6969/pty-linux-x64-musl": "0.5.0", "@Mackery6969/pty-win32-arm64": "0.5.0", "@Mackery6969/pty-win32-x64": "0.5.0" }, "bin": { "opencode-pty": "./bin/opencode-pty.js" } }],
 
     "@Mackery6969/gui-plugins/vite": ["vite@7.3.7", "", { "dependencies": { "esbuild": "^0.27.0 || ^0.28.0", "fdir": "^6.5.0", "picomatch": "^4.0.3", "postcss": "^8.5.6", "rollup": "^4.43.0", "tinyglobby": "^0.2.15" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^20.19.0 || >=22.12.0", "jiti": ">=1.21.0", "less": "^4.0.0", "lightningcss": "^1.21.0", "sass": "^1.70.0", "sass-embedded": "^1.70.0", "stylus": ">=0.54.8", "sugarss": "^5.0.0", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "jiti", "less", "lightningcss", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-AHEzTORMbi7/7aXp7w7KZ5+DCUdSeLsJz0grY8xHpc9DHdYb0vQu6DqJfm2tOw3gDExNgPgnJTXxM6syYFHaCA=="],
 
@@ -4878,6 +4876,8 @@
     "@Mackery6969/plugin/vite": ["vite@7.3.7", "", { "dependencies": { "esbuild": "^0.27.0 || ^0.28.0", "fdir": "^6.5.0", "picomatch": "^4.0.3", "postcss": "^8.5.6", "rollup": "^4.43.0", "tinyglobby": "^0.2.15" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^20.19.0 || >=22.12.0", "jiti": ">=1.21.0", "less": "^4.0.0", "lightningcss": "^1.21.0", "sass": "^1.70.0", "sass-embedded": "^1.70.0", "stylus": ">=0.54.8", "sugarss": "^5.0.0", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "jiti", "less", "lightningcss", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-AHEzTORMbi7/7aXp7w7KZ5+DCUdSeLsJz0grY8xHpc9DHdYb0vQu6DqJfm2tOw3gDExNgPgnJTXxM6syYFHaCA=="],
 
     "@Mackery6969/plugin/vite-plugin-solid": ["vite-plugin-solid@2.11.10", "", { "dependencies": { "@babel/core": "^7.23.3", "@types/babel__core": "^7.20.4", "babel-preset-solid": "^1.8.4", "merge-anything": "^5.1.7", "solid-refresh": "^0.6.3", "vitefu": "^1.0.4" }, "peerDependencies": { "@testing-library/jest-dom": "^5.16.6 || ^5.17.0 || ^6.*", "solid-js": "^1.7.2", "vite": "^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0" }, "optionalPeers": ["@testing-library/jest-dom"] }, "sha512-Yr1dQybmtDtDAHkii6hXuc1oVH9CPcS/Zb2jN/P36qqcrkNnVPsMTzQ06jyzFPFjj3U1IYKMVt/9ZqcwGCEbjw=="],
+
+    "@Mackery6969/server/@Mackery6969/pty": ["@Mackery6969/pty@file:packages/process-daemon/npm", { "optionalDependencies": { "@Mackery6969/pty-darwin-arm64": "0.5.0", "@Mackery6969/pty-darwin-x64": "0.5.0", "@Mackery6969/pty-linux-arm64-gnu": "0.5.0", "@Mackery6969/pty-linux-arm64-musl": "0.5.0", "@Mackery6969/pty-linux-x64-gnu": "0.5.0", "@Mackery6969/pty-linux-x64-musl": "0.5.0", "@Mackery6969/pty-win32-arm64": "0.5.0", "@Mackery6969/pty-win32-x64": "0.5.0" }, "bin": { "opencode-pty": "./bin/opencode-pty.js" } }],
 
     "@Mackery6969/session-ui/vite": ["vite@7.3.7", "", { "dependencies": { "esbuild": "^0.27.0 || ^0.28.0", "fdir": "^6.5.0", "picomatch": "^4.0.3", "postcss": "^8.5.6", "rollup": "^4.43.0", "tinyglobby": "^0.2.15" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^20.19.0 || >=22.12.0", "jiti": ">=1.21.0", "less": "^4.0.0", "lightningcss": "^1.21.0", "sass": "^1.70.0", "sass-embedded": "^1.70.0", "stylus": ">=0.54.8", "sugarss": "^5.0.0", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "jiti", "less", "lightningcss", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-AHEzTORMbi7/7aXp7w7KZ5+DCUdSeLsJz0grY8xHpc9DHdYb0vQu6DqJfm2tOw3gDExNgPgnJTXxM6syYFHaCA=="],
 

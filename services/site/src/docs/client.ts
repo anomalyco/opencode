@@ -5,7 +5,7 @@
 import { Funnel } from "../lib/funnel"
 import { downloadOf, surfaceOf, targetOf } from "../lib/funnel-config"
 import { base } from "./config"
-import { closeNavMenus, installNavMenus } from "@opencode/nav-menus"
+import { closeNavMenus, installNavMenus } from "@Mackery6969/nav-menus"
 import { fanMotion } from "../component/site/fan-motion"
 
 // The page reports to the Console's funnel like the site's (lib/funnel.ts). The docs are English, at the host's root

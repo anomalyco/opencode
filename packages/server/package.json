@@ -37,7 +37,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@Mackery6969/pty": "0.4.0",
+    "@Mackery6969/pty": "file:../process-daemon/npm",
     "@Mackery6969/client": "workspace:*",
     "@Mackery6969/plugin": "workspace:*",
     "@tsconfig/bun": "catalog:",

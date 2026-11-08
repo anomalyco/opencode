@@ -775,7 +775,7 @@ export function Site(props: {
     // Opening it closes the site's own menus. Its code (with the inlined brand files) loads after the page, so it stays
     // out of every page's first JavaScript (script/check-client-bundle.ts).
     let unmounted = false
-    void import("@opencode/nav-menus").then((module) => {
+    void import("@Mackery6969/nav-menus").then((module) => {
       if (unmounted) return
       const stop = module.installNavMenus({
         link: (path) => (["/", "/brand", "/press"].includes(path) ? language.route(path) : path),
