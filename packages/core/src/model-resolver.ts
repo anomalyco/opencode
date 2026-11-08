@@ -5,19 +5,18 @@ import {
   DecisionModel,
   DecisionModelCompatibility,
   DecisionModelSchema,
-  HttpOptions,
   ImageModel,
   ImageModelSchema,
   LanguageModel,
   ProviderConfigurationError,
   type ProviderPackage,
 } from "@opencode/ai/effect"
-import { Auth, mergeHttpOptions } from "@opencode/ai/route"
+import { Auth, mergeTransport } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
 import { Credential } from "./credential.js"
 import { Integration } from "./integration.js"
-import { Capabilities, ID, Info, Model, Ref, VariantID } from "./model.js"
+import { Capabilities, Compatibility, ID, Info, Model, Ref, VariantID } from "./model.js"
 import type { RuntimeInfo } from "./model.js"
 import { Npm } from "@opencode/util/npm"
 import { Provider } from "./provider.js"
@@ -245,23 +244,39 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   return yield* Effect.try({
     try: () => {
       const runtime = module.model(resolved.modelID ?? resolved.id, settings)
+      const timeouts = Provider.timeouts(configured)
       return LanguageModel.update(runtime, {
         provider: resolved.canonical ?? resolved.providerID,
+        capabilities: resolved.compatibility
+          ? capabilities(runtime.capabilities, resolved.compatibility)
+          : runtime.capabilities,
         compatibility: resolved.compatibility
-          ? Object.assign({}, runtime.compatibility, resolved.compatibility)
+          ? Object.assign({}, runtime.compatibility, Struct.omit(resolved.compatibility, CAPABILITY_KEYS))
           : runtime.compatibility,
-        // Timeouts and body encoding are transport policy, so they land on the route's HTTP defaults instead of package settings.
-        defaults: {
-          ...runtime.defaults,
-          http: mergeHttpOptions(
-            runtime.defaults?.http,
-            new HttpOptions({ ...Provider.timeouts(configured), encoding: Provider.encoding(configured) }),
-          ),
+        // Timeouts and body encoding are transport policy, so they land on the model's options instead of package settings.
+        options: {
+          ...runtime.options,
+          ...mergeTransport(runtime.options, {
+            timeout: { total: timeouts.timeout, headers: timeouts.headerTimeout, chunk: timeouts.chunkTimeout },
+            http: { encoding: Provider.encoding(configured) },
+          }),
         },
       })
     },
     catch: (cause) => constructionError(resolved, cause),
   })
+})
+
+// Config `compatibility` keys the AI package reads as model capabilities.
+const CAPABILITY_KEYS = ["supportsPromptCacheKey", "streamUsage", "supportsEffortUpdates"] as const
+
+const capabilities = (base: LanguageModel["capabilities"], compatibility: Compatibility) => ({
+  ...base,
+  ...("supportsPromptCacheKey" in compatibility ? { promptCacheKey: compatibility.supportsPromptCacheKey } : {}),
+  ...("streamUsage" in compatibility ? { streamUsage: compatibility.streamUsage } : {}),
+  ...("supportsEffortUpdates" in compatibility
+    ? { reasoning: { ...base?.reasoning, updates: compatibility.supportsEffortUpdates } }
+    : {}),
 })
 
 /** Settings and package loading shared by every model type: credentials, variables, canonical provider, overlays. */
@@ -365,7 +380,8 @@ function prepareProviderURL(
   const prepared = baseURL.replace(
     /\$\{([^}]+)\}/g,
     (placeholder, name: string) =>
-      (name === "AWS_REGION" && typeof settings.region === "string" ? settings.region : process.env[name]) ?? placeholder,
+      (name === "AWS_REGION" && typeof settings.region === "string" ? settings.region : process.env[name]) ??
+      placeholder,
   )
   const failure = unresolvedProviderVariables(model, prepared)
   return failure ? Effect.fail(failure) : Effect.succeed(prepared)

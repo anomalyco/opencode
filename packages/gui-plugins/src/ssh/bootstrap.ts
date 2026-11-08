@@ -79,7 +79,6 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
   development?: boolean
   env: NodeJS.ProcessEnv
   replace?: boolean
-  stage: (stage: "checking" | "downloading" | "uploading" | "starting") => Effect.Effect<void>
 }) {
   const run = (script: string) =>
     runSsh({
@@ -88,17 +87,13 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
       stdin: script,
     })
 
-  yield* input.stage("checking")
   const registered = parseRegistration(yield* run(discoverScript))
 
-  if (registered && (input.development || registered.version === input.version)) {
-    yield* input.stage("starting")
-
+  if (registered && (input.development || registered.version === input.version))
     return yield* Effect.try({
       try: () => connectionAddress(registered.url, registered.password),
       catch: SshFailure.from,
     })
-  }
 
   if (registered && !input.replace) return yield* Effect.fail(new SshFailure("version", registered.version))
   const destination = yield* Effect.try({ try: () => binaryPath(input.version), catch: SshFailure.from })
@@ -121,11 +116,9 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
       ?.split("=")[1]
 
     const url = yield* Effect.try({ try: () => RemoteCli.archiveUrl(target ?? "", version), catch: SshFailure.from })
-    yield* input.stage("downloading")
     yield* run(RemoteCli.installScript({ ...setup, source: { type: "download", url } })).pipe(
       Effect.catch(
         Effect.fnUntraced(function* (error) {
-          yield* input.stage("uploading")
           const http = yield* HttpClient.HttpClient
           const response = yield* http.get(url).pipe(Effect.mapError(SshFailure.from))
 
@@ -153,7 +146,6 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
     )
   }
 
-  yield* input.stage("starting")
   const registration = parseRegistration(yield* run(startScript(version, input.replace)))
 
   if (!registration) return yield* Effect.fail(new SshFailure("service"))

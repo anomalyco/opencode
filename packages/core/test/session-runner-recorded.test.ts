@@ -61,9 +61,10 @@ const model = OpenAIChat.route
   .with({
     endpoint: { baseURL: "https://api.openai.com/v1" },
     auth: Auth.bearer(process.env.OPENAI_API_KEY ?? "fixture"),
-    generation: { maxTokens: 20, temperature: 0 },
+    maxTokens: 20,
+    temperature: 0,
   })
-  .model({ id: "gpt-4o-mini", compatibility: { supportsPromptCacheKey: true } })
+  .model({ id: "gpt-4o-mini", capabilities: { promptCacheKey: true } })
 const models = Layer.mock(SessionRunnerModel.Service)({
   resolve: () =>
     Effect.succeed(
@@ -267,6 +268,7 @@ describe("SessionRunnerLLM recorded", () => {
         "gen_ai.response.finish_reasons": ["stop"],
         "gen_ai.usage.input_tokens": 465,
         "gen_ai.usage.output_tokens": 2,
+        "opencode.usage.cost_usd": 0,
       })
       expect(attempt?.attributes.get("opencode.llm.first_output_ms")).toBeNumber()
     }).pipe(Effect.withSpan("fixture.request")),

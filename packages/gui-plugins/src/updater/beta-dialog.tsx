@@ -16,36 +16,31 @@ import {
 import type definition from "./index"
 
 /**
- * Shows the features and fixes this beta build carries since the commit of the build the user saw last, and remembers
- * this build as seen. Everything comes from the build itself; only the links reach the network, when clicked.
+ * The features and fixes this beta build carries since the commit of the build the user saw last; undefined when there
+ * are none. Everything comes from the build itself; only the links reach the network, when clicked.
  */
-export function showBetaNotes(
-  ctx: SetupContext<typeof definition>,
-  input: { readonly previous: string; readonly previousCommit: string | undefined; readonly markSeen: () => void },
-) {
-  const notes = Option.flatMap(decodeEmbeddedNotes(import.meta.env.OPENCODE_BETA_NOTES), (embedded) =>
-    sliceBetaNotes(embedded, input.previousCommit),
-  )
-
-  input.markSeen()
-
-  if (Option.isNone(notes)) return
-
-  ctx.dialogs.open(
-    (dialog) => (
-      <DialogBetaNotes
-        notes={notes.value}
-        previous={input.previous}
-        dialog={dialog}
-        open={(href) => ctx.system.openExternal(href)}
-        viewAll={() => {
-          dialog.close()
-          ctx.layout.settings("whats-new")
-        }}
-      />
+export function readBetaNotes(previousCommit: string | undefined) {
+  return Option.getOrUndefined(
+    Option.flatMap(decodeEmbeddedNotes(import.meta.env.OPENCODE_BETA_NOTES), (embedded) =>
+      sliceBetaNotes(embedded, previousCommit),
     ),
-    { replace: true },
   )
+}
+
+/** Opens What's new in beta above any open dialog. */
+export function openBetaNotes(ctx: SetupContext<typeof definition>, notes: BetaNotes, previous: string) {
+  ctx.dialogs.open((dialog) => (
+    <DialogBetaNotes
+      notes={notes}
+      previous={previous}
+      dialog={dialog}
+      open={(href) => ctx.system.openExternal(href)}
+      viewAll={() => {
+        dialog.close()
+        ctx.layout.settings("whats-new")
+      }}
+    />
+  ))
 }
 
 /** What's new in beta: the listed features and fixes, and the What's new page when some are not listed. */

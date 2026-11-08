@@ -70,6 +70,8 @@ const request = (url: string, format: Format, userAgent = openCodeUserAgent) =>
 
 const assertHttpUrl = (url: URL) => {
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("URL must use http:// or https://")
+  // Rules match the URL, so `https://user@evil.com` would slip past a rule for `https://evil.com/*`.
+  if (url.username || url.password) throw new Error("URL must not include credentials")
 }
 
 export const MAX_REDIRECTS = 10
@@ -95,6 +97,7 @@ const execute = (
           try: () => {
             const target = new URL(location, url)
             assertHttpUrl(target)
+            target.hash = ""
             return target.href
           },
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),
@@ -138,14 +141,11 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              // Rules are matched against the URL that is requested, so `HTTPS://EVIL.COM` meets a rule for
-              // `https://evil.com/*`.
-              const url = yield* Effect.try({
-                try: () => {
-                  const parsed = new URL(input.url)
-                  assertHttpUrl(parsed)
-                  return parsed.href
-                },
+              // Rules match the URL as written. The fragment is never sent, and would keep a rule for the exact
+              // URL from matching.
+              const url = input.url.split("#")[0]
+              yield* Effect.try({
+                try: () => assertHttpUrl(new URL(url)),
                 catch: (error) => error,
               })
 

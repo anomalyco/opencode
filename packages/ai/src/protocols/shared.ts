@@ -7,15 +7,18 @@ import {
   InvalidRequestError,
   UnsupportedOperationError,
   AIError,
+  AssistantMessage,
   type LLMRequest,
   Message,
   ToolDefinition,
+  ToolMessage,
   type ContentPart,
   type MediaPart,
   type OpenString,
   type ProviderID,
   type RequestEncoding,
   type TextPart,
+  type ToolCallPart,
   type ToolEntry,
   type ToolResultPart,
 } from "../schema/index.js"
@@ -85,7 +88,7 @@ export const OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH = 64
 // Body-level `prompt_cache_key` is off when caching is disabled or the model
 // explicitly rejects the field. Header-based affinity is unaffected.
 export const sendsPromptCacheKey = (request: LLMRequest) =>
-  request.cache !== "none" && request.model.compatibility?.supportsPromptCacheKey !== false
+  request.cache !== "none" && request.model.capabilities?.promptCacheKey !== false
 
 // OpenAI limits `prompt_cache_key` to 64 chars; DeepSeek and Zai inherit the same
 // limit via their OpenAI-compatible APIs. Clamp with unicode-aware slicing.
@@ -348,13 +351,15 @@ export const flattenTools = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArra
 
 export const flattenToolRequest = (request: LLMRequest) => {
   const messages = request.messages.map((message) => {
-    const content = message.content.map((part) => {
-      if ((part.type !== "tool-call" && part.type !== "tool-result") || part.namespace === undefined) return part
-      return { ...part, name: `${part.namespace}_${part.name}`, namespace: undefined }
-    })
-    return content.every((part, index) => part === message.content[index])
-      ? message
-      : new Message({ ...message, content })
+    if (message.role === "assistant") {
+      const content = message.content.map((part) =>
+        part.type === "tool-call" || part.type === "tool-result" ? flattenToolName(part) : part,
+      )
+      return sameParts(content, message.content) ? message : new AssistantMessage({ ...message, content })
+    }
+    if (message.role !== "tool") return message
+    const content = message.content.map(flattenToolName)
+    return sameParts(content, message.content) ? message : new ToolMessage({ ...message, content })
   })
   return {
     tools: flattenTools(request.tools),
@@ -363,6 +368,12 @@ export const flattenToolRequest = (request: LLMRequest) => {
       : { ...request, messages },
   }
 }
+
+const flattenToolName = <Part extends ToolCallPart | ToolResultPart>(part: Part): Part =>
+  part.namespace === undefined ? part : { ...part, name: `${part.namespace}_${part.name}`, namespace: undefined }
+
+const sameParts = (next: ReadonlyArray<ContentPart>, previous: ReadonlyArray<ContentPart>) =>
+  next.every((part, index) => part === previous[index])
 
 export const matchToolChoice = <Auto, None, Required, Tool>(
   route: string,

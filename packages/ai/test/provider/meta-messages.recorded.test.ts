@@ -24,7 +24,7 @@ for (const mode of ["adaptive", "enabled"] as const) {
         const request = ai.request({
           model,
           prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
-          generation: { maxTokens: 2048 },
+          maxTokens: 2048,
           providerOptions: {
             thinking:
               mode === "adaptive"
@@ -77,7 +77,7 @@ recorded.effect.with(
           }),
         ],
         toolChoice: "auto",
-        generation: { maxTokens: 1024 },
+        maxTokens: 1024,
         providerOptions: { effort: "low" },
       })
       const compiled = yield* compileRequest(request)

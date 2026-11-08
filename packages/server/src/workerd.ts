@@ -46,6 +46,8 @@ export interface Options {
   readonly config?: { readonly content?: string }
   /** models.dev catalog options; the bundled snapshot is the boot-time floor either way. */
   readonly models?: ServerOptions["models"]
+  /** Replaces `globalThis.fetch` for OpenCode's own HTTP requests, e.g. to route them through a Service Binding. */
+  readonly fetch?: ServerOptions["fetch"]
 }
 
 /**
@@ -71,6 +73,7 @@ export function serverOptions(options: Options): ServerOptions {
     events: { persist: true },
     config: { content: options.config?.content },
     models: options.models,
+    fetch: options.fetch,
   }
 }
 

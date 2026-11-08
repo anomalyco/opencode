@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Heç bir plagin qurulmayıb",
   skills: "Bacarıqlar",
   "skills.empty": "Heç bir bacarıq qurulmayıb",
-  lsp: "LSP",
-  "lsp.empty": "Heç bir LSP serveri qurulmayıb",
   failed: "Uğursuz oldu",
   retry: "Təkrar cəhd et",
   connecting: "Qoşulur…",

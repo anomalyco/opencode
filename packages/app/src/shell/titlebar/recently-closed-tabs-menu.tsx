@@ -4,7 +4,9 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useQueries } from "@tanstack/solid-query"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
+import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { TextInput } from "@opencode/ui/text-input"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -23,7 +25,7 @@ export function RecentlyClosedTabsMenu(props: {
   onNewTab: () => void
   tooltip?: JSX.Element
   vertical?: boolean
-  keybind?: string
+  keybind?: string[]
 }) {
   const language = useLanguage()
   const tabs = useTabs()
@@ -110,23 +112,20 @@ export function RecentlyClosedTabsMenu(props: {
           type="button"
           data-titlebar-tab-action
           data-action="vertical-tabs-new-session"
-          class="group flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base"
+          class="group flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base"
           onClick={props.onNewTab}
           aria-label={language.t("command.session.new")}
         >
           <Icon name="edit" class="shrink-0" />
           <span class="min-w-0 truncate">{language.t("command.session.new")}</span>
-          <span
-            class="ms-auto hidden min-w-0 truncate text-v2-text-text-faint group-hover:block group-focus-visible:block"
-            aria-hidden="true"
-          >
-            <bdi dir="ltr">{props.keybind}</bdi>
-          </span>
+          <div class="ms-auto hidden shrink-0 group-hover:block group-focus-visible:block" aria-hidden="true">
+            <Keybind keys={props.keybind ?? []} variant="neutral" dir="ltr" />
+          </div>
         </Menu.Context.Trigger>
       </Show>
       <Menu.Context.Portal>
         <Menu.Context.Content
-          class="max-h-[66.667dvh] w-56 max-w-56 overflow-y-auto"
+          class="max-h-[66.667dvh] w-56 max-w-56 !p-0"
           onOpenAutoFocus={(event) => {
             event.preventDefault()
           }}
@@ -136,71 +135,73 @@ export function RecentlyClosedTabsMenu(props: {
             queueMicrotask(() => search?.focus())
           }}
         >
-          <div class="recently-closed-search m-1" data-empty={!state.query}>
-            <TextInput
-              ref={search}
-              type="search"
-              dir="auto"
-              leadingIcon={<Icon name="magnifying-glass" size="small" />}
-              showClearButton
-              clearIcon="circle-xmark"
-              onClearClick={() => {
-                setState("query", "")
-                search?.focus()
-              }}
-              aria-label={language.t("session.tabs.closed.search")}
-              placeholder={language.t("session.tabs.closed.search")}
-              spellcheck={false}
-              autocomplete="off"
-              value={state.query}
-              onFocusIn={(event) => event.stopPropagation()}
-              onInput={(event) => setState("query", event.currentTarget.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape" || event.key === "ArrowDown" || event.key === "ArrowUp") return
-                event.stopPropagation()
-              }}
-            />
-          </div>
-          <Show when={recent().length}>
-            <Menu.Group>
-              <Menu.GroupLabel>{language.t("home.recentlyClosed")}</Menu.GroupLabel>
-              <For each={recent()}>
-                {(entry) => (
-                  <RecentlyClosedTabItem
-                    entry={entry}
-                    onSelect={() => tabs.reopenClosedTab(entry.tab, { append: true })}
-                  />
-                )}
-              </For>
-            </Menu.Group>
-          </Show>
-          <Show when={other().length}>
-            <Menu.Group>
-              <Menu.GroupLabel>{language.t("sidebar.project.recentSessions")}</Menu.GroupLabel>
-              <For each={other()}>
-                {(item) => (
-                  <RecentlyClosedTabItem
-                    entry={{
-                      tab: { type: "session", server: item.server, sessionId: item.session.id },
-                      info: { title: item.session.title, directory: item.session.location.directory },
-                    }}
-                    onSelect={() => {
-                      global.serverCtx(item.server)?.data.session.remember(item.session)
-                      tabs.select(tabs.addSessionTab({ server: item.server, sessionId: item.session.id }))
-                    }}
-                  />
-                )}
-              </For>
-            </Menu.Group>
-          </Show>
-          <Show when={!recent().length && !other().length}>
-            <div
-              role="status"
-              class="px-3 py-2 text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-faint"
-            >
-              {language.t(state.query.trim() ? "session.search.noResults" : "session.tabs.closed.empty")}
+          <MenuScroll viewportClass="p-0.5">
+            <div class="recently-closed-search m-1" data-empty={!state.query}>
+              <TextInput
+                ref={search}
+                type="search"
+                dir="auto"
+                leadingIcon={<Icon name="magnifying-glass" size="small" />}
+                showClearButton
+                clearIcon="circle-xmark"
+                onClearClick={() => {
+                  setState("query", "")
+                  search?.focus()
+                }}
+                aria-label={language.t("session.tabs.closed.search")}
+                placeholder={language.t("session.tabs.closed.search")}
+                spellcheck={false}
+                autocomplete="off"
+                value={state.query}
+                onFocusIn={(event) => event.stopPropagation()}
+                onInput={(event) => setState("query", event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape" || event.key === "ArrowDown" || event.key === "ArrowUp") return
+                  event.stopPropagation()
+                }}
+              />
             </div>
-          </Show>
+            <Show when={recent().length}>
+              <Menu.Group>
+                <Menu.GroupLabel>{language.t("home.recentlyClosed")}</Menu.GroupLabel>
+                <For each={recent()}>
+                  {(entry) => (
+                    <RecentlyClosedTabItem
+                      entry={entry}
+                      onSelect={() => tabs.reopenClosedTab(entry.tab, { append: true })}
+                    />
+                  )}
+                </For>
+              </Menu.Group>
+            </Show>
+            <Show when={other().length}>
+              <Menu.Group>
+                <Menu.GroupLabel>{language.t("sidebar.project.recentSessions")}</Menu.GroupLabel>
+                <For each={other()}>
+                  {(item) => (
+                    <RecentlyClosedTabItem
+                      entry={{
+                        tab: { type: "session", server: item.server, sessionId: item.session.id },
+                        info: { title: item.session.title, directory: item.session.location.directory },
+                      }}
+                      onSelect={() => {
+                        global.serverCtx(item.server)?.data.session.remember(item.session)
+                        tabs.select(tabs.addSessionTab({ server: item.server, sessionId: item.session.id }))
+                      }}
+                    />
+                  )}
+                </For>
+              </Menu.Group>
+            </Show>
+            <Show when={!recent().length && !other().length}>
+              <div
+                role="status"
+                class="px-3 py-2 text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-faint"
+              >
+                {language.t(state.query.trim() ? "session.search.noResults" : "session.tabs.closed.empty")}
+              </div>
+            </Show>
+          </MenuScroll>
         </Menu.Context.Content>
       </Menu.Context.Portal>
     </Menu.Context>

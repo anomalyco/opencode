@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Плагины не настроены",
   skills: "Навыки",
   "skills.empty": "Навыки не настроены",
-  lsp: "LSP",
-  "lsp.empty": "LSP-серверы не настроены",
   failed: "Не удалось",
   retry: "Повторить попытку",
   connecting: "Подключение…",

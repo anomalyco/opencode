@@ -25,7 +25,8 @@ const request = ai.request({
   model,
   system: "You are concise.",
   prompt: "Say hello.",
-  generation: { maxTokens: 20, temperature: 0 },
+  maxTokens: 20,
+  temperature: 0,
 })
 
 const deltaChunk = (delta: object, finishReason: string | null = null) => ({
@@ -186,9 +187,7 @@ describe("OpenAI-compatible Chat route", () => {
       const compatible = OpenAICompatibleChat.route
         .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
         .model({ id: "custom-model", compatibility: { maxTokensField: "max_completion_tokens" } })
-      const prepared = yield* compileRequest(
-        ai.request({ model: compatible, prompt: "Say hello.", generation: { maxTokens: 20 } }),
-      )
+      const prepared = yield* compileRequest(ai.request({ model: compatible, prompt: "Say hello.", maxTokens: 20 }))
 
       expect(prepared.body).toMatchObject({ max_completion_tokens: 20 })
       expect(prepared.body).not.toHaveProperty("max_tokens")

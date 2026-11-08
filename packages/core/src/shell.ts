@@ -44,6 +44,8 @@ type Active = {
   file: string
   size: number
   newlines: number
+  // Byte offsets where the last two lines start, so a truncation notice can size a cut-off line.
+  lineStarts: [number, number]
   // Resolves with the terminal Info once the command exits, times out, or is killed. A wait
   // started after termination resolves immediately from the already-completed deferred.
   done: Deferred.Deferred<Info, NotFoundError>
@@ -205,31 +207,35 @@ const layer = () =>
         return command.info
       })
 
+      const readRange = (file: string, start: number, length: number) =>
+        length <= 0
+          ? Effect.succeed(Buffer.alloc(0))
+          : Effect.promise(
+              () =>
+                new Promise<Buffer>((resolve) => {
+                  const buffer = Buffer.alloc(length)
+                  const stream = createReadStream(file, { start, end: start + length - 1 })
+                  let offset = 0
+                  stream.on("data", (chunk: string | Buffer) => {
+                    const bytes = Buffer.from(chunk)
+                    bytes.copy(buffer, offset)
+                    offset += bytes.length
+                  })
+                  stream.on("end", () => resolve(buffer.subarray(0, offset)))
+                  stream.on("error", () => resolve(buffer.subarray(0, 0)))
+                }),
+            )
+
       const output = Effect.fnUntraced(function* (id: Shell.ID, input?: Shell.OutputInput) {
         const command = yield* require(id)
         const cursor = input?.cursor ?? 0
         const limit = input?.limit ?? 65536
         if (cursor >= command.size) return { output: "", cursor: command.size, size: command.size, truncated: false }
         const start = Math.max(0, cursor)
-        const length = Math.min(limit, command.size - start)
-        const buffer = Buffer.alloc(length)
-        const bytesRead = yield* Effect.promise(
-          () =>
-            new Promise<number>((resolve) => {
-              const stream = createReadStream(command.file, { start, end: start + length - 1 })
-              let offset = 0
-              stream.on("data", (chunk: string | Buffer) => {
-                const bytes = Buffer.from(chunk)
-                bytes.copy(buffer, offset)
-                offset += bytes.length
-              })
-              stream.on("end", () => resolve(offset))
-              stream.on("error", () => resolve(0))
-            }),
-        )
+        const bytes = yield* readRange(command.file, start, Math.min(limit, command.size - start))
         return {
-          output: buffer.subarray(0, bytesRead).toString("utf8"),
-          cursor: start + bytesRead,
+          output: bytes.toString("utf8"),
+          cursor: start + bytes.length,
           size: command.size,
           truncated: false,
         }
@@ -245,18 +251,36 @@ const layer = () =>
           const limits = Config.latest(yield* config.entries(), "tool_output")
           const maxLines = limits?.max_lines ?? ToolOutput.MAX_LINES
           const maxBytes = limits?.max_bytes ?? ToolOutput.MAX_BYTES
-          const latest = yield* output(info.id, { cursor: Number.MAX_SAFE_INTEGER })
-          const page = yield* output(info.id, { cursor: Math.max(0, latest.size - maxBytes), limit: maxBytes })
-          const lines = page.output.split("\n")
-          if (page.output.endsWith("\n")) lines.pop()
-          const truncated = latest.size > maxBytes || lines.length > maxLines
-          const text = lines.length > maxLines ? lines.slice(-maxLines).join("\n") : page.output
-          const total = (yield* require(info.id)).newlines + (page.output.endsWith("\n") ? 0 : 1)
-          const shown = Math.min(lines.length, maxLines)
-          const notice = truncated
-            ? `\n\n[showing lines ${total - shown + 1}-${total} of ${total}; full output saved to ${info.file}]`
-            : ""
-          return { output: `${text || "(no output)"}${notice}`, truncated }
+          const command = yield* require(info.id)
+          const start = Math.max(0, command.size - maxBytes)
+          // Read the byte before the window too, to tell whether the window starts on a line boundary.
+          const before = Math.max(0, start - 1)
+          const window = yield* readRange(command.file, before, command.size - before)
+          const page = window.subarray(charBoundary(window, start - before)).toString("utf8")
+          const partial = start > 0 && window[0] !== 10
+          const endsWithNewline = page.endsWith("\n")
+          const lines = page.split("\n")
+          if (endsWithNewline) lines.pop()
+          const total = command.newlines + (endsWithNewline ? 0 : 1)
+          const suffix = `full output saved to ${info.file}]`
+          if (partial && lines.length === 1) {
+            const lineStart = endsWithNewline ? command.lineStarts[0] : command.lineStarts[1]
+            const lineSize = command.size - (endsWithNewline ? 1 : 0) - lineStart
+            const shownSize = Buffer.byteLength(lines[0])
+            return {
+              output: `${lines[0]}\n\n[showing the last ${formatSize(shownSize)} of line ${total} (${formatSize(lineSize)}); ${suffix}`,
+              truncated: true,
+            }
+          }
+          if (start > 0 || lines.length > maxLines) {
+            // A window that starts mid-line drops that partial line so the line numbers stay exact.
+            const kept = lines.slice(-Math.min(maxLines, lines.length - (partial ? 1 : 0)))
+            return {
+              output: `${kept.join("\n")}\n\n[showing lines ${total - kept.length + 1}-${total} of ${total}; ${suffix}`,
+              truncated: true,
+            }
+          }
+          return { output: page || "(no output)", truncated: false }
         }).pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(undefined)))
         return { info, capture }
       })
@@ -326,6 +350,7 @@ const layer = () =>
                 file,
                 size: 0,
                 newlines: 0,
+                lineStarts: [0, 0],
                 done: Deferred.makeUnsafe<Info, NotFoundError>(),
               }
               commands.set(id, command)
@@ -336,10 +361,13 @@ const layer = () =>
                 Stream.runForEach((chunk: Uint8Array) =>
                   Effect.sync(() => {
                     stream.write(chunk)
-                    command.size += chunk.length
                     // Count while streaming so truncation notices never rescan the output file.
-                    for (let index = chunk.indexOf(10); index !== -1; index = chunk.indexOf(10, index + 1))
+                    for (let index = chunk.indexOf(10); index !== -1; index = chunk.indexOf(10, index + 1)) {
                       command.newlines++
+                      command.lineStarts[0] = command.lineStarts[1]
+                      command.lineStarts[1] = command.size + index + 1
+                    }
+                    command.size += chunk.length
                   }),
                 ),
               )
@@ -395,17 +423,19 @@ const layer = () =>
               // The process exits even after a timeout kill, so this fiber always publishes the outcome.
               runFork(
                 Effect.gen(function* () {
-                  yield* handle.exitCode.pipe(
-                    Effect.flatMap((code) => end({ status: "exited", exit: code })),
+                  const exited = yield* handle.exitCode.pipe(
+                    Effect.map((code) => ({ exit: code, signal: undefined })),
                     Effect.catch((error) =>
-                      end({
-                        status: "exited",
+                      Effect.succeed({
+                        exit: undefined,
                         signal:
                           error.cause instanceof CrossSpawnSpawner.KilledBySignal ? error.cause.signal : undefined,
                       }),
                     ),
                   )
-                  const outcome = yield* Deferred.await(ended)
+                  yield* end({ status: "exited", ...exited })
+                  // A timeout keeps its status but still records how the killed process exited.
+                  const outcome = { ...(yield* Deferred.await(ended)), ...exited }
                   // Report the terminal status only once captured output is complete, so a reader that
                   // sees it never reads a partial file.
                   yield* outputDone.await
@@ -455,6 +485,18 @@ const layer = () =>
       return Service.of({ create, list, get, wait, result, timeout, output, remove })
     }),
   )
+
+// Moves past UTF-8 continuation bytes (at most 3) so a byte cut never splits a character.
+function charBoundary(bytes: Buffer, offset: number) {
+  const limit = Math.min(bytes.length, offset + 3)
+  for (let index = offset; index < limit; index++) if ((bytes[index] & 0xc0) !== 0x80) return index
+  return limit
+}
+
+function formatSize(bytes: number) {
+  const kb = bytes / 1024
+  return kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${Math.round(kb)} KB`
+}
 
 export const node = makeLocationNode({
   service: Service,

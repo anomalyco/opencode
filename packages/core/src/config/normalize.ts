@@ -459,86 +459,20 @@ function normalizeExperimental(
       unsupportedExperimental.forEach((key) =>
         unsupportedIfPresent(experimental, key, ["experimental", key], diagnostics),
       )
-      if (own(experimental, "portable_shell_scanner")) {
+      // `policies` merges into top-level `policies` in normalizePolicies.
+      Object.entries(ConfigExperimental.Info.fields).forEach(([key, schema]) => {
+        if (key === "policies" || !own(experimental, key)) return
+        const value = decodeEncoded(schema, experimental[key], ["experimental", key], diagnostics)
+        if (value !== undefined) result[key] = value
+      })
+      if (!own(experimental, "codemode_vm") && own(experimental, "codemodeVm")) {
         const value = decodeEncoded(
-          ConfigExperimental.Info.fields.portable_shell_scanner,
-          experimental.portable_shell_scanner,
-          ["experimental", "portable_shell_scanner"],
+          ConfigExperimental.Info.fields.codemode_vm,
+          experimental.codemodeVm,
+          ["experimental", "codemodeVm"],
           diagnostics,
         )
-        if (value !== undefined) result.portable_shell_scanner = value
-      }
-      if (own(experimental, "todo")) {
-        const value = decodeEncoded(
-          ConfigExperimental.Info.fields.todo,
-          experimental.todo,
-          ["experimental", "todo"],
-          diagnostics,
-        )
-        if (value !== undefined) result.todo = value
-      }
-      if (own(experimental, "background_compaction")) {
-        const value = decodeEncoded(
-          ConfigExperimental.Info.fields.background_compaction,
-          experimental.background_compaction,
-          ["experimental", "background_compaction"],
-          diagnostics,
-        )
-        if (value !== undefined) result.background_compaction = value
-      }
-      if (own(experimental, "media_blob")) {
-        const value = decodeEncoded(
-          ConfigExperimental.Info.fields.media_blob,
-          experimental.media_blob,
-          ["experimental", "media_blob"],
-          diagnostics,
-        )
-        if (value !== undefined) result.media_blob = value
-      }
-      if (own(experimental, "image_generate")) {
-        const value = decodeEncoded(
-          ConfigExperimental.Info.fields.image_generate,
-          experimental.image_generate,
-          ["experimental", "image_generate"],
-          diagnostics,
-        )
-        if (value !== undefined) result.image_generate = value
-      }
-      if (own(experimental, "schedules")) {
-        const value = decodeEncoded(
-          ConfigExperimental.Info.fields.schedules,
-          experimental.schedules,
-          ["experimental", "schedules"],
-          diagnostics,
-        )
-        if (value !== undefined) result.schedules = value
-      }
-      if (own(experimental, "artifacts")) {
-        const value = decodeEncoded(
-          ConfigExperimental.Info.fields.artifacts,
-          experimental.artifacts,
-          ["experimental", "artifacts"],
-          diagnostics,
-        )
-        if (value !== undefined) result.artifacts = value
-      }
-      if (own(experimental, "subagent_depth")) {
-        const value = decodeEncoded(
-          ConfigExperimental.Info.fields.subagent_depth,
-          experimental.subagent_depth,
-          ["experimental", "subagent_depth"],
-          diagnostics,
-        )
-        if (value !== undefined) result.subagent_depth = value
-      }
-      if (own(experimental, "location_idle_timeout")) {
-        const value = decodeEncoded(
-          ConfigExperimental.Info.fields.location_idle_timeout,
-          experimental.location_idle_timeout,
-          ["experimental", "location_idle_timeout"],
-          diagnostics,
-        )
-        if (value !== undefined) result.location_idle_timeout = value
+        if (value !== undefined) result.codemode_vm = value
       }
     }
   }
@@ -697,7 +631,7 @@ function diagnoseSelectionMap(value: unknown, path: string[], diagnostics: Diagn
 }
 
 function diagnoseSelection(value: Record<string, unknown>, path: string[], diagnostics: Diagnostic[]) {
-  const modelValid = typeof value.model === "string" && /^[^/#]+\/[^#]+$/.test(value.model)
+  const modelValid = typeof value.model === "string" && ConfigMigrateV1.modelSelection(value.model) !== undefined
   if (own(value, "model") && typeof value.model === "string" && !modelValid)
     diagnostics.push({
       kind: "unsupported",

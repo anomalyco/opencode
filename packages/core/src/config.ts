@@ -105,6 +105,8 @@ export const testLayer = (
         emitChange: (update) => PubSub.publish(updates, update).pipe(Effect.asVoid),
         integration: (integrationID, document) =>
           Ref.update(integrations, (current) => {
+            // Like config, keeps the document it holds when handed a deep-equal one.
+            if (isDeepStrictEqual(current.get(integrationID), document)) return current
             const next = new Map(current)
             next.delete(integrationID)
             return document ? next.set(integrationID, document) : next
@@ -146,14 +148,17 @@ export const layer = (options?: Options) =>
           return
         }
         const result = ConfigNormalize.normalize(input)
-        yield* Effect.forEach(result.diagnostics, (diagnostic) =>
-          Effect.logWarning("configuration normalization diagnostic", {
+        // Every reload repeats the routine notes on a config that loads. A rejected config or a dropped malformed
+        // setting is the user's to fix, so those stay warnings.
+        yield* Effect.forEach(result.diagnostics, (diagnostic) => {
+          const log = result.type === "rejected" || diagnostic.kind === "invalid" ? Effect.logWarning : Effect.logDebug
+          return log("configuration normalization diagnostic", {
             source,
             path: diagnostic.path[0] === "$" ? "$" : `$.${diagnostic.path.join(".")}`,
             kind: diagnostic.kind,
             action: diagnostic.message,
-          }),
-        )
+          })
+        })
         if (result.type === "rejected") return
         const info = Option.getOrUndefined(decodeInfo(result.encoded))
         if (info) return info

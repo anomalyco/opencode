@@ -54,7 +54,7 @@ const fakeProtocol = Protocol.make<FakeBody, FakeEvent, FakeEvent, void>({
       Effect.succeed({
         body: [
           ...request.messages
-            .flatMap((message) => message.content)
+            .flatMap((message) => [...message.content])
             .filter((part) => part.type === "text")
             .map((part) => part.text),
           ...request.tools.map((tool) => `tool:${tool.name}:${tool.description}`),

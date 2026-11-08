@@ -370,11 +370,23 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     return { stdout, stderr, all: Stream.merge(stdout, stderr) }
   }
 
-  const launchProcess = (command: ChildProcess.StandardCommand, opts: NodeChildProcess.SpawnOptions) =>
+  // A Microsoft Store app execution alias, such as Store PowerShell 7 in %LOCALAPPDATA%\Microsoft\WindowsApps, is a
+  // reparse point that stat rejects with EACCES. cross-spawn then cannot find it and runs it through
+  // `cmd.exe /d /s /c`, which drops everything after the first newline of the command line. Launch the target of
+  // the link instead, read on every spawn because a Store update moves it.
+  const executable = (file: string) => {
+    if (globalThis.process.platform !== "win32" || !path.isAbsolute(file)) return Effect.succeed(file)
+    return fs.readLink(file).pipe(
+      Effect.map((target) => path.resolve(path.dirname(file), target)),
+      Effect.orElseSucceed(() => file),
+    )
+  }
+
+  const launchProcess = (command: ChildProcess.StandardCommand, file: string, opts: NodeChildProcess.SpawnOptions) =>
     Effect.callback<Spawned, PlatformError.PlatformError>((resume) => {
       const closed = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const exited = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
-      const proc = launch(command.command, command.args.map(unwrap), opts)
+      const proc = launch(file, command.args.map(unwrap), opts)
       let settle = () => {}
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
@@ -419,8 +431,8 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     command: ChildProcess.StandardCommand,
     opts: NodeChildProcess.SpawnOptions,
   ) {
-    yield* Effect.logInfo("spawning process", { command: command.command, args: command.args, cwd: opts.cwd })
-    const [proc, closed, exited, settle] = yield* launchProcess(command, opts)
+    yield* Effect.logDebug("spawning process", { command: command.command, args: command.args, cwd: opts.cwd })
+    const [proc, closed, exited, settle] = yield* launchProcess(command, yield* executable(command.command), opts)
     const stopOutput = yield* Deferred.make<void>()
     // Register before process release so the deadline remains active during termination.
     yield* Effect.forkScoped(

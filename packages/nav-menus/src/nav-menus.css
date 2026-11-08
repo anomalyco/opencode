@@ -1,0 +1,444 @@
+/* The OpenCode nav menus (index.ts): the logo menu and the product menu, one card style, as opencode.ai's logo menu
+   (cards, blue hover). No panel; each item is a card on the see-through pop-up surface, its thumbnail, a divider, then
+   its label. The menus sit in the page's body (or the top layer), so only these rules style them. A host recolours
+   them by setting these on an ancestor of its triggers (the menu copies them when it opens):
+     --nav-menu-ink       strong text
+     --nav-menu-weak      the labels' resting grey
+     --nav-menu-popover   the pop-up surface
+     --nav-menu-link      the link blue: hover and focus
+     --nav-menu-bar       the current product's bar
+     --nav-menu-icon      the Brand, ZIP and Press drawings
+     --nav-menu-mono      OpenTUI Mono (the host loads it) */
+[data-nav-menu] {
+  --ink: var(--nav-menu-ink, light-dark(hsl(0 0% 8%), hsl(0 0% 95%)));
+  --weak: var(--nav-menu-weak, light-dark(hsl(0 0% 40%), hsl(0 0% 64%)));
+  --popover: var(--nav-menu-popover, light-dark(hsl(0 0% 100%), hsl(0 0% 10%)));
+  --link: var(--nav-menu-link, light-dark(#3b5cf6, #6b8fff));
+  --bar: var(--nav-menu-bar, light-dark(hsl(0 0% 40%), hsl(0 0% 62%)));
+  --icon: var(--nav-menu-icon, light-dark(hsl(0 0% 40%), hsl(0 0% 56%)));
+  --tint: color-mix(in srgb, var(--link) 10%, var(--popover));
+  /* The divider between a card's thumbnail and its label, and the card's ring. */
+  --divider: light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.1));
+  --shadow:
+    0 0 0 1px var(--divider), 0 1px 2px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.4)),
+    0 2px 5px -2px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.4));
+  --shadow-hover:
+    0 0 0 1px var(--link), 0 1px 2px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.4)),
+    0 2px 5px -2px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.4));
+  position: fixed;
+  z-index: 1000;
+  inset: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: none;
+  margin: 0;
+  /* Room for the cards' shadows; index.ts places the menu 8px out so the cards land where they should. */
+  padding: 8px 8px 16px;
+  overflow: visible;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: 400 12px/16px var(--nav-menu-mono, "OpenTUI Mono", ui-monospace, monospace);
+  letter-spacing: 0;
+  text-align: start;
+  -webkit-font-smoothing: antialiased;
+  /* The whole box, its padding and the gaps between cards included, is the menu: the pointer can rest or cross
+     anywhere in it without the menu closing (index.ts closes a hover-opened menu only once the pointer has left it and
+     its trigger for 200ms). */
+
+  &[data-scroll] {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    /* The last visible card fades out, so the list reads as continuing. */
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent);
+  }
+
+  &[data-closing] {
+    pointer-events: none;
+  }
+
+  /* The 1px between the name and the menu's padding counts as the menu too, so the pointer crosses it while the menu
+     is open on hover; it stops short of the name, which stays clickable. */
+  &[data-nav-menu="product"]::before {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    inset-inline: 0;
+    height: 1px;
+  }
+
+  [role="menuitem"] {
+    position: relative;
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 10px;
+    box-sizing: border-box;
+    width: max-content;
+    height: 28px;
+    margin: 0;
+    padding: 0;
+    padding-inline-end: 12px;
+    background: color-mix(in srgb, var(--popover) 85%, transparent);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    box-shadow: var(--shadow);
+    color: var(--weak);
+    font: inherit;
+    text-decoration: none;
+    text-transform: none;
+    white-space: nowrap;
+    -webkit-text-stroke: 0;
+    outline: none;
+    transform-origin: 19px 50%;
+    transition:
+      background-color 150ms ease,
+      box-shadow 320ms cubic-bezier(0.23, 1, 0.32, 1),
+      color 150ms ease;
+
+    /* Hovered, focused or pressed: the blue card, its ring and the divider in the link blue. */
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--tint);
+        box-shadow: var(--shadow-hover);
+        color: var(--ink);
+
+        [data-slot="thumb"] {
+          --divider: var(--link);
+        }
+      }
+    }
+
+    &:is(:focus-visible, :active) {
+      background: var(--tint);
+      box-shadow: var(--shadow-hover);
+      color: var(--ink);
+
+      [data-slot="thumb"] {
+        --divider: var(--link);
+      }
+    }
+
+    &:active {
+      scale: 0.98;
+    }
+
+    /* The current product: its label at full strength, where the others rest muted. */
+    &[aria-current="page"] {
+      color: var(--ink);
+    }
+  }
+
+  /* The thumbnail: 38 × 28; its inline-end edge is the divider. */
+  [data-slot="thumb"] {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    box-sizing: border-box;
+    width: 38px;
+    height: 28px;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--popover) 94%, var(--ink));
+    box-shadow: inset -1px 0 0 var(--divider);
+    color: var(--icon);
+    transition: box-shadow 320ms cubic-bezier(0.23, 1, 0.32, 1);
+
+    &:dir(rtl) {
+      box-shadow: inset 1px 0 0 var(--divider);
+    }
+
+    svg {
+      display: block;
+    }
+
+    /* Each file on the background it is made for: light marks on light, dark on dark. */
+    &[data-tone="light"] {
+      background: hsl(0 0% 96%);
+    }
+
+    /* A dark preview's ring is its own colour, so it reads at full size (blue while hovered). */
+    &[data-tone="dark"],
+    &[data-tone="dark"]:dir(rtl) {
+      background: #0a0a0a;
+      box-shadow: 0 0 0 1px #0a0a0a;
+    }
+
+    &[data-kind="logo"] svg {
+      width: auto;
+      height: 18px;
+    }
+
+    &[data-kind="wordmark"] svg {
+      width: 30px;
+      height: auto;
+    }
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    [role="menuitem"]:hover [data-slot="thumb"][data-tone="dark"] {
+      box-shadow: 0 0 0 1px var(--link);
+    }
+  }
+
+  [role="menuitem"]:is(:focus-visible, :active) [data-slot="thumb"][data-tone="dark"] {
+    box-shadow: 0 0 0 1px var(--link);
+  }
+
+  /* The product cards: the label alone, in capitals like the names beside the logo (the accessible names keep their
+     case), 12px in from both edges, so each card is as wide as its label. The current product's label is at full
+     strength, with the site's active bar on the card's leading edge, the link blue while hovered, focused or pressed. */
+  &[data-nav-menu="product"] {
+    [role="menuitem"] {
+      padding-inline: 12px;
+    }
+
+    [data-slot="label"] {
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    [role="menuitem"][aria-current="page"]::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      inset-inline-start: -1px;
+      z-index: 1;
+      width: 2px;
+      background: var(--bar);
+    }
+
+    [role="menuitem"][aria-current="page"]:is(:focus-visible, :active)::before {
+      background: var(--link);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      [role="menuitem"][aria-current="page"]:hover::before {
+        background: var(--link);
+      }
+    }
+  }
+
+  [data-slot="meta"] {
+    color: var(--weak);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [role="menuitem"],
+    [data-slot="thumb"] {
+      transition: none !important;
+    }
+
+    [role="menuitem"]:active {
+      scale: none;
+    }
+  }
+}
+
+/* The product menu's chevron after the name, for touch screens (no hover), the same as the docs' split chevron after
+   DOCS (services/site docs-lockup.css reads these tokens too): --nav-chevron-width wide and --nav-chevron-gap after the
+   name's highlight, a --nav-chevron-glyph chevron that flips at once while the menu is open, a 44px tall target that
+   reaches --nav-chevron-reach further into the empty bar, the name fill on hover and the mark's inner grey pressed or
+   open. Hidden where a pointer can hover, where the name opens the menu. */
+[data-nav-product-toggle] {
+  all: unset;
+  position: relative;
+  display: none;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: var(--nav-chevron-width);
+  height: 100%;
+  min-height: 25px;
+  margin-inline-start: var(--nav-chevron-gap);
+  color: var(--nav-chevron-ink);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset-block: calc(50% - 22px);
+    inset-inline: 0 calc(-1 * var(--nav-chevron-reach));
+  }
+
+  svg {
+    display: block;
+    width: var(--nav-chevron-glyph);
+    height: var(--nav-chevron-glyph);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      background: var(--nav-chevron-hover);
+      color: var(--nav-menu-ink, light-dark(hsl(0 0% 8%), hsl(0 0% 95%)));
+    }
+  }
+
+  &:active,
+  &[aria-expanded="true"] {
+    background: var(--nav-chevron-press);
+    color: var(--nav-menu-ink, light-dark(hsl(0 0% 8%), hsl(0 0% 95%)));
+  }
+
+  &[aria-expanded="true"] svg {
+    scale: 1 -1;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--nav-menu-link, light-dark(#3b5cf6, #6b8fff));
+    outline-offset: 2px;
+  }
+
+  @media (hover: none), (pointer: coarse) {
+    display: inline-flex;
+  }
+}
+
+/* The OpenCode bar's metrics, opencode.ai's (site.css: the logo 25px from the top and the start edge, in the box of
+   "[1]" at 15px; the 56px phone top bar with its 24 × 30 logo box), so a product's bar puts everything where
+   opencode.ai does and moving between them never jumps:
+     --nav-bar-height     the bar, its 1px rule included (75 + 1; 56 on phones, the rule drawn inside)
+     --nav-edge           the start edge of the logo's box
+     --nav-end            the end edge of the bar's last item (opencode.ai's GitHub mark; the phone menu button)
+     --nav-rule           the bar's rule colour (opencode.ai's --border) */
+:root {
+  --nav-bar-height: 76px;
+  --nav-edge: 24px;
+  --nav-end: 17.5px;
+  --nav-rule: light-dark(hsl(0 0% 88%), hsl(0 0% 18%));
+  /* The product name's one fill (hover, open and pressed), opencode.ai's lockup hover: half the mark's inner grey on
+     the docs page (#d2d2d2 over #fbfbfb, #4b4b4b over #0c0c0c). Fixed, so it is the same on every page background. */
+  --nav-name-hover: light-dark(#e7e7e7, #2c2c2c);
+  /* The chevron after a product name (and the docs' after DOCS): its box, the gap after the name's highlight, the glyph,
+     how far its touch target reaches past it, and its colours. */
+  --nav-chevron-width: 20px;
+  --nav-chevron-gap: 2px;
+  --nav-chevron-glyph: 10px;
+  --nav-chevron-reach: 24px;
+  --nav-chevron-ink: light-dark(hsl(0 0% 8%), hsl(0 0% 95%));
+  --nav-chevron-hover: var(--nav-name-hover);
+  --nav-chevron-press: light-dark(#d2d2d2, #4b4b4b);
+  --nav-logo-box-w: calc(15px * 1.492);
+  --nav-logo-box-h: 25px;
+
+  @media (max-width: 60rem) {
+    --nav-bar-height: 56px;
+    --nav-end: 12px;
+    --nav-logo-box-w: 24px;
+    --nav-logo-box-h: 30px;
+  }
+}
+
+/* The lockup: the logo (`data-nav-logo`, a 20 × 25 mark at whole pixels in its box, as on opencode.ai), then the
+   product's name (`data-nav-product`) 12px after the box: OpenTUI Mono Bold 15px caps whose 6px padding is the
+   highlight, --nav-name-hover while hovered, pressed or open (hovering opens the product menu, so it never steps darker).
+   Placed at --nav-edge, centred in the bar. */
+[data-nav-lockup] {
+  --nav-lockup-ink: light-dark(hsl(0 0% 8%), hsl(0 0% 95%));
+  --nav-logo-inner: light-dark(#d2d2d2, #4b4b4b);
+  --nav-logo-code: light-dark(#1f1f1f, #eeeeee);
+  --nav-lockup-inset: round(calc((var(--nav-logo-box-h) - 25px) / 2), 1px);
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  box-sizing: border-box;
+  height: var(--nav-logo-box-h);
+  color: var(--nav-lockup-ink);
+  -webkit-font-smoothing: antialiased;
+
+  [data-nav-logo] {
+    display: block;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    width: var(--nav-logo-box-w);
+    height: var(--nav-logo-box-h);
+    padding-top: var(--nav-lockup-inset);
+    padding-inline-start: round(calc((var(--nav-logo-box-w) - 20px) / 2), 1px);
+    color: inherit;
+
+    svg {
+      display: block;
+      width: 20px;
+      height: 25px;
+    }
+
+    [data-part="inner"] {
+      fill: var(--nav-logo-inner);
+    }
+
+    [data-part="code"] {
+      fill: var(--nav-logo-code);
+    }
+  }
+
+  /* `data-nav-name` is a name with no product menu (the status page's). */
+  :is([data-nav-product], [data-nav-name]):is([data-nav-product], [data-nav-name]) {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    height: 25px;
+    margin: var(--nav-lockup-inset) 0 0;
+    margin-inline-start: 6px;
+    /* OpenTUI Mono's caps sit 0.325px below its line box's centre; this puts them on the mark's centre. */
+    padding: 0 6px 0.65px;
+    background: none;
+    color: var(--nav-lockup-ink);
+    font: 700 15px/1 var(--nav-menu-mono, "OpenTUI Mono", ui-monospace, monospace);
+    letter-spacing: 0;
+    text-decoration: none;
+    text-transform: uppercase;
+    white-space: nowrap;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 120ms ease;
+
+    /* A 32px hit area beside a desktop bar, 44px for touch. */
+    &::before {
+      content: "";
+      position: absolute;
+      inset: calc(50% - 16px) 0;
+    }
+
+    @media (max-width: 60rem), (pointer: coarse) {
+      &::before {
+        inset: calc(50% - 22px) 0;
+      }
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--nav-name-hover);
+        color: var(--nav-lockup-ink);
+        text-decoration: none;
+      }
+    }
+
+    &:active,
+    &[aria-expanded="true"] {
+      background: var(--nav-name-hover);
+    }
+  }
+
+  :is([data-nav-logo], [data-nav-product], [data-nav-name]):focus-visible {
+    outline: 2px solid var(--nav-menu-link, light-dark(#3b5cf6, #6b8fff));
+    outline-offset: 2px;
+  }
+
+  [data-nav-product-toggle] {
+    height: 25px;
+    margin-top: var(--nav-lockup-inset);
+  }
+}

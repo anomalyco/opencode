@@ -1,13 +1,15 @@
+import { randomUUID } from "node:crypto"
 import type { MainContext } from "@opencode/plugin/gui/main"
-import type {
-  WslDistroProbe,
-  WslJob,
-  WslOpencodeCheck,
-  WslServerConfig,
-  WslServerItem,
-  WslServerRuntime,
-  WslServersState,
-} from "./contract"
+import type { WslOpencodeCheck, WslServerConfig } from "./contract"
+import {
+  createWslMachineState,
+  toServersState,
+  transitionWslMachine,
+  type WslFailure,
+  type WslHostJob,
+  type WslMachineEffect,
+  type WslMachineEvent,
+} from "./machine"
 import type { WslCliBuild, WslRuntime } from "./runtime"
 
 type RunningSidecar = {
@@ -33,57 +35,91 @@ export function wslServerIdForDistro(distro: string) {
   return `wsl:${distro}`
 }
 
+/** Runs the WSL machine's effects and reports their outcomes back to it; the machine alone decides what is current. */
 export function createWslServersController(options: WslServersControllerOptions) {
   const t = options.t
   const runtime = options.runtime
-  let state: WslServersState = initialState()
   const listeners = new Set<() => void>()
-  const sidecars = new Map<string, RunningSidecar>()
-  // Starts in flight. Stopping one aborts its CLI discovery and health polling and waits until its process exited,
-  // so a restart, reload, disable or quit never leaves a sidecar running beside or after it.
+  const waiters = new Map<string, { readonly resolve: () => void; readonly reject: (cause: Error) => void }>()
+  // Process handles by start attempt, for stopping them only. Stopping one aborts its CLI discovery and health
+  // polling and waits until its process exited, so a restart, reload, disable or quit never leaves a sidecar running.
   const starts = new Map<string, { readonly abort: AbortController; readonly done: Promise<void> }>()
-  let closed = false
+  const running = new Map<string, RunningSidecar>()
+  const halts = new Map<string, Promise<void>>()
+  const current = { machine: createWslMachineState(options.readServers()) }
+  const published = { state: toServersState(current.machine) }
 
-  const emit = () => {
-    for (const listener of listeners) listener()
+  const dispatch = (event: WslMachineEvent) => {
+    const transition = transitionWslMachine(current.machine, event)
+
+    if (transition.state !== current.machine) {
+      current.machine = transition.state
+      published.state = toServersState(transition.state)
+      listeners.forEach((listener) => listener())
+    }
+
+    transition.effects.forEach(run)
   }
 
-  const setState = (next: Partial<WslServersState>) => {
-    state = { ...state, ...next }
-    emit()
+  const request = (event: (attempt: string) => WslMachineEvent) => {
+    const attempt = randomUUID()
+    const waiter = Promise.withResolvers<void>()
+    waiters.set(attempt, waiter)
+    dispatch(event(attempt))
+
+    return waiter.promise
   }
 
-  const updateServer = (id: string, update: (item: WslServerItem) => WslServerItem) => {
-    const next = state.servers.map((item) => (item.config.id === id ? update(item) : item))
-    setState({ servers: next })
+  const run = (effect: WslMachineEffect) => {
+    if (effect.type === "resolve") return settle(effect.attempt)?.resolve()
+
+    if (effect.type === "reject") return settle(effect.attempt)?.reject(failure(effect.failure))
+
+    if (effect.type === "persist") return options.writeServers([...effect.servers])
+
+    if (effect.type === "log") return options.log(effect.level, effect.message, effect.data)
+
+    if (effect.type === "spawn") return spawn(effect.distro, effect.attempt)
+
+    if (effect.type === "stop") {
+      return void halt(effect.server).then(() =>
+        dispatch({ type: "server.stopped", distro: effect.distro, attempt: effect.attempt }),
+      )
+    }
+
+    if (effect.type === "check-cli") {
+      return void inspectCli(effect.distro).then(
+        (check) => dispatch({ type: "cli.checked", distro: effect.distro, check }),
+        (error) => options.log("error", "wsl CLI check failed", { distro: effect.distro, message: message(error) }),
+      )
+    }
+
+    if (effect.type === "host") {
+      return void hostJob(effect.job, effect.attempt).then(dispatch, (error) =>
+        dispatch({ type: "host.failed", attempt: effect.attempt, message: message(error) }),
+      )
+    }
+
+    void distroJob(effect).then(dispatch, (error) =>
+      dispatch({ type: "job.failed", distro: effect.distro, attempt: effect.attempt, message: message(error) }),
+    )
   }
 
-  const refreshFromStore = () => {
-    const persisted = options.readServers()
+  const settle = (attempt: string) => {
+    const waiter = waiters.get(attempt)
+    waiters.delete(attempt)
 
-    const items: WslServerItem[] = persisted.map((config) => {
-      const existing = state.servers.find((item) => item.config.id === config.id)
-
-      return {
-        config,
-        runtime: existing?.runtime ?? { kind: "stopped" },
-      }
-    })
-
-    setState({ servers: items })
+    return waiter
   }
 
-  const setRuntime = (id: string, runtime: WslServerRuntime) => {
-    updateServer(id, (item) => ({ ...item, runtime }))
-  }
+  const failure = (reason: WslFailure) => {
+    if (reason.kind === "busy") return new Error(t("error.busy", { distro: reason.distro }))
 
-  const setCliCheck = (distro: string, check: WslOpencodeCheck) => {
-    setState({
-      opencodeChecks: {
-        ...state.opencodeChecks,
-        [distro]: check,
-      },
-    })
+    if (reason.kind === "already-added") return new Error(t("error.alreadyAdded", { distro: reason.distro }))
+
+    if (reason.kind === "unavailable") return new Error(t("error.unavailable"))
+
+    return new Error(reason.message)
   }
 
   const inspectCli = async (distro: string) => {
@@ -93,134 +129,101 @@ export function createWslServersController(options: WslServersControllerOptions)
     return cliCheck(t, distro, resolved, version, options.cli.version)
   }
 
-  const refreshCliCheck = async (distro: string) => {
-    const check = await inspectCli(distro)
-    setCliCheck(distro, check)
-
-    return check
-  }
-
-  const probeAddableDistros = async (distros: readonly string[]) => {
-    const unique = [...new Set(distros)]
-
-    const distroProbes = await Promise.all(
-      unique.flatMap((distro) =>
-        state.distroProbes[distro] ? [] : [runtime.probeDistro(distro).then((probe) => [distro, probe] as const)],
-      ),
-    )
-
-    if (distroProbes.length) {
-      setState({ distroProbes: { ...state.distroProbes, ...Object.fromEntries(distroProbes) } })
-    }
-
-    const opencodeChecks = await Promise.all(
-      unique.flatMap((distro) =>
-        distroProbeReady(state.distroProbes[distro]) && !state.opencodeChecks[distro]
-          ? [inspectCli(distro).then((check) => [distro, check] as const)]
-          : [],
-      ),
-    )
-
-    if (opencodeChecks.length) {
-      setState({ opencodeChecks: { ...state.opencodeChecks, ...Object.fromEntries(opencodeChecks) } })
-    }
-  }
-
-  const refreshCliCheckSafely = (id: string, distro: string) => {
-    return refreshCliCheck(distro).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error)
-      options.log("error", "wsl CLI check failed", { id, distro, message })
-    })
-  }
-
-  const refreshCliChecks = async () => {
-    await Promise.all(state.servers.map((item) => refreshCliCheckSafely(item.config.id, item.config.distro)))
-  }
-
-  const refreshDistroLists = async () => {
+  const listDistros = async () => {
     const [installed, online] = await Promise.all([runtime.listInstalled(), runtime.listOnline()])
 
     return { installed, online }
   }
 
-  const startServer = async (id: string) => {
-    const item = state.servers.find((x) => x.config.id === id)
+  const hostJob = async (job: WslHostJob, attempt: string): Promise<WslMachineEvent> => {
+    if (job === "probe-runtime") return { type: "runtime.probed", attempt, runtime: await runtime.probeRuntime() }
 
-    if (!item) return
-    await stopServer(id)
+    if (job === "refresh-distros") return { type: "distros.listed", attempt, ...(await listDistros()) }
+    await runtime.installRuntimeElevated()
 
-    if (closed) return
+    return { type: "runtime.installed", attempt, runtime: await runtime.probeRuntime() }
+  }
+
+  const distroJob = async (
+    effect: Extract<WslMachineEffect, { type: "probe-distro" | "inspect-cli" | "install-distro" | "install-cli" }>,
+  ): Promise<WslMachineEvent> => {
+    const distro = effect.distro
+    const attempt = effect.attempt
+
+    if (effect.type === "probe-distro") {
+      return { type: "distro.probed", distro, attempt, probe: await runtime.probeDistro(distro) }
+    }
+
+    if (effect.type === "inspect-cli")
+      return { type: "cli.inspected", distro, attempt, check: await inspectCli(distro) }
+
+    if (effect.type === "install-distro") {
+      await runtime.installDistro(distro)
+      const lists = await listDistros()
+
+      return { type: "distro.installed", distro, attempt, ...lists, probe: await runtime.probeDistro(distro) }
+    }
+
+    await options.installCli(distro, options.cli)
+    const check = await inspectCli(distro)
+
+    if (check.version === options.cli.version) return { type: "cli.installed", distro, attempt, check }
+
+    const expected = options.cli.version
+    const installed = check.version ?? t("error.noVersion")
+
+    return {
+      type: "job.failed",
+      distro,
+      attempt,
+      check,
+      message: t("error.updateVersion", { distro, installed, expected }),
+    }
+  }
+
+  const spawn = (distro: string, attempt: string) => {
     const abort = new AbortController()
-    const startup = { abort, done: launch(id, item.config.distro, abort) }
-    starts.set(id, startup)
-    await startup.done
+    options.log("info", "wsl sidecar starting", { distro })
+
+    const done = options
+      .spawnSidecar(distro, abort.signal)
+      .then(
+        (sidecar) => {
+          running.set(attempt, sidecar)
+          sidecar.onExit((code, signal) => {
+            running.delete(attempt)
+            const text = t("error.serverExited", { code: code ?? "null", signal: signal ?? "null" })
+            dispatch({ type: "server.exited", distro, attempt, code, signal, message: text })
+          })
+          dispatch({ type: "server.spawned", distro, attempt, url: sidecar.url, password: sidecar.password })
+        },
+        (error) => dispatch({ type: "server.failed", distro, attempt, message: message(error) }),
+      )
+      .finally(() => starts.delete(attempt))
+
+    starts.set(attempt, { abort, done })
   }
 
-  const launch = async (id: string, distro: string, abort: AbortController) => {
-    // A later start or a stop replaced this one.
-    const current = () => starts.get(id)?.abort === abort
-    setRuntime(id, { kind: "starting" })
-    options.log("info", "wsl sidecar starting", { id, distro })
+  // One stop per server, however many jobs and teardowns ask for it.
+  const halt = (attempt: string) => {
+    const pending = halts.get(attempt) ?? stopSidecar(attempt).finally(() => halts.delete(attempt))
+    halts.set(attempt, pending)
 
-    try {
-      const sidecar = await options.spawnSidecar(distro, abort.signal)
-
-      if (!current()) {
-        await sidecar.stop()
-
-        return
-      }
-
-      starts.delete(id)
-      sidecars.set(id, sidecar)
-      setRuntime(id, {
-        kind: "ready",
-        url: sidecar.url,
-        password: sidecar.password,
-      })
-      sidecar.onExit((code, signal) => {
-        if (sidecars.get(id) !== sidecar) return
-        sidecars.delete(id)
-        const message = t("error.serverExited", { code: code ?? "null", signal: signal ?? "null" })
-        setRuntime(id, { kind: "failed", message })
-        options.log("error", "wsl sidecar exited", { id, distro, code, signal })
-      })
-      void refreshCliCheckSafely(id, distro)
-      options.log("info", "wsl sidecar ready", { id, distro, url: sidecar.url })
-    } catch (error) {
-      if (!current()) return
-      starts.delete(id)
-      const message = error instanceof Error ? error.message : String(error)
-      setRuntime(id, { kind: "failed", message })
-      options.log("error", "wsl sidecar failed to start", { id, distro, message })
-    }
+    return pending
   }
 
-  const stopServer = async (id: string) => {
-    const startup = starts.get(id)
-    starts.delete(id)
-    startup?.abort.abort()
-    await startup?.done
-    const existing = sidecars.get(id)
-    sidecars.delete(id)
-    await existing?.stop()
-
-    if (startup || existing) setRuntime(id, { kind: "stopped" })
-  }
-
-  const runJob = async <T>(job: WslJob, runner: () => Promise<T>) => {
-    setState({ job })
-
-    try {
-      return await runner()
-    } finally {
-      setState({ job: null })
-    }
+  const stopSidecar = async (attempt: string) => {
+    const start = starts.get(attempt)
+    start?.abort.abort()
+    await start?.done
+    const sidecar = running.get(attempt)
+    running.delete(attempt)
+    await sidecar?.stop()
   }
 
   return {
     getState() {
-      return state
+      return published.state
     },
     subscribe(listener: () => void) {
       listeners.add(listener)
@@ -230,123 +233,56 @@ export function createWslServersController(options: WslServersControllerOptions)
       }
     },
 
+    // Starts at launch have no caller to answer.
     startConfiguredServers() {
-      closed = false
-      refreshFromStore()
-      void refreshCliChecks()
-      state.servers.forEach((item) => void startServer(item.config.id))
+      published.state.servers.forEach((item) => dispatch({ type: "start", id: item.config.id, attempt: randomUUID() }))
     },
 
-    async probeRuntime() {
-      await runJob({ kind: "runtime", startedAt: Date.now() }, async () => {
-        const next = await runtime.probeRuntime()
-        setState({
-          runtime: next,
-          pendingRestart: state.pendingRestart && !next.available ? state.pendingRestart : false,
-        })
-      })
+    probeRuntime() {
+      return request((attempt) => ({ type: "host", attempt, job: "probe-runtime" }))
     },
 
-    async refreshDistros() {
-      await runJob({ kind: "distros", startedAt: Date.now() }, async () => {
-        setState(await refreshDistroLists())
-      })
+    refreshDistros() {
+      return request((attempt) => ({ type: "host", attempt, job: "refresh-distros" }))
     },
 
-    async installWsl() {
-      await runJob({ kind: "install-wsl", startedAt: Date.now() }, async () => {
-        await runtime.installRuntimeElevated()
-        const next = await runtime.probeRuntime()
-        setState({ runtime: next, pendingRestart: !next.available })
-      })
+    installWsl() {
+      return request((attempt) => ({ type: "host", attempt, job: "install-wsl" }))
     },
 
-    async installDistro(distro: string) {
-      await runJob({ kind: "install-distro", distro, startedAt: Date.now() }, async () => {
-        await runtime.installDistro(distro)
-        const distros = await refreshDistroLists()
-        const probe = await runtime.probeDistro(distro)
-        setState({
-          ...distros,
-          distroProbes: { ...state.distroProbes, [distro]: probe },
-        })
-      })
+    installDistro(distro: string) {
+      return request((attempt) => ({ type: "install-distro", distro, attempt }))
     },
 
     async probeAddable(distros: readonly string[]) {
-      if (!distros.length) return
-      await runJob({ kind: "probe-addable", distros, startedAt: Date.now() }, () => probeAddableDistros(distros))
+      await Promise.all(
+        [...new Set(distros)].map((distro) => request((attempt) => ({ type: "probe", distro, attempt }))),
+      )
     },
 
-    async installOpencode(distro: string) {
-      await runJob({ kind: "install-opencode", distro, startedAt: Date.now() }, async () => {
-        const id = state.servers.find((item) => item.config.distro === distro)?.config.id
-
-        if (id) await stopServer(id)
-        await options.installCli(distro, options.cli)
-        requireMatchingCli(t, await refreshCliCheck(distro), options.cli.version)
-
-        if (id) await startServer(id)
-      })
+    installOpencode(distro: string) {
+      return request((attempt) => ({ type: "update", distro, attempt }))
     },
 
     async addServer(distro: string): Promise<WslServerConfig> {
-      const id = wslServerIdForDistro(distro)
-
-      if (state.servers.some((item) => item.config.id === id)) {
-        throw new Error(t("error.alreadyAdded", { distro }))
-      }
-
-      const config: WslServerConfig = {
-        id,
-        distro,
-      }
-
-      options.writeServers([...options.readServers(), config])
-      setState({
-        servers: [...state.servers, { config, runtime: { kind: "starting" } }],
-      })
-      void startServer(id)
+      const config: WslServerConfig = { id: wslServerIdForDistro(distro), distro }
+      await request((attempt) => ({ type: "add", config, attempt }))
 
       return config
     },
 
-    async removeServer(id: string) {
-      const distro = state.servers.find((item) => item.config.id === id)?.config.distro
-      await stopServer(id)
-      const remaining = options.readServers().filter((item) => item.id !== id)
-      options.writeServers(remaining)
-      const servers = state.servers.filter((item) => item.config.id !== id)
-
-      setState(distro ? { servers, ...removeDistroState(state, distro) } : { servers })
+    removeServer(id: string) {
+      return request((attempt) => ({ type: "remove", id, attempt }))
     },
 
-    startServer,
+    startServer(id: string) {
+      return request((attempt) => ({ type: "start", id, attempt }))
+    },
 
     async stopServers() {
-      closed = true
-      const pending = [...starts.values()]
-      starts.clear()
-      pending.forEach((startup) => startup.abort.abort())
-      await Promise.all([
-        ...pending.map((startup) => startup.done),
-        ...[...sidecars.values()].map((sidecar) => sidecar.stop()),
-      ])
-      sidecars.clear()
+      dispatch({ type: "close" })
+      await Promise.all([...new Set([...starts.keys(), ...running.keys(), ...halts.keys()])].map(halt))
     },
-  }
-}
-
-function initialState(): WslServersState {
-  return {
-    runtime: null,
-    installed: [],
-    online: [],
-    distroProbes: {},
-    opencodeChecks: {},
-    pendingRestart: false,
-    servers: [],
-    job: null,
   }
 }
 
@@ -389,26 +325,6 @@ function cliCheck(
   }
 }
 
-function requireMatchingCli(t: MainContext["t"], check: WslOpencodeCheck, expected: string) {
-  if (check.version === expected) return
-  throw new Error(
-    t("error.updateVersion", {
-      distro: check.distro,
-      installed: check.version ?? t("error.noVersion"),
-      expected,
-    }),
-  )
-}
-
-function removeDistroState(state: WslServersState, distro: string) {
-  const distroProbes = { ...state.distroProbes }
-  const opencodeChecks = { ...state.opencodeChecks }
-  delete distroProbes[distro]
-  delete opencodeChecks[distro]
-
-  return { distroProbes, opencodeChecks }
-}
-
-function distroProbeReady(probe: WslDistroProbe | undefined) {
-  return !!probe?.canExecute && probe.hasBash && probe.hasCurl
+function message(cause: unknown) {
+  return cause instanceof Error ? cause.message : String(cause)
 }

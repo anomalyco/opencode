@@ -6,6 +6,7 @@ import { pathToFileURL } from "url"
 import { eq } from "drizzle-orm"
 import { Database } from "@opencode/core/database/database"
 import { Agent } from "@opencode/core/agent"
+import { App } from "@opencode/core/app"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -104,7 +105,9 @@ const locations = makeGlobalNode({
               normalize: (resource, content) =>
                 content.mime === "image/heic"
                   ? Effect.fail(new Image.DecodeError({ resource }))
-                  : Effect.succeed(content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content),
+                  : Effect.succeed(
+                      content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content,
+                    ),
             }),
             Layer.mock(Snapshot.Service, {
               capture: () => Effect.undefined,
@@ -117,23 +120,27 @@ const locations = makeGlobalNode({
   ),
   deps: [Bus.node],
 })
-const it = testEffect(
-  AppNodeBuilder.build(
-    LayerNode.group([
-      Database.node,
-      Bus.node,
-      SessionProjector.node,
-      SessionStore.node,
-      Session.node,
-      SessionTransfer.node,
-    ]),
-    [
-      Bus.node.replace(Bus.configured({ persist: true })),
-      SessionExecution.node.replace(execution),
-      LocationServiceMap.node.replace(locations),
-    ],
-  ),
-)
+const harness = (channel?: string) =>
+  testEffect(
+    AppNodeBuilder.build(
+      LayerNode.group([
+        Database.node,
+        Bus.node,
+        SessionProjector.node,
+        SessionStore.node,
+        Session.node,
+        SessionTransfer.node,
+      ]),
+      [
+        Bus.node.replace(Bus.configured({ persist: true })),
+        SessionExecution.node.replace(execution),
+        LocationServiceMap.node.replace(locations),
+        App.node.replace(App.configured(channel ? { channel } : {})),
+      ],
+    ),
+  )
+const it = harness()
+const devIt = harness("dev")
 const sessionID = Session.ID.make("ses_prompt_test")
 const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 const messageID = SessionMessage.ID.create()
@@ -696,6 +703,26 @@ describe("Session.prompt", () => {
           .all()
           .pipe(Effect.orDie),
       ).toEqual([{ session: imported.id, hash }])
+    }),
+  )
+
+  devIt.effect("imports media into blobs by default on a dev-channel server with no config", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const session = yield* Session.Service
+      const transfer = yield* SessionTransfer.Service
+      const imported = yield* transfer.import({
+        data: {
+          info: { ...(yield* session.get(sessionID)), id: Session.ID.make("ses_import_dev") },
+          messages: mediaMessages("ses_import_dev"),
+        },
+        location: { directory: AbsolutePath.make("/project") },
+      })
+
+      const hash = SessionBlob.hashBytes(Buffer.from(pngBase64, "base64"))
+      expect(yield* db.select({ hash: BlobTable.hash }).from(BlobTable).all().pipe(Effect.orDie)).toEqual([{ hash }])
+      expect(yield* session.messages({ sessionID: imported.id, order: "asc" })).toEqual(mediaMessages("ses_import_dev"))
     }),
   )
 
