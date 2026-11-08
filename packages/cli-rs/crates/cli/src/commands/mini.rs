@@ -57,12 +57,11 @@ pub fn run(context: &Context, args: &MiniArgs) -> error::Result<()> {
         .thread_name("opencode-mini")
         .build()?;
     let server = runtime.block_on(connect_following(context))?;
-    let argv: Vec<String> = std::env::args().skip(1).collect();
     let input = Input {
         client: server.client.clone(),
         theme_directories: opencode_ui::theme::config_directories(&paths.config, std::path::Path::new(&directory)),
         home: paths.home.clone(),
-        trace: Trace::from_env(&paths.log, &directory, &argv),
+        trace: Trace::from_env(&paths.log, &directory, &context.args),
         target: TargetInput {
             directory: Some(directory.clone()),
             continue_latest: args.continue_,

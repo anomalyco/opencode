@@ -5,20 +5,28 @@ use std::sync::OnceLock;
 
 use super::State;
 
+static ENABLED: OnceLock<bool> = OnceLock::new();
+
+/// Decides the colors with the process arguments (after the program name). Before this, no flag counts.
+pub fn init(args: &[String]) {
+    let _ = ENABLED.set(detect(args));
+}
+
 /// picocolors' `isColorSupported`: off with `NO_COLOR` or `--no-color`; on with `FORCE_COLOR`, `--color`,
 /// `CI`, or a terminal on stdout whose `TERM` is not `dumb`. It looks at stdout even when a prompt
 /// writes to stderr.
+fn detect(args: &[String]) -> bool {
+    let set = |name| std::env::var_os(name).is_some_and(|value| !value.is_empty());
+    let flag = |name: &str| args.iter().any(|arg| arg == name);
+    !(set("NO_COLOR") || flag("--no-color"))
+        && (set("FORCE_COLOR")
+            || flag("--color")
+            || (std::io::stdout().is_terminal() && std::env::var("TERM").as_deref() != Ok("dumb"))
+            || set("CI"))
+}
+
 fn enabled() -> bool {
-    static ENABLED: OnceLock<bool> = OnceLock::new();
-    *ENABLED.get_or_init(|| {
-        let set = |name| std::env::var_os(name).is_some_and(|value| !value.is_empty());
-        let flag = |name: &str| std::env::args().any(|arg| arg == name);
-        !(set("NO_COLOR") || flag("--no-color"))
-            && (set("FORCE_COLOR")
-                || flag("--color")
-                || (std::io::stdout().is_terminal() && std::env::var("TERM").as_deref() != Ok("dumb"))
-                || set("CI"))
-    })
+    *ENABLED.get_or_init(|| detect(&[]))
 }
 
 /// picocolors' `formatter`: wraps `input` in `open` and `close`, and replaces every inner `close`
