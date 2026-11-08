@@ -8,6 +8,7 @@ import { ModelsProvider } from "@/providers/models/models"
 import { ComposerPersistenceProvider } from "@/composer/persistence"
 import { ServerProvider, useServer } from "@/runtime/server/current"
 import { ServerConnection } from "@/runtime/server/registry"
+import { isServerIncompatible } from "@/runtime/server/health-machine"
 import { useTabs, type DraftTab } from "@/shell/tabs/tabs"
 import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
 import NewSession from "@/new-session/screen"
@@ -62,7 +63,7 @@ function ResolvedDraftContent(props: { draft: DraftTab }) {
 
   return (
     <Show
-      when={!server.health?.incompatible}
+      when={!isServerIncompatible(server.health)}
       fallback={
         <SessionRouteFrame padded>
           <SessionPanelFrame raised>

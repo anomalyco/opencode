@@ -277,7 +277,7 @@
     gap: 8px;
     width: 100%;
 
-    /* Hover actions show and hide at once, without a fade. */
+    /* The meta line shows and hides at once, together with the chevron. */
     @media (hover: hover) {
       opacity: 0;
       pointer-events: none;
@@ -362,14 +362,6 @@
     }
   }
 
-  [data-slot="user-message-actions"] {
-    --user-message-transition-gap: 6px;
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    gap: 6px;
-  }
-
   [data-slot="user-message-transition"] {
     display: inline-grid;
     grid-template-columns: 0fr;
@@ -416,27 +408,79 @@
     }
   }
 
-  &:hover [data-slot="user-message-copy-wrapper"],
-  &:focus-within [data-slot="user-message-copy-wrapper"],
-  [data-slot="user-message-copy-wrapper"]:has([data-expanded]),
-  &:hover [data-slot="user-message-meta-tail"],
-  &:focus-within [data-slot="user-message-meta-tail"] {
+  /* A closed menu hands focus back without a ring, so only keyboard focus keeps the meta line shown. */
+  &:has([data-slot="user-message-body"]:hover) [data-slot="user-message-copy-wrapper"],
+  &:not(:has([data-slot="user-message-body"])):hover [data-slot="user-message-copy-wrapper"],
+  /* A footer holding its own buttons, as the /btw panel's does, stays reachable anywhere over the message. */
+  &:has([data-slot="user-message-copy-wrapper"] button):hover [data-slot="user-message-copy-wrapper"],
+  &:has(:focus-visible) [data-slot="user-message-copy-wrapper"],
+  [data-slot="user-message-copy-wrapper"]:has([data-expanded], [data-closing]),
+  &:has([data-slot="user-message-body"]:hover) [data-slot="user-message-meta-tail"],
+  &:has([data-slot="user-message-copy-wrapper"] button):hover [data-slot="user-message-meta-tail"],
+  &:has(:focus-visible) [data-slot="user-message-meta-tail"] {
     opacity: 1;
     pointer-events: auto;
   }
 
-  /* A pending steer keeps its Pending label and actions in view. */
+  /* A run's last message carries the whole run's agent and model, so hovering anywhere in the run shows it. */
+  &[data-run-hovered] [data-slot="user-message-copy-wrapper"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* A pending steer keeps its Pending label in view. */
   &[data-pending] [data-slot="user-message-copy-wrapper"] {
     opacity: 1;
     pointer-events: auto;
+  }
+
+  /* Its agent and model show on hover, like any other message's meta line. */
+  @media (hover: hover) {
+    &[data-pending] {
+      [data-slot="user-message-meta-label"],
+      [data-slot="user-message-pending-separator"] {
+        opacity: 0;
+      }
+    }
+
+    &[data-pending]:has([data-slot="user-message-body"]:hover),
+    &[data-pending]:not(:has([data-slot="user-message-body"])):hover,
+    &[data-pending]:has(:focus-visible),
+    &[data-pending][data-run-hovered] {
+      [data-slot="user-message-meta-label"],
+      [data-slot="user-message-pending-separator"] {
+        opacity: 1;
+      }
+    }
   }
 
   [data-slot="user-message-copy-wrapper"] > * {
     opacity: var(--user-run-meta, 1);
   }
 
-  /* The last message of a run carries the meta line; the others fold theirs away and offer their actions beside
-     the bubble. */
+  /* The bubbles of a run and the gaps between them are one hover zone: each body reaches across the 4px gap to its
+     neighbor, so the pointer never falls between them. */
+  [data-slot="user-message-body"] {
+    position: relative;
+  }
+
+  &[data-run-above] [data-slot="user-message-body"]::before,
+  &[data-run-folded] [data-slot="user-message-body"]::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    height: 4px;
+  }
+
+  &[data-run-above] [data-slot="user-message-body"]::before {
+    bottom: 100%;
+  }
+
+  &[data-run-folded] [data-slot="user-message-body"]::after {
+    top: 100%;
+  }
+
+  /* The last message of a run carries the meta line; the others fold theirs away. */
   &[data-run-folded] {
     [data-slot="user-message-body"] {
       position: relative;
@@ -452,13 +496,27 @@
     visibility: hidden;
   }
 
-  [data-slot="user-message-run-actions"] {
+  /* Every bubble offers its actions from a chevron pinned to its top trailing corner, centered on the first line.
+     The bubble color fades in behind it so text under the corner never competes with the control. */
+  [data-slot="user-message-text"] {
+    --user-message-bubble: var(--v2-background-bg-layer-02);
+    position: relative;
+  }
+
+  /* Inset from the trailing edge by the same distance as from the top. */
+  [data-slot="user-message-menu"] {
+    --user-message-menu-inset: calc(8px + (1lh - 20px) / 2);
     position: absolute;
-    /* Centered on the bubble's last line. */
-    bottom: calc(8px + (1lh - 20px) / 2);
-    inset-inline-end: calc(100% + 4px);
+    top: var(--user-message-menu-inset);
+    inset-inline-end: var(--user-message-menu-inset);
     display: flex;
-    align-items: center;
+    padding-inline-start: 16px;
+    background: linear-gradient(to left, var(--user-message-bubble) calc(100% - 16px), transparent);
+    border-radius: 4px;
+
+    &:dir(rtl) {
+      background: linear-gradient(to right, var(--user-message-bubble) calc(100% - 16px), transparent);
+    }
 
     @media (hover: hover) {
       opacity: 0;
@@ -466,9 +524,35 @@
     }
   }
 
-  &:hover [data-slot="user-message-run-actions"],
-  &:focus-within [data-slot="user-message-run-actions"],
-  [data-slot="user-message-run-actions"]:has([data-expanded]) {
+  /* Without hover the chevron always shows, so the first line keeps room for it instead of fading text under it. The
+     float also widens a short bubble, so a one-word prompt stays readable. 20px spans the 20px button, less the 12px
+     text padding it overlaps, plus a 4px gap at the 8px inset. */
+  @media not (hover: hover) {
+    [data-slot="user-message-text"]:has(> [data-slot="user-message-menu"])::before {
+      content: "";
+      float: inline-end;
+      width: 20px;
+      height: 1lh;
+    }
+
+    [data-slot="user-message-text"] > [data-slot="user-message-menu"] {
+      padding: 0;
+      background: none;
+    }
+  }
+
+  [data-slot="user-message-copy-wrapper"] [data-slot="user-message-menu"] {
+    position: static;
+    padding: 0;
+    background: none;
+  }
+
+  /* Only the bubble itself shows its chevron; a message without one shows it in its footer on hover. A closed menu hands
+     focus back without a ring, so only keyboard focus keeps the chevron shown. */
+  [data-slot="user-message-text"]:hover [data-slot="user-message-menu"],
+  &:not(:has([data-slot="user-message-text"])):hover [data-slot="user-message-menu"],
+  &:has(:focus-visible) [data-slot="user-message-menu"],
+  [data-slot="user-message-menu"]:has([data-expanded], [data-closing]) {
     opacity: 1;
     pointer-events: auto;
   }
@@ -556,7 +640,7 @@
   }
 
   @media (hover: hover) {
-    [data-slot="text-part-meta"]:hover [data-slot="text-part-meta-speed"] {
+    [data-slot="text-part-meta-speed"] {
       display: inline-flex;
     }
   }
@@ -1246,6 +1330,19 @@
     /* Nested sticky file headers stop below the open group header. */
     > [data-slot="collapsible-content"] {
       --sticky-accordion-top: calc(var(--context-group-sticky-top) + 28px + var(--tool-content-gap));
+      position: relative;
+      margin-inline-start: 12px;
+      padding-inline-start: 12px;
+
+      &::before {
+        content: "";
+        position: absolute;
+        inset-inline-start: -0.25px;
+        inset-block: 6px;
+        width: 0.5px;
+        background-color: var(--v2-border-border-base);
+        pointer-events: none;
+      }
     }
   }
 }
@@ -1445,9 +1542,9 @@
 
   [data-slot="permission-header-title"] {
     font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-size: 13px;
     font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
+    line-height: var(--line-height-base);
     color: var(--v2-text-text-base);
     min-width: 0;
   }
@@ -1462,11 +1559,38 @@
 
   [data-slot="permission-hint"] {
     font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-size: 13px;
     font-weight: var(--font-weight-regular);
-    line-height: var(--line-height-large);
+    line-height: var(--line-height-base);
     color: var(--v2-text-text-muted);
     padding: 0;
+  }
+
+  [data-slot="permission-action"] {
+    font-family: var(--v2-font-family-code);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-base);
+    letter-spacing: -0.04px;
+    color: var(--v2-text-text-base);
+  }
+
+  [data-slot="permission-input"] {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 8px;
+    max-height: 160px;
+    overflow-y: auto;
+
+    code {
+      font-family: var(--v2-font-family-code);
+      font-size: 13px;
+      font-weight: 440;
+      letter-spacing: -0.04px;
+      line-height: var(--line-height-base);
+      white-space: pre-wrap;
+    }
   }
 
   [data-slot="permission-patterns"] {
@@ -1845,6 +1969,7 @@
 /* Only delivery animates. A steer can render once before its admission marks it pending, and must not fade from the
    delivered color. */
 :root body [data-component="user-message"][data-pending] [data-slot="user-message-text"] {
+  --user-message-bubble: var(--v2-background-bg-layer-01);
   background: var(--v2-background-bg-layer-01);
   color: var(--v2-text-text-muted);
   transition: none;

@@ -155,9 +155,15 @@ export type WslMachineTransition = {
   readonly effects: readonly WslMachineEffect[]
 }
 
-const STOPPED: WslServer = { kind: "stopped" }
+// Fresh objects, never shared constants: windows reconcile `toServersState` into a Solid store, which writes into
+// the objects it holds, so two servers must never share one runtime object.
+function stoppedServer(): WslServer {
+  return { kind: "stopped" }
+}
 
-const IDLE: WslDistro = { status: "idle", server: STOPPED }
+function idleDistro(): WslDistro {
+  return { status: "idle", server: stoppedServer() }
+}
 
 export function createWslMachineState(configured: readonly WslServerConfig[]): WslMachineState {
   return {
@@ -244,7 +250,7 @@ export function toServersState(state: WslMachineState): WslServersState {
     pendingRestart: state.pendingRestart,
     servers: state.configured.map((config) => ({
       config,
-      runtime: open ? serverRuntime(distroOf(open, config.distro)) : STOPPED,
+      runtime: open ? serverRuntime(distroOf(open, config.distro)) : stoppedServer(),
     })),
     hostJob: open?.host.status ?? "idle",
     distroJobs: Object.fromEntries(
@@ -383,7 +389,7 @@ function distroInstalled(
     distroProbes: { ...state.distroProbes, [event.distro]: event.probe },
   }
 
-  return next(put(installed, event.distro, IDLE), [resolve(event.attempt)])
+  return next(put(installed, event.distro, idleDistro()), [resolve(event.attempt)])
 }
 
 // Updating stops the distro's server first, even one still starting, and starts it again once the CLI matches.
@@ -416,7 +422,8 @@ function cliInstalled(state: OpenState, event: { distro: string; attempt: string
   if (current.status !== "updating" || current.attempt !== event.attempt) return next(state)
   const checked = withCheck(state, event.distro, event.check)
 
-  if (!configuredDistro(state, event.distro)) return next(put(checked, event.distro, IDLE), [resolve(event.attempt)])
+  if (!configuredDistro(state, event.distro))
+    return next(put(checked, event.distro, idleDistro()), [resolve(event.attempt)])
 
   return next(put(checked, event.distro, { status: "starting", attempt: event.attempt }), [
     { type: "spawn", distro: event.distro, attempt: event.attempt },
@@ -438,7 +445,7 @@ function jobFailed(
   }
 
   const checked = event.check ? withCheck(state, event.distro, event.check) : state
-  const idle: WslDistro = current.status === "probing" ? { status: "idle", server: current.server } : IDLE
+  const idle: WslDistro = current.status === "probing" ? { status: "idle", server: current.server } : idleDistro()
 
   return next(put(checked, event.distro, idle), [reject(event.attempt, { kind: "error", message: event.message })])
 }
@@ -590,16 +597,18 @@ function cliChecked(state: OpenState, distro: string, check: WslOpencodeCheck) {
 function serverRuntime(job: WslDistro): WslServerRuntime {
   if (job.status === "starting") return { kind: "starting" }
 
-  if (job.status !== "idle" && job.status !== "probing") return STOPPED
+  if (job.status !== "idle" && job.status !== "probing") return stoppedServer()
 
   if (job.server.kind === "ready") return { kind: "ready", url: job.server.url, password: job.server.password }
 
-  return job.server
+  if (job.server.kind === "failed") return { kind: "failed", message: job.server.message }
+
+  return stoppedServer()
 }
 
 // A distro without a job is idle with no server.
 function distroOf(state: OpenState, distro: string): WslDistro {
-  return state.distros[distro] ?? IDLE
+  return state.distros[distro] ?? idleDistro()
 }
 
 function needsCliCheck(state: OpenState, distro: string) {

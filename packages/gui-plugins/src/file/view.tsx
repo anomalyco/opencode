@@ -1,10 +1,9 @@
-import { createMemo, createSignal, Match, on, onCleanup, onMount, Show, Switch } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createMemo, createSignal, Match, on, onCleanup, Show, Switch, untrack } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { FileSearchHandle } from "@opencode/session-ui/file"
 import { useFileComponent } from "@opencode/ui/context/file"
-import { cloneSelectedLineRange, previewSelectedLines } from "@opencode/session-ui/pierre/selection-bridge"
+import { previewSelectedLines } from "@opencode/session-ui/pierre/selection-bridge"
 import { createLineCommentControllerV2 } from "@opencode/session-ui/v2/line-comment-annotations-v2"
 import { sampledChecksum } from "@opencode/util/encode"
 import { LineCommentOverflowIcon } from "@opencode/ui/line-comment"
@@ -14,6 +13,20 @@ import { artifactKind } from "@opencode/util/artifact"
 import ArtifactView from "./artifact-view"
 import { useShared } from "./context"
 import { fileTabPath } from "./path"
+import {
+  FILE_SCROLL_INTERACTED,
+  FILE_SCROLL_RESTORE_REQUESTED,
+  FILE_SCROLL_REVEAL_REQUESTED,
+  canRestoreFileScroll,
+  canSaveFileScroll,
+  createFileScrollState,
+  sameFileScrollContext,
+  transitionFileScroll,
+  type FileScrollContext,
+  type FileScrollEffect,
+  type FileScrollEvent,
+  type FileScrollPos,
+} from "./scroll-machine"
 
 type FileSelection = { startLine: number; endLine: number; startChar: number; endChar: number }
 
@@ -55,20 +68,61 @@ function FileCommentMenu(props: {
   )
 }
 
-type ScrollPos = { x: number; y: number }
-
-type ScrollSyncState = { scroll?: HTMLDivElement; scrollFrame?: number; restoreFrame?: number; pending?: ScrollPos }
-
-type NoteState = { openedComment: string | null; commenting: LineRange | null; selected: LineRange | null }
+/** The code view's scroll element and the animation frame that restores or stores its scroll. */
+type ScrollTarget = { element?: HTMLDivElement; frame?: number }
 
 type FindState = { find: FileSearchHandle | null }
 
-function createScrollSync(input: { get: () => ScrollPos | undefined; set: (pos: ScrollPos) => void }) {
-  const state: ScrollSyncState = {}
+/** The session the view shows and the one it showed before a switch, whose unsaved scroll a switch still stores. */
+type ShownSessions = { current: MountedSession; previous?: MountedSession }
+
+function createScrollSync(input: {
+  context: () => Omit<FileScrollContext, "scroller">
+  get: () => FileScrollPos | undefined
+  write: (sessionKey: string, scrollKey: string, position: FileScrollPos) => void
+}) {
+  const scroller: ScrollTarget = {}
+  const [hasScroller, setHasScroller] = createSignal(false)
   const [code, setCode] = createSignal<HTMLElement[]>([])
+  const [scrollState, setScrollState] = createSignal(createFileScrollState())
+
+  const dispatch = (event: FileScrollEvent) => {
+    const next = transitionFileScroll(untrack(scrollState), event)
+
+    setScrollState(next.state)
+    next.effects.forEach(run)
+  }
+
+  const run = (effect: FileScrollEffect) => {
+    if (effect.type === "save.write") return input.write(effect.sessionKey, effect.scrollKey, effect.position)
+
+    if (scroller.frame !== undefined) cancelAnimationFrame(scroller.frame)
+    scroller.frame = undefined
+
+    if (effect.type === "frame.cancel") return
+    const attempt = effect.attempt
+
+    if (effect.type === "frame.save") {
+      scroller.frame = requestAnimationFrame(() => {
+        scroller.frame = undefined
+        dispatch({ type: "save.stepped", attempt })
+      })
+
+      return
+    }
+
+    scroller.frame = requestAnimationFrame(() => {
+      scroller.frame = undefined
+
+      if (canRestoreFileScroll(untrack(scrollState), attempt)) restore()
+      dispatch({ type: "restore.stepped", attempt })
+    })
+  }
+
+  const interacted = () => dispatch(FILE_SCROLL_INTERACTED)
 
   const getCode = () => {
-    const el = state.scroll
+    const el = scroller.element
 
     if (!el) return []
 
@@ -85,36 +139,16 @@ function createScrollSync(input: { get: () => ScrollPos | undefined; set: (pos: 
     )
   }
 
-  const save = (next: ScrollPos) => {
-    state.pending = next
-
-    if (state.scrollFrame !== undefined) return
-
-    state.scrollFrame = requestAnimationFrame(() => {
-      state.scrollFrame = undefined
-
-      const out = state.pending
-      state.pending = undefined
-
-      if (!out) return
-
-      input.set(out)
-    })
-  }
-
   const onCodeScroll = (event: Event) => {
-    const el = state.scroll
+    const el = scroller.element
 
-    if (!el) return
+    if (!el || !canSaveFileScroll(untrack(scrollState))) return
 
     const target = event.currentTarget
 
     if (!(target instanceof HTMLElement)) return
 
-    save({
-      x: target.scrollLeft,
-      y: el.scrollTop,
-    })
+    dispatch({ type: "scrolled", position: { x: target.scrollLeft, y: el.scrollTop } })
   }
 
   const sync = () => {
@@ -126,9 +160,9 @@ function createScrollSync(input: { get: () => ScrollPos | undefined; set: (pos: 
   }
 
   const restore = () => {
-    const el = state.scroll
+    const el = scroller.element
 
-    if (!el) return
+    if (!el || el.clientHeight === 0 || el.clientWidth === 0) return
 
     const pos = input.get()
 
@@ -149,42 +183,53 @@ function createScrollSync(input: { get: () => ScrollPos | undefined; set: (pos: 
     if (el.scrollLeft !== pos.x) el.scrollLeft = pos.x
   }
 
-  const queueRestore = () => {
-    if (state.restoreFrame !== undefined) return
-
-    state.restoreFrame = requestAnimationFrame(() => {
-      state.restoreFrame = undefined
-      restore()
-    })
-  }
-
+  // Scroll events a restore or a layout clamp fires arrive while restoring and are not the user's to store.
   const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
+    if (!canSaveFileScroll(untrack(scrollState))) return
+
     if (code().length === 0) sync()
 
-    save({
-      x: code()[0]?.scrollLeft ?? event.currentTarget.scrollLeft,
-      y: event.currentTarget.scrollTop,
+    dispatch({
+      type: "scrolled",
+      position: { x: code()[0]?.scrollLeft ?? event.currentTarget.scrollLeft, y: event.currentTarget.scrollTop },
     })
   }
 
   // The diff's code columns scroll on their own; listen to the ones on screen.
   createKeyed(code, (items) => items.forEach((item) => makeEventListener(item, "scroll", onCodeScroll)))
 
+  createKeyed(
+    () => ({ ...input.context(), scroller: hasScroller() }),
+    (context) => dispatch({ type: "context.synced", context }),
+    { equals: sameFileScrollContext },
+  )
+
+  // The ref runs before the file renders into the element; the machine restores a frame after the mount. The code view
+  // unmounts while an artifact shows its preview, and restores again when its source shows.
   const setViewport = (el: HTMLDivElement) => {
-    state.scroll = el
-    // The ref runs before the file renders into the element.
-    onMount(restore)
+    scroller.element = el
+    // Input, not the scroll events a restore or a layout change fires, hands the view to the user.
+    makeEventListener(el, "wheel", interacted, { passive: true, capture: true })
+    makeEventListener(el, "mousewheel", interacted, { passive: true, capture: true })
+    makeEventListener(el, "pointerdown", interacted, { passive: true, capture: true })
+    makeEventListener(el, "touchstart", interacted, { passive: true, capture: true })
+    makeEventListener(el, "keydown", interacted, { capture: true })
+    setHasScroller(true)
+    onCleanup(() => {
+      if (scroller.element !== el) return
+      scroller.element = undefined
+      setCode([])
+      setHasScroller(false)
+    })
   }
 
-  onCleanup(() => {
-    if (state.scrollFrame !== undefined) cancelAnimationFrame(state.scrollFrame)
-
-    if (state.restoreFrame !== undefined) cancelAnimationFrame(state.restoreFrame)
-  })
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   return {
     handleScroll,
-    queueRestore,
+    interacted,
+    requestRestore: () => dispatch(FILE_SCROLL_RESTORE_REQUESTED),
+    reveal: () => dispatch(FILE_SCROLL_REVEAL_REQUESTED),
     setViewport,
   }
 }
@@ -239,9 +284,29 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
     return shared.handoff.get(props.session.key, p) ?? null
   })
 
+  // The sessions the view showed last, so a session switch still stores the offset the user left the previous one at.
+  const shown: ShownSessions = { current: props.session }
+
   const scrollSync = createScrollSync({
+    context: () => {
+      if (props.session.key !== shown.current.key) shown.previous = shown.current
+      shown.current = props.session
+
+      return {
+        sessionKey: props.session.key,
+        scrollKey: key(),
+        loaded: Boolean(current()?.loaded),
+        fileReady: file.ready(),
+        layoutReady: layout.ready() && props.session.location !== undefined,
+        shown: active(),
+      }
+    },
     get: () => layout.scroll.get(props.session, key()),
-    set: (pos) => layout.scroll.set(props.session, key(), pos),
+    write: (sessionKey, scrollKey, position) => {
+      const session = [props.session, shown.previous].find((item) => item?.key === sessionKey)
+
+      if (session) layout.scroll.set(session, scrollKey, position)
+    },
   })
 
   const selectionPreview = (source: string, selection: FileSelection) => {
@@ -308,17 +373,6 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
 
   const commentedLines = createMemo(() => fileComments().map((comment) => comment.selection))
 
-  const [note, setNote] = createStore<NoteState>({ openedComment: null, commenting: null, selected: null })
-
-  const syncSelected = (range: LineRange | null) => {
-    const p = path()
-
-    if (!p) return
-    file.selection.set(p, range ? cloneSelectedLineRange(range) : null)
-  }
-
-  const activeSelection = () => note.selected ?? selectedLines()
-
   const commentsUi = createLineCommentControllerV2({
     comments: fileComments,
     label: ctx.t("ui.lineComment.submit"),
@@ -327,15 +381,11 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
       items: (query) => file.search(query, { kind: "any" }),
     },
     getSide: selectionSide,
-    state: {
-      opened: () => note.openedComment,
-      setOpened: (id) => setNote("openedComment", id),
-      selected: () => note.selected,
-      setSelected: (range) => setNote("selected", range),
-      commenting: () => note.commenting,
-      setCommenting: (range) => setNote("commenting", range),
-      syncSelected,
-      hoverSelected: syncSelected,
+    onSyncSelected: (range) => {
+      const p = path()
+
+      if (!p) return
+      file.selection.set(p, range)
     },
     onSubmit: ({ comment, selection }) => {
       const p = path()
@@ -380,6 +430,8 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
 
       event.preventDefault()
       event.stopPropagation()
+      // Find scrolls to its matches; the stored scroll must not pull the view back.
+      scrollSync.interacted()
       state.find?.focus()
     },
     { capture: true },
@@ -388,7 +440,7 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
   // A new path, e.g. after the workspace directory changes, drops the comment draft and selection of the old one.
   const moved = createMemo(on(path, () => ({}), { defer: true }))
 
-  createKeyed(moved, () => commentsUi.note.reset())
+  createKeyed(moved, () => commentsUi.reset())
 
   // A comment focused elsewhere, e.g. from its composer chip, opens here once this file shows.
   createKeyed(
@@ -403,12 +455,10 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
       return target && { target }
     },
     (focus) => {
-      commentsUi.note.openComment(focus.target.id, focus.target.selection, { cancelDraft: true })
+      commentsUi.focusComment(focus.target.id, focus.target.selection)
       requestAnimationFrame(() => comment.focus.set(null))
     },
   )
-
-  const previous = { loaded: false, ready: false, active: false }
 
   createKeyed(
     () => {
@@ -419,33 +469,11 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
     (target) =>
       onCleanup(
         shared.reveal.register(target.session, target.path, () => {
-          setNote("selected", null)
-          scrollSync.queueRestore()
+          commentsUi.clearPassive()
+          scrollSync.reveal()
         }),
       ),
     { equals: (previous, next) => previous?.session === next?.session && previous?.path === next?.path },
-  )
-
-  // Restores the stored scroll when the file loads, its view state loads, or the tab shows a loaded file again.
-  createKeyed(
-    () => ({ loaded: !!current()?.loaded, ready: file.ready(), shown: active() }),
-    (next) => {
-      const restore =
-        (next.loaded && !previous.loaded) ||
-        (next.ready && !previous.ready) ||
-        (next.shown && next.loaded && !previous.active)
-
-      previous.loaded = next.loaded
-      previous.ready = next.ready
-      previous.active = next.shown
-
-      if (restore) scrollSync.queueRestore()
-    },
-    {
-      // The file's content changing while it stays loaded is the same key.
-      equals: (previous, next) =>
-        previous.loaded === next.loaded && previous.ready === next.ready && previous.shown === next.shown,
-    },
   )
 
   const renderFile = () => (
@@ -460,11 +488,9 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
         }}
         enableLineSelection
         enableGutterUtility
-        selectedLines={activeSelection()}
+        selectedLines={commentsUi.selected() ?? selectedLines()}
         commentedLines={commentedLines()}
-        onRendered={() => {
-          scrollSync.queueRestore()
-        }}
+        onRendered={scrollSync.requestRestore}
         annotations={commentsUi.annotations()}
         renderAnnotation={commentsUi.renderAnnotation}
         renderGutterUtility={commentsUi.renderGutterUtility}
@@ -472,17 +498,7 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
           commentsUi.onLineSelected(range)
         }}
         onLineSelectionEnd={(range: LineRange | null) => {
-          if (!range) {
-            commentsUi.note.select(null)
-            commentsUi.note.cancelDraft()
-
-            return
-          }
-
           commentsUi.onLineSelectionEnd(range)
-        }}
-        onLineNumberSelectionEnd={(range: LineRange | null) => {
-          commentsUi.onLineNumberSelectionEnd(range)
         }}
         search={search}
         class="select-text"

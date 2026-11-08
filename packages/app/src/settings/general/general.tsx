@@ -1,4 +1,4 @@
-import { Component, Show, createMemo, createResource } from "solid-js"
+import { Component, Show, createMemo } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
@@ -17,7 +17,7 @@ import { formatKeybind } from "@/shell/commands/command"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
 import { createShellOptions } from "./behavior"
-import type { ShellSettingsController } from "./controllers"
+import { createOptimisticSetting, type ShellSettingsController } from "./controllers"
 import { InterfaceModeSetting } from "./interface-mode"
 import "@/settings/settings.css"
 
@@ -235,30 +235,21 @@ export const SettingsGeneral: Component = () => {
   const mobile = createMediaQuery("(max-width: 767px)")
   const desktop = createMemo(() => platform.platform === "desktop")
 
-  const [pinchZoom, { mutate: setPinchZoom }] = createResource(
-    () => desktop() && "getPinchZoomEnabled" in platform,
-    () => Promise.resolve(platform.getPinchZoomEnabled?.() ?? false).catch(() => false),
-    { initialValue: false },
-  )
+  const pinchZoom = createOptimisticSetting({
+    source: () => (desktop() && "getPinchZoomEnabled" in platform) || undefined,
+    initial: false,
+    initialMeta: undefined,
+    load: async () => ({ value: (await platform.getPinchZoomEnabled?.()) ?? false, meta: undefined }),
+    write: (checked) => platform.setPinchZoomEnabled?.(checked),
+  })
 
-  const onPinchZoomChange = (checked: boolean) => {
-    setPinchZoom(checked)
-    const update = platform.setPinchZoomEnabled?.(checked)
-
-    if (!update) return
-    void update.catch(() => setPinchZoom(!checked))
-  }
-
-  const [spellcheck, { mutate: setSpellcheck }] = createResource(
-    () => desktop() && "getSpellcheckEnabled" in platform,
-    () => platform.getSpellcheckEnabled?.().catch(() => true) ?? true,
-    { initialValue: true },
-  )
-
-  const onSpellcheckChange = (checked: boolean) => {
-    setSpellcheck(checked)
-    void platform.setSpellcheckEnabled?.(checked).catch(() => setSpellcheck(!checked))
-  }
+  const spellcheck = createOptimisticSetting({
+    source: () => (desktop() && "getSpellcheckEnabled" in platform) || undefined,
+    initial: true,
+    initialMeta: undefined,
+    load: async () => ({ value: (await platform.getSpellcheckEnabled?.()) ?? true, meta: undefined }),
+    write: (checked) => platform.setSpellcheckEnabled?.(checked),
+  })
 
   const GeneralSection = () => (
     <div class="settings-section">
@@ -290,7 +281,7 @@ export const SettingsGeneral: Component = () => {
             description={language.t("settings.general.row.pinchZoom.description")}
           >
             <div data-action="settings-pinch-zoom">
-              <Switch checked={pinchZoom.latest} onChange={onPinchZoomChange} />
+              <Switch checked={pinchZoom.value()} onChange={pinchZoom.select} />
             </div>
           </SettingsRow>
           <SettingsRow
@@ -298,7 +289,7 @@ export const SettingsGeneral: Component = () => {
             description={language.t("settings.general.row.spellcheck.description")}
           >
             <div data-action="settings-spellcheck">
-              <Switch checked={spellcheck.latest} onChange={onSpellcheckChange} />
+              <Switch checked={spellcheck.value()} onChange={spellcheck.select} />
             </div>
           </SettingsRow>
         </Show>

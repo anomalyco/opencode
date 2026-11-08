@@ -393,6 +393,9 @@ mod tests {
                     exit_code: Some(0),
                     signal: None,
                     final_offset: 123,
+                    output_lines: None,
+                    output_error: None,
+                    exited_at: 1,
                 },
             )
             .unwrap();
@@ -404,6 +407,9 @@ mod tests {
                 exit_code: Some(0),
                 signal: None,
                 final_offset: 123,
+                output_lines: None,
+                output_error: None,
+                exited_at: 1,
             }
         ));
         assert_eq!(client.read(&mut [0]).unwrap(), 0);

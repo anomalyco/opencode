@@ -1,8 +1,8 @@
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
+import { ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponsesChannel } from "../protocols/open-responses-channel.js"
 import { XAIResponses } from "../protocols/xai-responses.js"
@@ -18,7 +18,7 @@ const baseURL = "https://api.x.ai/v1"
 export type XAIProviderOptionsInput = OpenAIOptionsInput &
   XAIResponses.OptionsInput & { readonly contextManagement?: never }
 
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: XAIProviderOptionsInput
@@ -51,7 +51,7 @@ const responsesRoute = Route.make({
     // rejects `instructions` next to `previous_response_id` and keeps the instructions of the response it continues.
     continuation: ({ instructions: _instructions, ...request }) => (request.store === false ? undefined : request),
   }),
-  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
 const chatRoute = Route.make({

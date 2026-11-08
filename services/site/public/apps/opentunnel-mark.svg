@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1176 1232">
+  <!-- OpenTunnel mark: nested arches in white with see-through gaps (the tile supplies the background), traced from David's 6 Nov reference without the centre square. -->
+  <path fill="#fff" fill-rule="evenodd" d="M127 1103V536a473 473 0 0 1 946 0v567zM204 1025V537a396 396 0 0 1 792 0v488zM282 1025V567a318 318 0 0 1 636 0v458zM359 1025V567a241 241 0 0 1 482 0v458zM437 1025V598a163 163 0 0 1 326 0v427zM515 1025V598a85 85 0 0 1 170 0v427z"/>
+</svg>

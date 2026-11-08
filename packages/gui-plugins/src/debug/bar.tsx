@@ -1,12 +1,19 @@
-import { createMemo, createSignal, onCleanup, Show } from "solid-js"
+import { createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
+import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { usePlugin } from "@opencode/plugin/gui"
 import { motionGlobals, motionTuning } from "@opencode/ui/motion-tuning"
 import { duration } from "@opencode/util/duration"
 import { SessionTurn } from "@opencode/util/session-turn"
 import { builtinContext } from "@opencode/plugin/gui/builtin"
+import {
+  initialFocusToggleState,
+  isFocusToggleActive,
+  transitionFocusToggle,
+  type FocusToggleEvent,
+} from "./focus-machine"
 
 const fixed = (n?: number, digits = 0) => {
   if (n === undefined || Number.isNaN(n)) return
@@ -119,7 +126,7 @@ export default function DebugBar(props: {
   const locale = ctx.locale
   const desktop = ctx.desktop
   const sessions = ctx.sessions
-  const [focus, setFocus] = createSignal(false)
+  const [focus, setFocus] = createSignal(initialFocusToggleState)
 
   const target = createMemo(
     () => {
@@ -167,16 +174,26 @@ export default function DebugBar(props: {
 
   const na = () => ctx.t("na").toUpperCase()
 
-  const toggleFocus = async () => {
+  const dispatchFocus = (event: FocusToggleEvent) => {
     if (!desktop) return
-    const enabled = !focus()
-    await desktop.forceFocus(enabled)
-    setFocus(enabled)
+    const next = transitionFocusToggle(untrack(focus), event)
+    setFocus(next.state)
+    next.effects.forEach((effect) => {
+      switch (effect.type) {
+        case "set":
+          return void desktop.forceFocus(effect.enabled).then(
+            () => dispatchFocus({ type: "set.succeeded", attempt: effect.attempt }),
+            () => dispatchFocus({ type: "set.failed", attempt: effect.attempt }),
+          )
+        case "reset":
+          return void desktop.forceFocus(false).catch(() => undefined)
+        case "notify-failed":
+          return void showToast({ title: ctx.t("common.requestFailed") })
+      }
+    })
   }
 
-  onCleanup(() => {
-    if (focus()) void desktop?.forceFocus(false).catch(() => undefined)
-  })
+  onCleanup(() => dispatchFocus({ type: "disposed" }))
 
   return (
     <aside
@@ -234,12 +251,12 @@ export default function DebugBar(props: {
           />
           <Show when={desktop}>
             <ToggleCell
-              active={focus()}
+              active={isFocusToggleActive(focus())}
               inline={props.inline}
               label={ctx.t("focus.label")}
               tip={ctx.t("focus.tip")}
-              value={ctx.t(focus() ? "focus.on" : "focus.off")}
-              onClick={() => void toggleFocus()}
+              value={ctx.t(isFocusToggleActive(focus()) ? "focus.on" : "focus.off")}
+              onClick={() => dispatchFocus({ type: "toggle" })}
             />
           </Show>
         </Show>

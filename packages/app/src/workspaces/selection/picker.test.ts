@@ -11,11 +11,9 @@ const remote = {
   type: "plugin",
   key: "ssh:example",
   plugin: "ssh",
-  state: "ready",
-  connecting: false,
-  authenticationRequired: false,
+  status: { type: "ready", http: { url: "http://localhost:4096" } },
+  authenticate: () => false,
   managed: true,
-  http: { url: "http://localhost:4096" },
 } as const
 
 describe("directoryPickerKind", () => {

@@ -37,11 +37,10 @@ pub type TerminalId = u64;
 
 /// How a process is attached. `Pty` runs under a pseudo-terminal parsed by
 /// libghostty; `Pipe` runs with stdin closed and stdout and stderr merged into
-/// one pipe, and supports only output, replay, subscription and termination.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+/// one pipe written to an output file.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProcessMode {
-    #[default]
     Pty,
     Pipe,
 }
@@ -50,6 +49,22 @@ impl ProcessMode {
     pub fn is_pty(&self) -> bool {
         *self == Self::Pty
     }
+}
+
+/// Opaque JSON object a client stores with a pipe process.
+pub type PipeMetadata = serde_json::Map<String, serde_json::Value>;
+/// Largest accepted pipe metadata, measured as serialized JSON.
+pub const MAX_METADATA_BYTES: usize = 1024 * 1024;
+
+/// Signals a client may send to a pipe process.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ProcessSignal {
+    #[serde(rename = "SIGTERM")]
+    Term,
+    #[serde(rename = "SIGINT")]
+    Int,
+    #[serde(rename = "SIGKILL")]
+    Kill,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -68,30 +83,68 @@ pub enum TerminalLifecycle {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TerminalInfo {
+pub struct ProcessInfo {
     pub id: TerminalId,
-    #[serde(default)]
     pub mode: ProcessMode,
     pub pid: Option<u32>,
-    /// Effective title: the user title, else the latest non-empty OSC title,
-    /// else the title given at creation.
-    pub title: String,
-    #[serde(default)]
-    pub user_title: Option<String>,
-    pub foreground_process: Option<String>,
-    pub group_id: String,
     pub command: Vec<String>,
     pub cwd: PathBuf,
-    pub cols: u16,
-    pub rows: u16,
+    pub group_id: String,
     pub lifecycle: TerminalLifecycle,
     pub output_head: u64,
     pub output_tail: u64,
+    /// Milliseconds since the Unix epoch.
+    pub started_at: u64,
+    /// Milliseconds since the Unix epoch, set once the exit is final (the
+    /// same moment `Exited` is sent), never before `started_at`.
+    pub exited_at: Option<u64>,
+    /// Set exactly when `mode` is `pty`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pty: Option<PtyInfo>,
+    /// Set exactly when `mode` is `pipe`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pipe: Option<PipeInfo>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PtyInfo {
+    /// Effective title: the user title, else the latest non-empty OSC title,
+    /// else the title given at creation.
+    pub title: String,
+    pub user_title: Option<String>,
+    pub foreground_process: Option<String>,
+    pub cols: u16,
+    pub rows: u16,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PipeInfo {
+    pub output_path: PathBuf,
+    /// Newline bytes written to the output file so far. Updated together with
+    /// `output_tail`.
+    pub output_lines: u64,
+    /// Set when writing the output file failed; the file then lacks
+    /// everything from that point on. Omitted when there is no error.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_error: Option<String>,
+    pub metadata: PipeMetadata,
+}
+
+/// The final state of a process, sent once to every waiter and subscriber.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProcessExit {
+    pub exit_code: Option<u32>,
+    pub signal: Option<String>,
+    pub final_offset: u64,
+    /// Pipe only.
+    pub output_lines: Option<u64>,
+    pub output_error: Option<String>,
+    pub exited_at: u64,
 }
 
 #[derive(Clone, Debug)]
 pub struct TerminalSnapshot {
-    pub info: TerminalInfo,
+    pub info: ProcessInfo,
     pub text: String,
     pub checkpoint: Vec<u8>,
     pub cursor_x: u16,
@@ -100,7 +153,7 @@ pub struct TerminalSnapshot {
 
 #[derive(Clone, Debug)]
 pub struct TerminalRows {
-    pub terminal: TerminalInfo,
+    pub process: ProcessInfo,
     pub lines: Vec<String>,
     pub cursor_x: u16,
     pub cursor_y: u16,
@@ -128,11 +181,7 @@ pub enum StreamEvent {
         generation: u64,
         checkpoint: Vec<u8>,
     },
-    Exited {
-        exit_code: Option<u32>,
-        signal: Option<String>,
-        final_offset: u64,
-    },
+    Exited(ProcessExit),
     ControllerChanged {
         attachment_id: Option<String>,
         generation: u64,
@@ -146,7 +195,7 @@ pub enum StreamEvent {
 }
 
 pub struct TerminalAttachment {
-    pub terminal: TerminalInfo,
+    pub process: ProcessInfo,
     pub role: AttachmentRole,
     pub generation: u64,
     pub replay: RawReplay,
@@ -168,20 +217,38 @@ impl Drop for TerminalAttachment {
     }
 }
 
+/// A pending `wait` on a pipe process.
+pub struct ProcessWait {
+    /// Receives the exit once. Disconnects without a value if the process is
+    /// terminated first.
+    pub exit: Receiver<ProcessExit>,
+    /// Disconnects when the process's actor stops (terminate or shutdown).
+    pub actor_done: Receiver<()>,
+}
+
+impl ProcessWait {
+    /// Blocks until the process exits; errors if it is terminated first.
+    pub fn recv(&self) -> Result<ProcessExit> {
+        crossbeam_channel::select_biased! {
+            recv(self.exit) -> exit => exit.map_err(|_| anyhow!("terminated")),
+            recv(self.actor_done) -> _ => self.exit.try_recv().map_err(|_| anyhow!("terminated")),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
-pub struct CreateTerminal {
+pub struct CreatePty {
     pub program: String,
     pub args: Vec<String>,
     pub cwd: PathBuf,
-    pub title: String,
-    pub group_id: String,
     pub env: HashMap<String, String>,
+    pub group_id: String,
+    pub title: String,
     pub cols: u16,
     pub rows: u16,
-    pub mode: ProcessMode,
 }
 
-impl CreateTerminal {
+impl CreatePty {
     pub fn shell() -> Result<Self> {
         let program = default_shell();
         let title = PathBuf::from(&program)
@@ -193,14 +260,27 @@ impl CreateTerminal {
             program,
             args: Vec::new(),
             cwd: env::current_dir()?,
-            title,
-            group_id: format!("local:{}", env::current_dir()?.display()),
             env: HashMap::new(),
+            group_id: format!("local:{}", env::current_dir()?.display()),
+            title,
             cols: DEFAULT_COLS,
             rows: DEFAULT_ROWS,
-            mode: ProcessMode::Pty,
         })
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct CreatePipe {
+    pub program: String,
+    pub args: Vec<String>,
+    /// Absolute.
+    pub cwd: PathBuf,
+    /// The child's whole environment; nothing is inherited from the daemon.
+    pub env: HashMap<String, String>,
+    pub group_id: String,
+    /// Absolute. Truncated on open; receives every output byte.
+    pub output_path: PathBuf,
+    pub metadata: PipeMetadata,
 }
 
 pub struct TerminalService {
@@ -224,18 +304,35 @@ impl TerminalService {
         }
     }
 
-    pub fn create(&self, request: CreateTerminal) -> Result<TerminalInfo> {
-        match request.mode {
-            ProcessMode::Pty => validate_size(request.cols, request.rows)?,
-            #[cfg(not(unix))]
-            ProcessMode::Pipe => bail!("pipe processes are not supported on this platform"),
-            #[cfg(unix)]
-            ProcessMode::Pipe => {}
-        }
-        if request.program.trim().is_empty() {
-            bail!("terminal program cannot be empty");
-        }
+    pub fn create_pty(&self, request: CreatePty) -> Result<ProcessInfo> {
+        validate_size(request.cols, request.rows)?;
+        validate_program(&request.program)?;
+        let replay_capacity = self.replay_capacity;
+        self.insert(|id, order| TerminalHandle::spawn_pty(id, order, request, replay_capacity))
+    }
 
+    /// Starts a pipe process. Unix only.
+    pub fn create_pipe(&self, request: CreatePipe) -> Result<ProcessInfo> {
+        // Everything is checked before the output file is opened, so a
+        // rejected request never creates or truncates it.
+        validate_program(&request.program)?;
+        if !request.cwd.is_absolute() {
+            bail!("cwd must be absolute");
+        }
+        if !request.output_path.is_absolute() {
+            bail!("output_path must be absolute");
+        }
+        validate_metadata(&request.metadata)?;
+        #[cfg(unix)]
+        return self.insert(|id, order| TerminalHandle::spawn_pipe(id, order, request));
+        #[cfg(not(unix))]
+        bail!("pipe processes are not supported on this platform");
+    }
+
+    fn insert(
+        &self,
+        spawn: impl FnOnce(TerminalId, u64) -> Result<TerminalHandle>,
+    ) -> Result<ProcessInfo> {
         let id = loop {
             // JSON clients can represent integers exactly only through 53 bits.
             let id = rand::random::<u64>() & ((1_u64 << 53) - 1);
@@ -250,7 +347,7 @@ impl TerminalService {
             }
         };
         let order = self.created.fetch_add(1, Ordering::Relaxed);
-        let handle = TerminalHandle::spawn(id, order, request, self.replay_capacity)?;
+        let handle = spawn(id, order)?;
         let info = handle.info();
         self.terminals
             .lock()
@@ -259,12 +356,7 @@ impl TerminalService {
         Ok(info)
     }
 
-    /// Lists PTYs; see [`Self::list_mode`] for pipe processes.
-    pub fn list(&self) -> Result<Vec<TerminalInfo>> {
-        self.list_mode(ProcessMode::Pty)
-    }
-
-    pub fn list_mode(&self, mode: ProcessMode) -> Result<Vec<TerminalInfo>> {
+    pub fn list(&self, mode: ProcessMode) -> Result<Vec<ProcessInfo>> {
         // Filter before refreshing, so a busy actor of the other mode never
         // delays this listing.
         let mut handles = self
@@ -276,17 +368,64 @@ impl TerminalService {
             .cloned()
             .collect::<Vec<_>>();
         handles.sort_by_key(|terminal| terminal.order);
-        let mut terminals = Vec::with_capacity(handles.len());
-        for terminal in handles {
-            // Windows has no foreground query; do not wait behind actor
-            // backpressure just to read its already-cached metadata.
-            #[cfg(not(windows))]
-            if terminal.mode.is_pty() {
-                terminal.request(|reply| ActorMessage::RefreshForegroundProcess { reply })?;
+        handles
+            .into_iter()
+            .map(|terminal| terminal.refreshed_info())
+            .collect()
+    }
+
+    /// One process of either mode.
+    pub fn get(&self, id: TerminalId) -> Result<ProcessInfo> {
+        self.handle(id)?.refreshed_info()
+    }
+
+    /// Registers a waiter for a pipe process's exit. If it has already exited,
+    /// the exit is ready at once.
+    pub fn wait(&self, id: TerminalId) -> Result<ProcessWait> {
+        let process = self.pipe(id)?;
+        let (reply, exit) = bounded(1);
+        crossbeam_channel::select_biased! {
+            send(process.actor_tx, ActorMessage::Wait { reply }) -> result => {
+                result.map_err(|_| anyhow!("terminated"))?;
             }
-            terminals.push(terminal.info());
+            recv(process.actor_done) -> _ => bail!("terminated"),
         }
-        Ok(terminals)
+        Ok(ProcessWait {
+            exit,
+            actor_done: process.actor_done.clone(),
+        })
+    }
+
+    /// Signals a pipe process and its process group. The process stays
+    /// listed; signalling one that already exited is allowed.
+    pub fn signal(&self, id: TerminalId, signal: ProcessSignal) -> Result<()> {
+        let process = self.pipe(id)?;
+        #[cfg(unix)]
+        return process
+            .process
+            .as_ref()
+            .ok_or_else(|| anyhow!("process {id} cannot be signalled"))?
+            .signal(signal);
+        #[cfg(not(unix))]
+        {
+            let _ = (process, signal);
+            bail!("pipe processes are not supported on this platform");
+        }
+    }
+
+    /// Replaces a pipe process's metadata.
+    pub fn set_metadata(&self, id: TerminalId, metadata: PipeMetadata) -> Result<()> {
+        validate_metadata(&metadata)?;
+        let process = self.pipe(id)?;
+        let mut info = process
+            .info
+            .write()
+            .map_err(|_| anyhow!("terminal info lock poisoned"))?;
+        info.pipe
+            .as_mut()
+            .ok_or_else(|| anyhow!("process {id} is not a pipe process"))?
+            .metadata = metadata;
+        Ok(())
     }
 
     pub fn write(&self, id: TerminalId, bytes: Vec<u8>) -> Result<()> {
@@ -388,7 +527,7 @@ impl TerminalService {
     }
 
     pub fn replay(&self, id: TerminalId, offset: u64) -> Result<RawReplay> {
-        self.get(id)?
+        self.handle(id)?
             .request(|reply| ActorMessage::Replay { offset, reply })
     }
 
@@ -400,7 +539,7 @@ impl TerminalService {
         role: AttachmentRole,
         takeover: bool,
     ) -> Result<TerminalAttachment> {
-        let terminal = self.get(id)?;
+        let terminal = self.handle(id)?;
         let (reply_tx, reply_rx) = bounded(1);
         terminal
             .actor_tx
@@ -414,7 +553,7 @@ impl TerminalService {
             .map_err(|_| anyhow!("terminal actor stopped"))?;
         let attached = await_reply(&reply_rx, &terminal.actor_done)?;
         Ok(TerminalAttachment {
-            terminal: terminal.info(),
+            process: terminal.info(),
             role,
             generation: attached.generation,
             replay: attached.replay,
@@ -431,26 +570,34 @@ impl TerminalService {
             .lock()
             .map_err(|_| anyhow!("terminal registry lock poisoned"))?
             .remove(&id)
-            .ok_or_else(|| anyhow!("terminal {id} not found"))?;
+            .ok_or_else(|| anyhow!("process {id} not found"))?;
         terminal.shutdown()
     }
 
-    /// Like `get`, but for requests that need a terminal, which pipe processes lack.
+    /// Like `handle`, but for requests that need a terminal, which pipe processes lack.
     fn pty(&self, id: TerminalId) -> Result<Arc<TerminalHandle>> {
-        let terminal = self.get(id)?;
+        let terminal = self.handle(id)?;
         if !terminal.mode.is_pty() {
-            bail!("terminal {id} is a pipe process, which has no terminal");
+            bail!("process {id} is a pipe process, which has no terminal");
         }
         Ok(terminal)
     }
 
-    fn get(&self, id: TerminalId) -> Result<Arc<TerminalHandle>> {
+    fn pipe(&self, id: TerminalId) -> Result<Arc<TerminalHandle>> {
+        let process = self.handle(id)?;
+        if process.mode != ProcessMode::Pipe {
+            bail!("process {id} is a terminal, not a pipe process");
+        }
+        Ok(process)
+    }
+
+    fn handle(&self, id: TerminalId) -> Result<Arc<TerminalHandle>> {
         self.terminals
             .lock()
             .map_err(|_| anyhow!("terminal registry lock poisoned"))?
             .get(&id)
             .cloned()
-            .ok_or_else(|| anyhow!("terminal {id} not found"))
+            .ok_or_else(|| anyhow!("process {id} not found"))
     }
 
     pub(crate) fn shutdown(&self) {
@@ -496,7 +643,10 @@ struct TerminalHandle {
     cancel: Mutex<Option<Box<dyn Send>>>,
     /// Runs after the joins; reaps a pipe process kept as a zombie until now.
     reap: Mutex<Option<Box<dyn FnOnce() + Send>>>,
-    info: Arc<RwLock<TerminalInfo>>,
+    /// Pipe only: the child, for `signal`.
+    #[cfg(unix)]
+    process: Option<Arc<pipe::Process>>,
+    info: Arc<RwLock<ProcessInfo>>,
     joins: Mutex<Option<Vec<JoinHandle<()>>>>,
 }
 
@@ -516,7 +666,7 @@ fn start_actor(
     mode: ProcessMode,
     master: ActorMaster,
     writes: Sender<WriterMessage>,
-    info: &Arc<RwLock<TerminalInfo>>,
+    info: &Arc<RwLock<ProcessInfo>>,
     replay_capacity: usize,
     (cols, rows): (u16, u16),
 ) -> Result<ActorStart> {
@@ -570,25 +720,10 @@ fn start_actor(
 }
 
 impl TerminalHandle {
-    fn spawn(
-        id: TerminalId,
-        order: u64,
-        request: CreateTerminal,
-        replay_capacity: usize,
-    ) -> Result<Self> {
-        match request.mode {
-            ProcessMode::Pty => Self::spawn_pty(id, order, request, replay_capacity),
-            #[cfg(unix)]
-            ProcessMode::Pipe => Self::spawn_pipe(id, order, request, replay_capacity),
-            #[cfg(not(unix))]
-            ProcessMode::Pipe => bail!("pipe processes are not supported on this platform"),
-        }
-    }
-
     fn spawn_pty(
         id: TerminalId,
         order: u64,
-        request: CreateTerminal,
+        request: CreatePty,
         replay_capacity: usize,
     ) -> Result<Self> {
         let pty_system = native_pty_system();
@@ -626,7 +761,24 @@ impl TerminalHandle {
             .context("failed to take PTY writer")?;
         drop(pair.slave);
 
-        let info = new_info(id, ProcessMode::Pty, pid, &request);
+        let info = Arc::new(RwLock::new(ProcessInfo {
+            pty: Some(PtyInfo {
+                title: request.title.clone(),
+                user_title: None,
+                foreground_process: None,
+                cols: request.cols,
+                rows: request.rows,
+            }),
+            ..new_info(
+                id,
+                ProcessMode::Pty,
+                pid,
+                &request.program,
+                &request.args,
+                &request.cwd,
+                &request.group_id,
+            )
+        }));
 
         let (writer_tx, writer_rx) = bounded(WRITER_QUEUE_CAPACITY);
         #[cfg(windows)]
@@ -675,7 +827,7 @@ impl TerminalHandle {
                         Ok(length) => {
                             if forwarding {
                                 forwarding = reader_actor_tx
-                                    .send(ActorMessage::Output(buffer[..length].to_vec()))
+                                    .send(ActorMessage::output(buffer[..length].to_vec()))
                                     .is_ok();
                                 #[cfg(unix)]
                                 if !forwarding {
@@ -728,6 +880,8 @@ impl TerminalHandle {
             killer: Mutex::new(killer),
             cancel: Mutex::new(None),
             reap: Mutex::new(None),
+            #[cfg(unix)]
+            process: None,
             info,
             joins: Mutex::new(Some(vec![
                 actor.thread,
@@ -738,11 +892,22 @@ impl TerminalHandle {
         })
     }
 
-    fn info(&self) -> TerminalInfo {
+    fn info(&self) -> ProcessInfo {
         self.info
             .read()
             .map(|info| info.clone())
             .unwrap_or_else(|poisoned| poisoned.into_inner().clone())
+    }
+
+    /// The info, with a PTY's foreground process refreshed first.
+    fn refreshed_info(&self) -> Result<ProcessInfo> {
+        // Windows has no foreground query; do not wait behind actor
+        // backpressure just to read its already-cached metadata.
+        #[cfg(not(windows))]
+        if self.mode.is_pty() {
+            self.request(|reply| ActorMessage::RefreshForegroundProcess { reply })?;
+        }
+        Ok(self.info())
     }
 
     fn request<T>(&self, make: impl FnOnce(Reply<Result<T>>) -> ActorMessage) -> Result<T> {
@@ -789,39 +954,40 @@ impl TerminalHandle {
     }
 }
 
+/// Info for a new process, without its `pty` or `pipe` group.
 fn new_info(
     id: TerminalId,
     mode: ProcessMode,
     pid: Option<u32>,
-    request: &CreateTerminal,
-) -> Arc<RwLock<TerminalInfo>> {
-    let title = match mode {
-        ProcessMode::Pipe if request.title.is_empty() => PathBuf::from(&request.program)
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or(&request.program)
-            .to_string(),
-        _ => request.title.clone(),
-    };
-    Arc::new(RwLock::new(TerminalInfo {
+    program: &str,
+    args: &[String],
+    cwd: &std::path::Path,
+    group_id: &str,
+) -> ProcessInfo {
+    ProcessInfo {
         id,
         mode,
         pid,
-        title,
-        user_title: None,
-        foreground_process: None,
-        group_id: request.group_id.clone(),
-        command: std::iter::once(request.program.clone())
-            .chain(request.args.iter().cloned())
+        command: std::iter::once(program.to_string())
+            .chain(args.iter().cloned())
             .collect(),
-        cwd: request.cwd.clone(),
-        // Pipe processes have no terminal size.
-        cols: if mode.is_pty() { request.cols } else { 0 },
-        rows: if mode.is_pty() { request.rows } else { 0 },
+        cwd: cwd.to_path_buf(),
+        group_id: group_id.to_string(),
         lifecycle: TerminalLifecycle::Running,
         output_head: 0,
         output_tail: 0,
-    }))
+        started_at: unix_ms(),
+        exited_at: None,
+        pty: None,
+        pipe: None,
+    }
+}
+
+fn unix_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as u64)
+        .unwrap_or_default()
 }
 
 type Reply<T> = Sender<T>;
@@ -840,7 +1006,12 @@ fn await_reply<T>(reply: &Receiver<Result<T>>, actor_done: &Receiver<()>) -> Res
 }
 
 enum ActorMessage {
-    Output(Vec<u8>),
+    /// `newlines` counts the `\n` bytes of `bytes` that reached the output
+    /// file; always 0 for PTYs.
+    Output {
+        bytes: Vec<u8>,
+        newlines: u64,
+    },
     ReaderEof,
     ReaderFailed(String),
     WriterFailed(String),
@@ -848,6 +1019,9 @@ enum ActorMessage {
     /// A pipe process ended by a signal; the value is the signal's name.
     #[cfg(unix)]
     ChildKilled(String),
+    /// Writing the `output_path` file failed; it stops at this point.
+    #[cfg(unix)]
+    OutputFileFailed(String),
     #[cfg(not(windows))]
     RefreshForegroundProcess {
         reply: Reply<Result<()>>,
@@ -895,6 +1069,16 @@ enum ActorMessage {
     Detach {
         attachment_id: String,
     },
+    /// Replies once with the final exit, at once if it is already known.
+    Wait {
+        reply: Sender<ProcessExit>,
+    },
+}
+
+impl ActorMessage {
+    fn output(bytes: Vec<u8>) -> Self {
+        Self::Output { bytes, newlines: 0 }
+    }
 }
 
 struct Attached {
@@ -966,7 +1150,7 @@ struct ActorConfig {
     messages: Receiver<ActorMessage>,
     writes: Sender<WriterMessage>,
     shutdown: Receiver<()>,
-    info: Arc<RwLock<TerminalInfo>>,
+    info: Arc<RwLock<ProcessInfo>>,
     replay_capacity: usize,
     cols: u16,
     rows: u16,
@@ -1001,8 +1185,10 @@ fn run_actor(config: ActorConfig) -> Result<()> {
     let create_title = info
         .read()
         .map_err(|_| anyhow!("terminal info lock poisoned"))?
-        .title
-        .clone();
+        .pty
+        .as_ref()
+        .map(|pty| pty.title.clone())
+        .unwrap_or_default();
     let mut osc_title = None::<String>;
     let mut replay = ReplayBuffer::new(replay_capacity);
     let mut subscribers = HashMap::<String, Subscriber>::new();
@@ -1010,7 +1196,9 @@ fn run_actor(config: ActorConfig) -> Result<()> {
     let mut controller_generation = 0_u64;
     let mut child_exit = None::<std::result::Result<(Option<u32>, Option<String>), String>>;
     let mut reader_eof = false;
-    let mut final_exit = None::<StreamEvent>;
+    let mut final_exit = None::<ProcessExit>;
+    let mut waiters = Vec::<Sender<ProcessExit>>::new();
+    let mut output_lines = 0_u64;
     let mut pending_message = None;
     let _ = init_tx.send(Ok(()));
 
@@ -1030,8 +1218,9 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                 }
                 let _ = reply.send(Ok(()));
             }
-            Ok(ActorMessage::Output(bytes)) => {
+            Ok(ActorMessage::Output { bytes, newlines }) => {
                 let (start, end) = replay.append(&bytes);
+                output_lines += newlines;
                 if let Some(terminal) = terminal.as_mut() {
                     terminal.vt_write(&bytes);
                     // Once the Windows master is handed off for closing, the writer
@@ -1047,7 +1236,7 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                         break Err(error);
                     }
                 }
-                update_offsets(&info, &replay);
+                update_offsets(&info, &replay, output_lines);
                 broadcast(
                     &shutdown,
                     &mut subscribers,
@@ -1101,9 +1290,11 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                     let resized = terminal.resize(cols, rows);
                     forward_replies(terminal, &writes, &shutdown)?;
                     resized?;
-                    if let Ok(mut value) = info.write() {
-                        value.cols = cols;
-                        value.rows = rows;
+                    if let Ok(mut value) = info.write()
+                        && let Some(pty) = value.pty.as_mut()
+                    {
+                        pty.cols = cols;
+                        pty.rows = rows;
                     }
                     let generation = controller_generation;
                     let checkpoint = format_terminal(terminal, Format::Vt)?.into_bytes();
@@ -1160,7 +1351,12 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                     }
                     let changed = info
                         .read()
-                        .map(|value| value.cols != cols || value.rows != rows)
+                        .map(|value| {
+                            value
+                                .pty
+                                .as_ref()
+                                .is_none_or(|pty| pty.cols != cols || pty.rows != rows)
+                        })
                         .unwrap_or(true);
                     if changed {
                         let terminal = emulator(&mut terminal)?;
@@ -1173,9 +1369,11 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                         let resized = terminal.resize(cols, rows);
                         forward_replies(terminal, &writes, &shutdown)?;
                         resized?;
-                        if let Ok(mut value) = info.write() {
-                            value.cols = cols;
-                            value.rows = rows;
+                        if let Ok(mut value) = info.write()
+                            && let Some(pty) = value.pty.as_mut()
+                        {
+                            pty.cols = cols;
+                            pty.rows = rows;
                         }
                         let generation = controller_generation;
                         let checkpoint = format_terminal(terminal, Format::Vt)?.into_bytes();
@@ -1211,7 +1409,7 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                     let terminal = emulator(&mut terminal)?;
                     Ok(TerminalRows {
                         lines: format_rows(terminal, rows)?,
-                        terminal: info
+                        process: info
                             .read()
                             .map_err(|_| anyhow!("terminal info lock poisoned"))?
                             .clone(),
@@ -1298,10 +1496,10 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                             },
                         );
                     }
-                    if let Some(event) = &final_exit {
+                    if let Some(exit) = &final_exit {
                         // This fresh receiver is still actor-owned and has at
                         // most its initial ControllerChanged event queued.
-                        let _ = events_tx.send(event.clone());
+                        let _ = events_tx.send(StreamEvent::Exited(exit.clone()));
                     }
                     Ok(Attached {
                         generation: controller_generation,
@@ -1340,6 +1538,20 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                     );
                 }
             }
+            Ok(ActorMessage::Wait { reply }) => match &final_exit {
+                Some(exit) => {
+                    let _ = reply.try_send(exit.clone());
+                }
+                None => waiters.push(reply),
+            },
+            #[cfg(unix)]
+            Ok(ActorMessage::OutputFileFailed(message)) => {
+                if let Ok(mut value) = info.write()
+                    && let Some(pipe) = value.pipe.as_mut()
+                {
+                    pipe.output_error = Some(message);
+                }
+            }
             #[cfg(unix)]
             Ok(ActorMessage::ChildKilled(signal)) => {
                 child_exit = Some(Ok((None, Some(signal))));
@@ -1352,6 +1564,18 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                 #[cfg(windows)]
                 if let Err(error) = master.close() {
                     break Err(error);
+                }
+            }
+            Ok(ActorMessage::ReaderFailed(message)) if mode == ProcessMode::Pipe => {
+                // The pipe reader has stopped and closed the output file, so
+                // nothing more can arrive: let the exit still be published,
+                // and report the failure where the exit carries it.
+                reader_eof = true;
+                if let Ok(mut value) = info.write()
+                    && let Some(pipe) = value.pipe.as_mut()
+                {
+                    pipe.output_error
+                        .get_or_insert_with(|| format!("failed to read process output: {message}"));
                 }
             }
             Ok(ActorMessage::ReaderFailed(message)) | Ok(ActorMessage::WriterFailed(message)) => {
@@ -1374,25 +1598,37 @@ fn run_actor(config: ActorConfig) -> Result<()> {
             && let Some(result) = child_exit.take()
         {
             let (exit_code, signal) = result.clone().unwrap_or_default();
+            let mut exit = ProcessExit {
+                exit_code,
+                signal,
+                final_offset: replay.tail,
+                output_lines: (mode == ProcessMode::Pipe).then_some(output_lines),
+                output_error: None,
+                exited_at: unix_ms(),
+            };
             if let Ok(mut value) = info.write() {
                 value.lifecycle = match result {
                     Ok((exit_code, signal)) => TerminalLifecycle::Exited { exit_code, signal },
                     Err(message) => TerminalLifecycle::Failed { message },
                 };
+                exit.exited_at = exit.exited_at.max(value.started_at);
+                value.exited_at = Some(exit.exited_at);
+                exit.output_error = value
+                    .pipe
+                    .as_ref()
+                    .and_then(|pipe| pipe.output_error.clone());
             }
-            let event = StreamEvent::Exited {
-                exit_code,
-                signal,
-                final_offset: replay.tail,
-            };
+            for waiter in waiters.drain(..) {
+                let _ = waiter.try_send(exit.clone());
+            }
             broadcast(
                 &shutdown,
                 &mut subscribers,
                 &mut controller,
                 &mut controller_generation,
-                event.clone(),
+                StreamEvent::Exited(exit.clone()),
             );
-            final_exit = Some(event);
+            final_exit = Some(exit);
         }
     };
     // Release senders blocked on the actor queue before closing ConPTY. Its
@@ -1436,13 +1672,23 @@ fn receive_actor_message(
             recv(messages) -> message => message.map_err(|_| crossbeam_channel::RecvTimeoutError::Disconnected)?,
         },
     };
-    let ActorMessage::Output(mut bytes) = message else {
+    let ActorMessage::Output {
+        mut bytes,
+        mut newlines,
+    } = message
+    else {
         return Ok(message);
     };
     let deadline = Instant::now() + OUTPUT_BATCH_DELAY;
     while bytes.len() < OUTPUT_BATCH_BYTES {
         match messages.recv_deadline(deadline) {
-            Ok(ActorMessage::Output(next)) => bytes.extend(next),
+            Ok(ActorMessage::Output {
+                bytes: next,
+                newlines: next_newlines,
+            }) => {
+                bytes.extend(next);
+                newlines += next_newlines;
+            }
             Ok(message) => {
                 *pending = Some(message);
                 break;
@@ -1451,20 +1697,22 @@ fn receive_actor_message(
             | Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
         }
     }
-    Ok(ActorMessage::Output(bytes))
+    Ok(ActorMessage::Output { bytes, newlines })
 }
 
 #[cfg(not(windows))]
 fn publish_foreground_process(
     shutdown: &Receiver<()>,
     master: &dyn MasterPty,
-    info: &Arc<RwLock<TerminalInfo>>,
+    info: &Arc<RwLock<ProcessInfo>>,
     subscribers: &mut HashMap<String, Subscriber>,
     controller: &mut Option<String>,
     controller_generation: &mut u64,
 ) {
     let process = foreground_process(master);
-    let changed = if let Ok(mut value) = info.write() {
+    let changed = if let Ok(mut value) = info.write()
+        && let Some(value) = value.pty.as_mut()
+    {
         if value.foreground_process == process {
             false
         } else {
@@ -1525,7 +1773,7 @@ fn foreground_process(_master: &dyn MasterPty) -> Option<String> {
 }
 
 #[cfg(target_os = "linux")]
-struct ProcessInfo {
+struct ProcStat {
     pid: i32,
     ppid: i32,
     pgrp: i32,
@@ -1533,13 +1781,13 @@ struct ProcessInfo {
 }
 
 #[cfg(target_os = "linux")]
-fn read_process(pid: i32) -> Option<ProcessInfo> {
+fn read_process(pid: i32) -> Option<ProcStat> {
     let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
     let fields = stat
         .get(stat.rfind(") ")? + 2..)?
         .split_whitespace()
         .collect::<Vec<_>>();
-    Some(ProcessInfo {
+    Some(ProcStat {
         pid,
         ppid: fields.get(1)?.parse().ok()?,
         pgrp: fields.get(2)?.parse().ok()?,
@@ -1622,7 +1870,7 @@ fn run_writer(
 /// Applies an optional user-title update and stores the effective title under
 /// one write guard, returning the title only when it changed.
 fn refresh_title(
-    info: &Arc<RwLock<TerminalInfo>>,
+    info: &Arc<RwLock<ProcessInfo>>,
     user_title: Option<Option<String>>,
     osc_title: Option<&str>,
     create_title: &str,
@@ -1630,6 +1878,9 @@ fn refresh_title(
     let mut value = info
         .write()
         .map_err(|_| anyhow!("terminal info lock poisoned"))?;
+    let Some(value) = value.pty.as_mut() else {
+        return Ok(None);
+    };
     if let Some(user_title) = user_title {
         value.user_title = user_title;
     }
@@ -1646,10 +1897,7 @@ fn refresh_title(
     Ok(Some(title))
 }
 
-fn make_snapshot(
-    terminal: &Terminal,
-    info: &Arc<RwLock<TerminalInfo>>,
-) -> Result<TerminalSnapshot> {
+fn make_snapshot(terminal: &Terminal, info: &Arc<RwLock<ProcessInfo>>) -> Result<TerminalSnapshot> {
     let text = format_terminal(terminal, Format::Plain)?;
     let checkpoint = format_terminal(terminal, Format::Vt)?.into_bytes();
     let info = info
@@ -1711,10 +1959,13 @@ fn format_terminal(terminal: &Terminal, format: Format) -> Result<String> {
     ))
 }
 
-fn update_offsets(info: &Arc<RwLock<TerminalInfo>>, replay: &ReplayBuffer) {
+fn update_offsets(info: &Arc<RwLock<ProcessInfo>>, replay: &ReplayBuffer, output_lines: u64) {
     if let Ok(mut info) = info.write() {
         info.output_head = replay.head;
         info.output_tail = replay.tail;
+        if let Some(pipe) = info.pipe.as_mut() {
+            pipe.output_lines = output_lines;
+        }
     }
 }
 
@@ -1856,6 +2107,20 @@ fn authorize_controller(controller: &Option<String>, attachment_id: Option<&str>
     Ok(())
 }
 
+fn validate_program(program: &str) -> Result<()> {
+    if program.trim().is_empty() {
+        bail!("program cannot be empty");
+    }
+    Ok(())
+}
+
+fn validate_metadata(metadata: &PipeMetadata) -> Result<()> {
+    if serde_json::to_vec(metadata)?.len() > MAX_METADATA_BYTES {
+        bail!("metadata exceeds {MAX_METADATA_BYTES} byte limit");
+    }
+    Ok(())
+}
+
 fn validate_size(cols: u16, rows: u16) -> Result<()> {
     if cols == 0 || rows == 0 {
         bail!("terminal dimensions must be positive");
@@ -1918,28 +2183,35 @@ mod tests {
         }
     }
 
-    fn test_info() -> TerminalInfo {
-        TerminalInfo {
-            id: 1,
-            mode: ProcessMode::Pty,
-            pid: None,
-            title: "test".into(),
-            user_title: None,
-            foreground_process: None,
-            group_id: "test".into(),
-            command: vec![],
-            cwd: PathBuf::new(),
-            cols: 80,
-            rows: 24,
-            lifecycle: TerminalLifecycle::Running,
-            output_head: 0,
-            output_tail: 0,
+    fn test_info() -> ProcessInfo {
+        ProcessInfo {
+            pty: Some(PtyInfo {
+                title: "test".into(),
+                user_title: None,
+                foreground_process: None,
+                cols: 80,
+                rows: 24,
+            }),
+            ..new_info(
+                1,
+                ProcessMode::Pty,
+                None,
+                "test",
+                &[],
+                std::path::Path::new(""),
+                "test",
+            )
         }
     }
 
     // Real actor/parser and bounded channels, without OS pipe capacity or a
     // large output flood. Native child/handle coverage lives in tests/runtime.rs.
     fn test_actor() -> (TerminalHandle, Receiver<WriterMessage>) {
+        test_actor_in(ProcessMode::Pty)
+    }
+
+    /// A pipe-mode actor has no terminal and a `pipe` info group.
+    fn test_actor_in(mode: ProcessMode) -> (TerminalHandle, Receiver<WriterMessage>) {
         let (actor_tx, messages) = bounded(ACTOR_QUEUE_CAPACITY);
         let (writes, writer_rx) = bounded(1);
         let (shutdown_tx, shutdown) = bounded(0);
@@ -1952,15 +2224,31 @@ mod tests {
             }
         });
         let (init_tx, init_rx) = std_mpsc::sync_channel(1);
-        let info = Arc::new(RwLock::new(test_info()));
+        let info = match mode {
+            ProcessMode::Pty => test_info(),
+            ProcessMode::Pipe => ProcessInfo {
+                mode,
+                pty: None,
+                pipe: Some(PipeInfo {
+                    output_path: PathBuf::from("/out"),
+                    output_lines: 0,
+                    output_error: None,
+                    metadata: PipeMetadata::new(),
+                }),
+                ..test_info()
+            },
+        };
+        let info = Arc::new(RwLock::new(info));
         let actor_info = Arc::clone(&info);
         let (actor_done_tx, actor_done) = bounded::<()>(0);
         let actor = thread::spawn(move || {
             let _actor_done = actor_done_tx;
             run_actor(ActorConfig {
-                mode: ProcessMode::Pty,
+                mode,
                 master: ActorMaster {
-                    pty: Some(Box::new(TestMaster)),
+                    pty: mode
+                        .is_pty()
+                        .then(|| Box::new(TestMaster) as Box<dyn MasterPty + Send>),
                     #[cfg(windows)]
                     close_tx,
                 },
@@ -1979,13 +2267,15 @@ mod tests {
         (
             TerminalHandle {
                 order: 0,
-                mode: ProcessMode::Pty,
+                mode,
                 actor_tx,
                 actor_done,
                 shutdown_tx: Mutex::new(Some(shutdown_tx)),
                 killer: Mutex::new(Box::new(TestKiller)),
                 cancel: Mutex::new(None),
                 reap: Mutex::new(None),
+                #[cfg(unix)]
+                process: None,
                 info,
                 joins: Mutex::new(Some(vec![
                     actor,
@@ -2006,11 +2296,12 @@ mod tests {
         service.terminals.lock().unwrap().insert(1, Arc::new(actor));
 
         // Even a closed actor channel is irrelevant to cached Windows metadata.
-        let terminals = service.list().unwrap();
+        let terminals = service.list(ProcessMode::Pty).unwrap();
         assert_eq!(terminals.len(), 1);
         assert_eq!(terminals[0].id, 1);
-        assert_eq!(terminals[0].title, "test");
-        assert!(terminals[0].foreground_process.is_none());
+        let pty = terminals[0].pty.as_ref().unwrap();
+        assert_eq!(pty.title, "test");
+        assert!(pty.foreground_process.is_none());
     }
 
     #[test]
@@ -2032,7 +2323,7 @@ mod tests {
             if !eof_first {
                 actor
                     .actor_tx
-                    .send(ActorMessage::Output(b"final".to_vec()))
+                    .send(ActorMessage::output(b"final".to_vec()))
                     .unwrap();
             }
             actor
@@ -2070,10 +2361,92 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_pipe_reader_still_publishes_the_exit_with_the_error() {
+        for failed_first in [true, false] {
+            let (actor, _writer) = test_actor_in(ProcessMode::Pipe);
+            let wait = {
+                let (reply, exit) = bounded(1);
+                actor.actor_tx.send(ActorMessage::Wait { reply }).unwrap();
+                exit
+            };
+            actor
+                .actor_tx
+                .send(ActorMessage::Output {
+                    bytes: b"a\n".to_vec(),
+                    newlines: 1,
+                })
+                .unwrap();
+            let exited = || ActorMessage::ChildExited(Ok(Some(1)));
+            if failed_first {
+                actor
+                    .actor_tx
+                    .send(ActorMessage::ReaderFailed("boom".into()))
+                    .unwrap();
+                // A round trip, so the failure has been handled.
+                actor
+                    .request(|reply| ActorMessage::Replay { offset: 0, reply })
+                    .unwrap();
+                // Not exited yet: no `Failed` lifecycle in the meantime.
+                let info = actor.info();
+                assert_eq!(info.lifecycle, TerminalLifecycle::Running);
+                assert_eq!(info.exited_at, None);
+                assert!(wait.try_recv().is_err());
+                actor.actor_tx.send(exited()).unwrap();
+            } else {
+                actor.actor_tx.send(exited()).unwrap();
+                actor
+                    .request(|reply| ActorMessage::Replay { offset: 0, reply })
+                    .unwrap();
+                assert!(wait.try_recv().is_err());
+                actor
+                    .actor_tx
+                    .send(ActorMessage::ReaderFailed("boom".into()))
+                    .unwrap();
+            }
+            let exit = wait.recv_timeout(Duration::from_secs(5)).unwrap();
+            let error = "failed to read process output: boom".to_string();
+            assert_eq!(exit.output_error.as_ref(), Some(&error));
+            assert_eq!((exit.exit_code, exit.output_lines), (Some(1), Some(1)));
+            let info = actor.info();
+            assert_eq!(
+                info.lifecycle,
+                TerminalLifecycle::Exited {
+                    exit_code: Some(1),
+                    signal: None
+                }
+            );
+            assert_eq!(info.exited_at, Some(exit.exited_at));
+            assert_eq!(info.pipe.unwrap().output_error, Some(error));
+            actor.shutdown().unwrap();
+        }
+    }
+
+    #[test]
+    fn a_failed_pipe_reader_keeps_an_earlier_output_file_error() {
+        let (actor, _writer) = test_actor_in(ProcessMode::Pipe);
+        let (reply, wait) = bounded(1);
+        for message in [
+            ActorMessage::Wait { reply },
+            ActorMessage::ChildExited(Ok(Some(0))),
+            #[cfg(unix)]
+            ActorMessage::OutputFileFailed("disk full".into()),
+            ActorMessage::ReaderFailed("boom".into()),
+        ] {
+            actor.actor_tx.send(message).unwrap();
+        }
+        let exit = wait.recv_timeout(Duration::from_secs(5)).unwrap();
+        #[cfg(unix)]
+        assert_eq!(exit.output_error.as_deref(), Some("disk full"));
+        #[cfg(not(unix))]
+        assert!(exit.output_error.is_some());
+        actor.shutdown().unwrap();
+    }
+
+    #[test]
     fn late_attachments_receive_final_exit_after_replay_and_control() {
         let (actor, _writer) = test_actor();
         for message in [
-            ActorMessage::Output(b"final".to_vec()),
+            ActorMessage::output(b"final".to_vec()),
             ActorMessage::ChildExited(Ok(Some(23))),
             ActorMessage::ReaderEof,
         ] {
@@ -2115,11 +2488,14 @@ mod tests {
             }
             assert!(matches!(
                 events.as_slice(),
-                [StreamEvent::Exited {
+                [StreamEvent::Exited(ProcessExit {
                     exit_code: Some(23),
                     signal: None,
-                    final_offset: 5
-                }]
+                    final_offset: 5,
+                    output_lines: None,
+                    output_error: None,
+                    ..
+                })]
             ));
         }
     }
@@ -2150,7 +2526,7 @@ mod tests {
         let retained_events = events.clone();
         let (disconnect_tx, disconnected) = bounded(0);
         let attachment = TerminalAttachment {
-            terminal: test_info(),
+            process: test_info(),
             role: AttachmentRole::Controller,
             generation: 1,
             replay: ReplayBuffer::new(0).read_from(0).unwrap(),
@@ -2270,7 +2646,7 @@ mod tests {
         let osc = |title: &str| {
             actor
                 .actor_tx
-                .send(ActorMessage::Output(
+                .send(ActorMessage::output(
                     format!("\x1b]2;{title}\x07").into_bytes(),
                 ))
                 .unwrap()
@@ -2280,6 +2656,8 @@ mod tests {
                 .request(|reply| ActorMessage::Snapshot { reply })
                 .unwrap()
                 .info
+                .pty
+                .unwrap()
         };
 
         osc("shell");
@@ -2379,7 +2757,7 @@ mod tests {
         for _ in 1..SUBSCRIBER_QUEUE_CAPACITY {
             actor
                 .actor_tx
-                .send(ActorMessage::Output(b"x".to_vec()))
+                .send(ActorMessage::output(b"x".to_vec()))
                 .unwrap();
             actor
                 .request(|reply| ActorMessage::Replay { offset: 0, reply })
@@ -2388,7 +2766,7 @@ mod tests {
         assert!(attached.events.is_full());
         actor
             .actor_tx
-            .send(ActorMessage::Output(b"!".to_vec()))
+            .send(ActorMessage::output(b"!".to_vec()))
             .unwrap();
         let (done, finished) = std_mpsc::channel();
         let shutdown = thread::spawn(move || {
@@ -2807,17 +3185,23 @@ mod tests {
         let (_shutdown_tx, shutdown) = bounded(0);
         let (messages_tx, messages) = bounded(4);
         messages_tx
-            .send(ActorMessage::Output(b"abc".to_vec()))
+            .send(ActorMessage::Output {
+                bytes: b"a\nc".to_vec(),
+                newlines: 1,
+            })
             .unwrap();
         messages_tx
-            .send(ActorMessage::Output(b"def".to_vec()))
+            .send(ActorMessage::Output {
+                bytes: b"\n\nf".to_vec(),
+                newlines: 2,
+            })
             .unwrap();
         messages_tx.send(ActorMessage::ReaderEof).unwrap();
         let mut pending = None;
 
         assert!(matches!(
             receive_actor_message(&messages, &mut pending, &shutdown).unwrap(),
-            ActorMessage::Output(bytes) if bytes == b"abcdef"
+            ActorMessage::Output { bytes, newlines: 3 } if bytes == b"a\nc\n\nf"
         ));
         assert!(matches!(
             receive_actor_message(&messages, &mut pending, &shutdown).unwrap(),
