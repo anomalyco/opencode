@@ -16653,29 +16653,6 @@
               }
             ]
           },
-          "network": {
-            "type": "object",
-            "properties": {
-              "client_certificate": {
-                "type": "object",
-                "properties": {
-                  "cert": {
-                    "type": "string",
-                    "description": "Path to the PEM client certificate: absolute, `~/`, or relative to this configuration file"
-                  },
-                  "key": {
-                    "type": "string"
-                  },
-                  "passphrase": {
-                    "type": "string"
-                  }
-                },
-                "required": ["cert"],
-                "additionalProperties": false
-              }
-            },
-            "additionalProperties": false
-          },
           "providers": {
             "type": "object",
             "additionalProperties": {
@@ -17188,6 +17165,9 @@
           },
           "encoding": {
             "$ref": "#/components/schemas/Provider.Encoding"
+          },
+          "tls": {
+            "$ref": "#/components/schemas/Provider.Tls"
           }
         },
         "allOf": [
@@ -22022,6 +22002,9 @@
           },
           "encoding": {
             "$ref": "#/components/schemas/Provider.Encoding"
+          },
+          "tls": {
+            "$ref": "#/components/schemas/Provider.Tls"
           }
         },
         "allOf": [
@@ -22030,6 +22013,24 @@
             "additionalProperties": {}
           }
         ]
+      },
+      "Provider.Tls": {
+        "type": "object",
+        "properties": {
+          "cert": {
+            "type": "string",
+            "description": "PEM client certificate, usually `{file:/path/to/client.pem}`"
+          },
+          "key": {
+            "type": "string",
+            "description": "PEM private key, usually `{file:/path/to/client.key}`"
+          },
+          "passphrase": {
+            "type": "string"
+          }
+        },
+        "required": ["cert", "key"],
+        "additionalProperties": false
       },
       "Provider.Transport": {
         "type": "string",

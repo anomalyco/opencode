@@ -94,27 +94,30 @@ Fix it in one of two ways:
 
 ## Client certificates
 
-Set `network.client_certificate` when a model gateway requires mutual TLS. OpenCode presents the certificate on HTTPS
-model requests, and the TLS handshake only sends it to servers that ask for one.
+Set `settings.tls` on a provider whose gateway requires mutual TLS. Its model requests present the certificate, and the
+TLS handshake only sends it to servers that ask for one.
 
 ```jsonc title="opencode.jsonc"
 {
-  "network": {
-    "client_certificate": {
-      "cert": "/etc/company/client.pem",
-      "key": "/etc/company/client.key",
-      "passphrase": "{env:CLIENT_KEY_PASSPHRASE}",
+  "providers": {
+    "company": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.company.example/v1",
+        "tls": {
+          "cert": "{file:/etc/company/client.pem}",
+          "key": "{file:/etc/company/client.key}",
+          "passphrase": "{env:CLIENT_KEY_PASSPHRASE}",
+        },
+      },
     },
   },
 }
 ```
 
-- `cert` and `key` are paths to PEM files: absolute, `~/`, or relative to the configuration file (or to the project for
-  config without a file, such as `OPENCODE_CONFIG_CONTENT`). They are read on each request, so a rotated certificate is
-  used without a restart.
-- Leave out `key` when `cert` points to one PEM file holding both the certificate and the key.
-- `passphrase` is only needed for an encrypted key. Use `{env:...}` or `{file:...}` to keep it out of the file.
-- Model requests with a client certificate don't follow redirects, so the certificate isn't presented to another host.
+- `cert` and `key` are PEM text. Use `{file:...}` to read them from files. A file that can't be read leaves `tls` unset.
+- `passphrase` is only needed for an encrypted key.
+- Requests with a client certificate don't follow redirects, so the certificate isn't presented to another host.
 
 Only model requests present the certificate. Tools such as webfetch, remote MCP servers and plugin installs don't.
 

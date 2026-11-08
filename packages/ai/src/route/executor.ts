@@ -11,7 +11,7 @@ import { HttpContext, HttpRateLimitDetails, AIError, TransportError } from "../s
 import { classifyProviderFailure, providerErrorMessage } from "../provider-error.js"
 import { headerDetails, responseHttp, Service, type HttpMiddleware, type Interface } from "./executor-service.js"
 
-export { responseHttp, Service } from "./executor-service.js"
+export { CurrentTls, responseHttp, Service } from "./executor-service.js"
 export type { HttpHandler, HttpMiddleware, Interface, RequestExecutorService } from "./executor-service.js"
 
 const normalizedHeaders = (headers: Headers.Headers) =>

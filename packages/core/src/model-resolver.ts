@@ -258,7 +258,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
           ...runtime.options,
           ...mergeTransport(runtime.options, {
             timeout: { total: timeouts.timeout, headers: timeouts.headerTimeout, chunk: timeouts.chunkTimeout },
-            http: { encoding: Provider.encoding(configured) },
+            http: { encoding: Provider.encoding(configured), tls: Provider.tls(configured) },
           }),
         },
       })

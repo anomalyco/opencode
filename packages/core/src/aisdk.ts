@@ -134,6 +134,7 @@ function prepareOptions(model: RuntimeInfo, pkg: string, outbound: Fetch) {
 
   const customFetch = settings.fetch
   const timeouts = Provider.timeouts(settings)
+  const tls = Provider.tls(settings)
   options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const opts = { ...(init ?? {}) }
     // A plain AbortSignal.timeout would keep running into the body stream, so the header limit uses
@@ -160,6 +161,8 @@ function prepareOptions(model: RuntimeInfo, pkg: string, outbound: Fetch) {
       }
     }
 
+    // A followed redirect keeps the TLS options, so it would present the client certificate to another host.
+    if (tls) Object.assign(opts, { tls, redirect: "error" })
     const send: Fetch = isFetch(customFetch) ? customFetch : outbound
     const middleware = httpMiddleware.getStore()
     const res = await (
