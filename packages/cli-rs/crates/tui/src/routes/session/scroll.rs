@@ -43,6 +43,8 @@ pub(super) struct Inner {
     /// The tab's saved position was restored; until then nothing overwrites it (`restored`).
     restored: Cell<bool>,
     layers: RefCell<Vec<Disposer>>,
+    /// The settings listener, until the controls drop.
+    settings: RefCell<Option<Disposer>>,
 }
 
 impl Controls {
@@ -70,6 +72,7 @@ impl Controls {
             scrollbar: Cell::new(false),
             restored: Cell::new(false),
             layers: RefCell::default(),
+            settings: RefCell::default(),
         });
         inner.install(tui);
         Self(inner)
@@ -126,10 +129,10 @@ impl Inner {
     fn install(&self, tui: &Tui) {
         self.configure(&tui.settings.info());
         let weak = self.this.clone();
-        tui.settings.on_change(bind!(weak, |inner, tui| {
+        *self.settings.borrow_mut() = Some(tui.settings.subscribe(bind!(weak, |inner, tui| {
             inner.configure(&tui.settings.info());
             inner.register(tui);
-        }));
+        })));
         let weak = self.this.clone();
         self.latest.mouse_pointer(MousePointer::POINTER).on_click(bind!(weak, |inner, _, _| {
             let Some(tui) = inner.tui.upgrade() else {

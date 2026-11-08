@@ -52,6 +52,8 @@ struct Last {
     usage: Option<Usage>,
     from: usize,
     cost: f64,
+    /// The IDs of the session's family at the last cost read.
+    family: Vec<String>,
     shown: Option<Model>,
 }
 
@@ -65,9 +67,20 @@ impl Last {
                 .map(|info| abi::LocationRef { directory: info.location.directory.0.clone(), workspace: None });
             self.boundary = session.and_then(|info| info.revert).map(|revert| revert.message_id.0);
         }
-        // The cost of a root counts its family's.
-        if fresh || !changed.sessions.is_empty() {
-            self.cost = read.family(&self.session).cost;
+        // The cost of a root counts its family's: its members, and a session whose parent is one of them.
+        let family = |id: &String| *id == self.session || self.family.contains(id);
+        if fresh
+            || changed.sessions.iter().any(|id| {
+                family(id)
+                    || read
+                        .session(id)
+                        .and_then(|session| session.info.parent_id)
+                        .is_some_and(|parent| family(&parent.0))
+            })
+        {
+            let family = read.family(&self.session);
+            self.family = family.members.into_iter().map(|member| member.id).collect();
+            self.cost = family.cost;
         }
         let models = info || self.location.as_ref().is_some_and(|location| changed.location(location));
         if models {
@@ -223,5 +236,64 @@ mod tests {
         assert_eq!(grouped(999.0), "999");
         assert_eq!(grouped(12345.0), "12,345");
         assert_eq!(grouped(1234567.0), "1,234,567");
+    }
+
+    /// Session `ses_a`, whose family has `ses_b`; `ses_new` is a new child of `ses_b`. Counts the family reads.
+    struct Store {
+        families: Cell<usize>,
+    }
+
+    impl abi::Read for Store {
+        fn theme_mode(&self) -> abi::ThemeMode {
+            abi::ThemeMode::Dark
+        }
+
+        fn color(&self, _token: &str) -> Option<abi::Rgba> {
+            None
+        }
+
+        fn session(&self, id: &str) -> Option<abi::Session> {
+            let parent = match id {
+                "ses_a" => None,
+                "ses_b" => Some("ses_a"),
+                "ses_new" => Some("ses_b"),
+                _ => None,
+            };
+            let info = serde_json::from_value(serde_json::json!({
+                "id": id, "parentID": parent, "title": id, "projectID": "project", "cost": 0,
+                "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
+                "time": { "created": 1, "updated": 1 }, "location": { "directory": "/project" },
+            }))
+            .unwrap();
+            Some(abi::Session { info, status: abi::SessionStatus::Idle })
+        }
+
+        fn family(&self, _id: &str) -> abi::Family {
+            self.families.set(self.families.get() + 1);
+            let member = |id: &str| abi::Member {
+                id: id.to_owned(),
+                parent: None,
+                status: abi::SessionStatus::Idle,
+                updated: 1.0,
+            };
+            abi::Family { members: vec![member("ses_a"), member("ses_b")], cost: 1.0 }
+        }
+    }
+
+    // Expected: the cost reads the family again on a change of a member or of a new child of one, and not on a change
+    // of a session outside it.
+    #[test]
+    fn the_cost_skips_sessions_outside_the_family() {
+        let store = Store { families: Cell::new(0) };
+        let mut last = Last { session: "ses_a".to_owned(), ..Last::default() };
+        last.update(&store, &Changed::everything(), true);
+        assert_eq!(store.families.get(), 1);
+        let changed = |id: &str| Changed { sessions: vec![id.to_owned()], ..Changed::default() };
+        last.update(&store, &changed("ses_other"), false);
+        assert_eq!(store.families.get(), 1);
+        last.update(&store, &changed("ses_b"), false);
+        assert_eq!(store.families.get(), 2);
+        last.update(&store, &changed("ses_new"), false);
+        assert_eq!(store.families.get(), 3);
     }
 }
