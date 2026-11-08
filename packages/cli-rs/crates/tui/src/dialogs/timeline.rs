@@ -60,5 +60,5 @@ pub(crate) fn prompts(messages: &[SessionMessageInfo]) -> Vec<(String, String, f
 /// `Locale.time`: `toLocaleTimeString(undefined, { timeStyle: "short" })` in en-US. Bun's ICU puts a plain space
 /// before AM/PM.
 pub(crate) fn time(created: f64) -> String {
-    Zone::Local.at(created as i64).map(|date| date.short_time(" ")).unwrap_or_default()
+    Zone::Local.at(created as i64).map(|date| date.short_time()).unwrap_or_default()
 }
