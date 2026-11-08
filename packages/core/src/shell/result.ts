@@ -35,11 +35,11 @@ export function notice(output: Pick<Output, "exit" | "signal" | "timeout">, time
     return `Exit code: ${exitCode(output)}`
 }
 
-// A signal reads as the shell's 128 + signal number convention.
+// A signal reads as the shell's 128 + signal number convention, followed by its name.
 function exitCode(output: Pick<Output, "exit" | "signal">) {
   if (output.exit !== undefined) return output.exit
   const signal = output.signal === undefined ? undefined : os.constants.signals[output.signal as NodeJS.Signals]
-  return signal === undefined ? "unknown" : 128 + signal
+  return signal === undefined ? "unknown" : `${128 + signal} (${output.signal})`
 }
 
 export function metadata(output: Output) {

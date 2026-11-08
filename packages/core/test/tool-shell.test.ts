@@ -192,8 +192,8 @@ const idleCommand = isWindows ? "Start-Sleep -Seconds 60" : "sleep 60"
 const startingCommand = isWindows
   ? "[Console]::Out.Write('server starting'); Start-Sleep -Seconds 60"
   : "printf 'server starting'; sleep 60"
-// A timeout kills the process group with SIGTERM, which the result reports as 128 + 15.
-const timedOutExit = isWindows ? "\\S+" : "143"
+// A timeout kills the process group with SIGTERM, which the result reports as 128 + 15 and its name.
+const timedOutExit = isWindows ? ".+" : "143 \\(SIGTERM\\)"
 const bodyExitCommand = isWindows
   ? "[Console]::Out.Write('body'); Start-Sleep -Milliseconds 100; exit 7"
   : "printf body && exit 7"
@@ -1638,11 +1638,12 @@ describe("ShellTool", () => {
     Effect.sync(() => {
       expect(ShellResult.notice({ exit: 0 })).toBeUndefined()
       expect(ShellResult.notice({ exit: 7 })).toBe("Exit code: 7")
-      expect(ShellResult.notice({ signal: "SIGTERM" })).toBe("Exit code: 143")
-      expect(ShellResult.notice({ signal: "SIGKILL" })).toBe("Exit code: 137")
+      expect(ShellResult.notice({ exit: 143 })).toBe("Exit code: 143")
+      expect(ShellResult.notice({ signal: "SIGTERM" })).toBe("Exit code: 143 (SIGTERM)")
+      expect(ShellResult.notice({ signal: "SIGKILL" })).toBe("Exit code: 137 (SIGKILL)")
       expect(ShellResult.notice({ signal: "SIGNOPE" })).toBe("Exit code: unknown")
       expect(ShellResult.notice({ signal: "SIGTERM", timeout: true }, 120_000)).toBe(
-        "Command timed out after 120 seconds\nExit code: 143",
+        "Command timed out after 120 seconds\nExit code: 143 (SIGTERM)",
       )
       expect(ShellResult.notice({ timeout: true })).toBe("Command timed out\nExit code: unknown")
     }),
