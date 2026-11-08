@@ -1,5 +1,11 @@
 import { Effect, Schema } from "effect"
-import { DecisionResponse, type DecisionAnswer, type DecisionPart, type DecisionRequestFor } from "../decision.js"
+import {
+  DecisionResponse,
+  DecisionUsage,
+  type DecisionAnswer,
+  type DecisionPart,
+  type DecisionRequest,
+} from "../decision.js"
 import { DecisionRoute } from "../route/decision.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaProtocol } from "../route/media-protocol.js"
@@ -41,7 +47,7 @@ const Answer = Schema.Union([
     probabilities: Schema.Array(Schema.Struct({ value: Schema.Int, label: Schema.String, probability: Probability })),
     confidence: Probability,
   }),
-  Schema.Struct({ type: Schema.Literal("refusal"), name: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("refusal"), name: Schema.String, message: Schema.optional(Schema.String) }),
 ])
 const Response = Schema.Struct({
   model: Schema.String,
@@ -51,7 +57,7 @@ const Response = Schema.Struct({
 
 const decodeOptions = ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))
 
-const fromRequest = Effect.fn("OpenAIDecisions.fromRequest")(function* (request: DecisionRequestFor) {
+const fromRequest = Effect.fn("OpenAIDecisions.fromRequest")(function* (request: DecisionRequest) {
   const options = yield* decodeOptions(request.providerOptions ?? {})
   const { promptCacheKey: _, promptCacheOptions: __, safetyIdentifier: ___, ...native } = request.providerOptions ?? {}
   return {
@@ -71,10 +77,7 @@ const fromRequest = Effect.fn("OpenAIDecisions.fromRequest")(function* (request:
 })
 
 // `input_json` takes an object or a list of objects; other JSON values go as text.
-const inputPart = (
-  request: DecisionRequestFor,
-  part: DecisionPart,
-): Effect.Effect<Record<string, unknown>, AIError> => {
+const inputPart = (request: DecisionRequest, part: DecisionPart): Effect.Effect<Record<string, unknown>, AIError> => {
   if (part.type === "text") return Effect.succeed({ type: "input_text", text: part.text })
   if (part.type === "json")
     return Effect.succeed(
@@ -111,14 +114,35 @@ export const protocol = DecisionRoute.protocol({
       const output = yield* decodeDocument(response)
       const answers = output.value.answers.map(
         (answer): DecisionAnswer =>
-          answer.type === "refusal" ? { name: answer.name, type: "error", reason: "refusal" } : answer,
+          answer.type === "refusal"
+            ? {
+                name: answer.name,
+                type: "error",
+                reason: "refusal",
+                ...(answer.message === undefined ? {} : { message: answer.message }),
+              }
+            : answer,
       )
       const byName = new Map(answers.map((answer) => [answer.name, answer]))
       const ordered = context.request.questions.flatMap((question) => byName.get(question.name) ?? [])
+      const usage = OpenResponses.mapUsage(output.value.usage, context.providerMetadataKey)
       return new DecisionResponse({
         answers: ordered.length === answers.length ? ordered : answers,
-        usage: OpenResponses.mapUsage(output.value.usage, context.providerMetadataKey),
-        providerMetadata: { [context.providerMetadataKey]: { model: output.value.model } },
+        usage:
+          usage === undefined
+            ? undefined
+            : new DecisionUsage({
+                inputTokens: usage.inputTokens,
+                outputTokens: usage.outputTokens,
+                totalTokens: usage.totalTokens,
+                cost: usage.cost,
+              }),
+        providerMetadata: {
+          [context.providerMetadataKey]: {
+            model: output.value.model,
+            ...(output.value.usage === undefined ? {} : { usage: output.value.usage }),
+          },
+        },
       })
     }),
   },

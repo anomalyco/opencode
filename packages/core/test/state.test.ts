@@ -202,6 +202,37 @@ describe("State", () => {
       expect(finalized).toBe(2)
     }),
   )
+
+  it.effect("publishes the initial projection and skips unchanged reloads", () =>
+    Effect.gen(function* () {
+      let notifications = 0
+      let label = "first"
+      const state = State.create({
+        initial: () => ({ items: [] as { name: string; execute: () => void }[] }),
+        editor: (editor) => ({
+          add: (name: string) => editor.items.push({ name, execute: () => {} }),
+        }),
+        notify: State.changes(
+          (data) => data.items.map((item) => ({ name: item.name })),
+          () => Effect.sync(() => void notifications++),
+        ),
+      })
+
+      yield* state.transform(() => {})
+      expect(notifications).toBe(1)
+      yield* state.reload()
+      expect(notifications).toBe(1)
+
+      yield* state.transform((editor) => editor.add(label))
+      expect(notifications).toBe(2)
+      yield* state.reload()
+      expect(notifications).toBe(2)
+
+      label = "second"
+      yield* state.reload()
+      expect(notifications).toBe(3)
+    }),
+  )
 })
 
 describe("State rebuild", () => {

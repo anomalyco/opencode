@@ -18,6 +18,9 @@ import { ConfigNormalize } from "./config/normalize.js"
 import { ConfigDiscovery } from "./config/discovery.js"
 import { ConfigWatch } from "./config/watch.js"
 import { ConfigIntegration } from "./config/integration.js"
+import { ConfigManaged } from "./config/managed.js"
+import { ManagedPolicy } from "./managed-policy.js"
+import { Connection } from "@opencode/schema/connection"
 import { WellKnown } from "./wellknown.js"
 import { AppProcess } from "@opencode/util/process"
 import { ChildProcess } from "effect/process"
@@ -195,7 +198,15 @@ export const layer = (options?: Options) =>
             env: variables,
           }).pipe(
             Effect.flatMap((text) => parseInfo(text, entry.origin)),
-            Effect.map((info) => (info ? new Document({ type: "document", info }) : undefined)),
+            Effect.map((info) =>
+              info
+                ? new ConfigIntegration.WellKnownDocument({
+                    type: "document",
+                    info,
+                    integrationID: entry.integrationID,
+                  })
+                : undefined,
+            ),
           ),
         ).pipe(Effect.map((documents) => documents.filter((document) => document !== undefined)))
       })
@@ -208,7 +219,28 @@ export const layer = (options?: Options) =>
               Effect.logWarning("failed to discover wellknown config", { error }).pipe(Effect.as([] as const)),
             ),
           )
-        return yield* Effect.forEach(entries, loadWellknownEntry).pipe(Effect.map((documents) => documents.flat()))
+        return yield* Effect.forEach(entries, (entry) =>
+          loadWellknownEntry(entry).pipe(
+            Effect.map((documents) => ({ integrationID: entry.integrationID, documents })),
+          ),
+        )
+      })
+
+      // `integration.use` decides whether an integration may supply anything. Only managed policies can withhold the
+      // documents an integration delivers, so a project file can never strip the Console document carrying org policy.
+      // A withheld document keeps its policies, so denying an integration never lifts the restrictions it carries.
+      const supplies = Effect.fnUntraced(function* (
+        lockdown: ReturnType<typeof ManagedPolicy.statements>,
+        integrationID: string,
+        connection?: Connection.Info,
+      ) {
+        const stored =
+          connection?.type === "credential" ? yield* credentials.get(Credential.ID.make(connection.id)) : undefined
+        const resource = ManagedPolicy.integrationResource(
+          integrationID,
+          stored ? ManagedPolicy.account(stored.value) : undefined,
+        )
+        return ManagedPolicy.decision(lockdown, "integration.use", resource) !== "deny"
       })
 
       const loadPreferences = Effect.fn("Config.loadPreferences")(function* (plist: AbsolutePath) {
@@ -278,7 +310,7 @@ export const layer = (options?: Options) =>
           .flatMap((entry) =>
             entry.type === "document" && entry.info.policies
               ? [
-                  new Document({
+                  new ConfigManaged.Document({
                     type: "document",
                     path: entry.path,
                     info: new Info({ policies: entry.info.policies }),
@@ -288,8 +320,8 @@ export const layer = (options?: Options) =>
           )
           .toReversed()
         const managedSettings = managed.map((entry) =>
-          entry.type === "document" && entry.info.policies
-            ? new Document({ ...entry, info: new Info({ ...entry.info, policies: undefined }) })
+          entry.type === "document"
+            ? new ConfigManaged.Document({ ...entry, info: new Info({ ...entry.info, policies: undefined }) })
             : entry,
         )
         // Integration documents load right after managed policies: every remote, user, and project layer overrides
@@ -303,10 +335,35 @@ export const layer = (options?: Options) =>
           Effect.orDie,
           Effect.map((entries) => entries.flat()),
         )
+        const lockdown = ManagedPolicy.statements(managedPolicies)
+        const integrated = yield* Effect.forEach(integrations.values(), (document) =>
+          supplies(lockdown, document.integrationID, document.connection).pipe(
+            Effect.map((allowed) =>
+              allowed
+                ? document
+                : new ConfigIntegration.Document({ ...document, info: new Info({ policies: document.info.policies }) }),
+            ),
+          ),
+        )
+        const wellknownDocuments = yield* Effect.forEach(yield* loadWellknown().pipe(Effect.orDie), (entry) =>
+          supplies(lockdown, entry.integrationID).pipe(
+            Effect.map((allowed) =>
+              allowed
+                ? entry.documents
+                : entry.documents.map(
+                    (document) =>
+                      new ConfigIntegration.WellKnownDocument({
+                        ...document,
+                        info: new Info({ policies: document.info.policies }),
+                      }),
+                  ),
+            ),
+          ),
+        )
         return [
           ...managedPolicies,
-          ...integrations.values(),
-          ...(yield* loadWellknown().pipe(Effect.orDie)),
+          ...integrated,
+          ...wellknownDocuments.flat(),
           ...globalSupplementary,
           ...explicit,
           ...direct,

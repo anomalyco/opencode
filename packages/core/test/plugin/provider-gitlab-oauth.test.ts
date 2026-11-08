@@ -63,7 +63,7 @@ const fixture = Effect.fn(function* () {
     editor.method.update({ integrationID, method: { type: "key" } })
   })
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* GitLabPlugin.effect(host).pipe(Effect.provideService(HttpClient.HttpClient, http))
   const status = (attemptID: Integration.AttemptID) =>
     integrations.oauth

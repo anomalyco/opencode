@@ -1,5 +1,4 @@
 import { Effect } from "effect"
-import type { Media } from "../../media.js"
 import type { MediaProtocol } from "../../route/media-protocol.js"
 
 export interface Size {
@@ -71,14 +70,7 @@ export const nearest = (shape: Shape, sizes: ReadonlyArray<Size>): Size => {
   })
 }
 
-/** Reports a size more than 2% off the requested aspect or more than √2 per edge off the requested tier. */
-export const notice = (name: string, shape: Shape, size: Size): Media.Notice | undefined => {
-  const requested = missed(shape, size)
-  if (requested === undefined) return undefined
-  return { type: "other", message: `${name} doesn't offer ${requested}; used ${describe(size)}` }
-}
-
-/** Free width and height that must honor the shape; a size that misses it fails instead of returning a notice. */
+/** Free width and height that must honor the shape; a size that misses it fails. */
 export const exact = (route: MediaProtocol.Identity, shape: Shape, limits: Limits) => {
   if (!isRequested(shape)) return Effect.succeed(undefined)
   const size = fit(shape, limits)
@@ -92,6 +84,7 @@ export const exact = (route: MediaProtocol.Identity, shape: Shape, limits: Limit
   )
 }
 
+/** A size more than 2% off the requested aspect or more than √2 per edge off the requested tier. */
 const missed = (shape: Shape, size: Size) => {
   const aspectMissed =
     shape.aspect !== undefined && Math.abs(Math.log(size.width / size.height / aspectRatio(shape))) > 0.02

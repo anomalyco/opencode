@@ -1,31 +1,36 @@
-import { createEffect, createMemo, onCleanup, type Accessor } from "solid-js"
-import { createStore } from "solid-js/store"
-import { useMutation } from "@tanstack/solid-query"
-import { Option, Schema } from "effect"
-import type { SessionInboxInfo } from "@opencode/client/promise"
+import { createEffect, createMemo, createSignal, onCleanup, untrack, type Accessor } from "solid-js"
+import type { PromptAttachment } from "@opencode/client/promise"
 import { SessionMessage } from "@opencode/schema/session-message"
-import type { ComposerDelivery } from "@/composer/adapter"
+import type { ComposerDelivery, ComposerSession } from "@/composer/adapter"
 import type { ComposerStateTarget } from "@/composer/submission-state"
-import type { ContextItem, ImageAttachmentPart, PathAttachmentPart, Prompt } from "@/composer/state"
-import { appendPrompt, clonePrompt, isAttachment, promptLength } from "@/composer/prompt-parts"
+import type { ImageAttachmentPart, Prompt } from "@/composer/state"
+import { clonePrompt, promptLength } from "@/composer/prompt-parts"
 import { buildPromptRequest } from "@/composer/request"
-import { blobDataUrl, createLegacyBlobReference } from "@/runtime/persistence/drafts"
-import { readPromptPresentation } from "@/composer/comment-note"
+import { type BlobReference, blobDataUrl } from "@/runtime/persistence/drafts"
+import { pinPromptMedia } from "@/composer/media"
 import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
-
-export type QueuedPrompt = Extract<SessionInboxInfo, { type: "user" }>
-
-type EditStash = {
-  prompt: Prompt
-  cursor: number
-  mode: "normal" | "shell"
-  retry: ReturnType<ComposerStateTarget["retry"]["current"]>
-}
+import {
+  createQueueState,
+  editingID,
+  isComposerAttachment,
+  isPristine,
+  mergePrompt,
+  QUEUE_MUTATION_TIMEOUT_MS,
+  queuedPromptText,
+  transitionQueue,
+  viewQueue,
+  type ActiveOperation,
+  type EditOperation,
+  type QueueEffect,
+  type QueueEvent,
+  type QueueMutationStage,
+  type QueuedPrompt,
+} from "./queue-machine"
 
 export function createSessionQueue(input: {
   sessionID: string
@@ -33,81 +38,12 @@ export function createSessionQueue(input: {
   working: Accessor<boolean>
   behavior: Accessor<ComposerDelivery>
   restoreFocus: (cursor: number) => void
+  background: NonNullable<ComposerSession["background"]>
 }) {
   const data = useData()
   const server = useServerSDK()
   const location = useWorkspaceLocation()
   const language = useLanguage()
-  const [state, setState] = createStore<{ editing?: { id: string; stash: EditStash } }>({})
-  const notify = () => showToast({ title: language.t("common.requestFailed") })
-
-  const mutation = useMutation(() => ({
-    mutationFn: async (
-      change:
-        | { type: "reorder"; inboxIDs: string[] }
-        | { type: "undo"; item: QueuedPrompt; prompt: Prompt; context: ContextItem[] }
-        | {
-            type: "edit"
-            inboxIDs: string[]
-            original: string
-            replacement: string
-            item: QueuedPrompt | undefined
-            prompt: Prompt
-            text: string
-            delivery: ComposerDelivery
-          },
-    ) => {
-      if (change.type === "reorder") return rewrite(change.inboxIDs)
-
-      if (change.type === "undo") {
-        await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.item.id })
-        const draft = input.draft.current()
-
-        // A prompt of only comments or attachments adds no text, so it needs no paragraph break.
-        const prompt = !promptLength(draft)
-          ? [...change.prompt, ...draft.filter(isAttachment)]
-          : promptLength(change.prompt)
-            ? appendPrompt(draft, change.prompt)
-            : [...clonePrompt(draft), ...change.prompt.filter(isAttachment)]
-
-        input.draft.set(prompt, promptLength(prompt))
-        change.context.forEach((item) => input.draft.context.add(item))
-        input.restoreFocus(promptLength(prompt))
-
-        return
-      }
-
-      const replacement = await editedPromptInput(
-        input.sessionID,
-        location().directory,
-        change.item,
-        change.prompt,
-        change.text,
-      )
-
-      // Admit before cancelling so a failed replacement never discards the original. A queued edit
-      // rebuilds its position in one rewrite, which leaves the queue unchanged if any admission fails.
-      const admission = { ...replacement, id: change.replacement, delivery: change.delivery }
-
-      if (change.delivery === "queue") {
-        await rewrite(change.inboxIDs, { original: change.original, admission: { ...admission, resume: false } })
-        cancelEdit()
-
-        return
-      }
-
-      // Like a queued edit, an original the server delivered meanwhile keeps the edit draft instead of sending twice.
-      const pending = await server.api.session.inbox.list({ sessionID: input.sessionID })
-
-      if (!pending.some((item) => item.id === change.original && item.type === "user" && item.delivery === "queue"))
-        throw new Error("Queued prompt was delivered before the edit")
-      await data.session.prompt(admission)
-      await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.original })
-      cancelEdit()
-    },
-    onError: notify,
-    onSettled: () => data.session.pending.sync(input.sessionID).catch(() => undefined),
-  }))
 
   const queued = createMemo(() =>
     data.session.pending
@@ -115,34 +51,289 @@ export function createSessionQueue(input: {
       .filter((item): item is QueuedPrompt => item.type === "user" && item.delivery === "queue"),
   )
 
-  const rows = createMemo(() => {
-    const replacement = mutation.isPending ? mutation.variables : undefined
+  const [state, setState] = createSignal(createQueueState(untrack(queued)))
+  const view = createMemo(() => viewQueue(state(), { working: input.working(), behavior: input.behavior() }))
+  // OS handles for the machine's expiry timers, keyed by its expiry IDs.
+  const timers = new Map<number, ReturnType<typeof setTimeout>>()
+  // The bound on the operation in flight, and each running operation's progress, keyed by attempt.
+  let mutationTimer: ReturnType<typeof setTimeout> | undefined
+  const runs = new Map<number, MutationProgress>()
 
-    return queuedPromptRows(
-      queued(),
-      replacement?.type === "edit" && replacement.delivery === "queue" ? replacement : undefined,
+  // Effects read and write the composer, so neither the transition nor its effects subscribe the caller.
+  const dispatch = (event: QueueEvent) =>
+    untrack(() => {
+      const next = transitionQueue(state(), event)
+      setState(next.state)
+      next.effects.forEach(perform)
+    })
+
+  const perform = (effect: QueueEffect) => {
+    if (effect.type === "draft.load") {
+      input.draft.mode.set("normal")
+      input.draft.set(effect.prompt, effect.cursor)
+      input.restoreFocus(effect.cursor)
+
+      return
+    }
+
+    if (effect.type === "draft.restore") {
+      const current = input.draft.current()
+
+      const prompt =
+        effect.keep && !isPristine(effect.keep, current)
+          ? mergePrompt(effect.stash.prompt, current)
+          : effect.stash.prompt
+
+      const cursor = prompt === effect.stash.prompt ? effect.stash.cursor : promptLength(prompt)
+      // The stashed retry fingerprints its own payload, so a merged prompt sends under a new ID.
+      input.draft.mode.set(effect.stash.mode)
+      input.draft.set(prompt, cursor)
+
+      if (effect.stash.retry) input.draft.retry.set(effect.stash.retry)
+
+      if (effect.focus) input.restoreFocus(cursor)
+
+      return
+    }
+
+    if (effect.type === "draft.pinned") {
+      const current = input.draft.current()
+      input.draft.set(
+        current.map((part) => {
+          const blob = part.type === "image" ? effect.blobs.get(part.id) : undefined
+
+          return blob && part.type === "image" ? { ...part, blob } : part
+        }),
+        input.draft.cursor() ?? promptLength(current),
+      )
+
+      return
+    }
+
+    if (effect.type === "draft.merge") {
+      const prompt = mergePrompt(input.draft.current(), effect.prompt)
+      input.draft.set(prompt, promptLength(prompt))
+      effect.context.forEach((item) => input.draft.context.add(item))
+
+      if (effect.focus !== false) input.restoreFocus(promptLength(prompt))
+
+      return
+    }
+
+    if (effect.type === "media.pin") {
+      // Images the user removed meanwhile stay removed; a pin for a row no longer open is rejected by the machine.
+      void pinPromptMedia([...effect.attachments]).then(
+        (pinned) =>
+          dispatch({
+            type: "edit.mediaPinned",
+            attempt: effect.attempt,
+            blobs: new Map(
+              pinned.flatMap((part): [string, BlobReference][] =>
+                part.type === "image" ? [[part.id, part.blob]] : [],
+              ),
+            ),
+          }),
+        () => undefined,
+      )
+
+      return
+    }
+
+    if (effect.type === "mutation.run") {
+      const attempt = effect.operation.attempt
+      const progress: MutationProgress = { controller: new AbortController(), hidden: [], stage: "running" }
+      runs.set(attempt, progress)
+
+      return void run(effect.operation, progress).finally(() => runs.delete(attempt))
+    }
+
+    if (effect.type === "mutation.abort") return runs.get(effect.attempt)?.controller.abort()
+
+    if (effect.type === "mutation.timer.start") {
+      clearTimeout(mutationTimer)
+      mutationTimer = setTimeout(() => {
+        const progress = runs.get(effect.attempt)
+
+        dispatch({
+          type: "mutation.timed-out",
+          attempt: effect.attempt,
+          hidden: progress ? [...progress.hidden] : [],
+          stage: progress?.stage ?? "running",
+        })
+      }, QUEUE_MUTATION_TIMEOUT_MS)
+
+      return
+    }
+
+    if (effect.type === "mutation.timer.clear") {
+      clearTimeout(mutationTimer)
+      mutationTimer = undefined
+
+      return
+    }
+
+    if (effect.type === "timer.start") {
+      timers.set(
+        effect.expiry,
+        setTimeout(() => {
+          timers.delete(effect.expiry)
+          dispatch({ type: "gone.expired", expiry: effect.expiry })
+        }, 30_000),
+      )
+
+      return
+    }
+
+    if (effect.type === "timer.clear") {
+      clearTimeout(timers.get(effect.expiry))
+      timers.delete(effect.expiry)
+
+      return
+    }
+
+    if (effect.type === "timer.clearAll") {
+      timers.forEach(clearTimeout)
+      timers.clear()
+      clearTimeout(mutationTimer)
+      mutationTimer = undefined
+
+      return
+    }
+
+    showToast({ title: language.t(effect.key) })
+  }
+
+  // Runs the operation in flight and reports its progress. Each report carries the operation's attempt, so the machine
+  // ignores one that arrives after the operation stopped being current.
+  const run = async (operation: ActiveOperation, progress: MutationProgress) => {
+    const attempt = operation.attempt
+
+    // SSE retracts and updates materialized timeline messages for a steer or removal, so neither re-syncs the queue.
+    if (operation.type === "steer") {
+      const background = input.background()
+
+      return server.api.session.inbox
+        .update({ sessionID: input.sessionID, inboxID: operation.id, delivery: "steer" })
+        .then(
+          () => {
+            void background?.move()
+            dispatch({ type: "mutation.succeeded", attempt })
+          },
+          () => dispatch({ type: "mutation.failed", attempt, hidden: [] }),
+        )
+    }
+
+    if (operation.type === "remove")
+      return server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: operation.id }).then(
+        () => dispatch({ type: "mutation.succeeded", attempt }),
+        () => dispatch({ type: "mutation.failed", attempt, hidden: [] }),
+      )
+
+    if (operation.type === "undo") {
+      const source = { id: operation.item.id, ...operation.item.payload }
+      const context = extractPromptContext(source, { directory: location().directory })
+
+      await undoQueuedPrompt({
+        prompt: extractPromptFromMessage(source, {
+          directory: location().directory,
+          attachmentName: language.t("common.attachment"),
+          sessionTitle: (id) => data.session.get(id)?.title,
+        }),
+        signal: progress.controller.signal,
+        cancelInboxItem: () => {
+          progress.stage = "committed"
+
+          return server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: operation.item.id })
+        },
+      }).then(
+        (prompt) =>
+          dispatch({ type: "mutation.undone", attempt, prompt, context: [...context.comments, ...context.files] }),
+        () => dispatch({ type: "mutation.failed", attempt, hidden: [] }),
+      )
+      await data.session.pending.sync(input.sessionID).catch(() => undefined)
+
+      return
+    }
+
+    const settled = await (
+      operation.type === "reorder" ? rewrite(attempt, progress, [...operation.inboxIDs]) : sendEdit(operation, progress)
+    ).then(
+      () => true,
+      () => false,
     )
-  })
 
-  createEffect(() => {
-    const editing = state.editing
+    if (settled) progress.stage = "settled"
 
-    if (!editing || mutation.isPending || queued().some((item) => item.id === editing.id)) return
-    setState("editing", undefined)
-  })
-  onCleanup(() => cancelEdit())
+    if (operation.type === "reorder") data.session.pending.invalidate(input.sessionID)
+    // The rows keep their optimistic state until the server's queue has caught up.
+    await data.session.pending.sync(input.sessionID).catch(() => undefined)
+    dispatch(
+      settled ? { type: "mutation.succeeded", attempt } : { type: "mutation.failed", attempt, hidden: progress.hidden },
+    )
+  }
+
+  const sendEdit = async (operation: EditOperation & { attempt: number }, progress: MutationProgress) => {
+    const signal = progress.controller.signal
+
+    const replacement = await editedPromptInput(
+      input.sessionID,
+      location().directory,
+      operation.item,
+      operation.prompt,
+      operation.raw,
+    )
+
+    // Admit before cancelling so a failed replacement never discards the original. A queued edit rebuilds its position
+    // in one rewrite, which leaves the queue unchanged if any admission fails.
+    const admission = { ...replacement, id: operation.moved[operation.original], delivery: operation.delivery }
+
+    if (operation.delivery === "queue")
+      return rewrite(operation.attempt, progress, undefined, {
+        original: operation.original,
+        admission: { ...admission, resume: false },
+        moved: operation.moved,
+      })
+
+    signal.throwIfAborted()
+    // Like a queued edit, an original the server delivered meanwhile keeps the edit draft instead of sending twice.
+    const pending = await server.api.session.inbox.list({ sessionID: input.sessionID })
+
+    if (!pending.some((item) => item.id === operation.original && item.type === "user" && item.delivery === "queue"))
+      throw new Error("Queued prompt was delivered before the edit")
+    signal.throwIfAborted()
+    const background = input.background()
+    // A steered replacement can be delivered before a withdrawal reaches it, so the bound waits for the admission and
+    // the edit returns to the composer only if it really did not go out.
+    progress.stage = "committed"
+    await data.session.prompt(admission)
+    void background?.move()
+    dispatch({ type: "mutation.admitted", attempt: operation.attempt })
+    // Cancelling is a no-op once the original is gone, so one retry is safe.
+    const cancel = () => server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: operation.original })
+    await cancel().catch(cancel)
+  }
 
   // `replace` substitutes an edited prompt for the original at its position in the same rewrite.
+  // Without `inboxIDs` the server's current order is kept.
   const rewrite = async (
-    inboxIDs: string[],
-    replace?: { original: string; admission: Parameters<typeof data.session.prompt>[0] },
+    attempt: number,
+    progress: MutationProgress,
+    inboxIDs: string[] | undefined,
+    replace?: {
+      original: string
+      admission: Parameters<typeof data.session.prompt>[0]
+      moved: Readonly<Record<string, string>>
+    },
   ) => {
+    const signal = progress.controller.signal
+    signal.throwIfAborted()
     const pending = await server.api.session.inbox.list({ sessionID: input.sessionID })
+    signal.throwIfAborted()
 
     if (pending.some((item) => item.delivery === "queue" && item.type !== "user"))
       throw new Error("Queued control items block reordering")
     const current = pending.filter((item): item is QueuedPrompt => item.type === "user" && item.delivery === "queue")
-    const ordered = inboxIDs.flatMap((id) => current.filter((item) => item.id === id))
+    const ordered = inboxIDs ? inboxIDs.flatMap((id) => current.filter((item) => item.id === id)) : current
 
     // An edited prompt delivered meanwhile is no longer queued; fail so the edit draft stays.
     if (ordered.length !== current.length || (replace && !current.some((item) => item.id === replace.original)))
@@ -156,12 +347,36 @@ export function createSessionQueue(input: {
     // Each ID is recorded before sending: the server can admit a prompt whose response then fails.
     const replacements: string[] = []
 
+    const withdraw = () =>
+      Promise.all(
+        replacements.map((inboxID) =>
+          server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID }).then(
+            () => void progress.hidden.push(inboxID),
+            () => undefined,
+          ),
+        ),
+      )
+
+    // A rewrite stopped by its bound withdraws what it sent, as a failed one does.
+    const stopped = async () => {
+      if (!signal.aborted) return
+      await withdraw()
+      signal.throwIfAborted()
+    }
+
+    // An edit's pending rows follow the queue as the server has it now, keeping the IDs minted at confirm.
+    const moved = Object.fromEntries(
+      ordered.slice(changed).map((item) => [item.id, replace?.moved[item.id] ?? SessionMessage.ID.create()]),
+    )
+
+    dispatch({ type: "mutation.moved", attempt, moved })
+
     for (const item of ordered.slice(changed)) {
       const admission =
         item.id === replace?.original
           ? replace.admission
           : {
-              id: SessionMessage.ID.create(),
+              id: moved[item.id],
               sessionID: input.sessionID,
               text: item.payload.text,
               files: item.payload.files?.map((file) => ({
@@ -179,257 +394,124 @@ export function createSessionQueue(input: {
 
       const id = admission.id ?? SessionMessage.ID.create()
 
+      await stopped()
       replacements.push(id)
       await data.session.prompt({ ...admission, id }).catch(async (error) => {
-        await Promise.all(
-          replacements.map((inboxID) =>
-            server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID }).catch(() => undefined),
-          ),
-        )
+        await withdraw()
         throw error
       })
     }
 
-    for (const item of current.slice(changed)) {
+    await stopped()
+    // Every copy is in, so the originals must go, however long that takes, or the queue holds both.
+    progress.stage = "committed"
+
+    if (replace) dispatch({ type: "mutation.admitted", attempt })
+
+    // An edit cancels last first: the strip shows each original until it goes, so its copies never
+    // show out of order.
+    const replaced = current.slice(changed)
+
+    for (const item of replace ? replaced.reverse() : replaced) {
       await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: item.id })
+      progress.hidden.push(item.id)
     }
   }
 
-  const steer = (id: string) => {
-    if (state.editing?.id === id) cancelEdit()
+  createEffect(() => {
+    const items = queued()
+    dispatch({ type: "inbox.synced", items })
+  })
 
-    return server.api.session.inbox
-      .update({ sessionID: input.sessionID, inboxID: id, delivery: "steer" })
-      .catch(() => notify())
-  }
+  onCleanup(() => dispatch({ type: "dispose" }))
 
-  const remove = (id: string) => {
-    if (state.editing?.id === id) cancelEdit()
-
-    return server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: id }).catch(() => notify())
-  }
-
-  const undo = (id: string) => {
-    if (mutation.isPending || state.editing) return
-    const item = queued().find((entry) => entry.id === id)
-
-    if (!item) return
-
-    if (input.draft.mode.current() !== "normal") {
-      showToast({ title: language.t("session.queue.undoShell") })
-
-      return
-    }
-
-    const source = { id: item.id, ...item.payload }
-    const context = extractPromptContext(source, { directory: location().directory })
-
-    mutation.mutate({
-      type: "undo",
-      item,
-      prompt: extractPromptFromMessage(source, {
-        directory: location().directory,
-        attachmentName: language.t("common.attachment"),
-      }),
-      context: [...context.comments, ...context.files],
-    })
-  }
-
-  // Re-admitting a queued prompt commits a staged revert, which drops every prompt queued after its boundary.
-  const refuseReverted = () => {
-    if (!data.session.get(input.sessionID)?.revert) return false
-    showToast({ title: language.t("session.queue.reverted") })
-
-    return true
-  }
-
-  const reorder = (inboxIDs: string[]) => {
-    if (mutation.isPending || refuseReverted()) return Promise.resolve()
-
-    return mutation.mutateAsync({ type: "reorder", inboxIDs }).catch(() => undefined)
-  }
+  const reverted = () => !!data.session.get(input.sessionID)?.revert
 
   const edit = (id: string) => {
-    if (mutation.isPending || refuseReverted()) return false
-
-    if (state.editing?.id === id) return true
-    const item = queued().find((entry) => entry.id === id)
-
-    if (!item) return false
-
-    if (state.editing) cancelEdit()
     const draft = input.draft.current()
-    setState("editing", {
+
+    dispatch({
+      type: "edit.start",
       id,
-      stash: {
+      reverted: reverted(),
+      draft: {
         prompt: clonePrompt(draft),
         cursor: input.draft.cursor() ?? promptLength(draft),
         mode: input.draft.mode.current(),
         retry: input.draft.retry.current(),
       },
     })
-    const text = queuedPromptText(item)
-    input.draft.mode.set("normal")
-    input.draft.set(
-      [{ type: "text", content: text, start: 0, end: text.length }, ...queuedPromptAttachments(item)],
-      text.length,
-    )
-    input.restoreFocus(text.length)
 
-    return true
-  }
-
-  const cancelEdit = () => {
-    const editing = state.editing
-
-    if (!editing) return
-    setState("editing", undefined)
-    // Mode first, then prompt, then retry: mode and prompt writes both clear
-    // the retry marker.
-    input.draft.mode.set(editing.stash.mode)
-    input.draft.set(editing.stash.prompt, editing.stash.cursor)
-
-    if (editing.stash.retry) input.draft.retry.set(editing.stash.retry)
-    input.restoreFocus(editing.stash.cursor)
-  }
-
-  const confirmEdit = (delivery: ComposerDelivery) => {
-    const editing = state.editing
-
-    if (!editing || mutation.isPending || refuseReverted()) return
-    const prompt = clonePrompt(input.draft.current())
-    const text = prompt.map((part) => ("content" in part ? part.content : "")).join("")
-    const attachments = prompt.filter(isAttachment)
-
-    if (!text.trim() && !attachments.length) return cancelEdit()
-    const item = queued().find((entry) => entry.id === editing.id)
-    const original = item ? queuedPromptAttachments(item) : []
-
-    const pristine =
-      item &&
-      text.trim() === queuedPromptText(item) &&
-      attachments.length === original.length &&
-      attachments.every((attachment, index) => attachment.id === original[index].id)
-
-    if (pristine && delivery === "queue") return cancelEdit()
-    mutation.mutate({
-      type: "edit",
-      inboxIDs: queued().map((entry) => entry.id),
-      original: editing.id,
-      replacement: SessionMessage.ID.create(),
-      item,
-      prompt,
-      text,
-      delivery,
-    })
-  }
-
-  const editFirst = () => {
-    const first = queued()[0]
-
-    if (!first) return false
-
-    return edit(first.id)
+    return editingID(state()) === id
   }
 
   return {
-    count: () => queued().length,
-    delivery: () => (input.working() ? input.behavior() : "steer"),
-    alternate: () => {
-      if (state.editing) return "steer"
+    count: () => view().rows.length,
+    delivery: () => view().delivery,
+    alternate: () => view().alternate,
+    editing: () => view().editing,
+    confirmEdit: (delivery: ComposerDelivery) =>
+      dispatch({
+        type: "edit.confirm",
+        delivery,
+        reverted: reverted(),
+        prompt: clonePrompt(input.draft.current()),
+        ids: queued().map(() => SessionMessage.ID.create()),
+      }),
+    cancelEdit: () => dispatch({ type: "edit.cancel" }),
+    editFirst: () => {
+      const first = view().rows[0]
 
-      if (!input.working()) return undefined
+      if (!first) return false
 
-      return input.behavior() === "queue" ? "steer" : "queue"
+      return edit(first.id)
     },
-    editing: () => state.editing?.id,
-    confirmEdit,
-    cancelEdit,
-    editFirst,
-    rows,
-    busy: () => mutation.isPending,
-    undoing: () => mutation.isPending && mutation.variables?.type === "undo",
+    rows: () => view().rows,
+    moved: () => view().moved,
+    busy: () => view().busy,
+    undoing: () => view().undoing,
     working: input.working,
-    steer,
-    remove,
-    undo,
+    steer: (id: string) => dispatch({ type: "steer.requested", id }),
+    remove: (id: string) => dispatch({ type: "remove.requested", id }),
+    undo: (id: string) => dispatch({ type: "undo.requested", id, mode: input.draft.mode.current() }),
     edit,
-    reorder,
+    reorder: (inboxIDs: string[]) => dispatch({ type: "reorder.requested", inboxIDs, reverted: reverted() }),
   }
 }
 
 export type SessionQueue = ReturnType<typeof createSessionQueue>
 
-// The slice of the queue the panel renders and drives.
+// What a running operation has done so far: the IDs it withdrew or cancelled, and how far it got.
+type MutationProgress = { controller: AbortController; hidden: string[]; stage: QueueMutationStage }
+
+// The slice of the queue the panel renders and drives. Without `moved`, a replaced row closes and its replacement opens.
 export type SessionQueueView = Pick<
   SessionQueue,
   "rows" | "editing" | "working" | "busy" | "steer" | "remove" | "undo" | "edit" | "reorder"
->
+> &
+  Partial<Pick<SessionQueue, "moved">>
 
-export function queuedPromptRows(items: QueuedPrompt[], replacement?: { original: string; replacement: string }) {
-  const replaced = replacement && items.some((item) => item.id === replacement.replacement)
+// Pin `media:<hash>` attachments before cancelling: the cancel releases the item's blob refs and sweeps blobs
+// nothing else references, so a pin that fails leaves the item queued.
+// An undo stopped while its media loads leaves the item queued.
+export async function undoQueuedPrompt<A>(input: {
+  prompt: Prompt
+  signal?: AbortSignal
+  cancelInboxItem: () => Promise<A>
+}): Promise<Prompt> {
+  const pinned = await pinPromptMedia(input.prompt)
+  input.signal?.throwIfAborted()
+  await input.cancelInboxItem()
 
-  return items.flatMap((item) =>
-    replaced && item.id === replacement.original
-      ? []
-      : [
-          {
-            id: item.id,
-            text: queuedPromptText(item),
-            attachments:
-              (item.payload.files?.length ?? 0) +
-              (readPromptPresentation(item.payload.metadata)?.attachments.length ?? 0),
-          },
-        ],
-  )
-}
-
-const decodeDisplayText = Schema.decodeUnknownOption(Schema.Struct({ displayText: Schema.NonEmptyString }))
-
-export function queuedPromptText(item: QueuedPrompt) {
-  return Option.match(decodeDisplayText(item.payload.metadata), {
-    onNone: () => item.payload.text,
-    onSome: (metadata) => metadata.displayText,
-  })
-}
-
-// Inline attachments are the files the composer added itself, so they return
-// to it as image parts that an edit can remove or extend, and path references
-// return as path parts. Mentions and `file://` context stay in the payload; see
-// editedPromptInput.
-export function queuedPromptAttachments(item: QueuedPrompt): (ImageAttachmentPart | PathAttachmentPart)[] {
-  return [
-    ...(item.payload.files ?? [])
-      .filter((file) => isComposerAttachment(file))
-      .map(
-        (file, index): ImageAttachmentPart => ({
-          type: "image",
-          id: `${item.id}:file:${index}`,
-          filename: file.name ?? "attachment",
-          mime: file.mime,
-          blob: createLegacyBlobReference(`data:${file.mime};base64,${file.data}`),
-        }),
-      ),
-    ...(readPromptPresentation(item.payload.metadata)?.attachments ?? []).map(
-      (file, index): PathAttachmentPart => ({
-        type: "path",
-        id: `${item.id}:path:${index}`,
-        filename: file.name,
-        mime: file.mime,
-        path: file.path,
-      }),
-    ),
-  ]
+  return pinned
 }
 
 // A stored file re-admits by the URI it came from, as the TUI does, so a file:// reference keeps its
 // provenance (review comment files stay recognizable) instead of turning into an inline snapshot.
-function storedFileUri(file: NonNullable<QueuedPrompt["payload"]["files"]>[number]) {
-  return file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`
-}
+function storedFileUri(file: PromptAttachment) {
+  const source = file.source
 
-function isComposerAttachment(file: NonNullable<QueuedPrompt["payload"]["files"]>[number]) {
-  return !file.mention && file.source.type === "inline"
+  return source?.type === "uri" ? source.uri : "uri" in file ? file.uri : `data:${file.mime};base64,${file.data}`
 }
 
 // Confirming an edit submits the current composer content as the replacement:

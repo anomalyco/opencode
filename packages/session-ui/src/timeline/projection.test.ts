@@ -50,6 +50,17 @@ const part = (key: string, partID: string) =>
 
 const user = (userMessageID = "user-1") => new TimelineRow.UserMessage({ userMessageID })
 
+const diff = (files: string[]) =>
+  new TimelineRow.TurnDiff({ userMessageID: "user-1", messageID: "idle-1", from: "user-1", files })
+
+const spaced = (spacing?: "tool" | "content") =>
+  new TimelineRow.AssistantPart({
+    userMessageID: "user-1",
+    group: { key: "part:a", type: "part", ref: { messageID: "assistant-1", partID: "a" } },
+    previousAssistantPart: true,
+    spacing,
+  })
+
 const keys = (rows: TimelineRow.TimelineRow[]) => rows.map(TimelineRow.key)
 
 describe("Timeline.resolveContent", () => {
@@ -199,6 +210,29 @@ describe("reuseTimelineRows", () => {
       reused: [[0, 0]],
     },
     {
+      name: "reuses a row whose list field is equal",
+      previous: [diff(["a.ts", "b.ts"])],
+      rows: [diff(["a.ts", "b.ts"])],
+      expected: ["turn-diff:idle-1"],
+      reused: [[0, 0]],
+    },
+    {
+      name: "replaces a row whose list field changed",
+      previous: [diff(["a.ts"])],
+      rows: [diff(["a.ts", "b.ts"])],
+      expected: ["turn-diff:idle-1"],
+      reused: [],
+      replaced: [[0, 0]],
+    },
+    {
+      name: "replaces a row whose optional field changed",
+      previous: [spaced("tool")],
+      rows: [spaced("content")],
+      expected: ["assistant-part:part:part:a"],
+      reused: [],
+      replaced: [[0, 0]],
+    },
+    {
       name: "does not create accidental key collisions",
       previous: [context("context:a", ["a", "b", "c"])],
       rows: [context("context:b", ["b"]), context("context:a", ["a"]), context("context:c", ["c"])],
@@ -209,12 +243,13 @@ describe("reuseTimelineRows", () => {
       ],
       reused: [],
     },
-  ])("$name", ({ previous, rows, expected, reused }) => {
+  ])("$name", ({ previous, rows, expected, reused, replaced }) => {
     const result = reuseTimelineRows([...previous], [...rows])
 
     expect(keys(result)).toEqual([...expected])
     expect(new Set(keys(result)).size).toBe(result.length)
     reused.forEach(([resultIndex, previousIndex]) => expect(result[resultIndex]).toBe(previous[previousIndex]))
+    replaced?.forEach(([resultIndex, previousIndex]) => expect(result[resultIndex]).not.toBe(previous[previousIndex]))
   })
 })
 

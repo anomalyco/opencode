@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 // Moved from packages/app/e2e/regression/session-timeline-notices.spec.ts
 story("renders the moved location notice as a timeline divider", async ({ mount, page }) => {

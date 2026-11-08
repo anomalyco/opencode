@@ -1,17 +1,16 @@
 import { Effect } from "effect"
+import { Generation, Media } from "../src/effect.js"
 import {
-  Generation,
-  Media,
   Video,
   VideoClient,
   VideoModel,
   VideoResponse,
   type VideoModelOptions,
   type VideoOptions,
-  type VideoRequestFor,
-} from "../src/effect.js"
+  type VideoRequest,
+} from "../src/experimental.js"
 import type { Service } from "../src/video-client.js"
-import { Anthropic, Fal, Google, OpenAI, Runway, XAI } from "../src/providers.js"
+import { Anthropic, Google, OpenAI, Runway, XAI } from "../src/providers.js"
 
 type Requirements<T> = T extends Effect.Effect<infer _A, infer _E, infer R> ? R : never
 type Success<T> = T extends Effect.Effect<infer A, infer _E, infer _R> ? A : never
@@ -63,12 +62,6 @@ Video.start({
 // @ts-expect-error xAI modes are a closed set because the route selects an endpoint from them.
 Video.start({ model: xai, prompt: "Waves", providerOptions: { mode: "remix" } })
 
-const fal = Fal.configure({ apiKey: "test" }).video("fal-ai/veo3.1")
-Video.start({ model: fal, prompt: "Interview", providerOptions: { duration: "8s", safety_tolerance: "4" } })
-Video.start({ model: fal, prompt: "Interview", providerOptions: { duration: "future-duration" } })
-// @ts-expect-error Known fal string options retain their value kind.
-Video.start({ model: fal, prompt: "Interview", providerOptions: { duration: 8 } })
-
 const runway = Runway.configure({ apiKey: "test" }).video("gen4.5")
 Video.start({
   model: runway,
@@ -102,7 +95,7 @@ void widenVideo
 Video.generate({ model: generic, prompt: "A kitten", providerOptions: { arbitrary: true } })
 
 const request = Video.request({ model: veo, prompt: "A kitten", providerOptions: { personGeneration: "allow_all" } })
-const typedRequest: VideoRequestFor<VeoLikeOptions> = request
+const typedRequest: VideoRequest<VideoModel<VeoLikeOptions>> = request
 void typedRequest
 const started = VideoClient.start(request)
 type StartRequirements = Assert<Equal<Requirements<typeof started>, Service>>

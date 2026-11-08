@@ -1,0 +1,180 @@
+/* The quiet product lists (icon, name, description and an Install button): More products on
+   /product, and More from Anomaly on every product and extension page (product-list.tsx). */
+[data-site] {
+  /* The one space between items, in every list (Extensions, Integrations, More from Anomaly). */
+  --product-list-gap: 2.25rem;
+  /* The icon tile: as tall as the name and a one-line description beside it (see below). */
+  --product-list-tile: 3rem;
+
+  /* One item per row, no dividers: the icon, the name and a line, and the button at the end. */
+  [data-component="product-list"] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: var(--gutter);
+    row-gap: var(--product-list-gap);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    /* The icon, the name-and-description group and the button, each centred on the row. */
+    li {
+      position: relative;
+      display: grid;
+      grid-template-columns: var(--product-list-tile) minmax(0, 1fr) auto;
+      align-items: center;
+      column-gap: 0.875rem;
+    }
+
+    [data-slot="icon"] {
+      display: grid;
+      place-items: center;
+      width: var(--product-list-tile);
+      height: var(--product-list-tile);
+      overflow: hidden;
+      /* Square corners, like every other surface on the site. On the dark page every tile (Hex's
+         black icon too) gets a hairline edge, drawn over the artwork, so it doesn't vanish. */
+      border-radius: 0;
+      outline: 1px solid light-dark(transparent, hsl(0, 0%, 26%));
+      outline-offset: -1px;
+      background: var(--bg-weaker);
+      font-family: var(--font-mono);
+      font-size: var(--fs-ui);
+      color: var(--text-strong);
+
+      /* A blank tile (no icon yet) or a mark drawn in it: black on the light page; on the dark page a
+         lifted grey with a hairline edge, since black would vanish into the background. */
+      &:is([data-empty], [data-mark]) {
+        background: light-dark(#000, hsl(0, 0%, 15%));
+        color: #fff;
+      }
+
+      /* The GitHub and GitLab marks, white in the tile. */
+      &[data-mark] svg {
+        width: 1.625rem;
+        height: 1.625rem;
+      }
+
+      /* Black behind a product's own icon, so its rounded corners fill out to the square tile. */
+      &:has(img) {
+        background: #000;
+      }
+
+      img {
+        width: 100%;
+        height: 100%;
+        /* The icons carry a 10% margin of their own; scale it off so they fill the tile. */
+        scale: 1.25;
+      }
+    }
+
+    /* The name (trimmed to its cap height and baseline) and the description (trimmed to its
+       ascenders and descenders) as one group, 12px apart, centred on the tile and the button. */
+    [data-slot="text"] {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      min-width: 0;
+    }
+
+    [data-slot="name"] {
+      display: block;
+      text-box: trim-both cap alphabetic;
+      font-family: var(--font-mono);
+      color: var(--text-strong);
+    }
+
+    [data-slot="description"] {
+      text-box: trim-both text;
+      color: var(--text-weak);
+      line-height: 1.4;
+    }
+
+    /* The only action: a grey button at the row's right end, the download rows' size (the grey comes
+       from the product button rule in site.css). */
+    [data-slot="get"] {
+      min-width: 6.5rem;
+      justify-content: center;
+      margin-inline-start: var(--gutter);
+    }
+
+    /* The nav's corner arrow after an external item's name, as in the phone menu: 6px after the
+       label and nudged up, in the name's colour. */
+    [data-slot="name"] [data-slot="external"] {
+      display: inline-block;
+      margin-inline-start: 6px;
+      translate: 0 -2px;
+      vertical-align: middle;
+    }
+
+    /* Phones: no Learn more button; the whole row is the link. The row's pressed grey runs to the
+       screen's edges and its content keeps the page's 24px edges, like the phone menu's rows. The
+       link's box covers the row (its label stays its accessible name), the row's other parts let
+       taps through to it, and its focus ring draws around the row. */
+    @media (max-width: 39.9375rem) {
+      row-gap: calc(var(--product-list-gap) - 1.5rem);
+
+      li {
+        grid-template-columns: var(--product-list-tile) minmax(0, 1fr);
+        isolation: isolate;
+        margin-inline: calc(-1 * var(--edge));
+        padding: 0.75rem var(--edge);
+
+        > :not([data-slot="get"]) {
+          pointer-events: none;
+        }
+      }
+
+      [data-slot="get"] {
+        position: static;
+        width: 0;
+        min-width: 0;
+        height: 0;
+        min-height: 0;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        border: 0;
+        background: none;
+        font-size: 0;
+        outline: none;
+        /* No press scale: a transform would make the link the box its cover is placed in, and the
+           tap would end outside it. */
+        transform: none !important;
+        scale: none;
+
+        &::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          z-index: -1;
+          transition: background-color 150ms ease;
+        }
+
+        &:active::before {
+          background: var(--bg-weak);
+        }
+
+        &:focus-visible::before {
+          outline: 2px solid var(--link);
+          outline-offset: -2px;
+        }
+      }
+    }
+  }
+}
+
+/* Product and extension pages: More from Anomaly with its title in the first of the page's four
+   columns and the list across columns 2–3, so the Install buttons end on the changelog media's and
+   the download buttons' right edge. Up to 78rem (phones and tablets) the title sits above. */
+@media (min-width: 78.0625rem) {
+  [data-site][data-page="product"] [data-component="block"][data-slot="more-from-anomaly"] {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    column-gap: var(--gutter);
+    align-items: start;
+
+    > [data-slot="body"] {
+      grid-column: 2 / 4;
+    }
+  }
+}

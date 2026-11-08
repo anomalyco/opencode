@@ -48,7 +48,7 @@ const setup = Effect.gen(function* () {
   })
   const session = yield* Effect.promise(async () => {
     const template = await api.session.create({ title: "Message filtering" })
-    return api.session.import({ info: { ...template, id: Session.ID.create() }, messages })
+    return api.experimental.session.import({ info: { ...template, id: Session.ID.create() }, messages })
   })
   return { api, handler, sessionID: session.id }
 })

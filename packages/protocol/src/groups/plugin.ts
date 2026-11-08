@@ -2,7 +2,7 @@ import { Location } from "@opencode/schema/location"
 import { Plugin } from "@opencode/schema/plugin"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
-import { InvalidRequestError, ServiceUnavailableError } from "../errors.js"
+import { InvalidRequestError, PluginNotFoundError, ServiceUnavailableError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 export const PluginGroup = HttpApiGroup.make("server.plugin")
@@ -17,6 +17,25 @@ export const PluginGroup = HttpApiGroup.make("server.plugin")
           identifier: "plugin.list",
           summary: "List plugins",
           description: "Retrieve enabled server plugins and their current status.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("plugin.gui", "/api/plugin/gui", {
+      query: Schema.Struct({
+        ...LocationQuery.fields,
+        id: Plugin.ID,
+      }),
+      success: Location.response(Plugin.GuiBundle),
+      error: PluginNotFoundError,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "plugin.gui",
+          summary: "Read plugin GUI bundle",
+          description:
+            "Read an active plugin's prebuilt CommonJS `./gui-experimental` bundle. Desktop app windows run its default export; the desktop app's main process runs its `main` export. Fails with not found when no active plugin has the id or the plugin exports no `./gui-experimental`.",
         }),
       ),
   )

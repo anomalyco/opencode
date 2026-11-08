@@ -3,6 +3,7 @@ import path from "path"
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Environment } from "@opencode/core/environment/index"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
 import { Permission } from "@opencode/core/permission"
@@ -13,10 +14,20 @@ import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 
-function provide(directory: string, projectDirectory = directory) {
+function provide(directory: string, projectDirectory = directory, environment?: Environment.Driver) {
   return Effect.provide(
     LayerNode.compile(FileAccess.node, {
       replacements: [
+        ...(environment
+          ? [
+              Environment.node.replace(
+                Layer.succeed(
+                  Environment.Service,
+                  Environment.Service.of({ files: Environment.makeFiles(environment), spawner: environment.spawner }),
+                ),
+              ),
+            ]
+          : []),
         Permission.node.replace(permissionLayer()),
         Location.node.replace(
           Layer.succeed(
@@ -227,6 +238,53 @@ describe("FileAccess.resolve", () => {
       ),
     ),
   )
+
+  it.live("saves external approval at the enclosing repository on the host filesystem", () =>
+    withTempDir(({ path: directory }) =>
+      withTempDir(({ path: outside }) =>
+        Effect.gen(function* () {
+          const src = path.join(outside, "src")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(outside, ".git"))
+            await fs.mkdir(src)
+          })
+          const access = yield* FileAccess.Service
+          const target = yield* access.resolve({ path: src })
+          expect(target.externalDirectory).toMatchObject({
+            directory: src,
+            save: path.join(outside, "*").replaceAll("\\", "/"),
+          })
+        }).pipe(provide(directory)),
+      ),
+    ),
+  )
+
+  it.live("stats and finds the repository through the Location's Environment driver", () => {
+    if (process.platform === "win32") return Effect.void
+    const driver = Environment.makeMemoryDriver()
+    const files = Environment.makeFiles(driver)
+    return Effect.gen(function* () {
+      yield* files.mkdir("/project")
+      yield* files.mkdir("/remote/repo/.git")
+      yield* files.mkdir("/remote/repo/src")
+      yield* driver.symlink("/remote/repo/src", "/remote/repo/linked")
+      const access = yield* FileAccess.Service
+
+      // These paths exist only in the memory driver, so the host filesystem would see neither the directory nor the repository.
+      expect((yield* access.resolve({ path: "/remote/repo/src" })).externalDirectory).toMatchObject({
+        directory: "/remote/repo/src",
+        save: "/remote/repo/*",
+      })
+      expect((yield* access.resolve({ path: "/remote/repo/linked" })).externalDirectory).toMatchObject({
+        directory: "/remote/repo/linked",
+        save: "/remote/repo/*",
+      })
+      expect((yield* access.resolve({ path: "/remote/repo/src/new.txt" })).externalDirectory).toMatchObject({
+        directory: "/remote/repo/src",
+        save: "/remote/repo/*",
+      })
+    }).pipe(provide("/project", "/project", driver))
+  })
 
   test("ignores unknown path input fields", () => {
     expect(Schema.decodeUnknownSync(FileAccess.ResolveInput)({ path: "README.md", reference: "docs" })).toEqual({

@@ -11,7 +11,7 @@
   background: var(--home-row-background);
 }
 
-[data-home-row]:is(:hover, :focus-within, [data-dragging="true"], :has([data-menu="true"])) {
+[data-home-row]:is(:hover, :focus-within, :has([data-menu="true"])) {
   --home-row-surface: var(--v2-background-bg-layer-01);
 }
 

@@ -2,7 +2,16 @@ import { Effect, Schema } from "effect"
 import { DecisionClient, Service, type Execute } from "./decision-client.js"
 import { Media } from "./media.js"
 import { tryRequest } from "./media-model.js"
-import { AIError, HttpOptions, ModelID, ProviderID, ProviderMetadata, ProviderOptions, Usage } from "./schema/index.js"
+import {
+  AIError,
+  type BaseRequest,
+  type HttpOptions,
+  ModelID,
+  ProviderID,
+  ProviderMetadata,
+  ProviderOptions,
+  type OpenString,
+} from "./schema/index.js"
 
 // ---------------------------------------------------------------------------
 // Input
@@ -20,8 +29,15 @@ export const DecisionPart = Schema.Union([DecisionTextPart, DecisionJsonPart, De
 )
 export type DecisionPart = Schema.Schema.Type<typeof DecisionPart>
 
+/** A media part as input: `media` may be plain data, with `mediaType` naming its type when the content can't. */
+export type DecisionMediaPartInput = Omit<typeof DecisionMediaPart.Type, "media"> & {
+  readonly media: Media.Input
+  readonly mediaType?: string
+}
+export type DecisionPartInput = Exclude<DecisionPart, { readonly type: "media" }> | DecisionMediaPartInput
+
 /** A plain object is one `json` part. */
-export type DecisionInput = typeof Schema.JsonObject.Type | ReadonlyArray<DecisionPart>
+export type DecisionInput = typeof Schema.JsonObject.Type | ReadonlyArray<DecisionPartInput>
 
 // ---------------------------------------------------------------------------
 // Questions
@@ -100,11 +116,16 @@ export const ScoreAnswer = Schema.Struct({
 })
 export type ScoreAnswer = Schema.Schema.Type<typeof ScoreAnswer>
 
-/** The host declined this one question; the other answers still came back. */
+/** Why a question has no answer; hosts may report reasons beyond these. */
+export type ErrorReason = OpenString<"refusal">
+export const ErrorReason: Schema.Codec<ErrorReason> = Schema.Union([Schema.Literal("refusal"), Schema.String])
+
+/** This one question has no answer; the other answers still came back. */
 export const ErrorAnswer = Schema.Struct({
   name: Schema.String,
   type: Schema.Literal("error"),
-  reason: Schema.Literal("refusal"),
+  reason: ErrorReason,
+  message: Schema.optional(Schema.String),
 })
 export type ErrorAnswer = Schema.Schema.Type<typeof ErrorAnswer>
 
@@ -148,17 +169,18 @@ export type DecisionOptions = Record<string, unknown>
 /** What a decision model's route does; `DecisionRoute.make(...).model(...)` builds one from a protocol. */
 export interface DecisionModelRoute<Options extends DecisionOptions = DecisionOptions> {
   readonly id: string
-  generate(request: DecisionRequestFor<Options>, execute: Execute): Effect.Effect<DecisionResponse, AIError>
+  generate(request: DecisionRequest<DecisionModel<Options>>, execute: Execute): Effect.Effect<DecisionResponse, AIError>
 }
 
 /** Host quirks a protocol adapts to, like `LanguageModelCompatibility` for language models. */
 export class DecisionModelCompatibility extends Schema.Class<DecisionModelCompatibility>("Decision.ModelCompatibility")(
   {
     /**
-     * Where a System One host reads media, from models.dev `[api.systemone] compatibility.image_input`:
-     * `assets` (TypeSafe's assets map), `images` (top-level lists) or `state` (items inside a state list).
+     * Where a System One host reads media, from models.dev `[api.systemone] compatibility.media_input`, named after
+     * where the media goes in the body: `assets` (TypeSafe's assets map, referenced from the state), `state` (items
+     * inside a state list) or `root` (one top-level list per kind: `images`, `audio`, `videos`).
      */
-    imageInput: Schema.optional(Schema.Literals(["assets", "images", "state"])),
+    mediaInput: Schema.optional(Schema.Literals(["assets", "state", "root"])),
   },
 ) {}
 
@@ -176,6 +198,8 @@ export class DecisionModel<Options extends DecisionOptions = DecisionOptions> {
   readonly route: DecisionModelRoute<Options>
   readonly http?: HttpOptions
   readonly compatibility?: DecisionModelCompatibility
+  /** Defaults under each request's `providerOptions`, such as options a provider package reads from its settings. */
+  readonly providerOptions?: ProviderOptions
 
   constructor(input: DecisionModel.Input<Options>) {
     this.id = input.id
@@ -183,6 +207,7 @@ export class DecisionModel<Options extends DecisionOptions = DecisionOptions> {
     this.route = input.route
     this.http = input.http
     this.compatibility = input.compatibility
+    this.providerOptions = input.providerOptions
   }
 
   static make<Options extends DecisionOptions = DecisionOptions>(input: DecisionModel.MakeInput<Options>) {
@@ -201,6 +226,7 @@ export namespace DecisionModel {
     readonly route: DecisionModelRoute<Options>
     readonly http?: HttpOptions
     readonly compatibility?: DecisionModelCompatibility
+    readonly providerOptions?: ProviderOptions
   }
 
   export interface MakeInput<Options extends DecisionOptions = DecisionOptions>
@@ -220,39 +246,43 @@ export type DecisionModelOptions<Model> = Model extends DecisionModel<infer Opti
 // Request and response
 // ---------------------------------------------------------------------------
 
-export class DecisionRequest extends Schema.Class<DecisionRequest>("Decision.Request")({
+const DecisionRequestSchema = Schema.Struct({
   model: DecisionModelSchema,
   input: Schema.Array(DecisionPart),
   questions: DecisionQuestionList,
   providerOptions: Schema.optional(ProviderOptions),
-  http: Schema.optional(HttpOptions),
-}) {
-  declare protected readonly _DecisionRequest: void
-}
+})
 
-export type DecisionRequestFor<
-  Options extends DecisionOptions = DecisionOptions,
-  Questions extends DecisionQuestions = DecisionQuestions,
-> = Omit<DecisionRequest, "model" | "questions" | "providerOptions"> & {
-  readonly model: DecisionModel<Options>
-  readonly questions: Questions
-  readonly providerOptions?: Options
-}
-
-export type DecisionRequestInput<
+/** A normalized decision request, the plain object `ai.decision.request(...)` returns. */
+export interface DecisionRequest<
   Model extends DecisionModel = DecisionModel,
   Questions extends DecisionQuestions = DecisionQuestions,
-> = {
-  readonly model: Model
+> extends BaseRequest<Model, DecisionModelOptions<Model>> {
+  readonly input: ReadonlyArray<DecisionPart>
+  readonly questions: Questions
+}
+
+/** Input accepted by `ai.decision.request` and `generate`. A `DecisionRequest` is also a valid input. */
+export interface DecisionRequestInput<
+  Model extends DecisionModel = DecisionModel,
+  Questions extends DecisionQuestions = DecisionQuestions,
+> extends BaseRequest<Model, NoInfer<DecisionModelOptions<Model>>> {
   readonly input: DecisionInput
   readonly questions: Questions
-  readonly providerOptions?: NoInfer<DecisionModelOptions<Model>>
-  readonly http?: HttpOptions.Input
 }
+
+/** What decision hosts report; their raw usage stays in the response's `providerMetadata`. */
+export class DecisionUsage extends Schema.Class<DecisionUsage>("Decision.Usage")({
+  inputTokens: Schema.optional(Schema.Number),
+  outputTokens: Schema.optional(Schema.Number),
+  totalTokens: Schema.optional(Schema.Number),
+  /** USD the host says it charged for this request. */
+  cost: Schema.optional(Schema.Number),
+}) {}
 
 export class DecisionResponse extends Schema.Class<DecisionResponse>("Decision.Response")({
   answers: Schema.Array(DecisionAnswer),
-  usage: Schema.optional(Usage),
+  usage: Schema.optional(DecisionUsage),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {}
 
@@ -264,26 +294,34 @@ export type DecisionResponseFor<Questions extends DecisionQuestions> = Omit<Deci
 // Call API
 // ---------------------------------------------------------------------------
 
-export function request<const Model extends DecisionModel, const Questions extends DecisionQuestions>(
+/** Normalize decision request input into a plain `DecisionRequest`; a plain object `input` becomes one `json` part. */
+export const request = <const Model extends DecisionModel, const Questions extends DecisionQuestions>(
   input: DecisionRequestInput<Model, Questions>,
-): DecisionRequestFor<DecisionModelOptions<Model>, Questions>
-export function request(input: DecisionRequest): DecisionRequest
-export function request(input: DecisionRequest | DecisionRequestInput): DecisionRequest
-export function request(input: DecisionRequest | DecisionRequestInput) {
-  if (input instanceof DecisionRequest) return input
-  return new DecisionRequest({
-    ...input,
-    input: Array.isArray(input.input) ? input.input : [{ type: "json", value: input.input }],
-    http: HttpOptions.make(input.http),
-  })
+): DecisionRequest<Model, Questions> => ({
+  ...input,
+  input: isParts(input.input) ? input.input.map(decisionPart) : [{ type: "json", value: input.input }],
+})
+
+const validate = Schema.decodeUnknownSync(DecisionRequestSchema)
+
+// `Array.isArray` doesn't narrow a readonly array union, so the object branch would keep the parts type.
+const isParts = (input: DecisionInput): input is ReadonlyArray<DecisionPartInput> => Array.isArray(input)
+
+const decisionPart = (part: DecisionPartInput): DecisionPart => {
+  if (part.type !== "media") return part
+  const { mediaType, ...rest } = part
+  return { ...rest, media: Media.make(part.media, mediaType) }
 }
 
 export function generate<const Model extends DecisionModel, const Questions extends DecisionQuestions>(
   input: DecisionRequestInput<Model, Questions>,
 ): Effect.Effect<DecisionResponseFor<Questions>, AIError, Service>
-export function generate(input: DecisionRequest): Effect.Effect<DecisionResponse, AIError, Service>
-export function generate(input: DecisionRequest | DecisionRequestInput) {
-  return tryRequest(() => request(input)).pipe(Effect.flatMap(DecisionClient.generate))
+export function generate(input: DecisionRequestInput) {
+  return tryRequest(() => {
+    const normalized = request(input)
+    validate(normalized)
+    return normalized
+  }).pipe(Effect.flatMap(DecisionClient.generate))
 }
 
 export const Decision = {

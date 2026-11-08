@@ -1,6 +1,10 @@
 [data-component="new-session-wordmark"] {
   --icon-strong-base: var(--icon-base);
   --wordmark-shimmer-opacity: 0.45;
+  --lodger-body: color-mix(in srgb, var(--v2-icon-icon-base) 22%, var(--v2-background-bg-base));
+  --lodger-side: color-mix(in srgb, var(--v2-icon-icon-base) 38%, var(--v2-background-bg-base));
+  --lodger-eye: var(--v2-icon-icon-base);
+  --lodger-crack: color-mix(in srgb, var(--v2-icon-icon-base) 55%, var(--v2-background-bg-base));
 
   .wordmark-shimmer {
     --icon-base: white;
@@ -16,6 +20,25 @@
     mask-repeat: no-repeat;
     animation: new-session-wordmark-shimmer 800ms linear both;
   }
+
+  [data-slot="lodger-blink"] {
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+}
+
+/* The composer gives a little under the lodger while it is carried over it, hinting it can be dropped there. */
+[data-component="new-session"] [data-slot="new-session-composer"] {
+  transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+[data-component="new-session"] [data-slot="new-session-composer"][data-lodger-over] {
+  transform: translateY(3px) scale(0.985);
+}
+
+[data-component="new-session-wordmark"][data-lifted] {
+  position: relative;
+  z-index: 20;
 }
 
 [data-color-scheme="light"] [data-component="new-session-wordmark"] {
@@ -43,10 +66,6 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  [data-component="new-session-wordmark"] {
-    .wordmark-shimmer {
-      animation: none;
-    }
-  }
+:root[data-motion="reduce"] [data-component="new-session-wordmark"] .wordmark-shimmer {
+  animation: none;
 }

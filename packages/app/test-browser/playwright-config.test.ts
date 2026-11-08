@@ -38,29 +38,27 @@ test.each([
   })
 })
 
-test.each([
-  "./playwright.config.ts",
-  "./e2e/performance/playwright.config.ts",
-  "./e2e/performance/playwright.uncapped.config.ts",
-  "./e2e/performance/timeline-stability/playwright.config.ts",
-])("%s leaves an explicit external app unmanaged", (file) => {
-  const result = Bun.spawnSync({
-    cmd: [
-      process.execPath,
-      "-e",
-      `import config from ${JSON.stringify(file)}; console.log(JSON.stringify({ ...config, fixtureHost: process.env.PLAYWRIGHT_SERVER_HOST, fixturePort: process.env.PLAYWRIGHT_SERVER_PORT }))`,
-    ],
-    cwd: path.resolve(import.meta.dirname, ".."),
-    env: { ...process.env, CI: "true", PLAYWRIGHT_BASE_URL: "http://127.0.0.1:4444" },
-  })
+test.each(["./playwright.config.ts", "./e2e/stability/playwright.config.ts"])(
+  "%s leaves an explicit external app unmanaged",
+  (file) => {
+    const result = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "-e",
+        `import config from ${JSON.stringify(file)}; console.log(JSON.stringify({ ...config, fixtureHost: process.env.PLAYWRIGHT_SERVER_HOST, fixturePort: process.env.PLAYWRIGHT_SERVER_PORT }))`,
+      ],
+      cwd: path.resolve(import.meta.dirname, ".."),
+      env: { ...process.env, CI: "true", PLAYWRIGHT_BASE_URL: "http://127.0.0.1:4444" },
+    })
 
-  expect(result.exitCode).toBe(0)
-  const config = JSON.parse(result.stdout.toString())
-  expect(config.webServer).toBeUndefined()
-  expect(config.use.baseURL).toBe("http://127.0.0.1:4444")
-  expect(config.fixtureHost).toBe("127.0.0.1")
-  expect(config.fixturePort).toBe("4444")
-})
+    expect(result.exitCode).toBe(0)
+    const config = JSON.parse(result.stdout.toString())
+    expect(config.webServer).toBeUndefined()
+    expect(config.use.baseURL).toBe("http://127.0.0.1:4444")
+    expect(config.fixtureHost).toBe("127.0.0.1")
+    expect(config.fixturePort).toBe("4444")
+  },
+)
 
 test("Playwright rejects HTTPS targets unsupported by the API fixtures", () => {
   const result = Bun.spawnSync({
