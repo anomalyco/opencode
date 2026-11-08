@@ -29,35 +29,34 @@ export const content = {
     desktop: {
       title: "OpenCode | 適用於 macOS、Windows 和 Linux 的桌面應用程式",
       description:
-        "同時執行多個 OpenCode 代理，每個都在獨立的分頁中。以 diff 審查每項變更，在任何一行留言，並在內建瀏覽器中預覽結果。",
+        "平行執行任意多個 OpenCode 代理，在旁邊的瀏覽器中查看每項變更，並在任何裝置上繼續。適用於 macOS、Windows 和 Linux。",
       intro:
         "同時執行多個代理，每個工作階段都有獨立的分頁。以 diff 審查每項變更，在任何一行留言，並在內建瀏覽器中檢查結果。支援 macOS、Windows 和 Linux。",
-      features: {
-        "built-in-terminal": { title: "內建終端機", body: "在工作階段旁的終端機分頁中執行指令。" },
-        "ssh-servers": { title: "SSH 伺服器", body: "透過 SSH 連線到另一台電腦，處理其中的專案。" },
-        extensions: { title: "擴充功能", body: "在同一個選單中管理 MCP 伺服器、外掛和技能。" },
-        wsl: { title: "WSL", body: "在 Windows 上，可以在 WSL 2 發行版中執行工作階段，而非原生執行。" },
-        "office-files": { title: "Office 檔案", body: "在工作階段旁開啟 Word、Excel 和 PowerPoint 檔案。" },
-        "keyboard-shortcuts": { title: "鍵盤快捷鍵", body: "每個動作都有快捷鍵，而且都能自訂。" },
-        "updates-itself": { title: "自動更新", body: "新版本會在應用程式內下載並安裝。" },
-        "all-your-projects": { title: "所有專案", body: "在一個視窗中切換專案及其工作階段。" },
-      },
       showcase: {
-        "pair-your-phone": { title: "配對手機", body: "在 OpenCode Mobile 中掃描 QR 碼，用 iPhone 引導工作階段。" },
-        "sessions-in-tabs": { title: "分頁中的工作階段", body: "讓多個代理同時工作，每個工作階段都有自己的分頁。" },
-        "review-and-comment": { title: "審查與留言", body: "以 diff 閱讀每項變更，在某一行留言並傳回。" },
+        "parallel-agents": {
+          title: "平行代理",
+          body: "想啟動多少個代理都可以，讓它們全部平行工作。哪個完成了，就切換過去查看。",
+        },
         "see-it-in-the-browser": {
           title: "在瀏覽器中查看",
-          body: "代理的成果一出來，就會在工作階段旁的瀏覽器中開啟。",
+          body: "你的應用程式會在代理旁的瀏覽器中開啟，你和代理都能看到每項變更落地。",
+        },
+        "on-every-device": {
+          title: "在每台裝置上",
+          body: "在你的所有裝置上啟動代理，並在桌面應用程式、終端機或手機上繼續。",
+        },
+        "extend-it": {
+          title: "擴充它",
+          body: "連接你的工具和服務，讓代理能處理任何事情。或者讓 OpenCode 為自己建立外掛程式，並在側邊欄中擁有自己的介面。",
         },
       },
     },
     mobile: {
       title: "OpenCode | 用手機引導編碼代理的行動應用程式",
       description:
-        "用手機啟動、引導和核准 OpenCode 工作階段。與代理對話、審查它的變更並允許它需要的操作，而它始終在你的電腦上執行。",
+        "在手機上啟動並引導 OpenCode 工作階段。代理在您的電腦上執行時，您可以與它對話。",
       intro:
-        "不論身在何處，都能用手機啟動、引導和核准工作階段。撥打給工作階段並與代理對話、審查它的變更、允許它需要的操作，一切都在你自己電腦上執行的 OpenCode 中完成。",
+        "無論身在何處，都能在手機上啟動並引導工作階段。打電話給工作階段與代理交談，或開啟任一工作階段從上次中斷處繼續，一切都在您自己電腦上的 OpenCode 中執行。",
       features: {
         "notify-when-done": { title: "完成時通知", body: "你啟動的工作階段完成後，會收到一段簡短摘要。" },
         "pair-from-anywhere": { title: "隨處配對", body: "使用 opencode pair --remote 從任何網路連線。" },
@@ -71,7 +70,6 @@ export const content = {
       showcase: {
         results: { title: "結果", body: "你交代的工作完成後，通話會告訴你改了什麼。" },
         voice: { title: "語音", body: "撥打給工作階段，說出你的需求。代理會出聲回答。" },
-        approvals: { title: "核准", body: "代理請求權限時，在手機上審查變更並允許。" },
         sessions: { title: "工作階段", body: "開啟任何工作階段查看進度，再從上次中斷的地方繼續。" },
         steer: { title: "引導", body: "傳送後續訊息，在工作階段中途調整方向。" },
       },
@@ -193,14 +191,18 @@ export const content = {
           title: "任何 MCP 用戶端",
           body: "OpenCode、Claude Code、Cursor、Codex、Zed 等眾多用戶端。",
         },
-        "named-sessions": { title: "具名工作階段", body: "每個工作階段都保留自己的分頁，重新啟動後依然存在。" },
+        "all-your-logins": {
+          title: "沿用你的所有登入",
+          body: "代理直接使用你已登入的網站。無需金鑰，無需設定。",
+        },
         allowlists: { title: "允許清單", body: "將工作階段的分頁限制在你指定的網站內。" },
       },
       install:
-        "只需執行一次。它會把 browse MCP 伺服器加入你選擇的代理，並從 Chrome 線上應用程式商店配對擴充功能。需要 Node.js 22.19 或更新版本。",
+        "請先安裝 [Chrome 擴充功能]，它會引導你完成其餘步驟。如需直接安裝 CLI（通常不需要），可使用以下任一指令。",
     },
   },
   apps: {
+    browse: { category: "代理瀏覽器控制", body: "讓你的代理使用你真正的瀏覽器，保留登入狀態和分頁。" },
     hex: { category: "語音聽寫", body: "適用於任何應用程式的裝置端語音聽寫。" },
     opentunnel: { category: "本機通道", body: "為本機應用程式提供公開的 HTTPS URL。" },
     opentui: { category: "函式庫", body: "用於打造終端機使用者介面的函式庫。" },
@@ -217,7 +219,7 @@ export const content = {
     },
     subscriptions: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } },
     steps: {
-      download: { title: "下載", line: "桌面、行動裝置或終端機。" },
+      download: { title: "下載", line: "桌面、終端機或行動裝置。" },
       "use-free-models": { title: "使用免費模型", line: "OpenCode 內建一組免費模型，不需要帳號。" },
       "add-more-models": {
         title: "加入更多模型",
@@ -229,7 +231,7 @@ export const content = {
   byos: {
     title: "自備訂閱",
     headline: "使用你已有的訂閱。",
-    line: "使用 ChatGPT Plus 或 Pro、GitHub Copilot 或 Claude Code 登入，或是使用 OpenCode 訂閱。",
+    line: "使用 ChatGPT Plus 或 Pro 或 GitHub Copilot 登入，或是使用 OpenCode 訂閱。",
     yours: { label: "你的訂閱", items: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } } },
     planLinks: ["OpenCode 訂閱", "OpenCode Go"],
     ours: { label: "OpenCode 方案" },
@@ -392,7 +394,7 @@ export const content = {
       projects: {
         opencode: {
           name: "OpenCode",
-          body: "開源編碼代理，提供桌面、行動和終端機應用程式以及 SDK。採用 MIT 授權，GitHub 星星超過 220,000 顆。",
+          body: "開源編碼代理，提供桌面、終端機和行動應用程式以及 SDK。採用 MIT 授權，GitHub 星星超過 220,000 顆。",
         },
         sst: {
           name: "SST",
@@ -418,9 +420,10 @@ export const content = {
     },
     about: {
       title: "關於 OpenCode",
+      body: "OpenCode 及其產品的介紹，有長短兩個版本，可直接複製。",
       boilerplate: {
-        long: "OpenCode 是一個開源編碼代理。它提供桌面應用程式、行動應用程式、終端機介面和 SDK，並支援任何供應商的模型，包括 Claude、GPT 和 Gemini。OpenCode 採用 MIT 授權，由 Anomaly 打造。它在 GitHub 上擁有超過 220,000 顆星星和 1,000 多位貢獻者，每月有超過 2200 萬名開發者使用。",
-        short: "OpenCode 是 Anomaly 推出的開源編碼代理，提供桌面、行動和終端機應用程式以及 SDK。",
+        long: "OpenCode 是一個開源編碼代理。它提供桌面應用程式、終端機介面、行動應用程式和 SDK，並支援任何供應商的模型，包括 Claude、GPT 和 Gemini。OpenCode 採用 MIT 授權，由 Anomaly 打造。它在 GitHub 上擁有超過 220,000 顆星星和 1,000 多位貢獻者，每月有超過 2200 萬名開發者使用。",
+        short: "OpenCode 是 Anomaly 推出的開源編碼代理，提供桌面、終端機和行動應用程式以及 SDK。",
       },
       products: {
         "opencode-console": {
@@ -597,13 +600,6 @@ export const content = {
         vscodium: { label: "VSCodium" },
       },
     },
-    integrations: {
-      title: "整合",
-      items: {
-        github: { body: "在 GitHub Actions 中使用 OpenCode。" },
-        gitlab: { label: "GitLab", body: "在 GitLab CI/CD 或 Duo 中使用 OpenCode。" },
-      },
-    },
   },
   productDownloads: {
     terminal: { commands: { curl: { name: "指令碼" } } },
@@ -650,10 +646,6 @@ export const content = {
   },
   announcements: {
     "create-install-and-share-desktop-plugins": { text: "建立、安裝和分享桌面外掛。", link: "查看 2.2 的新功能" },
-    "use-your-claude-code-login-in-opencode": {
-      text: "在 OpenCode 中使用你的 Claude Code 登入。",
-      link: "查看 v2.2.3",
-    },
     "desktop-terminals-now-survive-restarts": { text: "桌面終端機現在重新啟動後依然保留。", link: "查看 v2.2.4" },
     "agents-can-now-generate-images": { text: "代理現在可以產生圖片了。", link: "查看 v2.2.1" },
     "steer-your-sessions-from-your-phone": { text: "用手機引導你的工作階段。", link: "認識 OpenCode Mobile" },

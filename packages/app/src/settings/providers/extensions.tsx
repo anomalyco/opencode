@@ -227,7 +227,7 @@ export const SettingsExtensions: Component<{
                 <span class="settings-extension-heading text-13-medium">
                   {language.t("settings.extensions.availableAll")}
                 </span>
-                <ExternalLink class="settings-extension-link text-13-regular" href="https://opencode.ai/v2/docs/skills">
+                <ExternalLink class="settings-extension-link text-13-regular" href="https://opencode.ai/docs/skills">
                   {language.t("settings.extensions.addSkills")}
                 </ExternalLink>
               </div>

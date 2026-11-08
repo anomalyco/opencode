@@ -1,6 +1,6 @@
-import opencodeWordmarkDark from "../asset/logo-ornate-dark.svg"
 import { query } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { ProductLockup } from "../component/product-lockup"
 import { useI18n } from "../context/i18n"
 import { useLanguage } from "../context/language"
 import { route, type Locale } from "../lib/language"
@@ -104,13 +104,12 @@ export function Header(props: { githubStars: string; links?: readonly HeaderLink
   return (
     <header data-component="top" data-menu-open={menuOpen() ? "true" : undefined}>
       <div data-slot="header-bar">
-        <a
-          data-slot="brand"
+        <ProductLockup
           href={localHref(props.brandHref ?? import.meta.env.BASE_URL)}
-          aria-label={i18n.t("header.brandLabel")}
-        >
-          <DataWordmark />
-        </a>
+          nameLabel={i18n.t("header.brandLabel")}
+          homeLabel={i18n.t("footer.homeAria")}
+          link={(path) => (path === "/data" ? localHref(import.meta.env.BASE_URL) : path)}
+        />
         <nav data-component="section-nav" aria-label={i18n.t("header.sectionNavLabel")}>
           <ul>
             <For each={links()}>
@@ -125,17 +124,24 @@ export function Header(props: { githubStars: string; links?: readonly HeaderLink
         <div data-slot="header-actions">
           <a
             data-slot="header-button"
-            data-variant="neutral"
+            data-variant="contrast"
+            href="https://opencode.ai/"
+            aria-label={i18n.t("header.tryOpenCode")}
+          >
+            <strong data-slot="label">{i18n.t("header.tryOpenCode")}</strong>
+            <strong data-slot="label-short">{i18n.t("header.tryOpenCodeShort")}</strong>
+          </a>
+          <a
+            data-slot="github-mark"
             href={githubLink.href}
             target="_blank"
             rel="noreferrer"
             aria-label={`${i18n.t("header.githubAria")} (${props.githubStars} stars)`}
+            title={i18n.t("header.github")}
           >
-            <strong>{i18n.t("header.github")}</strong>
-            <span>[{props.githubStars}]</span>
-          </a>
-          <a data-slot="header-button" data-variant="contrast" href="https://opencode.ai/">
-            <strong>{i18n.t("header.tryOpenCode")}</strong>
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z" />
+            </svg>
           </a>
           <button
             data-slot="menu-button"
@@ -145,11 +151,7 @@ export function Header(props: { githubStars: string; links?: readonly HeaderLink
             aria-label={menuOpen() ? i18n.t("header.closeNav") : i18n.t("header.openNav")}
             onClick={() => setMenuOpen((value) => !value)}
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <Show when={menuOpen()} fallback={<path d="M2 4.72H14M2 8.5H14M2 12.28H14" stroke="currentColor" />}>
-                <path d="M4.44 4.44L11.56 11.56M11.56 4.44L4.44 11.56" stroke="currentColor" />
-              </Show>
-            </svg>
+            <span data-slot="menu-lines" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -159,17 +161,6 @@ export function Header(props: { githubStars: string; links?: readonly HeaderLink
         aria-label={i18n.t("header.sectionNavLabel")}
         hidden={!menuOpen()}
       >
-        <a
-          data-slot="mobile-menu-item"
-          data-variant="github"
-          href={githubLink.href}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={`${i18n.t("header.githubAria")} (${props.githubStars} stars)`}
-        >
-          <strong>{i18n.t("header.github")}</strong>
-          <span>[{props.githubStars}]</span>
-        </a>
         <For each={links()}>
           {(link) => (
             <a data-slot="mobile-menu-item" href={localHref(link.href)} onClick={() => setMenuOpen(false)}>
@@ -179,28 +170,6 @@ export function Header(props: { githubStars: string; links?: readonly HeaderLink
         </For>
       </nav>
     </header>
-  )
-}
-
-function DataWordmark() {
-  return (
-    <svg data-slot="stats-wordmark" width="66" height="20" viewBox="0 0 66 20" fill="none" aria-hidden="true">
-      <path opacity="0.2" d="M12 16H4V8H12V16Z" fill="currentColor" />
-      <path d="M12 4H4V16H12V4ZM16 20H0V0H16V20Z" fill="currentColor" />
-      <path
-        d="M63.3543 16L62.5119 12.8711H58.6437L57.8013 16H55.7383L59.2454 4H61.9618L65.4689 16H63.3543ZM61.0678 7.851L60.6896 5.94269H60.4489L60.0707 7.851L59.1595 11.1347H61.9962L61.0678 7.851Z"
-        fill="currentColor"
-      />
-      <path d="M52.5951 5.87392V16H50.4461V5.87392H47.4375V4H55.6209V5.87392H52.5951Z" fill="currentColor" />
-      <path
-        d="M45.2059 16L44.3635 12.8711H40.4953L39.6529 16H37.5898L41.097 4H43.8133L47.3205 16H45.2059ZM42.9194 7.851L42.5411 5.94269H42.3004L41.9222 7.851L41.011 11.1347H43.8477L42.9194 7.851Z"
-        fill="currentColor"
-      />
-      <path
-        d="M28 4H32.0917C32.8138 4 33.4556 4.11461 34.0172 4.34384C34.5903 4.5616 35.0716 4.9169 35.4613 5.40974C35.8625 5.89112 36.1662 6.51003 36.3725 7.26648C36.5788 8.02292 36.6819 8.9341 36.6819 10C36.6819 11.0659 36.5788 11.9771 36.3725 12.7335C36.1662 13.49 35.8625 14.1146 35.4613 14.6075C35.0716 15.0888 34.5903 15.4441 34.0172 15.6734C33.4556 15.8911 32.8138 16 32.0917 16H28V4ZM32.0917 14.1261C32.8252 14.1261 33.3926 13.9026 33.7937 13.4556C34.1948 12.9971 34.3954 12.3152 34.3954 11.4097V8.59026C34.3954 7.68481 34.1948 7.0086 33.7937 6.5616C33.3926 6.10315 32.8252 5.87392 32.0917 5.87392H30.149V14.1261H32.0917Z"
-        fill="currentColor"
-      />
-    </svg>
   )
 }
 
@@ -222,7 +191,6 @@ export function Footer(props: {
 }) {
   const i18n = useI18n()
   const language = useLanguage()
-  const [subscribeOpen, setSubscribeOpen] = createSignal(false)
   const localHref = (href: string) => (href.startsWith("/") ? language.route(href) : href)
   const modelStats = props.links ?? [
     { href: "#top-models", label: i18n.t("nav.topModels") },
@@ -260,13 +228,6 @@ export function Footer(props: {
         <FooterColumn title={i18n.t("footer.modelData")} links={modelStats} localHref={localHref} />
         <FooterColumn title={i18n.t("footer.legal")} links={legal} localHref={localHref} />
         <FooterColumn title={i18n.t("footer.connect")} links={connect} localHref={localHref} />
-        <div data-slot="footer-column">
-          <h2>{i18n.t("footer.newsletter")}</h2>
-          <p>{i18n.t("footer.newsletterBody")}</p>
-          <button data-slot="subscribe-button" type="button" onClick={() => setSubscribeOpen(true)}>
-            {i18n.t("footer.subscribe")}
-          </button>
-        </div>
       </div>
       <div data-slot="footer-pattern" aria-hidden="true" />
       <div data-slot="footer-bottom">
@@ -294,9 +255,6 @@ export function Footer(props: {
           </div>
         </div>
       </div>
-      <Show when={subscribeOpen()}>
-        <SubscribeModal onClose={() => setSubscribeOpen(false)} />
-      </Show>
     </footer>
   )
 }
@@ -434,110 +392,6 @@ function ThemePreferenceIcon(props: { preference: ThemePreference }) {
         </svg>
       </Show>
     </svg>
-  )
-}
-
-function SubscribeModal(props: { onClose: () => void }) {
-  const i18n = useI18n()
-  const [status, setStatus] = createSignal<"idle" | "pending" | "success" | "error">("idle")
-  const [message, setMessage] = createSignal("")
-  let input: HTMLInputElement | undefined
-
-  onMount(() => {
-    if (typeof document === "undefined") return
-    const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : undefined
-    const htmlOverflow = document.documentElement.style.overflow
-    const bodyOverflow = document.body.style.overflow
-    document.documentElement.style.overflow = "hidden"
-    document.body.style.overflow = "hidden"
-    const focusTimeout = window.setTimeout(() => input?.focus(), 0)
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") props.onClose()
-    }
-    document.addEventListener("keydown", onKeyDown)
-    onCleanup(() => {
-      window.clearTimeout(focusTimeout)
-      document.documentElement.style.overflow = htmlOverflow
-      document.body.style.overflow = bodyOverflow
-      document.removeEventListener("keydown", onKeyDown)
-      activeElement?.focus()
-    })
-  })
-
-  return (
-    <div data-component="subscribe-modal" role="dialog" aria-modal="true" aria-labelledby="subscribe-title">
-      <div data-slot="modal-scrim" aria-hidden="true" onClick={props.onClose} />
-      <div data-slot="modal-panel">
-        <div data-slot="modal-brand">
-          <img data-slot="modal-logo" src={opencodeWordmarkDark} alt="OpenCode" />
-          <button
-            data-slot="modal-close"
-            type="button"
-            aria-label={i18n.t("modal.closeNewsletter")}
-            onClick={props.onClose}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M4.44 4.44L11.56 11.56M11.56 4.44L4.44 11.56" stroke="currentColor" />
-            </svg>
-          </button>
-        </div>
-        <div data-slot="modal-body">
-          <div data-slot="modal-intro">
-            <h2 id="subscribe-title">{i18n.t("modal.title")}</h2>
-            <p>{i18n.t("modal.body")}</p>
-          </div>
-          <form
-            data-slot="subscribe-form"
-            method="post"
-            onSubmit={(event) => {
-              event.preventDefault()
-              const form = event.currentTarget
-              setStatus("pending")
-              setMessage("")
-              fetch(`${import.meta.env.BASE_URL}api/newsletter`, {
-                method: "POST",
-                body: new FormData(form),
-              }).then(
-                async (response) => {
-                  if (response.ok) {
-                    form.reset()
-                    setStatus("success")
-                    return
-                  }
-                  setMessage(await newsletterErrorMessage(response, i18n.t("modal.error")))
-                  setStatus("error")
-                },
-                () => {
-                  setMessage(i18n.t("modal.error"))
-                  setStatus("error")
-                },
-              )
-            }}
-          >
-            <input ref={input} type="email" name="email" placeholder={i18n.t("modal.email")} required />
-            <button type="submit" disabled={status() === "pending"}>
-              <span>{status() === "pending" ? i18n.t("modal.subscribing") : i18n.t("modal.subscribe")}</span>
-            </button>
-          </form>
-          <div data-slot="subscribe-feedback" aria-live="polite">
-            <Show when={status() === "success"}>
-              <p data-state="success">{i18n.t("modal.success")}</p>
-            </Show>
-            <Show when={status() === "error"}>
-              <p data-state="error">{message()}</p>
-            </Show>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function newsletterErrorMessage(response: Response, fallback: string) {
-  return response.json().then(
-    (body: unknown) =>
-      body && typeof body === "object" && "error" in body && typeof body.error === "string" ? body.error : fallback,
-    () => fallback,
   )
 }
 

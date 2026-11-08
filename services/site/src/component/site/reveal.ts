@@ -15,7 +15,7 @@ import type { logoAnimations, SiteSettings } from "./settings"
 /**
  * The entrance wash for a grid: the first time `element` scrolls into view, `start` becomes that
  * moment (performance.now()), and each item arrives `washStep` staggers later. Armed on the client
- * only, never with reduced motion, and only while `enabled`. `columns` follows the grid's tracks.
+ * only, never with reduced motion, and only while `enabled`. `columns` follows the grid's tracks (or --wash-columns).
  * Give the container `data-entrance` and `data-mounted={mounted()}` so it waits from first paint.
  */
 export function createWash(
@@ -44,8 +44,18 @@ export function createWash(
     setMounted(true)
     const target = element()
     if (!target) return
-    const measure = () =>
-      setColumns(Math.max(1, getComputedStyle(target).gridTemplateColumns.split(" ").filter(Boolean).length))
+    // A grid whose cells span several tracks (the logo tiles, index.css) gives its cells across in
+    // --wash-columns.
+    const measure = () => {
+      const style = getComputedStyle(target)
+      setColumns(
+        Math.max(
+          1,
+          Number(style.getPropertyValue("--wash-columns")) ||
+            style.gridTemplateColumns.split(" ").filter(Boolean).length,
+        ),
+      )
+    }
     measure()
     const resize = new ResizeObserver(measure)
     resize.observe(target)

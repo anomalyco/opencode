@@ -36,6 +36,8 @@ export type ChangelogEntry = {
   improved: ChangelogNote[]
   fixed: ChangelogNote[]
   media: ChangelogMedia[]
+  /** The release's highlights an area filter left out; the entry links to its page for them. */
+  hiddenFeatures: number
 }
 
 /** An area the notes are filed under: its key in `?area=`, and its label. */
@@ -183,11 +185,15 @@ export function parseReleaseNotes(body: string): ReleaseNotes {
 export function changelogTimeline(releases: ChangelogRelease[], areas?: string[]) {
   const units = releases
     .filter((release) => /^v\d/.test(release.tag))
-    .map((release) => ({
-      date: release.date.slice(0, 10),
-      releases: [{ tag: release.tag, url: release.url }],
-      notes: areas ? onlyAreas(release.notes, areas) : release.notes,
-    }))
+    .map((release) => {
+      const notes = areas ? onlyAreas(release.notes, areas) : release.notes
+      return {
+        date: release.date.slice(0, 10),
+        releases: [{ tag: release.tag, url: release.url }],
+        notes,
+        hiddenFeatures: release.notes.features.length - notes.features.length,
+      }
+    })
     .filter((unit) => noteCount(unit.notes) > 0)
   const days = units.reduce<(typeof units)[]>((acc, unit) => {
     const last = acc.at(-1)
@@ -374,9 +380,11 @@ export function bodyBlocks(body: string) {
     .blocks.filter((block) => block.type !== "p" || block.text)
 }
 
-function entry(unit: { date: string; releases: { tag: string; url: string }[]; notes: ReleaseNotes }): ChangelogEntry {
+type Unit = { date: string; releases: { tag: string; url: string }[]; notes: ReleaseNotes; hiddenFeatures: number }
+
+function entry(unit: Unit): ChangelogEntry {
   const notes = unit.notes
-  const base = { date: unit.date, releases: unit.releases, ...notes }
+  const base = { date: unit.date, releases: unit.releases, hiddenFeatures: unit.hiddenFeatures, ...notes }
   const lead = notes.features[0]
   if (lead)
     return {
@@ -534,13 +542,11 @@ function tiny(notes: ReleaseNotes) {
   return notes.features.length === 0 && notes.breaking.length === 0 && notes.improved.length + notes.fixed.length <= 3
 }
 
-function merge(
-  a: { date: string; releases: { tag: string; url: string }[]; notes: ReleaseNotes },
-  b: { date: string; releases: { tag: string; url: string }[]; notes: ReleaseNotes },
-) {
+function merge(a: Unit, b: Unit) {
   return {
     date: a.date,
     releases: [...a.releases, ...b.releases],
+    hiddenFeatures: a.hiddenFeatures + b.hiddenFeatures,
     notes: {
       media: [...a.notes.media, ...b.notes.media],
       features: [...a.notes.features, ...b.notes.features],

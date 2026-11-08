@@ -3,9 +3,36 @@
 export const legalHistory = {
   "/legal/privacy-policy": [
     {
-      sha: "bc2891953b63dccfb3b688892b09009b9574caaa",
+      sha: "9c7212c99a69b9d1c644fc30ad79068124aab1a7",
+      date: "2026-11-08",
+      subject: "docs(legal): cover integrations with third-party services (#62700)",
+      effective: "Nov 8, 2026",
+      first: false,
+      added: [
+        "Effective date: Nov 8, 2026",
+        "OpenCode is provided by Anomaly Innovations, Inc.",
+        '("Anomaly," "OpenCode," "we," "us" or "our").',
+        "We take your privacy seriously.",
+        "Integrations with Third-Party Services",
+        'OpenCode Console lets a workspace connect third-party services ("Connected Services"), such as Slack, Zoom, HubSpot, GitHub, Google Workspace and Microsoft 365, so that its members\' OpenCode agents can use them.',
+        "This section explains how we handle data from Connected Services.",
+        "It supplements the rest of this Privacy Policy and controls where they conflict.",
+        "What we receive and store.",
+        "To connect a Connected Service, you sign in with that service and authorize OpenCode Console, or you or a workspace administrator enter an API key.",
+        "We encrypt and store the access and refresh tokens or API keys, and any OAuth client secret your workspace provides, and we record the permissions you granted, so that your OpenCode agent can act for you within them.",
+        "Where a service gives us your user or workspace identifier when you sign in, as Slack and Zoom do, we store it too, so we can recognize your connection and act when the service tells us you removed our app.",
+      ],
+      removed: ["Effective date: Nov 6, 2026", "At OpenCode, we take your privacy seriously."],
+      addedCount: 36,
+      removedCount: 2,
+      source:
+        "https://github.com/anomalyco/opencode/blob/9c7212c99a69b9d1c644fc30ad79068124aab1a7/services/site/src/lib/legal/privacy-policy.ts",
+      diff: "https://github.com/anomalyco/opencode/commit/9c7212c99a69b9d1c644fc30ad79068124aab1a7#diff-13f1bdb3583f198406200946a0d6bde1bc1f9271e4e629272db2023a211e2819",
+    },
+    {
+      sha: "76ff9a6ab25fca4b8f0f5c43e4ef12bd0c10cc3e",
       date: "2026-11-06",
-      subject: "docs(legal): cover analytics across opencode.ai and add an opt-out",
+      subject: "docs(legal): cover analytics across opencode.ai and add an opt-out (#62299)",
       effective: "Nov 6, 2026",
       first: false,
       added: [
@@ -39,8 +66,8 @@ export const legalHistory = {
       addedCount: 16,
       removedCount: 12,
       source:
-        "https://github.com/anomalyco/opencode/blob/bc2891953b63dccfb3b688892b09009b9574caaa/packages/console/app/src/routes/legal/privacy-policy/index.tsx",
-      diff: "https://github.com/anomalyco/opencode/commit/bc2891953b63dccfb3b688892b09009b9574caaa#diff-86623c1b761ddcf78790804023aeabaca6b33689a83d2402241105bf407fdc31",
+        "https://github.com/anomalyco/opencode/blob/76ff9a6ab25fca4b8f0f5c43e4ef12bd0c10cc3e/services/site/src/lib/legal/privacy-policy.ts",
+      diff: "https://github.com/anomalyco/opencode/commit/76ff9a6ab25fca4b8f0f5c43e4ef12bd0c10cc3e#diff-13f1bdb3583f198406200946a0d6bde1bc1f9271e4e629272db2023a211e2819",
     },
     {
       sha: "926b2af0cc606398342b487a26ada2ee7badd39c",
@@ -93,7 +120,7 @@ export const legalHistory = {
       diff: "https://github.com/anomalyco/opencode/commit/eb463de93ef91b3c9355ecfefe937c68556f0040#diff-86623c1b761ddcf78790804023aeabaca6b33689a83d2402241105bf407fdc31",
     },
     {
-      sha: "19d00098910af21b33458ba4ea011c25d472f8b7",
+      sha: "51070b6f598fc171636f5a52cb53f90f2cdccbc3",
       date: "2026-08-24",
       subject: "docs: clarify prompt data handling (#44854)",
       effective: "Mar 6, 2026",
@@ -107,8 +134,8 @@ export const legalHistory = {
       addedCount: 2,
       removedCount: 3,
       source:
-        "https://github.com/anomalyco/opencode/blob/19d00098910af21b33458ba4ea011c25d472f8b7/packages/console/app/src/routes/legal/privacy-policy/index.tsx",
-      diff: "https://github.com/anomalyco/opencode/commit/19d00098910af21b33458ba4ea011c25d472f8b7#diff-86623c1b761ddcf78790804023aeabaca6b33689a83d2402241105bf407fdc31",
+        "https://github.com/anomalyco/opencode/blob/51070b6f598fc171636f5a52cb53f90f2cdccbc3/packages/console/app/src/routes/legal/privacy-policy/index.tsx",
+      diff: "https://github.com/anomalyco/opencode/commit/51070b6f598fc171636f5a52cb53f90f2cdccbc3#diff-86623c1b761ddcf78790804023aeabaca6b33689a83d2402241105bf407fdc31",
     },
     {
       sha: "4863aedf3dfcabf02d7c193a5d5e4e4da0535717",
@@ -172,9 +199,53 @@ export const legalHistory = {
   ],
   "/legal/terms-of-service": [
     {
-      sha: "64b9ba339e26d3d1fef23990274a6bc56470500b",
-      date: "2026-08-15",
-      subject: "docs(console): prohibit abusive multi-account use (#42813)",
+      sha: "9c7212c99a69b9d1c644fc30ad79068124aab1a7",
+      date: "2026-11-08",
+      subject: "docs(legal): cover integrations with third-party services (#62700)",
+      effective: "Nov 8, 2026",
+      first: false,
+      added: [
+        "Effective date: Nov 8, 2026",
+        "In addition, if you are using the Services through an unpaid account, we may use Content to further develop and improve our Services, except Content obtained or derived from a Connected Service (as defined in our Privacy Policy), which we never use for that purpose.",
+      ],
+      removed: [
+        "Effective date: Aug 15, 2026",
+        "In addition, if you are using the Services through an unpaid account, we may use Content to further develop and improve our Services.",
+      ],
+      addedCount: 2,
+      removedCount: 2,
+      source:
+        "https://github.com/anomalyco/opencode/blob/9c7212c99a69b9d1c644fc30ad79068124aab1a7/services/site/src/lib/legal/terms-of-service.ts",
+      diff: "https://github.com/anomalyco/opencode/commit/9c7212c99a69b9d1c644fc30ad79068124aab1a7#diff-209b8f3fa7d4510762a9da362f1ccd8ea7c8754348118dec83377de38a818b32",
+    },
+    {
+      sha: "24008abeb3df6d2bf7c9d39f69803558499062b2",
+      date: "2026-11-05",
+      subject: "feat(site): deploy the opencode.ai site separately from the docs (#62209)",
+      effective: "Aug 15, 2026",
+      first: false,
+      added: [
+        'Certain of these large language models are provided by third parties ("Third Party Models") and certain of these models are provided directly by us if you use the OpenCode Models paid offering ("OpenCode Models").',
+        "Regardless of whether you use Third Party Models or OpenCode Models, OpenCode enables you to access the functionality of models through a coding agent running within your terminal.",
+        'Certain of our Services, including OpenCode Models, may be subject to payments now or in the future (the "Paid Services").',
+        "Please see our Paid Services page https://opencode.ai/console/models for a description of the current Paid Services.",
+      ],
+      removed: [
+        'Certain of these large language models are provided by third parties ("Third Party Models") and certain of these models are provided directly by us if you use the OpenCode Zen paid offering ("Zen").',
+        "Regardless of whether you use Third Party Models or Zen, OpenCode enables you to access the functionality of models through a coding agent running within your terminal.",
+        'Certain of our Services, including Zen, may be subject to payments now or in the future (the "Paid Services").',
+        "Please see our Paid Services page https://opencode.ai/zen for a description of the current Paid Services.",
+      ],
+      addedCount: 4,
+      removedCount: 4,
+      source:
+        "https://github.com/anomalyco/opencode/blob/24008abeb3df6d2bf7c9d39f69803558499062b2/services/site/src/lib/legal/terms-of-service.ts",
+      diff: "https://github.com/anomalyco/opencode/commit/24008abeb3df6d2bf7c9d39f69803558499062b2#diff-209b8f3fa7d4510762a9da362f1ccd8ea7c8754348118dec83377de38a818b32",
+    },
+    {
+      sha: "d0ceaef6aa44ce60b9b02a1084d6650e0decfb94",
+      date: "2026-08-24",
+      subject: "docs(console): prohibit abusive multi-account use",
       effective: "Aug 15, 2026",
       first: false,
       added: [
@@ -185,8 +256,8 @@ export const legalHistory = {
       addedCount: 2,
       removedCount: 1,
       source:
-        "https://github.com/anomalyco/opencode/blob/64b9ba339e26d3d1fef23990274a6bc56470500b/packages/console/app/src/routes/legal/terms-of-service/index.tsx",
-      diff: "https://github.com/anomalyco/opencode/commit/64b9ba339e26d3d1fef23990274a6bc56470500b#diff-af798db409166356bf4ec3212cb527b5fe96befbd94700a605c3a4672fca2168",
+        "https://github.com/anomalyco/opencode/blob/d0ceaef6aa44ce60b9b02a1084d6650e0decfb94/packages/console/app/src/routes/legal/terms-of-service/index.tsx",
+      diff: "https://github.com/anomalyco/opencode/commit/d0ceaef6aa44ce60b9b02a1084d6650e0decfb94#diff-af798db409166356bf4ec3212cb527b5fe96befbd94700a605c3a4672fca2168",
     },
     {
       sha: "4863aedf3dfcabf02d7c193a5d5e4e4da0535717",

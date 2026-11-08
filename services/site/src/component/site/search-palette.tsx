@@ -3,6 +3,8 @@ import { useLocation } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
+import type { FunnelEvent } from "~/lib/funnel"
+import { strip } from "~/lib/language"
 import { devicePreviewOpenEvent, inDevicePreview } from "~/lib/platform"
 import { siteSettings, type SiteSettings } from "./settings"
 import { onCloseMenus } from "./menu-open"
@@ -11,13 +13,14 @@ import {
   searchOpenEvent,
   setSearchAnnouncement,
   setSearchShown,
+  type SearchVia,
   type SiteSearchProps,
 } from "./search"
 import type { SearchAction, SearchGroup, SearchItem, SearchResult } from "./search-index"
 
 /**
- * The ⌘K dialog, loaded by the search shell (search.tsx) on the first ⌘K, Ctrl+K or "/", or when
- * the page is idle. The index loads with a second dynamic import on first open.
+ * The ⌘K dialog, loaded by the search shell (search.tsx) on the first ⌘K, Ctrl+K or "/", or once ⌘
+ * or Ctrl is pressed. The index loads with a second dynamic import on first open.
  */
 
 type SearchModule = typeof import("./search-index")
@@ -44,7 +47,7 @@ function englishOnly(item: { id: string; group: string; href?: string; action?: 
   )
 }
 
-export function SearchPalette(props: SiteSearchProps & { openOnMount: boolean }) {
+export function SearchPalette(props: SiteSearchProps & { openOnMount?: SearchVia }) {
   const i18n = useI18n()
   const language = useLanguage()
   const location = useLocation()
@@ -61,6 +64,8 @@ export function SearchPalette(props: SiteSearchProps & { openOnMount: boolean })
   let list: HTMLDivElement | undefined
   let opener: HTMLElement | undefined
   let closeTimer: ReturnType<typeof setTimeout> | undefined
+  // Whether a result was chosen since the search opened, so closing it then isn't a dismissal.
+  let chosen = false
 
   // Spotlight and minimal are one list; the others follow Settings › Search results.
   const grouped = () =>
@@ -163,8 +168,13 @@ export function SearchPalette(props: SiteSearchProps & { openOnMount: boolean })
       .catch(() => undefined)
   }
 
-  const show = () => {
+  // How many results showed for how many characters; never what was typed.
+  const searched = () => ({ results: rows().length, query_len: query().trim().length })
+
+  const show = (via: SearchVia) => {
     if (open() && !closing()) return
+    report({ name: "search.opened", action: "opened", target: via, properties: { kind: "site" } })
+    chosen = false
     clearTimeout(closeTimer)
     setClosing(false)
     opener = document.activeElement instanceof HTMLElement ? document.activeElement : undefined
@@ -178,6 +188,7 @@ export function SearchPalette(props: SiteSearchProps & { openOnMount: boolean })
 
   const close = (restore = true) => {
     if (!open() || closing()) return
+    if (!chosen) report({ name: "search.closed", action: "dismissed", target: "", properties: searched() })
     const instant = siteSettings.searchMotion === "none" || matchMedia("(prefers-reduced-motion: reduce)").matches
     const finish = () => {
       setOpen(false)
@@ -212,6 +223,13 @@ export function SearchPalette(props: SiteSearchProps & { openOnMount: boolean })
       return
     }
     const item = row.result.item
+    chosen = true
+    report({
+      name: "search.selected",
+      action: "selected",
+      target: resultTarget(item),
+      properties: { rank: rows().indexOf(row) + 1, ...searched() },
+    })
     remember(item, query().trim())
     if (item.action && item.action !== "brand-assets") return act(item.action)
     if (!item.href) return
@@ -348,8 +366,9 @@ export function SearchPalette(props: SiteSearchProps & { openOnMount: boolean })
       if (!isSearchShortcut(event)) return
       event.preventDefault()
       if (event.key !== "/" && open() && !closing()) return close()
-      show()
+      show(event.key === "/" ? "slash" : "shortcut")
     }
+    const showFromButton = () => show("button")
     // Focus stays in the dialog, except for Design mode's controls and the Settings panel, which
     // tune it live (Settings › Search › Preview opens it under the panel).
     const trap = (event: FocusEvent) => {
@@ -365,10 +384,10 @@ export function SearchPalette(props: SiteSearchProps & { openOnMount: boolean })
     }
     document.addEventListener("keydown", shortcut)
     document.addEventListener("focusin", trap)
-    document.addEventListener(searchOpenEvent, show)
-    if (props.openOnMount) show()
-    // Mounted while the page is idle: build the index in the next idle period, so the first ⌘K
-    // shows results at once.
+    document.addEventListener(searchOpenEvent, showFromButton)
+    if (props.openOnMount) show(props.openOnMount)
+    // Mounted ahead of the first open (⌘ or Ctrl pressed): build the index in the next idle period,
+    // so the first ⌘K shows results at once.
     const idle = window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 500))
     if (!props.openOnMount) idle(() => void index())
     onCleanup(() => {
@@ -376,7 +395,7 @@ export function SearchPalette(props: SiteSearchProps & { openOnMount: boolean })
       clearTimeout(closeTimer)
       document.removeEventListener("keydown", shortcut)
       document.removeEventListener("focusin", trap)
-      document.removeEventListener(searchOpenEvent, show)
+      document.removeEventListener(searchOpenEvent, showFromButton)
     })
   })
 
@@ -417,8 +436,21 @@ export function SearchPalette(props: SiteSearchProps & { openOnMount: boolean })
         >
           <div data-slot="field">
             <svg data-slot="icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.25" />
-              <path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.25" />
+              <circle
+                cx="7.43"
+                cy="7.43"
+                r="5.06"
+                stroke="currentColor"
+                stroke-width="1.5"
+                vector-effect="non-scaling-stroke"
+              />
+              <path
+                d="M11 11L13.33 13.33"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="square"
+                vector-effect="non-scaling-stroke"
+              />
             </svg>
             <input
               ref={input}
@@ -538,7 +570,7 @@ export function SearchPalette(props: SiteSearchProps & { openOnMount: boolean })
  * panel also tones the page behind it into a narrow band next to the panel colour, so the panel stays
  * at least 97% white (dark: at most 12%) over any page, which keeps its text at 4.5:1 or more.
  */
-function searchLook(s: SiteSettings) {
+export function searchLook(s: SiteSettings) {
   const alpha = s.searchPanelOpacity / 100
   const blur = alpha < 1 && s.searchPanelBlur > 0 ? `blur(${s.searchPanelBlur}px)` : ""
   // Light: map the page's 0–1 onto lo–1 with contrast(c) then brightness(b), in sRGB like compositing.
@@ -631,6 +663,19 @@ function find(target: SearchItem["target"]): HTMLElement | undefined {
       (element) => element.textContent?.trim().toLowerCase() === text && element.getClientRects().length > 0,
     ) ?? undefined
   )
+}
+
+/** A chosen result for the funnel: the page it opens, without its language (`link:/desktop`), or the action it runs. */
+function resultTarget(item: SearchItem) {
+  if (item.action && item.action !== "brand-assets") return `action:${item.action}`
+  const url = new URL(item.href ?? "/", window.location.origin)
+  const target = url.origin === window.location.origin ? `link:${strip(url.pathname)}` : `outbound:${url.hostname}`
+  return target.replace(/[^A-Za-z0-9/_.:+-]+/g, "-").slice(0, 96)
+}
+
+/** Reports a search event to the funnel (lib/funnel.ts), through its queue. */
+function report(event: FunnelEvent) {
+  window.__ocFunnel?.push({ event, at: performance.now() })
 }
 
 function trim(path: string) {

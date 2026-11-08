@@ -1549,7 +1549,14 @@ test("video files stream into the viewer behind a loading state, open into the p
   const ranged = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
   await page.route(`**/api/fs/read/${file}*`, async (route) => {
-    const headers = { "access-control-allow-origin": "*", "accept-ranges": "bytes", "content-type": "video/mp4" }
+    const headers = {
+      "access-control-allow-origin": "*",
+      "accept-ranges": "bytes",
+      "content-type": "video/mp4",
+      "content-disposition": `attachment; filename="${file}"`,
+      "content-security-policy": "default-src 'none'; img-src 'self'; media-src 'self'; sandbox",
+      "x-content-type-options": "nosniff",
+    }
 
     if (route.request().method() === "HEAD")
       return route.fulfill({ status: 200, headers: { ...headers, "content-length": String(mp4.length) } })
