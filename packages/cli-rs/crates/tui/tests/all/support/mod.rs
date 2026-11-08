@@ -243,7 +243,7 @@ pub fn deps(transport: Arc<dyn Transport>) -> Deps {
         route: session_route("ses_a"),
         continue_: false,
         events: false,
-        builtins: vec![opencode_mermaid::plugin(), opencode_latex::plugin().into()],
+        builtins: vec![opencode_mermaid::plugin().into(), opencode_latex::plugin().into()],
     }
 }
 

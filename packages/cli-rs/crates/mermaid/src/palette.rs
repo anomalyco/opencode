@@ -1,43 +1,42 @@
 //! The diagram palette from the TUI theme (`palette.ts`).
 
-use opencode_ui::theme::{Theme, ThemeMode};
-use opentui::prelude::Color;
+use opencode_plugin_abi::{Read, Rgba, ThemeMode};
 
 use crate::core::color::{blend, with_alpha};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Palette {
-    pub text: Color,
-    pub primary: Color,
-    pub secondary: Color,
-    pub muted: Color,
-    pub warning: Color,
-    pub background: Color,
-    pub request: Color,
-    pub response: Color,
-    pub note: Color,
-    pub note_background: Color,
-    pub box_text: Color,
-    pub box_border: Color,
-    pub line: Color,
-    pub label_background: Color,
-    pub group: Color,
-    pub group_text: Color,
-    pub marker: Color,
-    pub note_border: Color,
-    pub note_text: Color,
-    pub note_connector: Color,
+    pub text: Rgba,
+    pub primary: Rgba,
+    pub secondary: Rgba,
+    pub muted: Rgba,
+    pub warning: Rgba,
+    pub background: Rgba,
+    pub request: Rgba,
+    pub response: Rgba,
+    pub note: Rgba,
+    pub note_background: Rgba,
+    pub box_text: Rgba,
+    pub box_border: Rgba,
+    pub line: Rgba,
+    pub label_background: Rgba,
+    pub group: Rgba,
+    pub group_text: Rgba,
+    pub marker: Rgba,
+    pub note_border: Rgba,
+    pub note_text: Rgba,
+    pub note_connector: Rgba,
 }
 
 pub struct PaletteInput {
-    pub text: Color,
-    pub subdued: Color,
-    pub info: Color,
-    pub success: Color,
-    pub warning: Color,
-    pub background: Color,
-    pub accent_soft: Color,
-    pub accent_clear: Color,
+    pub text: Rgba,
+    pub subdued: Rgba,
+    pub info: Rgba,
+    pub success: Rgba,
+    pub warning: Rgba,
+    pub background: Rgba,
+    pub accent_soft: Rgba,
+    pub accent_clear: Rgba,
 }
 
 impl Palette {
@@ -69,25 +68,26 @@ impl Palette {
         }
     }
 
-    /// `resolveOpenCodeDiagramPalette`, with the mode from the plugin context (`context.themeMode`).
-    pub fn from_theme(theme: &Theme, mode: ThemeMode) -> Self {
-        let categorical = theme.categorical();
-        let accent = categorical.get(3).or(categorical.first());
-        let dark = mode == ThemeMode::Dark;
-        let (soft, clear) = match accent {
-            Some(scale) if dark => (scale.step(300), scale.step(200)),
-            Some(scale) => (scale.step(700), scale.step(800)),
-            None => (theme.text.muted, theme.text.base),
-        };
+    /// `resolveOpenCodeDiagramPalette`, with the mode from the plugin context (`context.themeMode`). The accent is
+    /// the fourth categorical scale, else the first, else the muted and base text.
+    pub fn read(read: &dyn Read) -> Self {
+        let text = read.color("text.base").unwrap_or(Rgba::new(255, 255, 255, 255));
+        let token = |token: &str| read.color(token).unwrap_or(text);
+        let (soft, clear) = if read.theme_mode() == ThemeMode::Dark { (300, 200) } else { (700, 800) };
+        let accent = [3, 0].into_iter().find_map(|index| {
+            let step = |step| read.color(&format!("categorical.{index}.{step}"));
+            Some((step(soft)?, step(clear)?))
+        });
+        let (accent_soft, accent_clear) = accent.unwrap_or((token("text.muted"), text));
         Self::new(&PaletteInput {
-            text: theme.text.base,
-            subdued: theme.text.muted,
-            info: theme.text.feedback.info.base,
-            success: theme.text.feedback.success.base,
-            warning: theme.text.feedback.warning.base,
-            background: theme.background.base,
-            accent_soft: soft,
-            accent_clear: clear,
+            text,
+            subdued: token("text.muted"),
+            info: token("text.feedback.info.base"),
+            success: token("text.feedback.success.base"),
+            warning: token("text.feedback.warning.base"),
+            background: token("background.base"),
+            accent_soft,
+            accent_clear,
         })
     }
 }
