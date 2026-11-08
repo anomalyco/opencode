@@ -61,7 +61,7 @@ describe("shell", () => {
       "-NoProfile",
       "-NonInteractive",
       "-Command",
-      "Write-Output hi",
+      expect.stringMatching(/\nWrite-Output hi$/),
     ])
   })
 
