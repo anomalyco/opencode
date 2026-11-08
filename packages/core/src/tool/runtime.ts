@@ -134,7 +134,7 @@ const encodeOutput = (schema: Tool.ValueSchema<any>, value: unknown) => {
 }
 
 const isStandardSchema = (schema: Tool.ValueSchema<any>): schema is StandardSchemaV1<any, any> =>
-  typeof schema === "object" && schema !== null && "~standard" in schema
+  (typeof schema === "object" || typeof schema === "function") && schema !== null && "~standard" in schema
 
 const isStandardJSONSchema = (
   schema: StandardSchemaV1<any, any>,
