@@ -5,11 +5,25 @@ use std::rc::Rc;
 
 use opencode_ui::bind;
 use opencode_ui::dialog::DialogOptions;
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::select::{self, SelectOption, SelectProps};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::prelude::*;
 
 use crate::app::Tui;
+
+/// Registers `workspace.directory`, a hidden command (no palette entry, slash or key) that opens the menu of the
+/// directory its input names, for a plugin's click (the sidebar footer's location).
+pub fn install(tui: &Rc<Tui>) {
+    let weak = tui.weak();
+    let command = TuiCommand::new("workspace.directory", move |input: Option<&str>, _| {
+        if let (Some(tui), Some(directory)) = (weak.upgrade(), input) {
+            show(&tui, directory);
+        }
+    })
+    .bind(Bind::Off);
+    tui.keymap.install("working-directory", [KeymapLayer::global(vec![command])]);
+}
 
 /// `openMenu`: does nothing while text is selected, so finishing a drag over the location does not open it.
 pub fn show(tui: &Tui, directory: &str) {

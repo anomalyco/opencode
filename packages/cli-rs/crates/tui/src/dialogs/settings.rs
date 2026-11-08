@@ -477,7 +477,8 @@ pub struct Live {
     serial: Option<Serial>,
     done: RefCell<VecDeque<Done>>,
     watch: RefCell<Option<Watch>>,
-    listeners: RefCell<Vec<Listener>>,
+    listeners: Rc<RefCell<Vec<(u64, Listener)>>>,
+    next_listener: Cell<u64>,
     layers: RefCell<Vec<Disposer>>,
 }
 
@@ -500,7 +501,8 @@ impl Live {
             config,
             done: RefCell::default(),
             watch: RefCell::default(),
-            listeners: RefCell::default(),
+            listeners: Rc::default(),
+            next_listener: Cell::new(0),
             layers: RefCell::default(),
         }
     }
@@ -519,9 +521,24 @@ impl Live {
         self.resolved.borrow().info.experiment(name)
     }
 
-    /// Calls `listener` after each config change.
+    /// Calls `listener` after each config change, for the life of the TUI.
     pub fn on_change(&self, listener: impl Fn(&Tui) + 'static) {
-        self.listeners.borrow_mut().push(Rc::new(listener));
+        self.subscribe(listener).forget();
+    }
+
+    /// Calls `listener` after each config change, until the disposer is dropped.
+    pub fn subscribe(&self, listener: impl Fn(&Tui) + 'static) -> Disposer {
+        let id = self.next_listener.get();
+        self.next_listener.set(id + 1);
+        self.listeners.borrow_mut().push((id, Rc::new(listener)));
+        let listeners = Rc::downgrade(&self.listeners);
+        Disposer::new(bind!(listeners, |listeners| listeners.borrow_mut().retain(|(other, _)| *other != id)))
+    }
+
+    /// How many listeners are registered, for the tests that check mounts let go of theirs.
+    #[doc(hidden)]
+    pub fn listener_count(&self) -> usize {
+        self.listeners.borrow().len()
     }
 
     fn resolve(&self, info: Info) -> Resolved {
@@ -613,7 +630,8 @@ fn apply(tui: &Tui, info: Info) {
     tui.keymap.set_leader_timeout(leader);
     crate::tabs::route_changed(tui);
     crate::frame::refresh(tui);
-    let listeners = tui.settings.listeners.borrow().clone();
+    let listeners: Vec<Listener> =
+        tui.settings.listeners.borrow().iter().map(|(_, listener)| listener.clone()).collect();
     for listener in listeners {
         listener(tui);
     }
