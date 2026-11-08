@@ -310,12 +310,23 @@ body {
   color: var(--stats-text);
 }
 
+/* Try OpenCode, the GitHub mark and the menu button sit 24px apart, ink to ink: the button's edge to the mark, and the
+   mark to the menu's lines. That is as close as their 44px targets go without overlapping. */
 [data-page="stats"] [data-slot="header-actions"] {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+}
+
+[data-page="stats"] [data-slot="header-actions"] [data-slot="header-button"] {
+  margin-inline-end: 14px;
+}
+
+/* In capitals, as the nav's other labels (DATA, the product menu), at their 0 tracking. */
+[data-page="stats"] [data-slot="header-actions"] [data-slot="header-button"] strong {
+  letter-spacing: 0;
+  text-transform: uppercase;
 }
 
 [data-page="stats"] [data-slot="header-button"] {
@@ -393,14 +404,18 @@ body {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 
+  margin-inline-start: 7px;
+
+  /* A 44px target, reaching 5px towards the GitHub mark's and 7px past the lines' end. */
   &::after {
     content: "";
     position: absolute;
-    inset: -8px -6px;
+    inset-block: -8px;
+    inset-inline: -5px -7px;
   }
 
   @media (max-width: 60rem) {
-    margin-inline: 8px 6px;
+    margin-inline-end: 6px;
   }
 }
 
