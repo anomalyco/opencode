@@ -366,15 +366,8 @@ export const ComposerStore = Persistence.struct({
   ),
   model: Persistence.optional(PromptModel),
   mode: Persistence.optional(Schema.Literals(["normal", "shell"])),
-  retry: Persistence.optional(
-    Schema.Struct({
-      id: SessionMessage.ID,
-      agent: Schema.String,
-      providerID: Schema.String,
-      modelID: Schema.String,
-      variant: Persistence.optional(Schema.String),
-    }),
-  ),
+  // A retry stored before it carried its payload's fingerprint cannot prove its payload, so it reads as none.
+  retry: Persistence.optional(Schema.Struct({ id: SessionMessage.ID, fingerprint: Schema.NonEmptyString })),
   context: Persistence.struct({ items: Persistence.array(ContextEntry) }),
   quoteSources: Persistence.optional(Persistence.record(Schema.UndefinedOr(TimelineQuoteSource))),
 })
@@ -392,7 +385,7 @@ export const LineComment = Persistence.struct({
 export type LineComment = typeof LineComment.Type
 
 export const CommentStore = Persistence.struct({
-  comments: Schema.Record(Schema.String, Schema.mutableKey(Persistence.array(LineComment))),
+  comments: Schema.Record(Schema.String, Persistence.entry(Persistence.array(LineComment))),
 })
 
 export type CommentStore = typeof CommentStore.Type

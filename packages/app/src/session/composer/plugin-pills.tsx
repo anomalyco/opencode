@@ -14,10 +14,8 @@ import {
 } from "@opencode/plugin/gui"
 import { usePluginHost } from "@/runtime/plugin/host"
 import { Contribution } from "@/runtime/plugin/render"
-import type { useComposerLaneAlignment } from "./composer-lane"
+import { composerLanePlacement, type useComposerLaneAlignment } from "./composer-lane"
 
-const capsule =
-  "pointer-events-auto flex h-7 min-w-0 max-w-full items-center gap-2 rounded-[12px] border-[0.5px] border-v2-border-border-muted bg-v2-background-bg-base ps-2.5 pe-2.5 text-[13px] font-[440] leading-text-compact tracking-[-0.04px] whitespace-nowrap text-v2-text-text-base shadow-[var(--v2-elevation-raised)] outline-none"
 
 type Alignment = ReturnType<ReturnType<typeof useComposerLaneAlignment>>
 
@@ -73,7 +71,6 @@ export function SessionPluginPills(props: {
 function PluginPill(props: { pill: ComposerPill; input: ComposerPillProps; alignment: Accessor<Alignment> }) {
   const alignment = props.alignment
   const view = createMemo(() => props.pill.show(props.input))
-  const placement = () => (({ center: "top", start: "top-start", end: "top-end" }) as const)[alignment()]
   const [state, setState] = createStore({ open: false })
 
   return (
@@ -85,7 +82,7 @@ function PluginPill(props: { pill: ComposerPill; input: ComposerPillProps; align
               type="button"
               data-slot="session-plugin-pill"
               aria-label={current().title}
-              class={capsule}
+              data-composer-pill
               onClick={() => current().run?.()}
             >
               <Content view={current()} />
@@ -97,7 +94,7 @@ function PluginPill(props: { pill: ComposerPill; input: ComposerPillProps; align
               <Popover
                 open={state.open}
                 onOpenChange={(open) => setState("open", open)}
-                placement={placement()}
+                placement={composerLanePlacement(alignment())}
                 gutter={8}
               >
                 <Popover.Trigger
@@ -105,7 +102,7 @@ function PluginPill(props: { pill: ComposerPill; input: ComposerPillProps; align
                   type="button"
                   data-slot="session-plugin-pill"
                   aria-label={current().title}
-                  class={capsule}
+                  data-composer-pill
                 >
                   <Content view={current()} />
                 </Popover.Trigger>
@@ -113,7 +110,8 @@ function PluginPill(props: { pill: ComposerPill; input: ComposerPillProps; align
                   <Popover.Content
                     data-slot="session-plugin-pill-popover"
                     aria-label={current().title ?? current().label}
-                    class="w-80 max-w-[calc(100vw-56px)] rounded-[10px] border-[0.5px] border-v2-border-border-muted bg-v2-background-bg-layer-01 p-1 shadow-[var(--v2-elevation-floating)] outline-none"
+                    data-composer-pill-panel
+                    class="w-80 p-1"
                   >
                     <div class="px-2 pt-1 pb-1.5 text-[11px] font-[530] tracking-[0.05px] leading-[var(--line-height-tight)] text-v2-text-text-faint">
                       <span dir="auto" class="line-clamp-3 break-words">
@@ -139,13 +137,13 @@ function PluginPill(props: { pill: ComposerPill; input: ComposerPillProps; align
           </Match>
           <Match when={current().rows}>
             {(rows) => (
-              <Menu gutter={8} placement={placement()}>
+              <Menu gutter={8} placement={composerLanePlacement(alignment())}>
                 <Menu.Trigger
                   as="button"
                   type="button"
                   data-slot="session-plugin-pill"
                   aria-label={current().title}
-                  class={capsule}
+                  data-composer-pill
                 >
                   <Content view={current()} />
                 </Menu.Trigger>

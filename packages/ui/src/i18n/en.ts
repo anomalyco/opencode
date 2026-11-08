@@ -72,6 +72,8 @@ const source = {
   "ui.sessionTurn.diffs.showAll": "Show all",
   "ui.sessionTurn.diffs.showLess": "Show less",
   "ui.sessionTurn.diffs.more": "+{{count}} more files",
+  "ui.sessionTurn.diffs.failed": "Diff unavailable",
+  "ui.sessionTurn.diffs.retry": "Retry",
 
   "ui.sessionTurn.retry.retrying": "retrying",
   "ui.sessionTurn.retry.inSeconds": "in {{seconds}}s",
@@ -93,6 +95,8 @@ const source = {
   "ui.sessionTurn.budgetLimit.modelsUntilReset": "Model budget reached · this model is paused until it resets",
   "ui.sessionTurn.budgetLimit.useFreeModel": "Use a free model",
   "ui.sessionTurn.budgetLimit.switchModel": "Switch model",
+  "ui.sessionTurn.goLimit.title": "You've reached your OpenCode Go usage limit.",
+  "ui.sessionTurn.goLimit.lineReset": "You've reached your OpenCode Go usage limit. It resets at {{time}}.",
   "ui.sessionTurn.error.freeUsageExceeded": "Free usage exceeded",
   "ui.sessionTurn.error.addCredits": "Add credits",
 
@@ -101,10 +105,6 @@ const source = {
     "Subscribe to OpenCode Go for reliable access to the best open-source models for $10/month.",
   "dialog.usageExceeded.freeTier.reset": "Your free messages reset at {{time}}.",
   "dialog.usageExceeded.freeTier.actionLabel": "Subscribe",
-  "dialog.usageExceeded.accountRateLimit.title": "Go limit reached",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Usage limit reached. To continue using this model now, enable usage from your available balance",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Open settings",
 
   "ui.sessionTurn.status.delegating": "Delegating work",
   "ui.sessionTurn.status.planning": "Planning next steps",
@@ -153,6 +153,7 @@ const source = {
 
   "ui.list.loading": "Loading",
   "ui.list.empty": "No results",
+  "ui.list.failed": "Failed to load results",
   "ui.list.clearFilter": "Clear filter",
   "ui.list.emptyWithFilter.prefix": "No results for",
   "ui.list.emptyWithFilter.suffix": "",
@@ -283,7 +284,9 @@ const source = {
   "ui.message.copyMessage": "Copy message",
   "ui.message.copyFullMessage": "Copy full message",
   "ui.message.forkMessage": "Fork from here",
-  "ui.message.revertMessage": "Rewind to here",
+  "ui.message.revertMessage": "Revert to here",
+  "ui.message.undoMessage": "Undo",
+  "ui.message.moreActions": "More actions",
   "ui.message.moveToQueue": "Move to queue",
   "ui.message.pending": "Pending",
   "ui.message.voice": "Voice",
@@ -295,6 +298,7 @@ const source = {
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
   "ui.message.duration.hoursMinutes": "{{hours}}h {{minutes}}m",
+  "ui.message.tokensPerSecond": "{{value}} tok/s",
   "ui.message.interrupted": "Interrupted",
   "ui.message.modelVariant": "{{model}} ({{variant}})",
   "ui.message.time.justNow": "Just now",
@@ -334,6 +338,8 @@ const source = {
   "ui.question.answer.none": "(no answer)",
   "ui.question.review.notAnswered": "(not answered)",
   "ui.question.multiHint": "Pick any",
+  "ui.question.singleHint": "Select one answer",
+  "ui.question.classic.multiHint": "Select all answers that apply",
   "ui.question.custom.placeholder": "Type your answer…",
   "ui.question.custom.answerPlaceholder": "Type your own answer…",
 } satisfies Record<string, string>

@@ -1,24 +1,20 @@
 import { describe, expect, test, vi } from "bun:test"
-import { createScrollPersistence } from "./scroll"
+import { createScrollPersistence, type SessionScroll } from "./scroll"
 
 describe("createScrollPersistence", () => {
   test("debounces persisted scroll writes", () => {
     vi.useFakeTimers()
 
     try {
-      const snapshot = {
-        session: {
-          review: { x: 0, y: 0 },
-        },
-      } as Record<string, Record<string, { x: number; y: number }>>
+      const snapshot = new Map<string, Record<string, SessionScroll>>([["session", { review: { x: 0, y: 0 } }]])
 
-      const writes: Array<Record<string, { x: number; y: number }>> = []
+      const writes: Array<Record<string, SessionScroll>> = []
 
       const scroll = createScrollPersistence({
         debounceMs: 10,
-        getSnapshot: (sessionKey) => snapshot[sessionKey],
+        getSnapshot: (sessionKey) => snapshot.get(sessionKey),
         onFlush: (sessionKey, next) => {
-          snapshot[sessionKey] = next
+          snapshot.set(sessionKey, next)
           writes.push(next)
         },
       })
@@ -45,21 +41,41 @@ describe("createScrollPersistence", () => {
     }
   })
 
+  test("disposing writes the last position instead of dropping its pending debounce", () => {
+    vi.useFakeTimers()
+
+    try {
+      const writes: Array<[string, Record<string, SessionScroll>]> = []
+
+      const scroll = createScrollPersistence({
+        debounceMs: 250,
+        getSnapshot: () => undefined,
+        onFlush: (sessionKey, next) => writes.push([sessionKey, next]),
+      })
+
+      scroll.setScroll("session", "review", { x: 0, y: 120 })
+      scroll.dispose()
+      vi.advanceTimersByTime(250)
+      scroll.setScroll("session", "review", { x: 0, y: 240 })
+      vi.advanceTimersByTime(250)
+
+      expect(writes).toEqual([["session", { review: { x: 0, y: 120 } }]])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   test("reseeds empty cache after persisted snapshot loads", () => {
-    const snapshot = {
-      session: {},
-    } as Record<string, Record<string, { x: number; y: number }>>
+    const snapshot = new Map<string, Record<string, SessionScroll>>([["session", {}]])
 
     const scroll = createScrollPersistence({
-      getSnapshot: (sessionKey) => snapshot[sessionKey],
+      getSnapshot: (sessionKey) => snapshot.get(sessionKey),
       onFlush: () => {},
     })
 
     expect(scroll.scroll("session", "review")).toBeUndefined()
 
-    snapshot.session = {
-      review: { x: 12, y: 34 },
-    }
+    snapshot.set("session", { review: { x: 12, y: 34 } })
 
     expect(scroll.scroll("session", "review")).toEqual({ x: 12, y: 34 })
     scroll.dispose()

@@ -97,6 +97,8 @@ describe("settings schema", () => {
         timelineWidth: "comfortable",
         newIcons: false,
         foldUserMessages: false,
+        newQuestionUI: false,
+        sidebarOrganize: "list",
         mobileTitlebarPosition: "top",
         followUpBehavior: "steer",
       },
@@ -111,12 +113,14 @@ describe("settings schema", () => {
       keybinds: {},
       permissions: { autoApprove: false, autoApproveProjects: {} },
       workspaces: { defaultDestination: "last-used", lastUsed: {} },
-      notifications: { agent: false, permissions: true, errors: false },
+      notifications: { agent: false, permissions: true, questions: true, errors: false },
       sounds: {
         agentEnabled: true,
         agent: "staplebops-01",
         permissionsEnabled: true,
         permissions: "staplebops-02",
+        questionsEnabled: true,
+        questions: "staplebops-05",
         errorsEnabled: true,
         errors: "nope-03",
         interfaceEnabled: true,
@@ -134,6 +138,8 @@ describe("settings schema", () => {
         followUpBehavior: "invalid",
         backgroundActivity: "invalid",
         timelineWidth: "invalid",
+        newQuestionUI: "invalid",
+        sidebarOrganize: "off",
       },
       appearance: { fontSize: "large", mono: "Custom Mono", tabLayout: "vertical", showProjectName: true },
       permissions: { autoApprove: true, autoApproveProjects: { on: true, off: false, bad: "yes" } },
@@ -150,6 +156,8 @@ describe("settings schema", () => {
       followUpBehavior: "steer",
       backgroundActivity: "left",
       timelineWidth: "comfortable",
+      newQuestionUI: false,
+      sidebarOrganize: "list",
     })
     expect(settings.appearance).toEqual({
       fontSize: 14,
@@ -162,7 +170,7 @@ describe("settings schema", () => {
     expect(settings.permissions).toEqual({ autoApprove: true, autoApproveProjects: { on: true, off: false } })
     expect(settings.workspaces).toEqual({ defaultDestination: "new", lastUsed: { good: "workspace" } })
     expect(settings.keybinds).toEqual({ good: "ctrl+k" })
-    expect(settings.notifications).toEqual({ agent: false, permissions: true, errors: true })
+    expect(settings.notifications).toEqual({ agent: false, permissions: true, questions: true, errors: true })
     expect(settings.sounds).toMatchObject({ agent: "custom", agentEnabled: false, permissions: "staplebops-02" })
     expect(decode(encode(settings))).toEqual(settings)
   })

@@ -32,8 +32,8 @@ export interface AwaitOptions {
   readonly poll?: Poll
 }
 
-export const DEFAULT_POLL_INTERVAL = Duration.seconds(5)
-export const DEFAULT_POLL_TIMEOUT = Duration.minutes(10)
+const DEFAULT_POLL_INTERVAL = Duration.seconds(5)
+const DEFAULT_POLL_TIMEOUT = Duration.minutes(10)
 
 export const QueuedEvent = Schema.Struct({
   type: Schema.tag("generation-queued"),

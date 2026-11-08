@@ -76,6 +76,16 @@ export const settings: Setting[] = [
     keywords: ["scroll bar"],
   },
   {
+    title: "Scroll on send",
+    category: "Session",
+    path: ["session", "submit_scroll"],
+    description: "Whether sending a prompt jumps to the latest message",
+    default: "bottom",
+    values: ["bottom", "keep"],
+    labels: ["jump to latest", "keep position"],
+    keywords: ["submit", "scroll position", "jump to latest", "follow"],
+  },
+  {
     title: "Thinking",
     category: "Session",
     path: ["session", "thinking"],

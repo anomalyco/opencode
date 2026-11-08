@@ -40,7 +40,7 @@
 [data-component="dialog-v2"]:has(.model-dialog) [data-slot="dialog-container"] {
   width: min(calc(100vw - 24px), 480px);
   min-height: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--v2-background-bg-base);
 }
 
@@ -228,11 +228,15 @@
   /* One width for every model, matching the 160px its placement assumes. */
   width: 160px;
   max-height: 400px;
-  overflow-y: auto;
+  padding: 0;
   animation: none;
 
+  > [data-component="menu-scroll"] > [data-scrollable] {
+    padding: 2px;
+  }
+
   /* The model stats that close the flyout. */
-  > :last-child {
+  [data-slot="menu-scroll-content"] > :last-child {
     font-size: 11px;
     line-height: 16px;
     cursor: default;

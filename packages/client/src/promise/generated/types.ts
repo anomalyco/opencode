@@ -25,6 +25,8 @@ export type ProviderCompaction = { type: "summary" } | { type: "native" }
 
 export type ProviderCacheTTL = `${number}${"ms" | "s" | "m" | "h" | "d"}`
 
+export type ProviderCacheWarming = boolean | { interval?: "auto" | (string & {}); duration?: string }
+
 export type ProviderTransport = "http" | "websocket"
 
 export type ProviderEncoding = "zstd" | "gzip" | "none"
@@ -327,11 +329,25 @@ export type ScheduleWhenAt = { type: "at"; at: string; tz?: string }
 
 export type ScheduleWhenCron = { type: "cron"; cron: string; tz?: string }
 
+export type ScheduleConditionShell = { type: "shell"; run: string; is?: string; matches?: string; changes?: boolean }
+
+export type ScheduleConditionCode = { type: "code"; code: string }
+
 export type ScheduleActionPrompt = { type: "prompt"; prompt: string }
 
 export type ScheduleStatus = "active" | "paused" | "done"
 
-export type ScheduleOutcome = "fired" | "late" | "skipped" | "disabled" | "failed"
+export type ScheduleOutcome = "fired" | "late" | "checked" | "expired" | "skipped" | "disabled" | "failed"
+
+export type ArtifactCapability = "static" | "server-code" | "sqlite" | "durable-objects"
+
+export type ArtifactID = string
+
+export type ArtifactTime = { created: number; updated: number }
+
+export type JobStatus = "running" | "completed" | "error" | "cancelled"
+
+export type JobTime = { started: number; completed?: number }
 
 export type ReferenceGitSource = { type: "git"; repository: string; branch?: string }
 
@@ -355,6 +371,8 @@ export type WebSearchResult = { url: string; title?: string; content?: string; t
 export type UsageLimitsMeter = { percent: number; limited: boolean; resetsAt: number }
 
 export type McpProtocol = "legacy" | "auto" | "2026-07-28"
+
+export type ConfigCompactionPercent = string
 
 export type ConfigWorktree = { directory: string }
 
@@ -381,7 +399,7 @@ export type LocationPublicInfo = {
 
 export type ModelRef = { id: string; providerID: ProviderID; variant?: string }
 
-export type ProviderCache = { ttl?: ProviderCacheTTL }
+export type ProviderCache = { ttl?: ProviderCacheTTL; warming?: ProviderCacheWarming }
 
 export type ModelVariantSettings = { compaction?: ProviderCompaction; encoding?: ProviderEncoding } & {
   [x: string]: any
@@ -751,6 +769,7 @@ export type IntegrationAttempt = {
   url: string
   instructions: string
   mode: "auto" | "code"
+  paste?: true
   time: { created: number; expires: number }
 }
 
@@ -816,6 +835,7 @@ export type PersistentPtyInfo = {
   pid: number
   exitCode?: number
   sessionID: SessionID
+  userTitle: string | null
   foregroundProcess: string | null
   size: { cols: number; rows: number }
   output: { head: number; tail: number }
@@ -905,7 +925,55 @@ export type ScheduleWhenIn = { type: "in"; in: ScheduleDuration; tz?: string }
 
 export type ScheduleWhenEvery = { type: "every"; every: ScheduleDuration; tz?: string }
 
+export type ScheduleCondition = ScheduleConditionShell | ScheduleConditionCode
+
 export type ScheduleAction = ScheduleActionPrompt
+
+export type ArtifactProvider = { id: string; name: string; capabilities: Array<ArtifactCapability>; default: boolean }
+
+export type ArtifactInfo = {
+  id: ArtifactID
+  provider: string
+  sessionID?: SessionID
+  title: string
+  entry: string
+  url: string
+  time: ArtifactTime
+}
+
+export type JobShell = {
+  kind: "shell"
+  id: string
+  sessionID: SessionID
+  status: JobStatus
+  title?: string
+  time: JobTime
+  shellID: string
+  command: string
+}
+
+export type JobSubagent = {
+  kind: "subagent"
+  id: string
+  sessionID: SessionID
+  status: JobStatus
+  title?: string
+  time: JobTime
+  childSessionID: SessionID
+  agent: string
+  description: string
+}
+
+export type JobImage = {
+  kind: "image"
+  id: string
+  sessionID: SessionID
+  status: JobStatus
+  title?: string
+  time: JobTime
+  path: string
+  model: string
+}
 
 export type VcsInfo = { provider?: string; branch: VcsBranch }
 
@@ -1902,6 +1970,15 @@ export type WebsearchUpdated = {
   data: {}
 }
 
+export type ArtifactUpdated = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "artifact.updated"
+  location?: LocationRef
+  data: {}
+}
+
 export type SessionStatusUpdated = {
   id: EventID
   created: number
@@ -2118,6 +2195,15 @@ export type PersistentPtyAdded = {
   data: { sessionID: SessionID; terminal: PersistentPtyInfo }
 }
 
+export type PersistentPtyUpdated = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "persistent-pty.updated"
+  location?: LocationRef
+  data: { sessionID: SessionID; terminal: PersistentPtyInfo }
+}
+
 export type PersistentPtySnapshot = {
   info: PersistentPtyInfo
   text: string
@@ -2143,6 +2229,10 @@ export type FormReplied = {
 }
 
 export type ScheduleWhen = ScheduleWhenIn | ScheduleWhenAt | ScheduleWhenEvery | ScheduleWhenCron
+
+export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
+
+export type JobInfo = JobShell | JobSubagent | JobImage
 
 export type SessionInboxMove = {
   id: SessionMessageID
@@ -2290,7 +2380,15 @@ export type ConfigEntry =
         timezone?: string
         permissions?: PermissionRuleset
         policies?: Array<{
-          action: "provider.use" | "tool.use" | "integration.use"
+          action:
+            | "provider.use"
+            | "tool.use"
+            | "integration.connect"
+            | "integration.use"
+            | "mcp.use"
+            | "skill.use"
+            | "plugin.use"
+            | "websearch.use"
           resource: string
           effect: "allow" | "deny"
         }>
@@ -2350,6 +2448,7 @@ export type ConfigEntry =
                   codemode?: boolean
                   timeout?: { startup?: number; catalog?: number; execution?: number }
                   protocol?: McpProtocol
+                  pool?: boolean
                 }
               | {
                   type: "remote"
@@ -2369,10 +2468,11 @@ export type ConfigEntry =
                   codemode?: boolean
                   timeout?: { startup?: number; catalog?: number; execution?: number }
                   protocol?: McpProtocol
+                  pool?: boolean
                 }
           }
         }
-        compaction?: { auto?: boolean; keep?: { tokens?: number }; buffer?: number }
+        compaction?: { auto?: boolean; keep?: { tokens?: number }; buffer?: ConfigCompactionPercent | number }
         skills?: Array<string>
         commands?: {
           [x: string]: {
@@ -2394,7 +2494,7 @@ export type ConfigEntry =
         websearch?: false | { provider: "random" | WebSearchID }
         plugins?: Array<string | { package: string; options?: { [x: string]: JsonValue } }>
         worktree?: ConfigWorktree
-        warming?: boolean | { prompt?: string; interval?: string; duration?: string }
+        warming?: boolean | { prompt?: string; interval?: "auto" | (string & {}); duration?: string }
         providers?: {
           [x: string]: {
             canonical?: ProviderID
@@ -2445,15 +2545,27 @@ export type ConfigEntry =
         }
         experimental?: {
           portable_shell_scanner?: boolean
+          all_flags?: boolean
           todo?: boolean
           background_compaction?: boolean
           media_blob?: boolean
-          image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           schedules?: boolean
+          artifacts?: boolean
+          codemode_vm?: boolean
+          part_rows?: boolean
+          image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
           location_idle_timeout?: string | false
           policies?: Array<{
-            action: "provider.use" | "tool.use" | "integration.use"
+            action:
+              | "provider.use"
+              | "tool.use"
+              | "integration.connect"
+              | "integration.use"
+              | "mcp.use"
+              | "skill.use"
+              | "plugin.use"
+              | "websearch.use"
             resource: string
             effect: "allow" | "deny"
           }>
@@ -2530,7 +2642,7 @@ export type CredentialEntry = {
   value: CredentialValue
 }
 
-export type FormFields2 = [FormField1, ...Array<FormField1>]
+export type FormFields1 = [FormField1, ...Array<FormField1>]
 
 export type ScheduleInfo = {
   id: ScheduleID
@@ -2538,6 +2650,8 @@ export type ScheduleInfo = {
   name?: string
   when: ScheduleWhen
   tz: string
+  if?: ScheduleCondition
+  until?: ScheduleCondition
   action: ScheduleAction
   status: ScheduleStatus
   nextDueAt?: number
@@ -2546,6 +2660,7 @@ export type ScheduleInfo = {
   runCount: number
   lastFiredAt?: number
   lastOutcome?: ScheduleOutcome
+  lastOutput?: string
   time: { created: number; updated: number }
 }
 
@@ -2622,7 +2737,7 @@ export type SessionMessageAssistantContentEncoded =
 
 export type GenerateDecisionsResponse = { data: GenerateDecisionResult }
 
-export type FormInfo1 = { id: FormID; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields2 }
+export type FormInfo1 = { id: FormID; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields1 }
 
 export type SessionMessageInfo =
   | SessionMessageAgentSelected
@@ -2804,6 +2919,7 @@ export type V2Event =
   | PtyDeleted
   | PersistentPtyAdded
   | PersistentPtyRemoved
+  | PersistentPtyUpdated
   | ShellCreated
   | ShellExited
   | ShellDeleted
@@ -2811,6 +2927,7 @@ export type V2Event =
   | FormReplied
   | FormCancelled
   | WebsearchUpdated
+  | ArtifactUpdated
   | SessionStatusUpdated
   | SessionIdle
   | TuiPromptAppend
@@ -3099,6 +3216,14 @@ export type PtyNotFoundError = { readonly _tag: "PtyNotFoundError"; readonly pty
 export const isPtyNotFoundError = (value: unknown): value is PtyNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PtyNotFoundError"
 
+export type PtyFeatureUnsupportedError = {
+  readonly _tag: "PtyFeatureUnsupportedError"
+  readonly feature: string
+  readonly message: string
+}
+export const isPtyFeatureUnsupportedError = (value: unknown): value is PtyFeatureUnsupportedError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PtyFeatureUnsupportedError"
+
 export type ScheduleNotFoundError = {
   readonly _tag: "ScheduleNotFoundError"
   readonly scheduleID: string
@@ -3106,6 +3231,14 @@ export type ScheduleNotFoundError = {
 }
 export const isScheduleNotFoundError = (value: unknown): value is ScheduleNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ScheduleNotFoundError"
+
+export type ArtifactNotFoundError = {
+  readonly _tag: "ArtifactNotFoundError"
+  readonly artifactID: string
+  readonly message: string
+}
+export const isArtifactNotFoundError = (value: unknown): value is ArtifactNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ArtifactNotFoundError"
 
 export type ShellNotFoundError = { readonly _tag: "ShellNotFoundError"; readonly id: string; readonly message: string }
 export const isShellNotFoundError = (value: unknown): value is ShellNotFoundError =>
@@ -3259,6 +3392,7 @@ export type SessionPromptInput = {
   readonly files?:
     | ReadonlyArray<{
         readonly uri: string
+        readonly source?: { readonly type: "inline" } | { readonly type: "uri"; readonly uri: string }
         readonly name?: string
         readonly description?: string
         readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
@@ -3290,6 +3424,7 @@ export type SessionCommandInput = {
   readonly files?:
     | ReadonlyArray<{
         readonly uri: string
+        readonly source?: { readonly type: "inline" } | { readonly type: "uri"; readonly uri: string }
         readonly name?: string
         readonly description?: string
         readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
@@ -3978,6 +4113,7 @@ export type ExperimentalMcpAddInput = {
         readonly codemode?: boolean
         readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
         readonly protocol?: "legacy" | "auto" | "2026-07-28"
+        readonly pool?: boolean
       }
     | {
         readonly type: "remote"
@@ -3997,6 +4133,7 @@ export type ExperimentalMcpAddInput = {
         readonly codemode?: boolean
         readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
         readonly protocol?: "legacy" | "auto" | "2026-07-28"
+        readonly pool?: boolean
       }
 }
 
@@ -4274,6 +4411,7 @@ export type EventSubscribeInput = {
         | "pty.deleted"
         | "persistent-pty.added"
         | "persistent-pty.removed"
+        | "persistent-pty.updated"
         | "shell.created"
         | "shell.exited"
         | "shell.deleted"
@@ -4281,6 +4419,7 @@ export type EventSubscribeInput = {
         | "form.replied"
         | "form.cancelled"
         | "websearch.updated"
+        | "artifact.updated"
         | "session.status"
         | "session.idle"
         | "tui.prompt.append"
@@ -4376,7 +4515,8 @@ export type ExperimentalPersistentPtyGetOutput = { data: PersistentPtyInfo }["da
 export type ExperimentalPersistentPtyUpdateInput = {
   readonly ptyID: string
   readonly attachmentID?: string | undefined
-  readonly size: { readonly cols: number; readonly rows: number }
+  readonly size?: { readonly cols: number; readonly rows: number } | undefined
+  readonly title?: string | null | undefined
 }
 
 export type ExperimentalPersistentPtyUpdateOutput = { data: PersistentPtyInfo }["data"]
@@ -4403,11 +4543,74 @@ export type ExperimentalMediaGetOutput = globalThis.Uint8Array
 export type ExperimentalScheduleCreateInput = {
   readonly sessionID: string
   readonly name?: string | undefined
-  readonly when:
-    | { readonly in: string; readonly at?: never; readonly every?: never; readonly cron?: never; readonly tz?: string }
-    | { readonly at: string; readonly in?: never; readonly every?: never; readonly cron?: never; readonly tz?: string }
-    | { readonly every: string; readonly in?: never; readonly at?: never; readonly cron?: never; readonly tz?: string }
-    | { readonly cron: string; readonly in?: never; readonly at?: never; readonly every?: never; readonly tz?: string }
+  readonly when?:
+    | (
+        | {
+            readonly in: string
+            readonly at?: never
+            readonly every?: never
+            readonly cron?: never
+            readonly tz?: string
+          }
+        | {
+            readonly at: string
+            readonly in?: never
+            readonly every?: never
+            readonly cron?: never
+            readonly tz?: string
+          }
+        | {
+            readonly every: string
+            readonly in?: never
+            readonly at?: never
+            readonly cron?: never
+            readonly tz?: string
+          }
+        | {
+            readonly cron: string
+            readonly in?: never
+            readonly at?: never
+            readonly every?: never
+            readonly tz?: string
+          }
+      )
+    | undefined
+  readonly if?:
+    | (
+        | {
+            readonly run: string
+            readonly is?: string
+            readonly matches?: string
+            readonly changes?: boolean
+            readonly code?: never
+          }
+        | {
+            readonly code: string
+            readonly run?: never
+            readonly is?: never
+            readonly matches?: never
+            readonly changes?: never
+          }
+      )
+    | undefined
+  readonly until?:
+    | (
+        | {
+            readonly run: string
+            readonly is?: string
+            readonly matches?: string
+            readonly changes?: boolean
+            readonly code?: never
+          }
+        | {
+            readonly code: string
+            readonly run?: never
+            readonly is?: never
+            readonly matches?: never
+            readonly changes?: never
+          }
+      )
+    | undefined
   readonly ends?: { readonly after?: string; readonly at?: string; readonly times?: number } | undefined
   readonly prompt: string
 }
@@ -4433,6 +4636,73 @@ export type ExperimentalScheduleResumeOutput = { data: ScheduleInfo }["data"]
 export type ExperimentalScheduleDeleteInput = { readonly scheduleID: string }
 
 export type ExperimentalScheduleDeleteOutput = void
+
+export type ExperimentalArtifactsProvidersInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+
+export type ExperimentalArtifactsProvidersOutput = { location: LocationPublicRef; data: Array<ArtifactProvider> }
+
+export type ExperimentalArtifactsListInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly sessionID?: string | undefined
+  readonly provider?: string | undefined
+}
+
+export type ExperimentalArtifactsListOutput = { location: LocationPublicRef; data: Array<ArtifactInfo> }
+
+export type ExperimentalArtifactsCreateInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly title: string
+  readonly files: { readonly [x: string]: string }
+  readonly entry?: string | undefined
+  readonly provider?: string | undefined
+  readonly sessionID?: string | undefined
+}
+
+export type ExperimentalArtifactsCreateOutput = { location: LocationPublicRef; data: ArtifactInfo }
+
+export type ExperimentalArtifactsGetInput = {
+  readonly artifactID: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+
+export type ExperimentalArtifactsGetOutput = { location: LocationPublicRef; data: ArtifactContent }
+
+export type ExperimentalArtifactsUpdateInput = {
+  readonly artifactID: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly title?: string | undefined
+  readonly files: { readonly [x: string]: string }
+  readonly entry?: string | undefined
+  readonly sessionID?: string | undefined
+}
+
+export type ExperimentalArtifactsUpdateOutput = { location: LocationPublicRef; data: ArtifactInfo }
+
+export type ExperimentalArtifactsDeleteInput = {
+  readonly artifactID: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+
+export type ExperimentalArtifactsDeleteOutput = void
+
+export type ExperimentalArtifactsViewInput = {
+  readonly artifactID: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly path: string
+}
+
+export type ExperimentalArtifactsViewOutput = globalThis.Uint8Array
+
+export type ExperimentalJobListInput = {
+  readonly sessionID?: string | undefined
+  readonly kind?: ("shell" | "subagent" | "image") | undefined
+  readonly status?: ("running" | "completed" | "error" | "cancelled") | undefined
+  readonly descendants?: boolean | undefined
+}
+
+export type ExperimentalJobListOutput = { data: Array<JobInfo> }["data"]
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 

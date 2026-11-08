@@ -759,6 +759,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "データを移行中 {{current}}/{{total}}",
   "home.workspaceTip": "変更を隔離するために、新しいワークスペースで次のセッションを開始",
   "session.tab.add": "タブを追加",
+  "session.tab.closeOthers": "他のタブを閉じる",
   "session.queue.attachments.one": "添付ファイル {{count}} 件追加",
   "session.queue.attachments.other": "添付ファイル {{count}} 件追加",
   "settings.backToSettings": "設定に戻る",

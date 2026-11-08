@@ -753,6 +753,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "Đang di chuyển dữ liệu {{current}}/{{total}}",
   "home.workspaceTip": "Bắt đầu phiên tiếp theo trong một không gian làm việc mới để giữ các thay đổi riêng biệt",
   "session.tab.add": "Thêm tab",
+  "session.tab.closeOthers": "Đóng các tab khác",
   "session.queue.attachments.one": "Thêm {{count}} tệp đính kèm",
   "session.queue.attachments.other": "Thêm {{count}} tệp đính kèm",
   "settings.backToSettings": "Quay lại cài đặt",

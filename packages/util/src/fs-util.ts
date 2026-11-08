@@ -1,6 +1,5 @@
 import path, { dirname, isAbsolute, join, relative, sep } from "path"
 import { realpathSync } from "fs"
-import { readdir } from "fs/promises"
 import { lookup } from "mime-types"
 import { Context, Effect, FileSystem, Layer, Schema } from "effect"
 import type { PlatformError } from "effect/PlatformError"
@@ -22,11 +21,6 @@ export namespace FSUtil {
 
   export type Error = PlatformError | FileSystemError
 
-  export interface DirEntry {
-    readonly name: string
-    readonly type: "file" | "directory" | "symlink" | "other"
-  }
-
   export interface UpOptions {
     readonly targets: string[]
     readonly start: string
@@ -45,7 +39,6 @@ export namespace FSUtil {
     readonly writeJson: (path: string, data: unknown, mode?: number) => Effect.Effect<void, Error>
     readonly ensureDir: (path: string) => Effect.Effect<void, Error>
     readonly writeWithDirs: (path: string, content: string | Uint8Array, mode?: number) => Effect.Effect<void, Error>
-    readonly readDirectoryEntries: (path: string) => Effect.Effect<DirEntry[], Error>
     readonly resolve: (path: string) => Effect.Effect<string>
     readonly findUp: (target: string, start: string, stop?: string) => Effect.Effect<string[], Error>
     readonly up: (options: UpOptions) => Effect.Effect<string[], Error>
@@ -57,7 +50,7 @@ export namespace FSUtil {
   export class Service extends Context.Service<Service, Interface>()("@opencode/FSUtil") {}
 
   // Exported so simulation can wrap this layer and override the methods that
-  // bypass the injected FileSystem (readDirectoryEntries, scan, globUp).
+  // bypass the injected FileSystem (scan, globUp).
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -85,25 +78,13 @@ export namespace FSUtil {
         return info?.type === "File"
       })
 
-      const readDirectoryEntries = Effect.fn("FileSystem.readDirectoryEntries")(function* (dirPath: string) {
-        return yield* Effect.tryPromise({
-          try: async () => {
-            const entries = await readdir(dirPath, { withFileTypes: true })
-            return entries.map(
-              (e): DirEntry => ({
-                name: e.name,
-                type: e.isDirectory() ? "directory" : e.isSymbolicLink() ? "symlink" : e.isFile() ? "file" : "other",
-              }),
-            )
-          },
-          catch: (cause) => new FileSystemError({ method: "readDirectoryEntries", cause }),
-        })
-      })
-
-      const resolve = Effect.fn("FileSystem.resolve")(function* (input: string) {
+      const resolve = Effect.fnUntraced(function* (input: string) {
         const resolved = path.resolve(windowsPath(input))
         // Sandboxes deny reads outside granted paths; canonicalize what we can see.
         return yield* fs.realPath(resolved).pipe(
+          Effect.map((real) =>
+            process.platform === "win32" && real.toLowerCase() === resolved.toLowerCase() ? resolved : real,
+          ),
           Effect.catchIf(
             (error) => error.reason._tag === "NotFound" || isAccessDenied(error),
             () => Effect.succeed(resolved),
@@ -215,7 +196,6 @@ export namespace FSUtil {
         readFileStringSafe,
         isDir,
         isFile,
-        readDirectoryEntries,
         resolve,
         readJson,
         writeJson,

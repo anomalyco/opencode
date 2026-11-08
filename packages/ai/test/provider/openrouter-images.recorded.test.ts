@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image, Media } from "../../src/effect.js"
+import { ai, Media } from "../../src/effect.js"
 import { OpenRouter } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
@@ -21,7 +21,7 @@ describe("OpenRouter Images recorded", () => {
     "renders Gemini at the requested 2K tier",
     () =>
       Effect.gen(function* () {
-        const response = yield* Image.generate({
+        const response = yield* ai.image.generate({
           model: openrouter.image("google/gemini-3.1-flash-image"),
           prompt: "A simple flat black circle centered on a plain white background.",
           aspect: "16:9",
@@ -37,7 +37,7 @@ describe("OpenRouter Images recorded", () => {
     "renders FLUX 3 from an aspect ratio and tier",
     () =>
       Effect.gen(function* () {
-        const response = yield* Image.generate({
+        const response = yield* ai.image.generate({
           model: openrouter.image("black-forest-labs/flux-3-image-klein"),
           prompt: "A simple flat black circle centered on a plain white background.",
           aspect: "16:9",
@@ -54,7 +54,7 @@ describe("OpenRouter Images recorded", () => {
     "edits an image through input references",
     () =>
       Effect.gen(function* () {
-        const response = yield* Image.generate({
+        const response = yield* ai.image.generate({
           model: openrouter.image("openai/gpt-image-1-mini"),
           prompt: "Keep the simple shape and change it from black to bright green.",
           images: [

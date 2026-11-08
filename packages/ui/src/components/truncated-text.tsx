@@ -17,7 +17,8 @@ export function TruncatedText(props: { text: string; class?: string }) {
     <Tooltip
       value={<span dir="auto">{props.text}</span>}
       disabled={!store.truncated}
-      triggerTabIndex={store.truncated ? 0 : -1}
+      // Focusable only while there is more to reveal; a -1 would still let a click focus the name.
+      triggerTabIndex={store.truncated ? 0 : undefined}
       class={`truncated-text ${props.class ?? ""}`}
       contentClass="truncated-text-tooltip"
     >

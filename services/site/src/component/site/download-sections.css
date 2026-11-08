@@ -1,0 +1,199 @@
+/* The download lists (download-sections.tsx). */
+/* The sections stay part of the page's flow, as if they were its own children. */
+[data-component="download-sections"] {
+  display: contents;
+}
+
+/* The lists' rows, on /product and in each product page's Download section. */
+:is([data-component="download-sections"], [data-slot="product-download"]) {
+  /* The intro's button for this computer's build, at its own width. */
+  [data-slot="download-os"] {
+    align-self: flex-start;
+  }
+
+  /* One row per build or integration: icon, name, and the action on the right. */
+  [data-component="download-list"] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-width: 40rem;
+
+    li {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      /* Anchored rows (/desktop#windows) land clear of the top of the window. */
+      scroll-margin-top: 6rem;
+    }
+
+    [data-slot="platform-icon"] {
+      flex-shrink: 0;
+      color: var(--text-strong);
+    }
+
+    /* Names are body copy in Inter; only terminal commands use the mono face. */
+    [data-slot="name"] {
+      flex: 1;
+      min-width: 0;
+      font-family: var(--font-sans);
+      font-size: var(--body-size);
+    }
+
+    [data-slot="detail"] {
+      margin-inline-start: 0.5rem;
+      color: var(--text-weak);
+    }
+
+    [data-component="site-button"] {
+      flex-shrink: 0;
+      width: var(--action-width, auto);
+      min-width: 6.5rem;
+      justify-content: center;
+    }
+  }
+
+  /* Pull the first row up so its cap height lines up with the section label beside it: the
+     row centers its text in the 36px button height, and the label is trimmed to its cap height. */
+  [data-slot="body"] > [data-component="download-list"]:first-child {
+    margin-top: -0.79rem;
+  }
+
+  /* Copyable commands share the row layout and size; the method and command are set in mono. */
+  [data-slot="copy-row"] {
+    [data-slot="method"] {
+      flex-shrink: 0;
+      width: 3.5rem;
+      font-family: var(--font-mono);
+      font-size: var(--body-size);
+      color: var(--text-weak);
+    }
+
+    /* The site's one command size and colour (the home install row and the Terminal install menu). */
+    [data-slot="name"] {
+      font-family: var(--font-mono);
+      font-size: var(--fs-meta);
+      color: var(--text-strong);
+      overflow-wrap: anywhere;
+    }
+  }
+
+  @media (max-width: 40rem) {
+    [data-slot="copy-row"] [data-slot="method"] {
+      display: none;
+    }
+  }
+
+  /* Phones: the command at the build labels' size on one line, ending in an ellipsis when it runs
+     out of room (Copy still copies all of it, and the title shows it). */
+  @media (max-width: 39.9375rem) {
+    [data-slot="copy-row"] [data-slot="name"] {
+      font-size: var(--body-size);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      overflow-wrap: normal;
+    }
+  }
+}
+
+/* A product page's Download section: its lead, list and docs link stacked with the block's gap; the
+   visitor's own desktop builds lead the list. */
+[data-slot="product-download"] {
+  [data-slot="body"] > [data-component="download-list"]:first-child {
+    margin-top: 0;
+  }
+
+  /* Three of the page's four columns, so the buttons end on the changelog media's right edge below. */
+  [data-component="download-list"] {
+    max-width: calc((100% - 3 * var(--gutter)) / 4 * 3 + 2 * var(--gutter));
+
+    @media (max-width: 60rem) {
+      max-width: none;
+    }
+  }
+
+  [data-slot="more"] {
+    align-self: flex-start;
+  }
+}
+
+/* Dot leaders on the product and extension pages' download rows: on hover or keyboard focus a row
+   of 2px dots on the label's baseline connects the label to its button. The dots appear one after
+   another from the label outward: a mask with a soft 48px edge (about eight dots) sweeps across
+   the row in 320ms, linear, so the front travels at an even pace and each dot fades up as the edge
+   passes it. A second, static mask tapers the last third of the line to nothing before the button.
+   A keyframe animation, so entering again always starts the sweep from the label. On leave all the
+   dots fade together in 120ms. Fine pointers only: touch screens show nothing extra. */
+@media (hover: hover) and (pointer: fine) {
+  [data-slot="product-download"] [data-component="download-list"] li [data-slot="name"] {
+    display: flex;
+    align-items: baseline;
+
+    &::after {
+      content: "";
+      flex: 1;
+      min-width: 1.5rem;
+      height: 2px;
+      margin-inline-start: 0.5rem;
+      background: radial-gradient(circle, currentColor 0.75px, transparent 1.1px) 0 100% / 6px 2px repeat-x;
+      color: var(--text-faint);
+      /* The sweep: twice the row's width, the left half showing the dots and the right half hiding
+         them, with the soft edge between; sliding it from right to left uncovers the dots from the
+         label outward. The taper: full over the first two thirds, then fading out toward the button.
+         Only what both show is drawn. */
+      mask-image:
+        linear-gradient(to right, #000 calc(50% - 24px), transparent calc(50% + 24px)),
+        linear-gradient(to right, #000 67%, transparent);
+      mask-size:
+        200% 100%,
+        100% 100%;
+      mask-repeat: no-repeat;
+      mask-position:
+        0 0,
+        0 0;
+      mask-composite: intersect;
+      opacity: 0;
+      transition: opacity 120ms ease;
+    }
+
+    /* Right to left: the same sweep, mirrored (the dots are symmetric). */
+    &:dir(rtl)::after {
+      transform: scaleX(-1);
+    }
+  }
+
+  [data-slot="product-download"]
+    [data-component="download-list"]
+    li:is(:hover, :focus-within)
+    [data-slot="name"]::after {
+    opacity: 1;
+    transition: opacity 80ms ease-out;
+    animation: dot-leader-sweep 320ms linear both;
+  }
+
+  /* Reduced motion: an instant fade, no sweep. */
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="product-download"] [data-component="download-list"] li [data-slot="name"]::after,
+    [data-slot="product-download"]
+      [data-component="download-list"]
+      li:is(:hover, :focus-within)
+      [data-slot="name"]::after {
+      animation: none;
+      transition: none;
+    }
+  }
+}
+
+@keyframes dot-leader-sweep {
+  from {
+    mask-position:
+      100% 0,
+      0 0;
+  }
+
+  to {
+    mask-position:
+      0 0,
+      0 0;
+  }
+}

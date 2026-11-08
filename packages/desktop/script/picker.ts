@@ -9,6 +9,7 @@ const attribute = "data-opencode-picker-source"
 export function pickerPlugin() {
   const plugin = picker()
   const client = "/__vite_opencode_picker_client.js"
+
   let workspaceRoot = ""
 
   return {
