@@ -464,6 +464,7 @@ export const content = {
     },
     about: {
       title: "OpenCode 소개",
+      body: "OpenCode와 각 제품의 소개 글입니다. 긴 버전과 짧은 버전이 있으며 바로 복사해 쓸 수 있습니다.",
       boilerplate: {
         long: "OpenCode는 오픈 소스 코딩 에이전트입니다. 데스크톱 앱, 터미널 UI, 모바일 앱, SDK로 제공되며, Claude, GPT, Gemini를 비롯해 모든 제공자의 모델과 함께 작동합니다. OpenCode는 MIT 라이선스이며 Anomaly가 만듭니다. GitHub 스타 220,000개 이상, 기여자 1,000명 이상을 보유하고 있으며, 매달 2,200만 명 이상의 개발자가 사용합니다.",
         short: "OpenCode는 Anomaly가 만든 오픈 소스 코딩 에이전트로, 데스크톱, 터미널, 모바일 앱과 SDK를 제공합니다.",

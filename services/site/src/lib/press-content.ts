@@ -62,6 +62,7 @@ export function pressContent(t: Translate, route: (path: string) => string) {
     },
     about: {
       title: "About OpenCode",
+      body: "Descriptions of OpenCode and its products in long and short versions, ready to copy.",
       // Both versions name the products in the site's order (products in product-data.ts): desktop,
       // terminal, mobile, SDK.
       boilerplate: {
@@ -337,6 +338,7 @@ export function pressMarkdown(context: MarkdownContext) {
     `# ${content.hero.title}`,
     content.hero.body,
     `## ${content.about.title}`,
+    content.about.body,
     ...[{ name: "OpenCode", ...content.about.boilerplate }, ...content.about.products].flatMap((product) => [
       `### ${product.name}`,
       "#### Long version",

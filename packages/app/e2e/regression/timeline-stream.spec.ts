@@ -3263,6 +3263,8 @@ test("opens an optional comment beside the quote action and skips it with Alt-cl
   await page.keyboard.press("Enter")
   await expect(comment).toHaveCount(0)
   await expect(chips.nth(0)).toContainText("Why first?")
+  // The editor takes focus back a frame after the comment closes, and its caret would replace the next selection.
+  await expect(editor).toBeFocused()
 
   await select("The second sentence to quote.")
   await toolbar.getByRole("button", { name: "Quote", exact: true }).click()

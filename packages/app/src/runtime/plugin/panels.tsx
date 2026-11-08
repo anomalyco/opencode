@@ -459,8 +459,11 @@ export function createRegion(input: {
       if (entry) entry.provider.enter?.(panelInput(input.view, input.screen, { tab: entry.tab }))
       settled(() => {
         const root = document.getElementById("review-panel")
+        const current = document.activeElement
 
-        if (root && !root.contains(document.activeElement)) root.focus({ preventScroll: true, focusVisible: false })
+        // Focus the reader moved during the motion, such as into a menu they opened, stays where they put it.
+        if (!root || root.contains(current) || (current !== focused && current !== document.body)) return
+        root.focus({ preventScroll: true, focusVisible: false })
       })
     },
     close(key: string) {

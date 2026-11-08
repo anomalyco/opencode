@@ -460,12 +460,12 @@ describe("DatabaseMigration", () => {
       "https://example.com/": { type: "wellknown", key: "TOKEN", token: "wellknown-key" },
       invalid: { type: "unknown" },
     })
-    await Bun.write(source, content)
 
     await run(
       Effect.gen(function* () {
         const db = yield* makeDb
         yield* DatabaseMigration.apply(db)
+        yield* Effect.promise(() => Bun.write(source, content))
         const now = Date.now()
         yield* db.run(sql`
           INSERT INTO credential (id, integration_id, label, value, time_created, time_updated)
@@ -531,6 +531,41 @@ describe("DatabaseMigration", () => {
     )
 
     expect(await Bun.file(source).text()).toBe(content)
+  })
+
+  test("imports legacy credentials when bootstrapping a fresh database", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(
+      path.join(tmp.path, "auth.json"),
+      JSON.stringify({ openai: { type: "oauth", refresh: "refresh", access: "access", expires: 123 } }),
+    )
+
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.apply(db)
+
+        expect(yield* db.all(sql`SELECT integration_id, label FROM credential`)).toEqual([
+          { integration_id: "openai", label: "OAuth" },
+        ])
+      }),
+      Global.make({ data: tmp.path }),
+    )
+  })
+
+  test("bootstraps a fresh database when the legacy credential file is malformed", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "auth.json"), "not json")
+
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.apply(db)
+
+        expect(yield* db.all(sql`SELECT id FROM credential`)).toEqual([])
+      }),
+      Global.make({ data: tmp.path }),
+    )
   })
 
   test("skips legacy credential import when the source file is absent", async () => {

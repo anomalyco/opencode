@@ -169,7 +169,8 @@ story(
     await page.mouse.move(0, 0)
 
     // Kobalte drops the expanded state a task before it returns focus to the trigger, so record every frame from the
-    // click until well after the menu has gone rather than the settled state.
+    // click until well after the menu has gone rather than the settled state. The first sample is taken now: the click
+    // can land and close the menu before the next frame.
     const frames = await message.evaluateHandle((element) => {
       const slots = ["user-message-copy-wrapper", "user-message-menu"]
       const samples = slots.map((): number[] => [])
@@ -189,7 +190,7 @@ story(
           resolve(samples)
         }
 
-        requestAnimationFrame(tick)
+        tick()
       })
 
       return { done }

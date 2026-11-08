@@ -501,6 +501,7 @@ export const content = {
     },
     about: {
       title: "Om OpenCode",
+      body: "Beskrivelser av OpenCode og produktene i lang og kort versjon, klare til å kopieres.",
       boilerplate: {
         long: "OpenCode er en kodeagent med åpen kildekode. Den finnes som skrivebordsapp, terminal-UI, mobilapp og SDK, og fungerer med modeller fra alle leverandører, blant annet Claude, GPT og Gemini. OpenCode er MIT-lisensiert og laget av Anomaly. Den har over 220 000 GitHub-stjerner og mer enn 1 000 bidragsytere, og over 22 millioner utviklere bruker den hver måned.",
         short:
