@@ -80,8 +80,10 @@ fn usage_errors_match_the_typescript_cli() {
         let Outcome::Usage { path, errors } = parse::parse(&args, PROGRAM) else {
             panic!("{args:?} is not a usage error");
         };
-        let stdout = format!("{}\n", help::render(&path, PROGRAM, true));
-        let stderr = help::error_output(&errors, true, true);
+        // The recorded run had no terminal, so its environment alone decides the colors.
+        let env = |name: &str| record["env"][name].as_str().map(String::from);
+        let stdout = format!("{}\n", help::render(&path, PROGRAM, help::can_color(env, false)));
+        let stderr = help::error_output(&errors, help::can_color(env, false), help::bun_colors(env, false));
         assert!(
             stdout == record["stdout"],
             "{args:?} stdout:\n{}",
