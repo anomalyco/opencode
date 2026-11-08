@@ -77,12 +77,21 @@ impl<H: Host> Mount<H> {
             return;
         }
         self.root.clear();
+        // TS's `<Slot>` is a fragment, so the node's own layout places it in the slot's parent: the root takes it, and
+        // the node fills the root, which stretches it across.
+        self.root.width(Length::Auto).grow(0.0).shrink(0.0).min_width(Length::Undefined);
         let mut slots = Vec::new();
         let mut hovers = Vec::new();
         if let Some(node) = &node {
+            let mut inner = node.clone();
+            if let abi::Node::Box { layout, .. } | abi::Node::Text { layout, .. } = &mut inner {
+                lay_out(&self.root, layout);
+                layout.width = None;
+                layout.grow = false;
+            }
             let owner = self.owner.clone();
             let act: Act = Rc::new(move |action| act(&owner, action));
-            add(host.app(), &host.theme(), &self.root, node, &act, &mut hovers, &mut |parent, path| {
+            add(host.app(), &host.theme(), &self.root, &inner, &act, &mut hovers, &mut |parent, path| {
                 if !nests(&self.path, path) {
                     log::warn!("a claim in slot {} cannot show slot {path}: it is not a slot inside it", self.path);
                     return;
