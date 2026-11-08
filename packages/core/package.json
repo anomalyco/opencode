@@ -105,7 +105,7 @@
     "@modelcontextprotocol/client": "2.3.1",
     "@modelcontextprotocol/core": "2.3.1",
     "@modelcontextprotocol/server": "2.3.1",
-    "@Mackery6969/pty": "0.4.0",
+    "@Mackery6969/pty": "file:../process-daemon/npm",
     "@Mackery6969/ai": "workspace:*",
     "@Mackery6969/codemode": "workspace:*",
     "@Mackery6969/plugin": "workspace:*",

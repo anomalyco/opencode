@@ -32,7 +32,7 @@
     "@effect/platform-node": "catalog:",
     "@Mackery6969/client": "workspace:*",
     "@Mackery6969/plugin": "workspace:*",
-    "@Mackery6969/pty": "0.4.0",
+    "@Mackery6969/pty": "file:../process-daemon/npm",
     "@Mackery6969/schema": "workspace:*",
     "@Mackery6969/server": "workspace:*",
     "@Mackery6969/tui": "workspace:*",
