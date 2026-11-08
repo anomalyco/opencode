@@ -13,6 +13,10 @@ crate-type = ["cdylib"]
 [features]
 # Draws "v2" instead of "v1", for the reload tests.
 v2 = []
+# A build whose setup fails, for the reload tests.
+setup-fails = []
+# Starts no ticker, so the slot changes only when the host draws it again for a change batch.
+still = []
 # Builds that pretend to target another ABI version, for the version tests.
 abi-1-0 = []
 minor-newer = []
