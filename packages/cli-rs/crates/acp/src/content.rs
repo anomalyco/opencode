@@ -64,7 +64,7 @@ fn content_block_to_parts(block: &Value) -> Vec<PromptPart> {
             let field = |key: &str| resource.get(key).and_then(Value::as_str);
             let uri = field("uri").unwrap_or_default();
             if let Some(body) = field("text") {
-                let parsed = url::Url::parse(uri).ok();
+                let parsed = opencode_api::js::parse_url(uri).ok();
                 let decoded = parsed.as_ref().filter(|parsed| parsed.scheme() == "file").and_then(|parsed| {
                     parsed.to_file_path().ok().map(|path| path.to_string_lossy().into_owned()).or_else(|| {
                         percent_encoding::percent_decode_str(parsed.path())
@@ -180,7 +180,7 @@ fn resource_link_to_part(uri: &str, name: Option<&str>, mime: Option<&str>) -> P
         };
     }
     if uri.starts_with("zed://")
-        && let Ok(parsed) = url::Url::parse(uri)
+        && let Ok(parsed) = opencode_api::js::parse_url(uri)
         && let Some(pathname) = query_param(&parsed, "path").filter(|path| !path.is_empty())
     {
         let base = js_basename(&pathname);
@@ -210,7 +210,7 @@ fn query_param(url: &url::Url, name: &str) -> Option<String> {
 
 fn filename_from_uri(uri: Option<&str>) -> Option<String> {
     let uri = uri.filter(|uri| !uri.is_empty() && !uri.starts_with("data:"))?;
-    let base = match url::Url::parse(uri) {
+    let base = match opencode_api::js::parse_url(uri) {
         Ok(url) => {
             let zed =
                 (url.scheme() == "zed").then(|| query_param(&url, "path")).flatten().filter(|path| !path.is_empty());
@@ -240,6 +240,45 @@ mod tests {
 
     fn text(text: &str) -> PromptPart {
         PromptPart::text(text)
+    }
+
+    #[test]
+    fn non_ascii_hosts_from_the_client_do_not_panic() {
+        for uri in ["https://Bücher.example", "file://Bücher.example/a.txt"] {
+            assert_eq!(
+                opencode_api::js::parse_url(uri).unwrap_err().to_string(),
+                format!("{uri}: {}", opencode_api::js::ASCII_HOST)
+            );
+        }
+        let rows = [
+            (
+                json!({ "type": "resource_link", "uri": "https://Bücher.example", "name": "" }),
+                vec![text("https://Bücher.example")],
+            ),
+            (
+                json!({ "type": "resource", "resource": { "uri": "https://Bücher.example", "text": "body" } }),
+                vec![text("[https://Bücher.example]\nbody")],
+            ),
+            (
+                json!({ "type": "resource_link", "uri": "file://Bücher.example/a.txt" }),
+                vec![PromptPart::File {
+                    url: "file://Bücher.example/a.txt".to_owned(),
+                    filename: Some("a.txt".to_owned()),
+                    mime: "text/plain".to_owned(),
+                }],
+            ),
+            (
+                json!({ "type": "resource", "resource": { "uri": "https://Bücher.example/a.bin", "mimeType": "application/octet-stream", "blob": "AAE=" } }),
+                vec![PromptPart::File {
+                    url: "data:application/octet-stream;base64,AAE=".to_owned(),
+                    filename: Some("a.bin".to_owned()),
+                    mime: "application/octet-stream".to_owned(),
+                }],
+            ),
+        ];
+        for (block, expected) in rows {
+            assert_eq!(prompt_content_to_parts(std::slice::from_ref(&block)), expected, "{block}");
+        }
     }
 
     #[test]

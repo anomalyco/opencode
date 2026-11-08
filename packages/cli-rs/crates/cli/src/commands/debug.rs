@@ -75,7 +75,7 @@ fn redact_entry(key: &str, item: &Value, headers: bool) -> Value {
         }
         let lower = text.get(..8).unwrap_or(text).to_ascii_lowercase();
         if lower.starts_with("http://") || lower.starts_with("https://") {
-            let Ok(url) = url::Url::parse(text) else {
+            let Ok(url) = opencode_api::js::parse_url(text) else {
                 return hidden();
             };
             if !url.username().is_empty()

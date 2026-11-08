@@ -398,7 +398,7 @@ mod tests {
     fn the_socket_url_matches_the_typescript_client() {
         let input =
             ConnectInput { pty_id: PtyID("pty_1/x".into()), cursor: 128, attachment_id: "att".into(), takeover: true };
-        let base = Url::parse("https://host/prefix").unwrap();
+        let base = crate::js::parse_url("https://host/prefix").unwrap();
         assert_eq!(
             url(&base, &input, "tk").unwrap().as_str(),
             "wss://host/prefix/api/experimental/persistent-pty/pty_1%2Fx/connect?ticket=tk&cursor=128&attachment_id=att&takeover=true&input_protocol=1"
@@ -459,7 +459,7 @@ mod tests {
             socket.close(None).await.unwrap();
             received
         });
-        let url = Url::parse(&format!("ws://{address}/connect")).unwrap();
+        let url = crate::js::parse_url(&format!("ws://{address}/connect")).unwrap();
         let mut socket = Tungstenite.open(url).await.unwrap();
         assert_eq!(socket.incoming.recv().await, Some(Incoming::Text(r#"{"type":"replay_complete"}"#.into())));
         assert_eq!(socket.incoming.recv().await, Some(Incoming::Binary(vec![104, 105])));

@@ -215,7 +215,7 @@ mod tests {
     use super::*;
 
     fn request(method: &'static str, url: &str) -> Request {
-        Request { method, url: url::Url::parse(url).unwrap(), headers: Vec::new(), body: None }
+        Request { method, url: crate::js::parse_url(url).unwrap(), headers: Vec::new(), body: None }
     }
 
     #[tokio::test]

@@ -92,7 +92,7 @@ async fn reference_unreadable_file(part: PromptPart) -> PromptPart {
     if !url.starts_with("file://") {
         return part;
     }
-    let readable = match url::Url::parse(url).ok().and_then(|url| url.to_file_path().ok()) {
+    let readable = match opencode_api::js::parse_url(url).ok().and_then(|url| url.to_file_path().ok()) {
         Some(path) => tokio::task::spawn_blocking(move || readable(&path)).await.unwrap_or(false),
         None => false,
     };

@@ -138,7 +138,7 @@ fn decode(contents: &str) -> Result<Manifest, String> {
 
 /// A `ws://127.0.0.1:<port>` endpoint's address, as `manifest.ts` `Endpoint` accepts it.
 fn endpoint(value: &str) -> Option<SocketAddr> {
-    let url = url::Url::parse(value).ok()?;
+    let url = opencode_api_types::js::parse_url(value).ok()?;
     let port = url.port().filter(|port| *port >= 1)?;
     (url.scheme() == "ws" && url.host_str() == Some("127.0.0.1")).then(|| SocketAddr::from(([127, 0, 0, 1], port)))
 }

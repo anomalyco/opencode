@@ -73,7 +73,7 @@ fn links(urls: &[String], code: &str, expires_in: i64) -> String {
     // Loopback URLs are useless to the scanning device, so the QR code only carries reachable addresses.
     let remote: Vec<&String> = urls
         .iter()
-        .filter(|url| !url::Url::parse(url).is_ok_and(|url| is_loopback(url.host_str().unwrap_or(""))))
+        .filter(|url| !opencode_api::js::parse_url(url).is_ok_and(|url| is_loopback(url.host_str().unwrap_or(""))))
         .collect();
     let mut lines = vec![
         String::new(),
@@ -104,14 +104,14 @@ fn links(urls: &[String], code: &str, expires_in: i64) -> String {
 
 // `new URL(`/auth/connect/${code}`, url).href`.
 fn connect_link(url: &str, code: &str) -> String {
-    url::Url::parse(url)
-        .and_then(|base| base.join(&format!("/auth/connect/{code}")))
+    opencode_api::js::parse_url(url)
+        .and_then(|base| opencode_api::js::join_url(&base, &format!("/auth/connect/{code}")))
         .map_or_else(|_| format!("{url}/auth/connect/{code}"), String::from)
 }
 
 /// The SSH port-forwarding hint for a service on a loopback address, for stderr.
 fn ssh_hint(endpoint: &str) -> Option<String> {
-    let url = url::Url::parse(endpoint).ok()?;
+    let url = opencode_api::js::parse_url(endpoint).ok()?;
     let host = url.host_str()?;
     if !["localhost", "127.0.0.1", "[::1]"].contains(&host) {
         return None;
@@ -176,9 +176,9 @@ async fn remote_url(local: &Local, client: &Client) -> error::Result<String> {
         let route = local.config().read().ok()?.remote?.route;
         let hostname = delegate::tunnel_hostname(&local.paths, &route).ok()??;
         let info = client.server_info().await.ok()?;
-        info.urls
-            .into_iter()
-            .find(|candidate| url::Url::parse(candidate).is_ok_and(|url| url.host_str() == Some(hostname.as_str())))
+        info.urls.into_iter().find(|candidate| {
+            opencode_api::js::parse_url(candidate).is_ok_and(|url| url.host_str() == Some(hostname.as_str()))
+        })
     };
     let poll = async {
         loop {
@@ -211,6 +211,14 @@ mod tests {
         assert!(links(&[], "abc", 90).contains("expire in 2 minutes.\n\n  (no server URLs)\n"));
         let remote = links(&["https://x.example/base".into()], "abc", 600);
         assert!(remote.contains("  https://x.example/auth/connect/abc\n\n  ████"));
+    }
+
+    #[test]
+    fn server_urls_with_non_ascii_hosts_do_not_panic() {
+        let url = "https://Bücher.example";
+        assert!(matches!(opencode_api::js::parse_url(url), Err(opencode_api::js::UrlError::NonAsciiHost(_))));
+        assert!(links(&[url.into()], "abc", 600).contains("  https://Bücher.example/auth/connect/abc\n\n  ████"));
+        assert_eq!(ssh_hint(url), None);
     }
 
     #[test]

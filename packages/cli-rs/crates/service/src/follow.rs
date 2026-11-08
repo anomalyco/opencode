@@ -30,8 +30,10 @@ pub fn client(
     let Source::Service { .. } = connection.source else {
         return connection.endpoint.client(transport);
     };
-    let origin = url::Url::parse(&connection.endpoint.url)
-        .map_err(|error| ApiError::Transport(format!("{}: {error}", connection.endpoint.url)))?;
+    let origin = opencode_api::js::parse_url(&connection.endpoint.url).map_err(|error| match error {
+        opencode_api::js::UrlError::NonAsciiHost(_) => ApiError::Transport(error.to_string()),
+        error => ApiError::Transport(format!("{}: {error}", connection.endpoint.url)),
+    })?;
     let follow = Follow {
         inner: transport,
         origin: origin.origin(),
@@ -117,7 +119,7 @@ fn point(route: &url::Url, url: &mut url::Url) {
     };
     // The URL has a host, so these cannot fail.
     let _ = url.set_scheme(scheme);
-    let _ = url.set_host(route.host_str());
+    let _ = opencode_api::js::set_host(url, route.host_str());
     let _ = url.set_port(route.port());
 }
 
@@ -147,7 +149,7 @@ impl Follow {
                 return false;
             }
         };
-        let Ok(url) = url::Url::parse(&endpoint.url) else {
+        let Ok(url) = opencode_api::js::parse_url(&endpoint.url) else {
             log::warn!("service.reconnect found an invalid url: {}", endpoint.url);
             return false;
         };
@@ -298,7 +300,8 @@ mod tests {
         assert_eq!(endpoint(), ("http://127.0.0.1:5000/".to_owned(), token("new")));
         // Another origin keeps its own address and credentials.
         let other = Auth::password("other");
-        let (url, auth) = client.transport().endpoint(url::Url::parse("http://example.com/").unwrap(), Some(&other));
+        let (url, auth) =
+            client.transport().endpoint(opencode_api::js::parse_url("http://example.com/").unwrap(), Some(&other));
         assert_eq!(url.as_str(), "http://example.com/");
         assert!(auth == Some(other));
     }
@@ -318,5 +321,39 @@ mod tests {
         assert!(client.server_info().await.is_err());
         // Only the request itself: no discovery ran.
         assert_eq!(server.requests().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_registered_url_with_a_non_ascii_host_is_an_error() {
+        let url = "https://Bücher.example";
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let paths = Paths::from_vars(|name| match name {
+            "HOME" => Some(OsString::from(dir.path())),
+            "XDG_STATE_HOME" => Some(dir.path().join("state").into()),
+            _ => None,
+        })
+        .unwrap();
+        let file = paths.state.join("service-oc-x.json");
+        let server = Arc::new(Server::default());
+        let registration = opencode_local::registration::Registration {
+            id: None,
+            version: None,
+            url: url.to_owned(),
+            pid: 9,
+            password: None,
+        };
+        let probe = crate::probe::probe(server.as_ref(), &registration, std::time::Duration::from_secs(1)).await;
+        assert!(probe.service.is_none() && !probe.timed_out);
+        let connection = Connection {
+            endpoint: Endpoint::new(url, None),
+            version: String::new(),
+            source: Source::Service { channel: "oc-x".to_owned(), file },
+            warning: None,
+        };
+        let Err(ApiError::Transport(message)) = client(server.clone(), &connection, &paths, &Env::default()) else {
+            panic!("a non-ASCII host connected");
+        };
+        assert_eq!(message, format!("{url}: {}", opencode_api::js::ASCII_HOST));
+        assert!(server.requests().is_empty());
     }
 }
