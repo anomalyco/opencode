@@ -49,15 +49,19 @@ the boundary:
 | P.1 (`opencode_plugin::Setup`) | ABI (`opencode_plugin_abi::Setup`) |
 | --- | --- |
 | `layer` (commands, palette, slash, keybinds) | `command(Command, run)`; the host builds the keymap layer |
-| `code_block(language, render)` | `code_block(language, render(&Fence) -> Option<Vec<Line>>)` |
+| `code_block(language, render)` | `code_block(language, render(&dyn Read, &Fence) -> Fenced)` (1.4) |
 | `slot(placement, render)` | `slot(SlotKind, path, render(session_id) -> Vec<Line>)` |
 | `route(name, render)` | `route(name, render() -> Vec<Line>)` |
 | `storage_key(key)` | `storage_key(key)`; `Host::storage_get` and `storage_set` on `plugin.<id>.<key>` |
 | `on_dispose` | the instance is destroyed on deactivation |
 
 A `Line` is a list of spans with text, colors, and bold, italic, underline, and dim. A color is a theme token
-path (`text.muted`, `markdown.heading`) or `#rrggbb`, so plugins follow the theme. The host draws rows without
-wrapping; a fence scrolls sideways like the LaTeX and Mermaid renderers. `Setup::options()` holds the
+path (`text.muted`, `markdown.heading`), a scale step (`categorical.3.300`), `#rrggbb`, or (1.4) an `Rgba`, sent
+as `#rrggbbaa`, so plugins follow the theme; `Read::color(token)` resolves one to an `Rgba`. The host draws rows
+without wrapping. A fence returns `Fenced::{Code, Keep, Lines { lines, fg, drag }}`, with `Fence::key` naming the
+block across renders and `Fence::width` the terminal's columns. `fg` is the default for spans without one.
+`Lines` scrolls sideways on a horizontal wheel, as LaTeX's formulas do; with `drag` it scrolls under a left drag
+and swallows a horizontal wheel, as Mermaid's diagrams do. `Setup::options()` holds the
 `options` of the plugin's `plugins` entry as JSON text. Other languages implement the same structs and JSON.
 
 What does not cross: arbitrary widget trees, mouse handlers, and live store access (`api.state`). A slot or
