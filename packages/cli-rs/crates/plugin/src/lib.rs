@@ -8,11 +8,11 @@ pub mod node;
 pub mod slot;
 
 use std::cell::{Cell, RefCell};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 pub use opencode_plugin_abi as abi;
 use opencode_ui::dialog::{DialogKeymap, FocusId};
-use opencode_ui::keymap::KeymapLayer;
+use opencode_ui::keymap::{Bind, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::markdown::CodeBlockRenderers;
 use opencode_ui::theme::Theme;
 use opentui::keymap::Disposer;
@@ -49,7 +49,8 @@ pub trait Host: 'static {
     fn storage_read(&self, _key: &str) -> Option<String> {
         None
     }
-    /// Stores JSON text (an object or an array) under storage key `key`.
+    /// Stores JSON text (an object or an array) under storage key `key`. [`Host::storage_read`] shows it at once; a
+    /// host that writes it to disk or tells the claims does that after the current plugin callback.
     fn storage_write(&self, _key: &str, _json: &str) -> Result<(), String> {
         Err("no storage".to_owned())
     }
@@ -58,6 +59,9 @@ pub trait Host: 'static {
     fn open_route(&self, _id: &str, _name: &str) {}
     /// Mounts the current route again, so changed slot claims and code-block renderers show.
     fn remount(&self) {}
+    /// Runs the registered command `name` with `input` (a plugin's [`abi::Host::dispatch`], a click's
+    /// [`abi::Action::Command`]). Called outside every plugin callback.
+    fn dispatch(&self, _name: &str, _input: Option<&str>) {}
 
     // What the renders of the one API (O-67) read, on both paths.
 
@@ -141,7 +145,7 @@ impl<H: Host> Definition<H> {
 }
 
 /// A plugin of the one API, run in process: its closures get Rust values, with no JSON step. It may register code
-/// fences and slot claims so far; the rest of its surface moves here with the built-ins that need it.
+/// fences, slot claims and commands so far; the rest of its surface moves here with the built-ins that need it.
 impl<H: Host> From<abi::Plugin> for Definition<H> {
     fn from(plugin: abi::Plugin) -> Self {
         Definition::new(plugin.id, move |setup: &mut Setup<'_, H>| {
@@ -151,26 +155,166 @@ impl<H: Host> From<abi::Plugin> for Definition<H> {
                 return;
             }
             let manifest = api.manifest();
-            if !(manifest.commands.is_empty()
-                && manifest.routes.is_empty()
-                && manifest.slots.iter().all(|claim| claim.render))
-            {
-                log::error!("plugin {}: only code fences and slot renders run in process so far", setup.id());
+            if !(manifest.routes.is_empty() && manifest.slots.iter().all(|claim| claim.render)) {
+                log::error!("plugin {}: routes and 1.3 slot claims do not run in process", setup.id());
             }
+            let scope = Rc::new(Scope {
+                host: Rc::downgrade(setup.host()),
+                prefix: format!("plugin.{}.", setup.id()),
+                keys: manifest.storage.clone(),
+            });
             for (language, render) in api.fences() {
                 let render = node::code_block(Rc::downgrade(setup.host()), render.clone());
                 setup.registration.code_blocks.push((language.clone(), render));
             }
             for (claim, render) in api.renders() {
-                let render = render.clone();
+                let (render, scope) = (render.clone(), scope.clone());
                 let render: node::SlotRender<H> = Rc::new(move |host: &H, input, changed| {
                     let mut out = abi::Render::Keep;
-                    host.read(&mut |read| out = render(read, input, changed));
+                    host.read(&mut |read| out = render(&Scoped { read, host, scope: &scope }, input, changed));
                     out
                 });
                 setup.claim(slot::placement(claim), render);
             }
+            let commands: Vec<TuiCommand> = api
+                .commands()
+                .map(|(command, run)| {
+                    let (run, scope) = (run.clone(), scope.clone());
+                    tui_command(command, move |input| {
+                        let Some(host) = scope.host.upgrade() else { return };
+                        host.read(&mut |read| run(&Scoped { read, host: &*host, scope: &scope }, input));
+                    })
+                })
+                .collect();
+            if !commands.is_empty() {
+                setup.layer(KeymapLayer::global(commands));
+            }
         })
+    }
+}
+
+/// The keymap command of a plugin's `command`, which calls `run` with its input.
+pub(crate) fn tui_command(command: &abi::Command, run: impl Fn(Option<&str>) + 'static) -> TuiCommand {
+    let mut entry = TuiCommand::new(command.name.clone(), move |input, _| run(input))
+        .bind(command.keybind.clone().map_or(Bind::Default, Bind::Key));
+    // The keymap refuses an empty title, which a hidden command may have.
+    if !command.title.trim().is_empty() {
+        entry = entry.title(command.title.clone());
+    }
+    if command.palette {
+        entry = entry.palette();
+    }
+    if let Some(group) = &command.group {
+        entry = entry.group(group.clone());
+    }
+    if let Some(slash) = &command.slash {
+        entry = entry.slash(Slash { name: slash.clone(), aliases: Vec::new(), arguments: false });
+    }
+    entry
+}
+
+/// What an in-process plugin's reads and effects are scoped to: its host and its declared storage keys.
+struct Scope<H: Host> {
+    host: Weak<H>,
+    /// `plugin.<id>.`, which the host's storage keys start with.
+    prefix: String,
+    keys: Vec<String>,
+}
+
+impl<H: Host> Scope<H> {
+    /// The host's storage key of `key`, when the plugin declared it.
+    fn stored(&self, key: &str) -> Option<String> {
+        if self.keys.iter().any(|known| known == key) {
+            return Some(format!("{}{key}", self.prefix));
+        }
+        log::warn!("plugin {}: storage key {key} was not declared", self.prefix);
+        None
+    }
+}
+
+/// The host as an in-process plugin reads and calls it: the host's reads, its storage, and its effects, which wait
+/// for the callback to return.
+struct Scoped<'a, H: Host> {
+    read: &'a dyn abi::Read,
+    host: &'a H,
+    scope: &'a Scope<H>,
+}
+
+impl<H: Host> abi::Read for Scoped<'_, H> {
+    fn theme_mode(&self) -> abi::ThemeMode {
+        self.read.theme_mode()
+    }
+
+    fn color(&self, token: &str) -> Option<abi::Rgba> {
+        self.read.color(token)
+    }
+
+    fn session(&self, id: &str) -> Option<abi::Session> {
+        self.read.session(id)
+    }
+
+    fn family(&self, id: &str) -> abi::Family {
+        self.read.family(id)
+    }
+
+    fn messages(&self, id: &str, visit: &mut dyn FnMut(&[abi::types::SessionMessageInfo])) {
+        self.read.messages(id, visit)
+    }
+
+    fn models(&self, location: Option<&abi::LocationRef>) -> Option<Vec<abi::types::ModelInfo>> {
+        self.read.models(location)
+    }
+
+    fn model(&self) -> Option<abi::types::ModelRef> {
+        self.read.model()
+    }
+
+    fn limits(&self) -> Option<abi::types::UsageLimitsInfo> {
+        self.read.limits()
+    }
+
+    fn providers(&self) -> Option<Vec<abi::types::ProviderInfo>> {
+        self.read.providers()
+    }
+
+    fn storage_get(&self, key: &str) -> Option<serde_json::Value> {
+        let json = self.host.storage_read(&self.scope.stored(key)?)?;
+        serde_json::from_str(&json).ok()
+    }
+
+    fn info(&self) -> abi::Info {
+        self.read.info()
+    }
+
+    fn mcp_servers(&self, location: Option<&abi::LocationRef>) -> Option<Vec<abi::types::McpServer>> {
+        self.read.mcp_servers(location)
+    }
+
+    fn integrations(&self, location: Option<&abi::LocationRef>) -> Option<Vec<abi::types::IntegrationInfo>> {
+        self.read.integrations(location)
+    }
+
+    fn vcs(&self, location: Option<&abi::LocationRef>) -> Option<abi::types::VcsInfo> {
+        self.read.vcs(location)
+    }
+}
+
+impl<H: Host> abi::Host for Scoped<'_, H> {
+    fn storage_set(&self, key: &str, value: serde_json::Value) {
+        let Some(stored) = self.scope.stored(key) else { return };
+        // The host shows it to reads at once and defers the rest.
+        if let Err(error) = self.host.storage_write(&stored, &value.to_string()) {
+            log::warn!("storage {stored}: {error}");
+        }
+    }
+
+    fn dispatch(&self, name: &str, input: Option<&str>) {
+        let (host, name, input) = (self.scope.host.clone(), name.to_owned(), input.map(str::to_owned));
+        self.host.app().defer(move |_| {
+            if let Some(host) = host.upgrade() {
+                host.dispatch(&name, input.as_deref());
+            }
+        });
     }
 }
 
