@@ -148,6 +148,32 @@ test("a language whose chunk fails to load keeps English and says so", async ({ 
   await expect(settings.locator('[data-action="settings-language"]')).toContainText("English")
 })
 
+test("arrow keys preview themes, Escape restores the saved one, and Enter saves", async ({ page }) => {
+  const { settings } = await open(page)
+  await settings.getByRole("tab", { name: "Appearance", exact: true }).click()
+  const trigger = settings.locator('[data-action="settings-theme"]')
+  const listbox = page.getByRole("listbox")
+  const html = page.locator("html")
+  await trigger.click()
+  await expect(listbox.getByRole("option", { name: "OpenCode", selected: true })).toBeFocused()
+
+  await page.keyboard.press("ArrowDown")
+  await expect(listbox.getByRole("option", { name: "Orng", exact: true })).toBeFocused()
+  await expect(html).toHaveAttribute("data-theme", "orng")
+  await page.keyboard.press("Escape")
+  await expect(listbox).toBeHidden()
+  await expect(html).toHaveAttribute("data-theme", "oc-2")
+
+  await trigger.click()
+  await expect(listbox.getByRole("option", { name: "OpenCode", selected: true })).toBeFocused()
+  await page.keyboard.press("ArrowDown")
+  await expect(listbox.getByRole("option", { name: "Orng", exact: true })).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(trigger).toHaveText("Orng")
+  await page.reload()
+  await expect(html).toHaveAttribute("data-theme", "orng")
+})
+
 test("Questions settings default independently of old Permissions settings and survive reload", async ({ page }) => {
   const { settings } = await open(page, {
     seed: {

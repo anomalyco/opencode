@@ -127,6 +127,7 @@ export const SettingsAppearance: Component = () => {
                 gutter={6}
                 value={(option) => option.id}
                 label={(option) => option.name}
+                onHighlight={appearance.theme.preview}
                 onSelect={appearance.theme.select}
               />
             </SettingsRow>

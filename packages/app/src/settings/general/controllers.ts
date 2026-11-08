@@ -166,7 +166,14 @@ export function createAppearanceSettingsController() {
     },
     theme: {
       options: themes,
-      current: createMemo(() => themes().find((option) => option.id === theme.themeId())),
+      current: createMemo(() => themes().find((option) => option.id === theme.committedThemeId())),
+      preview: (option: { id: string } | undefined) => {
+        if (!option) return
+
+        theme.previewTheme(option.id)
+
+        return theme.cancelPreview
+      },
       select: (option: { id: string } | null) => option && theme.setTheme(option.id),
     },
     zoom: {

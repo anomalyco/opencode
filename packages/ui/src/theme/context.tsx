@@ -12,6 +12,7 @@ import {
   DEFAULT_THEME_ID,
   parseColorScheme,
   selectColorScheme,
+  selectCommittedThemeId,
   selectMode,
   selectThemeId,
   selectThemesLoading,
@@ -317,6 +318,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     return {
       /** The theme the window shows: a previewed one, the selected one, or the default while that one is not coming. */
       themeId: createMemo(() => selectThemeId(state(), knownThemes())),
+      /** The selected theme, or the default while that one is not coming; a preview does not change it. */
+      committedThemeId: createMemo(() => selectCommittedThemeId(state(), knownThemes())),
       colorScheme: createMemo(() => selectColorScheme(state())),
       /** The mode the window shows, a previewed scheme included. */
       mode: createMemo(() => selectMode(state())),
