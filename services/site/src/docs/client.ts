@@ -144,6 +144,9 @@ function toggleSection(open?: boolean) {
   const nav = $("[data-component=section-nav]")!
   const next = open ?? !nav.hasAttribute("data-open")
   nav.toggleAttribute("data-open", next)
+  // The section list and the Contents list drop over the same page, so one closes the other.
+  const contents = $<HTMLDetailsElement>("[data-component=contents-menu][open]")
+  if (next && contents) contents.open = false
   $("[data-slot=section-toggle]", nav)!.setAttribute("aria-expanded", String(next))
 }
 
@@ -324,6 +327,8 @@ on("pointerdown", (event) => {
   if (lockup && !lockup.contains(target)) closeLockup()
   const contents = $<HTMLDetailsElement>("[data-component=contents-menu][open]")
   if (contents && !contents.contains(target)) contents.open = false
+  const section = $("[data-component=section-nav][data-open]")
+  if (section && !section.contains(target)) toggleSection(false)
 })
 
 // Arrow keys, Home and End move between tabs.
