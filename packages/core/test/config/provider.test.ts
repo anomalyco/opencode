@@ -647,6 +647,11 @@ describe("ConfigProviderPlugin.Plugin", () => {
       native: { settings: { baseURL: "http://127.0.0.1:4000/v1" }, models: { chat: {} } },
     },
     {
+      name: "empty provider baseURL falls back to api",
+      legacy: { api: "http://127.0.0.1:4000/v1", options: { baseURL: "" }, models: { chat: {} } },
+      native: { settings: { baseURL: "http://127.0.0.1:4000/v1" }, models: { chat: {} } },
+    },
+    {
       name: "model package, limits, costs, and variant overrides",
       legacy: {
         npm: "@ai-sdk/openai",
