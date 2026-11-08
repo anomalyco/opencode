@@ -16,6 +16,7 @@ mod diffs;
 mod drive;
 mod editor;
 mod form;
+mod home_footer;
 mod hover_pointer;
 mod integrations;
 mod mcp;

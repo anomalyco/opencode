@@ -56,3 +56,52 @@ fn sounds_off_creates_no_engine() {
     harness.app.wait_until(Duration::from_millis(100), || false);
     assert!(loudest(&harness.tui).is_none());
 }
+
+#[allow(unsafe_code)]
+unsafe extern "C" fn notifications_create(
+    host: *const opencode_plugin::abi::HostApi,
+    options: opencode_plugin::abi::Bytes,
+    instance: *mut *mut std::ffi::c_void,
+    out: *mut opencode_plugin::abi::Owned,
+) -> i32 {
+    let plugin = opencode_tui::plugins::notifications::plugin();
+    // SAFETY: the loader passes what `PluginApi::create` documents.
+    unsafe {
+        opencode_plugin::abi::runtime::create("loopback.notifications", plugin.setup, host, options, instance, out)
+    }
+}
+
+/// The screen after a permission request, which plays a sound, and a failure of a session that is not on screen,
+/// which toasts with an "Open" action. With `loopback`, the notifications plugin is wired through the byte shims of
+/// the C ABI (`Loopback`), where its events and effects cross as JSON, instead of running in process.
+fn notified(loopback: bool) -> String {
+    let config =
+        r#"{"animations":false,"attention":{"sound":true,"volume":0.5},"plugins":["-opencode.notifications"]}"#;
+    let (harness, memory) =
+        mount(if loopback { config } else { r#"{"animations":false,"attention":{"sound":true,"volume":0.5}}"# });
+    if loopback {
+        let (definition, _) = opencode_plugin::loader::native::loopback(&harness.tui, notifications_create).unwrap();
+        opencode_tui::plugins::host::add(&harness.tui, definition);
+        harness.wait_for("Fix the parser");
+    }
+    ask(&memory);
+    harness.wait("no sound reached the engine", || harness.tui.attention.sound.audio().is_some());
+    assert!(loudest(&harness.tui).unwrap() > 0.01);
+    memory.emit(&json!({
+        "id": "evt_failed", "created": 2, "type": "session.execution.failed",
+        "durable": { "aggregateID": "ses_b", "seq": 1, "version": 1 },
+        "data": { "sessionID": "ses_b", "error": { "type": "unknown", "message": "the model went away" } },
+    }));
+    harness.wait_for("the model went away");
+    harness.app.render();
+    harness.app.text()
+}
+
+// Expected: the notifications plugin plays the same sound and shows the same session toast through the C ABI's byte
+// shims as in process.
+#[test]
+fn notifications_act_the_same_through_the_c_abi_loopback() {
+    let screen = notified(true);
+    assert!(screen.contains("Session failed") && screen.contains("Open"), "{screen}");
+    assert_eq!(screen, notified(false));
+}

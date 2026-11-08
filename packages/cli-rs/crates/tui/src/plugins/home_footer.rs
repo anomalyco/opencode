@@ -1,127 +1,57 @@
 //! The home footer plugin (E.14, row F01, `feature-plugins/home/footer.tsx`), appended to `home.footer`: the
 //! MCP servers of the default location (`⊙ 2 MCP`, or `⊙ 1 MCP failed`, with `/mcps` from 64 columns; a click
 //! opens the list), the failed plugins, the `home.footer.status` slot, and the version on the right from 64
-//! columns. Hidden below 44x14.
+//! columns. Hidden below 44x14. It is a plugin of the one API (O-67).
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use opencode_plugin::abi::{self, Click, Layout, Node, Placement, Render, Span, Width};
+use opencode_plugin::slot;
 
-use opencode_plugin::{Definition, Placement, SlotMount, Slotted, slot};
-use opencode_store::Changes;
-use opentui::prelude::*;
-
-use crate::app::Tui;
-
-pub fn plugin() -> Definition<Tui> {
-    Definition::new("opencode.home.footer", |cx| {
-        // Append keeps the path open to additive plugin claims; an external replace still takes it over.
-        cx.slot(Placement::append(slot::HOME_FOOTER), |tui, _| Box::new(Footer::new(tui)));
-    })
+pub fn plugin() -> abi::Plugin {
+    abi::Plugin { id: "opencode.home.footer", setup }
 }
 
-struct Footer(Rc<Inner>);
-
-struct Inner {
-    root: View,
-    shown: RefCell<Option<Model>>,
-    status: RefCell<SlotMount<Tui>>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-struct Model {
-    size: (u16, u16),
-    /// Servers, connected, failed.
-    mcp: (usize, usize, usize),
-}
-
-impl Footer {
-    fn new(tui: &Tui) -> Self {
-        let inner = Rc::new(Inner {
-            root: View::new(&tui.app).width(Length::percent(100.0)).shrink(0.0),
-            shown: RefCell::default(),
-            status: RefCell::default(),
-        });
-        inner.refresh(tui);
-        Self(inner)
-    }
-}
-
-impl Inner {
-    fn refresh(&self, tui: &Tui) {
-        let mcp = tui.data.read(|state| {
-            let list = state.location(None).and_then(|data| data.mcp_server.as_deref()).unwrap_or_default();
-            let count = |tag: &str| list.iter().filter(|item| item.status.tag() == tag).count();
-            (list.len(), count("connected"), count("failed"))
-        });
-        let model = Model { size: tui.app.size(), mcp };
-        if self.shown.borrow().as_ref() == Some(&model) {
-            return;
+fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+    // Append keeps the path open to additive plugin claims; an external replace still takes it over.
+    setup.slot(Placement::append(slot::HOME_FOOTER), |read, _, changed| {
+        // It reads the MCP servers where the TUI works and the terminal size.
+        if !(changed.all || changed.size || !changed.locations.is_empty()) {
+            return Render::Keep;
         }
-        self.root.clear();
-        *self.status.borrow_mut() = self.render(tui, &model);
-        *self.shown.borrow_mut() = Some(model);
-        tui.app.request_redraw();
-    }
-
-    fn render(&self, tui: &Tui, model: &Model) -> SlotMount<Tui> {
-        let app = &tui.app;
-        let theme = tui.page();
-        let (width, height) = model.size;
+        let info = read.info();
+        if !(changed.all || changed.size || changed.location(&info.location)) {
+            return Render::Keep;
+        }
+        let (width, height) = info.size;
         if height < 14 || width < 44 {
-            return SlotMount::default();
+            return Render::Hide;
         }
-        let padding = if height < 16 { 0 } else { 1 };
-        let row = View::new(app).row().width(Length::percent(100.0)).padding_y(padding).padding_x(2).gap(2).shrink(0.0);
-        let (servers, connected, failed) = model.mcp;
-        if servers > 0 {
+        let list = read.mcp_servers(None).unwrap_or_default();
+        let count = |tag: &str| list.iter().filter(|item| item.status.tag() == tag).count();
+        let mut row = Vec::new();
+        if !list.is_empty() {
+            let (connected, failed) = (count("connected"), count("failed"));
             let spans = if failed > 0 {
-                vec!["⊙ ".fg(theme.text.feedback.error.base), format!("{failed} MCP failed").fg(theme.text.base)]
+                vec![Span::new("⊙ ").fg("text.feedback.error.base"), Span::new(format!("{failed} MCP failed"))]
             } else {
-                vec![
-                    "⊙ ".fg(if connected > 0 { theme.text.feedback.success.base } else { theme.text.muted }),
-                    format!("{connected} MCP").fg(theme.text.base),
-                ]
+                let dot = if connected > 0 { "text.feedback.success.base" } else { "text.muted" };
+                vec![Span::new("⊙ ").fg(dot), Span::new(format!("{connected} MCP"))]
             };
-            let mcp = View::new(app).row().gap(1).shrink(0.0).child(&Text::new(app, spans).fg(theme.text.base));
+            let mut mcp = vec![Node::text(spans)];
             if width >= 64 {
-                mcp.add(&Text::new(app, "/mcps").fg(theme.text.muted));
+                mcp.push(Node::text([Span::new("/mcps")]).fg("text.muted"));
             }
-            let weak = tui.weak();
-            mcp.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
-                if matches!(event.kind, MouseEventKind::Up(_))
-                    && let Some(tui) = weak.upgrade()
-                {
-                    tui.keymap.dispatch("mcp.list", None);
-                }
-            });
-            row.add(&mcp);
+            let fixed = Layout::default().shrink(false);
+            row.push(Node::row(mcp).gap(1).layout(fixed).on_click(Click::command("mcp.list", None)));
         }
         // Failed plugins: built-ins do not fail, and server plugins are read from P.4 on.
-        let status = crate::plugins::host::slot(tui, &row, slot::HOME_FOOTER_STATUS, &Default::default(), |_| {});
-        row.add(&View::new(app).grow(1.0));
+        row.push(Node::slot(slot::HOME_FOOTER_STATUS));
+        row.push(Node::column(Vec::new()).layout(Layout::default().grow()));
         if width >= 64 {
-            row.add(
-                &View::new(app)
-                    .shrink(0.0)
-                    .child(&Text::new(app, tui.startup.args.version.clone()).fg(theme.text.muted)),
-            );
+            let version = Node::text([Span::new(info.version)]).fg("text.muted");
+            row.push(Node::column(vec![version]).layout(Layout::default().shrink(false)));
         }
-        self.root.add(&row);
-        status
-    }
-}
-
-impl Slotted<Tui> for Footer {
-    fn root(&self) -> View {
-        self.0.root.clone()
-    }
-
-    fn sync(&self, tui: &Tui, changes: &Changes) {
-        // It reads the default location's MCP servers and the terminal size; the home syncs every change on a
-        // resize.
-        if tui.data.read(|state| changes.location(state.default_location())) {
-            self.0.refresh(tui);
-        }
-        self.0.status.borrow().sync(tui, changes);
-    }
+        let full = Layout { width: Some(Width::Percent(100.0)), ..Layout::default() }.shrink(false);
+        Render::Show(Node::row(row).gap(2).padding(2, if height < 16 { 0 } else { 1 }).layout(full))
+    });
+    Ok(())
 }

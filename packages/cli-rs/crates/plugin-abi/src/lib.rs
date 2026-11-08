@@ -34,7 +34,7 @@
 //! external plugin gets them over this ABI. A render (a code fence or a slot claim) receives a [`Read`]: it reads and
 //! returns a value, and has no effects. Reads are pure too: a read of something the host has not loaded yet (a
 //! catalog) returns `None`, and the host starts the load once the outermost plugin callback has returned. A command
-//! receives a [`Host`], which also has effects; they wait until then as well, so a plugin never reenters itself
+//! or an event handler receives a [`Host`], which also has effects; they wait until then as well, so a plugin never reenters itself
 //! through the host.
 //!
 //! Renders in this form (ABI 1.4) are opt-in on the wire: [`Setup`] sets [`Manifest::render`], and the host sends
@@ -55,15 +55,15 @@ pub use opencode_api_types as types;
 use serde::{Deserialize, Serialize};
 use types::{
     IntegrationInfo, McpServer, ModelInfo, ModelRef, ProviderInfo, SessionInfo, SessionMessageInfo, UsageLimitsInfo,
-    VcsInfo,
+    V2Event, VcsInfo,
 };
 
 /// The major version: changes only with a deliberate breaking change, and a mismatch refuses the plugin.
 pub const ABI_MAJOR: u32 = 1;
 /// The minor version: grows when entries are appended. 1.0 is the core; 1.1 adds [`PluginApi::describe`]; 1.2 adds
 /// [`HostApi::theme_mode`]; 1.3 adds [`HostApi::wake`]; 1.4 adds [`Manifest::render`], [`Request::RenderFence`],
-/// [`Request::Render`], [`HostRequest::Color`], the session and catalog reads, [`HostRequest::Info`] and
-/// [`HostRequest::Dispatch`].
+/// [`Request::Render`], [`Request::Event`], [`HostRequest::Color`], the session and catalog reads,
+/// [`HostRequest::Info`], [`HostRequest::Route`], [`HostRequest::Dispatch`] and [`HostRequest::Attention`].
 pub const ABI_MINOR: u32 = 4;
 
 /// The symbol every plugin exports, of type [`EntryFn`].
@@ -271,6 +271,9 @@ pub struct Manifest {
     /// ([`Request::Fence`]). [`Setup`] sets it; absent (0) in a 1.3 plugin.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub render: u32,
+    /// The event types of each [`Setup::on_event`] handler, in order; [`Request::Event`] names one by index.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub events: Vec<Vec<String>>,
 }
 
 /// What [`Manifest::render`] is for the render requests of ABI 1.4.
@@ -538,6 +541,11 @@ pub enum Node {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_click: Option<Click>,
     },
+    /// The claims of slot `path`, in place, as if they were children of this node's parent. `path` is a published
+    /// slot inside the one the claim renders in, such as `home.footer.status` in `home.footer`; the host draws
+    /// nothing for any other path. The host keeps the slot's claims mounted, and renders them with each change,
+    /// also while this claim returns [`Render::Keep`].
+    Slot { path: String },
 }
 
 impl Node {
@@ -578,18 +586,23 @@ impl Node {
         }
     }
 
-    /// The node with `click`.
+    /// The claims of slot `path` in place ([`Node::Slot`]).
+    pub fn slot(path: impl Into<String>) -> Self {
+        Node::Slot { path: path.into() }
+    }
+
+    /// The node with `click`; a slot is unchanged.
     pub fn on_click(mut self, click: Click) -> Self {
-        match &mut self {
-            Node::Box { on_click, .. } | Node::Text { on_click, .. } => *on_click = Some(click),
+        if let Node::Box { on_click, .. } | Node::Text { on_click, .. } = &mut self {
+            *on_click = Some(click);
         }
         self
     }
 
-    /// The node laid out with `layout`.
+    /// The node laid out with `layout`; a slot is unchanged.
     pub fn layout(mut self, value: Layout) -> Self {
-        match &mut self {
-            Node::Box { layout, .. } | Node::Text { layout, .. } => *layout = value,
+        if let Node::Box { layout, .. } | Node::Text { layout, .. } = &mut self {
+            *layout = value;
         }
         self
     }
@@ -931,6 +944,12 @@ pub enum Request {
         input: SlotInput,
         changed: Changed,
     },
+    /// 1.4: runs a handler of [`Setup::on_event`], which [`Manifest::events`] names by index, with one of its
+    /// events.
+    Event {
+        handler: usize,
+        event: Box<V2Event>,
+    },
 }
 
 /// From the plugin to the host. Results: `StorageGet` → `Option<String>` (JSON text), `Color` → `Option<Rgba>`, the
@@ -943,9 +962,14 @@ pub enum HostRequest {
         level: Level,
         message: String,
     },
+    /// A toast; `title` and `session` are 1.4 ([`Host::toast`]).
     Toast {
-        variant: Toast,
+        variant: Variant,
         message: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session: Option<String>,
     },
     StorageGet {
         key: String,
@@ -1003,12 +1027,16 @@ pub enum HostRequest {
     Vcs {
         location: Option<LocationRef>,
     },
+    /// 1.4: [`Read::route`].
+    Route,
     /// 1.4: [`Host::dispatch`], once the current call returns.
     Dispatch {
         name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         input: Option<String>,
     },
+    /// 1.4: [`Host::attention`], once the current call returns.
+    Attention(Attention),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1020,13 +1048,100 @@ pub enum Level {
     Error,
 }
 
+/// A toast's kind, which sets its color.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum Toast {
+pub enum Variant {
     Info,
     Success,
     Warning,
     Error,
+}
+
+/// A toast, for [`Host::toast`]. With a `session`, the toast offers to open that session unless the session's
+/// family is on screen.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Toast {
+    pub variant: Variant,
+    pub title: Option<String>,
+    pub message: String,
+    pub session: Option<String>,
+}
+
+impl Toast {
+    pub fn new(variant: Variant, message: impl Into<String>) -> Self {
+        Self { variant, title: None, message: message.into(), session: None }
+    }
+
+    pub fn title(self, title: impl Into<String>) -> Self {
+        Self { title: Some(title.into()), ..self }
+    }
+
+    /// The toast about session `id`.
+    pub fn session(self, id: impl Into<String>) -> Self {
+        Self { session: Some(id.into()), ..self }
+    }
+}
+
+/// A request for the user's attention, for [`Host::attention`]: a desktop notification through the terminal, a
+/// sound, or both, each when the user's `attention` settings allow it and its focus rule holds.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Attention {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    pub message: String,
+    /// When to send a notification; none without.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notify: Option<When>,
+    /// Which sound to play, and when; none without.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sound: Option<Sound>,
+}
+
+/// When a notification or sound goes out, by the terminal's focus.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum When {
+    Always,
+    Focused,
+    Blurred,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Sound {
+    pub name: SoundName,
+    pub when: When,
+    /// Overrides the user's `attention.volume`, from 0 to 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub volume: Option<f64>,
+}
+
+/// The sounds of the user's `attention.sounds`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SoundName {
+    Default,
+    Question,
+    Permission,
+    Error,
+    Done,
+    SubagentDone,
+}
+
+/// What the host shows, from [`Read::route`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum Route {
+    #[default]
+    Home,
+    Session {
+        id: String,
+    },
+    /// A plugin's route.
+    Plugin {
+        id: String,
+        name: String,
+    },
 }
 
 /// What a render reads from the host. It has no effects, so a render may call it at any time, also inside
@@ -1092,16 +1207,24 @@ pub trait Read {
     fn vcs(&self, _location: Option<&LocationRef>) -> Option<VcsInfo> {
         None
     }
+    /// What the host shows.
+    fn route(&self) -> Route {
+        Route::Home
+    }
 }
 
-/// What a command reads and asks of the host. An effect waits until the outermost plugin callback has returned, and
-/// effects run in the order they were asked for.
+/// What a command or an event handler reads and asks of the host. An effect waits until the outermost plugin
+/// callback has returned, and effects run in the order they were asked for.
 pub trait Host: Read {
     /// Stores `value`, an object, under one of the plugin's declared storage keys. [`Read::storage_get`] reads it back
     /// at once; the host writes it to disk later, and claims render again with [`Changed::local`].
     fn storage_set(&self, key: &str, value: serde_json::Value);
     /// Runs the registered command `name` with `input`, the plugin's or the host's, palette or not.
     fn dispatch(&self, name: &str, input: Option<&str>);
+    /// Shows `toast`.
+    fn toast(&self, toast: Toast);
+    /// Asks for the user's attention.
+    fn attention(&self, attention: Attention);
 }
 
 /// The host, as a plugin calls it. Valid while the instance lives.
@@ -1144,8 +1267,8 @@ impl HostHandle {
     }
 
     /// Shows a toast once the current call returns.
-    pub fn toast(&self, variant: Toast, message: &str) {
-        let _ = self.request(&HostRequest::Toast { variant, message: message.to_owned() });
+    pub fn toast(&self, variant: Variant, message: &str) {
+        Host::toast(self, Toast::new(variant, message));
     }
 
     /// Opens one of the plugin's routes once the current call returns.
@@ -1243,6 +1366,10 @@ impl Read for HostHandle {
     fn vcs(&self, location: Option<&LocationRef>) -> Option<VcsInfo> {
         self.read(&HostRequest::Vcs { location: location.cloned() })
     }
+
+    fn route(&self) -> Route {
+        self.read(&HostRequest::Route).unwrap_or_default()
+    }
 }
 
 impl Host for HostHandle {
@@ -1254,6 +1381,15 @@ impl Host for HostHandle {
 
     fn dispatch(&self, name: &str, input: Option<&str>) {
         let _ = self.request(&HostRequest::Dispatch { name: name.to_owned(), input: input.map(str::to_owned) });
+    }
+
+    fn toast(&self, toast: Toast) {
+        let Toast { variant, title, message, session } = toast;
+        let _ = self.request(&HostRequest::Toast { variant, message, title, session });
+    }
+
+    fn attention(&self, attention: Attention) {
+        let _ = self.request(&HostRequest::Attention(attention));
     }
 }
 
@@ -1308,6 +1444,8 @@ enum SlotFn {
 type RouteFn = Box<dyn Fn() -> Vec<Line>>;
 /// A registered command.
 pub type CommandFn = Rc<dyn Fn(&dyn Host, Option<&str>)>;
+/// A registered event handler.
+pub type EventFn = Rc<dyn Fn(&dyn Host, &V2Event)>;
 
 /// What a plugin registers (the C-ABI form of P.1's `Setup`). The instance keeps it until the host destroys it.
 pub struct Setup {
@@ -1318,6 +1456,7 @@ pub struct Setup {
     slots: Vec<SlotFn>,
     routes: Vec<(String, RouteFn)>,
     commands: Vec<CommandFn>,
+    events: Vec<EventFn>,
 }
 
 impl Setup {
@@ -1346,6 +1485,13 @@ impl Setup {
     pub fn command(&mut self, command: Command, run: impl Fn(&dyn Host, Option<&str>) + 'static) {
         self.commands.push(Rc::new(run));
         self.manifest.commands.push(command);
+    }
+
+    /// Calls `run` with each server event whose type is one of `types` (such as `session.execution.failed`), after
+    /// the host has applied it, as the HTTP API's [`V2Event`].
+    pub fn on_event(&mut self, types: &[&str], run: impl Fn(&dyn Host, &V2Event) + 'static) {
+        self.manifest.events.push(types.iter().map(|kind| (*kind).to_owned()).collect());
+        self.events.push(Rc::new(run));
     }
 
     /// Renders Markdown fences of `language`.
@@ -1407,6 +1553,12 @@ impl Setup {
         self.manifest.commands.iter().zip(&self.commands)
     }
 
+    /// The event handlers, with the types each takes.
+    #[doc(hidden)]
+    pub fn events(&self) -> impl Iterator<Item = (&[String], &EventFn)> {
+        self.manifest.events.iter().map(Vec::as_slice).zip(&self.events)
+    }
+
     fn new(id: &str, options: Option<String>, host: *const HostApi) -> Self {
         Self {
             manifest: Manifest { id: id.to_owned(), render: RENDER, ..Manifest::default() },
@@ -1416,6 +1568,7 @@ impl Setup {
             slots: Vec::new(),
             routes: Vec::new(),
             commands: Vec::new(),
+            events: Vec::new(),
         }
     }
 
@@ -1443,6 +1596,10 @@ impl Setup {
             Request::Command { name, input } => {
                 let (_, run) = self.commands().find(|(command, _)| command.name == name).ok_or("no such command")?;
                 run(&self.host, input.as_deref());
+                Ok(serde_json::Value::Null)
+            }
+            Request::Event { handler, event } => {
+                self.events.get(handler).ok_or("no such event handler")?(&self.host, &event);
                 Ok(serde_json::Value::Null)
             }
         }
@@ -1826,6 +1983,57 @@ mod tests {
         let request = Request::Command { name: "x.hidden".into(), input: Some("b".into()) };
         assert_eq!(setup.handle(request).unwrap(), serde_json::Value::Null);
         assert_eq!(*seen.borrow(), [(Some("b".to_owned()), None)]);
+    }
+
+    // Expected: a 1.3 toast keeps its JSON, and a 1.4 one adds its title and session; attention, the route and a nested
+    // slot leave out what is unset; an event handler is named by index, gets its event back as written, and its
+    // manifest entry is left out when there is none.
+    #[test]
+    fn events_toasts_attention_and_slots_round_trip() {
+        let toast = HostRequest::Toast { variant: Variant::Info, message: "a".into(), title: None, session: None };
+        assert_eq!(serde_json::to_string(&toast).unwrap(), r#"{"type":"toast","variant":"info","message":"a"}"#);
+        let toast = Toast::new(Variant::Error, "boom").title("Session failed").session("ses_1");
+        let request = HostRequest::Toast {
+            variant: toast.variant,
+            message: toast.message.clone(),
+            title: toast.title.clone(),
+            session: toast.session.clone(),
+        };
+        let json = r#"{"type":"toast","variant":"error","message":"boom","title":"Session failed","session":"ses_1"}"#;
+        assert_eq!(serde_json::to_string(&request).unwrap(), json);
+        assert_eq!(serde_json::from_str::<HostRequest>(json).unwrap(), request);
+        let attention = HostRequest::Attention(Attention {
+            title: None,
+            message: "done".into(),
+            notify: Some(When::Blurred),
+            sound: Some(Sound { name: SoundName::SubagentDone, when: When::Always, volume: None }),
+        });
+        let json = r#"{"type":"attention","message":"done","notify":"blurred","sound":{"name":"subagent_done","when":"always"}}"#;
+        assert_eq!(serde_json::to_string(&attention).unwrap(), json);
+        assert_eq!(serde_json::from_str::<HostRequest>(json).unwrap(), attention);
+        let route = Route::Session { id: "ses_1".into() };
+        assert_eq!(serde_json::to_string(&route).unwrap(), r#"{"type":"session","id":"ses_1"}"#);
+        let node = Node::row(vec![Node::slot("home.footer.status")]);
+        let json = r#"{"type":"box","row":true,"children":[{"type":"slot","path":"home.footer.status"}]}"#;
+        assert_eq!(serde_json::to_string(&node).unwrap(), json);
+        assert_eq!(serde_json::from_str::<Node>(json).unwrap(), node);
+
+        let mut setup = Setup::in_process("new", None);
+        assert!(!serde_json::to_string(setup.manifest()).unwrap().contains("events"));
+        let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
+        let into = seen.clone();
+        setup.on_event(&["session.execution.started"], move |_, event| into.borrow_mut().push(event.clone()));
+        assert_eq!(setup.manifest().events, [["session.execution.started"]]);
+        let event: V2Event = serde_json::from_value(serde_json::json!({
+            "id": "evt_1", "created": 1, "type": "session.execution.started",
+            "durable": { "aggregateID": "ses_1", "seq": 1, "version": 1 }, "data": { "sessionID": "ses_1" },
+        }))
+        .unwrap();
+        let request = Request::Event { handler: 0, event: Box::new(event.clone()) };
+        let request = serde_json::from_slice(&serde_json::to_vec(&request).unwrap()).unwrap();
+        assert_eq!(setup.handle(request).unwrap(), serde_json::Value::Null);
+        assert_eq!(*seen.borrow(), std::slice::from_ref(&event));
+        assert!(setup.handle(Request::Event { handler: 1, event: Box::new(event) }).is_err());
     }
 
     // Expected: the shims answer a null instance with an error, ignore a null `out` or a null `destroy`, and never
