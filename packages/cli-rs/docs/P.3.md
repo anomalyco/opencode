@@ -50,20 +50,22 @@ So the "library" is the port itself, kept as one crate with the TS module layout
 
 ## API
 
-- `opencode_mermaid::plugin::<H: Host>() -> Definition<H>`: registers the `mermaid` code-block renderer
-  (P.1's `Setup::code_block`, the U.4c hook). The TUI's `host::builtins()` uses it for `opencode.merman`.
+- `opencode_mermaid::plugin() -> opencode_plugin_abi::Plugin`: registers the `mermaid` fence render on the one
+  plugin API (O-67). The crate depends on `opencode-plugin-abi` alone, not on OpenTUI. The TUI's
+  `host::builtins()` uses it for `opencode.merman`.
 - `opencode_mermaid::render(source, width, &Palette) -> Rendered`: the plan's
   `render(lang, source, width, theme) -> cells`, as styled lines. `Rendered::Code` is TS's `undefined`;
   `Rendered::Syntax { kind, prefix }` is a syntax error with the drawable prefix, if any.
-- `Renderer` adds the streaming fallback; `widget(app, &Diagram)` is the `Text` it returns.
-- `Palette::from_theme(&Theme, ThemeMode)`: `resolveOpenCodeDiagramPalette`, with the mode from
-  `Host::theme_mode`, as TS reads `context.themeMode`.
+- `fenced(&Diagram) -> Fenced`: the diagram's rows, `Fenced::Lines` with a white `fg` and `drag`.
+- `Palette::read(&dyn Read)`: `resolveOpenCodeDiagramPalette`, with the colors from `Read::color` and the mode
+  from `Read::theme_mode`, as TS reads `context.themeMode`.
 
 ## Widget
 
 TS's `StaticDiagramRenderable` is a `TextRenderable`: full width, the diagram's height, no wrap, not
-selectable, one row of top margin, and a left drag that scrolls it sideways. The Rust widget is a `Text`
-with the same options and drag scrolling, with two differences that keep the cells equal:
+selectable, one row of top margin, and a left drag that scrolls it sideways. The host draws `Fenced::Lines`
+with `drag` as a `Text` with the same options and drag scrolling, with two differences that keep the cells
+equal:
 
 - No top margin: Core's Markdown uses that margin as the gap before the block, while the Rust Markdown widget
   puts the gap between blocks itself.
@@ -72,9 +74,8 @@ with the same options and drag scrolling, with two differences that keep the cel
 ## Streaming
 
 TS keeps the last good diagram per fence (keyed by the block's id) and shows it while a later edit does
-not parse. The U.4c hook gives the widget it returned before as `CodeBlock::previous`; the renderer
-remembers each widget's diagram kind and returns the previous widget when the new source fails with a
-syntax error of the same kind. opentui-rust's Markdown re-runs renderers when streaming ends, so a kept
+not parse. The plugin remembers each block's diagram kind by `Fence::key` and returns `Fenced::Keep` when the
+new source fails with a syntax error of the same kind. opentui-rust's Markdown re-runs renderers when streaming ends, so a kept
 preview does not outlive a broken fence.
 
 ## Proof

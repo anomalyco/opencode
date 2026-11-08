@@ -742,6 +742,7 @@ dependencies = [
  "indexmap",
  "opencode-parity",
  "opencode-plugin",
+ "opencode-plugin-abi",
  "opencode-ui",
  "opentui",
  "regex",

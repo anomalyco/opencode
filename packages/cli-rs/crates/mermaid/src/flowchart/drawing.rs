@@ -35,8 +35,9 @@ pub enum Style {
 
 pub type Grid = Canvas<Style>;
 
+/// OpenTUI's `ITALIC` attribute bit, as TS stores it.
 pub fn italic() -> u8 {
-    opentui::prelude::Attributes::ITALIC.bits()
+    4
 }
 
 #[derive(Debug)]
