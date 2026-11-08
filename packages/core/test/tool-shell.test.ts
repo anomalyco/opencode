@@ -204,6 +204,11 @@ const overflowCommand = (bytes: number) =>
 const lineOverflowCommand = isWindows
   ? "[Console]::Out.Write('one' + [Environment]::NewLine + 'two' + [Environment]::NewLine + 'three')"
   : "printf 'one\\ntwo\\nthree'"
+// Streams a file's exact bytes, so tests control line lengths and UTF-8 boundaries on every platform.
+const catCommand = (file: string) =>
+  isWindows
+    ? `$bytes = [IO.File]::ReadAllBytes('${file}'); $out = [Console]::OpenStandardOutput(); $out.Write($bytes, 0, $bytes.Length); $out.Flush()`
+    : `cat '${file}'`
 const progressOverflowCommand = (bytes: number, release: string) =>
   isWindows
     ? `[Console]::Out.Write(('x' * ${bytes})); while (!(Test-Path -LiteralPath '${release}')) { Start-Sleep -Milliseconds 50 }`
@@ -1286,7 +1291,9 @@ describe("ShellTool", () => {
               expect(settled.metadata).toMatchObject({ exit: 3, truncated: true })
               expect(settled.content).toEqual([
                 Expected.text(
-                  expect.stringMatching(/output-end[^]*\[showing lines [^]*full output saved to [^\]]+\]$/),
+                  expect.stringMatching(
+                    /output-end[^]*\[showing the last 50 KB of line 1 \(51 KB\); full output saved to [^\]]+\]$/,
+                  ),
                 ),
                 { type: "text", text: "Exit code: 3" },
               ])
@@ -1373,6 +1380,79 @@ describe("ShellTool", () => {
         expect(content.text.replaceAll("\r\n", "\n")).toStartWith("two\nthree")
         expect(content.text).toContain("full output saved to ")
       })
+    }),
+  )
+
+  const truncatedText = (tmp: string, contents: string | Uint8Array, callID: string) =>
+    Effect.gen(function* () {
+      const file = path.join(tmp, `${callID}.txt`)
+      yield* Effect.promise(() => Bun.write(file, contents))
+      const settled = yield* withSession(tmp, (registry) =>
+        executeTool(registry, call({ command: catCommand(file) }, callID)),
+      )
+      expect(settled.metadata).toMatchObject({ exit: 0, truncated: true })
+      const content = settled.content?.[0]
+      if (!content || content.type !== "text") throw new Error("Expected text content")
+      return content.text
+    })
+
+  it.live("drops the partial first line so the truncation note counts only whole lines", () =>
+    withTempDir((tmp) => {
+      reset()
+      const lines = Array.from({ length: 10 }, (_, index) => `${index + 1}`.padEnd(10 * 1024, "x"))
+      return truncatedText(tmp.path, lines.join("\n") + "\n", "call-long-lines").pipe(
+        Effect.andThen((text) =>
+          Effect.sync(() => {
+            expect(text).toStartWith(`7xxx`)
+            expect(text).toContain(`${lines[9]}\n\n[showing lines 7-10 of 10; full output saved to `)
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.live("says how much of a single long line is shown", () =>
+    withTempDir((tmp) => {
+      reset()
+      return truncatedText(tmp.path, "head\n" + "x".repeat(200 * 1024), "call-long-line").pipe(
+        Effect.andThen((text) =>
+          Effect.sync(() => {
+            expect(text).toStartWith("x".repeat(ToolOutput.MAX_BYTES) + "\n\n")
+            expect(text).toContain("[showing the last 50 KB of line 2 (200 KB); full output saved to ")
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.live("starts the truncated view on a whole UTF-8 character", () =>
+    withTempDir((tmp) => {
+      reset()
+      // The window starts on the last byte of the three-byte euro sign.
+      const contents = "a".repeat(100) + "€" + "b".repeat(ToolOutput.MAX_BYTES - 1)
+      return truncatedText(tmp.path, contents, "call-utf8-cut").pipe(
+        Effect.andThen((text) =>
+          Effect.sync(() => {
+            expect(text).toStartWith("b".repeat(ToolOutput.MAX_BYTES - 1) + "\n\n")
+            expect(text).not.toContain("\uFFFD")
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.live("numbers lines exactly when the line limit truncates", () =>
+    withTempDir((tmp) => {
+      reset()
+      const lines = Array.from({ length: 2500 }, (_, index) => `line ${index + 1}`)
+      return truncatedText(tmp.path, lines.join("\n") + "\n", "call-many-lines").pipe(
+        Effect.andThen((text) =>
+          Effect.sync(() => {
+            expect(text).toStartWith("line 501\n")
+            expect(text).toContain("line 2500\n\n[showing lines 501-2500 of 2500; full output saved to ")
+          }),
+        ),
+      )
     }),
   )
 
