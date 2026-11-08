@@ -333,11 +333,8 @@ export const Plugin = {
                 })
               }
               if (replacements > 1 && input.replaceAll !== true) {
-                const starts = matches.slice(0, 10).map((match) => source.slice(0, match.start).split("\n").length)
-                const lines = [...new Set(starts)]
-                const more = replacements > 10 ? ` and ${replacements - 10} more` : ""
                 return yield* new ToolFailure({
-                  message: `Found ${replacements} matches for oldString (${lines.length === 1 ? "line" : "lines"} ${lines.join(", ")}${more}), but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.`,
+                  message: `Found ${replacements} matches for oldString, but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.`,
                 })
               }
               if (replaced === source) {

@@ -376,10 +376,7 @@ describe("EditTool", () => {
     withTempDir((tmp) => {
       const edit = makeEditFixture()
       const target = path.join(tmp.path, "matches.txt")
-      const items = ["head", ...Array.from({ length: 12 }, (_, index) => `item ${index}\r\nfiller`)].join("\r\n")
-      return Effect.promise(() =>
-        Promise.all([fs.writeFile(target, "same same"), fs.writeFile(path.join(tmp.path, "items.txt"), items)]),
-      ).pipe(
+      return Effect.promise(() => fs.writeFile(target, "same same")).pipe(
         Effect.andThen(
           withTool(tmp.path, edit, (registry) =>
             Effect.gen(function* () {
@@ -418,13 +415,9 @@ describe("EditTool", () => {
                 error: {
                   type: "tool.execution",
                   message:
-                    "Found 2 matches for oldString (line 1), but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.",
+                    "Found 2 matches for oldString, but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.",
                 },
               })
-              const capped = call({ path: "items.txt", oldString: "item", newString: "x" })
-              expect((yield* executeTool(registry, capped)).error?.message).toContain(
-                "12 matches for oldString (lines 2, 4, 6, 8, 10, 12, 14, 16, 18, 20 and 2 more)",
-              )
               expect(edit.writes).toEqual([])
             }),
           ),
