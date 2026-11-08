@@ -493,10 +493,12 @@ fn loopback(
 #[path = "../../../examples/sample/src/slot.rs"]
 mod sample_slot;
 
-/// The frames of `registry`'s `sidebar.content` claims for `ses_1`: as mounted, then after a message arrives and the
-/// host syncs them.
+/// The frames of `registry`'s `sidebar.content` claims for `ses_1`: as mounted, after a message arrives and the host
+/// syncs them, with the pointer over the click count, and after two clicks on it, which the claim reads back from
+/// storage when the host syncs it again.
 fn sidebar(host: &Rc<TestHost>, registry: &Registry<TestHost>) -> Vec<Capture> {
     host.messages.borrow_mut().clear();
+    host.storage.borrow_mut().clear();
     let parent = View::new(host.app()).column();
     let input = SlotInput { session_id: Some("ses_1".to_owned()), ..SlotInput::default() };
     let mounted = registry.mount(&**host, &parent, slot::SIDEBAR_CONTENT, &input, |_| {});
@@ -505,11 +507,21 @@ fn sidebar(host: &Rc<TestHost>, registry: &Registry<TestHost>) -> Vec<Capture> {
     let first = host.app.render();
     host.messages.borrow_mut().push(abi::types::SessionMessageInfo::Unknown(serde_json::json!({ "type": "x" })));
     mounted.sync(host, &());
-    vec![first, host.app.render()]
+    let synced = host.app.render();
+    host.app.hover(2, 2);
+    let hovered = host.app.render();
+    for _ in 0..2 {
+        host.app.click(2, 2);
+        host.app.advance(Duration::from_millis(1));
+    }
+    mounted.sync(host, &());
+    vec![first, synced, hovered, host.app.render()]
 }
 
 // Expected: the sample's sidebar claim, compiled into the host and run in process, draws the same cells as the same
-// source draws from the library, where its session, message and model reads cross the C ABI as requests.
+// source draws from the library, where its reads cross the C ABI as requests. Its click count brightens under the
+// pointer, and each click dispatches the sample's hidden command with the session as its input, which stores the
+// count the claim then shows.
 #[test]
 fn the_sample_slot_draws_the_same_in_process_and_through_the_library() {
     let host = host();
@@ -519,8 +531,16 @@ fn the_sample_slot_draws_the_same_in_process_and_through_the_library() {
     let direct = sidebar(&host, &in_process);
     let text: Vec<String> = direct.iter().map(Capture::text).collect();
     assert!(text[0].contains("Sample: 0 messages") && text[0].contains("opencode/big"), "{}", text[0]);
-    assert!(text[1].contains("Sample: 1 messages"), "{}", text[1]);
-    assert_eq!(sidebar(&host, &active(&host, &build("still"))), direct);
+    assert!(text[1].contains("Sample: 1 messages") && text[1].contains("0 clicks"), "{}", text[1]);
+    assert_ne!(direct[2], direct[1], "the hover changes no cell");
+    assert!(text[3].contains("2 clicks"), "{}", text[3]);
+    let stored = host.storage.borrow().get("plugin.sample.clicks").cloned();
+    assert_eq!(stored.as_deref(), Some(r#"{"count":2,"input":"ses_1"}"#));
+    // Its hidden command leaves the keymap with it, so the library's runs the clicks.
+    in_process.set_active(&host, "sample", false);
+    let library = active(&host, &build("still"));
+    assert_eq!(sidebar(&host, &library), direct);
+    assert_eq!(host.storage.borrow().get("plugin.sample.clicks").cloned(), stored);
 }
 
 // Expected: the LaTeX built-in, wired through the byte shims of the C ABI (`Loopback`), keeps its formula across
