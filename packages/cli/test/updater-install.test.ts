@@ -138,6 +138,10 @@ function fixture(
   })
 }
 
+// A completed brew upgrade unpacks the new version next to the running one.
+const installKeg = (test: { readonly executable: string; readonly fs: FileSystem.FileSystem }, version: string) =>
+  test.fs.makeDirectory(path.resolve(test.executable, "..", "..", "..", version), { recursive: true })
+
 const windows = process.platform === "win32" ? it.live : it.live.skip
 const unix = process.platform === "win32" ? it.live.skip : it.live
 
@@ -321,11 +325,13 @@ it.live("Homebrew Core installs check and upgrade the Core formula", () =>
     const test = yield* fixture(() => ({}), "@opencode/cli", false, "anomalyco/tap/opencode-v2", "opencode")
     expect(yield* test.updater.method()).toBe("brew")
     expect(yield* test.updater.latest()).toBe("2.0.21")
+    yield* installKeg(test, "2.0.21")
     yield* test.updater.upgrade("brew", "2.0.21")
     expect(test.commands).toEqual([["brew", "upgrade", "opencode"]])
     // An explicitly selected method keeps its own release source.
     expect(yield* test.updater.latest("npm")).toBe("2.3.4")
     expect(test.requests).toEqual([
+      "https://formulae.brew.sh/api/formula/opencode.json",
       "https://formulae.brew.sh/api/formula/opencode.json",
       "https://opencode.ai/update/api/local/cli/npm?current=local",
     ])
@@ -337,6 +343,7 @@ it.live("Homebrew Core installs check and upgrade the Core formula", () =>
       const test = yield* fixture(() => ({}), "@opencode/cli", false, `anomalyco/tap/${formula}`, formula)
       expect(yield* test.updater.method()).toBe("brew")
       expect(yield* test.updater.latest()).toBe("2.3.4")
+      yield* installKeg(test, "2.3.4")
       yield* test.updater.upgrade("brew", "2.3.4")
       expect(test.commands).toEqual([["brew", "upgrade", `anomalyco/tap/${formula}`]])
       expect(test.requests).toEqual([
@@ -346,6 +353,46 @@ it.live("Homebrew Core installs check and upgrade the Core formula", () =>
     }),
   )
 })
+
+it.live("Homebrew upgrade fails when brew exits 0 without installing the target version", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture(() => ({}), "@opencode/cli", false, "anomalyco/tap/opencode-v2", "opencode-v2")
+    const error = yield* test.updater.upgrade("brew", "2.3.4").pipe(Effect.flip)
+    expect(error).toMatchObject({
+      title: "Homebrew did not install OpenCode 2.3.4",
+      command: "brew upgrade anomalyco/tap/opencode-v2",
+      retry: "Run brew update, then run opencode upgrade again.",
+    })
+    // The TUI update dialog shows only the message.
+    expect(error.message).toContain("brew update")
+  }),
+)
+
+it.live("Homebrew upgrade rejects a version other than the formula's before running brew", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture(() => ({}), "@opencode/cli", false, "anomalyco/tap/opencode-v2", "opencode-v2")
+    const error = yield* test.updater.upgrade("brew", "2.3.3").pipe(Effect.flip)
+    expect(error).toMatchObject({ title: "Homebrew cannot install OpenCode 2.3.3", command: undefined })
+    expect(error.message).toContain("2.3.4")
+    expect(test.commands).toEqual([])
+  }),
+)
+
+it.live("Homebrew upgrade accepts a target keg with a formula revision", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture(() => ({}), "@opencode/cli", false, "anomalyco/tap/opencode-v2", "opencode-v2")
+    yield* installKeg(test, "2.3.4_1")
+    yield* test.updater.upgrade("brew", "2.3.4")
+  }),
+)
+
+it.live("Homebrew upgrade of a binary outside the Cellar has no keg to check", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture(() => ({}), "@opencode/cli", false, "anomalyco/tap/opencode-v2")
+    yield* test.updater.upgrade("brew", "2.3.4")
+    expect(test.commands).toEqual([["brew", "upgrade", "anomalyco/tap/opencode-v2"]])
+  }),
+)
 
 const winget = (search: Partial<AppProcess.RunResult>) =>
   fixture(

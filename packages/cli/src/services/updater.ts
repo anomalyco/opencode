@@ -425,16 +425,21 @@ const make = Effect.gen(function* () {
   const upgrade = Effect.fnUntraced(function* (method: Method, input: string) {
     if (!parseReleaseVersion(input)) return yield* Effect.fail(new Error(`Invalid version: ${input}`))
     const version = input.trim().replace(/^v/, "")
-    const packageName =
-      method === "winget"
-        ? wingetPackage
-        : method === "brew" && installedFormula === "opencode"
-          ? "opencode"
-          : (yield* release(method)).package
+    const published = method === "winget" ? undefined : yield* release(method)
+    const packageName = published ? published.package : wingetPackage
     const target = `${packageName}@${version}`
     if (installedPackage && packageName !== installedPackage && (method === "pnpm" || method === "yarn")) {
       return yield* Effect.fail(new Error(`Reinstall ${target} with ${method} to migrate from ${installedPackage}.`))
     }
+    // brew upgrade takes no version and installs whatever the formula describes.
+    if (method === "brew" && published && published.version !== version)
+      return yield* Effect.fail(
+        new UpgradeError({
+          title: `Homebrew cannot install OpenCode ${version}`,
+          detail: `brew upgrade installs only the version in the ${packageName} formula, which is ${published.version}.`,
+          retry: "Run opencode upgrade without a version, or choose another method with --method.",
+        }),
+      )
     const commands: Record<Exclude<Method, "bun" | "curl" | "brew" | "winget">, string[]> = {
       // Keep the old package: uninstalling it can unlink the replacement command.
       npm: [
@@ -495,7 +500,27 @@ const make = Effect.gen(function* () {
             }),
           )
         }
-        if (method === "brew") return yield* runUpgrade({ method, command: ["brew", "upgrade", packageName] })
+        if (method === "brew") {
+          const command = ["brew", "upgrade", packageName]
+          yield* runUpgrade({ method, command })
+          if (!installedFormula) return
+          // brew exits 0 without installing anything when its local formulae are older than the release.
+          const marker = `${path.sep}Cellar${path.sep}${installedFormula}${path.sep}`
+          const kegs = yield* fs
+            .readDirectory(executable.slice(0, executable.indexOf(marker) + marker.length))
+            .pipe(Effect.orElseSucceed(() => undefined))
+          // A formula revision appends _<n> to the keg name.
+          if (kegs && !kegs.some((keg) => keg.replace(/_\d+$/, "") === version))
+            return yield* Effect.fail(
+              new UpgradeError({
+                title: `Homebrew did not install OpenCode ${version}`,
+                detail: `brew upgrade finished without installing OpenCode ${version}. The local Homebrew formulae are probably older than this release, so run brew update first.`,
+                command: command.join(" "),
+                retry: "Run brew update, then run opencode upgrade again.",
+              }),
+            )
+          return
+        }
         if (method === "winget")
           return yield* retaining(
             method,
