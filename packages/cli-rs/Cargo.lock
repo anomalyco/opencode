@@ -788,6 +788,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "opencode-latex",
+ "opencode-mermaid",
  "opencode-plugin-abi",
  "opencode-ui",
  "opencode-util",
