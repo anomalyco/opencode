@@ -7,11 +7,9 @@ import path from "path"
 import { Config } from "../config.js"
 import { Database } from "../database/database.js"
 import { DatabaseBatch } from "../database/batch.js"
-import { EventTable } from "../event/sql.js"
 import { Bus } from "../bus.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Model } from "@opencode/schema/model"
-import { Event } from "@opencode/schema/event"
 import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
 import { SessionMessageUpdater } from "./message-updater.js"
@@ -1141,31 +1139,13 @@ const layer = Layer.effectDiscard(
           .get()
           .pipe(Effect.orDie)
         if (message) {
-          // The message seq is the message-history cutoff. The inbox cutoff
-          // is the boundary's original enqueue seq, recovered from the
-          // durable event log: an inbox item enqueued after the boundary but
-          // before its delivery still belongs to the reverted suffix. Without
-          // an enqueue record (e.g. a forked message) fall back to the
-          // message seq, the previous behavior.
-          const admitted = yield* db
-            .select({ seq: EventTable.seq })
-            .from(EventTable)
-            .where(
-              and(
-                eq(EventTable.aggregate_id, event.data.sessionID),
-                eq(
-                  EventTable.type,
-                  Event.versionedType(
-                    SessionEvent.InboxEnqueued.type,
-                    SessionEvent.InboxEnqueued.durable.version,
-                  ),
-                ),
-                sql`json_extract(${EventTable.data}, '$.inboxID') = ${event.data.to}`,
-              ),
-            )
-            .get()
-            .pipe(Effect.orDie)
-          const inboxCutoff = admitted?.seq ?? message.seq
+          // The message seq is both the message-history cutoff and the inbox
+          // cutoff. An inbox item enqueued after the boundary but before its
+          // delivery is not dropped: its enqueue seq is not recoverable from
+          // projected state (the durable event log is only written when event
+          // persistence is on), so a wider cutoff would only apply on some
+          // deployments. If that cutoff is wanted, record the enqueue seq on
+          // projected state and land it in a separate PR.
           yield* db
             .delete(SessionMessageTable)
             .where(
@@ -1178,7 +1158,7 @@ const layer = Layer.effectDiscard(
             .where(
               and(
                 eq(SessionInboxTable.session_id, event.data.sessionID),
-                gte(SessionInboxTable.enqueued_seq, inboxCutoff),
+                gte(SessionInboxTable.enqueued_seq, message.seq),
               ),
             )
             .run()
