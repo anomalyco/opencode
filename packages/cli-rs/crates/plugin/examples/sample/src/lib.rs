@@ -69,17 +69,20 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         };
         Some(vec![vec![Span::new(format!("sample mode {mode}"))]])
     });
-    // Ticks every `tick_ms` (a second by default) on a host that offers a waker (ABI 1.3).
-    let tick = setup
-        .options()
-        .and_then(|options| options.split("\"tick_ms\":").nth(1))
-        .and_then(|rest| rest.chars().take_while(char::is_ascii_digit).collect::<String>().parse().ok())
-        .unwrap_or(1000);
+    // Ticks every `tick_ms` (a second by default), `ticks` times (no limit by default), on a host that offers a
+    // waker (ABI 1.3).
+    let option = |name: &str| {
+        setup
+            .options()
+            .and_then(|options| options.split(&format!("\"{name}\":")).nth(1))
+            .and_then(|rest| rest.chars().take_while(char::is_ascii_digit).collect::<String>().parse().ok())
+    };
+    let (tick, limit) = (option("tick_ms").unwrap_or(1000), option("ticks").unwrap_or(u64::MAX));
     let ticks = Arc::new(AtomicU64::new(0));
     let ticker = host
         .waker()
         .filter(|_| !cfg!(feature = "still"))
-        .map(|waker| Ticker::start(waker, Duration::from_millis(tick), ticks.clone()));
+        .map(|waker| Ticker::start(waker, Duration::from_millis(tick), limit, ticks.clone()));
     setup.slot(SlotKind::Append, "home.footer", move |_| {
         let _ = (&destroyed, &ticker);
         let (hellos, ticks) = (hellos.get(), ticks.load(Ordering::Relaxed));
@@ -114,11 +117,11 @@ struct Ticker {
 }
 
 impl Ticker {
-    fn start(waker: Waker, every: Duration, ticks: Arc<AtomicU64>) -> Self {
+    fn start(waker: Waker, every: Duration, limit: u64, ticks: Arc<AtomicU64>) -> Self {
         let stop = Arc::new(AtomicBool::new(false));
         let stopped = stop.clone();
         let thread = std::thread::spawn(move || {
-            loop {
+            for _ in 0..limit {
                 std::thread::park_timeout(every);
                 if stopped.load(Ordering::Acquire) {
                     return;

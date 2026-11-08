@@ -325,6 +325,52 @@ fn a_wake_from_a_plugin_thread_draws_its_claims_again() {
     assert!(ticked, "{}", host.app.text());
 }
 
+/// The sample, active with `options`, its home footer claim mounted, after the app's task queue is filled, so the
+/// plugin's wakes find it full.
+fn woken_into_a_full_queue(host: &Rc<TestHost>, options: &str) -> (Registry<TestHost>, impl Sized) {
+    let proxy = host.app().proxy();
+    while proxy.post(|_| {}).is_ok() {}
+    let (definition, error) = Native.load(host, &build(""), Some(options)).unwrap();
+    let registry = Registry::new(Vec::new(), []);
+    registry.load(host, definition.external("sample.so", error));
+    let parent = View::new(host.app());
+    let mounted = registry.mount(&**host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+    host.app().root().add(&parent);
+    // The one tick wakes the host while the queue is still full.
+    std::thread::sleep(Duration::from_millis(300));
+    (registry, mounted)
+}
+
+// Expected: a wake that finds the app's task queue full is delivered once the queue has room, so a plugin that wakes
+// the host once, for one result, still shows it.
+#[test]
+fn a_wake_into_a_full_queue_draws_once_the_queue_has_room() {
+    let host = host();
+    let (_registry, _mounted) = woken_into_a_full_queue(&host, "{\"tick_ms\":50,\"ticks\":1}");
+    let drawn = host.app.wait_until(Duration::from_secs(5), || {
+        host.app.render();
+        host.app.text().contains(" 1 ticks")
+    });
+    assert!(drawn, "{}", host.app.text());
+}
+
+// Expected: a wake the host delivers after the plugin is disabled finds no instance and does nothing; enabling the
+// plugin again starts an instance that draws.
+#[test]
+fn a_wake_after_deactivation_does_nothing() {
+    let host = host();
+    let (registry, mounted) = woken_into_a_full_queue(&host, "{\"tick_ms\":50,\"ticks\":1}");
+    drop(mounted);
+    host.app().root().clear();
+    assert!(registry.set_active(&host, "sample", false));
+    host.app.wait_until(Duration::from_millis(100), || false);
+    assert_eq!(status(&registry), Status::Inactive);
+    assert!(host.toasts.borrow().is_empty());
+    assert!(registry.set_active(&host, "sample", true));
+    let screen = markdown(&host, &registry, "```sample\nagain\n```\n");
+    assert!(screen.contains("SAMPLE v1 AGAIN"), "{screen}");
+}
+
 // Expected: setup runs against the live host, under its ID: it reads and writes a storage key it declared, reads
 // the theme mode, and its toast shows once the plugin is active.
 #[test]
