@@ -322,7 +322,10 @@ fn placement_constructors_name_their_kind() {
 /// A plugin whose one claim at `placement` renders what `render` returns.
 fn rendering(id: &str, placement: Placement, render: impl Fn() -> abi::Render + 'static) -> Definition<TestHost> {
     let render: node::SlotRender<TestHost> = Rc::new(move |_, _, _| render());
-    Definition::new(id, move |cx: &mut Setup<'_, TestHost>| cx.claim(placement.clone(), render.clone()))
+    Definition::new(id, move |cx: &mut Setup<'_, TestHost>| {
+        let activation = crate::activation::Activation::new(cx.host(), Arc::new(crate::activation::Wake::new(None)));
+        cx.claim(placement.clone(), render.clone(), &activation);
+    })
 }
 
 /// The rows the app draws, without trailing blanks.
