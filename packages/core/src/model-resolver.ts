@@ -258,7 +258,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
           ...runtime.options,
           ...mergeTransport(runtime.options, {
             timeout: { total: timeouts.timeout, headers: timeouts.headerTimeout, chunk: timeouts.chunkTimeout },
-            http: { encoding: Provider.encoding(configured) },
+            http: { encoding: Provider.encoding(configured), socketPath: Provider.socketPath(configured) },
           }),
         },
       })
@@ -313,7 +313,7 @@ const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <
   credential?: Credential.Value,
   dependencies?: Dependencies,
 ) {
-  const { resolved, module, settings } = yield* loadCatalogPackage(model, credential, dependencies)
+  const { resolved, configured, module, settings } = yield* loadCatalogPackage(model, credential, dependencies)
   const runtime: unknown = yield* Effect.try({
     try: () => module.model(resolved.modelID ?? resolved.id, settings),
     catch: (cause) => constructionError(resolved, cause),
@@ -328,6 +328,11 @@ const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <
         })
       : runtime
   if (!is(adapted)) return yield* unsupported(resolved)
+  const socketPath = Provider.socketPath(configured)
+  if (!socketPath) return adapted
+  if (adapted instanceof DecisionModel)
+    return new DecisionModel({ ...adapted, http: { ...adapted.http, socketPath } }) as Runtime
+  if (adapted instanceof ImageModel) return new ImageModel({ ...adapted, http: { ...adapted.http, socketPath } }) as Runtime
   return adapted
 })
 
@@ -502,7 +507,8 @@ export const layer = Layer.effect(
         limit: selected.limit,
         compaction: runtimeInfo.settings?.compaction,
         cache: runtimeInfo.settings?.cache,
-        transport: provider?.settings?.transport,
+        // A WebSocket transport would dial the base URL's host over TCP, so a socket keeps the model on HTTP.
+        transport: Provider.socketPath(runtimeInfo.settings ?? {}) ? "http" : provider?.settings?.transport,
         chunkTimeout: Provider.timeout(provider?.settings?.chunkTimeout),
       }
     })

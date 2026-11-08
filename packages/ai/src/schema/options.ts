@@ -72,6 +72,11 @@ export interface HttpOptions {
   readonly body?: Record<string, unknown>
   /** Compression for JSON request bodies. Only set it for endpoints known to decode it. */
   readonly encoding?: RequestEncoding
+  /**
+   * Unix domain socket to dial instead of the URL's host and port, such as a local model server's socket. The URL still
+   * supplies the request path and must use `http:`; its host and port are ignored.
+   */
+  readonly socketPath?: string
 }
 
 /** Per-phase time limits in milliseconds. */
@@ -127,6 +132,7 @@ export const mergeTransport = (...items: ReadonlyArray<TransportOptions | undefi
       query: mergeStringRecords(...http.map((item) => item?.query)),
       body: mergeJsonRecords(...http.map((item) => item?.body)),
       encoding: last(http.map((item) => item?.encoding)),
+      socketPath: last(http.map((item) => item?.socketPath)),
     }),
   }
 }

@@ -258,6 +258,11 @@ export function encoding(settings: Readonly<Record<string, unknown>>) {
   return Option.getOrUndefined(decodeEncoding(settings.encoding))
 }
 
+/** Unix domain socket the provider's HTTP requests dial instead of the URL's host and port. */
+export function socketPath(settings: Readonly<Record<string, unknown>>) {
+  return typeof settings.socketPath === "string" && settings.socketPath.length > 0 ? settings.socketPath : undefined
+}
+
 export function mergeOverlay(
   base: Readonly<Record<string, unknown>> | undefined,
   overlay: Readonly<Record<string, unknown>> | undefined,

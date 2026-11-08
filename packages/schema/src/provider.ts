@@ -89,6 +89,10 @@ export const Settings = Schema.StructWithRest(
     cache: Cache.pipe(optional),
     transport: Transport.pipe(optional),
     encoding: Encoding.pipe(optional),
+    socketPath: Schema.String.pipe(optional).annotate({
+      description:
+        "Unix domain socket the provider's HTTP requests dial instead of the base URL's host and port, such as a local model server's socket",
+    }),
   }),
   [Schema.Record(Schema.String, Schema.Any)],
 ).annotate({ identifier: "Provider.Settings" })

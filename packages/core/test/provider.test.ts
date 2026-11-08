@@ -68,6 +68,7 @@ describe("Provider", () => {
         cache: { ttl: "1h" },
         encoding: "gzip",
         transport: "websocket",
+        socketPath: "/run/llm.sock",
       }),
     ).toEqual({
       apiKey: "secret",

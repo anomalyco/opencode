@@ -32,7 +32,15 @@ import {
   type ToolMessage,
   type UsageInput,
 } from "@opencode/ai/effect"
-import { Auth, Endpoint, ProviderShared, RequestExecutor, type AnyRoute, type HttpMiddleware } from "@opencode/ai/route"
+import {
+  Auth,
+  Endpoint,
+  ProviderShared,
+  RequestExecutor,
+  unixSocketFetch,
+  type AnyRoute,
+  type HttpMiddleware,
+} from "@opencode/ai/route"
 import { isRecord } from "@opencode/util/record"
 import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream, Struct } from "effect"
 import { makeParser } from "effect/encoding/Sse"
@@ -133,6 +141,7 @@ function prepareOptions(model: RuntimeInfo, pkg: string, outbound: Fetch) {
   }
 
   const customFetch = settings.fetch
+  const socketPath = Provider.socketPath(settings)
   const timeouts = Provider.timeouts(settings)
   options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const opts = { ...(init ?? {}) }
@@ -160,7 +169,9 @@ function prepareOptions(model: RuntimeInfo, pkg: string, outbound: Fetch) {
       }
     }
 
-    const send: Fetch = isFetch(customFetch) ? customFetch : outbound
+    // A configured socket wins over a custom fetch so a provider never silently falls back to TCP.
+    const send: Fetch =
+      socketPath === undefined ? (isFetch(customFetch) ? customFetch : outbound) : (unixSocketFetch(socketPath) as Fetch)
     const middleware = httpMiddleware.getStore()
     const res = await (
       middleware

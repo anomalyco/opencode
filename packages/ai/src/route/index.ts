@@ -13,6 +13,7 @@ export type {
   TriggerCompactOptions,
 } from "./client.js"
 export * from "./executor.js"
+export { unixSocketFetch } from "./unix-socket.js"
 export { Auth } from "./auth.js"
 export { AuthOptions } from "./auth-options.js"
 export { Endpoint } from "./endpoint.js"
