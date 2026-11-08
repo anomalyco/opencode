@@ -335,8 +335,7 @@ pub fn free_limit_reset(delay: Option<f64>, base: f64, now: f64) -> Option<Strin
     let at = base + delay;
     let date = Zone::Local.at(at as i64)?;
     let today = Zone::Local.at(now as i64)?;
-    // `toLocaleTimeString(undefined, { timeStyle: "short" })` in en-US puts a narrow no-break space before AM/PM.
-    let time = date.short_time("\u{202f}");
+    let time = date.short_time();
     if date.date == today.date && at - now < DAY_MS {
         return Some(time);
     }
@@ -495,5 +494,7 @@ mod tests {
         // Over a day away is always the time and the date.
         let far = free_limit_reset(Some(2.0 * DAY_MS), 1_768_478_400_000.0, 1_768_478_400_000.0).unwrap();
         assert!(far.contains(" · "), "{far}");
+        // `Locale.time` under Bun puts an ASCII space before AM/PM.
+        assert!(far.contains(" AM") || far.contains(" PM"), "{far:?}");
     }
 }

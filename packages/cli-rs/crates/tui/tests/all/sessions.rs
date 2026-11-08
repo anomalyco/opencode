@@ -84,7 +84,7 @@ fn fake(mode: Mode, now: f64, delete_status: u16) -> Fake {
 
 fn noon(day: u32) -> f64 {
     let date = opencode_util::time::Date { year: 2026, month: 3, day };
-    opencode_util::time::UTC.instant(date, 12 * 3600).unwrap() as f64
+    opencode_util::time::UTC.instant(date, 12 * 3600) as f64
 }
 
 fn session(id: &str, title: Option<&str>, updated: f64, extra: Value) -> Value {

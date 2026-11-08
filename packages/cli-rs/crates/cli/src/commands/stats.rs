@@ -140,7 +140,7 @@ impl Range {
         if let Some(days) = args.days {
             let from = Date::from_days(today.days() - i64::from(days.max(1) - 1));
             return Self {
-                from: Some(local_midnight(zone, from)),
+                from: Some(zone.instant(from, 0)),
                 to,
                 label: match days {
                     0 | 1 => "today".to_owned(),
@@ -150,18 +150,13 @@ impl Range {
         }
         let current = today.year;
         let year = args.year.map_or(current, i32::from);
-        let start = |year| local_midnight(zone, Date { year, month: 1, day: 1 });
+        let start = |year| zone.instant(Date { year, month: 1, day: 1 }, 0);
         Self {
             from: Some(start(year)),
             to: if year == current { to } else { start(year + 1) },
             label: if year == current { format!("{year} so far") } else { year.to_string() },
         }
     }
-}
-
-// `new Date(y, m, d).getTime()`: local midnight, or the first instant after a gap that skips it.
-fn local_midnight(zone: Zone, date: Date) -> i64 {
-    (0..=24).find_map(|hours| zone.instant(date, hours * 3600)).unwrap_or(0)
 }
 
 /// The stats palette, which `terminalPalette` picks from `COLORFGBG`'s background.
@@ -674,7 +669,7 @@ mod tests {
     #[test]
     fn ranges_follow_stats_range() {
         let zone = Zone::Fixed(3600);
-        let ms = |year, month, day| zone.instant(Date { year, month, day }, 0).unwrap();
+        let ms = |year, month, day| zone.instant(Date { year, month, day }, 0);
         let now = ms(2026, 11, 4) + (15 * 60 + 30) * 60_000;
         let to = now + 1;
         let args = |days: Option<u32>, year: Option<u16>, all: bool| StatsArgs {
