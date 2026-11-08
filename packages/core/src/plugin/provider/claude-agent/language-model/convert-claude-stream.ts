@@ -1,7 +1,7 @@
 export * as ConvertClaudeStream from "./convert-claude-stream.js"
 
 import type { LanguageModelV3FunctionTool, LanguageModelV3StreamPart } from "@ai-sdk/provider"
-import type { SDKMessage, SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
+import type { AccountInfo, SDKMessage, SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
 import { Provider } from "@opencode/schema/provider"
 import { ClaudeUsage } from "./usage.js"
 import { ToolNames } from "../tools/names.js"
@@ -17,9 +17,20 @@ export function make(tools: readonly LanguageModelV3FunctionTool[]) {
   let metadata: Record<string, { sessionID: string; messageID: string }> | undefined
   // Plugins read plan usage from step metadata instead of polling Anthropic for it.
   let rateLimit: SDKRateLimitInfo | undefined
-  const finishMetadata = () => (rateLimit ? { [Provider.ID.claudeAgent]: { rateLimit } } : undefined)
+  let vendorModel: string | undefined
+  // `subscription` proves a Claude plan answered this step. A wrapper that sends a step elsewhere replaces this metadata.
+  const finishMetadata = (account?: AccountInfo) => {
+    const plan = account?.apiProvider === "firstParty" && account.apiKeySource === undefined
+    if (!rateLimit && !plan) return undefined
+    return {
+      [Provider.ID.claudeAgent]: {
+        ...(rateLimit && { rateLimit }),
+        ...(plan && { subscription: true, model: vendorModel }),
+      },
+    }
+  }
 
-  return (message: SDKMessage): LanguageModelV3StreamPart[] => {
+  return (message: SDKMessage, account?: AccountInfo): LanguageModelV3StreamPart[] => {
     const parts: LanguageModelV3StreamPart[] = []
     const error = failure(message)
     if (error) return [{ type: "error", error }]
@@ -78,7 +89,7 @@ export function make(tools: readonly LanguageModelV3FunctionTool[]) {
               type: "finish",
               finishReason: { unified: "tool-calls", raw: "tool_use" },
               usage: usage.snapshot(),
-              providerMetadata: finishMetadata(),
+              providerMetadata: finishMetadata(account),
             })
           }
           break
@@ -90,6 +101,7 @@ export function make(tools: readonly LanguageModelV3FunctionTool[]) {
       // Stream events carry API message IDs; only the complete assistant message carries the transcript UUID.
       metadata = { [Provider.ID.claudeAgent]: { sessionID: message.session_id, messageID: message.uuid } }
       usage.update(message.message.id, message.message.usage)
+      vendorModel = message.message.model
       for (const block of message.message.content) {
         if (block.type !== "tool_use") continue
         const toolName = ToolNames.original(block.name, tools)
@@ -131,7 +143,7 @@ export function make(tools: readonly LanguageModelV3FunctionTool[]) {
           raw: message.stop_reason ?? undefined,
         },
         usage: usage.snapshot(),
-        providerMetadata: finishMetadata(),
+        providerMetadata: finishMetadata(account),
       })
     }
     return parts

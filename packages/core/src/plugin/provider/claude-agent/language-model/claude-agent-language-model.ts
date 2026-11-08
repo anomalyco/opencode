@@ -77,9 +77,9 @@ export class Model implements LanguageModelV3 {
               system,
               prompt: options.prompt,
               tools: offered,
-              emit: (message) => {
+              emit: (message, account) => {
                 if (cancelled) return
-                for (const part of convert(message)) controller.enqueue(part)
+                for (const part of convert(message, account)) controller.enqueue(part)
               },
             },
             signal,

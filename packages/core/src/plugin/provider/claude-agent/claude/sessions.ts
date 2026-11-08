@@ -1,6 +1,6 @@
 export * as ClaudeSessions from "./sessions.js"
 
-import type { Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk"
+import type { AccountInfo, Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk"
 import type {
   LanguageModelV3FunctionTool,
   LanguageModelV3Prompt,
@@ -37,7 +37,8 @@ export interface Request {
   readonly system: NonNullable<Options["systemPrompt"]>
   readonly prompt: LanguageModelV3Prompt
   readonly tools: readonly LanguageModelV3FunctionTool[]
-  readonly emit: (message: SDKMessage) => void
+  // `account` is the login of the process that answered, undefined behind a custom endpoint, which can bill anything.
+  readonly emit: (message: SDKMessage, account: AccountInfo | undefined) => void
 }
 
 interface LiveProcess {
@@ -224,6 +225,10 @@ export function registry() {
       })
       const live = yield* open(entry, request)
       const session = live.session
+      const account =
+        (request.connection?.ANTHROPIC_BASE_URL ?? input.io.env().ANTHROPIC_BASE_URL)
+          ? undefined
+          : (yield* attempt(() => session.ready)).account
 
       const addsUserMessage = !continuation || content.length > 0
       const userID = addsUserMessage ? crypto.randomUUID() : undefined
@@ -267,7 +272,7 @@ export function registry() {
             if (part.type === "tool_result") toolMessages.set(part.tool_use_id, message.uuid)
           }
         }
-        request.emit(message)
+        request.emit(message, account)
       }
 
       let completed = false

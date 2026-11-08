@@ -29,6 +29,7 @@ import { SharedCache } from "../../shared-cache.js"
 import { Skill } from "../../skill.js"
 import { SkillDiscovery } from "../../skill/discovery.js"
 import { WebSearch } from "../../websearch.js"
+import { OpencodeTelemetry } from "./opencode-telemetry.js"
 import { OpencodeWatches } from "./opencode-watches.js"
 import { ProviderRefresh } from "./refresh.js"
 
@@ -66,6 +67,10 @@ const ConsoleInstructions = Schema.Struct({
 })
 const ConsoleSkills = Schema.Struct({
   skills: Schema.Array(Schema.Struct({ slug: Schema.String, version: Schema.String })),
+})
+const ConsoleTelemetry = Schema.Struct({
+  otlpLogsUrl: Schema.String,
+  headers: Schema.Record(Schema.String, Schema.String),
 })
 const SkillBundle = Schema.Struct({
   slug: Schema.String,
@@ -215,6 +220,9 @@ export const OpencodePlugin = define<
     let reported: IntegrationConnection.Status | undefined
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
     const watches = yield* OpencodeWatches.make(ctx, http)
+    const telemetry = yield* OpencodeTelemetry.make(ctx, http)
+    const telemetryDiscovery = yield* FiberHandle.make<void, never>()
+    let reportingAllowed = false
 
     // Every project signed in to the same workspace shares one fetch, reused while it is younger than `maxAge`.
     const load = Effect.fn("OpencodePlugin.load")(function* (maxAge: Duration.Input = Duration.minutes(1)) {
@@ -332,7 +340,30 @@ export const OpencodePlugin = define<
       const allowed = document !== undefined && (!config.integration || isDeepStrictEqual(integrated, document))
       yield* syncInstructionsAndSkills(next, allowed)
       yield* syncWatches(allowed && next.remote?.watches === true ? next.connection : undefined)
+      reportingAllowed = allowed
+      yield* discoverTelemetry(next)
     })
+    // Beside the load rather than in it, so a slow or failing telemetry endpoint never holds up config or policy.
+    const discoverTelemetry = (next: typeof snapshot) => FiberHandle.run(telemetryDiscovery, syncTelemetry(next))
+    const syncTelemetry = Effect.fnUntraced(
+      function* (next: typeof snapshot) {
+        // `reported` is the Console refusing this sign-in. The gateway already counts a provider it defines itself.
+        const credential =
+          reportingAllowed && !reported && next.connection && !next.remote?.providers?.[Provider.ID.claudeAgent]
+            ? yield* ctx.integration.connection.resolve(next.connection)
+            : undefined
+        if (!next.connection || credential?.type !== "oauth") return yield* telemetry.sync(undefined)
+        const workspace = workspaceKey(next.connection, credential)
+        // A failed fetch keeps the last target.
+        const body = yield* cache.get({
+          key: `opencode-console-telemetry:${workspace}`,
+          interval: Duration.minutes(1),
+          load: fetchList(http, credential, "/api/v2/telemetry", ConsoleTelemetry),
+        })
+        yield* telemetry.sync(body && { key: workspace, url: body.otlpLogsUrl, headers: body.headers })
+      },
+      Effect.catch((cause) => Effect.logWarning("failed to discover Console telemetry", { cause })),
+    )
     // Watching starts when the Console's config says the workspace has event watches, and stops when it no longer does.
     const syncWatches = Effect.fnUntraced(
       function* (connection: ActiveConnection) {
@@ -524,7 +555,8 @@ export const OpencodePlugin = define<
       loading.withPermit(
         Effect.gen(function* () {
           const next = yield* load(maxAge)
-          if (!Equal.equals(snapshot, next)) yield* apply(next)
+          if (!Equal.equals(snapshot, next)) return yield* apply(next)
+          yield* discoverTelemetry(next)
         }),
       )
 

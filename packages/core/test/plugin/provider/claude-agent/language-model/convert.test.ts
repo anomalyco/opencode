@@ -3,17 +3,17 @@ import { ConvertClaudeStream } from "@opencode/core/plugin/provider/claude-agent
 import { ConvertToClaudeMessage } from "@opencode/core/plugin/provider/claude-agent/language-model/convert-to-claude-message"
 import { ClaudeSystemPrompt } from "@opencode/core/plugin/provider/claude-agent/language-model/system-prompt"
 import type { LanguageModelV3FunctionTool, LanguageModelV3Prompt, LanguageModelV3StreamPart } from "@ai-sdk/provider"
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk"
+import type { AccountInfo, SDKMessage } from "@anthropic-ai/claude-agent-sdk"
 import { Recorder } from "../lib/recorder"
 import { TestTools } from "../lib/tools"
 
 // The recorded first reply calls lookup twice.
-function firstToolReply(tools: readonly LanguageModelV3FunctionTool[]) {
+function firstToolReply(tools: readonly LanguageModelV3FunctionTool[], account?: AccountInfo) {
   const convert = ConvertClaudeStream.make(tools)
   const parts: LanguageModelV3StreamPart[] = []
   for (const line of Recorder.load("tools")) {
     if (line.from !== "claude" || line.message.type === "control_response") continue
-    parts.push(...convert(line.message as SDKMessage))
+    parts.push(...convert(line.message as SDKMessage, account))
     if (line.message.type === "stream_event" && line.message.event.type === "message_stop") break
   }
   return parts
@@ -42,6 +42,21 @@ describe("Claude conversions", () => {
       type: "finish",
       providerMetadata: undefined,
     })
+  })
+
+  test("only a step a Claude plan answered finishes with proof of it and the vendor model", () => {
+    const metadata = (account: AccountInfo) => {
+      const finish = firstToolReply(TestTools.tools, account).at(-1)
+      return finish?.type === "finish" ? finish.providerMetadata?.["claude-agent"] : undefined
+    }
+    expect(metadata({ subscriptionType: "Claude Team", apiProvider: "firstParty" })).toMatchObject({
+      subscription: true,
+      model: "claude-haiku-5-5",
+    })
+    expect(metadata({ apiKeySource: "ANTHROPIC_API_KEY", apiProvider: "firstParty" })).not.toHaveProperty(
+      "subscription",
+    )
+    expect(metadata({ apiProvider: "bedrock" })).not.toHaveProperty("subscription")
   })
 
   test("utility calls keep system instructions separate from conversation content and omit thinking", () => {

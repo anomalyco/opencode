@@ -359,7 +359,7 @@ describe("OpencodePlugin", () => {
                   label: initial.label,
                 }),
               ).toEqual(stored.value)
-              expect(requests).toEqual([
+              expect(requests.filter((path) => path !== "/api/v2/telemetry")).toEqual([
                 "/auth/device/token",
                 "/api/v2/config",
                 ...(scenario.orgID === "org-missing" ? [] : ["/api/v2/instructions", "/api/v2/skills"]),
@@ -1274,7 +1274,8 @@ describe("OpencodePlugin", () => {
               ],
             }),
           )
-          expect(requests).toEqual([
+          const answered = requests.filter((request) => request.path !== "/api/v2/telemetry")
+          expect(answered).toEqual([
             {
               method: "GET",
               path: "/api/v2/config",
@@ -1339,7 +1340,7 @@ describe("OpencodePlugin", () => {
           yield* eventually(websearch.providers(), (providers) =>
             providers.every((provider) => provider.id !== WebSearch.ID.make("opencode")),
           )
-          expect(requests.at(-1)).toMatchObject({
+          expect(requests.findLast((request) => request.path !== "/api/v2/telemetry")).toMatchObject({
             method: "GET",
             path: "/api/v2/config",
             authorization: "Bearer switched",
