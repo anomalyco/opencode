@@ -176,11 +176,16 @@ export const read = Effect.fn("ReadTool.read")(function* (
   while (true) {
     const eof = ended || bytes >= first.info.size
     const total = lineCount(lines, leaves.at(-1)?.bytes.at(-1))
-    if (eof && (offset < 0 || offset > total)) {
-      const skipped = Math.max(0, total - tailLines(page))
+    if (eof && offset > total) {
+      const skipped = Math.max(0, total - Math.min(page.limit || TAIL_LINES, TAIL_LINES))
       // Decode from the newline ending the last skipped line, so a byte order mark
       // starting the tail stays content. That empty first line is never in the tail.
-      const tail = textPage(textSuffix(leaves, Math.max(0, textOffset(textTree(leaves), skipped) - 1)), true, page)
+      const tree = textTree(leaves)
+      const tail = textPage(
+        textSlice(leaves, Math.max(0, textOffset(tree, skipped) - 1), tree.summary.bytes),
+        true,
+        page,
+      )
       if (tail === undefined) return yield* Effect.die("Read page did not settle for a complete file")
       return yield* makeTextPage(
         input,
@@ -190,13 +195,18 @@ export const read = Effect.fn("ReadTool.read")(function* (
       )
     }
     if (eof || (offset > 0 && lines >= offset - 1)) {
-      const start = textOffset(textTree(leaves), offset - 1)
-      const result = textPage(textSuffix(leaves, start), eof, { limit })
+      // A negative offset only resolves at EOF, counting back from the last line.
+      const from = offset < 0 ? Math.max(1, total + offset + 1) : offset
+      const tree = textTree(leaves)
+      const start = textOffset(tree, from - 1)
+      // Decode only the requested lines plus one byte, enough to tell whether more follow.
+      const end = Math.min(tree.summary.bytes, textOffset(tree, from - 1 + limit) + 1)
+      const result = textPage(textSlice(leaves, start, end), eof && end === tree.summary.bytes, { limit })
       if (result !== undefined) {
         const translated = {
           ...result,
-          offset,
-          ...(result.next === undefined ? { next: undefined } : { next: offset + result.next - 1 }),
+          offset: from,
+          ...(result.next === undefined ? { next: undefined } : { next: from + result.next - 1 }),
         }
         const consumed = start + result.consumed
         let checked = 0
@@ -239,7 +249,12 @@ const completePage = Effect.fnUntraced(function* (
   bytes: Uint8Array,
   page: PageInput,
 ) {
-  const result = textPage(bytes, true, page)
+  const total = lineCount(textLeaf(bytes).summary.lines, bytes.at(-1))
+  const result = textPage(
+    bytes,
+    true,
+    page.offset !== undefined && page.offset < 0 ? { ...page, offset: Math.max(1, total + page.offset + 1) } : page,
+  )
   if (result === undefined) return yield* Effect.die("Read page did not settle for a complete file")
   return yield* makeTextPage(input, resource, result, bytes.subarray(0, result.consumed).includes(0))
 })
@@ -304,9 +319,9 @@ const textPage = (bytes: Uint8Array, eof: boolean, page: PageInput) => {
 
   const entries: string[] = []
   let size = 0
-  // A negative offset or one past the end returns the file's last lines that fit, ending at the last line.
-  if (eof && (offset < 0 || offset > Math.max(1, available.length))) {
-    for (const value of available.slice(-tailLines(page)).toReversed()) {
+  // An offset past the end returns the file's last lines that fit, ending at the last line.
+  if (eof && offset > Math.max(1, available.length)) {
+    for (const value of available.slice(-Math.min(page.limit || TAIL_LINES, TAIL_LINES)).toReversed()) {
       const text = clampLine(value)
       size += Buffer.byteLength(text, "utf-8") + (entries.length > 0 ? 1 : 0)
       if (size > MAX_READ_BYTES) break
@@ -338,12 +353,6 @@ const textPage = (bytes: Uint8Array, eof: boolean, page: PageInput) => {
   const consumed = consumedLines === 0 ? 0 : (nthNewline(bytes, consumedLines) ?? bytes.length)
   return { entries, offset, next, consumed }
 }
-
-// offset -N asks for the last N lines; an offset past the end falls back to the last 100.
-const tailLines = (page: PageInput) =>
-  page.offset !== undefined && page.offset < 0
-    ? Math.min(-page.offset, page.limit || MAX_READ_LINES, MAX_READ_LINES)
-    : Math.min(page.limit || TAIL_LINES, TAIL_LINES)
 
 const clampLine = (line: string) =>
   line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : line
@@ -401,14 +410,18 @@ const textOffset = (tree: TextNode, newline: number) => {
   return end === undefined ? tree.summary.bytes : offset + end
 }
 
-const textSuffix = (leaves: ReadonlyArray<Extract<TextNode, { readonly type: "leaf" }>>, start: number) => {
+const textSlice = (
+  leaves: ReadonlyArray<Extract<TextNode, { readonly type: "leaf" }>>,
+  start: number,
+  end: number,
+) => {
   let position = 0
   return Buffer.concat(
     leaves.flatMap((leaf) => {
       const leafStart = position
       position += leaf.summary.bytes
-      if (position <= start) return []
-      return [leaf.bytes.subarray(Math.max(0, start - leafStart))]
+      if (position <= start || leafStart >= end) return []
+      return [leaf.bytes.subarray(Math.max(0, start - leafStart), end - leafStart)]
     }),
   )
 }

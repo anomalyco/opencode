@@ -300,7 +300,7 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
-  it.effect("reads the last lines for a negative offset", () =>
+  it.effect("starts a negative offset that many lines before the end", () =>
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
       const read = (name: string, content: string, page: ReadToolFileSystem.PageInput) =>
@@ -325,9 +325,10 @@ describe("ReadToolFileSystem", () => {
         "5: five",
       ])
       expect(yield* read("limited.txt", small, { offset: -4, limit: 2 })).toEqual([
-        "Read file limited.txt, lines 4-5",
-        "4: four",
-        "5: five",
+        "Read file limited.txt, lines 2-3",
+        "2: two",
+        "3: three",
+        "[Output truncated. Continue reading with offset: 4]",
       ])
       expect(yield* read("crlf.txt", "one\r\ntwo\r\nthree\r\n", { offset: -2 })).toEqual([
         "Read file crlf.txt, lines 2-3",
@@ -339,15 +340,10 @@ describe("ReadToolFileSystem", () => {
         "3: three",
       ])
       expect(yield* read("empty.txt", "", { offset: -5 })).toEqual(["Read file empty.txt, 0 lines"])
-      // Each clamped line is 2041 bytes, so 25 of them fit in the 50 KB cap.
-      const wide = Array.from({ length: 200 }, (_, index) => `${index + 1}`.padEnd(3_000, "w"))
-      expect((yield* read("wide.txt", wide.join("\n") + "\n", { offset: -100 }))[0]).toBe(
-        "Read file wide.txt, lines 176-200",
-      )
     }),
   )
 
-  it.effect("reads the last lines of a file larger than the first chunk for a negative offset", () =>
+  it.effect("starts a negative offset from the end of a file larger than the first chunk", () =>
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
       const read = (name: string, content: string, page: ReadToolFileSystem.PageInput) =>
@@ -363,14 +359,29 @@ describe("ReadToolFileSystem", () => {
         "Read file lf.txt, lines 2951-3000",
         ...expected(2_951),
       ])
-      expect(yield* read("crlf.txt", lines.join("\r\n"), { offset: -50, limit: 3 })).toEqual([
+      expect(yield* read("window.txt", lines.join("\n") + "\n", { offset: -50, limit: 10 })).toEqual([
+        "Read file window.txt, lines 2951-2960",
+        ...expected(2_951, 2_960),
+        "[Output truncated. Continue reading with offset: 2961]",
+      ])
+      expect(yield* read("crlf.txt", lines.join("\r\n"), { offset: -3 })).toEqual([
         "Read file crlf.txt, lines 2998-3000",
         ...expected(2_998),
       ])
-      // 3000 lines of 101 bytes exceed the 50 KB cap, so the whole-file request keeps the last 506.
-      expect((yield* read("whole.txt", lines.join("\n") + "\n", { offset: -5_000 }))[0]).toBe(
-        "Read file whole.txt, lines 2495-3000",
-      )
+      // 3000 lines of 101 bytes exceed the 50 KB cap, so reading from line 1 stops after 506 like any read.
+      const whole = yield* read("whole.txt", lines.join("\n") + "\n", { offset: -5_000 })
+      expect([whole[0], whole.at(-2), whole.at(-1)]).toEqual([
+        "Read file whole.txt, lines 1-506",
+        `506: ${lines[505]}`,
+        "[Output truncated. Continue reading with offset: 507]",
+      ])
+      // Each clamped line is 2041 bytes, so 25 of them fit in the 50 KB cap.
+      const wide = Array.from({ length: 200 }, (_, index) => `${index + 1}`.padEnd(3_000, "w"))
+      const clipped = yield* read("wide.txt", wide.join("\n") + "\n", { offset: -100 })
+      expect([clipped[0], clipped.at(-1)]).toEqual([
+        "Read file wide.txt, lines 101-125",
+        "[Output truncated. Continue reading with offset: 126]",
+      ])
       const short = lines.slice(0, 10)
       const huge = yield* read("huge.txt", `${short.join("\n")}\n${"z".repeat(300 * 1024)}`, { offset: -20 })
       expect(huge).toEqual([

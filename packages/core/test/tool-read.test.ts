@@ -1165,27 +1165,33 @@ describe("ReadTool", () => {
     }),
   )
 
-  it.effect("forwards a negative offset and shows the real line numbers", () =>
+  it.effect("forwards a negative offset and shows the real line numbers and continuation", () =>
     Effect.gen(function* () {
       readResult = new ReadToolFileSystem.TextPage({
         type: "text-page",
         content: "nine\nten",
         mime: "text/plain",
         offset: 9,
-        truncated: false,
+        truncated: true,
+        next: 11,
       })
       const registry = yield* Tool.Service
 
       const result = yield* executeTool(registry, {
         sessionID,
         ...toolIdentity,
-        call: { type: "tool-call", id: "call-tail", name: "read", input: { path: "log.txt", offset: -2 } },
+        call: { type: "tool-call", id: "call-tail", name: "read", input: { path: "log.txt", offset: -5, limit: 2 } },
       })
       expect(result.status).toBe("completed")
       if (result.status !== "completed") return
-      expect(result.content).toEqual([{ type: "text", text: "Read file log.txt, lines 9-10\n9: nine\n10: ten" }])
+      expect(result.content).toEqual([
+        {
+          type: "text",
+          text: "Read file log.txt, lines 9-10\n9: nine\n10: ten\n[Output truncated. Continue reading with offset: 11]",
+        },
+      ])
       expect(readCalls).toEqual([
-        { input: AbsolutePath.make(path.join(process.cwd(), "log.txt")), page: { offset: -2, limit: undefined } },
+        { input: AbsolutePath.make(path.join(process.cwd(), "log.txt")), page: { offset: -5, limit: 2 } },
       ])
     }),
   )
