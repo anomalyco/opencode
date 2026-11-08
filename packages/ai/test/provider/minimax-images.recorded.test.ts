@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image, Media } from "../../src/effect.js"
+import { ai, Media } from "../../src/effect.js"
 import { MiniMax } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
@@ -17,7 +17,7 @@ const recorded = recordedTests({
 describe("MiniMax Images recorded", () => {
   recorded.effect("generates an image", () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model,
         prompt: "A simple flat red circle centered on a plain white background.",
         aspect: "1:1",
@@ -33,7 +33,7 @@ describe("MiniMax Images recorded", () => {
 
   recorded.effect("generates from a subject reference", () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model,
         prompt: "The same woman reading a book in a quiet library, soft window light.",
         // MiniMax's own documentation portrait.

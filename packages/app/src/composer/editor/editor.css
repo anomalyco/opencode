@@ -3,11 +3,7 @@
 }
 
 [data-component="composer-editor"] [data-mention="session"] {
-  border-radius: 4px;
-  padding-inline: 4px;
-  background: var(--v2-background-bg-layer-02);
-  color: var(--v2-text-text-base);
-  box-shadow: inset 0 0 0 1px var(--v2-border-border-base);
+  color: var(--v2-text-text-muted);
 }
 
 /* Matches the 16px session title fade. The top fade only covers the editor's 16px top padding until text scrolls

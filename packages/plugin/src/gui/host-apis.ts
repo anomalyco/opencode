@@ -23,7 +23,7 @@ export interface ServerRef {
   readonly client: OpenCodeClient
   /** The server's synced data (sessions, projects, …). Reactive. */
   readonly data: Data
-  /** The built-in local server or a loopback http server. */
+  /** The app's own local server, or a loopback http connection to its port. */
   readonly local: boolean
   /** The app's own server, the desktop sidecar. */
   readonly builtin: boolean
@@ -892,6 +892,26 @@ export interface Layout {
      * ```
      */
     menu(): readonly SessionPanelMenuItem[]
+    /**
+     * The side region width the user dragged to, or `resize` stored, while one of your panel's tabs shows; undefined
+     * when none is stored, as before the app interface mounts. Reactive.
+     *
+     * @param panel - Your `Panel`'s id.
+     */
+    width(panel: string): number | undefined
+    /**
+     * Stores the side region width for your panel, as a drag on one of its tabs does; it applies while the side pane
+     * shows one of the panel's tabs, and the user's next drag replaces it. Waits until the app interface mounts.
+     *
+     * @param panel - Your `Panel`'s id.
+     * @param width - CSS pixels. The host keeps the conversation at its minimum width and the region at its own.
+     *
+     * @example
+     * ```ts
+     * ctx.layout.side.resize("quota", 360)
+     * ```
+     */
+    resize(panel: string, width: number): void
   }
   /**
    * The inner sidebar preference every side panel shares, which `usePanel().sidebar` also reads inside a panel render.
@@ -1214,7 +1234,8 @@ export interface Servers {
    * stay in the main process. The same ref for the same id; read its `client` each time you call it. Reactive.
    *
    * @param id - The server's id, as `list()` returns it.
-   * @returns Undefined while the app does not list the server, and before the app interface mounts.
+   * @returns Undefined while the app does not list the server, before the app interface mounts, and while a server
+   * that rejects the app's credentials has not connected in this window yet.
    *
    * @example
    * ```ts
@@ -1760,7 +1781,7 @@ export interface UiTooltipProps {
   readonly children: JSX.Element
 }
 
-/** An action in `UiMenuProps.items`. */
+/** An action in `UiMenuProps.items`, and the props of `Ui.MenuItem`. */
 export interface UiMenuItem {
   /** Marks the entry as an action. Optional: an entry without `type` is an action. */
   readonly type?: "item"
@@ -1813,6 +1834,28 @@ export interface UiMenuProps {
   readonly placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end"
   /** The trigger cannot open the menu. Defaults to false. */
   readonly disabled?: boolean
+}
+
+/** Props of `Ui.MenuGroup`. */
+export interface UiMenuGroupProps {
+  /** The group's heading. Pass translated copy. */
+  readonly label: string
+  /** The group's rows, such as `Ui.MenuItem` and `Ui.MenuSub`. */
+  readonly children: JSX.Element
+}
+
+/** Props of `Ui.MenuSub`. */
+export interface UiMenuSubProps {
+  /** The text of the row that opens the submenu, which also names the submenu for screen readers. */
+  readonly label: string
+  /** An icon before the text. Omit it for none. */
+  readonly icon?: IconName
+  /** The row cannot open the submenu. Defaults to false. */
+  readonly disabled?: boolean
+  /** Runs with true when the submenu opens and false when it closes, for example to load its rows only while open. */
+  readonly onOpenChange?: (open: boolean) => void
+  /** The submenu's rows, such as `Ui.MenuItem`, `Ui.MenuSeparator` and `Ui.MenuGroup`. */
+  readonly children: JSX.Element
 }
 
 /** Props of `Ui.Loader`. */
@@ -1935,6 +1978,79 @@ export interface UiCodeProps {
   readonly class?: string
 }
 
+/** One choice in `UiSelectProps.options`. */
+export interface UiSelectOption<T extends string = string> {
+  /** The value `onChange` receives. Unique among the options. */
+  readonly value: T
+  /** The choice's text, in the list and on the closed select. Pass translated copy. */
+  readonly label: string
+}
+
+/** Props of `Ui.Select`. */
+export interface UiSelectProps<T extends string = string> {
+  /** The choices, in order. */
+  readonly options: readonly UiSelectOption<T>[]
+  /** The selected choice's value. Undefined, or a value no option has, shows `placeholder`. */
+  readonly value: T | undefined
+  /**
+   * Runs with the value the user picks. Pass it on to `value` to keep the select in step. Picking the selected choice
+   * again does not call it.
+   */
+  readonly onChange: (value: T) => void
+  /** The select's accessible name, which screen readers announce. Pass translated copy; it is not shown. */
+  readonly label: string
+  /** Text the select shows while no choice is selected. Omit it for none. */
+  readonly placeholder?: string
+  /** The select cannot be opened. Defaults to false. */
+  readonly disabled?: boolean
+  /** Shows the select as invalid. Defaults to false. */
+  readonly invalid?: boolean
+  /**
+   * Where the list opens from the select. Defaults to `bottom-end`, as the app's settings rows open theirs; it flips
+   * when there is no room.
+   */
+  readonly placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end"
+  /** Classes of the select, for layout. The app's styles give it its look. */
+  readonly class?: string
+}
+
+/** Props of `Ui.SettingsLayout`. */
+export interface UiSettingsLayoutProps {
+  /** The page's title, at the top of the page. Pass translated copy, usually the `SettingsPage.title`. */
+  readonly title: string
+  /** Text under the title. Omit it for none. */
+  readonly description?: string
+  /** Controls at the end of the title row, such as a `Ui.Button` that opens a website. Omit it for none. */
+  readonly actions?: JSX.Element
+  /** The page's sections, usually `Ui.SettingsSection`s. */
+  readonly children: JSX.Element
+}
+
+/** Props of `Ui.SettingsSection`. */
+export interface UiSettingsSectionProps {
+  /** The section's heading, which also names it for screen readers. Omit it for a section without a heading. */
+  readonly title?: string
+  /** The section's rows, usually `Ui.SettingsRow`s, in the app's bordered list. */
+  readonly children: JSX.Element
+  /** Content under the list, outside its border, such as an error that concerns the rows. Omit it for none. */
+  readonly footer?: JSX.Element
+}
+
+/** Props of `Ui.SettingsRow`. */
+export interface UiSettingsRowProps {
+  /** The setting's name. Pass translated copy. */
+  readonly title: JSX.Element
+  /** Text under the title that says what the setting does. Omit it for none. */
+  readonly description?: JSX.Element
+  /**
+   * The `SettingEntry.id` that reveals this row: when the user picks the entry in settings search, the host scrolls
+   * to the row and highlights it. Omit it for a row that search does not list.
+   */
+  readonly id?: string
+  /** The row's control at its end, such as a `Ui.Switch`, `Ui.Select` or `Ui.Button`. Omit it for none. */
+  readonly children?: JSX.Element
+}
+
 /**
  * The app's own components, so a plugin's UI looks and behaves like the app's: the same buttons, menus, dialogs and
  * fields, in the user's theme, fonts and language. Each takes a small set of props the SDK keeps stable. A component
@@ -1999,6 +2115,64 @@ export interface Ui {
    */
   Menu(props: UiMenuProps): JSX.Element
   /**
+   * One action row of a menu the host renders, such as the `session.location.menu` slot, so your rows look and
+   * behave like the host's: keyboard navigation, the muted icon, shortcut chips, and the menu closing on a pick. It
+   * also renders inside `Ui.MenuGroup` and `Ui.MenuSub`. It takes the fields of an entry of `UiMenuProps.items`.
+   * Outside a menu it throws, so the host records the error and the contribution renders nothing.
+   *
+   * @param props - The row's text, icon, keys and action.
+   *
+   * @example
+   * ```tsx
+   * ctx.add(Slot, {
+   *   at: "session.location.menu",
+   *   render: (input) => <ctx.ui.MenuItem label={ctx.t("usage")} icon="status" onSelect={() => open(input.session)} />,
+   * })
+   * ```
+   */
+  MenuItem(props: UiMenuItem): JSX.Element
+  /**
+   * A line between rows of a menu the host renders, or of a `Ui.MenuSub`, with the menu's spacing and color.
+   *
+   * @example
+   * ```tsx
+   * <>
+   *   <ctx.ui.MenuSeparator />
+   *   <ctx.ui.MenuItem label={ctx.t("usage")} onSelect={open} />
+   * </>
+   * ```
+   */
+  MenuSeparator(): JSX.Element
+  /**
+   * Rows of a menu the host renders under a heading, as `UiMenuGroup` groups the entries of `Ui.Menu`. Outside a menu
+   * it throws, as `Ui.MenuItem` does.
+   *
+   * @param props - The heading and its rows.
+   *
+   * @example
+   * ```tsx
+   * <ctx.ui.MenuGroup label={ctx.t("usage")}>
+   *   <ctx.ui.MenuItem label={ctx.t("today")} onSelect={() => open("today")} />
+   *   <ctx.ui.MenuItem label={ctx.t("month")} onSelect={() => open("month")} />
+   * </ctx.ui.MenuGroup>
+   * ```
+   */
+  MenuGroup(props: UiMenuGroupProps): JSX.Element
+  /**
+   * A row of a menu the host renders that opens a submenu beside it, with the host's chevron, as the location menu's
+   * branch and folder rows do. Outside a menu it throws, as `Ui.MenuItem` does.
+   *
+   * @param props - The row's text and icon, and the submenu's rows.
+   *
+   * @example
+   * ```tsx
+   * <ctx.ui.MenuSub label={ctx.t("openIn")} icon="outline-share">
+   *   <For each={apps()}>{(app) => <ctx.ui.MenuItem label={app.name} onSelect={() => launch(app)} />}</For>
+   * </ctx.ui.MenuSub>
+   * ```
+   */
+  MenuSub(props: UiMenuSubProps): JSX.Element
+  /**
    * The app's loading indicator, for anything that loads, connects or runs that is not the AI working.
    *
    * @param props - Its size.
@@ -2048,6 +2222,26 @@ export interface Ui {
    */
   TextInput(props: UiTextInputProps): JSX.Element
   /**
+   * A select that opens a list of choices, as the app's settings rows pick a language or a width. The value is a
+   * string; `T` narrows it to your choices' values.
+   *
+   * @param props - The choices, the selected value and its handler.
+   *
+   * @example
+   * ```tsx
+   * <ctx.ui.Select
+   *   label={ctx.t("period")}
+   *   options={[
+   *     { value: "day", label: ctx.t("period.day") },
+   *     { value: "month", label: ctx.t("period.month") },
+   *   ]}
+   *   value={period()}
+   *   onChange={setPeriod}
+   * />
+   * ```
+   */
+  Select<T extends string>(props: UiSelectProps<T>): JSX.Element
+  /**
    * Keys shown as chips, as menus and tooltips show shortcuts.
    *
    * @param props - The keys.
@@ -2061,7 +2255,8 @@ export interface Ui {
   /**
    * Markdown rendered as the timeline renders a message: headings, lists, tables, links, math and highlighted code
    * blocks with a copy button. On the session screen, links to local files open through the LinkHandler
-   * contributions, as the timeline's do. Rendering is asynchronous: the block fills in shortly after it mounts.
+   * contributions, and fenced code blocks show `CodeBlock` and `CodeBlockAction` contributions, as the timeline's do;
+   * inside a `CodeBlock` render they do not. Rendering is asynchronous: the block fills in shortly after it mounts.
    *
    * @param props - The Markdown source.
    *
@@ -2072,8 +2267,9 @@ export interface Ui {
    */
   Markdown(props: UiMarkdownProps): JSX.Element
   /**
-   * A read-only code block, highlighted as the timeline highlights code, with a copy button. Highlighting is
-   * asynchronous: the block fills in shortly after it mounts.
+   * A read-only code block, highlighted as the timeline highlights code, with a copy button. It always shows the code:
+   * `CodeBlock` and `CodeBlockAction` contributions do not apply, so a `CodeBlock` render can show its source through
+   * it. Highlighting is asynchronous: the block fills in shortly after it mounts.
    *
    * @param props - The code and its language.
    *
@@ -2083,4 +2279,58 @@ export interface Ui {
    * ```
    */
   Code(props: UiCodeProps): JSX.Element
+  /**
+   * The frame of a settings page of your own (a `SettingsPage` without `page`): the app's page header with the title,
+   * then your sections, spaced as the app's pages are. Search that reveals the page itself highlights its header. The
+   * settings components take their look from the Settings screen's styles, so render them from a `SettingsPage`.
+   *
+   * @param props - The page's title, header actions and sections.
+   *
+   * @example
+   * ```tsx
+   * ctx.add(SettingsPage, {
+   *   id: "acme",
+   *   get title() {
+   *     return ctx.t("title")
+   *   },
+   *   render: () => (
+   *     <ctx.ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")}>
+   *       <ctx.ui.SettingsSection title={ctx.t("sync")}>{rows()}</ctx.ui.SettingsSection>
+   *     </ctx.ui.SettingsLayout>
+   *   ),
+   * })
+   * ```
+   */
+  SettingsLayout(props: UiSettingsLayoutProps): JSX.Element
+  /**
+   * A section of settings rows: an optional heading over the app's bordered list. Render it in `SettingsLayout`, or on
+   * its own as a section on a host page (`SettingsPage.page`).
+   *
+   * @param props - The heading and rows.
+   *
+   * @example
+   * ```tsx
+   * <ctx.ui.SettingsSection title={ctx.t("sync")}>
+   *   <ctx.ui.SettingsRow id="acme-sync" title={ctx.t("sync")} description={ctx.t("sync.description")}>
+   *     <ctx.ui.Switch label={ctx.t("sync")} hideLabel checked={sync()} onChange={setSync} />
+   *   </ctx.ui.SettingsRow>
+   * </ctx.ui.SettingsSection>
+   * ```
+   */
+  SettingsSection(props: UiSettingsSectionProps): JSX.Element
+  /**
+   * One setting, as the app's own settings rows show it: its title and description, and its control at the end. Render
+   * it in a `SettingsSection`, or on its own as rows in a host section (`SettingsPage.section`), where it lines up
+   * with the host's rows.
+   *
+   * @param props - The setting's text, search id and control.
+   *
+   * @example
+   * ```tsx
+   * <ctx.ui.SettingsRow id="acme-sync" title={ctx.t("sync")} description={ctx.t("sync.description")}>
+   *   <ctx.ui.Switch label={ctx.t("sync")} hideLabel checked={sync()} onChange={setSync} />
+   * </ctx.ui.SettingsRow>
+   * ```
+   */
+  SettingsRow(props: UiSettingsRowProps): JSX.Element
 }

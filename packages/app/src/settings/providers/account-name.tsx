@@ -1,7 +1,7 @@
 import { InlineInput } from "@opencode/ui/inline-input"
-import { onMount } from "solid-js"
-import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
+import { showToast } from "@/shell/notifications/toast"
+import { createInlineRename } from "@/settings/rename"
 
 export function AccountNameInput(props: {
   value: string
@@ -10,60 +10,37 @@ export function AccountNameInput(props: {
   onClose: () => void
 }) {
   const language = useLanguage()
-  const [store, setStore] = createStore({ draft: props.value, saving: false, cancelled: false })
   let input: HTMLInputElement | undefined
 
-  // Waits a frame so a closing menu's focus restore cannot pull focus back out of the field.
-  onMount(() =>
-    requestAnimationFrame(() => {
-      input?.focus()
-      input?.select()
-    }),
-  )
-
-  const save = async () => {
-    const label = store.draft.trim()
-
-    if (!label || label === props.value) return props.onClose()
-    setStore("saving", true)
-
-    if (await props.onSave(label)) return props.onClose()
-    setStore("saving", false)
-    requestAnimationFrame(() => input?.focus())
-  }
+  // Like session title editing, clicking away keeps the typed name.
+  const rename = createInlineRename({
+    open: props.value,
+    blurPolicy: "submit",
+    current: () => props.value,
+    input: () => input,
+    onSave: (label) => props.onSave(label),
+    onClose: () => props.onClose(),
+    onTimeout: () =>
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: language.t("home.sessions.load.timeout"),
+      }),
+  })
 
   return (
     <InlineInput
       ref={input}
       aria-label={language.t("settings.providers.account.name")}
       dir="auto"
-      value={store.draft}
-      disabled={store.saving}
+      value={rename.draft()}
+      readOnly={rename.saving()}
+      aria-busy={rename.saving() || undefined}
       class={`field-sizing-content rounded-[6px] px-1 py-1 ${props.class ?? ""}`}
       style={{ "--inline-input-shadow": "none", "text-align": "start" }}
-      onInput={(event) => setStore("draft", event.currentTarget.value)}
+      onInput={(event) => rename.input(event.currentTarget.value)}
       data-owns-escape
-      onKeyDown={(event) => {
-        event.stopPropagation()
-
-        if (event.isComposing || event.keyCode === 229) return
-
-        if (event.key === "Enter") {
-          event.preventDefault()
-          void save()
-
-          return
-        }
-
-        if (event.key !== "Escape") return
-        event.preventDefault()
-        setStore("cancelled", true)
-        props.onClose()
-      }}
-      // Like session title editing, clicking away keeps the typed name.
-      onBlur={() => {
-        if (!store.saving && !store.cancelled) void save()
-      }}
+      onKeyDown={rename.keyDown}
+      onBlur={rename.blur}
     />
   )
 }

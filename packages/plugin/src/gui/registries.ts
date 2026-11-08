@@ -266,6 +266,16 @@ export interface Panel {
   readonly region: "side"
   /** Asks for the wider session minimum while the side region is open. Reactive. */
   readonly wide?: boolean
+  /**
+   * Gives the panel a side region width of its own, for content that wants less room or more than other tabs. While the
+   * side pane shows one of the panel's tabs, the region takes the width the user last dragged it to on this panel,
+   * app-wide, else this one; other tabs keep the conversation's width. The host keeps the conversation at its minimum
+   * width and the region at least `narrow`. Omit it to share the conversation's width, unless `Layout.side.resize`
+   * stored one for the panel.
+   * - A number: CSS pixels.
+   * - `narrow`: the narrowest the region goes.
+   */
+  readonly width?: number | "narrow"
   /** Tabs are not restored: stored keys this panel stops listing leave the strip. See also `PanelTab.transient`. */
   readonly transient?: boolean
   /**
@@ -403,7 +413,8 @@ export interface SettingsPage {
   /** Search metadata, indexed without mounting the page. */
   readonly entries?: readonly SettingEntry[]
   /**
-   * Renders the page, section or rows.
+   * Renders the page, section or rows: `Ui.SettingsLayout` frames a page, `Ui.SettingsSection` a section, and
+   * `Ui.SettingsRow` is one row, each as the app's own settings render them.
    *
    * @param input - `target` is the entry search is revealing.
    */
@@ -673,6 +684,181 @@ export interface ComposerPill {
   menu?(input: ComposerPillMenuProps): JSX.Element
 }
 
+/**
+ * One complete fenced code block, as a `CodeBlock` render and a `CodeBlockAction` receive it. Do not destructure:
+ * `session` is a getter.
+ */
+export interface CodeBlockProps {
+  /** The source between the fences, without the final line break. */
+  readonly code: string
+  /**
+   * The fence's language: the first word of its info string, lowercased, without characters other than letters, digits
+   * and `_ # + . -`. For ```` ```Mermaid title="Flow" ```` it is `mermaid`; empty for a fence without one.
+   */
+  readonly language: string
+  /**
+   * The routed session of the screen that shows the block; a new object when another session is routed. Undefined for
+   * Markdown outside a session screen, where the host does not offer code block content today.
+   */
+  readonly session?: MountedSession
+}
+
+/**
+ * Renders the fenced code blocks of some languages as your own UI in place of the highlighted code, for example a
+ * diagram for ```` ```mermaid ```` or a table for ```` ```csv ````. Applies to Markdown on the session screen: the
+ * timeline (assistant text and tool output), side panels such as the file viewer's Markdown preview, and `ctx.ui.Markdown`
+ * rendered there. `ctx.ui.Code`, and Markdown your own render shows, keep the plain code, so a render never meets
+ * itself.
+ *
+ * The host renders a block only once its closing fence arrives: while it streams, and in a message that stopped
+ * mid-block, the user sees the highlighted code, then your UI replaces it in place. Blocks of other languages cost
+ * nothing. The block keeps its Copy button and `CodeBlockAction` buttons over the top end corner of your UI, and its
+ * height follows your UI as it grows; reserve the height you know (for example a minimum) so the timeline shifts less
+ * when asynchronous content arrives.
+ */
+export interface CodeBlock {
+  /**
+   * The languages whose blocks you render, compared with `CodeBlockProps.language`, e.g. `["csv", "tsv"]`. The host
+   * resolves no aliases: list each name you accept. When several contributions list a language, the first contributed
+   * renders it.
+   */
+  readonly languages: readonly string[]
+  /**
+   * Renders one block once, under your plugin's context; its own reactivity updates it, also when another session is
+   * routed. Return `undefined` or `null` to keep the highlighted code, e.g. for a source you cannot parse. A render that
+   * throws records the error under your plugin and the block shows its code; the plugin keeps running. The host
+   * renders it again only when the block or the set of contributions changes.
+   *
+   * @param props - The block and its session. Do not destructure.
+   * @returns Your UI for the block, or `undefined` or `null` to keep the code.
+   */
+  render(props: CodeBlockProps): JSX.Element | undefined
+}
+
+/**
+ * A button beside the Copy button of the fenced code blocks of some languages, for example "Run in terminal" for
+ * ```` ```sh ````. It shows where `CodeBlock` content shows, once the block's closing fence arrives, so it never acts on
+ * half a block. Buttons reveal with Copy on hover or focus.
+ */
+export interface CodeBlockAction {
+  /** The action's id, unique within the plugin. */
+  readonly id: string
+  /**
+   * The languages whose blocks show the button, compared with `CodeBlockProps.language`, e.g. `["sh", "bash", "shell"]`.
+   * The host resolves no aliases: list each name you accept.
+   */
+  readonly languages: readonly string[]
+  /** The button's icon. */
+  readonly icon: IconName
+  /** The button's accessible name and tooltip. Read it from a getter so it follows the locale. */
+  readonly title: string
+  /** Buttons list in ascending order, before Copy. Defaults to 0; ties keep contribution order. */
+  readonly order?: number
+  /**
+   * Runs when the user clicks the button. A throw or a rejection is logged under your plugin and changes nothing else.
+   *
+   * @param input - The clicked block and its session. Do not destructure.
+   */
+  run(input: CodeBlockProps): void | Promise<void>
+}
+
+/**
+ * The seed colors a theme variant generates its scales from. Each is a hex color: `#rgb`, `#rgba`, `#rrggbb` or
+ * `#rrggbbaa`.
+ */
+export interface ThemeSeedColors {
+  /** Base of the gray scale. */
+  readonly neutral: string
+  /** The brand and accent color. */
+  readonly primary: string
+  /** Success states, usually green. */
+  readonly success: string
+  /** Warning states, usually yellow or orange. */
+  readonly warning: string
+  /** Error and critical states, usually red. */
+  readonly error: string
+  /** Informational states, usually blue or purple. */
+  readonly info: string
+  /** Links and interactive elements. */
+  readonly interactive: string
+  /** Added lines in diffs. */
+  readonly diffAdd: string
+  /** Deleted lines in diffs. */
+  readonly diffDelete: string
+}
+
+/**
+ * The palette a theme variant derives its colors from, the form most of the app's own themes use. Each is a hex color:
+ * `#rgb`, `#rgba`, `#rrggbb` or `#rrggbbaa`.
+ */
+export interface ThemePaletteColors {
+  /** The background the neutral scale starts from. */
+  readonly neutral: string
+  /** The text color the neutral scale ends at. */
+  readonly ink: string
+  /** The brand color. */
+  readonly primary: string
+  /** Success states, usually green. */
+  readonly success: string
+  /** Warning states, usually yellow or orange. */
+  readonly warning: string
+  /** Error and critical states, usually red. */
+  readonly error: string
+  /** Informational states, usually blue or purple. */
+  readonly info: string
+  /** A secondary accent. Defaults to `info`. */
+  readonly accent?: string
+  /** Links and interactive elements. Defaults to `primary`. */
+  readonly interactive?: string
+  /** Added lines in diffs. Defaults to one derived from `success`. */
+  readonly diffAdd?: string
+  /** Deleted lines in diffs. Defaults to one derived from `error`. */
+  readonly diffDelete?: string
+}
+
+/** The fields every theme variant can have, whichever colors it starts from. */
+interface ThemeVariantBase {
+  /** Exact values for single tokens, such as `syntax-keyword`: a hex color or a `var(--token)` reference. */
+  readonly overrides?: Readonly<Record<string, string>>
+  /** Exact values for single tokens of the app's newer token set: a hex color, a `var(--token)` reference, or CSS. */
+  readonly v2Overrides?: Readonly<Record<string, string>>
+}
+
+/** The colors of one color scheme of a `Theme`: generated from `seeds` or from a `palette`, never both. */
+export type ThemeVariant =
+  | (ThemeVariantBase & {
+      /** The seed colors to generate from. */
+      readonly seeds: ThemeSeedColors
+      /** Not allowed beside `seeds`. */
+      readonly palette?: never
+    })
+  | (ThemeVariantBase & {
+      /** The palette to derive from. */
+      readonly palette: ThemePaletteColors
+      /** Not allowed beside `palette`. */
+      readonly seeds?: never
+    })
+
+/**
+ * A color theme, in the format of the app's own themes (`https://opencode.ai/desktop-theme.json`), so a theme file
+ * imports as it is. The host lists it in Settings › Appearance › Theme among the app's themes, alphabetically by
+ * `name`, under the key `${plugin}:${id}`; withdrawing the theme takes it out of the list. A user who picked it keeps the choice: the window
+ * shows the theme's colors from the last run until the plugin contributes it again, and the default theme while it is
+ * withdrawn.
+ */
+export interface Theme {
+  /** The JSON Schema reference of a theme file. Ignored. */
+  readonly $schema?: string
+  /** The name the theme list shows. */
+  readonly name: string
+  /** The theme's id, unique within the plugin, in lowercase letters, digits and hyphens. */
+  readonly id: string
+  /** The light color scheme. */
+  readonly light: ThemeVariant
+  /** The dark color scheme. */
+  readonly dark: ThemeVariant
+}
+
 /** The places a `Slot` renders, with the input each passes to `render`. */
 export interface SlotMap {
   /** Full-width strip under the window content, above toasts. */
@@ -685,8 +871,17 @@ export interface SlotMap {
     readonly session: MountedSession
     /** The timeline is the one on screen. */
     readonly active: boolean
+    /**
+     * The title does not fit beside the actions, even with the location collapsed. Show the compact form of what you
+     * render, without its details (for example an icon that opens them in a menu), so the title keeps the room. The
+     * header returns to false once the title fits beside your expanded content again.
+     */
+    readonly compact: boolean
   }
-  /** Items in the project/location menu, after its location details. Omitted on loading headers without a screen. */
+  /**
+   * Items in the project/location menu, after its location details. Omitted on loading headers without a screen.
+   * Render rows with `Ui.MenuItem`, `Ui.MenuSub`, `Ui.MenuGroup` and `Ui.MenuSeparator`, so they match the host's.
+   */
   readonly "session.location.menu": {
     /** The menu's owning session screen; always present. */
     readonly screen: SessionScreen
@@ -822,6 +1017,41 @@ export const TitlebarItem = Registry.define<TitlebarItem>("titlebar-item")
 export const ComposerPill = Registry.define<ComposerPill>("composer-pill")
 
 /**
+ * The registry of renderers for fenced code blocks, by language.
+ *
+ * @example
+ * ```tsx
+ * ctx.add(CodeBlock, {
+ *   languages: ["csv"],
+ *   render: (props) => {
+ *     const rows = parseCsv(props.code)
+ *
+ *     return rows ? <CsvTable rows={rows} /> : undefined
+ *   },
+ * })
+ * ```
+ */
+export const CodeBlock = Registry.define<CodeBlock>("code-block")
+
+/**
+ * The registry of buttons beside a fenced code block's Copy button, by language.
+ *
+ * @example
+ * ```ts
+ * ctx.add(CodeBlockAction, {
+ *   id: "run",
+ *   languages: ["sh", "bash", "shell"],
+ *   icon: "terminal",
+ *   get title() {
+ *     return ctx.t("run")
+ *   },
+ *   run: (input) => runInTerminal(input.code, input.session),
+ * })
+ * ```
+ */
+export const CodeBlockAction = Registry.define<CodeBlockAction>("code-block-action")
+
+/**
  * The registry of content for the host's slots (`SlotMap`).
  *
  * @example
@@ -841,3 +1071,14 @@ export const Slot = Registry.define<Slot>("slot")
  * ```
  */
 export const Style = Registry.define<string>("style")
+
+/**
+ * The registry of color themes the user can pick in Settings › Appearance, in the format of the app's own theme files.
+ *
+ * @example
+ * ```ts
+ * import theme from "./midnight.json"
+ * ctx.add(Theme, theme)
+ * ```
+ */
+export const Theme = Registry.define<Theme>("theme")

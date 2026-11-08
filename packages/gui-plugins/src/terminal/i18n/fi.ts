@@ -6,8 +6,5 @@ export default {
   loading: "Ladataan terminaalia…",
   "title.numbered": "Terminaali {{number}}",
   close: "Sulje terminaali",
-  "connectionLost.title": "Yhteys katkesi",
-  "connectionLost.abnormalClose": "WebSocket sulkeutui poikkeavasti: {{code}}",
-  "connectionLost.description": "Terminaaliyhteys katkesi. Näin voi tapahtua, kun palvelin käynnistyy uudelleen.",
   "tab.title": "Terminaali",
 }

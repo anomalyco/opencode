@@ -1,71 +1,55 @@
-import type {
-  EventSubscribeOutput,
-  JsonValue,
-  LocationRef,
-  OpenCodeClient,
-  SessionMessageAssistantTool,
-  SessionMessageInfo,
-  ToolContent,
+import {
+  ClientError,
+  type EventSubscribeOutput,
+  type ExperimentalJobListOutput,
+  type FormInfo,
+  type JsonValue,
+  type LocationRef,
+  type ModelRef,
+  type OpenCodeClient,
+  type PermissionRequest,
+  type SessionMessageAssistantTool,
+  type SessionMessageIdle,
+  type SessionMessageInfo,
 } from "@opencode/client/promise"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { EOL } from "node:os"
-import { readFile } from "node:fs/promises"
-import { nonEmptyToolContent, toolOutputText, type MiniToolPart } from "@opencode/tui/mini/tool"
+import { toolOutputText, type MiniToolPart } from "@opencode/tui/mini/tool"
 import { UI } from "./ui"
-
-type Model = {
-  providerID: string
-  modelID: string
-}
-
-type File = {
-  url: string
-  filename: string
-  mime: string
-}
 
 type Input = {
   client: OpenCodeClient
   sessionID: string
   location: LocationRef
   message: string
-  files: File[]
+  files: { uri: string; name: string }[]
   agent?: string
-  model?: Model
-  variant?: string
+  model?: ModelRef
   thinking: boolean
   format: "default" | "json"
   auto: boolean
-  /** True when the client is attached to a shared server rather than an exclusive in-process one. */
-  attached: boolean
-  compatibility?: "v1"
+  /** The server is private to this run, so MCP input requests in its location are this run's too. */
+  standalone: boolean
+  /** Aborted on SIGINT or SIGTERM: the run cancels its Session and background jobs, then returns. */
+  signal: AbortSignal
   renderTool: (part: SessionMessageAssistantTool) => Promise<void>
   renderToolError: (part: SessionMessageAssistantTool) => Promise<void>
 }
 
-type StartedPart = {
+type Event = EventSubscribeOutput
+type Job = ExperimentalJobListOutput[number]
+type RunError = { type: string; message: string }
+type Outcome = Pick<SessionMessageIdle, "id" | "outcome" | "error">
+
+type Tool = {
   id: string
   timestamp: number
-}
-
-type ToolState = StartedPart & {
-  assistantMessageID: string
-  tool: string
+  name: string
   input: Record<string, JsonValue>
   raw?: string
-  provider?: unknown
-  native?: SessionMessageAssistantTool["native"]
+  call?: { executed: boolean; state: SessionMessageAssistantTool["native"] }
   metadata: Record<string, JsonValue>
-  content: ToolContent[]
 }
-
-type V2Event = EventSubscribeOutput
-type FormRequest = Extract<V2Event, { type: "form.created" }>["data"]["form"]
-
-// MCP elicitations are temporarily owned by the "global" sentinel instead of a real
-// session. An exclusive local process may treat them as this run's blockers; an
-// attached client must not cancel input that may belong to another session.
-const GLOBAL_FORM_SESSION_ID = "global"
 
 const QUESTION_CANCELLED_FEEDBACK =
   "This non-interactive run cannot ask the user questions, so the question was cancelled. Continue without an answer; make reasonable assumptions and state them."
@@ -73,29 +57,308 @@ const QUESTION_CANCELLED_FEEDBACK =
 const PERMISSION_REJECTED_FEEDBACK =
   "This non-interactive run cannot ask the user for permission, so the request was rejected. Continue without this action."
 
+/**
+ * Runs one prompt to completion:
+ *
+ *   admitting → running → settling → waiting for this prompt's jobs → done(exit code)
+ *   any state + abort (SIGINT/SIGTERM) → cancelling → done
+ */
 export async function runNonInteractivePrompt(input: Input) {
   const controller = new AbortController()
   const stream = input.client.event.subscribe({ signal: controller.signal })[Symbol.asyncIterator]()
-  const connected = await stream.next()
-  if (connected.done) throw new Error("Event stream disconnected before prompt admission")
+  if ((await stream.next()).done) throw new Error("Event stream disconnected before prompt admission")
 
   const messageID = SessionMessage.ID.create()
-  const starts = new Map<string, StartedPart>()
-  const tools = new Map<string, ToolState>()
-  const renderedText = new Map<string, string>()
-  const renderedReasoning = new Map<string, string>()
-  const renderedTools = new Set<string>()
-  let submitted = false
-  let promoted = false
-  let emittedError = false
-  let permissionRejected = false
-  let formCancelled = false
-  let interrupted = false
-  let v1InvalidOutput = false
-  let prePromotionError: { message: string; [key: string]: unknown } | undefined
-  let finalizing = false
-  let admission: AbortController | undefined
-  let pendingStep: { timestamp: number; part: Record<string, unknown>; label: string } | undefined
+  const render = renderer(input)
+  const state = {
+    phase: "running" as "running" | "settled" | "cancelling",
+    promoted: false,
+    admission: undefined as Promise<{ time: { created: number } }> | undefined,
+    failure: undefined as RunError | undefined,
+    outcomes: [] as Outcome[],
+    // Sessions in this run's tree that own jobs; an execution ending in one can change background state.
+    jobSessions: new Set([input.sessionID]),
+    ended: deferred(),
+  }
+
+  // Subagents' asks belong to this run too; other sessions on a shared server must be left alone.
+  const owned = new Map([[input.sessionID, Promise.resolve(true)]])
+  const ownsSession = (sessionID: string): Promise<boolean> => {
+    const known = owned.get(sessionID)
+    if (known) return known
+    const result = input.client.session.get({ sessionID }).then(
+      (session) => (session.parentID ? ownsSession(session.parentID) : false),
+      () => false,
+    )
+    owned.set(sessionID, result)
+    return result
+  }
+
+  const replyPermission = async (request: PermissionRequest) => {
+    if (!input.auto)
+      UI.println(
+        UI.Style.TEXT_WARNING_BOLD + "!",
+        UI.Style.TEXT_NORMAL +
+          `permission requested: ${request.action} (${request.resources.join(", ")}); auto-rejecting`,
+      )
+    await input.client.permission
+      .reply({
+        sessionID: request.sessionID,
+        requestID: request.id,
+        decision: input.auto ? "once" : "reject",
+        ...(input.auto ? {} : { message: PERMISSION_REJECTED_FEEDBACK }),
+      })
+      .catch(() => {})
+  }
+
+  // A cancelled question lets the model continue; any other input request fails the run.
+  // MCP elicitations belong to the "global" sentinel rather than a session; on a shared server they
+  // may belong to another client.
+  const ownsForm = (form: Pick<FormInfo, "sessionID">, location: LocationRef | undefined) =>
+    form.sessionID === "global"
+      ? input.standalone && location?.directory === input.location.directory
+      : ownsSession(form.sessionID)
+
+  const cancelForm = async (form: Pick<FormInfo, "id" | "sessionID" | "title" | "metadata">) => {
+    const question = form.metadata?.kind === "question"
+    await input.client.session.form
+      .cancel(
+        { sessionID: form.sessionID, formID: form.id, ...(question ? { message: QUESTION_CANCELLED_FEEDBACK } : {}) },
+        // A global form is found through its location.
+        ...(form.sessionID === "global"
+          ? [{ headers: { "x-opencode-directory": encodeURIComponent(input.location.directory) } }]
+          : []),
+      )
+      .catch((error) => {
+        if (!formAlreadySettled(error)) throw error
+      })
+    if (!question)
+      state.failure ??= {
+        type: "unknown",
+        message: `Cancelled a request for input this run cannot answer: ${form.title}`,
+      }
+  }
+
+  const consume = async () => {
+    while (true) {
+      const next = await stream.next().catch((error) => {
+        if (controller.signal.aborted) return { done: true as const, value: undefined }
+        throw error
+      })
+      if (next.done) {
+        if (controller.signal.aborted) return
+        throw new Error("Event stream disconnected during prompt execution")
+      }
+      const event = next.value
+      if (event.type === "permission.asked") {
+        if (await ownsSession(event.data.sessionID)) await replyPermission(event.data)
+        continue
+      }
+      if (event.type === "form.created") {
+        if (await ownsForm(event.data.form, event.location)) await cancelForm(event.data.form)
+        continue
+      }
+      if (!("sessionID" in event.data)) continue
+      const sessionID = event.data.sessionID
+      const terminal = terminalOutcome(event)
+      if (state.jobSessions.has(sessionID)) {
+        if (event.type === "session.execution.started" && state.phase === "cancelling")
+          void input.client.session.interrupt({ sessionID }).catch(() => {})
+        if (terminal) {
+          state.ended.resolve()
+          state.ended = deferred()
+        }
+      }
+      if (sessionID !== input.sessionID) continue
+      if (event.type === "session.inbox.delivered" && event.data.inboxID === messageID) state.promoted = true
+      // A busy period that ends before this prompt is delivered leaves the prompt queued for good.
+      if (terminal && !state.promoted && terminal.error) state.failure ??= terminal.error
+      if (terminal && state.promoted) state.outcomes.push(terminal)
+      if (state.promoted && state.phase === "running") await render.event(event)
+    }
+  }
+
+  // The jobs this prompt started (older ones belong to someone else), or `[]` while one of their wakes
+  // is queued or running. Work moves job → inbox → active, so reading in that order can't miss it.
+  const background = async () => {
+    const since = (await state.admission)?.time.created
+    if (since === undefined) return undefined
+    const jobs = await input.client.experimental.job
+      .list({ sessionID: input.sessionID, descendants: true })
+      .catch((error) => {
+        // Servers older than the job list endpoint answer 404 with no JSON body; they have no jobs to report.
+        if (error instanceof ClientError && error.reason === "UnsupportedContentType") return []
+        throw error
+      })
+    const running = jobs.filter((job) => job.time.started >= since)
+    running.forEach((job) => {
+      state.jobSessions.add(job.sessionID)
+      if (job.kind === "subagent") state.jobSessions.add(job.childSessionID)
+    })
+    if (running.length > 0) return running
+    const inboxes = await Promise.all(
+      [...state.jobSessions].map((sessionID) => input.client.session.inbox.list({ sessionID })),
+    )
+    if (inboxes.some((inbox) => inbox.length > 0)) return running
+    const active = await input.client.session.active()
+    for (const sessionID of Object.keys(active)) {
+      if (await ownsSession(sessionID)) return running
+    }
+    return undefined
+  }
+
+  const lifecycle = async () => {
+    // admitting
+    if (input.agent) await input.client.session.switchAgent({ sessionID: input.sessionID, agent: input.agent })
+    if (input.model) await input.client.session.switchModel({ sessionID: input.sessionID, model: input.model })
+    if (input.signal.aborted) return
+    // A failed stream rejects whatever wait is pending, since no further end could be seen.
+    consume().catch((error) => state.ended.reject(error))
+    state.admission = input.client.session.prompt({
+      sessionID: input.sessionID,
+      id: messageID,
+      text: input.message,
+      files: input.files,
+      delivery: "steer",
+    })
+    await state.admission
+    const [permissions, forms, globals] = await Promise.all([
+      input.client.permission.list({ sessionID: input.sessionID }).catch(() => []),
+      input.client.session.form.list({ sessionID: input.sessionID }).catch(() => []),
+      input.standalone
+        ? input.client.form.list({ location: { directory: input.location.directory } }).catch(() => undefined)
+        : undefined,
+    ])
+    await Promise.all([
+      ...permissions.map(replyPermission),
+      ...forms.map(cancelForm),
+      ...(globals?.data.filter((form) => ownsForm(form, globals.location) === true) ?? []).map(cancelForm),
+    ])
+
+    // running → settling → waiting for this prompt's jobs
+    let waited = false
+    let shown = 0
+    while (true) {
+      const ended = state.ended.promise
+      await input.client.experimental.session.wait({ sessionID: input.sessionID })
+      if (input.signal.aborted) return
+      const projected = await projectedMessages(input.client, input.sessionID, messageID)
+      if (state.failure || state.outcomes.length > 0 || projected.messages.some((item) => item.type === "idle")) {
+        const pending = state.failure ? undefined : await background()
+        if (!pending) return { ...projected, background: waited }
+        if (pending.length > 0 && pending.length !== shown) render.waiting(pending)
+        shown = pending.length || shown
+        waited = true
+      }
+      await ended
+    }
+  }
+
+  // cancelling: a wake can still start after the interrupt (the notice each cancelled job queues),
+  // so the consumer interrupts every execution that starts until the tree is quiet.
+  const cancel = async () => {
+    state.phase = "cancelling"
+    if (!(await state.admission?.catch(() => undefined))) return
+    if (!state.promoted)
+      await input.client.session.inbox.cancel({ sessionID: input.sessionID, inboxID: messageID }).catch(() => {})
+    const running = (await background().catch(() => undefined)) ?? []
+    await Promise.all([
+      input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {}),
+      ...running.map((job) =>
+        (job.kind === "shell"
+          ? input.client.shell.remove({ id: job.shellID, location: { directory: input.location.directory } })
+          : job.kind === "subagent"
+            ? input.client.session.interrupt({ sessionID: job.childSessionID })
+            : Promise.resolve()
+        ).catch(() => {}),
+      ),
+    ])
+    while (true) {
+      const ended = state.ended.promise
+      await input.client.experimental.session.wait({ sessionID: input.sessionID })
+      const pending = await background()
+      // Image jobs can't be cancelled through the API, so waiting on them would only hold the exit.
+      if (!pending || (pending.length > 0 && pending.every((job) => job.kind === "image"))) return
+      await ended
+    }
+  }
+
+  try {
+    const running = lifecycle()
+    const aborted = new Promise<undefined>((resolve) =>
+      input.signal.addEventListener("abort", () => resolve(undefined), { once: true }),
+    )
+    const settled = await Promise.race([running, aborted])
+    // Requests failing during or after cancellation (e.g. the private server shutting down) are ignored.
+    if (!settled) {
+      running.catch(() => {})
+      return await cancel().catch(() => {})
+    }
+    state.phase = "settled"
+    await render.reconcile(settled.messages)
+    const error = finalError(settled, state)
+    if (!error) return
+    process.exitCode = 1
+    render.error(error)
+  } finally {
+    controller.abort()
+    void stream.return?.(undefined).catch(() => {})
+  }
+}
+
+/** The run's exit code comes from here alone: the first stored idle marker after this run's prompt. */
+function finalError(
+  run: { found: boolean; messages: SessionMessageInfo[]; background: boolean },
+  state: { failure?: RunError; outcomes: Outcome[] },
+) {
+  if (state.failure) return state.failure
+  if (!run.found) return { type: "unknown", message: "Prompt was not promoted" }
+  const idles = run.messages.filter((message) => message.type === "idle")
+  const recorded = idles.length > 0 ? idles : state.outcomes
+  // The first marker closes this prompt's turn. Later ones count only as replies woken by this
+  // prompt's background jobs; otherwise they belong to other prompts, possibly from another client.
+  const turns = run.background ? recorded : recorded.slice(0, 1)
+  const final = turns.find((turn) => turn.outcome !== "succeeded") ?? turns[0]
+  if (!final) return { type: "unknown", message: "Session ended without a recorded outcome" }
+  if (final.outcome === "succeeded") return
+  const fallback = { type: final.outcome === "failed" ? "unknown" : "aborted", message: `Session ${final.outcome}` }
+  return final.error ?? state.outcomes.find((turn) => turn.id === final.id)?.error ?? fallback
+}
+
+function terminalOutcome(event: Event): Outcome | undefined {
+  const id = SessionMessage.ID.fromEvent(event.id)
+  if (event.type === "session.execution.succeeded") return { id, outcome: "succeeded" }
+  if (event.type === "session.execution.failed") return { id, outcome: "failed", error: event.data.error }
+  if (event.type !== "session.execution.interrupted") return undefined
+  return {
+    id,
+    outcome: "interrupted",
+    error: { type: "aborted", message: `Session interrupted: ${event.data.reason}` },
+  }
+}
+
+async function projectedMessages(client: OpenCodeClient, sessionID: string, messageID: string) {
+  const messages: SessionMessageInfo[] = []
+  let cursor: string | undefined
+  while (true) {
+    const page = await client.message.list(
+      cursor ? { sessionID, limit: 200, cursor } : { sessionID, limit: 200, order: "desc" },
+    )
+    for (const message of page.data) {
+      if (message.id === messageID) return { found: true, messages: messages.toReversed() }
+      messages.push(message)
+    }
+    cursor = page.cursor.next ?? undefined
+    if (!cursor) return { found: false, messages: [] }
+  }
+}
+
+function renderer(input: Input) {
+  const starts = new Map<string, { id: string; timestamp: number }>()
+  const tools = new Map<string, Tool>()
+  const steps = new Map<string, "started" | "ended">()
+  // The session can go idle before the last live events arrive; reconcile prints what they missed.
+  const printed = new Map<string, string>()
 
   const emit = (type: string, timestamp: number, data: Record<string, unknown>) => {
     if (input.format !== "json") return false
@@ -103,755 +366,297 @@ export async function runNonInteractivePrompt(input: Input) {
     return true
   }
 
-  const writeText = (part: { text: string; [key: string]: unknown }, timestamp: number) => {
-    if (emit("text", timestamp, { part })) return
-    const text = part.text.trim()
-    if (!text) return
-    if (!process.stdout.isTTY) {
-      process.stdout.write(text + EOL)
-      return
-    }
+  const block = (line: string) => {
     UI.empty()
-    UI.println(text)
+    UI.println(line)
     UI.empty()
   }
 
-  const writeReasoning = (part: { text: string; [key: string]: unknown }, timestamp: number) => {
-    if (emit("reasoning", timestamp, { part })) return
-    const text = part.text.trim()
-    if (!text) return
-    const line = `Thinking: ${text}`
+  const text = (
+    part: {
+      kind: "text" | "reasoning"
+      id: string
+      messageID: string
+      ordinal: number
+      text: string
+      metadata?: unknown
+    },
+    start: number,
+    end: number,
+  ) => {
+    if (part.kind === "reasoning" && !input.thinking) return
+    const id = key(part.kind, part.messageID, part.ordinal)
+    const previous = printed.get(id) ?? ""
+    if (printed.has(id) && (previous === part.text || !part.text.startsWith(previous))) return
+    printed.set(id, part.text)
+    const value = part.text.slice(previous.length)
+    const json = {
+      id: part.id,
+      sessionID: input.sessionID,
+      messageID: part.messageID,
+      type: part.kind,
+      text: value,
+      ...(part.kind === "reasoning" ? { metadata: part.metadata } : {}),
+      time: { start, end },
+    }
+    if (emit(part.kind, end, { part: json })) return
+    const trimmed = value.trim()
+    if (!trimmed) return
+    const line = part.kind === "text" ? trimmed : `Thinking: ${trimmed}`
     if (!process.stdout.isTTY) return void process.stdout.write(line + EOL)
-    UI.empty()
-    UI.println(`${UI.Style.TEXT_DIM}\u001b[3m${line}\u001b[0m${UI.Style.TEXT_NORMAL}`)
-    UI.empty()
+    block(part.kind === "text" ? line : `${UI.Style.TEXT_DIM}\u001b[3m${line}\u001b[0m${UI.Style.TEXT_NORMAL}`)
   }
 
-  const flushStep = () => {
-    if (!pendingStep) return
-    const value = pendingStep
-    pendingStep = undefined
-    if (!emit("step_start", value.timestamp, { part: value.part }) && input.format !== "json") {
-      UI.empty()
-      UI.println(value.label)
-      UI.empty()
-    }
-  }
-
-  // Subagents run in child sessions; their asks and questions belong to this run too. Other
-  // sessions on a shared server (e.g. the TUI's) must be left alone.
-  const owned = new Map<string, Promise<boolean>>([[input.sessionID, Promise.resolve(true)]])
-  const ownsSession = (sessionID: string): Promise<boolean> => {
-    const known = owned.get(sessionID)
-    if (known) return known
-    const result =
-      sessionID === GLOBAL_FORM_SESSION_ID
-        ? Promise.resolve(false)
-        : input.client.session
-            .get({ sessionID })
-            .then((session) => (session.parentID ? ownsSession(session.parentID) : false))
-            .catch(() => false)
-    owned.set(sessionID, result)
-    return result
-  }
-
-  const replyPermission = async (request: {
-    id: string
-    sessionID: string
-    action: string
-    resources: ReadonlyArray<string>
-  }) => {
-    // Nobody can approve here. Outside V1 compatibility, reject with feedback so the tool fails
-    // as ordinary model-visible output and the model continues without the action.
-    const continuing = !input.auto && input.compatibility !== "v1"
-    if (!input.auto) {
-      if (!continuing) permissionRejected = true
-      UI.println(
-        UI.Style.TEXT_WARNING_BOLD + "!",
-        UI.Style.TEXT_NORMAL +
-          `permission requested: ${request.action} (${request.resources.join(", ")}); auto-rejecting`,
-      )
-    }
-    await input.client.permission
-      .reply({
-        sessionID: request.sessionID,
-        requestID: request.id,
-        decision: input.auto ? "once" : "reject",
-        ...(continuing ? { message: PERMISSION_REJECTED_FEEDBACK } : {}),
-      })
-      .catch(() => {})
-    if (!input.auto && !continuing) {
-      await input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
-    }
-  }
-
-  const cancelForm = async (request: Pick<FormRequest, "id" | "sessionID" | "metadata">) => {
-    // Nobody can answer a question here. Outside V1 compatibility, cancel it with a message so the
-    // question tool fails as ordinary model-visible output and the model continues without an answer.
-    const continuing = request.metadata?.kind === "question" && input.compatibility !== "v1"
-    try {
-      await input.client.session.form.cancel(
-        {
-          sessionID: request.sessionID,
-          formID: request.id,
-          ...(continuing ? { message: QUESTION_CANCELLED_FEEDBACK } : {}),
-        },
-        ...formRequestOptions(request.sessionID === GLOBAL_FORM_SESSION_ID ? input.location : undefined),
-      )
-    } catch (error) {
-      if (!formAlreadySettled(error)) throw error
-    }
-    if (continuing) return
-    formCancelled = true
-    if (input.compatibility !== "v1") process.exitCode = 1
-  }
-
-  const consume = async () => {
-    while (!controller.signal.aborted) {
-      const next = await stream.next().catch((error) => {
-        if (!emittedError) throw error
-        return { done: true as const, value: undefined }
-      })
-      if (next.done) {
-        if (emittedError) return
-        throw new Error("Event stream disconnected during prompt execution")
-      }
-      const event = next.value
-
-      if (event.type === "permission.asked" && submitted && (await ownsSession(event.data.sessionID))) {
-        await replyPermission(event.data)
-        continue
-      }
-      if (
-        event.type === "form.created" &&
-        submitted &&
-        ((await ownsSession(event.data.form.sessionID)) ||
-          (!input.attached &&
-            event.data.form.sessionID === GLOBAL_FORM_SESSION_ID &&
-            sameLocation(event.location, input.location)))
-      ) {
-        await cancelForm(event.data.form)
-        continue
-      }
-      if (!("sessionID" in event.data) || event.data.sessionID !== input.sessionID) continue
-      const time = toMillis("created" in event ? event.created : undefined)
-
-      if (event.type === "session.inbox.delivered") {
-        if (event.data.inboxID === messageID) {
-          promoted = true
-          prePromotionError = undefined
-          continue
-        }
-      }
-      if (
-        event.type === "session.execution.interrupted" &&
-        event.data.reason === "user" &&
-        (interrupted || permissionRejected || formCancelled)
-      ) {
-        return
-      }
-      if (!promoted && event.type === "session.execution.failed") {
-        prePromotionError = event.data.error
-        if (finalizing) return
-        continue
-      }
-      if (
-        !promoted &&
-        finalizing &&
-        (event.type === "session.execution.succeeded" || event.type === "session.execution.interrupted")
-      )
-        return
-      if (!promoted) continue
-      if (finalizing && !event.type.startsWith("session.execution.")) continue
-
-      if (event.type === "session.step.started") {
-        const part = {
-          id: partID(event.id),
-          sessionID: input.sessionID,
-          messageID: event.data.assistantMessageID,
-          type: "step-start",
-          snapshot: event.data.snapshot,
-        }
-        if (input.compatibility === "v1") {
-          pendingStep = {
-            timestamp: time,
-            part,
-            label: `> ${event.data.agent} · ${event.data.model.id}`,
+  const tool = async (
+    partID: string,
+    messageID: string,
+    item: SessionMessageAssistantTool & { state: { status: "completed" | "error" } },
+    metadata: Record<string, unknown>,
+    timestamp: number,
+  ) => {
+    const id = key(messageID, item.id)
+    if (printed.has(id)) return
+    printed.set(id, "")
+    const time = { start: item.time.ran ?? item.time.created, end: item.time.completed ?? timestamp }
+    const state =
+      item.state.status === "completed"
+        ? {
+            status: "completed" as const,
+            input: item.state.input,
+            output: toolOutputText(item.name, item.state.content),
+            title: item.name,
+            metadata,
+            time,
           }
-          continue
-        }
-        if (!emit("step_start", time, { part }) && input.format !== "json") {
-          UI.empty()
-          UI.println(`> ${event.data.agent} · ${event.data.model.id}`)
-          UI.empty()
-        }
-        continue
-      }
+        : { status: "error" as const, input: item.state.input, error: item.state.error.message, metadata, time }
+    const part = {
+      partID,
+      sessionID: input.sessionID,
+      messageID,
+      type: "tool" as const,
+      id: item.id,
+      tool: item.name,
+      state,
+    }
+    if (emit("tool_use", timestamp, { part: part satisfies MiniToolPart })) return
+    if (item.state.status === "completed") return input.renderTool(item)
+    if (item.state.content && toolOutputText(item.name, item.state.content).trim())
+      await input.renderTool({
+        ...item,
+        state: {
+          status: "completed",
+          input: item.state.input,
+          metadata: item.state.metadata,
+          content: item.state.content,
+        },
+      })
+    await input.renderToolError(item)
+    UI.error(item.state.error.message)
+  }
 
-      if (event.type === "session.text.started") {
-        flushStep()
-        starts.set(`text\u0000${contentKey(event.data.assistantMessageID, event.data.ordinal)}`, {
-          id: partID(event.id),
-          timestamp: time,
-        })
-        continue
-      }
-      if (event.type === "session.text.ended") {
-        const key = contentKey(event.data.assistantMessageID, event.data.ordinal)
-        const started = starts.get(`text\u0000${key}`)
-        starts.delete(`text\u0000${key}`)
-        const part = {
-          id: started?.id ?? partID(event.id),
-          sessionID: input.sessionID,
+  const step = (type: "step-start" | "step-finish", timestamp: number, id: string, messageID: string, rest: object) => {
+    steps.set(messageID, type === "step-start" ? "started" : "ended")
+    const part = { id, sessionID: input.sessionID, messageID, type, ...rest }
+    return emit(type === "step-start" ? "step_start" : "step_finish", timestamp, { part })
+  }
+
+  return {
+    error: (error: RunError) => {
+      if (!emit("error", Date.now(), { error })) UI.error(error.message)
+    },
+
+    waiting: (jobs: Job[]) => {
+      const list = jobs.map((job) => ({ id: job.id, kind: job.kind, title: job.title }))
+      if (emit("background_wait", Date.now(), { jobs: list })) return
+      UI.println(
+        UI.Style.TEXT_DIM +
+          `waiting for ${jobs.length} background job${jobs.length === 1 ? "" : "s"}` +
+          UI.Style.TEXT_NORMAL,
+      )
+    },
+
+    event: async (event: Event) => {
+      const time = "created" in event ? event.created : Date.now()
+      if (event.type === "session.retry.scheduled") {
+        const retry = {
           messageID: event.data.assistantMessageID,
-          type: "text",
-          text: event.data.text,
-          time: { start: started?.timestamp ?? time, end: time },
+          attempt: event.data.attempt,
+          nextRetryAt: event.data.at,
+          error: event.data.error,
         }
-        renderedText.set(key, event.data.text)
-        writeText(part, time)
-        continue
+        if (emit("retry", time, retry)) return
+        UI.println(
+          UI.Style.TEXT_WARNING_BOLD + "!",
+          UI.Style.TEXT_NORMAL + `retrying (attempt ${retry.attempt}): ${retry.error.message}`,
+        )
+        return
       }
-
-      if (event.type === "session.reasoning.started") {
-        flushStep()
-        starts.set(`reasoning\u0000${contentKey(event.data.assistantMessageID, event.data.ordinal)}`, {
+      // Each retried attempt of a step starts it again.
+      if (event.type === "session.step.started" && !steps.has(event.data.assistantMessageID)) {
+        const rest = { snapshot: event.data.snapshot }
+        if (!step("step-start", time, partID(event.id), event.data.assistantMessageID, rest))
+          block(`> ${event.data.agent} · ${event.data.model.id}`)
+        return
+      }
+      if (event.type === "session.step.ended") {
+        const data = event.data
+        const rest = { reason: data.finish, snapshot: data.snapshot, cost: data.cost, tokens: data.tokens }
+        step("step-finish", time, partID(event.id), data.assistantMessageID, rest)
+        return
+      }
+      if (event.type === "session.text.started" || event.type === "session.reasoning.started") {
+        const kind = event.type === "session.text.started" ? "text" : "reasoning"
+        starts.set(key(kind, event.data.assistantMessageID, event.data.ordinal), {
           id: partID(event.id),
           timestamp: time,
         })
-        continue
+        return
       }
-      if (event.type === "session.reasoning.ended" && input.thinking) {
-        const key = contentKey(event.data.assistantMessageID, event.data.ordinal)
-        const started = starts.get(`reasoning\u0000${key}`)
-        starts.delete(`reasoning\u0000${key}`)
+      if (event.type === "session.text.ended" || event.type === "session.reasoning.ended") {
+        const kind = event.type === "session.text.ended" ? ("text" as const) : ("reasoning" as const)
+        const started = starts.get(key(kind, event.data.assistantMessageID, event.data.ordinal))
+        const metadata = event.type === "session.reasoning.ended" ? event.data.native : undefined
         const part = {
-          id: started?.id ?? partID(event.id),
-          sessionID: input.sessionID,
+          kind,
           messageID: event.data.assistantMessageID,
-          type: "reasoning",
+          ordinal: event.data.ordinal,
           text: event.data.text,
-          metadata: event.data.native,
-          time: { start: started?.timestamp ?? time, end: time },
         }
-        renderedReasoning.set(key, event.data.text)
-        writeReasoning(part, time)
-        continue
+        return text({ ...part, id: started?.id ?? partID(event.id), metadata }, started?.timestamp ?? time, time)
       }
-
-      if (event.type === "session.tool.input.started") {
-        flushStep()
-        tools.set(toolKey(event.data.assistantMessageID, event.data.id), {
-          id: partID(event.id),
-          timestamp: time,
-          assistantMessageID: event.data.assistantMessageID,
-          tool: event.data.name,
-          input: {},
-          metadata: {},
-          content: [],
-        })
-        continue
-      }
-      if (event.type === "session.tool.input.ended") {
-        const current = tools.get(toolKey(event.data.assistantMessageID, event.data.id))
-        if (current) current.raw = event.data.text
-        continue
-      }
-      if (event.type === "session.tool.input.delta") {
-        const current = tools.get(toolKey(event.data.assistantMessageID, event.data.id))
-        if (current) current.raw = (current.raw ?? "") + event.data.delta
-        continue
-      }
-      if (event.type === "session.tool.called") {
-        flushStep()
-        const key = toolKey(event.data.assistantMessageID, event.data.id)
-        const current = tools.get(key)
-        tools.set(key, {
+      if (event.type === "session.tool.input.started" || event.type === "session.tool.called") {
+        const id = key(event.data.assistantMessageID, event.data.id)
+        const current = tools.get(id)
+        tools.set(id, {
           id: current?.id ?? partID(event.id),
           timestamp: current?.timestamp ?? time,
-          assistantMessageID: event.data.assistantMessageID,
-          tool: current?.tool ?? "tool",
-          input: event.data.input,
+          name: event.type === "session.tool.input.started" ? event.data.name : (current?.name ?? "tool"),
+          input: event.type === "session.tool.called" ? event.data.input : {},
           raw: current?.raw,
-          provider: { executed: event.data.executed, state: event.data.native },
-          native: event.data.native,
+          call:
+            event.type === "session.tool.called"
+              ? { executed: event.data.executed, state: event.data.native }
+              : undefined,
           metadata: {},
-          content: [],
         })
-        continue
+        return
       }
-      if (event.type === "session.tool.progress") {
-        const current = tools.get(toolKey(event.data.assistantMessageID, event.data.id))
-        if (current) {
-          current.metadata = event.data.metadata
-        }
-        continue
+      if (
+        event.type === "session.tool.input.delta" ||
+        event.type === "session.tool.input.ended" ||
+        event.type === "session.tool.progress"
+      ) {
+        const current = tools.get(key(event.data.assistantMessageID, event.data.id))
+        if (!current) return
+        if (event.type === "session.tool.input.delta") current.raw = (current.raw ?? "") + event.data.delta
+        if (event.type === "session.tool.input.ended") current.raw = event.data.text
+        if (event.type === "session.tool.progress") current.metadata = event.data.metadata
+        return
       }
-      if (event.type === "session.tool.success") {
-        const key = toolKey(event.data.assistantMessageID, event.data.id)
-        const current = tools.get(key) ?? fallbackTool(event)
-        const tool: SessionMessageAssistantTool = {
-          type: "tool",
-          id: event.data.id,
-          name: current.tool,
-          executed: event.data.executed,
-          native: event.data.native ? { ...current.native, ...event.data.native } : current.native,
-          state: {
-            status: "completed",
+      if (event.type !== "session.tool.success" && event.type !== "session.tool.failed") return
+      const current = tools.get(key(event.data.assistantMessageID, event.data.id)) ?? {
+        id: partID(event.id),
+        timestamp: time,
+        name: "tool",
+        input: {},
+        metadata: {},
+      }
+      const call = {
+        providerCall: current.call,
+        providerResult: { executed: event.data.executed, state: event.data.native },
+        rawInput: current.raw,
+      }
+      const item = {
+        type: "tool" as const,
+        id: event.data.id,
+        name: current.name,
+        executed: event.data.executed,
+        native: event.data.native ? { ...current.call?.state, ...event.data.native } : current.call?.state,
+        time: { created: current.timestamp, ran: current.timestamp, completed: time },
+      }
+      const success = event.type === "session.tool.success"
+      const metadata = success ? { metadata: event.data.metadata, content: event.data.content, ...call } : call
+      const state = success
+        ? {
+            status: "completed" as const,
             input: current.input,
             metadata: event.data.metadata,
             content: event.data.content,
-          },
-          time: { created: current.timestamp, ran: current.timestamp, completed: time },
-        }
-        const part: MiniToolPart = {
-          partID: current.id,
-          sessionID: input.sessionID,
-          messageID: event.data.assistantMessageID,
-          type: "tool",
-          id: event.data.id,
-          tool: current.tool,
-          state: {
-            status: "completed",
+          }
+        : {
+            status: "error" as const,
             input: current.input,
-            output: toolOutputText(current.tool, event.data.content),
-            title: current.tool,
-            metadata: {
-              metadata: event.data.metadata,
-              content: event.data.content,
-              providerCall: current.provider,
-              providerResult: { executed: event.data.executed, state: event.data.native },
-              rawInput: current.raw,
-            },
-            time: { start: current.timestamp, end: time },
-          },
-        }
-        tools.delete(key)
-        renderedTools.add(key)
-        if (!emit("tool_use", time, { part })) await input.renderTool(tool)
-        continue
-      }
-      if (event.type === "session.tool.failed") {
-        const key = toolKey(event.data.assistantMessageID, event.data.id)
-        const current = tools.get(key) ?? fallbackTool(event)
-        const error = event.data.error.message
-        const metadata = event.data.metadata ?? current.metadata
-        const content = event.data.content ?? nonEmptyToolContent(current.content)
-        const tool: SessionMessageAssistantTool = {
-          type: "tool",
-          id: event.data.id,
-          name: current.tool,
-          executed: event.data.executed,
-          native: event.data.native ? { ...current.native, ...event.data.native } : current.native,
-          state: {
-            status: "error",
-            input: current.input,
-            metadata,
-            content,
+            metadata: event.data.metadata ?? current.metadata,
+            content: event.data.content,
             error: event.data.error,
-          },
-          time: { created: current.timestamp, ran: current.timestamp, completed: time },
-        }
-        const part: MiniToolPart = {
-          partID: current.id,
-          sessionID: input.sessionID,
-          messageID: event.data.assistantMessageID,
-          type: "tool",
-          id: event.data.id,
-          tool: current.tool,
-          state: {
-            status: "error",
-            input: current.input,
-            error,
-            metadata: {
-              providerCall: current.provider,
-              providerResult: { executed: event.data.executed, state: event.data.native },
-              rawInput: current.raw,
-            },
-            time: { start: current.timestamp, end: time },
-          },
-        }
-        tools.delete(key)
-        renderedTools.add(key)
-        if (input.compatibility === "v1" && (permissionRejected || formCancelled)) continue
-        if (!emit("tool_use", time, { part })) {
-          if (content && toolOutputText(current.tool, content).trim())
-            await input.renderTool({
-              ...tool,
-              state: {
-                status: "completed",
-                input: current.input,
-                metadata,
-                content,
-              },
-            })
-          await input.renderToolError(tool)
-          UI.error(error)
-        }
-        continue
-      }
+          }
+      return tool(current.id, event.data.assistantMessageID, { ...item, state }, metadata, time)
+    },
 
-      if (event.type === "session.step.ended") {
-        flushStep()
-        const part = {
-          id: partID(event.id),
-          sessionID: input.sessionID,
-          messageID: event.data.assistantMessageID,
-          type: "step-finish",
-          reason: event.data.finish,
-          snapshot: event.data.snapshot,
-          cost: event.data.cost,
-          tokens: event.data.tokens,
-        }
-        emit("step_finish", time, { part })
-        continue
-      }
-      if (event.type === "session.step.failed") {
-        if (input.compatibility === "v1" && event.data.error.message === "The provider response ended unexpectedly.") {
-          pendingStep = undefined
-          v1InvalidOutput = true
-          continue
-        }
-        if (interrupted || permissionRejected || formCancelled) continue
-        flushStep()
-        emittedError = true
-        process.exitCode = 1
-        if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
-        continue
-      }
-      if (event.type === "session.execution.failed") {
-        if (input.compatibility === "v1" && (v1InvalidOutput || permissionRejected || formCancelled)) return
-        flushStep()
-        if (!emittedError && !formCancelled) {
-          emittedError = true
-          process.exitCode = 1
-          if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
-        }
-        return
-      }
-      if (event.type === "session.execution.interrupted") {
-        if (input.compatibility === "v1" && (permissionRejected || formCancelled)) return
-        if (event.data.reason === "user" && interrupted) process.exitCode = 130
-        // A declined tool call ends the step with an interruption; it was already reported above.
-        if (event.data.reason !== "user" && !emittedError && !permissionRejected && !formCancelled) {
-          emittedError = true
-          process.exitCode = 1
-          const error = { type: "aborted" as const, message: `Session interrupted: ${event.data.reason}` }
-          if (!emit("error", time, { error })) UI.error(error.message)
-        }
-        return
-      }
-      if (event.type === "session.execution.succeeded") return
-    }
-  }
-
-  const projectedMessages = async () => {
-    const messages: SessionMessageInfo[] = []
-    let cursor: string | undefined
-    while (true) {
-      const page = await input.client.message.list(
-        cursor
-          ? { sessionID: input.sessionID, limit: 200, cursor }
-          : { sessionID: input.sessionID, limit: 200, order: "desc" },
-      )
-      for (const message of page.data) {
-        if (message.id === messageID) return { found: true, messages: messages.toReversed() }
-        messages.push(message)
-      }
-      cursor = page.cursor.next ?? undefined
-      if (!cursor) return { found: false, messages: [] }
-    }
-  }
-
-  const reconcile = async () => {
-    const projected = await projectedMessages()
-    for (const message of projected.messages) {
-      if (message.type !== "assistant") continue
-      const timestamp = message.time.completed ?? message.time.created
-      let textOrdinal = 0
-      let reasoningOrdinal = 0
-      for (const item of message.content) {
-        if (item.type === "text") {
-          const ordinal = textOrdinal++
-          const key = contentKey(message.id, ordinal)
-          const rendered = renderedText.get(key) ?? ""
-          if (rendered === item.text || !item.text.startsWith(rendered)) continue
-          const text = item.text.slice(rendered.length)
-          writeText(
+    reconcile: async (messages: SessionMessageInfo[]) => {
+      for (const message of messages) {
+        if (message.type !== "assistant") continue
+        const timestamp = message.time.completed ?? message.time.created
+        const seen = steps.get(message.id)
+        const id = (part: string) => projectedPartID(message.id, part)
+        if (!seen)
+          step("step-start", message.time.created, id("step-start"), message.id, { snapshot: message.snapshot?.start })
+        const ordinals = { text: 0, reasoning: 0 }
+        for (const item of message.content) {
+          if (item.type === "tool") {
+            if (item.state.status === "streaming" || item.state.status === "running") continue
+            const metadata = { metadata: item.state.metadata, content: item.state.content }
+            const done = { ...item, state: item.state }
+            await tool(id(`tool-${item.id}`), message.id, done, metadata, timestamp)
+            continue
+          }
+          const ordinal = ordinals[item.type]++
+          // A part never printed live and still empty has nothing to show.
+          if (!item.text && !printed.has(key(item.type, message.id, ordinal))) continue
+          const metadata = item.type === "reasoning" ? item.native : undefined
+          text(
             {
-              id: projectedPartID(message.id, `text-${ordinal}`),
-              sessionID: input.sessionID,
+              kind: item.type,
+              id: id(`${item.type}-${ordinal}`),
               messageID: message.id,
-              type: "text",
-              text,
-              time: { start: message.time.created, end: timestamp },
+              ordinal,
+              text: item.text,
+              metadata,
             },
+            message.time.created,
             timestamp,
           )
-          renderedText.set(key, item.text)
-          continue
         }
-        if (item.type === "reasoning") {
-          const ordinal = reasoningOrdinal++
-          if (!input.thinking) continue
-          const key = contentKey(message.id, ordinal)
-          const rendered = renderedReasoning.get(key) ?? ""
-          if (rendered === item.text || !item.text.startsWith(rendered)) continue
-          const text = item.text.slice(rendered.length)
-          const part = {
-            id: projectedPartID(message.id, `reasoning-${ordinal}`),
-            sessionID: input.sessionID,
-            messageID: message.id,
-            type: "reasoning",
-            text,
-            metadata: item.native,
-            time: { start: message.time.created, end: timestamp },
-          }
-          renderedReasoning.set(key, item.text)
-          writeReasoning(part, timestamp)
-          continue
-        }
-
-        const key = toolKey(message.id, item.id)
-        if (renderedTools.has(key) || item.state.status === "streaming" || item.state.status === "running") continue
-        const part: MiniToolPart = {
-          partID: projectedPartID(message.id, `tool-${item.id}`),
-          sessionID: input.sessionID,
-          messageID: message.id,
-          type: "tool",
-          id: item.id,
-          tool: item.name,
-          state:
-            item.state.status === "completed"
-              ? {
-                  status: "completed",
-                  input: item.state.input,
-                  output: toolOutputText(item.name, item.state.content),
-                  title: item.name,
-                  metadata: { metadata: item.state.metadata, content: item.state.content },
-                  time: { start: item.time.ran ?? item.time.created, end: item.time.completed ?? timestamp },
-                }
-              : {
-                  status: "error",
-                  input: item.state.input,
-                  error: item.state.error.message,
-                  metadata: { metadata: item.state.metadata, content: item.state.content },
-                  time: { start: item.time.ran ?? item.time.created, end: item.time.completed ?? timestamp },
-                },
-        }
-        renderedTools.add(key)
-        if (emit("tool_use", timestamp, { part })) continue
-        if (item.state.status === "completed") {
-          await input.renderTool(item)
-          continue
-        }
-        if (item.state.content && toolOutputText(item.name, item.state.content).trim()) {
-          await input.renderTool({
-            ...item,
-            state: {
-              status: "completed",
-              input: item.state.input,
-              metadata: item.state.metadata,
-              content: item.state.content,
-            },
+        if (seen !== "ended" && message.finish && message.tokens)
+          step("step-finish", timestamp, id("step-finish"), message.id, {
+            reason: message.finish,
+            snapshot: message.snapshot?.end,
+            cost: message.cost ?? 0,
+            tokens: message.tokens,
           })
-        }
-        await input.renderToolError(item)
-        UI.error(item.state.error.message)
       }
-
-      // A declined tool call ends its step with an interrupted-step error that is
-      // only a consequence of our own rejection; it was already reported above.
-      if (message.error && !emittedError && !permissionRejected && !formCancelled) {
-        emittedError = true
-        process.exitCode = 1
-        if (!emit("error", timestamp, { error: message.error })) UI.error(message.error.message)
-      }
-    }
-    return {
-      found: projected.found,
-      responded: projected.messages.some((message) => message.type === "assistant"),
-    }
-  }
-
-  const interrupt = () => {
-    if (interrupted) process.exit(130)
-    interrupted = true
-    process.exitCode = 130
-    admission?.abort()
-    void input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
-  }
-  process.on("SIGINT", interrupt)
-
-  let completed: Promise<void> | undefined
-  try {
-    if (input.agent) {
-      await input.client.session.switchAgent({ sessionID: input.sessionID, agent: input.agent })
-    }
-    const selected = input.model
-      ? { providerID: input.model.providerID, id: input.model.modelID, variant: input.variant }
-      : input.variant
-        ? await input.client.session
-            .get({ sessionID: input.sessionID })
-            .then((result) => result.model)
-            .then(async (model) => {
-              if (model) return { ...model, variant: input.variant }
-              const result = await input.client.model.default()
-              const fallback = result.data
-              return fallback ? { providerID: fallback.providerID, id: fallback.id, variant: input.variant } : undefined
-            })
-        : undefined
-    if (input.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
-    if (selected) {
-      await input.client.session.switchModel({ sessionID: input.sessionID, model: selected })
-    }
-
-    const prepared = await Promise.all(input.files.map(prepareFile))
-    if (interrupted) return
-    submitted = true
-    completed = consume()
-    admission = new AbortController()
-    const response = await input.client.session
-      .prompt(
-        {
-          sessionID: input.sessionID,
-          id: messageID,
-          text: [input.message, ...prepared.flatMap((file) => (file.text ? [file.text] : []))].join("\n\n"),
-          files: prepared.flatMap((file) => (file.attachment ? [file.attachment] : [])),
-          delivery: "steer",
-        },
-        { signal: admission.signal },
-      )
-      .catch(async (error) => {
-        if (interrupted) {
-          await input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
-        }
-        controller.abort()
-        await completed?.catch(() => {})
-        if (interrupted || emittedError) return undefined
-        throw error
-      })
-    admission = undefined
-    if (!response) return
-    if (interrupted) await input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
-
-    const [permissions, forms, globals] = await Promise.all([
-      input.client.permission.list({ sessionID: input.sessionID }).catch(() => undefined),
-      input.client.session.form.list({ sessionID: input.sessionID }).catch(() => undefined),
-      input.attached
-        ? Promise.resolve(undefined)
-        : input.client.form
-            .list({
-              location: { directory: input.location.directory },
-            })
-            .catch(() => undefined),
-    ])
-    await Promise.all([
-      ...(permissions ?? []).map(replyPermission),
-      ...(forms ?? []).map(cancelForm),
-      ...(globals && sameLocation(globals.location, input.location)
-        ? globals.data.filter((form) => form.sessionID === GLOBAL_FORM_SESSION_ID).map(cancelForm)
-        : []),
-    ])
-    if (input.compatibility === "v1") {
-      await completed
-      return
-    }
-
-    const waiting = input.client.experimental.session.wait({ sessionID: input.sessionID })
-    await Promise.race([waiting, completed.then(() => waiting)])
-    finalizing = true
-    const projected = await reconcile()
-    if (
-      !projected.responded &&
-      !interrupted &&
-      !permissionRejected &&
-      !formCancelled &&
-      !emittedError &&
-      !prePromotionError
-    ) {
-      await completed
-    }
-    if (!projected.found && !interrupted && !permissionRejected && !formCancelled && !emittedError) {
-      const error = prePromotionError ?? { type: "unknown", message: "Prompt was not promoted" }
-      emittedError = true
-      process.exitCode = 1
-      if (!emit("error", Date.now(), { error })) UI.error(error.message)
-    }
-  } finally {
-    process.off("SIGINT", interrupt)
-    controller.abort()
-    if (input.compatibility === "v1") await stream.return?.(undefined).catch(() => {})
-    else void stream.return?.(undefined).catch(() => {})
-  }
-}
-
-function sameLocation(left: LocationRef | undefined, right: LocationRef) {
-  return !!left && left.directory === right.directory
-}
-
-function formRequestOptions(location: LocationRef | undefined): [] | [{ headers: Record<string, string> }] {
-  if (!location) return []
-  return [
-    {
-      headers: {
-        "x-opencode-directory": encodeURIComponent(location.directory),
-      },
     },
-  ]
+  }
+}
+
+function deferred() {
+  const result = Promise.withResolvers<void>()
+  result.promise.catch(() => {})
+  return result
 }
 
 function formAlreadySettled(error: unknown) {
   return !!error && typeof error === "object" && "_tag" in error && error._tag === "FormAlreadySettledError"
 }
 
+function key(...parts: Array<string | number>) {
+  return parts.join("\u0000")
+}
+
 function partID(eventID: string) {
   return `prt_${eventID.replace(/^evt_/, "")}`
 }
 
-function toolKey(messageID: string, id: string) {
-  return `${messageID}\u0000${id}`
-}
-
-function contentKey(messageID: string, ordinal: number) {
-  return `${messageID}\u0000${ordinal}`
-}
-
 function projectedPartID(messageID: string, part: string) {
   return `prt_${messageID.replace(/^msg_/, "")}_${part}`
-}
-
-function fallbackTool(event: {
-  id: string
-  created: number
-  data: { assistantMessageID: string; id: string }
-}): ToolState {
-  return {
-    id: partID(event.id),
-    timestamp: toMillis(event.created),
-    assistantMessageID: event.data.assistantMessageID,
-    tool: "tool",
-    input: {},
-    metadata: {},
-    content: [],
-  }
-}
-
-function toMillis(value: unknown) {
-  if (typeof value === "number") return value
-  if (typeof value === "string") return new Date(value).getTime()
-  return Date.now()
-}
-
-async function prepareFile(file: File) {
-  if (file.mime !== "text/plain") {
-    const uri = file.url.startsWith("data:")
-      ? file.url
-      : `data:${file.mime};base64,${(await readFile(new URL(file.url))).toString("base64")}`
-    return { attachment: { uri, name: file.filename } }
-  }
-  const content = file.url.startsWith("data:")
-    ? Buffer.from(file.url.slice(file.url.indexOf(",") + 1), "base64").toString("utf8")
-    : await readFile(new URL(file.url), "utf8")
-  return { text: `<file name="${file.filename}">\n${content}\n</file>` }
 }

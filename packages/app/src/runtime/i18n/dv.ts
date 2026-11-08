@@ -766,6 +766,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "ޑޭޓާ މައިގްރޭޓްކުރުން \u2068{{current}}\u2069/\u2068{{total}}\u2069",
   "home.workspaceTip": "ބަދަލުތައް އެކަހެރިކޮށް ބެހެއްޓުމަށްޓަކައި އާ ވޯކްސްޕޭސްއެއްގައި ދެން އޮންނަ ސެޝަން ފެށުން",
   "session.tab.add": "ޓެބް އިތުރުކުރުން",
+  "session.tab.closeOthers": "އެހެން ޓެބްތައް ބަންދުކުރުން",
   "session.queue.attachments.one": "ޕްލަސް \u2068{{count}}\u2069 އެޓޭޗްމަންޓް",
   "session.queue.attachments.other": "ޕްލަސް \u2068{{count}}\u2069 އެޓޭޗްމަންޓްސް",
   "settings.backToSettings": "އެނބުރި ސެޓިންގްސް އަށް",

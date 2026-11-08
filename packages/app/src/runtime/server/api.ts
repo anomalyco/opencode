@@ -1,10 +1,4 @@
-import {
-  OpenCode,
-  type MessageListInput,
-  type OpenCodeClient,
-  type SessionInboxListInput,
-  type SessionMessageGetInput,
-} from "@opencode/client/promise"
+import { OpenCode, withMediaRefs, type MediaRequestOptions } from "@opencode/client/promise"
 import type { ServerConnection } from "@/runtime/server/registry"
 import { decode64 } from "@/runtime/persistence/base64"
 
@@ -25,12 +19,8 @@ export function authFromToken(token: string | null) {
   }
 }
 
-export const MEDIA_URI_CAPABILITY = "experimental-media-uri"
-
-export const CAPABILITIES_HEADER = "X-OpenCode-Capabilities"
-
 /** `mediaRefs: false` reads stored media as inline bytes, for callers such as export that need self-contained messages. */
-export type ServerRequestOptions = OpenCode.RequestOptions & { readonly mediaRefs?: false }
+export type ServerRequestOptions = MediaRequestOptions
 
 export function createApiForServer(input: { server: ServerConnection.HttpBase; fetch?: typeof globalThis.fetch }) {
   return withMediaRefs(
@@ -46,42 +36,6 @@ export function createApiForServer(input: { server: ServerConnection.HttpBase; f
         : undefined,
     }),
   )
-}
-
-/**
- * Only the message and inbox reads can return stored media as `media:<hash>` refs, so only they carry the capability.
- * A custom header makes a cross-origin request preflighted, which every other request must keep avoiding.
- */
-function withMediaRefs(api: OpenCodeClient) {
-  return {
-    ...api,
-    message: {
-      ...api.message,
-      list: (input: MessageListInput, options?: ServerRequestOptions) =>
-        api.message.list(input, mediaRefOptions(options)),
-    },
-    session: {
-      ...api.session,
-      message: {
-        ...api.session.message,
-        get: (input: SessionMessageGetInput, options?: ServerRequestOptions) =>
-          api.session.message.get(input, mediaRefOptions(options)),
-      },
-      inbox: {
-        ...api.session.inbox,
-        list: (input: SessionInboxListInput, options?: ServerRequestOptions) =>
-          api.session.inbox.list(input, mediaRefOptions(options)),
-      },
-    },
-  }
-}
-
-function mediaRefOptions(options: ServerRequestOptions | undefined): OpenCode.RequestOptions | undefined {
-  if (options?.mediaRefs === false) return options
-  const headers = new Headers(options?.headers)
-  headers.set(CAPABILITIES_HEADER, MEDIA_URI_CAPABILITY)
-
-  return { ...options, headers }
 }
 
 /**

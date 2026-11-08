@@ -6,6 +6,7 @@ import { pathToFileURL } from "url"
 import { eq } from "drizzle-orm"
 import { Database } from "@opencode/core/database/database"
 import { Agent } from "@opencode/core/agent"
+import { App } from "@opencode/core/app"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -41,11 +42,13 @@ import { Skill } from "@opencode/core/skill"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { SessionStored } from "@opencode/core/session/stored"
 import { SessionBlob } from "@opencode/core/session/blob"
 import { SessionTransfer } from "@opencode/core/session/transfer"
+import { PromptInput } from "@opencode/schema/prompt-input"
 
 const executionCalls: Session.ID[] = []
 const interruptCalls: Session.ID[] = []
@@ -77,7 +80,7 @@ const execution = Layer.succeed(
 const mediaDirectory = "/media"
 // A location whose instance fails to boot, the way a bad config or unreadable directory does: as a defect.
 const brokenDirectory = "/broken"
-const mediaBlob = Config.testLayer([
+const mediaBlob = Flag.testLayer([
   new Document({
     type: "document",
     info: new Info({ experimental: new ConfigExperimental.Info({ media_blob: true }) }),
@@ -88,22 +91,28 @@ const locations = makeGlobalNode({
   layer: Layer.effect(
     LocationServiceMap.Service,
     Effect.gen(function* () {
+      const app = yield* App.Service
       const bus = yield* Bus.Service
       return yield* LayerMap.make(
         (ref: Location.Ref) =>
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
           Layer.mergeAll(
-            // Every real instance has its own config, so the caller's never shows through.
-            ref.directory === mediaDirectory ? mediaBlob : Config.testLayer([]),
             ref.directory === brokenDirectory ? Layer.effectDiscard(Effect.die("instance boot failed")) : Layer.empty,
-            LayerNode.compile(LayerNode.group([PluginHooks.node, Skill.node]), {
-              replacements: [Bus.node.replace(Layer.succeed(Bus.Service, bus))],
+            // Every real instance has its own config and flags, so the caller's never show through.
+            LayerNode.compile(LayerNode.group([App.node, Config.node, Flag.node, PluginHooks.node, Skill.node]), {
+              replacements: [
+                App.node.replace(Layer.succeed(App.Service, app)),
+                Bus.node.replace(Layer.succeed(Bus.Service, bus)),
+                Config.node.replace(ref.directory === mediaDirectory ? mediaBlob : Config.testLayer([])),
+              ],
             }),
             Layer.mock(Image.Service, {
               normalize: (resource, content) =>
                 content.mime === "image/heic"
                   ? Effect.fail(new Image.DecodeError({ resource }))
-                  : Effect.succeed(content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content),
+                  : Effect.succeed(
+                      content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content,
+                    ),
             }),
             Layer.mock(Snapshot.Service, {
               capture: () => Effect.undefined,
@@ -114,25 +123,29 @@ const locations = makeGlobalNode({
       )
     }),
   ),
-  deps: [Bus.node],
+  deps: [App.node, Bus.node],
 })
-const it = testEffect(
-  AppNodeBuilder.build(
-    LayerNode.group([
-      Database.node,
-      Bus.node,
-      SessionProjector.node,
-      SessionStore.node,
-      Session.node,
-      SessionTransfer.node,
-    ]),
-    [
-      Bus.node.replace(Bus.configured({ persist: true })),
-      SessionExecution.node.replace(execution),
-      LocationServiceMap.node.replace(locations),
-    ],
-  ),
-)
+const harness = (channel?: string) =>
+  testEffect(
+    AppNodeBuilder.build(
+      LayerNode.group([
+        Database.node,
+        Bus.node,
+        SessionProjector.node,
+        SessionStore.node,
+        Session.node,
+        SessionTransfer.node,
+      ]),
+      [
+        Bus.node.replace(Bus.configured({ persist: true })),
+        SessionExecution.node.replace(execution),
+        LocationServiceMap.node.replace(locations),
+        App.node.replace(App.configured(channel ? { channel } : {})),
+      ],
+    ),
+  )
+const it = harness()
+const devIt = harness("dev")
 const sessionID = Session.ID.make("ses_prompt_test")
 const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 const messageID = SessionMessage.ID.create()
@@ -534,6 +547,46 @@ describe("Session.prompt", () => {
     }),
   )
 
+  it.live("admits captured image bytes with their source path after the source disappears", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const directory = yield* tmpdirScoped("opencode-session-prompt-")
+      const source = path.join(directory.path, "screenshot.png")
+      yield* Effect.promise(() => Bun.write(source, Buffer.from(pngBase64, "base64")))
+      const bytes = yield* Effect.promise(() => Bun.file(source).arrayBuffer())
+      yield* Effect.promise(() => Bun.file(source).delete())
+      const file = {
+        uri: `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`,
+        source: { type: "uri", uri: pathToFileURL(source).href },
+        name: "screenshot.png",
+        mention: { start: 0, end: 9, text: "[Image 1]" },
+      } satisfies PromptInput.FileAttachment
+
+      const message = yield* session.prompt({
+        sessionID,
+        text: "[Image 1] Inspect this image",
+        files: [Schema.decodeUnknownSync(PromptInput.FileAttachment)(file)],
+        resume: false,
+      })
+
+      expect(message.payload.files).toEqual([
+        {
+          data: pngBase64,
+          mime: "image/png",
+          source: file.source,
+          name: file.name,
+          mention: file.mention,
+        },
+      ])
+      const stored = yield* admitted(message.id)
+      expect(stored?.type === "user" ? stored.payload.files : undefined).toEqual(message.payload.files)
+      expect(
+        Schema.encodeSync(PromptInput.FileAttachment)(Schema.decodeUnknownSync(PromptInput.FileAttachment)(file)),
+      ).toEqual(file)
+    }),
+  )
+
   it.effect("stores media refs at admission when the session's config enables media_blob", () =>
     Effect.gen(function* () {
       yield* setup
@@ -655,6 +708,39 @@ describe("Session.prompt", () => {
           .all()
           .pipe(Effect.orDie),
       ).toEqual([{ session: imported.id, hash }])
+    }),
+  )
+
+  devIt.effect("admits and imports media into blobs by default on a dev-channel server with no config", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const session = yield* Session.Service
+      const transfer = yield* SessionTransfer.Service
+      const prompted = yield* session.prompt({
+        sessionID,
+        text: "Inspect this image",
+        files: [{ uri: `data:image/png;base64,${pngBase64}`, name: "shot.png" }],
+        resume: false,
+      })
+      const imported = yield* transfer.import({
+        data: {
+          info: { ...(yield* session.get(sessionID)), id: Session.ID.make("ses_import_dev") },
+          messages: mediaMessages("ses_import_dev"),
+        },
+        location: { directory: AbsolutePath.make("/project") },
+      })
+
+      const hash = SessionBlob.hashBytes(Buffer.from(pngBase64, "base64"))
+      const inboxRow = yield* db
+        .select()
+        .from(SessionInboxTable)
+        .where(eq(SessionInboxTable.id, prompted.id))
+        .get()
+        .pipe(Effect.orDie)
+      expect(inboxRow?.payload).toMatchObject({ files: [{ uri: SessionStored.ref(hash), mime: "image/png" }] })
+      expect(yield* db.select({ hash: BlobTable.hash }).from(BlobTable).all().pipe(Effect.orDie)).toEqual([{ hash }])
+      expect(yield* session.messages({ sessionID: imported.id, order: "asc" })).toEqual(mediaMessages("ses_import_dev"))
     }),
   )
 

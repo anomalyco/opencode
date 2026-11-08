@@ -7,7 +7,7 @@ use std::env;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use opencode_pty::service::{CreateTerminal, TerminalLifecycle, TerminalService};
+use opencode_pty::service::{CreatePty, ProcessMode, TerminalLifecycle, TerminalService};
 use opencode_pty::{protocol::AttachmentRole, service::StreamEvent};
 use resize_fixture::ResizeFixture;
 
@@ -59,8 +59,8 @@ fn repeated_resize_reports_are_delivered_once() {
     fixture.expect_input(b"!\x1b[0n");
 }
 
-fn command(script: &str) -> CreateTerminal {
-    CreateTerminal {
+fn command(script: &str) -> CreatePty {
+    CreatePty {
         program: "/bin/sh".to_string(),
         args: vec!["-c".to_string(), script.to_string()],
         cwd: env::current_dir().expect("cwd"),
@@ -90,7 +90,7 @@ fn read_rows_snapshots_live_state_without_taking_control() {
         command(r"printf '\033]2;rows-title\007one\ntwo\nthree\nfour\nfive'; sleep 1");
     request.cols = 10;
     request.rows = 3;
-    let terminal = service.create(request).expect("terminal created");
+    let terminal = service.create_pty(request).expect("terminal created");
     wait_for(|| {
         service
             .read_rows(terminal.id, None)
@@ -109,11 +109,17 @@ fn read_rows_snapshots_live_state_without_taking_control() {
     let replay = service.replay(terminal.id, 0).unwrap();
     let rows = service.read_rows(terminal.id, Some(u16::MAX)).unwrap();
     assert_eq!(rows.lines, ["one", "two", "three", "four", "five"]);
-    assert_eq!(rows.terminal.id, terminal.id);
-    assert_eq!(rows.terminal.title, "rows-title");
-    assert_eq!((rows.terminal.cols, rows.terminal.rows), (10, 3));
+    assert_eq!(rows.process.id, terminal.id);
+    assert_eq!(rows.process.pty.as_ref().unwrap().title, "rows-title");
+    assert_eq!(
+        (
+            rows.process.pty.as_ref().unwrap().cols,
+            rows.process.pty.as_ref().unwrap().rows
+        ),
+        (10, 3)
+    );
     assert_eq!((rows.cursor_x, rows.cursor_y), (4, 2));
-    assert_eq!(rows.terminal.output_tail, replay.end_offset);
+    assert_eq!(rows.process.output_tail, replay.end_offset);
     assert_eq!(
         service.snapshot(terminal.id).unwrap().checkpoint,
         snapshot.checkpoint
@@ -125,7 +131,13 @@ fn read_rows_snapshots_live_state_without_taking_control() {
         .unwrap();
     let rows = service.read_rows(terminal.id, None).unwrap();
     assert_eq!(rows.lines, ["two", "three", "four", "five"]);
-    assert_eq!((rows.terminal.cols, rows.terminal.rows), (12, 4));
+    assert_eq!(
+        (
+            rows.process.pty.as_ref().unwrap().cols,
+            rows.process.pty.as_ref().unwrap().rows
+        ),
+        (12, 4)
+    );
     assert_eq!((rows.cursor_x, rows.cursor_y), (4, 3));
     assert!(
         service
@@ -143,10 +155,10 @@ fn read_rows_snapshots_live_state_without_taking_control() {
 fn terminals_run_independently_and_one_exit_does_not_stop_service() {
     let service = TerminalService::new(64 * 1024);
     let alpha = service
-        .create(command("printf 'alpha\\n'; sleep 0.05"))
+        .create_pty(command("printf 'alpha\\n'; sleep 0.05"))
         .expect("alpha created");
     let beta = service
-        .create(command("printf 'beta\\n'; sleep 0.2"))
+        .create_pty(command("printf 'beta\\n'; sleep 0.2"))
         .expect("beta created");
 
     wait_for(|| {
@@ -158,7 +170,7 @@ fn terminals_run_independently_and_one_exit_does_not_stop_service() {
                 .is_ok_and(|snapshot| snapshot.text.contains("beta"))
     });
     wait_for(|| {
-        service.list().is_ok_and(|terminals| {
+        service.list(ProcessMode::Pty).is_ok_and(|terminals| {
             terminals.iter().any(|terminal| {
                 terminal.id == alpha.id
                     && matches!(terminal.lifecycle, TerminalLifecycle::Exited { .. })
@@ -167,7 +179,7 @@ fn terminals_run_independently_and_one_exit_does_not_stop_service() {
     });
 
     let gamma = service
-        .create(command("printf 'gamma\\n'; sleep 0.05"))
+        .create_pty(command("printf 'gamma\\n'; sleep 0.05"))
         .expect("service creates terminal after child exit");
     wait_for(|| {
         service
@@ -184,11 +196,11 @@ fn terminals_run_independently_and_one_exit_does_not_stop_service() {
 fn hidden_terminal_output_uses_bounded_replay() {
     let service = TerminalService::new(32);
     let terminal = service
-        .create(command("printf '0123456789abcdefghijklmnopqrstuvwxyz'"))
+        .create_pty(command("printf '0123456789abcdefghijklmnopqrstuvwxyz'"))
         .expect("terminal created");
 
     wait_for(|| {
-        service.list().is_ok_and(|items| {
+        service.list(ProcessMode::Pty).is_ok_and(|items| {
             items
                 .iter()
                 .any(|item| item.id == terminal.id && item.output_tail >= 36)
@@ -206,7 +218,7 @@ fn hidden_terminal_output_uses_bounded_replay() {
 fn title_changes_update_metadata_and_notify_subscribers() {
     let service = TerminalService::new(64 * 1024);
     let terminal = service
-        .create(command(
+        .create_pty(command(
             r"sleep 0.05; printf '\033]2;dynamic-title\007'; sleep 0.2",
         ))
         .expect("terminal created");
@@ -236,13 +248,94 @@ fn title_changes_update_metadata_and_notify_subscribers() {
     };
 
     assert_eq!(title, "dynamic-title");
-    assert!(service.list().is_ok_and(|items| {
-        items
-            .iter()
-            .any(|item| item.id == terminal.id && item.title == "dynamic-title")
+    assert!(service.list(ProcessMode::Pty).is_ok_and(|items| {
+        items.iter().any(|item| {
+            item.id == terminal.id && item.pty.as_ref().unwrap().title == "dynamic-title"
+        })
     }));
 
     service.terminate(terminal.id).expect("terminal removed");
+}
+
+#[test]
+fn rename_updates_metadata_and_notifies_subscribers_once() {
+    let service = TerminalService::new(64 * 1024);
+    let terminal = service
+        .create_pty(command("exec cat"))
+        .expect("terminal created");
+    let observer = service
+        .attach(
+            terminal.id,
+            0,
+            "observer".to_string(),
+            AttachmentRole::Observer,
+            false,
+        )
+        .expect("observer attached");
+
+    service
+        .rename(terminal.id, Some("renamed".to_string()))
+        .unwrap();
+    service
+        .rename(terminal.id, Some("renamed".to_string()))
+        .unwrap();
+    let snapshot = service.snapshot(terminal.id).unwrap();
+    assert_eq!(snapshot.info.pty.as_ref().unwrap().title, "renamed");
+    assert_eq!(
+        snapshot.info.pty.as_ref().unwrap().user_title.as_deref(),
+        Some("renamed")
+    );
+    assert!(service.list(ProcessMode::Pty).is_ok_and(|items| {
+        items.iter().any(|item| {
+            item.id == terminal.id
+                && item.pty.as_ref().unwrap().title == "renamed"
+                && item.pty.as_ref().unwrap().user_title.as_deref() == Some("renamed")
+        })
+    }));
+    service.terminate(terminal.id).expect("terminal removed");
+
+    let titles = observer
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            StreamEvent::TitleChanged { title } => Some(title),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(titles, ["renamed"]);
+    assert!(service.rename(terminal.id, None).is_err());
+}
+
+#[test]
+fn list_returns_terminals_in_creation_order() {
+    let service = TerminalService::new(64 * 1024);
+    let created = (0..6)
+        .map(|_| service.create_pty(command("exec cat")).unwrap().id)
+        .collect::<Vec<_>>();
+    let listed = service
+        .list(ProcessMode::Pty)
+        .unwrap()
+        .into_iter()
+        .map(|terminal| terminal.id)
+        .collect::<Vec<_>>();
+    assert_eq!(listed, created);
+    service.terminate(created[2]).unwrap();
+    let id = service.create_pty(command("exec cat")).unwrap().id;
+    let listed = service
+        .list(ProcessMode::Pty)
+        .unwrap()
+        .into_iter()
+        .map(|terminal| terminal.id)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        listed,
+        [
+            created[0], created[1], created[3], created[4], created[5], id
+        ]
+    );
+    for id in listed {
+        service.terminate(id).unwrap();
+    }
 }
 
 #[test]
@@ -250,7 +343,7 @@ fn title_changes_update_metadata_and_notify_subscribers() {
 fn foreground_process_tracks_deepest_tty_attached_job() {
     let service = TerminalService::new(64 * 1024);
     let terminal = service
-        .create(command("exec /bin/sh"))
+        .create_pty(command("exec /bin/sh"))
         .expect("terminal created");
     let controller = service
         .attach(
@@ -277,7 +370,12 @@ fn foreground_process_tracks_deepest_tty_attached_job() {
             Instant::now() < deadline,
             "timed out waiting for foreground process"
         );
-        service.list().expect("foreground process refreshed");
+        // `get` refreshes the foreground process like `list` does.
+        let info = service
+            .get(terminal.id)
+            .expect("foreground process refreshed");
+        assert_eq!(info.mode, ProcessMode::Pty);
+        assert!(info.pipe.is_none());
         match controller.events.recv_timeout(Duration::from_millis(50)) {
             Ok(StreamEvent::ForegroundProcessChanged {
                 process: Some(process),
@@ -290,9 +388,10 @@ fn foreground_process_tracks_deepest_tty_attached_job() {
     };
 
     assert_eq!(process, "sleep");
-    assert!(service.list().is_ok_and(|items| {
+    assert!(service.list(ProcessMode::Pty).is_ok_and(|items| {
         items.iter().any(|item| {
-            item.id == terminal.id && item.foreground_process.as_deref() == Some("sleep")
+            item.id == terminal.id
+                && item.pty.as_ref().unwrap().foreground_process.as_deref() == Some("sleep")
         })
     }));
 
@@ -303,7 +402,7 @@ fn foreground_process_tracks_deepest_tty_attached_job() {
 fn bursty_output_does_not_disconnect_a_healthy_observer() {
     let service = TerminalService::new(2 * 1024 * 1024);
     let terminal = service
-        .create(command("sleep 0.05; head -c 1048576 /dev/zero; sleep 0.2"))
+        .create_pty(command("sleep 0.05; head -c 1048576 /dev/zero; sleep 0.2"))
         .expect("terminal created");
     let observer = service
         .attach(
@@ -316,7 +415,7 @@ fn bursty_output_does_not_disconnect_a_healthy_observer() {
         .expect("observer attached");
 
     wait_for(|| {
-        service.list().is_ok_and(|items| {
+        service.list(ProcessMode::Pty).is_ok_and(|items| {
             items
                 .iter()
                 .any(|item| item.id == terminal.id && item.output_tail >= 1024 * 1024)
@@ -348,7 +447,7 @@ fn bursty_output_does_not_disconnect_a_healthy_observer() {
 fn controller_switches_without_disconnecting_observers() {
     let service = TerminalService::new(64 * 1024);
     let terminal = service
-        .create(command("sleep 0.05; printf 'streamed\\n'; sleep 0.2"))
+        .create_pty(command("sleep 0.05; printf 'streamed\\n'; sleep 0.2"))
         .expect("terminal created");
     let controller = service
         .attach(

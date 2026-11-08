@@ -69,6 +69,22 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`job\` (
+          \`notification_id\` text PRIMARY KEY,
+          \`id\` text NOT NULL,
+          \`session_id\` text NOT NULL,
+          \`child_session_id\` text,
+          \`kind\` text NOT NULL,
+          \`title\` text,
+          \`status\` text NOT NULL,
+          \`output\` text,
+          \`error\` text,
+          \`recovery\` text NOT NULL,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`kv\` (
           \`key\` text PRIMARY KEY,
           \`value\` text NOT NULL,
@@ -122,6 +138,7 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           \`session_id\` text,
           \`name\` text,
           \`action\` text NOT NULL,
+          \`check\` text,
           \`when\` text NOT NULL,
           \`tz\` text NOT NULL,
           \`status\` text DEFAULT 'active' NOT NULL,
@@ -129,10 +146,13 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           \`ends_at\` integer,
           \`remaining_runs\` integer,
           \`run_count\` integer DEFAULT 0 NOT NULL,
+          \`checks\` integer DEFAULT 0 NOT NULL,
+          \`failures\` integer DEFAULT 0 NOT NULL,
           \`last_fired_at\` integer,
           \`last_message_id\` text,
           \`last_outcome\` text,
           \`retry_at\` integer,
+          \`state\` text,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL,
           CONSTRAINT \`fk_schedule_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE
@@ -290,6 +310,9 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       `)
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
       yield* tx.run(`CREATE INDEX \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)
+      yield* tx.run(`CREATE INDEX \`job_session_idx\` ON \`job\` (\`session_id\`);`)
+      yield* tx.run(`CREATE INDEX \`job_child_session_idx\` ON \`job\` (\`child_session_id\`);`)
+      yield* tx.run(`CREATE INDEX \`job_id_idx\` ON \`job\` (\`id\`);`)
       yield* tx.run(
         `CREATE UNIQUE INDEX \`permission_project_action_resource_idx\` ON \`permission\` (\`project_id\`,\`action\`,\`resource\`);`,
       )

@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.sessionReview.title": "Seanso pakeitimai",
   "ui.sessionReview.title.git": "Git pakeitimai",
   "ui.sessionReview.title.branch": "Šakos pakeitimai",
@@ -73,10 +73,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Prenumeruokite OpenCode Go už 10 USD per mėnesį ir gaukite patikimą prieigą prie geriausių atvirojo kodo modelių.",
   "dialog.usageExceeded.freeTier.actionLabel": "Prenumeruoti",
-  "dialog.usageExceeded.accountRateLimit.title": "Pasiektas Go limitas",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Pasiektas naudojimo limitas. Jei norite toliau naudoti šį modelį dabar, įgalinkite naudojimą iš turimo balanso",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Atidaryti nustatymus",
   "ui.sessionTurn.status.delegating": "Darbų delegavimas",
   "ui.sessionTurn.status.planning": "Kitų žingsnių planavimas",
   "ui.sessionTurn.status.gatheringContext": "Tyrinėjant",

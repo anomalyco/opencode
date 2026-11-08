@@ -723,6 +723,7 @@ export const dict = {
   "dialog.server.menu.remove": "Eemalda",
   "home.workspaceTip": "Alustage järgmist seanssi uues tööruumis, et hoida muudatused isoleerituna",
   "session.tab.add": "Lisa vahekaart",
+  "session.tab.closeOthers": "Sule teised vahekaardid",
   "session.queue.attachments.one": "Plus {{count}} kinnitus",
   "session.queue.attachments.other": "Pluss {{count}} lisaseadmed",
   "settings.backToSettings": "Tagasi seadete juurde",

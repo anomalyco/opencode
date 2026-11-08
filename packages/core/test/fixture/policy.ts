@@ -7,6 +7,8 @@ import { Skill } from "@opencode/core/skill"
 import { Info } from "@opencode/schema/config"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { ID } from "@opencode/schema/event"
+import { Credential } from "@opencode/core/credential"
+import { WebSearch } from "@opencode/core/websearch"
 import { Effect, Schema, Stream } from "effect"
 import { host } from "../plugin/host"
 
@@ -66,5 +68,30 @@ export const registerIntegrationPolicy = Effect.fn(function* (input: {
         assert: () => Effect.die("unused permission.assert"),
       },
     }),
+  ).pipe(
+    Effect.provideService(
+      Credential.Service,
+      Credential.Service.of({
+        all: () => Effect.succeed([]),
+        list: () => Effect.succeed([]),
+        get: () => Effect.succeed(undefined),
+        lock: () => Effect.die("unused Credential.lock"),
+        create: () => Effect.die("unused Credential.create"),
+        activate: () => Effect.die("unused Credential.activate"),
+        update: () => Effect.die("unused Credential.update"),
+        remove: () => Effect.die("unused Credential.remove"),
+      }),
+    ),
+    Effect.provideService(
+      WebSearch.Service,
+      WebSearch.Service.of({
+        providers: () => Effect.die("unused WebSearch.providers"),
+        default: () => Effect.die("unused WebSearch.default"),
+        select: () => Effect.die("unused WebSearch.select"),
+        query: () => Effect.die("unused WebSearch.query"),
+        transform: () => Effect.succeed({ dispose: Effect.void }),
+        reload: () => Effect.void,
+      }),
+    ),
   )
 })

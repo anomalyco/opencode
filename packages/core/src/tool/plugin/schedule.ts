@@ -7,6 +7,7 @@ import type { Session } from "@opencode/schema/session"
 import { DateTime, Effect, Option, Schema } from "effect"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
+import { Flag } from "../../flag.js"
 import PROMPT_SCHEDULE from "../../plugin/command/schedule.txt"
 import { Schedule } from "../../schedule.js"
 
@@ -16,6 +17,8 @@ export const View = Schema.Struct({
   name: Schema.String.pipe(optional),
   when: Schedule.When,
   tz: Schema.String,
+  if: Schedule.Condition.pipe(optional),
+  until: Schedule.Condition.pipe(optional),
   prompt: Schema.String,
   status: Schedule.Status,
   nextDueAt: Schema.String.pipe(optional),
@@ -24,6 +27,7 @@ export const View = Schema.Struct({
   runCount: Schema.Number,
   lastFiredAt: Schema.String.pipe(optional),
   lastOutcome: Schedule.Outcome.pipe(optional),
+  lastOutput: Schema.String.pipe(optional),
 })
 export type View = typeof View.Type
 
@@ -49,7 +53,8 @@ export const Plugin = {
       ctx.event,
       Effect.andThen(ctx.tool.reload(), ctx.command.reload()),
     )
-    const enabled = () => Config.latest(loaded.entries, "experimental")?.schedules === true
+    const flags = yield* Flag.Service
+    const enabled = () => flags.resolve(loaded.entries).schedules.enabled
 
     // A request keeps the tools it started with after config reloads, so each call rechecks the flag.
     const allowed = (sessionID: Session.ID) =>
@@ -73,7 +78,7 @@ export const Plugin = {
         editor.add({
           name: "schedule_create",
           description:
-            "Schedule a prompt that wakes this session later: once after a delay, at a time, every interval, or on a cron. Returns the schedule with its next run.",
+            "Schedule a prompt that wakes this session later: once after a delay, at a time, every interval, on a cron, or gated by an `if` / `until` shell (`{ run }`) or Code Mode (`{ code }`) check. Returns the schedule with its next run (or `done` immediately if `until` already matches).",
           input: Schedule.Request,
           output: View,
           options: { namespace: "opencode", codemode: true },
@@ -81,7 +86,9 @@ export const Plugin = {
             schedules.create(Schedule.toCreateInput(context.sessionID, input)).pipe(
               Effect.map((info) => {
                 const view = toView(info)
-                return { output: view, content: `Scheduled: ${summary(view)}` }
+                const prefix =
+                  view.status === "done" && view.until !== undefined ? "Matched immediately" : "Scheduled"
+                return { output: view, content: `${prefix}: ${summary(view)}` }
               }),
               Effect.mapError(failure),
             ),
@@ -165,6 +172,20 @@ export const Plugin = {
   }),
 }
 
+function formatCondition(condition: Schedule.Condition): string {
+  switch (condition.type) {
+    case "shell":
+      return JSON.stringify(condition.run)
+    case "code": {
+      const first = condition.code
+        .split("\n")
+        .map((line) => line.trim())
+        .find((line) => line.length > 0)
+      return `code ${JSON.stringify(first ? first.slice(0, 60) : "")}`
+    }
+  }
+}
+
 /** One line per schedule, for models that read tool content rather than output (Code Mode off). */
 function summary(view: View) {
   const when = view.when
@@ -176,12 +197,20 @@ function summary(view: View) {
         : when.type === "every"
           ? `every ${when.every}`
           : `cron "${when.cron}"`
+  const gate =
+    view.until !== undefined
+      ? `until ${formatCondition(view.until)}`
+      : view.if !== undefined
+        ? `if ${formatCondition(view.if)}`
+        : undefined
   const prompt = view.prompt.length > 80 ? `${view.prompt.slice(0, 79)}…` : view.prompt
   return [
     `${view.id}${view.name ? ` "${view.name}"` : ""}: ${trigger} (${view.tz})`,
+    gate,
     view.status,
     view.nextDueAt && `next ${view.nextDueAt}`,
     `prompt: ${JSON.stringify(prompt)}`,
+    view.lastOutput && `output: ${JSON.stringify(view.lastOutput)}`,
   ]
     .filter(Boolean)
     .join(", ")
@@ -200,6 +229,8 @@ function toView(info: Schedule.Info): View {
     name: info.name,
     when: info.when,
     tz: info.tz,
+    if: info.if,
+    until: info.until,
     prompt: info.action.prompt,
     status: info.status,
     nextDueAt: local(info.nextDueAt),
@@ -208,5 +239,6 @@ function toView(info: Schedule.Info): View {
     runCount: info.runCount,
     lastFiredAt: local(info.lastFiredAt),
     lastOutcome: info.lastOutcome,
+    lastOutput: info.lastOutput,
   }
 }

@@ -16,6 +16,7 @@ export const ID = Schema.String.pipe(
     google: schema.make("google"),
     googleVertex: schema.make("google-vertex"),
     githubCopilot: schema.make("github-copilot"),
+    claudeAgent: schema.make("claude-agent"),
     amazonBedrock: schema.make("amazon-bedrock"),
     azure: schema.make("azure"),
     openrouter: schema.make("openrouter"),
@@ -52,9 +53,23 @@ export const CacheTTL = Schema.TemplateLiteral([Schema.Number, Schema.Literals([
   .annotate({ identifier: "Provider.CacheTTL" })
 export type CacheTTL = typeof CacheTTL.Type
 
+/** Keep-alive requests for this provider's or model's sessions; overrides the top-level `warming`. */
+export const CacheWarming = Schema.Union([
+  Schema.Boolean,
+  Schema.Struct({
+    // Settings hold JSON, so durations stay strings here; the warming plugin parses them.
+    interval: Schema.Union([Schema.Literal("auto"), Schema.String])
+      .pipe(optional)
+      .annotate({ description: 'Duration such as "4 minutes", or "auto" for 90% of the model\'s cache.ttl' }),
+    duration: Schema.String.pipe(optional).annotate({ description: 'Duration such as "30 minutes"' }),
+  }),
+]).annotate({ identifier: "Provider.CacheWarming" })
+export type CacheWarming = typeof CacheWarming.Type
+
 /** Prompt-cache settings. `ttl` is sent to the provider as given; each provider accepts its own set. */
 export const Cache = Schema.Struct({
   ttl: CacheTTL.pipe(optional),
+  warming: CacheWarming.pipe(optional),
 }).annotate({ identifier: "Provider.Cache" })
 export type Cache = typeof Cache.Type
 

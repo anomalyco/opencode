@@ -16,7 +16,7 @@ import {
   PTY_CONNECT_TOKEN_HEADER_VALUE,
 } from "@opencode/protocol/groups/pty"
 import { locationErrors, requestRef, response } from "../location"
-import { type Outbound, runPtySocket } from "./pty-socket"
+import { holdLocation, type Outbound, runPtySocket } from "./pty-socket"
 
 const notFound = (ptyID: Pty.ID) => new PtyNotFoundError({ ptyID, message: `PTY session not found: ${ptyID}` })
 
@@ -137,6 +137,7 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
             const socket = yield* Effect.orDie(ctx.request.upgrade)
             // TODO: Integrate graceful-shutdown socket tracking before clients migrate to this route.
             const outbox = yield* Queue.unbounded<Outbound>()
+            yield* holdLocation(outbox)
             const attachment = yield* pty
               .attach(ctx.params.ptyID, {
                 cursor,
@@ -173,7 +174,7 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
               detach: () => attachment?.detach(),
             })
             return HttpServerResponse.empty()
-          }).pipe(Effect.provide(locations.get(ref)), locationErrors)
+          }).pipe(Effect.scoped, Effect.provide(locations.get(ref)), locationErrors)
         }),
       )
   }),

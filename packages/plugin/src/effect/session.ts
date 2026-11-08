@@ -25,6 +25,10 @@ export type SessionRequestOptions = Types.DeepMutable<GenerationOptionsFields> &
 export interface SessionRequest {
   readonly sessionID: Session.ID
   readonly model: Model.Ref
+  /**
+   * The instructions part keeps each source's text in `metadata.experimental.instructions` as `{ key, text }`. It is
+   * not updated when a hook edits `text`. Experimental.
+   */
   system: Array<SystemPart>
   messages: Array<Message>
   options: SessionRequestOptions

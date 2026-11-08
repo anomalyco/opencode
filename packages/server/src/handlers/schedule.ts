@@ -1,3 +1,4 @@
+import { Permission } from "@opencode/core/permission"
 import { Schedule } from "@opencode/core/schedule"
 import type { Session } from "@opencode/core/session"
 import { ForbiddenError, InvalidRequestError, ScheduleNotFoundError } from "@opencode/protocol/errors"
@@ -29,12 +30,16 @@ export const makeSchedule = Effect.gen(function* () {
 
   return {
     create: (payload: CreatePayload) =>
+      // Stateless HTTP callers have no guaranteed UI listener to answer an interactive ask, so settle asks unattended.
       schedules.create(Schedule.toCreateInput(payload.sessionID, payload)).pipe(
+        Effect.provideService(Permission.Unattended, []),
         Effect.map((data) => ({ data })),
         Effect.catchTags({
           "Schedule.InvalidError": (error) =>
             Effect.fail(new InvalidRequestError({ message: error.message, kind: "schedule" })),
           "Schedule.DisabledError": () => Effect.fail(disabled()),
+          "Permission.BlockedError": (error) => Effect.fail(new ForbiddenError({ message: error.message })),
+          "Permission.CorrectedError": (error) => Effect.fail(new ForbiddenError({ message: error.feedback })),
           "Session.NotFoundError": (error) => Effect.fail(missingSession(error)),
         }),
       ),

@@ -1,0 +1,101 @@
+---
+title: "Claude Agent"
+noindex: true
+---
+
+Use your Claude plan or another Claude Code login. Claude Agent runs Claude Code on your machine, so install Claude Code
+2.1.248 or later and sign in first.
+
+```bash
+claude auth login
+```
+
+Then connect **Claude Agent** and choose a model. The model list comes from Claude Code. Effort levels are variants, such
+as `claude-agent/opus#high`.
+
+```text
+/connect
+# Select Claude Agent.
+/models
+```
+
+You can also connect from the CLI with `auth login claude-agent`.
+
+OpenCode finds `claude` on your `PATH`. To use another copy, set `OPENCODE_CLAUDE_PATH` on the server.
+
+```bash
+opencode service set env OPENCODE_CLAUDE_PATH /opt/claude/bin/claude
+```
+
+## How it works
+
+Claude Code calls the model, and OpenCode does everything else.
+
+- Claude gets Claude Code's system prompt, plus your agent's prompt, `AGENTS.md` files, skills, and MCP instructions.
+- Claude uses OpenCode's tools and permissions instead of Claude Code's built-in tools.
+- Your Claude Code settings, `CLAUDE.md` files, hooks, MCP servers, skills, and memory are not loaded.
+- OpenCode runs compaction and subagents.
+- You can switch between Claude Agent and other models in the same session.
+
+## Cost
+
+Cost depends on how Claude Code is signed in.
+
+| Login | Cost shown |
+| --- | --- |
+| Claude subscription | None, your plan covers it |
+| Anthropic API key, or Claude Platform on AWS or Google Cloud | Anthropic prices |
+| Amazon Bedrock | Bedrock prices, or Anthropic prices on Bedrock Mantle |
+| Google Vertex | Vertex prices |
+| Microsoft Foundry | Azure prices |
+| Custom base URL | None |
+
+## Configure
+
+Connection settings on the `claude-agent` provider are passed to Claude Code. They override the same variables set in
+your shell.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "settings": {
+        "baseURL": "https://llm-proxy.example.com/anthropic",
+      },
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+    },
+  },
+}
+```
+
+| Config | Claude Code variable |
+| --- | --- |
+| `settings.baseURL` | `ANTHROPIC_BASE_URL` |
+| `settings.apiKey` | `ANTHROPIC_API_KEY` |
+| `settings.authToken` | `ANTHROPIC_AUTH_TOKEN` |
+| `settings.headerTimeout` | `API_TIMEOUT_MS` |
+| `settings.chunkTimeout` | `CLAUDE_STREAM_IDLE_TIMEOUT_MS` |
+| `headers` | `ANTHROPIC_CUSTOM_HEADERS` |
+| `body` | `CLAUDE_CODE_EXTRA_BODY` |
+
+Set them on a model to override the provider's values for that model.
+
+## Limitations
+
+- Claude Code must be installed on the same machine as the OpenCode server. Claude Agent is not available in remote
+  workspaces.
+- Claude Code's system prompt replaces OpenCode's built-in prompt. Custom agent prompts still apply.
+- Temperature, top-p, top-k, seed, and stop sequences are not supported.
+- Plugin `http.request` and `http.response` hooks do not run, because Claude Code makes the API calls.
+- Claude Code features such as `/usage`, `/loop`, auto mode, and agent teams are not available.
+
+## Errors
+
+| Error or symptom | Check |
+| --- | --- |
+| `Claude Code is not installed` | Install Claude Code, or set `OPENCODE_CLAUDE_PATH` to its path. |
+| `Claude Code is not logged in` | Run `claude auth login`, then connect Claude Agent again. |
+| `Claude Code ... is too old` | Run `claude update`. |

@@ -12,7 +12,7 @@ export function countingSpawner(fail?: (args: readonly string[]) => boolean) {
         Effect.map(ChildProcessSpawner.ChildProcessSpawner, (spawner) =>
           ChildProcessSpawner.make((command) => {
             state.spawns++
-            if (fail && command._tag === "StandardCommand" && fail(command.args))
+            if (fail && command._tag === "StandardCommand" && fail(command.args.map(String)))
               return Effect.fail(PlatformError.systemError({ _tag: "Busy", module: "ChildProcess", method: "spawn" }))
             return spawner.spawn(command)
           }),
