@@ -4,10 +4,10 @@
   "version": "2.2.5",
   "type": "module",
   "license": "MIT",
-  "homepage": "https://opencode.ai",
+  "homepage": "https://manostech-system.com.br",
   "author": {
-    "name": "OpenCode",
-    "email": "hello@opencode.ai"
+    "name": "ManosTech",
+    "email": "contato@manostech-system.com.br"
   },
   "scripts": {
     "typecheck": "bun check --no-script -b",
