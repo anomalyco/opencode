@@ -1,70 +1,47 @@
 //! The sidebar's limit section (E.14, row F05, `feature-plugins/sidebar/limit.tsx`): what the OpenCode Console
 //! workspace's limits leave for the selected model, in the error color when it is out or reached. Hidden when
-//! no limit applies to the model.
+//! no limit applies to the model. It is a plugin of the one API (O-67).
 
-use std::rc::Rc;
+use opencode_plugin::abi::{self, Node, Placement, Render, Span};
+use opencode_plugin::slot;
 
-use opencode_plugin::{Definition, Placement, Slotted, slot};
-use opencode_store::Changes;
-use opentui::keymap::Disposer;
-use opentui::prelude::*;
-
-use crate::app::Tui;
 use crate::dialogs::usage::{Level, format_dollars, level, model_usage};
-use crate::routes::session::sidebar::Section;
 
-pub fn plugin() -> Definition<Tui> {
-    Definition::new("opencode.sidebar.limit", |cx| {
-        cx.slot(Placement::append(slot::SIDEBAR_CONTENT), |tui, _| {
-            let section = Rc::new(Section::new(tui, None, |tui, _| model(tui), view));
-            // The limits and the selected model live outside the store: they load or change without a store
-            // change, so `tui.local` refreshes the section too.
-            let weak = Rc::downgrade(&section);
-            let tui_weak = tui.weak();
-            let listener = tui.local.subscribe(move || {
-                if let (Some(section), Some(tui)) = (weak.upgrade(), tui_weak.upgrade()) {
-                    section.sync(&tui, &Changes::everything());
-                }
-            });
-            Box::new(Limit { section, _listener: listener })
-        });
-    })
+pub fn plugin() -> abi::Plugin {
+    abi::Plugin { id: "opencode.sidebar.limit", setup }
 }
 
-struct Limit {
-    section: Rc<Section<(String, bool)>>,
-    _listener: Disposer,
-}
-
-impl Slotted<Tui> for Limit {
-    fn root(&self) -> View {
-        self.section.root()
-    }
-
-    // Any store change reads the limits and the selected model again.
-    fn sync(&self, tui: &Tui, changes: &Changes) {
-        self.section.sync(tui, changes);
-    }
+fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.slot(Placement::append(slot::SIDEBAR_CONTENT), |read, _, changed| {
+        // The limits and the selected model live in the host's own state (`local`); the selection also follows the
+        // sessions, and the models and providers their location.
+        if !(changed.all || changed.local || !changed.sessions.is_empty() || !changed.locations.is_empty()) {
+            return Render::Keep;
+        }
+        model(read).map_or(Render::Hide, |(left, danger)| {
+            Render::Show(Node::column(vec![
+                Node::text([Span::new("Limit").fg("text.base").bold()]),
+                Node::text([Span::new(format!("{left} remaining")).fg(if danger {
+                    "text.feedback.error.base"
+                } else {
+                    "text.muted"
+                })]),
+            ]))
+        })
+    });
+    Ok(())
 }
 
 /// What remains, and whether it is out or reached.
-fn model(tui: &Tui) -> Option<(String, bool)> {
-    let local = &tui.local;
-    let model = local.model_info(&local.current()?)?;
-    let info = local.usage()??;
-    let provider = local.provider(&model.provider_id.0);
+fn model(read: &dyn abi::Read) -> Option<(String, bool)> {
+    let selected = read.model()?;
+    let model = read
+        .models(None)?
+        .into_iter()
+        .find(|model| model.provider_id == selected.provider_id && model.id == selected.id)?;
+    let info = read.limits()?;
+    let provider =
+        read.providers().and_then(|providers| providers.into_iter().find(|item| item.id == model.provider_id));
     let usage = model_usage(&info, &model, provider.as_ref())?;
     Some((format_dollars(usage.left), matches!(level(&usage, &model), Level::Out | Level::Reached)))
-}
-
-fn view(tui: &Tui, (left, danger): &(String, bool)) -> View {
-    let theme = tui.page();
-    let app = &tui.app;
-    View::new(app).child(&Text::new(app, "Limit").fg(theme.text.base).bold()).child(
-        &Text::new(app, format!("{left} remaining")).fg(if *danger {
-            theme.text.feedback.error.base
-        } else {
-            theme.text.muted
-        }),
-    )
 }
