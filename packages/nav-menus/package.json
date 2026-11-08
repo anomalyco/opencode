@@ -18,7 +18,7 @@
     "@happy-dom/global-registrator": "20.0.11",
     "@types/bun": "catalog:",
     "@typescript/native": "catalog:",
-    "happy-dom": "20.11.1",
+    "happy-dom": "21.0.4",
     "typescript": "catalog:"
   }
 }
