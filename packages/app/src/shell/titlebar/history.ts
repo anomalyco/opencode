@@ -41,8 +41,25 @@ export function createTitlebarHistory() {
 
   onCleanup(() => dispatch({ type: "disposed" }))
 
+  // While a traversal is in flight the cursor is its target, so a second press still moves one step from there.
+  const canBack = () => {
+    const state = historyState()
+
+    if (state.status === "disposed") return false
+    return (state.status === "traversing" ? state.targetIndex : state.index) > 0
+  }
+
+  const canForward = () => {
+    const state = historyState()
+
+    if (state.status === "disposed") return false
+    return (state.status === "traversing" ? state.targetIndex : state.index) < state.stack.length - 1
+  }
+
   return {
     back: () => dispatch({ type: "back" }),
     forward: () => dispatch({ type: "forward" }),
+    canBack,
+    canForward,
   }
 }

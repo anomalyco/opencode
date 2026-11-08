@@ -158,6 +158,15 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
     },
   ])
 
+  // Mouse side buttons: 3 is back, 4 is forward, matching the browser convention.
+  makeEventListener(window, "mouseup", (event) => {
+    if (event.button !== 3 && event.button !== 4) return
+    event.preventDefault()
+
+    if (event.button === 3) history.back()
+    else history.forward()
+  })
+
   return (
     <header
       data-slot="titlebar-v2"
@@ -710,6 +719,50 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                     when={props.verticalTabs}
                     fallback={
                       <>
+                        <div class="flex shrink-0 items-center gap-0.5" data-slot="titlebar-history">
+                          <Tooltip
+                            placement="bottom"
+                            value={
+                              <>
+                                {language.t("common.goBack")}
+                                <Keybind keys={command.keybindParts(goBackCommand.id)} variant="neutral" />
+                              </>
+                            }
+                            class="shrink-0"
+                          >
+                            <IconButton
+                              type="button"
+                              variant="ghost-muted"
+                              size="small"
+                              icon={<Icon name="arrow-left" />}
+                              disabled={!history.canBack()}
+                              onClick={history.back}
+                              aria-label={language.t("common.goBack")}
+                              data-action="titlebar-history-back"
+                            />
+                          </Tooltip>
+                          <Tooltip
+                            placement="bottom"
+                            value={
+                              <>
+                                {language.t("common.goForward")}
+                                <Keybind keys={command.keybindParts(goForwardCommand.id)} variant="neutral" />
+                              </>
+                            }
+                            class="shrink-0"
+                          >
+                            <IconButton
+                              type="button"
+                              variant="ghost-muted"
+                              size="small"
+                              icon={<Icon name="arrow-right" />}
+                              disabled={!history.canForward()}
+                              onClick={history.forward}
+                              aria-label={language.t("common.goForward")}
+                              data-action="titlebar-history-forward"
+                            />
+                          </Tooltip>
+                        </div>
                         <TitlebarTabStrip
                           tabs={tabsStore}
                           currentTab={currentTab()}
