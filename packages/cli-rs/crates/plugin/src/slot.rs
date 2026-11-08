@@ -1,7 +1,9 @@
 //! The slot tree: the `SlotMap` paths (`packages/plugin/src/tui/context.ts:191-202`), their inputs, and
 //! the pure resolution of claims into placements (`packages/tui/src/plugin/structure.ts`).
 
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::rc::Rc;
 
 pub const APP: &str = "app";
 pub const HOME_FOOTER: &str = "home.footer";
@@ -27,6 +29,64 @@ pub const PATHS: [&str; 10] = [
     SIDEBAR_CONTENT,
     SIDEBAR_FOOTER,
 ];
+
+/// The slot paths mounted now, each with its count of mounts (TS `registerSlot`): a path exists while any mount of it
+/// lives, so a claim on a child slot its parent did not mount degrades onto the parent.
+#[derive(Default)]
+pub struct Live {
+    counts: RefCell<HashMap<String, usize>>,
+    /// Changes when a path appears or goes.
+    version: Cell<u64>,
+}
+
+impl Live {
+    /// Counts one more mount of `path` until the guard drops.
+    pub fn mount(self: &Rc<Self>, path: &str) -> Mounted {
+        let mut counts = self.counts.borrow_mut();
+        let count = counts.entry(path.to_owned()).or_default();
+        *count += 1;
+        if *count == 1 {
+            self.version.set(self.version.get() + 1);
+        }
+        Mounted { live: self.clone(), path: path.to_owned() }
+    }
+
+    pub fn paths(&self) -> Vec<String> {
+        self.counts.borrow().keys().cloned().collect()
+    }
+
+    pub fn version(&self) -> u64 {
+        self.version.get()
+    }
+}
+
+/// One mount of a slot path in [`Live`].
+pub struct Mounted {
+    live: Rc<Live>,
+    path: String,
+}
+
+impl Mounted {
+    pub fn live(&self) -> &Rc<Live> {
+        &self.live
+    }
+
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+}
+
+impl Drop for Mounted {
+    fn drop(&mut self) {
+        let mut counts = self.live.counts.borrow_mut();
+        let Some(count) = counts.get_mut(&self.path) else { return };
+        *count -= 1;
+        if *count == 0 {
+            counts.remove(&self.path);
+            self.live.version.set(self.live.version.get() + 1);
+        }
+    }
+}
 
 /// What a slot passes to every claim that renders in it: the union of the `SlotMap` inputs. A path fills
 /// the fields its TS input has and leaves the rest empty.

@@ -12,6 +12,8 @@ use super::*;
 struct TestHost {
     app: TestApp,
     keymap: DialogKeymap,
+    /// The registry nested slots mount from.
+    registry: std::cell::RefCell<std::rc::Weak<Registry<TestHost>>>,
 }
 
 impl Host for TestHost {
@@ -28,10 +30,18 @@ impl Host for TestHost {
     fn keymap(&self) -> &DialogKeymap {
         &self.keymap
     }
+
+    fn slot(&self, parent: &View, path: &str, input: &SlotInput) -> Option<SlotMount<Self>> {
+        Some(self.registry.borrow().upgrade()?.mount(self, parent, path, input, |_| {}))
+    }
 }
 
 fn host() -> Rc<TestHost> {
-    Rc::new(TestHost { app: TestApp::new(40, 6), keymap: DialogKeymap::new(Keybinds::defaults(), Options::default()) })
+    Rc::new(TestHost {
+        app: TestApp::new(40, 6),
+        keymap: DialogKeymap::new(Keybinds::defaults(), Options::default()),
+        registry: Default::default(),
+    })
 }
 
 /// A plugin that claims `placements`, each rendering a text of the plugin ID and its index.
@@ -395,4 +405,48 @@ fn a_replaced_hover_text_drops_its_handlers() {
     }
     assert_eq!(rows(&host)[0], "hover 11");
     assert_eq!(Rc::weak_count(&host), weak);
+}
+
+// Expected: a claim on a child slot its parent did not mount, because the parent's plugin is off or hides, is
+// appended to the parent (TS `survivingAncestor`), and moves back inside once the child slot mounts again.
+#[test]
+fn a_claim_on_an_unmounted_child_slot_degrades_to_its_parent() {
+    use abi::{Node, Render, Span};
+    let host = host();
+    let hidden = Rc::new(Cell::new(false));
+    let hide = hidden.clone();
+    let footer = rendering("footer", Placement::append(slot::HOME_FOOTER), move || match hide.get() {
+        true => Render::Hide,
+        false => {
+            Render::Show(Node::row(vec![Node::text([Span::new("footer ")]), Node::slot(slot::HOME_FOOTER_STATUS)]))
+        }
+    });
+    let status = rendering("status", Placement::append(slot::HOME_FOOTER_STATUS), || {
+        Render::Show(Node::text([Span::new("status")]))
+    });
+    let registry = Rc::new(Registry::new(vec![footer, status], []));
+    *host.registry.borrow_mut() = Rc::downgrade(&registry);
+    registry.activate(&host);
+    let mount = |registry: &Registry<TestHost>| {
+        let parent = View::new(host.app()).column();
+        host.app().root().clear();
+        host.app().root().add(&parent);
+        registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |parent| {
+            parent.add(&Text::new(host.app(), "content"));
+        })
+    };
+    let mounted = mount(&registry);
+    assert_eq!(rows(&host)[..2], ["content", "footer status"]);
+
+    hidden.set(true);
+    mounted.sync(&host, &());
+    assert_eq!(rows(&host)[..2], ["content", "status"]);
+    hidden.set(false);
+    mounted.sync(&host, &());
+    assert_eq!(rows(&host)[..3], ["content", "footer status", ""]);
+    drop(mounted);
+
+    registry.set_active(&host, "footer", false);
+    let _mounted = mount(&registry);
+    assert_eq!(rows(&host)[..2], ["content", "status"]);
 }

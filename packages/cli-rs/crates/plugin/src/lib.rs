@@ -110,6 +110,7 @@ impl<H: Host> Slotted<H> for View {
 }
 
 pub type SlotRender<H> = Rc<dyn Fn(&H, &SlotInput) -> Box<dyn Slotted<H>>>;
+type Claim<H> = Box<dyn Slotted<H>>;
 pub type RouteRender<H> = Rc<dyn Fn(&H) -> Box<dyn Slotted<H>>>;
 type SetupFn<H> = Rc<dyn Fn(&mut Setup<'_, H>)>;
 /// The current failure of an external plugin, if any.
@@ -499,6 +500,8 @@ pub struct Registry<H: Host> {
     /// The `plugins` targets, in order, which also enable and disable external plugins as they load.
     directives: Vec<String>,
     activations: Cell<u64>,
+    /// The slot paths mounted now, which claims resolve against.
+    live: Rc<slot::Live>,
 }
 
 impl<H: Host> Registry<H> {
@@ -529,7 +532,13 @@ impl<H: Host> Registry<H> {
                 skipped.push((target.to_owned(), Status::Skipped(SKIPPED.to_owned())));
             }
         }
-        Self { plugins: RefCell::new(plugins), unloaded: RefCell::new(skipped), directives, activations: Cell::new(0) }
+        Self {
+            plugins: RefCell::new(plugins),
+            unloaded: RefCell::new(skipped),
+            directives,
+            activations: Cell::new(0),
+            live: Rc::default(),
+        }
     }
 
     /// Adds an enabled plugin after the others; [`Registry::activate`] starts it.
@@ -716,7 +725,8 @@ impl<H: Host> Registry<H> {
 
     /// Mounts slot `path` into `parent`: the claims before it, prepended to it, `content` (the host's own,
     /// unless a claim replaces it), the claims appended to it, and after it. TS's `<Slot>` is a fragment, so
-    /// every part goes straight into `parent`.
+    /// every part goes straight into `parent`. Claims resolve against the slots mounted now: a claim on a slot inside
+    /// this one that is not mounted is appended here, until that slot mounts ([`SlotMount::sync`]).
     pub fn mount(
         &self,
         host: &H,
@@ -725,28 +735,46 @@ impl<H: Host> Registry<H> {
         input: &SlotInput,
         content: impl FnOnce(&View),
     ) -> SlotMount<H> {
-        let (claims, renders) = self.claims();
-        let resolution = slot::resolve(&slot::PATHS, &claims);
-        let placed = resolution.placed.get(path).cloned().unwrap_or_default();
-        let mut mounted = SlotMount { claims: Vec::new() };
+        let mut slot = SlotMount { claims: Vec::new(), mounted: Some(self.live.mount(path)), nested: None };
+        let snapshot = Rc::new(self.claims());
+        let (claims, renders) = &*snapshot;
+        let placed = resolve(&self.live, claims).placed.remove(path).unwrap_or_default();
         let mut render = |indices: &[usize]| {
             for &index in indices {
                 let claim = renders[index](host, input);
                 parent.add(&claim.root());
-                mounted.claims.push(claim);
+                slot.claims.push(claim);
             }
         };
         render(&placed.before);
-        match placed.replace {
-            Some(index) => render(&[index]),
-            None => {
-                render(&placed.prepend);
-                content(parent);
-                render(&placed.append);
-            }
+        if let Some(index) = placed.replace {
+            render(&[index]);
+            render(&placed.after);
+            return slot;
         }
-        render(&placed.after);
-        mounted
+        render(&placed.prepend);
+        content(parent);
+        // The claims appended here change only when a claim targets a slot inside this one.
+        if !claims.iter().any(|claim| claim.kind != Kind::Replace && slot::contains(path, &claim.target)) {
+            render(&placed.append);
+            render(&placed.after);
+            return slot;
+        }
+        let marker = View::new(host.app()).visible(false);
+        parent.add(&marker);
+        let after = placed.after.clone();
+        let nested = Nested {
+            parent: parent.clone(),
+            marker,
+            input: input.clone(),
+            claims: snapshot.clone(),
+            appended: RefCell::default(),
+            seen: Cell::new(0),
+        };
+        nested.refresh(host, slot.mounted.as_ref().unwrap());
+        render(&after);
+        slot.nested = Some(nested);
+        slot
     }
 
     /// The route plugin `id` registers as `name`, rendered.
@@ -837,22 +865,85 @@ struct RegistrationView<H: Host> {
 /// A mounted slot's claims. The owner of the slot syncs it with each change batch.
 pub struct SlotMount<H: Host> {
     claims: Vec<Box<dyn Slotted<H>>>,
+    mounted: Option<slot::Mounted>,
+    /// The claims appended to a slot that others may degrade onto, kept in step with the mounted slots.
+    nested: Option<Nested<H>>,
 }
 
 impl<H: Host> Default for SlotMount<H> {
     fn default() -> Self {
-        Self { claims: Vec::new() }
+        Self { claims: Vec::new(), mounted: None, nested: None }
     }
 }
 
 impl<H: Host> SlotMount<H> {
     pub fn sync(&self, host: &H, changes: &H::Changes) {
         self.claims.iter().for_each(|claim| claim.sync(host, changes));
+        if let (Some(nested), Some(mounted)) = (&self.nested, &self.mounted) {
+            nested.appended.borrow().iter().for_each(|(_, claim)| claim.sync(host, changes));
+            nested.refresh(host, mounted);
+        }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.claims.is_empty()
+        self.claims.is_empty() && self.nested.as_ref().is_none_or(|nested| nested.appended.borrow().is_empty())
     }
+}
+
+/// The claims appended to a mounted slot, in claim order after a hidden marker that follows its content. A claim on a
+/// slot inside it shows here while that slot is not mounted (TS `survivingAncestor`).
+struct Nested<H: Host> {
+    parent: View,
+    marker: View,
+    input: SlotInput,
+    /// The claims and their renders as of the mount, which a change of plugins mounts again.
+    claims: Rc<(Vec<Placement>, Vec<SlotRender<H>>)>,
+    /// The mounted ones, by claim index.
+    appended: RefCell<Vec<(usize, Claim<H>)>>,
+    /// The [`slot::Live::version`] the appended claims follow.
+    seen: Cell<u64>,
+}
+
+impl<H: Host> Nested<H> {
+    /// Mounts the claims appended here that are not, and drops the ones that are no longer, one at a time in claim
+    /// order: a claim that mounts a slot inside this one takes the claims on that slot along before they show here.
+    fn refresh(&self, host: &H, mounted: &slot::Mounted) {
+        let live = mounted.live();
+        if self.seen.get() == live.version() {
+            return;
+        }
+        // Each pass mounts one claim at most; the bound only guards against claims that keep mounting and dropping
+        // each other's slots.
+        for _ in 0..=self.claims.0.len() {
+            let version = live.version();
+            let wanted = resolve(live, &self.claims.0).placed.remove(mounted.path()).unwrap_or_default().append;
+            let mut appended = self.appended.borrow_mut();
+            appended.retain(|(index, claim)| {
+                let keep = wanted.contains(index);
+                if !keep {
+                    claim.root().detach();
+                }
+                keep
+            });
+            let Some(&index) = wanted.iter().find(|index| !appended.iter().any(|(known, _)| known == *index)) else {
+                self.seen.set(version);
+                return;
+            };
+            let at = appended.partition_point(|(known, _)| *known < index);
+            drop(appended);
+            let claim = self.claims.1[index](host, &self.input);
+            let marker = self.parent.children().iter().position(|child| child.is(&self.marker)).unwrap_or(0);
+            self.parent.insert(marker + 1 + at, &claim.root());
+            self.appended.borrow_mut().insert(at, (index, claim));
+        }
+    }
+}
+
+/// Resolves `claims` against the slots mounted now.
+fn resolve(live: &slot::Live, claims: &[Placement]) -> slot::Resolution {
+    let paths = live.paths();
+    let paths: Vec<&str> = paths.iter().map(String::as_str).collect();
+    slot::resolve(&paths, claims)
 }
 
 /// Whether a `plugins` selector names plugin `id`: itself, `*`, or a `prefix.*` it starts with.

@@ -151,3 +151,12 @@ fn a_growing_status_claim_fills_the_footer_row() {
     let (left, right) = (line.find(" L ").unwrap(), line.find(" R ").unwrap());
     assert!(right - left > 30 && line.trim_end().ends_with("local"), "{screen}");
 }
+
+// Expected: with the footer plugin off, `home.footer.status` is not mounted, so a status claim is appended to
+// `home.footer` instead (TS `survivingAncestor`).
+#[test]
+fn a_status_claim_shows_in_the_home_footer_without_the_footer_plugin() {
+    let h = mount(100, &["-opencode.home.footer"], vec![abi::Plugin { id: "test.status", setup: status }.into()]);
+    h.wait_for("status none");
+    assert!(!h.app.text().contains("2 MCP"), "{}", h.app.text());
+}
