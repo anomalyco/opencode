@@ -48,11 +48,11 @@ the boundary:
 
 | P.1 (`opencode_plugin::Setup`) | ABI (`opencode_plugin_abi::Setup`) |
 | --- | --- |
-| `layer` (commands, palette, slash, keybinds) | `command(Command, run)`; the host builds the keymap layer |
+| `layer` (commands, palette, slash, keybinds) | `command(Command, run(&dyn Host, input))`; the host builds the keymap layer. A command without `palette` and `slash` is hidden: a click or `Host::dispatch` runs it |
 | `code_block(language, render)` | `code_block(language, render(&dyn Read, &Fence) -> Fenced)` (1.4) |
 | `slot(placement, render)` | `slot(Placement, render(&dyn Read, &SlotInput, &Changed) -> Render)` (1.4); the 1.3 form is `slot_lines(SlotKind, path, render(session_id) -> Vec<Line>)` |
 | `route(name, render)` | `route(name, render() -> Vec<Line>)` |
-| `storage_key(key)` | `storage_key(key)`; `Host::storage_get` and `storage_set` on `plugin.<id>.<key>` |
+| `storage_key(key)` | `storage_key(key)`; `Read::storage_get` and `Host::storage_set` on `plugin.<id>.<key>` |
 | `on_dispose` | the instance is destroyed on deactivation |
 
 A `Line` is a list of spans with text, colors, and bold, italic, underline, and dim. A color is a theme token
@@ -65,16 +65,26 @@ and swallows a horizontal wheel, as Mermaid's diagrams do. `Setup::options()` ho
 `options` of the plugin's `plugins` entry as JSON text. Other languages implement the same structs and JSON.
 
 A 1.4 slot render returns `Render::{Keep, Hide, Show(Node)}`. A `Node` is a `Box` (a column or a row, with gap,
-padding and background) or a `Text` of spans, each with a `Layout` (width, grow, shrink, minimum width 0). The host
+padding, justification and background) or a `Text` of spans (with a hover color), each with a `Layout` (width,
+grow, shrink, minimum width 0) and an optional `Click`: on the press or the release of the left button, the host
+shows the hand and, once the event is handled, runs the click's `Action::Command { name, input }`, a command of the
+plugin's or of the host's (such as `mcp.list` with a server's name, or the hidden `workspace.directory` with a
+directory). The host
 rebuilds the claim's widgets only when the node differs from the last one; `Keep` keeps them, so a render that
 `Changed` shows is unaffected returns at once. `Changed` lists the sessions whose info or status changed, the
 sessions whose message list changed (`lists`), the messages that changed in place, and the locations whose
 catalogs changed, from the store's batch; the host also renders with `local` when its own state (the selected
-model, the usage limits, the settings) changes, with `size` on a resize, and with `woken` on a wake. A claim's first
-render gets `all`. The render reads through `Read`: `session`, `family`, `messages` (a visitor), `models` per
-location, `model`, `limits` and `providers`. Reads are pure, also inside the `messages` visitor: a catalog that is
-not loaded reads as `None`, and the host starts its load after the render returns. Over the ABI each read is one
-`HostRequest`, and `messages` hands the visitor the plugin's own copy.
+model, the usage limits, the settings, the plugins' storage) changes, with `size` on a resize, and with `woken` on a wake. A claim's first
+render gets `all`. The render reads through `Read`: `session`, `family`, `messages` (a visitor), `models`,
+`mcp_servers`, `integrations` and `vcs` per location, `model`, `limits`, `providers`, `info` (the version, the
+terminal size, where the TUI works) and `storage_get`. Reads are pure, also inside the `messages` visitor: a catalog
+that is not loaded reads as `None`, and the host starts its load after the render returns. Over the ABI each read is
+one `HostRequest`, and `messages` hands the visitor the plugin's own copy.
+
+A 1.4 command gets a `Host`: the reads, and effects that wait until the outermost plugin callback returns and run in
+order. `storage_set` shows to `storage_get` at once; the host writes the disk later and renders the claims with
+`local`. `dispatch(name, input)` runs any registered command, palette or not (`HostRequest::Dispatch`). The 1.3
+`HostHandle` (`Setup::host`) is still valid for the instance.
 
 What does not cross: arbitrary widget trees, mouse handlers, and live store access (`api.state`). A slot or
 route is drawn when it mounts, asks for its rows again with each change batch of the store and each wake, and

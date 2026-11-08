@@ -27,6 +27,7 @@ abi-1-3 = ["dep:abi-1-3"]
 
 [dependencies]
 opencode-plugin-abi = { path = "../../../plugin-abi" }
+serde_json = "1"
 abi-1-3 = { package = "opencode-plugin-abi-1-3", path = "abi-1-3", optional = true }
 
 [workspace]

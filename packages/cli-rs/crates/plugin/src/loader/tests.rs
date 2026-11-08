@@ -102,6 +102,10 @@ impl Host for TestHost {
         self.remounts.set(self.remounts.get() + 1);
     }
 
+    fn dispatch(&self, name: &str, input: Option<&str>) {
+        self.keymap.dispatch(name, input);
+    }
+
     fn read(&self, f: &mut dyn FnMut(&dyn abi::Read)) {
         f(&Fixture { host: self, theme: self.theme() });
     }

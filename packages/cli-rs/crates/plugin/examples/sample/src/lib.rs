@@ -4,7 +4,7 @@
 //! what it draws, so a rebuild proves hot reload. Each variant is its own feature, so cargo keeps every build.
 //!
 //! The fences ([`fence`]) and the sidebar claim ([`slot`]) are on the one API of ABI 1.4; the rest is still the 1.3
-//! surface. The `abi-1-3` feature builds [`v1_3`] instead: a plugin written against ABI 1.3, on a frozen copy of
+//! surface, with commands that take the 1.4 host and ignore it. The `abi-1-3` feature builds [`v1_3`] instead: a plugin written against ABI 1.3, on a frozen copy of
 //! that crate.
 
 #![cfg_attr(feature = "abi-1-3", allow(dead_code, unused_imports))]
@@ -49,7 +49,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     // Hellos said by this instance, which the slot shows once the host draws it again.
     let hellos = Rc::new(Cell::new(0u64));
     let said = hellos.clone();
-    setup.command(command("sample.hello", "Say hello", Some("hello")), move |_| {
+    setup.command(command("sample.hello", "Say hello", Some("hello")), move |_, _| {
         said.set(said.get() + 1);
         let count = count(host) + 1;
         if let Err(error) = host.storage_set("count", &format!("{{\"count\":{count}}}")) {
@@ -57,8 +57,10 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         }
         host.toast(Toast::Success, &format!("Hello from sample {VERSION} ({count})"));
     });
-    setup.command(command("sample.open", "Open the sample route", Some("sample")), move |_| host.open_route("hello"));
-    setup.command(command("sample.panic", "Panic in the sample plugin", None), |_| panic!("sample command panicked"));
+    setup
+        .command(command("sample.open", "Open the sample route", Some("sample")), move |_, _| host.open_route("hello"));
+    setup
+        .command(command("sample.panic", "Panic in the sample plugin", None), |_, _| panic!("sample command panicked"));
     fence::setup(setup)?;
     slot::setup(setup)?;
     // Ticks every `tick_ms` (a second by default), `ticks` times (no limit by default), on a host that offers a
@@ -137,7 +139,7 @@ impl Drop for Ticker {
 }
 
 /// Writes the `destroyed` key when the host destroys the instance, which drops what setup registered.
-struct Destroyed(opencode_plugin_abi::Host);
+struct Destroyed(opencode_plugin_abi::HostHandle);
 
 impl Drop for Destroyed {
     fn drop(&mut self) {
@@ -146,7 +148,7 @@ impl Drop for Destroyed {
 }
 
 /// The stored `{"count":N}`, else 0.
-fn count(host: opencode_plugin_abi::Host) -> u64 {
+fn count(host: opencode_plugin_abi::HostHandle) -> u64 {
     host.storage_get("count")
         .and_then(|json| json.chars().filter(char::is_ascii_digit).collect::<String>().parse().ok())
         .unwrap_or(0)

@@ -214,6 +214,7 @@ version = "0.1.0"
 dependencies = [
  "opencode-plugin-abi",
  "opencode-plugin-abi-1-3",
+ "serde_json",
 ]
 
 [[package]]

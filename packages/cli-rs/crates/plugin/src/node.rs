@@ -23,6 +23,7 @@ pub type SlotRender<H> = Rc<dyn Fn(&H, &abi::SlotInput, &abi::Changed) -> abi::R
 /// change the host pushes ([`Host::watch`]), and each wake. Its widgets are rebuilt only when the node differs.
 pub struct Mount<H: Host> {
     root: View,
+    owner: Weak<H>,
     render: SlotRender<H>,
     input: abi::SlotInput,
     /// What it shows: `None` before the first render, `Some(None)` while hidden.
@@ -36,6 +37,7 @@ impl<H: Host> Mount<H> {
     pub fn new(host: &H, owner: Weak<H>, input: abi::SlotInput, render: SlotRender<H>) -> Rc<Self> {
         let mount = Rc::new(Self {
             root: View::new(host.app()).column().shrink(0.0).visible(false),
+            owner: owner.clone(),
             render,
             input,
             shown: RefCell::new(None),
@@ -64,7 +66,9 @@ impl<H: Host> Mount<H> {
         }
         self.root.clear();
         if let Some(node) = &node {
-            self.root.add(&widget(host.app(), &host.theme(), node));
+            let owner = self.owner.clone();
+            let act: Act = Rc::new(move |action| act(&owner, action));
+            self.root.add(&widget(host.app(), &host.theme(), node, &act));
         }
         self.root.visible(node.is_some());
         *self.shown.borrow_mut() = Some(node);
@@ -108,10 +112,25 @@ pub fn assign(text: &mut String, value: &str) {
     text.push_str(value);
 }
 
-/// The widgets of `node`.
-pub fn widget(app: &App, theme: &Theme, node: &abi::Node) -> AnyWidget {
+/// What runs a node's click: the host's side of an [`abi::Action`].
+pub type Act = Rc<dyn Fn(&abi::Action)>;
+
+/// Runs `action` on `host` once the event that caused it is handled, outside every plugin callback.
+fn act<H: Host>(host: &Weak<H>, action: &abi::Action) {
+    let Some(strong) = host.upgrade() else { return };
+    let (host, action) = (host.clone(), action.clone());
+    strong.app().defer(move |_| {
+        let Some(host) = host.upgrade() else { return };
+        match action {
+            abi::Action::Command { name, input } => host.dispatch(&name, input.as_deref()),
+        }
+    });
+}
+
+/// The widgets of `node`; a click runs through `act`.
+pub fn widget(app: &App, theme: &Theme, node: &abi::Node, act: &Act) -> AnyWidget {
     match node {
-        abi::Node::Box { row, gap, padding, bg, layout, children } => {
+        abi::Node::Box { row, gap, padding, justify, bg, layout, on_click, children } => {
             let view = View::new(app);
             if *row {
                 view.row();
@@ -125,17 +144,25 @@ pub fn widget(app: &App, theme: &Theme, node: &abi::Node) -> AnyWidget {
             if padding.1 > 0 {
                 view.padding_y(padding.1);
             }
+            match justify {
+                abi::Justify::Start => {}
+                abi::Justify::End => drop(view.justify(Justify::End)),
+                abi::Justify::Center => drop(view.justify(Justify::Center)),
+                abi::Justify::SpaceBetween => drop(view.justify(Justify::SpaceBetween)),
+            }
             if let Some(bg) = color(theme, bg.as_ref()) {
                 view.bg(bg);
             }
             for child in children {
-                view.add(&widget(app, theme, child));
+                view.add(&widget(app, theme, child, act));
             }
+            clickable(&view, on_click.as_ref(), act);
             lay_out(&view, layout).as_any()
         }
-        abi::Node::Text { spans, fg, wrap, truncate, selectable, layout } => {
+        abi::Node::Text { spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click } => {
             let fg = color(theme, fg.as_ref()).unwrap_or(theme.text.base);
-            let text = Text::new(app, spans.iter().map(|span| styled(theme, span, fg)).collect::<Vec<_>>())
+            // Spans without a color of their own take the text's, which a hover changes.
+            let text = Text::new(app, spans.iter().map(|span| styled(theme, span, None)).collect::<Vec<_>>())
                 .fg(fg)
                 .wrap(match wrap {
                     abi::Wrap::Word => WrapMode::Word,
@@ -144,9 +171,33 @@ pub fn widget(app: &App, theme: &Theme, node: &abi::Node) -> AnyWidget {
                 })
                 .truncate(*truncate)
                 .selectable(*selectable);
+            if let Some(hover) = color(theme, hover_fg.as_ref()) {
+                let this = text.clone();
+                text.on_hover(move |cx, hovered| {
+                    this.fg(if hovered { hover } else { fg });
+                    cx.app().request_redraw();
+                });
+            }
+            clickable(&text, on_click.as_ref(), act);
             lay_out(&text, layout).as_any()
         }
     }
+}
+
+/// Shows the hand over `widget` and runs `click` on the press or the release of the left button.
+fn clickable(widget: &impl Widget, click: Option<&abi::Click>, act: &Act) {
+    let Some(click) = click.cloned() else { return };
+    let act = act.clone();
+    widget.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
+        let hit = match event.kind {
+            MouseEventKind::Down(MouseButton::Left) => click.on == abi::Press::Down,
+            MouseEventKind::Up(MouseButton::Left) => click.on == abi::Press::Up,
+            _ => false,
+        };
+        if hit {
+            act(&click.action);
+        }
+    });
 }
 
 fn lay_out<W: Widget>(widget: &W, layout: &abi::Layout) -> W {
@@ -168,19 +219,23 @@ fn lay_out<W: Widget>(widget: &W, layout: &abi::Layout) -> W {
 }
 
 /// `span` styled in `theme`, in `fg` without a color of its own.
-fn styled(theme: &Theme, span: &abi::Span, fg: Color) -> Span<'static> {
+fn styled(theme: &Theme, span: &abi::Span, fg: Option<Color>) -> Span<'static> {
     let mut attributes = Attributes::NONE;
     for (set, attribute) in [
         (span.bold, Attributes::BOLD),
         (span.italic, Attributes::ITALIC),
         (span.underline, Attributes::UNDERLINE),
         (span.dim, Attributes::DIM),
+        (span.strikethrough, Attributes::STRIKETHROUGH),
     ] {
         if set {
             attributes |= attribute;
         }
     }
-    let mut style = Style::new().fg(color(theme, span.fg.as_ref()).unwrap_or(fg));
+    let mut style = Style::new();
+    if let Some(fg) = color(theme, span.fg.as_ref()).or(fg) {
+        style = style.fg(fg);
+    }
     if let Some(bg) = color(theme, span.bg.as_ref()) {
         style = style.bg(bg);
     }
@@ -294,7 +349,7 @@ pub fn lines_widget(app: &App, theme: &Theme, lines: &[Line], fg: Option<&abi::C
         if index > 0 {
             spans.push(Span::styled("\n", Style::new().fg(base)));
         }
-        spans.extend(line.iter().map(|span| styled(theme, span, base)));
+        spans.extend(line.iter().map(|span| styled(theme, span, Some(base))));
     }
     let text = Text::new(app, spans).width(Length::percent(100.0)).wrap(WrapMode::None).selectable(false);
     let text = match fg {
