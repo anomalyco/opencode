@@ -27,6 +27,8 @@ use opencode_util::error;
 pub struct Context {
     /// `--standalone` and `--server` for the selected command, wherever they were given (`args::validate`).
     pub server: ServerFlags,
+    /// The arguments after the program name, decoded once in `main`.
+    pub args: Vec<String>,
 }
 
 pub fn run(context: &Context, cli: &Cli) -> error::Result<()> {
