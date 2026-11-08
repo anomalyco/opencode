@@ -15,6 +15,12 @@ pub struct TempDir {
 
 impl TempDir {
     pub fn new() -> io::Result<Self> {
+        Self::new_in(&std::env::temp_dir())
+    }
+
+    /// Made absolute first, as `tempfile` does, so a later `chdir` cannot redirect the removal.
+    fn new_in(base: &Path) -> io::Result<Self> {
+        let base = std::path::absolute(base)?;
         static COUNT: AtomicU64 = AtomicU64::new(0);
         let mut builder = std::fs::DirBuilder::new();
         #[cfg(unix)]
@@ -22,7 +28,7 @@ impl TempDir {
         loop {
             let count = COUNT.fetch_add(1, Ordering::Relaxed);
             let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |time| time.as_nanos());
-            let path = std::env::temp_dir().join(format!(".tmp-{}-{count}-{nanos:x}", std::process::id()));
+            let path = base.join(format!(".tmp-{}-{count}-{nanos:x}", std::process::id()));
             match builder.create(&path) {
                 Ok(()) => return Ok(Self { path }),
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
@@ -73,5 +79,22 @@ mod tests {
         }
         drop(dirs);
         assert!(paths.iter().all(|path| !path.exists()));
+    }
+
+    #[test]
+    fn a_relative_base_is_made_absolute() {
+        let base = tempdir().unwrap();
+        let relative = pathdiff(base.path());
+        let dir = TempDir::new_in(&relative).unwrap();
+        assert!(dir.path().is_absolute());
+        let canonical = |path: &Path| path.canonicalize().unwrap();
+        assert_eq!(canonical(dir.path()).parent(), Some(canonical(base.path()).as_path()));
+    }
+
+    /// `target` relative to the working directory, through `..` up to the root.
+    fn pathdiff(target: &Path) -> PathBuf {
+        let cwd = std::env::current_dir().unwrap();
+        let ups = cwd.components().count() - 1;
+        std::iter::repeat_n(Path::new(".."), ups).collect::<PathBuf>().join(target.strip_prefix("/").unwrap())
     }
 }
