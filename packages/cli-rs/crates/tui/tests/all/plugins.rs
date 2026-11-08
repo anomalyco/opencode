@@ -134,10 +134,10 @@ fn the_sample_claims_the_home_footer_and_runs_its_command() {
 }
 
 // Expected: an external slot claim asks for its rows again with each change batch, so it shows state the plugin
-// changed since it was mounted.
+// changed since it was mounted. The `still` build starts no ticker, so only the change batch draws it again.
 #[test]
 fn an_external_claim_draws_again_on_a_change_batch() {
-    let h = open(Route::Home, "", &build(""));
+    let h = open(Route::Home, "", &build("still"));
     h.wait_for("home.footer, 0 hellos");
     h.tui.keymap.dispatch("sample.hello", None);
     h.wait_for("Hello from sample v1 (1)");

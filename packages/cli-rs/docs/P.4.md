@@ -86,7 +86,9 @@ target is a TypeScript plugin and is listed as skipped (F16). Server-side TUI pl
 - Loading a build reads its ID from `describe` and runs no setup. Setup (`create`) runs on each activation,
   and deactivation or unloading destroys that instance, so a plugin that `cli.json` disables starts nothing. A
   plugin without `describe` (ABI 1.0) tells its ID only from setup, so its setup runs once at load and that
-  instance is destroyed at once. A setup that fails fails the plugin on activation.
+  instance is destroyed at once. A setup that fails fails the plugin on activation, except for a new build of
+  an active plugin: it starts before the active one stops, so when its setup fails it is destroyed, the active
+  one keeps running, and the plugin reports `… (previous version still active)`, as TS does.
 - `Loader::reconcile` loads new and changed builds (by content digest), unloads removed ones, and remounts the
   route when anything changed. A build that fails while a previous version runs keeps the previous version
   and reports `… (previous version still active)`, as TS does.

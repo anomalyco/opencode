@@ -320,12 +320,30 @@ impl<H: Host> Registry<H> {
 
     /// Adds external plugin `definition`, or replaces the one loaded from the same target, and activates it
     /// unless a `plugins` entry or the plugin manager disabled it. A replacement keeps its place, so slot
-    /// order holds across a reload.
-    pub fn load(&self, host: &Rc<H>, definition: Definition<H>) {
-        let Some(target) = definition.target().map(str::to_owned) else {
-            return;
-        };
+    /// order holds across a reload. A replacement of an active plugin starts before the active one stops: when its
+    /// setup fails, it is disposed, the active one keeps running, and the error is returned (TS `context.tsx`).
+    pub fn load(&self, host: &Rc<H>, definition: Definition<H>) -> Option<String> {
+        let target = definition.target()?.to_owned();
         self.set_unloaded(&target, None);
+        // A `plugins` entry that names the plugin enables it; it is not a plugin of its own.
+        self.unloaded
+            .borrow_mut()
+            .retain(|(known, status)| !(matches!(status, Status::Skipped(_)) && matches(known, &definition.id)));
+        if self.with_target(&target, |plugin| plugin.active.is_some()) == Some(true) {
+            let (order, registration) = self.setup(host, &definition);
+            if let Some(error) = definition.external.as_ref().and_then(|(_, error)| error()) {
+                registration.dispose();
+                return Some(error);
+            }
+            let previous = self.with_target(&target, |plugin| {
+                plugin.definition = definition;
+                plugin.active.replace((order, registration))
+            });
+            if let Some(Some((_, registration))) = previous {
+                registration.dispose();
+            }
+            return None;
+        }
         let previous = {
             let mut plugins = self.plugins.borrow_mut();
             match plugins.iter_mut().find(|plugin| plugin.definition.target() == Some(target.as_str())) {
@@ -353,16 +371,11 @@ impl<H: Host> Registry<H> {
         if let Some((_, registration)) = previous.flatten() {
             registration.dispose();
         }
-        // A `plugins` entry that names the plugin enables it; it is not a plugin of its own.
-        if let Some(id) = self.with_target(&target, |plugin| plugin.definition.id.clone()) {
-            self.unloaded
-                .borrow_mut()
-                .retain(|(known, status)| !(matches!(status, Status::Skipped(_)) && matches(known, &id)));
-        }
         let started = self.with_target(&target, |plugin| plugin.enabled.then(|| plugin.definition.id.clone()));
         if let Some(Some(id)) = started {
             self.start(host, &id);
         }
+        None
     }
 
     /// Whether `target` is a selector of a plugin, rather than a plugin to load.
@@ -523,13 +536,18 @@ impl<H: Host> Registry<H> {
         else {
             return;
         };
-        // Setup runs without the registry borrowed, so it may read the registry through the host.
-        let mut setup = Setup { host, id, registration: Registration::default() };
+        let active = self.setup(host, &definition);
+        self.with_plugin(id, move |plugin| plugin.active = Some(active));
+    }
+
+    /// Runs the setup of `definition` and numbers the activation. Setup runs without the registry borrowed, so it
+    /// may read the registry through the host.
+    fn setup(&self, host: &Rc<H>, definition: &Definition<H>) -> (u64, Registration<H>) {
+        let mut setup = Setup { host, id: &definition.id, registration: Registration::default() };
         (definition.setup)(&mut setup);
         let order = self.activations.get();
         self.activations.set(order + 1);
-        let registration = setup.registration;
-        self.with_plugin(id, move |plugin| plugin.active = Some((order, registration)));
+        (order, setup.registration)
     }
 
     fn with_target<T>(&self, target: &str, f: impl FnOnce(&mut Plugin<H>) -> T) -> Option<T> {
