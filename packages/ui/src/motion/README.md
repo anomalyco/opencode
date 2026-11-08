@@ -2,8 +2,8 @@
 
 Springs, a shared frame loop and DOM animation controllers for the UI packages.
 
-- `@opencode/ui/motion`: physics and DOM controllers. No Solid imports.
-- `@opencode/ui/motion/solid`: Solid primitives (`springStyle`, `slidingHighlight`, `widthMorph`, `numberTween`).
+- `@Mackery6969/ui/motion`: physics and DOM controllers. No Solid imports.
+- `@Mackery6969/ui/motion/solid`: Solid primitives (`springStyle`, `slidingHighlight`, `widthMorph`, `numberTween`).
 
 ## Provenance
 

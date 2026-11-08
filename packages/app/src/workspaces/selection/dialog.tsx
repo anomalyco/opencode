@@ -1,24 +1,24 @@
 import "@pierre/trees/web-components"
 import { FileTree } from "@pierre/trees"
-import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
-import { Button } from "@opencode/ui/button"
-import { Divider } from "@opencode/ui/divider"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@Mackery6969/ui/dialog"
+import { Button } from "@Mackery6969/ui/button"
+import { Divider } from "@Mackery6969/ui/divider"
 import {
   displayName,
   getProjectAvatarSource,
   getProjectAvatarVariant,
   ProjectAvatar,
-} from "@opencode/ui/project-avatar"
-import { TextInput } from "@opencode/ui/text-input"
-import { Tooltip } from "@opencode/ui/tooltip"
-import { useDialog } from "@opencode/ui/context/dialog"
+} from "@Mackery6969/ui/project-avatar"
+import { TextInput } from "@Mackery6969/ui/text-input"
+import { Tooltip } from "@Mackery6969/ui/tooltip"
+import { useDialog } from "@Mackery6969/ui/context/dialog"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
 import { useServer } from "@/runtime/server/current"
 import { inferHomeDirectory } from "@/runtime/server/global-sync/bootstrap"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, serverName, useServers } from "@/runtime/server/registry"
 import { pathKey } from "@/workspaces/path-key"
-import type { LocationRef } from "@opencode/client/promise"
+import type { LocationRef } from "@Mackery6969/client/promise"
 import {
   absoluteTreePath,
   canonicalPickerPath,

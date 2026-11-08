@@ -11,7 +11,7 @@ import {
   useContext,
 } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { Icon } from "@opencode/ui/icon"
+import { Icon } from "@Mackery6969/ui/icon"
 import { MenuScroll } from "../../components/menu-scroll"
 import { TextInput } from "../text-input/text-input"
 import { createTypeahead } from "../typeahead/controller"

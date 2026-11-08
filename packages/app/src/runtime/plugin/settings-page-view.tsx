@@ -1,5 +1,5 @@
 import { For } from "solid-js"
-import { Tabs } from "@opencode/ui/tabs"
+import { Tabs } from "@Mackery6969/ui/tabs"
 import { useSettingsSurface } from "@/settings/surface"
 import { Contribution } from "./render"
 

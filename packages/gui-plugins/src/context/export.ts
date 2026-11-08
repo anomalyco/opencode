@@ -1,4 +1,4 @@
-import type { OpenCodeClient, SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { OpenCodeClient, SessionInfo, SessionMessageInfo } from "@Mackery6969/client/promise"
 
 export type SessionExportData = {
   info: SessionInfo

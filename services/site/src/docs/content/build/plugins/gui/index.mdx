@@ -1,10 +1,10 @@
 ---
 title: "GUI"
-description: "Build the GUI part of an OpenCode plugin for OpenCode Desktop with @opencode/plugin/gui."
+description: "Build the GUI part of an OpenCode plugin for OpenCode Desktop with @Mackery6969/plugin/gui."
 ---
 
 A GUI plugin adds panels, commands, settings pages, and native integrations to OpenCode Desktop with the GUI plugin SDK,
-`@opencode/plugin/gui`. It is the `./gui-experimental` part of a [plugin package](/build/plugins), alone or beside a
+`@Mackery6969/plugin/gui`. It is the `./gui-experimental` part of a [plugin package](/build/plugins), alone or beside a
 [server part](/build/plugins/server) and a [TUI part](/build/plugins/cli).
 
 <Callout type="note">
@@ -15,7 +15,7 @@ A GUI plugin adds panels, commands, settings pages, and native integrations to O
 The `./gui-experimental` file default-exports `Plugin.define`, like the server and TUI parts:
 
 ```tsx title="src/gui.tsx"
-import { Command, Plugin } from "@opencode/plugin/gui"
+import { Command, Plugin } from "@Mackery6969/plugin/gui"
 import { Acme } from "./rpc"
 
 export default Plugin.define({
@@ -55,7 +55,7 @@ A plugin package can ship server, TUI, and GUI code from one npm package. Add on
     "./gui-experimental": "./dist/gui-experimental.cjs"
   },
   "dependencies": {
-    "@opencode/plugin": "latest"
+    "@Mackery6969/plugin": "latest"
   },
   "devDependencies": {
     "solid-js": "^1.9.0",
@@ -83,7 +83,7 @@ desktop app's main process runs `main`.
 
 ```tsx title="src/gui.tsx"
 import { shell } from "electron"
-import { Plugin } from "@opencode/plugin/gui"
+import { Plugin } from "@Mackery6969/plugin/gui"
 
 export default Plugin.define({
   setup(ctx) {
@@ -106,17 +106,17 @@ bundler's hoisted `require` calls. Keep each process's code inside its own setup
 gets placeholders instead of working values.
 
 `Plugin.define` and the contract helpers come from one SDK in both processes. In the main process,
-`@opencode/plugin/gui` resolves to the main SDK, which exports the same `Plugin`, `Store`, `Ipc`, `Contract`, and
+`@Mackery6969/plugin/gui` resolves to the main SDK, which exports the same `Plugin`, `Store`, `Ipc`, `Contract`, and
 `Registry`. One definition serves both processes. Its window-only exports, such as `Command`, `bindPlugin`, and
 `createKeyed`, are `undefined` in the main process, so use them only inside `setup`.
 
 ## Build the bundle
 
-`./gui-experimental` must be one prebuilt CommonJS file. Build it with the Vite preset from `@opencode/plugin/gui/vite`:
+`./gui-experimental` must be one prebuilt CommonJS file. Build it with the Vite preset from `@Mackery6969/plugin/gui/vite`:
 
 ```ts title="vite.config.ts"
 import { defineConfig } from "vite"
-import { gui } from "@opencode/plugin/gui/vite"
+import { gui } from "@Mackery6969/plugin/gui/vite"
 
 export default defineConfig({ plugins: [gui()] })
 ```
@@ -131,11 +131,11 @@ The preset does the following:
 - Emits one CommonJS file and inlines every dynamic `import()`, because the app cannot load a second chunk.
 - Keeps the app's [shared modules](#shared-modules), Electron, and Node built-ins external, and bundles every other
   dependency.
-- Fails the build on any other `effect/*`, `solid-js/*`, or `@opencode/*` module. The app does not provide it, and a
+- Fails the build on any other `effect/*`, `solid-js/*`, or `@Mackery6969/*` module. The app does not provide it, and a
   bundled copy would not share the app's instance.
 
 ```text
-effect/Schema is not a module the OpenCode app provides to plugin GUIs: effect, @opencode/plugin/gui, …
+effect/Schema is not a module the OpenCode app provides to plugin GUIs: effect, @Mackery6969/plugin/gui, …
 ```
 
 Import from the shared entry instead, for example `import { Schema } from "effect"`.
@@ -164,8 +164,8 @@ interface GuiOptions {
 
 ### Dependencies
 
-Add the build tools as devDependencies. The app provides `@opencode/plugin/gui` at runtime, so the bundle only needs its
-types from the `@opencode/plugin` dependency.
+Add the build tools as devDependencies. The app provides `@Mackery6969/plugin/gui` at runtime, so the bundle only needs its
+types from the `@Mackery6969/plugin` dependency.
 
 ```bash
 bun add -d vite vite-plugin-solid solid-js
@@ -188,10 +188,10 @@ import { createSignal } from "solid-js" // Windows; an inert placeholder in the 
 import { readFile } from "node:fs/promises" // The main process; an inert placeholder in windows
 ```
 
-- **Both processes:** `effect`, `@opencode/plugin/gui`, `@opencode/plugin/gui/main`, `@opencode/plugin/rpc`,
-  `@opencode/schema/rpc`, `@opencode/client`, and `@opencode/client/effect`.
-- **Windows only:** `solid-js`, `solid-js/web`, `solid-js/store`, `@opencode/client/solid`, and
-  `@opencode/plugin/gui/{file,review,browser}`. The main process gets inert placeholders.
+- **Both processes:** `effect`, `@Mackery6969/plugin/gui`, `@Mackery6969/plugin/gui/main`, `@Mackery6969/plugin/rpc`,
+  `@Mackery6969/schema/rpc`, `@Mackery6969/client`, and `@Mackery6969/client/effect`.
+- **Windows only:** `solid-js`, `solid-js/web`, `solid-js/store`, `@Mackery6969/client/solid`, and
+  `@Mackery6969/plugin/gui/{file,review,browser}`. The main process gets inert placeholders.
 - **Main process only:** `electron` and Node built-ins such as `node:fs`. Windows get inert placeholders.
 
 ## Where GUI entries load
@@ -242,7 +242,7 @@ declarations before either setup runs.
 
 ```ts title="src/gui/definition.ts"
 import { Schema } from "effect"
-import { Plugin, Store } from "@opencode/plugin/gui"
+import { Plugin, Store } from "@Mackery6969/plugin/gui"
 
 export const definition = Plugin.define({
   os: ["macos", "linux"],
@@ -296,7 +296,7 @@ A small GUI plugin fits in `src/gui.tsx`. For a larger one, declare the plugin i
 
 ```text
 src/
-├── index.ts            Server part: Plugin.define from @opencode/plugin
+├── index.ts            Server part: Plugin.define from @Mackery6969/plugin
 ├── rpc.ts              RPC contract between the server part and its clients
 ├── gui.tsx             ./gui-experimental entry: export default Plugin.define({ ...definition, setup, main })
 └── gui/
@@ -315,7 +315,7 @@ For a larger plugin, declare the plugin first, type each setup from the declarat
 
 ```ts title="src/gui/definition.ts"
 import { Schema } from "effect"
-import { Plugin, Store } from "@opencode/plugin/gui"
+import { Plugin, Store } from "@Mackery6969/plugin/gui"
 
 export const definition = Plugin.define({
   stores: { notes: Store.global(Schema.Struct({ count: Schema.Number }), { count: 0 }) },
@@ -323,7 +323,7 @@ export const definition = Plugin.define({
 ```
 
 ```tsx title="src/gui/window.tsx"
-import type { Plugin } from "@opencode/plugin/gui"
+import type { Plugin } from "@Mackery6969/plugin/gui"
 import { Notes } from "./contract"
 import type { definition } from "./definition"
 
@@ -333,7 +333,7 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
 ```
 
 ```ts title="src/gui/main.ts"
-import type { Plugin } from "@opencode/plugin/gui"
+import type { Plugin } from "@Mackery6969/plugin/gui"
 
 export const main: Plugin.MainSetup = (ctx) => {
   ctx.log.write("info", "acme started")
@@ -341,7 +341,7 @@ export const main: Plugin.MainSetup = (ctx) => {
 ```
 
 ```tsx title="src/gui.tsx"
-import { Plugin } from "@opencode/plugin/gui"
+import { Plugin } from "@Mackery6969/plugin/gui"
 import { definition } from "./gui/definition"
 import { main } from "./gui/main"
 import { setup } from "./gui/window"
@@ -353,8 +353,8 @@ export default Plugin.define({ ...definition, setup, main })
 - `Plugin.MainSetup` is the type of a main setup, and `Plugin.Cleanup` the type of the cleanup function either setup
   may return.
 - Import registries, tokens, and helpers such as `Command`, `SettingsPage`, `Panel`, `Slot`, `Contract`, `Ipc`,
-  `Registry`, `Store`, `createKeyed`, `usePlugin`, and `bindPlugin` from `@opencode/plugin/gui`.
-- Import main-only registries such as `MenubarItem` from `@opencode/plugin/gui/main`.
+  `Registry`, `Store`, `createKeyed`, `usePlugin`, and `bindPlugin` from `@Mackery6969/plugin/gui`.
+- Import main-only registries such as `MenubarItem` from `@Mackery6969/plugin/gui/main`.
 
 ## Shared context
 
@@ -385,7 +385,7 @@ setup(ctx) {
 your server part through its [RPC](/build/plugins/rpc).
 
 ```ts
-import { Command } from "@opencode/plugin/gui"
+import { Command } from "@Mackery6969/plugin/gui"
 import { Acme } from "./rpc"
 
 ctx.add(Command, () => ({
@@ -454,7 +454,7 @@ setups.
 
 ```ts title="src/gui/contract.ts"
 import type { JSX } from "solid-js"
-import { Contract } from "@opencode/plugin/gui"
+import { Contract } from "@Mackery6969/plugin/gui"
 
 export interface AcmeBadge {
   Badge(props: { readonly label: string }): JSX.Element
@@ -468,7 +468,7 @@ Provide it from the window setup with `ctx.provide`. When the contract holds a c
 during setup. Then `usePlugin()` inside it reads the provider's context, not the consumer's.
 
 ```tsx title="src/gui.tsx"
-import { bindPlugin, Plugin } from "@opencode/plugin/gui"
+import { bindPlugin, Plugin } from "@Mackery6969/plugin/gui"
 import { AcmeBadge } from "./gui/contract"
 
 export default Plugin.define({
@@ -499,7 +499,7 @@ plugin follows the contract with `ctx.use(token)`. The accessor's value changes 
 restarts, so read it where you use it.
 
 ```tsx title="src/gui.tsx"
-import { Plugin, Slot } from "@opencode/plugin/gui"
+import { Plugin, Slot } from "@Mackery6969/plugin/gui"
 import { AcmeBadge } from "opencode-acme-plugin/contract"
 
 export default Plugin.define({
@@ -528,7 +528,7 @@ with `ctx.provide`, and the window calls it through `ctx.main`.
 
 ```ts title="src/gui/contract.ts"
 import { Schema } from "effect"
-import { Ipc } from "@opencode/plugin/gui"
+import { Ipc } from "@Mackery6969/plugin/gui"
 
 export const KeepAwake = Ipc.define({
   id: "acme.awake",
@@ -554,7 +554,7 @@ Use `Registry.define` for a list your plugin owns. Other plugins contribute item
 them with `ctx.list`.
 
 ```ts title="src/gui/contract.ts"
-import { Registry } from "@opencode/plugin/gui"
+import { Registry } from "@Mackery6969/plugin/gui"
 
 export interface Exporter {
   readonly id: string
@@ -575,12 +575,12 @@ const exporters = () => ctx.list(Exporter)
 
 ## The window
 
-A plugin's `setup` runs in every desktop app window. Pass it to `Plugin.define` from `@opencode/plugin/gui` in the
+A plugin's `setup` runs in every desktop app window. Pass it to `Plugin.define` from `@Mackery6969/plugin/gui` in the
 plugin's [`./gui-experimental` file](#define-the-gui-plugin). `setup` is synchronous and may return a
 cleanup function; see [Lifetimes and cleanup](#lifetimes-and-cleanup).
 
 ```tsx title="src/gui.tsx"
-import { Command, Plugin } from "@opencode/plugin/gui"
+import { Command, Plugin } from "@Mackery6969/plugin/gui"
 
 export default Plugin.define({
   i18n: { en: { open: "Open Acme" } },
@@ -601,7 +601,7 @@ it from the declarations in their own file ([split across files](#split-across-f
 component and the definition do not import each other.
 
 ```tsx title="src/gui/window.tsx"
-import { Slot, usePlugin, type Plugin } from "@opencode/plugin/gui"
+import { Slot, usePlugin, type Plugin } from "@Mackery6969/plugin/gui"
 import type { definition } from "./definition"
 
 function StatusLabel() {
@@ -643,7 +643,7 @@ ctx.add(Command, () => ({ id: "open", title: ctx.t("command.open"), run: () => o
 host publishes the command as `<plugin id>.<command id>`.
 
 ```ts
-import { Command } from "@opencode/plugin/gui"
+import { Command } from "@Mackery6969/plugin/gui"
 
 ctx.add(
   Command,
@@ -732,7 +732,7 @@ interface Command {
 the timeline.
 
 ```tsx
-import { Panel, type PanelTab } from "@opencode/plugin/gui"
+import { Panel, type PanelTab } from "@Mackery6969/plugin/gui"
 
 const mainTab: PanelTab = {
   id: "main",
@@ -927,7 +927,7 @@ interface ClosedPanelTab {
 rows in the host's General section (`page: "general", section: "general"`).
 
 ```tsx
-import { SettingsPage } from "@opencode/plugin/gui"
+import { SettingsPage } from "@Mackery6969/plugin/gui"
 import { AcmeSettings } from "./settings"
 
 ctx.add(SettingsPage, {
@@ -999,7 +999,7 @@ interface SettingEntry {
 `Slot` renders UI into one of four window slots.
 
 ```tsx
-import { Slot } from "@opencode/plugin/gui"
+import { Slot } from "@Mackery6969/plugin/gui"
 
 ctx.add(Slot, {
   at: "session.header",
@@ -1056,7 +1056,7 @@ interface SlotMap {
 or each server's row menu in Settings (`"server.row"`).
 
 ```ts
-import { MenuItem } from "@opencode/plugin/gui"
+import { MenuItem } from "@Mackery6969/plugin/gui"
 
 ctx.add(MenuItem, (): MenuItem => {
   const session = ctx.sessions.current()
@@ -1134,7 +1134,7 @@ interface ServerRowMenuItem {
 `TitlebarItem` renders a pill button in the window titlebar or tabs footer. Its label shows on hover.
 
 ```ts
-import { TitlebarItem } from "@opencode/plugin/gui"
+import { TitlebarItem } from "@Mackery6969/plugin/gui"
 
 ctx.add(TitlebarItem, (): TitlebarItem | undefined =>
   syncing() ? { id: "sync", label: ctx.t("syncing"), icon: "server", busy: true, run: () => sync() } : undefined,
@@ -1172,7 +1172,7 @@ through its server part's [RPC](/build/plugins/rpc), and shows them as one pill:
 
 ```tsx
 import { createStore } from "solid-js/store"
-import { ComposerPill, createKeyed } from "@opencode/plugin/gui"
+import { ComposerPill, createKeyed } from "@Mackery6969/plugin/gui"
 import { GitHub, type Pull } from "./rpc"
 
 const [pulls, setPulls] = createStore<Record<string, readonly Pull[]>>({})
@@ -1263,7 +1263,7 @@ formula:
 
 ```tsx
 import { For } from "solid-js"
-import { CodeBlock } from "@opencode/plugin/gui"
+import { CodeBlock } from "@Mackery6969/plugin/gui"
 
 ctx.add(CodeBlock, {
   languages: ["csv"],
@@ -1327,7 +1327,7 @@ mid-block, the user sees the highlighted code; then your UI replaces it in place
 same block a `CodeBlock` render receives:
 
 ```ts
-import { CodeBlockAction } from "@opencode/plugin/gui"
+import { CodeBlockAction } from "@Mackery6969/plugin/gui"
 
 ctx.add(CodeBlockAction, {
   id: "run",
@@ -1375,7 +1375,7 @@ interface CodeBlockProps {
 highest `priority` whose `match` returns true opens the link.
 
 ```ts
-import { LinkHandler } from "@opencode/plugin/gui"
+import { LinkHandler } from "@Mackery6969/plugin/gui"
 
 ctx.add(LinkHandler, {
   priority: 10,
@@ -1417,7 +1417,7 @@ interface Link {
 `Server` contributes a list of server connections, such as servers your plugin starts on other machines.
 
 ```ts
-import { Server } from "@opencode/plugin/gui"
+import { Server } from "@Mackery6969/plugin/gui"
 
 ctx.add(
   Server,
@@ -1491,7 +1491,7 @@ interface ServerHealth {
 `Style` injects a CSS string into the document while the contribution is active.
 
 ```ts
-import { Style } from "@opencode/plugin/gui"
+import { Style } from "@Mackery6969/plugin/gui"
 import css from "./panel.css?inline"
 
 ctx.add(Style, css)
@@ -1503,7 +1503,7 @@ ctx.add(Style, css)
 a theme file imports as it is.
 
 ```ts
-import { Theme } from "@opencode/plugin/gui"
+import { Theme } from "@Mackery6969/plugin/gui"
 import midnight from "./midnight.json"
 
 ctx.add(Theme, midnight)
@@ -1982,7 +1982,7 @@ interface ComposerModel {
 
 ```ts
 import { onCleanup } from "solid-js"
-import { createKeyed } from "@opencode/plugin/gui"
+import { createKeyed } from "@Mackery6969/plugin/gui"
 
 createKeyed(
   () => ctx.servers.get("sidecar")?.data,
@@ -2130,12 +2130,12 @@ interface SelectOptions<T> {
 
 ### App components
 
-A plugin bundle cannot import `@opencode/ui`, so `ctx.ui` gives it the app's own components. They render in the
+A plugin bundle cannot import `@Mackery6969/ui`, so `ctx.ui` gives it the app's own components. They render in the
 user's theme, fonts, and language, so your plugin's UI looks and behaves like the app's.
 
 ```tsx
 import { Show } from "solid-js"
-import { createLatest, Panel } from "@opencode/plugin/gui"
+import { createLatest, Panel } from "@Mackery6969/plugin/gui"
 
 const ui = ctx.ui
 const summary = createLatest(
@@ -2602,7 +2602,7 @@ A session's token, cost and plan figures are in its server's data, the same reac
 header's "28k · $0.28". Read them there rather than from opencode's database.
 
 ```ts
-import { lastAssistantWithUsage } from "@opencode/client/solid"
+import { lastAssistantWithUsage } from "@Mackery6969/client/solid"
 
 const data = session.server.data
 const info = () => data.session.get(session.id)
@@ -2625,7 +2625,7 @@ the front when its run finishes:
 
 ```ts
 import { onCleanup } from "solid-js"
-import { createKeyed } from "@opencode/plugin/gui"
+import { createKeyed } from "@Mackery6969/plugin/gui"
 
 createKeyed(
   () => ctx.servers.get("sidecar")?.data,
@@ -2870,7 +2870,7 @@ directory, or session.
 
 ```tsx
 import { Schema } from "effect"
-import { usePlugin, type MountedSession } from "@opencode/plugin/gui"
+import { usePlugin, type MountedSession } from "@Mackery6969/plugin/gui"
 import type { definition } from "./definition"
 
 function DraftView(props: { readonly session: MountedSession }) {
@@ -2924,8 +2924,8 @@ and its dependencies' restarts, which hand-written effects tend to get wrong.
 
 ```tsx
 import { onCleanup } from "solid-js"
-import { createKeyed, usePlugin, type SessionScreen } from "@opencode/plugin/gui"
-import { Changes } from "@opencode/plugin/gui/review"
+import { createKeyed, usePlugin, type SessionScreen } from "@Mackery6969/plugin/gui"
+import { Changes } from "@Mackery6969/plugin/gui/review"
 
 function ChangedFiles(props: { readonly screen: SessionScreen }) {
   const ctx = usePlugin()
@@ -3049,11 +3049,11 @@ The app provides these contracts to every plugin. Follow one with `ctx.use(token
 
 ### Files
 
-`@opencode/plugin/gui/file` exports the app's file tree and **Open in** button, and the `FileViewer` registry.
+`@Mackery6969/plugin/gui/file` exports the app's file tree and **Open in** button, and the `FileViewer` registry.
 
 ```tsx
-import { bindPlugin } from "@opencode/plugin/gui"
-import { FileViewer, type FileViewerProps } from "@opencode/plugin/gui/file"
+import { bindPlugin } from "@Mackery6969/plugin/gui"
+import { FileViewer, type FileViewerProps } from "@Mackery6969/plugin/gui/file"
 
 // A viewer for a kind of file the file view does not render itself.
 ctx.add(FileViewer, {
@@ -3116,11 +3116,11 @@ interface FileViewerProps {
 
 ### Review changes
 
-`@opencode/plugin/gui/review` exports `Changes`, the app's view of a session's changes, and `ChangeKind`
+`@Mackery6969/plugin/gui/review` exports `Changes`, the app's view of a session's changes, and `ChangeKind`
 (`"add"`, `"del"`, or `"mix"`).
 
 ```ts
-import { Changes } from "@opencode/plugin/gui/review"
+import { Changes } from "@Mackery6969/plugin/gui/review"
 
 const changes = ctx.use(Changes)
 
@@ -3163,10 +3163,10 @@ type ChangeKind = "add" | "del" | "mix"
 
 ### Browser
 
-`@opencode/plugin/gui/browser` exports `Browser`, the desktop browser pane of a session.
+`@Mackery6969/plugin/gui/browser` exports `Browser`, the desktop browser pane of a session.
 
 ```ts
-import { Browser } from "@opencode/plugin/gui/browser"
+import { Browser } from "@Mackery6969/plugin/gui/browser"
 
 const session = ctx.sessions.current()
 const live = ctx.use(Browser)()
@@ -3200,7 +3200,7 @@ full access to Node.js built-ins, `electron`, and the main host APIs. Pass it to
 ```tsx title="src/gui.tsx"
 import { Schema } from "effect"
 import { powerSaveBlocker } from "electron"
-import { Plugin } from "@opencode/plugin/gui"
+import { Plugin } from "@Mackery6969/plugin/gui"
 import { KeepAwake } from "./gui/contract"
 
 export default Plugin.define({
@@ -3263,7 +3263,7 @@ main(ctx) {
 
 #### Reference
 
-`@opencode/plugin/gui/main` exports `MainStorage` and `MainEmbeds` below as `Storage` and `Embeds`.
+`@Mackery6969/plugin/gui/main` exports `MainStorage` and `MainEmbeds` below as `Storage` and `Embeds`.
 
 ```ts
 interface MainContext {
@@ -3315,7 +3315,7 @@ encodes every value that crosses the bridge.
 
 ```ts title="src/gui/contract.ts"
 import { Schema } from "effect"
-import { Ipc } from "@opencode/plugin/gui"
+import { Ipc } from "@Mackery6969/plugin/gui"
 
 export const Counter = Ipc.define({
   id: "acme.counter",
@@ -3355,7 +3355,7 @@ Each method receives the decoded input and a `Caller` (`{ window, signal }`). Ca
 event.
 
 ```ts title="src/gui/main.ts"
-import type { Plugin } from "@opencode/plugin/gui"
+import type { Plugin } from "@Mackery6969/plugin/gui"
 import { Counter } from "./contract"
 
 export const main: Plugin.MainSetup = (ctx) => {
@@ -3412,7 +3412,7 @@ In a window, `ctx.main(Counter)` returns the client of the `Ipc` your `main` pro
 schema takes only optional `{ signal }` call options. Do not pass `undefined` as its first argument.
 
 ```tsx title="src/gui/window.tsx"
-import { Command, type Plugin } from "@opencode/plugin/gui"
+import { Command, type Plugin } from "@Mackery6969/plugin/gui"
 import { Counter } from "./contract"
 import type { definition } from "./definition"
 
@@ -3481,10 +3481,10 @@ const count = () => {
 ## Native app menu
 
 `main` adds items to the native menus (the macOS app menu, File, Edit, View, Go, Window, and Help) and to the in-app
-menu on Windows and Linux with `MenubarItem` from `@opencode/plugin/gui/main`:
+menu on Windows and Linux with `MenubarItem` from `@Mackery6969/plugin/gui/main`:
 
 ```ts
-import { MenubarItem } from "@opencode/plugin/gui/main"
+import { MenubarItem } from "@Mackery6969/plugin/gui/main"
 
 ctx.add(
   MenubarItem,
@@ -3527,7 +3527,7 @@ To embed an isolated `WebContentsView` in a panel, create it in `main` and rende
 
 ```ts title="src/gui/main.ts"
 import { type BrowserWindow, WebContentsView } from "electron"
-import type { Plugin } from "@opencode/plugin/gui"
+import type { Plugin } from "@Mackery6969/plugin/gui"
 
 export const main: Plugin.MainSetup = (ctx) => {
   const attach = (window: BrowserWindow) => {
@@ -3602,7 +3602,7 @@ plugin keeps running while that provider is off, so handle the states that are n
 and no spinner should run forever.
 
 ```ts
-import { Browser } from "@opencode/plugin/gui/browser"
+import { Browser } from "@Mackery6969/plugin/gui/browser"
 
 const browser = ctx.use(Browser)
 
@@ -3662,8 +3662,8 @@ For other resources, such as timers or sockets, return a cleanup function from t
 Window `setup` must be synchronous. Start asynchronous work inside `createKeyed` or `createLatest`.
 
 ```tsx title="src/gui.tsx"
-import { Command, createKeyed, Plugin } from "@opencode/plugin/gui"
-import { Changes } from "@opencode/plugin/gui/review"
+import { Command, createKeyed, Plugin } from "@Mackery6969/plugin/gui"
+import { Changes } from "@Mackery6969/plugin/gui/review"
 
 export default Plugin.define({
   i18n: { en: { changes: "Show changes" } },

@@ -1,4 +1,4 @@
-import type { UsageLimitsBudget, UsageLimitsInfo } from "@opencode/client/promise"
+import type { UsageLimitsBudget, UsageLimitsInfo } from "@Mackery6969/client/promise"
 
 /** The model the member is using, so a per-model budget shows this model's own counter. */
 export type CurrentModel = { readonly providerID: string; readonly modelID: string; readonly name: string }

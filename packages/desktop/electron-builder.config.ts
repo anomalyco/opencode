@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url"
 
 import { Arch, type Configuration } from "electron-builder"
 import { NativeArch } from "../../script/native-arch"
-import { DESKTOP_NATIVE_ENGLISH } from "@opencode/app/i18n/desktop-native"
+import { DESKTOP_NATIVE_ENGLISH } from "@Mackery6969/app/i18n/desktop-native"
 import { CLI_BINARIES, getCurrentCli, nodePtyPackage } from "./script/utils"
 
 const packageDir = path.dirname(fileURLToPath(import.meta.url))
@@ -52,7 +52,7 @@ const APP_IDS = {
 // ELF binary matches the glob and is parsed as a desktop entry, so
 // integration fails with `Malformed desktop entry: Unexpected char '\x7f' at 0`
 // (0x7F is the first byte of the ELF magic).
-// https://github.com/anomalyco/opencode/issues/51867
+// https://github.com/Mackery6969/opencode/issues/51867
 // Strip a trailing `.desktop` so the executable can never collide with the
 // desktop-entry glob. Beta/dev appIds end in `.beta`/`.dev` and are unaffected.
 function linuxExecutableName(appId: string): string {
@@ -220,8 +220,9 @@ export function getConfig() {
         appId,
         productName: "OpenCode Dev",
         publish: {
-          provider: "generic",
-          url: "https://opencode.ai/update/api/dev/desktop/opencode/",
+          provider: "github",
+          repo: "Mackery6969/opencode",
+          owner: "Mackery6969",
           channel: "latest",
         },
         deb: { fpm: [...previewCompressionFpm("deb"), metainfoFpm(appId)] },
@@ -239,8 +240,9 @@ export function getConfig() {
         productName: "OpenCode Beta",
         protocols: { name: "OpenCode Beta", schemes: ["opencode"] },
         publish: {
-          provider: "generic",
-          url: "https://opencode.ai/update/api/beta/desktop/opencode/",
+          provider: "github",
+          repo: "Mackery6969/opencode",
+          owner: "Mackery6969",
           channel: "latest",
         },
         deb: { fpm: [...previewCompressionFpm("deb"), metainfoFpm(appId)] },
@@ -263,8 +265,9 @@ export function getConfig() {
         // The DMG volume icon would otherwise use the same actool-generated ICNS.
         dmg: { icon: "resources/icons/icon.icns" },
         publish: {
-          provider: "generic",
-          url: "https://opencode.ai/update/api/latest/desktop/opencode/",
+          provider: "github",
+          repo: "Mackery6969/opencode",
+          owner: "Mackery6969",
           channel: "latest",
         },
         deb: { fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },

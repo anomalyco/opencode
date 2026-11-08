@@ -1,9 +1,9 @@
 import { Effect } from "effect"
 import { HttpServerResponse } from "effect/http"
 import { HttpApiMiddleware } from "effect/http-api"
-import { InvalidRequestError, UnknownError } from "@opencode/protocol/errors"
-import { SchemaErrorMiddleware } from "@opencode/protocol/middleware/schema-error"
-export { SchemaErrorMiddleware } from "@opencode/protocol/middleware/schema-error"
+import { InvalidRequestError, UnknownError } from "@Mackery6969/protocol/errors"
+import { SchemaErrorMiddleware } from "@Mackery6969/protocol/middleware/schema-error"
+export { SchemaErrorMiddleware } from "@Mackery6969/protocol/middleware/schema-error"
 
 const REASON_LIMIT = 1024
 

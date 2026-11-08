@@ -1,4 +1,4 @@
-import { PluginContextProvider } from "@opencode/plugin/tui"
+import { PluginContextProvider } from "@Mackery6969/plugin/tui"
 import { createRoot, createUniqueId, getOwner, onCleanup, runWithOwner, untrack, type JSX } from "solid-js"
 import type {
   Context,
@@ -9,7 +9,7 @@ import type {
   SlotMap,
   SlotPath,
   Toast,
-} from "@opencode/plugin/tui/context"
+} from "@Mackery6969/plugin/tui/context"
 import type { Placement, PlacementKind } from "./structure"
 import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"

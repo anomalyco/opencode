@@ -1,6 +1,6 @@
 import type { PresentationFileContent } from "../file-presentation"
 import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
-import { useI18n } from "@opencode/ui/context/i18n"
+import { useI18n } from "@Mackery6969/ui/context/i18n"
 import {
   DISPOSED_FILE_MEDIA_EVENT,
   INITIAL_FILE_MEDIA_STATE,

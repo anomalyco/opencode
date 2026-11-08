@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
-import type { Permission } from "@opencode/schema/permission"
+import type { Permission } from "@Mackery6969/schema/permission"
 import { makeSession, rpcError, startWire, type Wire } from "./wire-fixture"
 
 const key = "opencode.acp.additionalDirectories"

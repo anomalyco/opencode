@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { Icon } from "@opencode/ui/icon"
+import { Icon } from "@Mackery6969/ui/icon"
 import { Checkbox } from "./checkbox"
 
 const docs = `### Overview

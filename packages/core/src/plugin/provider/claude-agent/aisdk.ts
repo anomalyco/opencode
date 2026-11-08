@@ -1,6 +1,6 @@
 export * as ClaudeAISDK from "./aisdk.js"
 
-import type { Context } from "@opencode/plugin/effect/plugin"
+import type { Context } from "@Mackery6969/plugin/effect/plugin"
 import { Effect } from "effect"
 import { ClaudeQueryOptions } from "./claude/query-options.js"
 import type { ClaudeSessions } from "./claude/sessions.js"

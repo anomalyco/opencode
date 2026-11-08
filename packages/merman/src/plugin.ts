@@ -1,4 +1,4 @@
-import { Plugin } from "@opencode/plugin/tui"
+import { Plugin } from "@Mackery6969/plugin/tui"
 import { createMermaidCodeBlockRenderer } from "./markdown.js"
 import { resolveOpenCodeDiagramPalette } from "./palette.js"
 

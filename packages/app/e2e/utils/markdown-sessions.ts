@@ -1,4 +1,4 @@
-import type { SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessageInfo } from "@Mackery6969/client/promise"
 import { fixture } from "./session-fixture"
 
 // Two long sessions (source, target) of 200 exchanges each, ending in formatted markdown answers.

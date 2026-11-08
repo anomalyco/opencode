@@ -1,6 +1,6 @@
 import { EOL } from "os"
 import { Effect, Option } from "effect"
-import { Global } from "@opencode/util/global"
+import { Global } from "@Mackery6969/util/global"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { databasePath } from "../../../database-path"

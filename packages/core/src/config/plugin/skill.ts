@@ -1,9 +1,9 @@
 export * as ConfigSkillPlugin from "./skill.js"
 
-import { define } from "@opencode/plugin/effect/plugin"
-import type { Entry } from "@opencode/schema/config"
-import { FSUtil } from "@opencode/util/fs-util"
-import { Global } from "@opencode/util/global"
+import { define } from "@Mackery6969/plugin/effect/plugin"
+import type { Entry } from "@Mackery6969/schema/config"
+import { FSUtil } from "@Mackery6969/util/fs-util"
+import { Global } from "@Mackery6969/util/global"
 import path from "path"
 import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
 import { Config } from "../../config.js"

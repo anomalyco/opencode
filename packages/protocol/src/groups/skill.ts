@@ -1,5 +1,5 @@
-import { Skill } from "@opencode/schema/skill"
-import { Location } from "@opencode/schema/location"
+import { Skill } from "@Mackery6969/schema/skill"
+import { Location } from "@Mackery6969/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { ServiceUnavailableError } from "../errors.js"

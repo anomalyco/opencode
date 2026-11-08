@@ -1,11 +1,11 @@
 export * as QuestionTool from "./question.js"
 
-import type { Context } from "@opencode/plugin/effect/plugin"
-import { ToolFailure } from "@opencode/ai/effect"
+import type { Context } from "@Mackery6969/plugin/effect/plugin"
+import { ToolFailure } from "@Mackery6969/ai/effect"
 import { Effect, Schema } from "effect"
 import { Form } from "../../form.js"
 import { Permission } from "../../permission.js"
-import { Question } from "@opencode/schema/question"
+import { Question } from "@Mackery6969/schema/question"
 
 export const name = "question"
 

@@ -1,6 +1,6 @@
 import { EmbeddedTerminalRenderable, type RGBA } from "@opentui/core"
-import { decodePersistentPtyMessage, persistentPtyFrame } from "@opencode/client/solid"
-import { rgbToOklch, type ResolvedThemeTokens } from "@opencode/theme/tui"
+import { decodePersistentPtyMessage, persistentPtyFrame } from "@Mackery6969/client/solid"
+import { rgbToOklch, type ResolvedThemeTokens } from "@Mackery6969/theme/tui"
 import { extend, useRenderer } from "@opentui/solid"
 import { Option } from "effect"
 import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js"

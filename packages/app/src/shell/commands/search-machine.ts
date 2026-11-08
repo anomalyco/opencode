@@ -1,4 +1,4 @@
-import type { SessionInfo } from "@opencode/client/promise"
+import type { SessionInfo } from "@Mackery6969/client/promise"
 import type { CommandPaletteEntry } from "./palette"
 
 export const PALETTE_SEARCH_TIMEOUT_MS = 10_000

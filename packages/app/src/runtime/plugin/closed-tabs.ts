@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createEventListener } from "@solid-primitives/event-listener"
-import type { Panel, PanelProps, SessionRef } from "@opencode/plugin/gui"
+import type { Panel, PanelProps, SessionRef } from "@Mackery6969/plugin/gui"
 import { adjacentTabKey } from "@/shell/titlebar/tab-order"
 
 /** The most closed tabs a session keeps. */

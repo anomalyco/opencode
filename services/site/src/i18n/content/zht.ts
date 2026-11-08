@@ -104,10 +104,10 @@ export const content = {
       intro:
         "從你自己的腳本、CI 工作和工具驅動 OpenCode。SDK 在你的處理程序內執行 OpenCode，使用你的設定和模型，其具型別的用戶端可以建立工作階段、傳送提示詞並串流每個事件。",
       features: {
-        "typescript-client": { title: "TypeScript 用戶端", body: "具型別的請求和事件，與 @opencode/client 的值相同。" },
+        "typescript-client": { title: "TypeScript 用戶端", body: "具型別的請求和事件，與 @Mackery6969/client 的值相同。" },
         "sessions-from-code": { title: "用程式碼建立工作階段", body: "在任何腳本中建立工作階段並傳送提示詞。" },
         "any-model": { title: "任何模型", body: "使用你的 OpenCode 設定中的任何模型。" },
-        "npm-or-bun": { title: "npm 或 bun", body: "使用 npm i @opencode/sdk 或 bun add @opencode/sdk 安裝。" },
+        "npm-or-bun": { title: "npm 或 bun", body: "使用 npm i @Mackery6969/sdk 或 bun add @Mackery6969/sdk 安裝。" },
         "in-process-host": { title: "同處理程序主機", body: "在記憶體中執行 OpenCode，不經過網路。" },
         "your-plugins": { title: "你的外掛", body: "建立同處理程序主機時傳入你自己的外掛。" },
         "promise-or-effect": { title: "Promise 或 Effect", body: "Promise API 和 Effect API，回傳相同的值。" },

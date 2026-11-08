@@ -6,7 +6,7 @@ import type {
   SessionMessageShell,
   SessionMessageUser,
   SessionStatus,
-} from "@opencode/client/promise"
+} from "@Mackery6969/client/promise"
 import { Effect, Option, Predicate, Schema } from "effect"
 import { createComputed, createMemo, createSignal, mapArray, type Accessor } from "solid-js"
 import {

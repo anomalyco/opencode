@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
-import { SdkPlugins } from "@opencode/core/plugin/sdk"
-import { Plugin } from "@opencode/plugin/effect"
+import { SdkPlugins } from "@Mackery6969/core/plugin/sdk"
+import { Plugin } from "@Mackery6969/plugin/effect"
 import { Context, Deferred, Effect, Fiber, Layer } from "effect"
 import { HttpEffect, HttpRouter, HttpServer } from "effect/http"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
@@ -27,7 +27,7 @@ it.live(
               providers: {
                 custom: {
                   name: "Configured Custom Provider",
-                  package: "@opencode/ai/providers/openai-compatible",
+                  package: "@Mackery6969/ai/providers/openai-compatible",
                   settings: { apiKey: "secret" },
                   models: { chat: {} },
                 },

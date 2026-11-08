@@ -1,4 +1,4 @@
-import type { UsagePoint } from "@opencode/stats-core/domain/home"
+import type { UsagePoint } from "@Mackery6969/stats-core/domain/home"
 import { translate } from "../i18n"
 import {
   catalogModelPath,

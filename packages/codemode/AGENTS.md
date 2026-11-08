@@ -1,4 +1,4 @@
-# @opencode/codemode
+# @Mackery6969/codemode
 
 - `interpreter-support.md` is a checklist, not a changelog: check off newly added support and add unchecked items for significant gaps. Leave it alone for fixes and refactors.
 - Program values are `Value` (`src/interpreter/objects.ts`). Host values are `unknown` and enter only through `fromHost` and `fromJson`; do not widen program-facing signatures to `unknown`.

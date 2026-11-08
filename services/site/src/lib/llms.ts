@@ -49,7 +49,7 @@ export async function llmsText(locale: Locale) {
       docs("Providers", "/providers/", "connect model providers"),
       docs("Agents", "/agents/", "built-in and custom agents"),
       docs("CLI", "/cli/", "the terminal interface and its commands"),
-      docs("SDK", "/build/sdk/", "run OpenCode inside your own app with @opencode/sdk"),
+      docs("SDK", "/build/sdk/", "run OpenCode inside your own app with @Mackery6969/sdk"),
       docs("JavaScript client", "/build/client/", "connect to a running OpenCode server from your own code"),
       docs("Console", "/console/", "OpenCode Console: models, Go subscriptions and workspaces"),
       docs("Migrate from V1", "/migrate-v1/", "upgrade from OpenCode 1"),

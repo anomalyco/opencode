@@ -185,7 +185,7 @@ export const voiceAnswers: VoiceAnswer[] = [
     asks: ["is opencode open source", "where is the source code", "github", "license", "can i contribute"],
     keys: ["open", "source", "github", "license", "mit", "contribute", "stars", "repo"],
     text: "Yes. OpenCode is fully open source under the MIT license. It has over 220,000 GitHub stars and more than 1,000 contributors, and anyone can file issues or send pull requests.",
-    links: [{ label: "GitHub", href: "https://github.com/anomalyco/opencode" }],
+    links: [{ label: "GitHub", href: "https://github.com/Mackery6969/opencode" }],
   },
   {
     id: "extensions",

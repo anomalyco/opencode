@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { WorktreeDirectory } from "@opencode/client/promise"
+import type { WorktreeDirectory } from "@Mackery6969/client/promise"
 import {
   createLocationMissingState,
   selectLocationMissingView,

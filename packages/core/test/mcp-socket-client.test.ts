@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Client, type JSONRPCMessage } from "@modelcontextprotocol/client"
 import { fromJsonSchema, McpServer } from "@modelcontextprotocol/server"
-import { McpSocketClient } from "@opencode/core/mcp/socket-client"
+import { McpSocketClient } from "@Mackery6969/core/mcp/socket-client"
 
 function fakeSocket() {
   const socket = {

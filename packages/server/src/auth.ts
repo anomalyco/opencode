@@ -15,7 +15,7 @@ export type Info = {
 
 export const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60
 
-export class Config extends Context.Service<Config, Info>()("@opencode/ServerAuthConfig") {
+export class Config extends Context.Service<Config, Info>()("@Mackery6969/ServerAuthConfig") {
   static configLayer(input: Pick<Info, "password">) {
     return Layer.succeed(this, this.of({ ...input, username: "opencode" }))
   }

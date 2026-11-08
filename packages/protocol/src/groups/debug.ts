@@ -1,4 +1,4 @@
-import { Location } from "@opencode/schema/location"
+import { Location } from "@Mackery6969/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
 import { InvalidRequestError, UnknownError } from "../errors.js"

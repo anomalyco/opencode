@@ -1,4 +1,4 @@
-import { base64Encode } from "@opencode/util/encode"
+import { base64Encode } from "@Mackery6969/util/encode"
 import { expect, test, type Locator } from "@playwright/test"
 import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, provider, session } from "../utils/app"
 import { mockOpenCodeServer, mockServers } from "../utils/mock-server"

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { motionTuning } from "@opencode/ui/motion-tuning"
+import { motionTuning } from "@Mackery6969/ui/motion-tuning"
 import { sameMotion, storyMotion } from "./motion"
 
 test("a remounted story's replay buttons rebuild the inspector, though their ids match", () => {

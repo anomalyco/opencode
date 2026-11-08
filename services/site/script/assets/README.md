@@ -7,7 +7,7 @@ Status: **terminal is automated** (`script/capture-assets.ts`). The other surfac
 
 ## 1. Current assets (Nov 2 2026)
 
-Latest release: **v2.2.5** (Oct 30 2026). Source: `gh api 'repos/anomalyco/opencode/releases?per_page=8'`.
+Latest release: **v2.2.5** (Oct 30 2026). Source: `gh api 'repos/Mackery6969/opencode/releases?per_page=8'`.
 
 | Used on                     | File                                                                   | Source                                                                         | Shows                                                                                                                           | Size                       | Mode | Problem                                                                                      |
 | --------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | ---- | -------------------------------------------------------------------------------------------- |
@@ -93,7 +93,7 @@ The SDK has no UI. Two options:
 1. **Terminal capture (preferred).** Add a second VHS tape that opens the snippet in nvim and runs it in a split. This exists as a recording in `real-cli/term/gen.py` (`sdk2-*`). Move it into `capture-assets.ts` as `surfaces.sdk`, with the same stub model (it already replays the SDK steps) and `Screenshot` instead of video.
 2. **Static render.** Render the snippet from `src/component/site/products.tsx` with Shiki and the OpenCode light and dark syntax themes in headless Chromium at 2×. This is simple and fully deterministic, but it does not show the product running.
 
-The site's `sdkSnippet` shows the v2 `@opencode/sdk` API (`OpenCode.create()`); render that.
+The site's `sdkSnippet` shows the v2 `@Mackery6969/sdk` API (`OpenCode.create()`); render that.
 
 ### Web: Playwright against `packages/app` (not automated yet)
 
@@ -124,7 +124,7 @@ Until then, the web capture with the desktop window chrome (vertical tabs, title
 
 ### Mobile: iOS Simulator (not automated yet)
 
-The `real-ios` recording builds `anomalyco/opencode-ios` in the simulator, drives it with XCUITest and talks to a local demo server with the stub model. For stills:
+The `real-ios` recording builds `Mackery6969/opencode-ios` in the simulator, drives it with XCUITest and talks to a local demo server with the stub model. For stills:
 
 ```sh
 xcrun simctl boot "iPhone 17 Pro"
@@ -183,7 +183,7 @@ jobs:
       - env: { TAG: "${{ github.event.release.tag_name }}" }
         run: |
           VERSION="${TAG#v}"
-          bun add -g --trust "@opencode/cli@${VERSION:-latest}"
+          bun add -g --trust "@Mackery6969/cli@${VERSION:-latest}"
       - run: bun install
       - name: Capture
         working-directory: packages/console/app

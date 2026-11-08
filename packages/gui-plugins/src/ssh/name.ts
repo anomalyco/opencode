@@ -1,4 +1,4 @@
-import type { ServerState } from "@opencode/plugin/gui"
+import type { ServerState } from "@Mackery6969/plugin/gui"
 import type { SshConfig, SshItem } from "./contract"
 
 export function sshHostname(target: string) {

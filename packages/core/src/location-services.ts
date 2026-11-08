@@ -1,5 +1,5 @@
 import { Context, Duration, Effect, Exit, Layer, LayerMap, MutableHashMap, Option, Scope } from "effect"
-import { LayerNode } from "@opencode/util/effect/layer-node"
+import { LayerNode } from "@Mackery6969/util/effect/layer-node"
 import { Instance } from "./instance.js"
 import { Location } from "./location.js"
 import { LocationLifecycle } from "./location-lifecycle.js"

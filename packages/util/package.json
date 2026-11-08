@@ -1,12 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode/util",
+  "name": "@Mackery6969/util",
   "version": "2.2.5",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anomalyco/opencode.git",
+    "url": "git+https://github.com/Mackery6969/opencode.git",
     "directory": "packages/util"
   },
   "publishConfig": {

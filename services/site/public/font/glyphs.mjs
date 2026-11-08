@@ -1,5 +1,5 @@
 // Normalized outlines from the official OpenCode SVG wordmark (24 × 42).
-// https://github.com/anomalyco/opencode/blob/dev/packages/ui/src/components/logo.tsx
+// https://github.com/Mackery6969/opencode/blob/dev/packages/ui/src/components/logo.tsx
 export const GLYPHS = {
   o: { shadow: 'M18 30H6V18H18V30Z', ink: 'M18 12H6V30H18V12ZM24 36H0V6H24V36Z' },
   p: { shadow: 'M18 30H6V18H18V30Z', ink: 'M6 30H18V12H6V30ZM24 36H6V42H0V6H24V36Z' },

@@ -1,4 +1,4 @@
-import { createSimpleContext } from "@opencode/ui/context"
+import { createSimpleContext } from "@Mackery6969/ui/context"
 import { translate, type Key } from "../i18n"
 import { useLanguage } from "./language"
 

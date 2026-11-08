@@ -1,6 +1,6 @@
 # OpenCode V2 Promise Plugin API
 
-The Promise plugin API at `@opencode/plugin` is the async/await equivalent of `@opencode/plugin/effect`. It grants plugins the same two in-process capabilities:
+The Promise plugin API at `@Mackery6969/plugin` is the async/await equivalent of `@Mackery6969/plugin/effect`. It grants plugins the same two in-process capabilities:
 
 - `hook` installs behavior at an OpenCode extension point.
 - `reload` reruns every transform hook for a stateful domain.
@@ -12,7 +12,7 @@ editor callbacks remain synchronous.
 ## Defining A Plugin
 
 ```ts
-import { Plugin } from "@opencode/plugin"
+import { Plugin } from "@Mackery6969/plugin"
 
 export default Plugin.define({
   id: "example",

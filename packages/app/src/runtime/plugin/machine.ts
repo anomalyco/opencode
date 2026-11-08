@@ -1,4 +1,4 @@
-import { pluginEnabled, type EnableState, type Installed } from "@opencode/plugin/gui/host"
+import { pluginEnabled, type EnableState, type Installed } from "@Mackery6969/plugin/gui/host"
 
 /** Main's reply to the one installed-list request, while it has not answered or after it failed. */
 export type ListRequest = { readonly status: "loading" } | { readonly status: "failed"; readonly error: string }

@@ -9,7 +9,7 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { Cause, Effect, Tracer } from "effect"
 import type { SqlClient } from "effect/sql/SqlClient"
 import { isSqlError } from "effect/sql/SqlError"
-import { EffectDrizzleSqlite } from "@opencode/core/database/drizzle"
+import { EffectDrizzleSqlite } from "@Mackery6969/core/database/drizzle"
 import { EffectDrizzleQueryError } from "drizzle-orm/effect-core/errors"
 
 const users = sqliteTable("users", {

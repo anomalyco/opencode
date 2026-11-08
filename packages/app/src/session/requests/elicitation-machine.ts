@@ -1,4 +1,4 @@
-import type { FormAnswer, FormInfo, FormValue } from "@opencode/client/promise"
+import type { FormAnswer, FormInfo, FormValue } from "@Mackery6969/client/promise"
 
 // A reply or dismissal that never settles gives the dock back after this long, so it cannot stay disabled forever.
 export const ELICITATION_REQUEST_TIMEOUT_MS = 30_000

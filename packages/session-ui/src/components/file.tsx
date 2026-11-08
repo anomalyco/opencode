@@ -1,4 +1,4 @@
-import { sampledChecksum } from "@opencode/util/encode"
+import { sampledChecksum } from "@Mackery6969/util/encode"
 import {
   areOptionsEqual,
   DEFAULT_VIRTUAL_FILE_METRICS,

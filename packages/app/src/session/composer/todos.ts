@@ -1,4 +1,4 @@
-import type { SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessageInfo } from "@Mackery6969/client/promise"
 
 export type TodoStatus = "pending" | "in_progress" | "completed" | "cancelled"
 

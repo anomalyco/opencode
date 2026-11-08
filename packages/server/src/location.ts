@@ -1,10 +1,10 @@
-import { FileSystem } from "@opencode/core/filesystem"
-import { Location } from "@opencode/core/location"
-import { Plugin } from "@opencode/core/plugin"
-import { LocationServiceMap } from "@opencode/core/location-services"
-import { AbsolutePath } from "@opencode/core/schema"
-import { Session } from "@opencode/core/session"
-import { LocationNotFoundError, InvalidRequestError, ServiceUnavailableError } from "@opencode/protocol/errors"
+import { FileSystem } from "@Mackery6969/core/filesystem"
+import { Location } from "@Mackery6969/core/location"
+import { Plugin } from "@Mackery6969/core/plugin"
+import { LocationServiceMap } from "@Mackery6969/core/location-services"
+import { AbsolutePath } from "@Mackery6969/core/schema"
+import { Session } from "@Mackery6969/core/session"
+import { LocationNotFoundError, InvalidRequestError, ServiceUnavailableError } from "@Mackery6969/protocol/errors"
 import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/http"
 import { HttpApiMiddleware } from "effect/http-api"
@@ -13,7 +13,7 @@ import { missingSession } from "./handlers/session-error"
 export type LocationServices = Layer.Success<ReturnType<(typeof LocationServiceMap.Service)["get"]>>
 
 export class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddleware, { provides: LocationServices }>()(
-  "@opencode/HttpApiLocation",
+  "@Mackery6969/HttpApiLocation",
   { error: [LocationNotFoundError] },
 ) {}
 

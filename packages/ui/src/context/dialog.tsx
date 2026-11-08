@@ -18,7 +18,7 @@ import {
 } from "solid-js"
 import { Dialog as Kobalte } from "@kobalte/core/dialog"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { uuid } from "@opencode/util/uuid"
+import { uuid } from "@Mackery6969/util/uuid"
 import {
   createDialogStackState,
   selectLayerClosing,

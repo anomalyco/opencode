@@ -6,7 +6,7 @@ import {
   PositiveInt,
   RelativePath,
   statics,
-} from "@opencode/schema/schema"
+} from "@Mackery6969/schema/schema"
 
 export { AbsolutePath, DateTimeUtcFromMillis, NonNegativeInt, optional, PositiveInt, RelativePath, statics }
 

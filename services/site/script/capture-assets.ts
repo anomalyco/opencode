@@ -273,7 +273,7 @@ async function writeTerminalFixture(home: string, mode: string, port: number) {
         providers: {
           demo: {
             name: "OpenCode",
-            package: "@opencode/ai/providers/openai-compatible",
+            package: "@Mackery6969/ai/providers/openai-compatible",
             settings: { baseURL: `http://127.0.0.1:${port}/v1`, apiKey: "demo" },
             models: { "claude-opus-5-5": { name: "Claude Opus 5.5" } },
           },

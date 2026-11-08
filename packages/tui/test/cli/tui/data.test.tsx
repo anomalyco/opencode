@@ -1,9 +1,9 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
-import type { OpenCodeEvent } from "@opencode/client"
-import { SessionMessage } from "@opencode/core/session/message"
-import { Event } from "@opencode/schema/event"
+import type { OpenCodeEvent } from "@Mackery6969/client"
+import { SessionMessage } from "@Mackery6969/core/session/message"
+import { Event } from "@Mackery6969/schema/event"
 import { Expected } from "../../../../core/test/lib/session-message"
 import { createEffect, onMount, type ParentProps } from "solid-js"
 import { ConfigProvider } from "../../../src/config"

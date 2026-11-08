@@ -1,4 +1,4 @@
-import type { ModelInfo, SessionMessageAssistant } from "@opencode/client"
+import type { ModelInfo, SessionMessageAssistant } from "@Mackery6969/client"
 import { TextAttributes } from "@opentui/core"
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { useData } from "../context/data"

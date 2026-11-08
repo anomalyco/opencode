@@ -11,9 +11,9 @@ import fs from "fs/promises"
 import { mkdirSync, realpathSync, rmSync } from "fs"
 import os from "os"
 import path from "path"
-import type { LLMEvent } from "@opencode/ai/effect"
-import { Global } from "@opencode/util/global"
-import { AppProcess } from "@opencode/util/process"
+import type { LLMEvent } from "@Mackery6969/ai/effect"
+import { Global } from "@Mackery6969/util/global"
+import { AppProcess } from "@Mackery6969/util/process"
 import { Effect, Layer, Logger, ManagedRuntime, Stream } from "effect"
 import { AppNodeBuilder } from "../src/effect/app-node-builder"
 import { Git } from "../src/git"
@@ -235,11 +235,11 @@ const trace = [
 export async function session(snapshots: "on" | "off", ttft: number) {
   // Loaded here, not at the top: the snapshot cases then load at git refs whose session and model
   // APIs differ, and the first session call (a warmup run) pays for the import.
-  const { ai, LanguageModel } = await import("@opencode/ai/effect")
-  const { OpenAIChat } = await import("@opencode/ai/protocols/openai-chat")
-  const { TestLLM } = await import("@opencode/ai/testing")
-  const { LayerNode } = await import("@opencode/util/effect/layer-node")
-  const { Money } = await import("@opencode/schema/money")
+  const { ai, LanguageModel } = await import("@Mackery6969/ai/effect")
+  const { OpenAIChat } = await import("@Mackery6969/ai/protocols/openai-chat")
+  const { TestLLM } = await import("@Mackery6969/ai/testing")
+  const { LayerNode } = await import("@Mackery6969/util/effect/layer-node")
+  const { Money } = await import("@Mackery6969/schema/money")
   const { Agent } = await import("../src/agent")
   const { Bus } = await import("../src/bus")
   const { Database } = await import("../src/database/database")

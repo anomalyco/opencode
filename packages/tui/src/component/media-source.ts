@@ -1,4 +1,4 @@
-import { mediaHashFromUri } from "@opencode/client"
+import { mediaHashFromUri } from "@Mackery6969/client"
 import { createEffect, createSignal, on, onCleanup, useContext, type Accessor } from "solid-js"
 import { ClientContext } from "../context/client"
 

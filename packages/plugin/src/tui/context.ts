@@ -22,8 +22,8 @@ import type {
   ShellInfo,
   SkillInfo,
   VcsInfo,
-} from "@opencode/client"
-import type { ResolvedTheme } from "@opencode/theme/tui"
+} from "@Mackery6969/client"
+import type { ResolvedTheme } from "@Mackery6969/theme/tui"
 import type { CliRenderer, KeyEvent, MarkdownCodeBlockRenderer, Renderable } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
 import type { Store } from "solid-js/store"

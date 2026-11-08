@@ -1,6 +1,6 @@
 // @ts-nocheck
-import { Button } from "@opencode/ui/button"
-import { useDialog } from "@opencode/ui/context/dialog"
+import { Button } from "@Mackery6969/ui/button"
+import { useDialog } from "@Mackery6969/ui/context/dialog"
 import { createSignal, onMount } from "solid-js"
 import { DialogSelectModelUnpaid } from "./unpaid"
 import { DialogStoryRuntime } from "@/components-lab/dialog-story-runtime"

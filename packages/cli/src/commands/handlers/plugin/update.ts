@@ -1,6 +1,6 @@
 import { EOL } from "node:os"
 import { Cause, Effect, Exit, Option } from "effect"
-import { Npm } from "@opencode/util/npm"
+import { Npm } from "@Mackery6969/util/npm"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { inspect } from "./inventory"

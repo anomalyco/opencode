@@ -1,5 +1,5 @@
 import { app, bench, command, type LaunchContext, type Milestone } from "@hona/strobe"
-import { Service } from "@opencode/client/service"
+import { Service } from "@Mackery6969/client/service"
 import { spawn, spawnSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { basename, dirname, join } from "node:path"

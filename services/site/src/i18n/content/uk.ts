@@ -151,14 +151,14 @@ export const content = {
       features: {
         "typescript-client": {
           title: "TypeScript-клієнт",
-          body: "Типізовані запити й події, ті самі значення, що й у @opencode/client.",
+          body: "Типізовані запити й події, ті самі значення, що й у @Mackery6969/client.",
         },
         "sessions-from-code": {
           title: "Сесії з коду",
           body: "Створюйте сесії й надсилайте промпти з будь-якого скрипта.",
         },
         "any-model": { title: "Будь-яка модель", body: "Використовує моделі, налаштовані у вашому OpenCode." },
-        "npm-or-bun": { title: "npm або bun", body: "Встановіть через npm i @opencode/sdk або bun add @opencode/sdk." },
+        "npm-or-bun": { title: "npm або bun", body: "Встановіть через npm i @Mackery6969/sdk або bun add @Mackery6969/sdk." },
         "in-process-host": { title: "Хост у процесі", body: "Запускає OpenCode у пам'яті, без мережевих запитів." },
         "your-plugins": { title: "Ваші плагіни", body: "Передайте свої плагіни під час створення хоста в процесі." },
         "promise-or-effect": {

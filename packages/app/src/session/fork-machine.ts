@@ -1,4 +1,4 @@
-import type { SessionInfo } from "@opencode/client/promise"
+import type { SessionInfo } from "@Mackery6969/client/promise"
 import type { ContextItem, Prompt } from "@/composer/schema"
 
 export const FORK_TIMEOUT_MS = 30_000

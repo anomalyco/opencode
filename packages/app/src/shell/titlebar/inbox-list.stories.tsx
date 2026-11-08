@@ -1,4 +1,4 @@
-import { Button } from "@opencode/ui/button"
+import { Button } from "@Mackery6969/ui/button"
 import { createEffect, createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { InboxSessionCard, InboxSessionList } from "./inbox"

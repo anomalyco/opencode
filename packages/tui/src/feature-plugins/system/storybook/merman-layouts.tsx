@@ -1,4 +1,4 @@
-import type { Plugin } from "@opencode/plugin/tui"
+import type { Plugin } from "@Mackery6969/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createSignal, Show } from "solid-js"
 import { useTheme, useThemes } from "../../../context/theme"

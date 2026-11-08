@@ -1,6 +1,6 @@
 import { createSignal, onCleanup, Show, untrack } from "solid-js"
-import { Loader } from "@opencode/ui/loader"
-import { usePlugin } from "@opencode/plugin/gui"
+import { Loader } from "@Mackery6969/ui/loader"
+import { usePlugin } from "@Mackery6969/plugin/gui"
 import { createOfficeWorker, type WorkerClient } from "./office-worker"
 import { OfficePages, type PaintPage } from "./pages"
 import { paper } from "./paper"
@@ -20,7 +20,7 @@ import {
   type VectorRequest,
 } from "./slide-protocol"
 import { SupersededError, WorkerClosedError } from "./worker-rpc"
-import type { FileViewerProps } from "@opencode/plugin/gui/file"
+import type { FileViewerProps } from "@Mackery6969/plugin/gui/file"
 
 type Client = WorkerClient<SlideMethods>
 

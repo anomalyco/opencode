@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { chmod, stat, writeFile } from "node:fs/promises"
 import path from "path"
 import { Effect, Layer } from "effect"
-import { Database } from "@opencode/core/database/database"
-import { Global } from "@opencode/util/global"
+import { Database } from "@Mackery6969/core/database/database"
+import { Global } from "@Mackery6969/util/global"
 import { tmpdir } from "./fixture/tmpdir"
 
 // Read while the connection is open: SQLite may remove the sidecars on close.

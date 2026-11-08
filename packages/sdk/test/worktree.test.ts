@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { mkdir, rm } from "node:fs/promises"
 import { join } from "node:path"
-import { Plugin } from "@opencode/plugin"
+import { Plugin } from "@Mackery6969/plugin"
 import { initRepo } from "../../core/test/fixture/git"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { OpenCode } from "../src"

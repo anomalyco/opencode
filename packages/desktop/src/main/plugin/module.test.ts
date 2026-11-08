@@ -7,7 +7,7 @@ import { evaluateMain } from "./module"
 const bundle = `
 const web = require("solid-js/web")
 const path = require("node:path")
-const sdk = require("@opencode/plugin/gui")
+const sdk = require("@Mackery6969/plugin/gui")
 const tmpl = web.template("<p>Notes</p>")
 web.delegateEvents(["click"])
 exports.default = sdk.Plugin.define({

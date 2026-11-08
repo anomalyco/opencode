@@ -1,6 +1,6 @@
 import { createEffect, For, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { prefersReducedMotion } from "@opencode/ui/motion"
+import { prefersReducedMotion } from "@Mackery6969/ui/motion"
 
 const target = ["o", "p", "e", "n", "c", "o", "d", "e"] as const
 

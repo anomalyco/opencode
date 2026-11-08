@@ -1,6 +1,6 @@
-import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
+import type { OpenCodeEvent, SessionMessageInfo } from "@Mackery6969/client/promise"
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import { base64Encode } from "@opencode/util/encode"
+import { base64Encode } from "@Mackery6969/util/encode"
 import { SERVER, holdRoute, project, provider, session } from "../utils/app"
 import { browseFiles, openFileLauncher, openReviewLauncher, reviewTabs } from "../utils/side-panel"
 import { mockOpenCodeServer } from "../utils/mock-server"

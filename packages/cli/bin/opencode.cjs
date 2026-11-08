@@ -38,7 +38,7 @@ const sourceCommand = nodeBuild ? "opencode2-node" : "opencode"
 const cached = path.join(scriptDir, `.${command}`)
 const platform = { darwin: "darwin", linux: "linux", win32: "windows" }[os.platform()] || os.platform()
 const arch = { x64: "x64", arm64: "arm64", arm: "arm" }[os.arch()] || os.arch()
-const base = `@opencode/cli${nodeBuild ? "-node" : ""}-` + platform + "-" + arch
+const base = `@Mackery6969/cli${nodeBuild ? "-node" : ""}-` + platform + "-" + arch
 const binary = platform === "windows" ? `${sourceCommand}.exe` : sourceCommand
 
 function supportsAvx2() {

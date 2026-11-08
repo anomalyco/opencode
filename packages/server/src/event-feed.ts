@@ -1,8 +1,8 @@
 export * as EventFeed from "./event-feed"
 
-import { Bus } from "@opencode/core/bus"
-import { Event } from "@opencode/schema/event"
-import { isOpenCodeEvent, type OpenCodeEvent } from "@opencode/protocol/groups/event"
+import { Bus } from "@Mackery6969/core/bus"
+import { Event } from "@Mackery6969/schema/event"
+import { isOpenCodeEvent, type OpenCodeEvent } from "@Mackery6969/protocol/groups/event"
 import { Cause, Context, Effect, Layer, Queue, Schema, Scope, Stream } from "effect"
 
 export const SubscriberCapacity = 4_096
@@ -24,7 +24,7 @@ export interface Interface {
   readonly subscribe: (types?: ReadonlyArray<string>) => Effect.Effect<Stream.Stream<string, Error>, never, Scope.Scope>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/server/EventFeed") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/server/EventFeed") {}
 
 export function frame(event: OpenCodeEvent) {
   return `data: ${JSON.stringify(event)}\n\n`

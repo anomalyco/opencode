@@ -657,7 +657,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: npm install --global @opencode/cli
+      - run: npm install --global @Mackery6969/cli
       - run: opencode run --standalone --model opencode/claude-opus-5-5 "Review this repository"`
 
 const env = `# Loaded by your shell or CI, never committed

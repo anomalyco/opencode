@@ -1,5 +1,5 @@
-import { getStatsHomeData } from "@opencode/stats-core/domain/home"
-import { runtime } from "@opencode/stats-core/runtime"
+import { getStatsHomeData } from "@Mackery6969/stats-core/domain/home"
+import { runtime } from "@Mackery6969/stats-core/runtime"
 import {
   canonicalFamilyComparisonPath,
   canonicalModelComparisonPath,

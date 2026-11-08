@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { BridgeMenubarItem } from "@opencode/plugin/gui/host"
+import type { BridgeMenubarItem } from "@Mackery6969/plugin/gui/host"
 import {
   createPluginBridgeState,
   selectPluginSubscriptions,

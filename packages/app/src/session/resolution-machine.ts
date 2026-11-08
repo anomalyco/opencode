@@ -1,4 +1,4 @@
-import { isFallbackTitle } from "@opencode/util/session-title-fallback"
+import { isFallbackTitle } from "@Mackery6969/util/session-title-fallback"
 import { isSessionNotFoundError } from "@/runtime/server/errors"
 import type { ServerHealth } from "@/runtime/server/health-machine"
 

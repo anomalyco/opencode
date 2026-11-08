@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url"
 
 export type RuntimeModuleLoader = () => Record<string, unknown> | Promise<Record<string, unknown>>
 
-const runtimePackages = ["effect", "@opencode/plugin"] as const
+const runtimePackages = ["effect", "@Mackery6969/plugin"] as const
 
 export function resolveHostPackageRoots(from = import.meta.dir, packages: readonly string[] = runtimePackages) {
   return packages.flatMap((pkgName) => {
@@ -29,7 +29,7 @@ export function discoverPluginRuntimeSpecifiers(
   const entries = new Map<string, string>()
   for (const pkgName of packages) {
     const realDir = path.dirname(Bun.resolveSync(`${pkgName}/package.json`, from))
-    // Resolve workspace @opencode/plugin paths via node_modules so OpenTUI does not wrap host files in async rewrite loaders.
+    // Resolve workspace @Mackery6969/plugin paths via node_modules so OpenTUI does not wrap host files in async rewrite loaders.
     const loadDir = findNodeModulesDir(pkgName, from, realDir)
     const toLoadPath = (resolved: string) =>
       loadDir === realDir ? resolved : path.join(loadDir, path.relative(realDir, resolved))

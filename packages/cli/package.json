@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode/cli",
+  "name": "@Mackery6969/cli",
   "version": "2.2.5",
   "type": "module",
   "license": "MIT",
@@ -30,13 +30,13 @@
     "@clack/core": "1.0.0-alpha.1",
     "@clack/prompts": "1.0.0-alpha.1",
     "@effect/platform-node": "catalog:",
-    "@opencode/client": "workspace:*",
-    "@opencode/plugin": "workspace:*",
-    "@opencode/pty": "0.4.0",
-    "@opencode/schema": "workspace:*",
-    "@opencode/server": "workspace:*",
-    "@opencode/tui": "workspace:*",
-    "@opencode/util": "workspace:*",
+    "@Mackery6969/client": "workspace:*",
+    "@Mackery6969/plugin": "workspace:*",
+    "@Mackery6969/pty": "0.4.0",
+    "@Mackery6969/schema": "workspace:*",
+    "@Mackery6969/server": "workspace:*",
+    "@Mackery6969/tui": "workspace:*",
+    "@Mackery6969/util": "workspace:*",
     "@opentui/core": "catalog:",
     "@opentui/solid": "catalog:",
     "@opentunnel/client": "0.6.1",
@@ -52,8 +52,8 @@
     "ws": "8.21.0"
   },
   "devDependencies": {
-    "@opencode/script": "workspace:*",
-    "@opencode/protocol": "workspace:*",
+    "@Mackery6969/script": "workspace:*",
+    "@Mackery6969/protocol": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native": "catalog:",
@@ -84,7 +84,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anomalyco/opencode.git",
+    "url": "git+https://github.com/Mackery6969/opencode.git",
     "directory": "packages/cli"
   }
 }

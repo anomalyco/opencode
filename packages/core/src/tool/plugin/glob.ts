@@ -1,7 +1,7 @@
 export * as GlobTool from "./glob.js"
 
-import { ToolFailure } from "@opencode/ai/effect"
-import type { Context } from "@opencode/plugin/effect/plugin"
+import { ToolFailure } from "@Mackery6969/ai/effect"
+import type { Context } from "@Mackery6969/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
 import path from "path"
 import { toolFailure } from "../runtime.js"

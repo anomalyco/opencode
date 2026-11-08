@@ -10,22 +10,22 @@ import {
   QuotaExceededError,
   RateLimitError,
   TransportError,
-} from "@opencode/ai/effect"
-import { RequestExecutor } from "@opencode/ai/route"
-import { OpenAIChat } from "@opencode/ai/protocols"
-import { TestLLM } from "@opencode/ai/testing"
-import { AISDK } from "@opencode/core/aisdk"
-import { Credential } from "@opencode/core/credential"
-import { Generate } from "@opencode/core/generate"
-import { Integration } from "@opencode/core/integration"
-import { IntegrationConnection } from "@opencode/core/integration/connection"
-import { ModelResolver } from "@opencode/core/model-resolver"
-import { ModelsDev } from "@opencode/core/models-dev"
-import { ID, Info, Model, Ref, VariantID } from "@opencode/core/model"
-import { Provider } from "@opencode/core/provider"
-import { Variant } from "@opencode/core/variant"
-import { Money } from "@opencode/schema/money"
-import { Npm } from "@opencode/util/npm"
+} from "@Mackery6969/ai/effect"
+import { RequestExecutor } from "@Mackery6969/ai/route"
+import { OpenAIChat } from "@Mackery6969/ai/protocols"
+import { TestLLM } from "@Mackery6969/ai/testing"
+import { AISDK } from "@Mackery6969/core/aisdk"
+import { Credential } from "@Mackery6969/core/credential"
+import { Generate } from "@Mackery6969/core/generate"
+import { Integration } from "@Mackery6969/core/integration"
+import { IntegrationConnection } from "@Mackery6969/core/integration/connection"
+import { ModelResolver } from "@Mackery6969/core/model-resolver"
+import { ModelsDev } from "@Mackery6969/core/models-dev"
+import { ID, Info, Model, Ref, VariantID } from "@Mackery6969/core/model"
+import { Provider } from "@Mackery6969/core/provider"
+import { Variant } from "@Mackery6969/core/variant"
+import { Money } from "@Mackery6969/schema/money"
+import { Npm } from "@Mackery6969/util/npm"
 import { Effect, Exit, Fiber, Layer } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClient, HttpClientResponse } from "effect/http"
@@ -280,26 +280,26 @@ describe("image and decision generation", () => {
     Info.make({
       ...Info.default(Provider.ID.openai, ID.make("gpt-image-1-mini")),
       type: "image",
-      package: "@opencode/ai/providers/openai/images",
+      package: "@Mackery6969/ai/providers/openai/images",
     }),
     Info.make({
       ...Info.default(Provider.ID.opencode, ID.make("gpt-image-2.5-sunburst")),
       type: "image",
-      package: "@opencode/ai/providers/openai/images",
+      package: "@Mackery6969/ai/providers/openai/images",
     }),
     Info.make({
       ...Info.default(Provider.ID.make("zai"), ID.make("glm-image")),
       type: "image",
-      package: "@opencode/ai/providers/zai/images",
+      package: "@Mackery6969/ai/providers/zai/images",
     }),
     Info.make({
       ...Info.default(Provider.ID.openai, ID.make("gpt-5")),
-      package: "@opencode/ai/providers/openai/responses",
+      package: "@Mackery6969/ai/providers/openai/responses",
     }),
     Info.make({
       ...Info.default(Provider.ID.make("openrouter"), ID.make("typesafe/jev-1.13")),
       type: "decision",
-      package: "@opencode/ai/providers/openrouter/decisions",
+      package: "@Mackery6969/ai/providers/openrouter/decisions",
     }),
   ].concat(
     decisionCatalog(),
@@ -307,7 +307,7 @@ describe("image and decision generation", () => {
       const gemini = Info.make({
         ...Info.default(Provider.ID.make("google"), ID.make("gemini-3.1-flash-image")),
         type: "image",
-        package: "@opencode/ai/providers/google/images",
+        package: "@Mackery6969/ai/providers/google/images",
       })
       return [{ ...gemini, variants: Variant.resolve(gemini, Variant.supports({ supported: true, effort: ["high"] })) }]
     })(),
@@ -614,7 +614,7 @@ function decisionCatalog() {
     api: {
       systemone: {
         base_url: "https://api.typesafe.ai/v1",
-        sdk: { opencodeai: "@opencode/ai/providers/typesafe-ai/decisions" },
+        sdk: { opencodeai: "@Mackery6969/ai/providers/typesafe-ai/decisions" },
         ...(compatibility ? { compatibility } : {}),
       },
     },

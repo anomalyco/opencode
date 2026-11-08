@@ -1,10 +1,10 @@
 export * as ConfigPluginSource from "./source.js"
 
-import { Directory, Document, type Entry } from "@opencode/schema/config"
-import { ConfigPlugin } from "@opencode/schema/config/plugin"
-import { FSUtil } from "@opencode/util/fs-util"
-import { Host } from "@opencode/plugin/host"
-import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { Directory, Document, type Entry } from "@Mackery6969/schema/config"
+import { ConfigPlugin } from "@Mackery6969/schema/config/plugin"
+import { FSUtil } from "@Mackery6969/util/fs-util"
+import { Host } from "@Mackery6969/plugin/host"
+import { makeLocationNode } from "@Mackery6969/util/effect/app-node"
 import { Context, Effect, Layer, Option, PubSub, Scope, Stream } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
@@ -31,7 +31,7 @@ export interface Interface {
   readonly changes: () => Stream.Stream<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/ConfigPluginSource") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/ConfigPluginSource") {}
 
 export const layer = Layer.effect(
   Service,

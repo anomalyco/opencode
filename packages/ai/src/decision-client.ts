@@ -19,7 +19,7 @@ export interface Interface {
   ) => Effect.Effect<DecisionResponseFor<Questions>, AIError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/AI/DecisionClient") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/AI/DecisionClient") {}
 
 export const generate = <Options extends DecisionOptions, const Questions extends DecisionQuestions>(
   request: DecisionRequest<DecisionModel<Options>, Questions>,

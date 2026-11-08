@@ -1,4 +1,4 @@
-import { getDirectory, getFilename } from "@opencode/util/path"
+import { getDirectory, getFilename } from "@Mackery6969/util/path"
 import {
   createComputed,
   createEffect,
@@ -22,12 +22,12 @@ import {
   type LineCommentEditorConfig,
   type LineCommentEditorEffect,
   type LineCommentEditorEvent,
-} from "@opencode/ui/line-comment/machine"
-import { Button } from "@opencode/ui/button"
-import { FileIcon } from "@opencode/ui/file-icon"
-import { Icon } from "@opencode/ui/icon"
+} from "@Mackery6969/ui/line-comment/machine"
+import { Button } from "@Mackery6969/ui/button"
+import { FileIcon } from "@Mackery6969/ui/file-icon"
+import { Icon } from "@Mackery6969/ui/icon"
 import { installLineCommentStyles } from "./line-comment-styles"
-import { useI18n } from "@opencode/ui/context/i18n"
+import { useI18n } from "@Mackery6969/ui/context/i18n"
 
 installLineCommentStyles()
 

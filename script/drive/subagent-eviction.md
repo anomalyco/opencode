@@ -50,7 +50,7 @@ duplicate the notification.
 | Background marker    | completed, unacknowledged | absent                      |
 
 The dynamic hold tool avoids the static adapter loading issue in
-[opencode-drive#116](https://github.com/anomalyco/opencode-drive/issues/116).
+[opencode-drive#116](https://github.com/Mackery6969/opencode-drive/issues/116).
 
 ## History
 

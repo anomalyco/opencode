@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import type { SessionMessageAssistant, SessionMessageInfo, ShellInfo } from "@opencode/client/promise"
-import { timelinePresets } from "@opencode/session-ui/timeline/detail"
+import type { SessionMessageAssistant, SessionMessageInfo, ShellInfo } from "@Mackery6969/client/promise"
+import { timelinePresets } from "@Mackery6969/session-ui/timeline/detail"
 import { createTwoFilesPatch } from "diff"
 import { readSessionDraftText } from "../utils/drafts"
 import { holdRoute } from "../utils/app"

@@ -102,10 +102,10 @@ export const content = {
       intro:
         "تحكّم في OpenCode من سكربتاتك ومهام CI وأدواتك. يشغّل SDK OpenCode داخل عمليتك، بإعداداتك ونماذجك، وينشئ عميله المُنمّط الجلسات ويرسل المطالبات ويبث كل حدث.",
       features: {
-        "typescript-client": { title: "عميل TypeScript", body: "طلبات وأحداث مُنمّطة، بنفس قيم @opencode/client." },
+        "typescript-client": { title: "عميل TypeScript", body: "طلبات وأحداث مُنمّطة، بنفس قيم @Mackery6969/client." },
         "sessions-from-code": { title: "جلسات من الكود", body: "أنشئ الجلسات وأرسل المطالبات من أي سكربت." },
         "any-model": { title: "أي نموذج", body: "يستخدم النماذج المضبوطة في إعداد OpenCode لديك." },
-        "npm-or-bun": { title: "npm أو bun", body: "ثبّته عبر npm i @opencode/sdk أو bun add @opencode/sdk." },
+        "npm-or-bun": { title: "npm أو bun", body: "ثبّته عبر npm i @Mackery6969/sdk أو bun add @Mackery6969/sdk." },
         "in-process-host": { title: "مضيف داخل العملية", body: "يشغّل OpenCode في الذاكرة، دون المرور بالشبكة." },
         "your-plugins": { title: "ملحقاتك", body: "مرّر ملحقاتك عند إنشاء المضيف داخل العملية." },
         "promise-or-effect": { title: "Promise أو Effect", body: "واجهة Promise API وواجهة Effect API بنفس القيم." },

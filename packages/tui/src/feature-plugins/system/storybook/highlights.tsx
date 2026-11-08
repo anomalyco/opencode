@@ -1,4 +1,4 @@
-import type { Plugin } from "@opencode/plugin/tui"
+import type { Plugin } from "@Mackery6969/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
 import { onMount } from "solid-js"
 import { DialogHighlights } from "../../../component/dialog-highlights"

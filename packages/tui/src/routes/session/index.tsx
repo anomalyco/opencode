@@ -43,7 +43,7 @@ import {
   type SessionMessageUser,
   type SessionInfo,
   type ModelInfo,
-} from "@opencode/client"
+} from "@Mackery6969/client"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
 import { FilePath } from "../../ui/file-path"
@@ -117,8 +117,8 @@ import { switchLabel } from "../../util/model"
 import { findMessageBoundary, messageNavigationSlack } from "./message-navigation"
 import { stringWidth } from "../../util/string-width"
 import { useArgs } from "../../context/args"
-import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
-import { SessionTurn } from "@opencode/util/session-turn"
+import { withTimestampedFallback } from "@Mackery6969/util/session-title-fallback"
+import { SessionTurn } from "@Mackery6969/util/session-turn"
 import { useSessionTabs, type ScrollAnchor } from "../../context/session-tabs"
 import { createSingleFlight } from "../../util/single-flight"
 import { createDelayedPresence } from "../../util/delayed-presence"

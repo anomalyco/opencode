@@ -19,7 +19,7 @@ const chunk = (delta: object, finishReason: string | null = null, usage?: object
 
 describe("Mistral Chat", () => {
   test("exposes native provider and protocol identities", async () => {
-    const entrypoint = await import("@opencode/ai/providers/mistral")
+    const entrypoint = await import("@Mackery6969/ai/providers/mistral")
 
     expect(Mistral.id).toBe("mistral")
     expect(MistralChat.protocol.id).toBe("mistral-chat")

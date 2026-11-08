@@ -13,19 +13,19 @@ import {
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { PreviewControls } from "@opencode/ui/preview-controls"
-import { useDialog } from "@opencode/ui/context/dialog"
-import { FileIcon } from "@opencode/ui/file-icon"
-import { Icon } from "@opencode/ui/icon"
-import { IconButton } from "@opencode/ui/icon-button"
-import { ImagePreview } from "@opencode/ui/image-preview"
-import { Loader } from "@opencode/ui/loader"
-import { showToast } from "@opencode/ui/toast"
-import { Markdown } from "@opencode/session-ui/markdown"
-import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
-import { artifactKind } from "@opencode/util/artifact"
-import { getDirectory, getFilename } from "@opencode/util/path"
-import { createKeyed, usePlugin, type FileContent, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
+import { PreviewControls } from "@Mackery6969/ui/preview-controls"
+import { useDialog } from "@Mackery6969/ui/context/dialog"
+import { FileIcon } from "@Mackery6969/ui/file-icon"
+import { Icon } from "@Mackery6969/ui/icon"
+import { IconButton } from "@Mackery6969/ui/icon-button"
+import { ImagePreview } from "@Mackery6969/ui/image-preview"
+import { Loader } from "@Mackery6969/ui/loader"
+import { showToast } from "@Mackery6969/ui/toast"
+import { Markdown } from "@Mackery6969/session-ui/markdown"
+import { MarkdownProvider, useMarkdown } from "@Mackery6969/session-ui/context/markdown"
+import { artifactKind } from "@Mackery6969/util/artifact"
+import { getDirectory, getFilename } from "@Mackery6969/util/path"
+import { createKeyed, usePlugin, type FileContent, type MountedSession, type SessionScreen } from "@Mackery6969/plugin/gui"
 import {
   blobUrlFromContent,
   bytesFromContent,
@@ -35,8 +35,8 @@ import {
   splitFrontmatter,
   type FrontmatterProperty,
 } from "./artifact"
-import { FileViewer } from "@opencode/plugin/gui/file"
-import { uuid } from "@opencode/util/uuid"
+import { FileViewer } from "@Mackery6969/plugin/gui/file"
+import { uuid } from "@Mackery6969/util/uuid"
 import { ArtifactToolbar } from "./artifact-toolbar"
 import {
   createArtifactViewerState,

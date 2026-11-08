@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test"
-import type { SessionMessageAssistantTool } from "@opencode/client/promise"
+import type { SessionMessageAssistantTool } from "@Mackery6969/client/promise"
 import {
   CliRenderEvents,
   MarkdownRenderable,

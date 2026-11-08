@@ -8,7 +8,7 @@ const evict = process.env.DEMO_EVICT !== "false"
 
 // Run with OPENCODE_DRIVE_DB=proof.sqlite. Only model output and fixture_hold are
 // simulated. The debug endpoint closes the real graph without waiting an hour.
-// Dynamic tools avoid the static adapter issue: anomalyco/opencode-drive#116.
+// Dynamic tools avoid the static adapter issue: Mackery6969/opencode-drive#116.
 export default OpenCodeDriver.use(
   {
     opencode: { dev: process.env.OPENCODE_DEV ?? process.cwd() },

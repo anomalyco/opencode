@@ -634,7 +634,7 @@ export function mountGoUpsellHero(canvas: HTMLCanvasElement) {
   // One event object for every frame, so the loop allocates nothing.
   const frame = { type: "frame" as const, attempt: 0, now: 0 }
 
-  // The app's Reduce Motion setting overrides the system preference, as in @opencode/ui/motion/reduced.
+  // The app's Reduce Motion setting overrides the system preference, as in @Mackery6969/ui/motion/reduced.
   const reduced = () => {
     const value = document.documentElement.getAttribute("data-motion")
 

@@ -1,9 +1,9 @@
 export * as ConfigInstructionPlugin from "./instruction.js"
 
-import { define } from "@opencode/plugin/effect/plugin"
-import { FSUtil } from "@opencode/util/fs-util"
-import { Global } from "@opencode/util/global"
-import { sameDirectory } from "@opencode/util/path"
+import { define } from "@Mackery6969/plugin/effect/plugin"
+import { FSUtil } from "@Mackery6969/util/fs-util"
+import { Global } from "@Mackery6969/util/global"
+import { sameDirectory } from "@Mackery6969/util/path"
 import path, { dirname, join } from "path"
 import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"

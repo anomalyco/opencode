@@ -1,4 +1,4 @@
-import { Plugin } from "@opencode/plugin/tui"
+import { Plugin } from "@Mackery6969/plugin/tui"
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createSignal, Show } from "solid-js"

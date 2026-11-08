@@ -1,9 +1,9 @@
-import type { FileSystem } from "@opencode/core/filesystem"
+import type { FileSystem } from "@Mackery6969/core/filesystem"
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Event } from "@opencode/schema/config"
-import { Money } from "@opencode/schema/money"
+import { Event } from "@Mackery6969/schema/config"
+import { Money } from "@Mackery6969/schema/money"
 import {
   Context,
   DateTime,
@@ -24,25 +24,25 @@ import {
   Stream,
 } from "effect"
 import { TestClock } from "effect/testing"
-import { Agent } from "@opencode/core/agent"
-import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
-import { LayerNode } from "@opencode/util/effect/layer-node"
-import { Global } from "@opencode/util/global"
-import { LocationServiceMap, type LocationServices } from "@opencode/core/location-services"
-import { LocationActivity } from "@opencode/core/location-activity"
-import { Location } from "@opencode/core/location"
-import { LocationLifecycle } from "@opencode/core/location-lifecycle"
-import { Config } from "@opencode/core/config"
-import { LocationWatcher } from "@opencode/core/filesystem/location-watcher"
-import { Plugin } from "@opencode/core/plugin"
-import { Model } from "@opencode/core/model"
-import { Project } from "@opencode/core/project"
-import { Provider } from "@opencode/core/provider"
-import { AbsolutePath } from "@opencode/core/schema"
-import { Session } from "@opencode/core/session"
-import { Workspace } from "@opencode/core/workspace"
-import { SessionEvent } from "@opencode/core/session/event"
-import { SessionRunnerModel } from "@opencode/core/session/runner/model"
+import { Agent } from "@Mackery6969/core/agent"
+import { AppNodeBuilder } from "@Mackery6969/core/effect/app-node-builder"
+import { LayerNode } from "@Mackery6969/util/effect/layer-node"
+import { Global } from "@Mackery6969/util/global"
+import { LocationServiceMap, type LocationServices } from "@Mackery6969/core/location-services"
+import { LocationActivity } from "@Mackery6969/core/location-activity"
+import { Location } from "@Mackery6969/core/location"
+import { LocationLifecycle } from "@Mackery6969/core/location-lifecycle"
+import { Config } from "@Mackery6969/core/config"
+import { LocationWatcher } from "@Mackery6969/core/filesystem/location-watcher"
+import { Plugin } from "@Mackery6969/core/plugin"
+import { Model } from "@Mackery6969/core/model"
+import { Project } from "@Mackery6969/core/project"
+import { Provider } from "@Mackery6969/core/provider"
+import { AbsolutePath } from "@Mackery6969/core/schema"
+import { Session } from "@Mackery6969/core/session"
+import { Workspace } from "@Mackery6969/core/workspace"
+import { SessionEvent } from "@Mackery6969/core/session/event"
+import { SessionRunnerModel } from "@Mackery6969/core/session/runner/model"
 import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
@@ -709,7 +709,7 @@ describe("LocationServiceMap", () => {
             const modelState = yield* Model.Service
             yield* providers.transform((editor) => {
               editor.update(Provider.ID.make("aliased"), (provider) => {
-                provider.package = "@opencode/ai/providers/openai"
+                provider.package = "@Mackery6969/ai/providers/openai"
               })
               editor.models.update(Provider.ID.make("aliased"), Model.ID.make("fast"), (model) => {
                 // Catalog id and package model id intentionally differ, like gpt-5.5-fast -> gpt-5.5.

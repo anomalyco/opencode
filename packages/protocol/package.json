@@ -1,12 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode/protocol",
+  "name": "@Mackery6969/protocol",
   "version": "2.2.5",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anomalyco/opencode.git",
+    "url": "git+https://github.com/Mackery6969/opencode.git",
     "directory": "packages/protocol"
   },
   "publishConfig": {
@@ -29,7 +29,7 @@
     "typecheck:tsc": "tsc --noEmit"
   },
   "dependencies": {
-    "@opencode/schema": "workspace:*",
+    "@Mackery6969/schema": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

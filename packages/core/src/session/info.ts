@@ -1,11 +1,11 @@
 import { DateTime, Schema } from "effect"
-import { Model } from "@opencode/schema/model"
-import { Provider } from "@opencode/schema/provider"
+import { Model } from "@Mackery6969/schema/model"
+import { Provider } from "@Mackery6969/schema/provider"
 import { AbsolutePath, RelativePath } from "../schema.js"
 import { SessionSchema } from "./schema.js"
 import type { SessionTable } from "./sql.js"
-import { PersistedRevert } from "@opencode/schema/session-revert"
-import { Money } from "@opencode/schema/money"
+import { PersistedRevert } from "@Mackery6969/schema/session-revert"
+import { Money } from "@Mackery6969/schema/money"
 
 const decodeRevert = Schema.decodeUnknownSync(PersistedRevert)
 

@@ -1,7 +1,7 @@
 import { describe, expect, jest, test } from "bun:test"
 import type { ModelSelection } from "@/providers/models/selection"
 import type { SessionMessageHandoff } from "@/session/handoff"
-import { Skill } from "@opencode/schema/skill"
+import { Skill } from "@Mackery6969/schema/skill"
 import type {
   ActiveComposerAdapter,
   ComposerControls,

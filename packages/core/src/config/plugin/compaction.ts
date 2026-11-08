@@ -1,6 +1,6 @@
 export * as ConfigCompactionPlugin from "./compaction.js"
 
-import { define } from "@opencode/plugin/effect/plugin"
+import { define } from "@Mackery6969/plugin/effect/plugin"
 import { Effect } from "effect"
 import { Config } from "../../config.js"
 import { Flag } from "../../flag.js"

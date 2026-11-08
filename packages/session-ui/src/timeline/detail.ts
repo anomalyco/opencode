@@ -1,4 +1,4 @@
-import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessageAssistant, SessionMessageInfo } from "@Mackery6969/client/promise"
 import { shellResultFailed } from "../message/current-tool-state"
 
 export const timelineCategories = ["shell", "edit", "thinking", "subagents", "notices", "tools", "commentary"] as const

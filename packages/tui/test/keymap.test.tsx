@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import type { KeymapCommand } from "@opencode/plugin/tui/context"
+import type { KeymapCommand } from "@Mackery6969/plugin/tui/context"
 import { useKeymap } from "@opentui/keymap/solid"
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"

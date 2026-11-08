@@ -1,4 +1,4 @@
-import { TextShimmer } from "@opencode/ui/text-shimmer"
+import { TextShimmer } from "@Mackery6969/ui/text-shimmer"
 import { For, type JSX } from "solid-js"
 import { CurrentSessionProviders } from "../storybook/current-session-story"
 import { storyDocument, storyTool } from "../storybook/current-session-scenarios"

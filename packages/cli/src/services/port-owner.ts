@@ -1,4 +1,4 @@
-import { AppProcess } from "@opencode/util/process"
+import { AppProcess } from "@Mackery6969/util/process"
 import { Effect } from "effect"
 import { ChildProcess } from "effect/process"
 import net from "node:net"

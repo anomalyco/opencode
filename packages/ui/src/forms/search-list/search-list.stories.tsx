@@ -1,6 +1,6 @@
 import { createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Keybind } from "@opencode/ui/keybind"
+import { Keybind } from "@Mackery6969/ui/keybind"
 import { SearchHighlight, SearchList } from "./search-list"
 
 type Row = { id: string; section: string; title: string; description: string; keybind?: string[] }

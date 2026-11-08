@@ -1,55 +1,55 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { compile, emitEffectImported, emitEffectShape, emitPromise, write } from "@opencode/httpapi-codegen"
+import { compile, emitEffectImported, emitEffectShape, emitPromise, write } from "@Mackery6969/httpapi-codegen"
 import {
   ClientApi,
   clientNamespace,
   effectOmitEndpoints,
   groupNames,
   promiseOmitEndpoints,
-} from "@opencode/protocol/client"
-import { Agent } from "@opencode/schema/agent"
-import { Artifact } from "@opencode/schema/artifact"
-import { Command } from "@opencode/schema/command"
-import { Config } from "@opencode/schema/config"
-import { Credential } from "@opencode/schema/credential"
-import { Event } from "@opencode/schema/event"
-import { EventLog } from "@opencode/schema/event-log"
-import { FileDiff } from "@opencode/schema/file-diff"
-import { FileSystem } from "@opencode/schema/filesystem"
-import { Form } from "@opencode/schema/form"
-import { Generate } from "@opencode/schema/generate"
-import { Instruction } from "@opencode/schema/instruction"
-import { InstructionEntry } from "@opencode/schema/instruction-entry"
-import { Integration } from "@opencode/schema/integration"
-import { Job } from "@opencode/schema/job"
-import { Location } from "@opencode/schema/location"
-import { Mcp } from "@opencode/schema/mcp"
-import { Model } from "@opencode/schema/model"
-import { Money } from "@opencode/schema/money"
-import { Permission } from "@opencode/schema/permission"
-import { PermissionSaved } from "@opencode/schema/permission-saved"
-import { Plugin } from "@opencode/schema/plugin"
-import { Project } from "@opencode/schema/project"
-import { Worktree } from "@opencode/schema/worktree"
-import { AgentAttachment, FileAttachment, Prompt, PromptMention } from "@opencode/schema/prompt"
-import { PromptInput } from "@opencode/schema/prompt-input"
-import { Provider } from "@opencode/schema/provider"
-import { Pty } from "@opencode/schema/pty"
-import { PtyTicket } from "@opencode/schema/pty-ticket"
-import { Question } from "@opencode/schema/question"
-import { Reference } from "@opencode/schema/reference"
-import { AbsolutePath, RelativePath } from "@opencode/schema/schema"
-import { Schedule } from "@opencode/schema/schedule"
-import { Session } from "@opencode/schema/session"
-import { SessionMessage } from "@opencode/schema/session-message"
-import { SessionInbox } from "@opencode/schema/session-inbox"
-import { Shell } from "@opencode/schema/shell"
-import { Skill } from "@opencode/schema/skill"
-import { Snapshot } from "@opencode/schema/snapshot"
-import { UsageLimits } from "@opencode/schema/usage-limits"
-import { Vcs } from "@opencode/schema/vcs"
-import { WebSearch } from "@opencode/schema/websearch"
-import { Workspace } from "@opencode/schema/workspace"
+} from "@Mackery6969/protocol/client"
+import { Agent } from "@Mackery6969/schema/agent"
+import { Artifact } from "@Mackery6969/schema/artifact"
+import { Command } from "@Mackery6969/schema/command"
+import { Config } from "@Mackery6969/schema/config"
+import { Credential } from "@Mackery6969/schema/credential"
+import { Event } from "@Mackery6969/schema/event"
+import { EventLog } from "@Mackery6969/schema/event-log"
+import { FileDiff } from "@Mackery6969/schema/file-diff"
+import { FileSystem } from "@Mackery6969/schema/filesystem"
+import { Form } from "@Mackery6969/schema/form"
+import { Generate } from "@Mackery6969/schema/generate"
+import { Instruction } from "@Mackery6969/schema/instruction"
+import { InstructionEntry } from "@Mackery6969/schema/instruction-entry"
+import { Integration } from "@Mackery6969/schema/integration"
+import { Job } from "@Mackery6969/schema/job"
+import { Location } from "@Mackery6969/schema/location"
+import { Mcp } from "@Mackery6969/schema/mcp"
+import { Model } from "@Mackery6969/schema/model"
+import { Money } from "@Mackery6969/schema/money"
+import { Permission } from "@Mackery6969/schema/permission"
+import { PermissionSaved } from "@Mackery6969/schema/permission-saved"
+import { Plugin } from "@Mackery6969/schema/plugin"
+import { Project } from "@Mackery6969/schema/project"
+import { Worktree } from "@Mackery6969/schema/worktree"
+import { AgentAttachment, FileAttachment, Prompt, PromptMention } from "@Mackery6969/schema/prompt"
+import { PromptInput } from "@Mackery6969/schema/prompt-input"
+import { Provider } from "@Mackery6969/schema/provider"
+import { Pty } from "@Mackery6969/schema/pty"
+import { PtyTicket } from "@Mackery6969/schema/pty-ticket"
+import { Question } from "@Mackery6969/schema/question"
+import { Reference } from "@Mackery6969/schema/reference"
+import { AbsolutePath, RelativePath } from "@Mackery6969/schema/schema"
+import { Schedule } from "@Mackery6969/schema/schedule"
+import { Session } from "@Mackery6969/schema/session"
+import { SessionMessage } from "@Mackery6969/schema/session-message"
+import { SessionInbox } from "@Mackery6969/schema/session-inbox"
+import { Shell } from "@Mackery6969/schema/shell"
+import { Skill } from "@Mackery6969/schema/skill"
+import { Snapshot } from "@Mackery6969/schema/snapshot"
+import { UsageLimits } from "@Mackery6969/schema/usage-limits"
+import { Vcs } from "@Mackery6969/schema/vcs"
+import { WebSearch } from "@Mackery6969/schema/websearch"
+import { Workspace } from "@Mackery6969/schema/workspace"
 import { Effect, Schema } from "effect"
 import { fileURLToPath } from "url"
 
@@ -66,54 +66,54 @@ const effectContract = compile(ClientApi, {
   aliases: true,
 })
 const effectTypeReferences = [
-  ...namespaceTypes("Agent", "@opencode/schema/agent", Agent),
-  ...namespaceTypes("Artifact", "@opencode/schema/artifact", Artifact),
-  ...namespaceTypes("Command", "@opencode/schema/command", Command),
-  ...namespaceTypes("Config", "@opencode/schema/config", Config),
-  ...namespaceTypes("Credential", "@opencode/schema/credential", Credential),
-  ...namespaceTypes("Event", "@opencode/schema/event", Event),
-  ...namespaceTypes("EventLog", "@opencode/schema/event-log", EventLog),
-  ...namespaceTypes("FileDiff", "@opencode/schema/file-diff", FileDiff),
-  ...namespaceTypes("FileSystem", "@opencode/schema/filesystem", FileSystem),
-  ...namespaceTypes("Form", "@opencode/schema/form", Form),
-  ...namespaceTypes("Generate", "@opencode/schema/generate", Generate),
-  ...namespaceTypes("Instruction", "@opencode/schema/instruction", Instruction),
-  ...namespaceTypes("InstructionEntry", "@opencode/schema/instruction-entry", InstructionEntry),
-  ...namespaceTypes("Integration", "@opencode/schema/integration", Integration),
-  ...namespaceTypes("Job", "@opencode/schema/job", Job),
-  typeReference("Location.PublicRef", "@opencode/schema/location", Location.PublicRef),
-  typeReference("Location.PublicInfo", "@opencode/schema/location", Location.PublicInfo),
-  ...namespaceTypes("Mcp", "@opencode/schema/mcp", Mcp),
-  ...namespaceTypes("Model", "@opencode/schema/model", Model),
-  ...namespaceTypes("Money", "@opencode/schema/money", Money),
-  ...namespaceTypes("Permission", "@opencode/schema/permission", Permission),
-  ...namespaceTypes("PermissionSaved", "@opencode/schema/permission-saved", PermissionSaved),
-  ...namespaceTypes("Plugin", "@opencode/schema/plugin", Plugin),
-  ...namespaceTypes("Project", "@opencode/schema/project", Project),
-  ...namespaceTypes("Worktree", "@opencode/schema/worktree", Worktree),
-  ...namespaceTypes("PromptInput", "@opencode/schema/prompt-input", PromptInput),
-  ...namespaceTypes("Provider", "@opencode/schema/provider", Provider),
-  ...namespaceTypes("Pty", "@opencode/schema/pty", Pty),
-  ...namespaceTypes("PtyTicket", "@opencode/schema/pty-ticket", PtyTicket),
-  ...namespaceTypes("Question", "@opencode/schema/question", Question),
-  ...namespaceTypes("Reference", "@opencode/schema/reference", Reference),
-  ...namespaceTypes("Schedule", "@opencode/schema/schedule", Schedule),
-  ...namespaceTypes("Session", "@opencode/schema/session", Session),
-  ...namespaceTypes("SessionMessage", "@opencode/schema/session-message", SessionMessage),
-  ...namespaceTypes("SessionInbox", "@opencode/schema/session-inbox", SessionInbox),
-  ...namespaceTypes("Shell", "@opencode/schema/shell", Shell),
-  ...namespaceTypes("Skill", "@opencode/schema/skill", Skill),
-  ...namespaceTypes("Snapshot", "@opencode/schema/snapshot", Snapshot),
-  ...namespaceTypes("UsageLimits", "@opencode/schema/usage-limits", UsageLimits),
-  ...namespaceTypes("Vcs", "@opencode/schema/vcs", Vcs),
-  ...namespaceTypes("WebSearch", "@opencode/schema/websearch", WebSearch),
-  ...namespaceTypes("Workspace", "@opencode/schema/workspace", Workspace),
-  typeReference("Prompt", "@opencode/schema/prompt", Prompt),
-  typeReference("PromptMention", "@opencode/schema/prompt", PromptMention),
-  typeReference("FileAttachment", "@opencode/schema/prompt", FileAttachment),
-  typeReference("AgentAttachment", "@opencode/schema/prompt", AgentAttachment),
-  typeReference("AbsolutePath", "@opencode/schema/schema", AbsolutePath),
-  typeReference("RelativePath", "@opencode/schema/schema", RelativePath),
+  ...namespaceTypes("Agent", "@Mackery6969/schema/agent", Agent),
+  ...namespaceTypes("Artifact", "@Mackery6969/schema/artifact", Artifact),
+  ...namespaceTypes("Command", "@Mackery6969/schema/command", Command),
+  ...namespaceTypes("Config", "@Mackery6969/schema/config", Config),
+  ...namespaceTypes("Credential", "@Mackery6969/schema/credential", Credential),
+  ...namespaceTypes("Event", "@Mackery6969/schema/event", Event),
+  ...namespaceTypes("EventLog", "@Mackery6969/schema/event-log", EventLog),
+  ...namespaceTypes("FileDiff", "@Mackery6969/schema/file-diff", FileDiff),
+  ...namespaceTypes("FileSystem", "@Mackery6969/schema/filesystem", FileSystem),
+  ...namespaceTypes("Form", "@Mackery6969/schema/form", Form),
+  ...namespaceTypes("Generate", "@Mackery6969/schema/generate", Generate),
+  ...namespaceTypes("Instruction", "@Mackery6969/schema/instruction", Instruction),
+  ...namespaceTypes("InstructionEntry", "@Mackery6969/schema/instruction-entry", InstructionEntry),
+  ...namespaceTypes("Integration", "@Mackery6969/schema/integration", Integration),
+  ...namespaceTypes("Job", "@Mackery6969/schema/job", Job),
+  typeReference("Location.PublicRef", "@Mackery6969/schema/location", Location.PublicRef),
+  typeReference("Location.PublicInfo", "@Mackery6969/schema/location", Location.PublicInfo),
+  ...namespaceTypes("Mcp", "@Mackery6969/schema/mcp", Mcp),
+  ...namespaceTypes("Model", "@Mackery6969/schema/model", Model),
+  ...namespaceTypes("Money", "@Mackery6969/schema/money", Money),
+  ...namespaceTypes("Permission", "@Mackery6969/schema/permission", Permission),
+  ...namespaceTypes("PermissionSaved", "@Mackery6969/schema/permission-saved", PermissionSaved),
+  ...namespaceTypes("Plugin", "@Mackery6969/schema/plugin", Plugin),
+  ...namespaceTypes("Project", "@Mackery6969/schema/project", Project),
+  ...namespaceTypes("Worktree", "@Mackery6969/schema/worktree", Worktree),
+  ...namespaceTypes("PromptInput", "@Mackery6969/schema/prompt-input", PromptInput),
+  ...namespaceTypes("Provider", "@Mackery6969/schema/provider", Provider),
+  ...namespaceTypes("Pty", "@Mackery6969/schema/pty", Pty),
+  ...namespaceTypes("PtyTicket", "@Mackery6969/schema/pty-ticket", PtyTicket),
+  ...namespaceTypes("Question", "@Mackery6969/schema/question", Question),
+  ...namespaceTypes("Reference", "@Mackery6969/schema/reference", Reference),
+  ...namespaceTypes("Schedule", "@Mackery6969/schema/schedule", Schedule),
+  ...namespaceTypes("Session", "@Mackery6969/schema/session", Session),
+  ...namespaceTypes("SessionMessage", "@Mackery6969/schema/session-message", SessionMessage),
+  ...namespaceTypes("SessionInbox", "@Mackery6969/schema/session-inbox", SessionInbox),
+  ...namespaceTypes("Shell", "@Mackery6969/schema/shell", Shell),
+  ...namespaceTypes("Skill", "@Mackery6969/schema/skill", Skill),
+  ...namespaceTypes("Snapshot", "@Mackery6969/schema/snapshot", Snapshot),
+  ...namespaceTypes("UsageLimits", "@Mackery6969/schema/usage-limits", UsageLimits),
+  ...namespaceTypes("Vcs", "@Mackery6969/schema/vcs", Vcs),
+  ...namespaceTypes("WebSearch", "@Mackery6969/schema/websearch", WebSearch),
+  ...namespaceTypes("Workspace", "@Mackery6969/schema/workspace", Workspace),
+  typeReference("Prompt", "@Mackery6969/schema/prompt", Prompt),
+  typeReference("PromptMention", "@Mackery6969/schema/prompt", PromptMention),
+  typeReference("FileAttachment", "@Mackery6969/schema/prompt", FileAttachment),
+  typeReference("AgentAttachment", "@Mackery6969/schema/prompt", AgentAttachment),
+  typeReference("AbsolutePath", "@Mackery6969/schema/schema", AbsolutePath),
+  typeReference("RelativePath", "@Mackery6969/schema/schema", RelativePath),
 ]
 
 await Effect.runPromise(
@@ -139,7 +139,7 @@ await Effect.runPromise(
           outputTypes: {
             "event.subscribe": {
               name: "OpenCodeEvent",
-              import: 'import type { OpenCodeEvent } from "@opencode/protocol/groups/event"',
+              import: 'import type { OpenCodeEvent } from "@Mackery6969/protocol/groups/event"',
             },
           },
         }),

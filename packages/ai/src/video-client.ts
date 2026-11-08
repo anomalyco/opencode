@@ -4,7 +4,7 @@ import { VideoOutputEvent, VideoFinishEvent, type VideoEvent, type VideoRequest,
 
 export type Interface = MediaClient.Interface<VideoRequest, VideoEvent, VideoResponse>
 
-export class VideoClientService extends Context.Service<VideoClientService, Interface>()("@opencode/VideoClient") {}
+export class VideoClientService extends Context.Service<VideoClientService, Interface>()("@Mackery6969/VideoClient") {}
 export const Service = VideoClientService
 export type Service = VideoClientService
 

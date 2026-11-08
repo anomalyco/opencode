@@ -1,4 +1,4 @@
-import type { FormInfo, PermissionRequest, SessionInfo } from "@opencode/client/promise"
+import type { FormInfo, PermissionRequest, SessionInfo } from "@Mackery6969/client/promise"
 
 function sessionTreeRequest<T>(
   session: SessionInfo[],

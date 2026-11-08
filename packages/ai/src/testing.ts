@@ -48,7 +48,7 @@ interface Controls {
 
 export interface TestInterface extends ClientInterface, Controls {}
 
-export class Test extends Context.Service<Test, TestInterface>()("@opencode/ai/TestLLM/Test") {}
+export class Test extends Context.Service<Test, TestInterface>()("@Mackery6969/ai/TestLLM/Test") {}
 
 export interface LayerOptions {
   readonly transformRequest?: (request: LLMRequest) => LLMRequest

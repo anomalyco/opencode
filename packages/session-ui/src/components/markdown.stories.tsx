@@ -1,4 +1,4 @@
-import { markdown } from "@opencode/ui/storybook/fixtures"
+import { markdown } from "@Mackery6969/ui/storybook/fixtures"
 import { createSignal, onCleanup } from "solid-js"
 import { Markdown } from "./markdown"
 
@@ -110,7 +110,7 @@ export const StreamingInlineCode = {
 
 const externalLinkChunks = [
   "1. ",
-  "[#540](https://github.com/anomalyco/opencode/pull/540)",
+  "[#540](https://github.com/Mackery6969/opencode/pull/540)",
   ": Batch access-policy reads.\n2. ",
   "[Stack Overflow](https://stackoverflow.com/questions/123)",
   ": Favicon from a public site.\n3. ",

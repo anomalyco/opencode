@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { ScrollBoxRenderable, type Renderable } from "@opentui/core"
 import { TestRecorder } from "@opentui/core/testing"
-import type { SessionMessageInfo } from "@opencode/client"
+import type { SessionMessageInfo } from "@Mackery6969/client"
 import { mkdir } from "node:fs/promises"
 import { createAppFixture } from "./fixture/app"
 import { tmpdir } from "./fixture/fixture"

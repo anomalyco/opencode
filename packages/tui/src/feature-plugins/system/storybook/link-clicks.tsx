@@ -1,5 +1,5 @@
-import type { Plugin } from "@opencode/plugin/tui"
-import type { SessionMessageAssistant, SessionMessageAssistantText } from "@opencode/client"
+import type { Plugin } from "@Mackery6969/plugin/tui"
+import type { SessionMessageAssistant, SessionMessageAssistantText } from "@Mackery6969/client"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createSignal } from "solid-js"
 import { useConfig } from "../../../config"
@@ -15,14 +15,14 @@ const text = `Click, double-click, drag, right-click, or Ctrl/Shift+click the li
 
 **Named link:** read [the OpenTUI terminal capabilities guide](https://github.com/anomalyco/opentui/blob/main/packages/core/docs/terminal-capabilities.mdx) for details.
 
-**URL in inline code (not linked):** \`https://github.com/anomalyco/opencode/issues/51727#issuecomment-wrapped-link\`
+**URL in inline code (not linked):** \`https://github.com/Mackery6969/opencode/issues/51727#issuecomment-wrapped-link\`
 
 **Relative link (not http):** see [link.tsx](packages/tui/src/ui/link.tsx).
 
 | Issue | Link |
 | --- | --- |
-| Wrapped links | https://github.com/anomalyco/opencode/issues/51727 |
-| Ctrl+click | https://github.com/anomalyco/opencode/issues/44442 |
+| Wrapped links | https://github.com/Mackery6969/opencode/issues/51727 |
+| Ctrl+click | https://github.com/Mackery6969/opencode/issues/44442 |
 
 - A list item ending in https://example.com/a/very/long/path/that/keeps/going/until/it/wraps/around`
 

@@ -1,5 +1,5 @@
-import { Schedule } from "@opencode/schema/schedule"
-import { Session } from "@opencode/schema/session"
+import { Schedule } from "@Mackery6969/schema/schedule"
+import { Session } from "@Mackery6969/schema/session"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiSchema, OpenApi } from "effect/http-api"
 import { ForbiddenError, InvalidRequestError, ScheduleNotFoundError, SessionNotFoundError } from "../errors.js"

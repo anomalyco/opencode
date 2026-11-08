@@ -1,4 +1,4 @@
-import type { ThemeV1Json } from "@opencode/theme/tui/v1"
+import type { ThemeV1Json } from "@Mackery6969/theme/tui/v1"
 import aura from "./assets/aura.json" with { type: "json" }
 import ayu from "./assets/ayu.json" with { type: "json" }
 import carbonfox from "./assets/carbonfox.json" with { type: "json" }
@@ -32,7 +32,7 @@ import vercel from "./assets/vercel.json" with { type: "json" }
 import vesper from "./assets/vesper.json" with { type: "json" }
 import zenburn from "./assets/zenburn.json" with { type: "json" }
 
-export type { ColorValue, Theme, ThemeColor, ThemeV1Json } from "@opencode/theme/tui/v1"
+export type { ColorValue, Theme, ThemeColor, ThemeV1Json } from "@Mackery6969/theme/tui/v1"
 
 export const DEFAULT_THEMES: Record<string, ThemeV1Json> = {
   aura,

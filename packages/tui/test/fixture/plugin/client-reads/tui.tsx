@@ -1,4 +1,4 @@
-import { Plugin } from "@opencode/plugin/tui"
+import { Plugin } from "@Mackery6969/plugin/tui"
 
 // Reads messages through the plugin client, whose files must stay inline bytes.
 export default Plugin.define({

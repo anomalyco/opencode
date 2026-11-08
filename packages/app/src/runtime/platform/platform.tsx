@@ -1,9 +1,9 @@
-import { createSimpleContext } from "@opencode/ui/context"
+import { createSimpleContext } from "@Mackery6969/ui/context"
 import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
 import type { DesktopMenuAction, DesktopZoomLevel } from "@/shell/commands/desktop-menu"
 import type { DraftStore } from "@/runtime/persistence/drafts"
-import type { Bridge } from "@opencode/plugin/gui/host"
+import type { Bridge } from "@Mackery6969/plugin/gui/host"
 
 type PickerPaths = string | string[] | null
 

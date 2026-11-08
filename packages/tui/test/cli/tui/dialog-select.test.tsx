@@ -13,7 +13,7 @@ import {
 } from "../../../src/ui/dialog-select"
 import { truncateFilePath } from "../../../src/ui/file-path"
 import { getOpenCodeTheme } from "../../../src/theme"
-import { resolveThemeDocument } from "@opencode/theme/tui"
+import { resolveThemeDocument } from "@Mackery6969/theme/tui"
 import { stringWidth } from "../../../src/util/string-width"
 import { emptyThemeSource, tmpdir } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"

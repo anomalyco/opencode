@@ -6,8 +6,8 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { Effect, Exit, Fiber, Stream } from "effect"
 import { ChildProcess } from "effect/process"
-import { LayerNode } from "@opencode/util/effect/layer-node"
-import { AppProcess } from "@opencode/util/process"
+import { LayerNode } from "@Mackery6969/util/effect/layer-node"
+import { AppProcess } from "@Mackery6969/util/process"
 import { testEffect } from "../lib/effect"
 
 // Every test spawns a real child, so all of them use the live clock. The spawner's 1s post-exit capture deadline

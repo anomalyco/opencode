@@ -2,8 +2,8 @@ import { describe, expect } from "bun:test"
 import { Cause, Deferred, Duration, Effect, Exit, Fiber } from "effect"
 import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
-import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
-import { SharedCache } from "@opencode/core/shared-cache"
+import { AppNodeBuilder } from "@Mackery6969/core/effect/app-node-builder"
+import { SharedCache } from "@Mackery6969/core/shared-cache"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AppNodeBuilder.build(SharedCache.node))

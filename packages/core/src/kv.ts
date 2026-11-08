@@ -3,7 +3,7 @@ export * as KV from "./kv.js"
 import { and, asc, eq, gt, gte, lt } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "./database/database.js"
-import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { makeGlobalNode } from "@Mackery6969/util/effect/app-node"
 import { KVTable } from "./kv/sql.js"
 
 export type Value = Schema.Json
@@ -31,7 +31,7 @@ export interface Interface {
   readonly scan: (options: ScanOptions) => Effect.Effect<ScanResult>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/KV") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/KV") {}
 
 const layer = Layer.effect(
   Service,

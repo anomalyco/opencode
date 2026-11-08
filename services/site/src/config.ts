@@ -9,7 +9,7 @@ export const config = {
 
   // GitHub
   github: {
-    repoUrl: "https://github.com/anomalyco/opencode",
+    repoUrl: "https://github.com/Mackery6969/opencode",
     starsFormatted: {
       compact: "220K",
       full: "220,000",

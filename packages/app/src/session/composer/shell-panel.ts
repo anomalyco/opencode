@@ -1,5 +1,5 @@
-import type { ShellOutputInput, ShellOutputOutput } from "@opencode/client/promise"
-import { createShellFollower } from "@opencode/session-ui/tools/shell-output"
+import type { ShellOutputInput, ShellOutputOutput } from "@Mackery6969/client/promise"
+import { createShellFollower } from "@Mackery6969/session-ui/tools/shell-output"
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js"
 import type { SessionActivityItem } from "./activity-chips"
 import {

@@ -1,5 +1,5 @@
 import path from "path"
-import { Global } from "@opencode/util/global"
+import { Global } from "@Mackery6969/util/global"
 import { Effect, Layer } from "effect"
 import { tmpdir } from "./tmpdir"
 

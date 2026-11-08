@@ -3,8 +3,8 @@ export * as Formatter from "./formatter.js"
 import { Context, Effect, Layer } from "effect"
 import { ChildProcess } from "effect/process"
 import path from "path"
-import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { AppProcess } from "@opencode/util/process"
+import { makeLocationNode } from "@Mackery6969/util/effect/app-node"
+import { AppProcess } from "@Mackery6969/util/process"
 import { Location } from "./location.js"
 import type { Info } from "./formatter/builtins.js"
 import { State } from "./state.js"
@@ -22,7 +22,7 @@ export interface Interface extends State.Transformable<Editor> {
   readonly file: (filepath: string) => Effect.Effect<boolean>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Formatter") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/v2/Formatter") {}
 
 const layer = Layer.effect(
   Service,

@@ -1,4 +1,4 @@
-import { configure } from "@opencode/ai/providers/groq"
+import { configure } from "@Mackery6969/ai/providers/groq"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMEvent, LLMResponse, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"

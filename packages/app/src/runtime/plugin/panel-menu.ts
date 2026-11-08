@@ -1,5 +1,5 @@
 import { createMemo } from "solid-js"
-import { MenuItem, type SessionPanelMenuItem } from "@opencode/plugin/gui"
+import { MenuItem, type SessionPanelMenuItem } from "@Mackery6969/plugin/gui"
 import { usePluginHost } from "./host"
 
 export type SessionPanelMenuEntry = {

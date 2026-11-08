@@ -100,10 +100,10 @@ export const content = {
       intro:
         "在您自己的脚本、CI 任务和工具中驱动 OpenCode。SDK 在您的进程内运行 OpenCode，使用您的配置和模型，其带类型的客户端可以创建会话、发送提示词并流式传输每个事件。",
       features: {
-        "typescript-client": { title: "TypeScript 客户端", body: "带类型的请求和事件，与 @opencode/client 的值相同。" },
+        "typescript-client": { title: "TypeScript 客户端", body: "带类型的请求和事件，与 @Mackery6969/client 的值相同。" },
         "sessions-from-code": { title: "用代码创建会话", body: "在任意脚本中创建会话并发送提示词。" },
         "any-model": { title: "任意模型", body: "使用您的 OpenCode 配置中的任意模型。" },
-        "npm-or-bun": { title: "npm 或 bun", body: "使用 npm i @opencode/sdk 或 bun add @opencode/sdk 安装。" },
+        "npm-or-bun": { title: "npm 或 bun", body: "使用 npm i @Mackery6969/sdk 或 bun add @Mackery6969/sdk 安装。" },
         "in-process-host": { title: "进程内宿主", body: "在内存中运行 OpenCode，无需经过网络。" },
         "your-plugins": { title: "您的插件", body: "创建进程内宿主时传入您自己的插件。" },
         "promise-or-effect": { title: "Promise 或 Effect", body: "Promise API 和 Effect API，返回相同的值。" },

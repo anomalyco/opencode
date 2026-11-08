@@ -1,5 +1,5 @@
-import type { SessionMessageInfo } from "@opencode/client/promise"
-import { Timeline } from "@opencode/session-ui/timeline/projection"
+import type { SessionMessageInfo } from "@Mackery6969/client/promise"
+import { Timeline } from "@Mackery6969/session-ui/timeline/projection"
 
 // Frames a seek waits for the match's virtualized row and its async Markdown to mount.
 export const TIMELINE_SEARCH_SEEK_LIMIT = 12

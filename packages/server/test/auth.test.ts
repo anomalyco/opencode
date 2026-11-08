@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { ServerAuth } from "@opencode/server/auth"
+import { ServerAuth } from "@Mackery6969/server/auth"
 import { Option, Redacted } from "effect"
 
 test("accepts only the fixed opencode username", () => {

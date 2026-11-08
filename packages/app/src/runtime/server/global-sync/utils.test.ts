@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { AgentListOutput, ModelListOutput, Project, ProviderListOutput } from "@opencode/client/promise"
+import type { AgentListOutput, ModelListOutput, Project, ProviderListOutput } from "@Mackery6969/client/promise"
 import { directoryKey, normalizeAgentList, normalizeProjectInfo, normalizeProviderList } from "./utils"
 
 describe("normalizeAgentList", () => {
@@ -101,7 +101,7 @@ describe("normalizeProviderList", () => {
     ["disabled-only none variant", [{ id: "none" }], undefined, false],
   ] as const)("derives reasoning capability from %s", (_, variants, compatibility, expected) => {
     const providers: ProviderListOutput["data"] = [
-      { id: "opencode", name: "OpenCode", activation: "auto", package: "@opencode/ai/providers/openai-compatible" },
+      { id: "opencode", name: "OpenCode", activation: "auto", package: "@Mackery6969/ai/providers/openai-compatible" },
     ]
 
     const models: ModelListOutput["data"] = [

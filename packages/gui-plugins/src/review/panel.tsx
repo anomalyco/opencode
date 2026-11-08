@@ -1,7 +1,7 @@
 import { createMemo, createSignal, Match, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
-import { Loader } from "@opencode/ui/loader"
+import { Loader } from "@Mackery6969/ui/loader"
 import { Dynamic } from "solid-js/web"
-import type { FileDiffInfo } from "@opencode/client/promise"
+import type { FileDiffInfo } from "@Mackery6969/client/promise"
 import {
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX,
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN,
@@ -9,9 +9,9 @@ import {
   SessionReviewV2Sidebar,
   SessionReviewV2SidebarToggle,
   type SessionReviewExpandMode,
-} from "@opencode/session-ui/v2/session-review-v2"
-import { SessionReviewFilePreviewV2 } from "@opencode/session-ui/v2/session-review-file-preview-v2"
-import { DiffChanges } from "@opencode/ui/diff-changes"
+} from "@Mackery6969/session-ui/v2/session-review-v2"
+import { SessionReviewFilePreviewV2 } from "@Mackery6969/session-ui/v2/session-review-file-preview-v2"
+import { DiffChanges } from "@Mackery6969/ui/diff-changes"
 import type {
   SessionReviewComment,
   SessionReviewCommentActions,
@@ -20,7 +20,7 @@ import type {
   SessionReviewDiffStyle,
   SessionReviewFocus,
   SessionReviewLineComment,
-} from "@opencode/session-ui/session-review"
+} from "@Mackery6969/session-ui/session-review"
 import {
   createKeyed,
   usePlugin,
@@ -28,8 +28,8 @@ import {
   type MountedSession,
   type PanelSidebar,
   type SessionScreen,
-} from "@opencode/plugin/gui"
-import { FileTree, OpenInApp } from "@opencode/plugin/gui/file"
+} from "@Mackery6969/plugin/gui"
+import { FileTree, OpenInApp } from "@Mackery6969/plugin/gui/file"
 import type Review from "./index"
 import {
   applyFileListKeyDown,

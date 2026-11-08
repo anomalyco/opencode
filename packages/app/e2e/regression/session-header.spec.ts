@@ -1,4 +1,4 @@
-import type { SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessageInfo } from "@Mackery6969/client/promise"
 import { expect, test, type Page } from "@playwright/test"
 import { REMOTE_SERVER, seed, sessionHref } from "../utils/app"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"

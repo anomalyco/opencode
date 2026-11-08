@@ -4,7 +4,7 @@ import {
   type FormInfo,
   type FormOption,
   type SessionFormReplyInput,
-} from "@opencode/client/promise"
+} from "@Mackery6969/client/promise"
 import { createEffect, createSignal, on, onCleanup } from "solid-js"
 import type { OpenCodeEventStream } from "@/runtime/server/client"
 import {

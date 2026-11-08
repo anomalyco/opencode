@@ -1,6 +1,6 @@
 export * as WebSearchParallel from "./parallel.js"
 
-import { define } from "@opencode/plugin/effect/plugin"
+import { define } from "@Mackery6969/plugin/effect/plugin"
 import { Effect, Schema, Scope } from "effect"
 import { HttpClient } from "effect/http"
 import { App } from "../../app.js"

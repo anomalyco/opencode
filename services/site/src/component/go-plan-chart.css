@@ -1,4 +1,4 @@
-@import "@opencode/ui/styles/tokens/colors.css";
+@import "@Mackery6969/ui/styles/tokens/colors.css";
 
 [data-page="go"] {
   --go-console-bg: var(--v2-grey-50);

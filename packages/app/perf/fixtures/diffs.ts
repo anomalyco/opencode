@@ -1,4 +1,4 @@
-import type { SessionMessageAssistantTool } from "@opencode/client/promise"
+import type { SessionMessageAssistantTool } from "@Mackery6969/client/promise"
 import { createPatch, createTwoFilesPatch, diffLines } from "diff"
 
 /** `count` changed files of 300, 120 or 38 lines, three lines changed in each, with full-file hunks. */

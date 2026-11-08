@@ -11,10 +11,10 @@ import {
   type SessionMessageAssistantTool,
   type SessionMessageIdle,
   type SessionMessageInfo,
-} from "@opencode/client/promise"
-import { SessionMessage } from "@opencode/schema/session-message"
+} from "@Mackery6969/client/promise"
+import { SessionMessage } from "@Mackery6969/schema/session-message"
 import { EOL } from "node:os"
-import { toolOutputText, type MiniToolPart } from "@opencode/tui/mini/tool"
+import { toolOutputText, type MiniToolPart } from "@Mackery6969/tui/mini/tool"
 import { UI } from "./ui"
 
 type Input = {

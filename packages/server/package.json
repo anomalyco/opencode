@@ -1,12 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode/server",
+  "name": "@Mackery6969/server",
   "version": "2.2.5",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anomalyco/opencode.git",
+    "url": "git+https://github.com/Mackery6969/opencode.git",
     "directory": "packages/server"
   },
   "publishConfig": {
@@ -29,17 +29,17 @@
   "dependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
-    "@opencode/core": "workspace:*",
-    "@opencode/protocol": "workspace:*",
-    "@opencode/schema": "workspace:*",
-    "@opencode/simulation": "workspace:*",
-    "@opencode/util": "workspace:*",
+    "@Mackery6969/core": "workspace:*",
+    "@Mackery6969/protocol": "workspace:*",
+    "@Mackery6969/schema": "workspace:*",
+    "@Mackery6969/simulation": "workspace:*",
+    "@Mackery6969/util": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@opencode/pty": "0.4.0",
-    "@opencode/client": "workspace:*",
-    "@opencode/plugin": "workspace:*",
+    "@Mackery6969/pty": "0.4.0",
+    "@Mackery6969/client": "workspace:*",
+    "@Mackery6969/plugin": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native": "catalog:",

@@ -35,13 +35,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           HEAD=$(git ls-remote origin refs/heads/beta | awk '{print $1}')
-          last_built=$(curl -fsS "https://opencode.ai/files/bin/.last-beta-commit?t=${GITHUB_RUN_ID}" 2>/dev/null || echo "")
-          if [ "$HEAD" = "$last_built" ]; then
-            echo "No new commits on beta since last build ($HEAD). Skipping."
-            echo "new_commits=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "New commits detected: $HEAD (was $last_built or none)."
+          # Check if the current HEAD already has a beta release.
+          last_tag=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
+          if [ -z "$last_tag" ]; then
+            echo "No beta release found. Building."
             echo "new_commits=true" >> "$GITHUB_OUTPUT"
+          else
+            last_sha=$(gh release view "$last_tag" --json targetCommitish --jq '.targetCommitish' 2>/dev/null || echo "")
+            if [ "$HEAD" = "$last_sha" ]; then
+              echo "No new commits on beta since last build ($HEAD). Skipping."
+              echo "new_commits=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "New commits detected: $HEAD (was $last_sha or none)."
+              echo "new_commits=true" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
   dispatch-release:
@@ -58,20 +65,3 @@ jobs:
         run: |
           gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref beta \
             -f channel=beta
-      - name: Update last built commit marker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          BETA_HEAD=$(git ls-remote origin refs/heads/beta | awk '{print $1}')
-          # Derive R2 credentials the same way as the release scripts (lib.sh).
-          id=$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-            "https://api.cloudflare.com/client/v4/accounts/15d29c8639fd3733b1b5486a2acfd968/tokens/verify" | jq -er .result.id)
-          export AWS_ACCESS_KEY_ID="$id"
-          export AWS_SECRET_ACCESS_KEY=$(printf '%s' "$CLOUDFLARE_API_TOKEN" | sha256 | cut -c1-64)
-          export AWS_DEFAULT_REGION=auto AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
-          # Store the commit hash in R2 with no-cache so the next run sees the update immediately.
-          aws s3 cp - <<<"$BETA_HEAD" \
-            "s3://opencode-production-files/bin/.last-beta-commit" \
-            --endpoint-url "https://15d29c8639fd3733b1b5486a2acfd968.r2.cloudflarestorage.com" \
-            --content-type "text/plain" \
-            --cache-control "no-cache, no-store"

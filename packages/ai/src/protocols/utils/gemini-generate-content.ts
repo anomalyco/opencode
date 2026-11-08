@@ -1,5 +1,5 @@
 import { Effect, Schema, type Stream } from "effect"
-import type { Tool } from "@opencode/schema/tool"
+import type { Tool } from "@Mackery6969/schema/tool"
 import { Media } from "../../media.js"
 import { Framing } from "../../route/framing.js"
 import type { MediaProtocol } from "../../route/media-protocol.js"

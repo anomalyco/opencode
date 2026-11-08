@@ -1,5 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { Service } from "@opencode/client/effect/service"
+import { Service } from "@Mackery6969/client/effect/service"
 import { expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import fs from "node:fs/promises"

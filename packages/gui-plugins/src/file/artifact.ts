@@ -1,5 +1,5 @@
-import { base64ToBytes } from "@opencode/util/base64"
-import type { FileContent } from "@opencode/plugin/gui"
+import { base64ToBytes } from "@Mackery6969/util/base64"
+import type { FileContent } from "@Mackery6969/plugin/gui"
 
 /** Approximate on-disk size of loaded content. */
 export function contentBytes(content: FileContent) {

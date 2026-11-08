@@ -3,12 +3,12 @@ export * as SkillDiscovery from "./discovery.js"
 import path from "path"
 import { Context, Effect, Layer, Schedule, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
-import { FSUtil } from "@opencode/util/fs-util"
-import { Global } from "@opencode/util/global"
-import { makeGlobalNode } from "@opencode/util/effect/app-node"
-import { httpClient } from "@opencode/util/effect/app-node-platform"
+import { FSUtil } from "@Mackery6969/util/fs-util"
+import { Global } from "@Mackery6969/util/global"
+import { makeGlobalNode } from "@Mackery6969/util/effect/app-node"
+import { httpClient } from "@Mackery6969/util/effect/app-node-platform"
 import { AbsolutePath } from "../schema.js"
-import { Hash } from "@opencode/util/hash"
+import { Hash } from "@Mackery6969/util/hash"
 
 const skillConcurrency = 4
 const fileConcurrency = 8
@@ -59,7 +59,7 @@ export interface Interface {
   readonly pull: (url: string) => Effect.Effect<AbsolutePath[]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/SkillDiscovery") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/SkillDiscovery") {}
 
 const layer = Layer.effect(
   Service,

@@ -1,5 +1,5 @@
-import { Button } from "@opencode/ui/button"
-import { useDialog } from "@opencode/ui/context/dialog"
+import { Button } from "@Mackery6969/ui/button"
+import { useDialog } from "@Mackery6969/ui/context/dialog"
 import { Option } from "effect"
 import { createSignal, onMount, Show } from "solid-js"
 import { SettingsPanel } from "../../../stories/mocks/gui-plugins/settings-page"

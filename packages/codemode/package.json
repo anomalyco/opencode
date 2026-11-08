@@ -1,13 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode/codemode",
+  "name": "@Mackery6969/codemode",
   "version": "2.2.5",
   "description": "Effect-native confined code execution over schema-described tools",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anomalyco/opencode.git",
+    "url": "git+https://github.com/Mackery6969/opencode.git",
     "directory": "packages/codemode"
   },
   "publishConfig": {

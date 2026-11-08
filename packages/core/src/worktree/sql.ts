@@ -1,5 +1,5 @@
 import { integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import type { Worktree } from "@opencode/schema/worktree"
+import type { Worktree } from "@Mackery6969/schema/worktree"
 import { absoluteColumn } from "../database/path.js"
 import { ProjectSchema } from "../project/schema.js"
 import { ProjectTable } from "../project/sql.js"

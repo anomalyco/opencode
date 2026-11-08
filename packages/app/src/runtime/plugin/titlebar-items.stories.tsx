@@ -1,5 +1,5 @@
 import { For } from "solid-js"
-import type { TitlebarItem } from "@opencode/plugin/gui"
+import type { TitlebarItem } from "@Mackery6969/plugin/gui"
 import { TitlebarItems } from "./titlebar-items"
 
 const catalogs = import.meta.glob<{ default: Record<string, string> }>(

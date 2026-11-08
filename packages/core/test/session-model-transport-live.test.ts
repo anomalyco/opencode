@@ -1,16 +1,16 @@
 import { describe, expect, test } from "bun:test"
-import { ai, AIError, Message } from "@opencode/ai/effect"
+import { ai, AIError, Message } from "@Mackery6969/ai/effect"
 import {
   LLMClient,
   RequestExecutor,
   WebSocketTransport,
   type ChannelObservation,
   type WebSocketChannelExchange,
-} from "@opencode/ai/route"
-import { configure } from "@opencode/ai/providers/openai"
-import { SessionModelTransport } from "@opencode/core/session/model-transport"
-import { WebSocketConstructor } from "@opencode/core/effect/websocket-constructor"
-import { Session } from "@opencode/schema/session"
+} from "@Mackery6969/ai/route"
+import { configure } from "@Mackery6969/ai/providers/openai"
+import { SessionModelTransport } from "@Mackery6969/core/session/model-transport"
+import { WebSocketConstructor } from "@Mackery6969/core/effect/websocket-constructor"
+import { Session } from "@Mackery6969/schema/session"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import { Headers } from "effect/http"
 import { Socket } from "effect/socket"

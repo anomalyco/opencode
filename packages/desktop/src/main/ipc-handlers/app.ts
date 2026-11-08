@@ -1,5 +1,5 @@
 import { BrowserWindow } from "electron"
-import { parseDesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
+import { parseDesktopNativeBundle } from "@Mackery6969/app/i18n/desktop-native"
 import { Effect } from "effect"
 import { AppRpcs } from "../../shared/ipc-rpc"
 import { checkAppExists, resolveAppPath } from "../files/apps"

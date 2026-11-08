@@ -1,6 +1,6 @@
-import { R2Sql } from "@opencode/stats-core/r2-sql"
-import { layer } from "@opencode/stats-core/runtime"
-import { syncStats } from "@opencode/stats-core/stat-sync"
+import { R2Sql } from "@Mackery6969/stats-core/r2-sql"
+import { layer } from "@Mackery6969/stats-core/runtime"
+import { syncStats } from "@Mackery6969/stats-core/stat-sync"
 import { Effect, Layer } from "effect"
 
 // Runs one sync pass in this process, for local use. Deployed stages run the

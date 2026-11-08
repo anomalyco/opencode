@@ -6,7 +6,7 @@ const release: ChangelogRelease = {
   tag: "v2.2.5",
   name: "v2.2.5",
   date: "2026-11-04T12:00:00Z",
-  url: "https://github.com/anomalyco/opencode/releases/tag/v2.2.5",
+  url: "https://github.com/Mackery6969/opencode/releases/tag/v2.2.5",
   highlights: [],
   sections: [],
   notes: parseReleaseNotes("## Fixes\n- Fixed a crash when the session list was empty"),

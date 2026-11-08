@@ -1,4 +1,4 @@
-import { Credential } from "@opencode/schema/credential"
+import { Credential } from "@Mackery6969/schema/credential"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
 import { ConflictError, InvalidRequestError } from "../errors.js"

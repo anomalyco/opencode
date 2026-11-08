@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { useSpring } from "@opencode/ui/motion-spring"
+import { useSpring } from "@Mackery6969/ui/motion-spring"
 import { createEffect, createRoot, createSignal } from "solid-js"
 
 // Records every value the spring emits and resolves once it reaches `settled`.

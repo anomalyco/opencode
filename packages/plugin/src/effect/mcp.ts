@@ -1,5 +1,5 @@
-import type { McpApi } from "@opencode/client/effect/api"
-import type { Mcp } from "@opencode/schema/mcp"
+import type { McpApi } from "@Mackery6969/client/effect/api"
+import type { Mcp } from "@Mackery6969/schema/mcp"
 import type { Effect, Types } from "effect"
 import type { Transform } from "./registration.js"
 

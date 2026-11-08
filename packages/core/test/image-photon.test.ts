@@ -3,7 +3,7 @@ import photon from "@silvia-odwyer/photon-node"
 import { createHash } from "node:crypto"
 import { fileURLToPath } from "node:url"
 import { Deferred, Effect, Exit, Fiber, Logger, Ref } from "effect"
-import { Photon } from "@opencode/core/image/photon"
+import { Photon } from "@Mackery6969/core/image/photon"
 import { it } from "./lib/effect"
 
 const limits = { autoResize: true, maxWidth: 2_000, maxHeight: 2_000, maxBase64Bytes: 5 * 1024 * 1024 }

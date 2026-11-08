@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { LLM } from "@opencode/schema/llm"
+import { LLM } from "@Mackery6969/schema/llm"
 import { ContentBlockID, ToolCallID } from "./ids.js"
 import {
   AssistantMessage,

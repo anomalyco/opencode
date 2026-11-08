@@ -10,8 +10,8 @@
 <p align="center">오픈 소스 AI 코딩 에이전트.</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/@opencode/cli"><img alt="npm" src="https://img.shields.io/npm/v/@opencode/cli?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/release.yml?style=flat-square&branch=dev" /></a>
+  <a href="https://www.npmjs.com/package/@Mackery6969/cli"><img alt="npm" src="https://img.shields.io/npm/v/@Mackery6969/cli?style=flat-square" /></a>
+  <a href="https://github.com/Mackery6969/opencode/actions/workflows/release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/Mackery6969/opencode/release.yml?style=flat-square&branch=dev" /></a>
 </p>
 
 <p align="center">
@@ -50,13 +50,13 @@
 curl -fsSL https://opencode.ai/v2/install | bash
 
 # 패키지 매니저
-npm i -g @opencode/cli@latest      # bun/pnpm/yarn 도 가능
+npm i -g @Mackery6969/cli@latest      # bun/pnpm/yarn 도 가능
 brew install anomalyco/tap/opencode-v2 # macOS 및 Linux (권장, 항상 최신)
 brew install opencode              # macOS 및 Linux (공식 brew formula, 업데이트 빈도 낮음)
 sudo pacman -S opencode            # Arch Linux (Stable)
 paru -S opencode-beta              # Arch Linux (Latest from AUR)
 mise use -g opencode               # 어떤 OS든
-nix run github:anomalyco/opencode  # Nix
+nix run github:Mackery6969/opencode  # Nix
 ```
 
 > [!TIP]

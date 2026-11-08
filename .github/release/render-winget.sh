@@ -22,8 +22,8 @@ manifests() {
   {
     header "$id" defaultLocale
     printf '%s\n' "PackageLocale: en-US" "Publisher: OpenCode" "PublisherUrl: https://anoma.ly/" \
-      "PublisherSupportUrl: https://github.com/anomalyco/opencode/issues" "PrivacyUrl: https://opencode.ai/legal/privacy-policy" \
-      "PackageName: $name" "PackageUrl: https://opencode.ai/" "License: MIT" "LicenseUrl: https://github.com/anomalyco/opencode/blob/HEAD/LICENSE" \
+      "PublisherSupportUrl: https://github.com/Mackery6969/opencode/issues" "PrivacyUrl: https://opencode.ai/legal/privacy-policy" \
+      "PackageName: $name" "PackageUrl: https://opencode.ai/" "License: MIT" "LicenseUrl: https://github.com/Mackery6969/opencode/blob/HEAD/LICENSE" \
       "ShortDescription: $description" "Moniker: $moniker" "Tags:" "- ai" "- coding-agent" "- developer-tools" \
       "Documentations:" "- DocumentLabel: Docs" "  DocumentUrl: https://opencode.ai/docs"
     footer defaultLocale

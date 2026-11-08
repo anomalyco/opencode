@@ -1,8 +1,8 @@
-import { showToast } from "@opencode/ui/toast"
+import { showToast } from "@Mackery6969/ui/toast"
 import { createSignal, lazy, onCleanup, Suspense, untrack } from "solid-js"
-import { Command, createKeyed, SettingsPage, TitlebarItem, type SetupContext, type Plugin } from "@opencode/plugin/gui"
-import { onIdle } from "@opencode/plugin/gui/builtin"
-import { Updater } from "@opencode/plugin/gui/updater"
+import { Command, createKeyed, SettingsPage, TitlebarItem, type SetupContext, type Plugin } from "@Mackery6969/plugin/gui"
+import { onIdle } from "@Mackery6969/plugin/gui/builtin"
+import { Updater } from "@Mackery6969/plugin/gui/updater"
 import { updaterAction } from "./action"
 import {
   ACTION_CHUNK_TIMEOUT_MS,

@@ -1,7 +1,7 @@
 import { createMemo, For, Show } from "solid-js"
-import { syncSpinPhase } from "@opencode/ui/hooks"
-import { Icon } from "@opencode/ui/icon"
-import { TitlebarItem } from "@opencode/plugin/gui"
+import { syncSpinPhase } from "@Mackery6969/ui/hooks"
+import { Icon } from "@Mackery6969/ui/icon"
+import { TitlebarItem } from "@Mackery6969/plugin/gui"
 import { usePluginHost } from "./host"
 import "./titlebar-items.css"
 

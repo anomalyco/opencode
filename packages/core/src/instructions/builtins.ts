@@ -1,8 +1,8 @@
 export * as InstructionBuiltIns from "./builtins.js"
 
-import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { makeLocationNode } from "@Mackery6969/util/effect/app-node"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
-import { Global } from "@opencode/util/global"
+import { Global } from "@Mackery6969/util/global"
 import { Location } from "../location.js"
 import { Instructions } from "./index.js"
 
@@ -10,7 +10,7 @@ export interface Interface {
   readonly load: () => Effect.Effect<Instructions.List>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/InstructionBuiltIns") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/InstructionBuiltIns") {}
 
 const layer = Layer.effect(
   Service,

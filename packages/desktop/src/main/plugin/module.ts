@@ -4,8 +4,8 @@ import {
   inertModule,
   pluginWindowModules,
   type pluginSharedModules,
-} from "@opencode/plugin/gui/host"
-import type { Plugin } from "@opencode/plugin/gui/main"
+} from "@Mackery6969/plugin/gui/host"
+import type { Plugin } from "@Mackery6969/plugin/gui/main"
 
 const native = createRequire(import.meta.url)
 
@@ -13,12 +13,12 @@ const native = createRequire(import.meta.url)
 // checks against. In main, the window SDK's name resolves to the main SDK.
 const shared = {
   effect: () => import("effect"),
-  "@opencode/plugin/gui": () => import("@opencode/plugin/gui/main"),
-  "@opencode/plugin/gui/main": () => import("@opencode/plugin/gui/main"),
-  "@opencode/plugin/rpc": () => import("@opencode/plugin/rpc"),
-  "@opencode/schema/rpc": () => import("@opencode/schema/rpc"),
-  "@opencode/client": () => import("@opencode/client"),
-  "@opencode/client/effect": () => import("@opencode/client/effect"),
+  "@Mackery6969/plugin/gui": () => import("@Mackery6969/plugin/gui/main"),
+  "@Mackery6969/plugin/gui/main": () => import("@Mackery6969/plugin/gui/main"),
+  "@Mackery6969/plugin/rpc": () => import("@Mackery6969/plugin/rpc"),
+  "@Mackery6969/schema/rpc": () => import("@Mackery6969/schema/rpc"),
+  "@Mackery6969/client": () => import("@Mackery6969/client"),
+  "@Mackery6969/client/effect": () => import("@Mackery6969/client/effect"),
 } satisfies Record<(typeof pluginSharedModules)[number], () => Promise<object>>
 
 const windowOnly = new Set<string>(pluginWindowModules)

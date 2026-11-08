@@ -1,4 +1,4 @@
-import { define } from "@opencode/plugin/effect/plugin"
+import { define } from "@Mackery6969/plugin/effect/plugin"
 import { Clock, Deferred, Effect, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import type { ServerResponse } from "node:http"

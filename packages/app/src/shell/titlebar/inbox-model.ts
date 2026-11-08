@@ -1,4 +1,4 @@
-import { isSessionNotFoundError, type SessionInfo } from "@opencode/client/promise"
+import { isSessionNotFoundError, type SessionInfo } from "@Mackery6969/client/promise"
 import { useQueries, useQueryClient } from "@tanstack/solid-query"
 import { createStore } from "solid-js/store"
 import { createComputed, createEffect, createMemo, createSignal, onCleanup, startTransition, untrack } from "solid-js"

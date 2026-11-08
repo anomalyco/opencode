@@ -873,7 +873,7 @@ export function LegalHub(props: {
             <a href={language.route("/brand")}>Brand and trademark guidelines</a>
           </li>
           <li>
-            <a href="https://github.com/anomalyco/opencode/blob/dev/LICENSE" target="_blank" rel="noopener">
+            <a href="https://github.com/Mackery6969/opencode/blob/dev/LICENSE" target="_blank" rel="noopener">
               Open source license (MIT)
               <ExternalArrow />
               <NewTab />

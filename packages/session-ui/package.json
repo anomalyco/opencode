@@ -1,5 +1,5 @@
 {
-  "name": "@opencode/session-ui",
+  "name": "@Mackery6969/session-ui",
   "version": "2.2.5",
   "private": true,
   "type": "module",
@@ -71,10 +71,10 @@
   "dependencies": {
     "@kitlangton/solid-motion": "0.2.2",
     "@kobalte/core": "catalog:",
-    "@opencode/client": "workspace:*",
-    "@opencode/patchmark": "workspace:*",
-    "@opencode/ui": "workspace:*",
-    "@opencode/util": "workspace:*",
+    "@Mackery6969/client": "workspace:*",
+    "@Mackery6969/patchmark": "workspace:*",
+    "@Mackery6969/ui": "workspace:*",
+    "@Mackery6969/util": "workspace:*",
     "@pierre/diffs": "catalog:",
     "@pierre/highlights": "catalog:",
     "@solid-primitives/event-listener": "catalog:",

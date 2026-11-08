@@ -9,7 +9,7 @@ import {
   type JsonRpcId,
   type Stream,
 } from "@agentclientprotocol/sdk"
-import type { OpenCodeClient } from "@opencode/client/effect"
+import type { OpenCodeClient } from "@Mackery6969/client/effect"
 import { Cause, Deferred, Effect, Ref, type Scope } from "effect"
 import { ACPCapabilities } from "./capabilities"
 import { ACPCatalog } from "./catalog"

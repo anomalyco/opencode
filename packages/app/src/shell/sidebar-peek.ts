@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { frameLoop, prefersReducedMotion, Spring, type DurationOptions } from "@opencode/ui/motion"
-import { motionTimeScale } from "@opencode/ui/motion-tuning"
+import { frameLoop, prefersReducedMotion, Spring, type DurationOptions } from "@Mackery6969/ui/motion"
+import { motionTimeScale } from "@Mackery6969/ui/motion-tuning"
 import {
   INITIAL_SIDEBAR_PEEK_STATE,
   PEEK_BLUR_EVENT,

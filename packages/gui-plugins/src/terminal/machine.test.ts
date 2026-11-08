@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { PersistentPtyInfo } from "@opencode/client"
+import type { PersistentPtyInfo } from "@Mackery6969/client"
 import {
   initialState,
   serverAvailable,

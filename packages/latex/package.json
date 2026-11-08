@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode/latex",
+  "name": "@Mackery6969/latex",
   "version": "2.2.5",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "typecheck:tsc": "tsc --noEmit"
   },
   "dependencies": {
-    "@opencode/plugin": "workspace:*",
+    "@Mackery6969/plugin": "workspace:*",
     "@opentui/core": "catalog:",
     "string-width": "catalog:"
   },

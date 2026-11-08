@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test"
-import { base64Encode } from "@opencode/util/encode"
+import { base64Encode } from "@Mackery6969/util/encode"
 
 /** Opens the side panel's "Open file" launcher tab from the new tab view the strip's + opens. */
 export async function openFileLauncher(panel: Locator) {

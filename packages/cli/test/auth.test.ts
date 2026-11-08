@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
 import { OPENCODE_VERSION } from "../src/version"
-import type { FormFields } from "@opencode/client"
+import type { FormFields } from "@Mackery6969/client"
 
 const consoleForm = [
   { type: "string", key: "server", hidden: true, format: "uri", default: "https://opencode.ai/console" },

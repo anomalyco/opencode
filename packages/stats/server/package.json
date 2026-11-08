@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode/stats-server",
+  "name": "@Mackery6969/stats-server",
   "version": "2.2.5",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
     "typecheck:tsc": "tsc --noEmit"
   },
   "dependencies": {
-    "@opencode/stats-core": "workspace:*",
+    "@Mackery6969/stats-core": "workspace:*",
     "effect": "catalog:",
     "sst": "catalog:"
   },

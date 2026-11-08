@@ -113,7 +113,7 @@
   "devDependencies": {
     "@ast-grep/cli": "0.44.0",
     "@hona/strobe": "catalog:",
-    "@opencode/client": "workspace:*",
+    "@Mackery6969/client": "workspace:*",
     "@oxlint/plugins": "1.60.0",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
@@ -129,13 +129,13 @@
     "turbo": "2.10.2"
   },
   "dependencies": {
-    "@opencode/plugin": "workspace:*",
-    "@opencode/script": "workspace:*",
+    "@Mackery6969/plugin": "workspace:*",
+    "@Mackery6969/script": "workspace:*",
     "typescript": "catalog:"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/anomalyco/opencode"
+    "url": "https://github.com/Mackery6969/opencode"
   },
   "license": "MIT",
   "prettier": {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import os from "os"
 import path from "path"
-import type { SessionMessageAssistantTool } from "@opencode/client/promise"
+import type { SessionMessageAssistantTool } from "@Mackery6969/client/promise"
 import { entryBody, entryCanStream, entryDone } from "../../src/mini/entry.body"
 import type { StreamCommit, ToolSnapshot } from "../../src/mini/types"
 import { canonicalToolPart } from "./fixture/tool-part"

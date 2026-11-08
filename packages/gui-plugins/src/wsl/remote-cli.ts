@@ -43,7 +43,7 @@ export function installScript(input: { version: string; binary?: string }) {
   const version = requireVersion(input.version)
 
   return `set -eu
-curl -fsSL https://raw.githubusercontent.com/anomalyco/opencode/v2/install | bash -s -- ${input.binary ? `--binary ${input.binary}` : `--version ${quote(version)}`}
+curl -fsSL https://raw.githubusercontent.com/Mackery6969/opencode/v2/install | bash -s -- ${input.binary ? `--binary ${input.binary}` : `--version ${quote(version)}`}
 test "$("$HOME/.opencode/bin/opencode" --version | awk '{print $NF}' | sed 's/^v//')" = ${quote(version)}
 `
 }

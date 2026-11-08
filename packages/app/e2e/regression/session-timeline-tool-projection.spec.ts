@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { timelinePresets } from "@opencode/session-ui/timeline/detail"
+import { timelinePresets } from "@Mackery6969/session-ui/timeline/detail"
 import { assistantMessage, partUpdated, setupTimeline, textPart, toolPart, userMessage } from "../utils/timeline"
 
 test("keeps shell and question failures in their Used group", async ({ page }) => {

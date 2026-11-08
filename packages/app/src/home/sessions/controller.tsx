@@ -1,8 +1,8 @@
-import type { SessionInfo } from "@opencode/client/promise"
-import { useDialog } from "@opencode/ui/context/dialog"
-import { Button } from "@opencode/ui/button"
-import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
-import { prefersReducedMotion } from "@opencode/ui/motion"
+import type { SessionInfo } from "@Mackery6969/client/promise"
+import { useDialog } from "@Mackery6969/ui/context/dialog"
+import { Button } from "@Mackery6969/ui/button"
+import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@Mackery6969/ui/dialog"
+import { prefersReducedMotion } from "@Mackery6969/ui/motion"
 import { hashKey, onlineManager, useQueryClient } from "@tanstack/solid-query"
 import {
   type Accessor,

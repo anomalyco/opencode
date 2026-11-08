@@ -1,5 +1,5 @@
-import { DataProvider, type TurnDiffInput } from "@opencode/session-ui/context"
-import { MarkdownProvider, type ReadMarkdownImage } from "@opencode/session-ui/context/markdown"
+import { DataProvider, type TurnDiffInput } from "@Mackery6969/session-ui/context"
+import { MarkdownProvider, type ReadMarkdownImage } from "@Mackery6969/session-ui/context/markdown"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useQuery } from "@tanstack/solid-query"
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type ParentProps } from "solid-js"

@@ -1,4 +1,4 @@
-import type { Mutable } from "@opencode/plugin/gui"
+import type { Mutable } from "@Mackery6969/plugin/gui"
 
 /** A `Persisted` write, kept as data while it waits. */
 export type StoreWrite<T> =

@@ -12,7 +12,7 @@ export const loadADCClient = async (project?: string) => {
   const { GoogleAuth } = await import("google-auth-library")
   // google-auth-library 10.5.0 ignores CLOUDSDK_CONFIG during ADC file discovery.
   // Fix this in shipped AI code: a repository-level Bun dependency patch would not
-  // reach npm or Bun consumers of the published @opencode/ai package.
+  // reach npm or Bun consumers of the published @Mackery6969/ai package.
   // Override only the well-known-file lookup: keyFilename bypasses ADC's quota-project
   // preparation. Keep explicit credentials and metadata fallback in Google's ADC chain.
   class CloudSDKAuth extends GoogleAuth {

@@ -1,7 +1,7 @@
 export * as ConfigWatch from "./watch.js"
 
 import path from "path"
-import { FSUtil } from "@opencode/util/fs-util"
+import { FSUtil } from "@Mackery6969/util/fs-util"
 import type { Watcher } from "../filesystem/watcher.js"
 import type { ConfigDiscovery } from "./discovery.js"
 

@@ -1,4 +1,4 @@
-import type { IconName } from "@opencode/ui/icons/catalog"
+import type { IconName } from "@Mackery6969/ui/icons/catalog"
 import { createContext, useContext, type ParentProps } from "solid-js"
 
 export type ReadMarkdownImage = (path: string, signal: AbortSignal) => Promise<Blob | undefined>

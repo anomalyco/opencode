@@ -1,5 +1,5 @@
-import { Config } from "@opencode/schema/config"
-import { ConfigShell } from "@opencode/schema/config/shell"
+import { Config } from "@Mackery6969/schema/config"
+import { ConfigShell } from "@Mackery6969/schema/config/shell"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { SessionMessage } from "@opencode/schema/session-message"
+import { SessionMessage } from "@Mackery6969/schema/session-message"
 import type { ComposerSession } from "./adapter"
 import {
   composerSubmitView,

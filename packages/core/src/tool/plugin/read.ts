@@ -1,10 +1,10 @@
 export * as ReadTool from "./read.js"
 
-import type { Context } from "@opencode/plugin/effect/plugin"
+import type { Context } from "@Mackery6969/plugin/effect/plugin"
 import { basename, dirname, join } from "path"
-import { ToolFailure } from "@opencode/ai/effect"
+import { ToolFailure } from "@Mackery6969/ai/effect"
 import { Effect, Schema } from "effect"
-import { FSUtil } from "@opencode/util/fs-util"
+import { FSUtil } from "@Mackery6969/util/fs-util"
 import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"

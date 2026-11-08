@@ -1,8 +1,8 @@
 export * as ConfigMigration from "./migrate"
 
-import { TuiConfigV1 } from "@opencode/tui/config/v1"
-import { TuiKeybind } from "@opencode/tui/config/v1/keybind"
-import { Definitions } from "@opencode/tui/config/keybind"
+import { TuiConfigV1 } from "@Mackery6969/tui/config/v1"
+import { TuiKeybind } from "@Mackery6969/tui/config/v1/keybind"
+import { Definitions } from "@Mackery6969/tui/config/keybind"
 import { Effect, FileSystem, Option, Schema } from "effect"
 import { randomUUID } from "crypto"
 import { applyEdits, createScanner, modify, parse, parseTree, type Node, type ParseError } from "jsonc-parser"

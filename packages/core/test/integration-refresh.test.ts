@@ -1,10 +1,10 @@
 import { expect } from "bun:test"
 import { Context, Deferred, Effect, Fiber, Layer } from "effect"
 import { TestClock } from "effect/testing"
-import { Node } from "@opencode/util/effect/app-node"
-import { LayerNode } from "@opencode/util/effect/layer-node"
-import { Credential } from "@opencode/core/credential"
-import { Integration } from "@opencode/core/integration"
+import { Node } from "@Mackery6969/util/effect/app-node"
+import { LayerNode } from "@Mackery6969/util/effect/layer-node"
+import { Credential } from "@Mackery6969/core/credential"
+import { Integration } from "@Mackery6969/core/integration"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(Layer.empty)

@@ -1,4 +1,4 @@
-import { abort } from "@opencode/util/abort"
+import { abort } from "@Mackery6969/util/abort"
 import {
   batch,
   catchError,
@@ -22,11 +22,11 @@ import {
   type ParentProps,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { LifetimeContext, liveAccessor, PluginContext, type Bridge, type Entry } from "@opencode/plugin/gui/host"
-import type { BuiltinCatalog, BuiltinContext } from "@opencode/plugin/gui/builtin"
+import { LifetimeContext, liveAccessor, PluginContext, type Bridge, type Entry } from "@Mackery6969/plugin/gui/host"
+import type { BuiltinCatalog, BuiltinContext } from "@Mackery6969/plugin/gui/builtin"
 import { Predicate } from "effect"
-import { useDialog } from "@opencode/ui/context/dialog"
-import { pluralCategory, resolveTemplate } from "@opencode/ui/context/i18n"
+import { useDialog } from "@Mackery6969/ui/context/dialog"
+import { pluralCategory, resolveTemplate } from "@Mackery6969/ui/context/i18n"
 import {
   LinkHandler,
   type BaseContext,
@@ -49,8 +49,8 @@ import {
   type SessionRef,
   type SetupContext,
   type Token,
-} from "@opencode/plugin/gui"
-import { OpenCode, type OpenCodeClient } from "@opencode/client/promise"
+} from "@Mackery6969/plugin/gui"
+import { OpenCode, type OpenCodeClient } from "@Mackery6969/client/promise"
 import { useLanguage } from "@/runtime/i18n/language"
 import {
   createPluginDialogState,

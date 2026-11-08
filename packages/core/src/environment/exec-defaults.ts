@@ -1,7 +1,7 @@
 import { Effect, Stream } from "effect"
 import { ChildProcess } from "effect/process"
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
-import { collectStream } from "@opencode/util/process"
+import { collectStream } from "@Mackery6969/util/process"
 import type { Driver } from "./driver.js"
 import { Failed, NotFound, WrongKind, type FileInfo, type Files, type FileType, type FilesImpl } from "./files.js"
 

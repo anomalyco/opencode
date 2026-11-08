@@ -1,6 +1,6 @@
 # Browser plugin
 
-`@opencode/plugin-browser` exposes the desktop browser through Code Mode.
+`@Mackery6969/plugin-browser` exposes the desktop browser through Code Mode.
 The server owns tools, invocation scope, and permissions; the desktop owns tabs,
 CDP, captured traffic, evaluations, and capture files. Core only registers the
 plugin. Neither endpoint imports the other's implementation.
@@ -28,7 +28,7 @@ Screenshots require a focused, visible tab; call `browser.tabs.focus` first.
 - Audits: `lighthouse` (accessibility, SEO, best practices).
 
 The source of truth for inputs, descriptions, and outputs is
-`Browser.Operations` in `@opencode/plugin-browser/rpc`.
+`Browser.Operations` in `@Mackery6969/plugin-browser/rpc`.
 
 The built-in `browser` skill (`skill.ts`) teaches the workflow: explicit tab
 IDs, snapshots and refs, showing results to the user, recipes for debugging,
@@ -49,7 +49,7 @@ The desktop implementation is the built-in `browser` GUI plugin
 
 ## RPC
 
-The plugin-owned contract is `@opencode/plugin-browser/rpc`. This entrypoint
+The plugin-owned contract is `@Mackery6969/plugin-browser/rpc`. This entrypoint
 contains only schemas and descriptions; it does not load the server plugin or
 filesystem code. The desktop subscribes
 to control events before starting `attach` with `version: 4`. The attachment call

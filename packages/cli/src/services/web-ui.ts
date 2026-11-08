@@ -1,4 +1,4 @@
-import { FSUtil } from "@opencode/util/fs-util"
+import { FSUtil } from "@Mackery6969/util/fs-util"
 import { Effect, FileSystem } from "effect"
 import { HttpServerError, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { createHash } from "node:crypto"

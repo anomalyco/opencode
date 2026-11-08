@@ -1,5 +1,5 @@
 import type { FileNode } from "@/runtime/server/types"
-import type { OpenCodeEvent } from "@opencode/client/promise"
+import type { OpenCodeEvent } from "@Mackery6969/client/promise"
 
 type WatcherEvent = Extract<OpenCodeEvent, { type: "filesystem.changed" }>
 

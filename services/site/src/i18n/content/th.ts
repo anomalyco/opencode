@@ -125,11 +125,11 @@ export const content = {
       features: {
         "typescript-client": {
           title: "ไคลเอนต์ TypeScript",
-          body: "คำขอและอีเวนต์แบบมีชนิดข้อมูล ใช้ค่าเดียวกับ @opencode/client",
+          body: "คำขอและอีเวนต์แบบมีชนิดข้อมูล ใช้ค่าเดียวกับ @Mackery6969/client",
         },
         "sessions-from-code": { title: "เซสชันจากโค้ด", body: "สร้างเซสชันและส่งพรอมต์จากสคริปต์ใดก็ได้" },
         "any-model": { title: "โมเดลใดก็ได้", body: "ใช้โมเดลที่ตั้งค่าไว้ใน OpenCode ของคุณ" },
-        "npm-or-bun": { title: "npm หรือ bun", body: "ติดตั้งด้วย npm i @opencode/sdk หรือ bun add @opencode/sdk" },
+        "npm-or-bun": { title: "npm หรือ bun", body: "ติดตั้งด้วย npm i @Mackery6969/sdk หรือ bun add @Mackery6969/sdk" },
         "in-process-host": { title: "โฮสต์ในโปรเซส", body: "รัน OpenCode ในหน่วยความจำ โดยไม่ผ่านเครือข่าย" },
         "your-plugins": { title: "ปลั๊กอินของคุณ", body: "ส่งปลั๊กอินของคุณเข้าไปเมื่อสร้างโฮสต์ในโปรเซส" },
         "promise-or-effect": { title: "Promise หรือ Effect", body: "API แบบ Promise และแบบ Effect ที่ให้ค่าเดียวกัน" },

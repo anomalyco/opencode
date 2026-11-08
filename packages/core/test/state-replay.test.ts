@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { State } from "@opencode/core/state"
+import { State } from "@Mackery6969/core/state"
 import { Effect } from "effect"
 import FastCheck from "fast-check"
 

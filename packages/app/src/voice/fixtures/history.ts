@@ -1,4 +1,4 @@
-import type { SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessageInfo } from "@Mackery6969/client/promise"
 
 // Recorded from this implementation session's GET /message on 2026-10-22.
 // IDs, text, agent and model are redacted. Timing, order, finish and idle

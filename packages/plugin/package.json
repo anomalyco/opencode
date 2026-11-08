@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode/plugin",
+  "name": "@Mackery6969/plugin",
   "version": "2.2.5",
   "type": "module",
   "license": "MIT",
@@ -42,15 +42,15 @@
   ],
   "dependencies": {
     "@ai-sdk/provider": "3.0.8",
-    "@opencode/ai": "workspace:*",
-    "@opencode/client": "workspace:*",
-    "@opencode/protocol": "workspace:*",
-    "@opencode/schema": "workspace:*",
-    "@opencode/util": "workspace:*",
+    "@Mackery6969/ai": "workspace:*",
+    "@Mackery6969/client": "workspace:*",
+    "@Mackery6969/protocol": "workspace:*",
+    "@Mackery6969/schema": "workspace:*",
+    "@Mackery6969/util": "workspace:*",
     "effect": "catalog:"
   },
   "peerDependencies": {
-    "@opencode/theme": "workspace:*",
+    "@Mackery6969/theme": "workspace:*",
     "@opentui/core": ">=0.8.1",
     "@opentui/solid": ">=0.8.1",
     "electron": "*",
@@ -59,7 +59,7 @@
     "vite-plugin-solid": ">=2.11"
   },
   "peerDependenciesMeta": {
-    "@opencode/theme": {
+    "@Mackery6969/theme": {
       "optional": true
     },
     "@opentui/core": {
@@ -82,7 +82,7 @@
     }
   },
   "devDependencies": {
-    "@opencode/theme": "workspace:*",
+    "@Mackery6969/theme": "workspace:*",
     "@opentui/core": "catalog:",
     "@opentui/solid": "catalog:",
     "@tsconfig/bun": "catalog:",
@@ -97,7 +97,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anomalyco/opencode.git",
+    "url": "git+https://github.com/Mackery6969/opencode.git",
     "directory": "packages/plugin"
   }
 }

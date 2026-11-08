@@ -1,4 +1,4 @@
-import { STEALTH_MODELS, statModel } from "@opencode/stats-core/domain/model-normalization"
+import { STEALTH_MODELS, statModel } from "@Mackery6969/stats-core/domain/model-normalization"
 import { query } from "@solidjs/router"
 
 export const modelCatalogSourceUrl = "https://models.opencode.ai/catalog.json"

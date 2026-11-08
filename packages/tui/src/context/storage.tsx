@@ -2,7 +2,7 @@ import { batch, createContext, onCleanup, useContext, type ParentProps } from "s
 import { createStore, produce, reconcile, type Store } from "solid-js/store"
 import path from "path"
 import { mkdirSync, readFileSync } from "fs"
-import { Flock } from "@opencode/util/flock"
+import { Flock } from "@Mackery6969/util/flock"
 import { writeJsonAtomic } from "../util/persistence"
 import { safeWatch } from "../util/watch"
 import { useTuiApp, useTuiPaths } from "./runtime"

@@ -6,8 +6,8 @@ import {
   isPtyFeatureUnsupportedError,
   isPtyNotFoundError,
   isServiceUnavailableError,
-} from "@opencode/client"
-import type { Layout, Persisted, ServerRef, SessionRef, Storage, Toasts } from "@opencode/plugin/gui"
+} from "@Mackery6969/client"
+import type { Layout, Persisted, ServerRef, SessionRef, Storage, Toasts } from "@Mackery6969/plugin/gui"
 import { createDispatch } from "./dispatch"
 import { defaultTitle, titleNumber } from "./title"
 import {

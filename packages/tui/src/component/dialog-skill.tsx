@@ -5,7 +5,7 @@ import { DIALOG_LIST_INSET, useDialog } from "../ui/dialog"
 import { useTheme } from "../context/theme"
 import { errorMessage } from "../util/error"
 import { useData } from "../context/data"
-import type { LocationRef } from "@opencode/client"
+import type { LocationRef } from "@Mackery6969/client"
 
 export type DialogSkillProps = {
   location?: LocationRef

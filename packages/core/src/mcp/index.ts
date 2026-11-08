@@ -1,9 +1,9 @@
 export * as Mcp from "./index.js"
 
-import { Mcp } from "@opencode/schema/mcp"
-import { McpEvent } from "@opencode/schema/mcp-event"
-import { ephemeral } from "@opencode/schema/event"
-import type { Session } from "@opencode/schema/session"
+import { Mcp } from "@Mackery6969/schema/mcp"
+import { McpEvent } from "@Mackery6969/schema/mcp-event"
+import { ephemeral } from "@Mackery6969/schema/event"
+import type { Session } from "@Mackery6969/schema/session"
 import type { Transport } from "@modelcontextprotocol/client"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
@@ -23,8 +23,8 @@ import {
   Types,
 } from "effect"
 import { FetchHttpClient } from "effect/http"
-import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { httpFetch } from "@opencode/util/effect/app-node-platform"
+import { makeLocationNode } from "@Mackery6969/util/effect/app-node"
+import { httpFetch } from "@Mackery6969/util/effect/app-node-platform"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
@@ -32,7 +32,7 @@ import { Form } from "../form.js"
 import { Integration } from "../integration.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
 import { Location } from "../location.js"
-import { waitForAbort } from "@opencode/util/process"
+import { waitForAbort } from "@Mackery6969/util/process"
 import { State } from "../state.js"
 import type { McpClient } from "./client.js"
 import { McpConnection } from "./connection.js"
@@ -184,7 +184,7 @@ export interface Interface extends State.Transformable<Editor> {
   }) => Effect.Effect<ResourceContent | undefined, Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/MCP") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/MCP") {}
 
 export const Options = Schema.Struct({
   clientInfo: Schema.optional(

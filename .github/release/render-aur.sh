@@ -13,8 +13,8 @@ printf '#!/bin/sh\nexec "$(dirname "$0")/opencode" "$@"\n' > "$aur/opencode2"
 sum() { sha256 "$1" | cut -c1-64; }
 x64=$(sum "$npm/opencode-cli-linux-x64-baseline-$OPENCODE_VERSION.tgz")
 arm64=$(sum "$npm/opencode-cli-linux-arm64-$OPENCODE_VERSION.tgz")
-x64_url="https://registry.npmjs.org/@opencode/cli-linux-x64-baseline/-/cli-linux-x64-baseline-$OPENCODE_VERSION.tgz"
-arm64_url="https://registry.npmjs.org/@opencode/cli-linux-arm64/-/cli-linux-arm64-$OPENCODE_VERSION.tgz"
+x64_url="https://registry.npmjs.org/@Mackery6969/cli-linux-x64-baseline/-/cli-linux-x64-baseline-$OPENCODE_VERSION.tgz"
+arm64_url="https://registry.npmjs.org/@Mackery6969/cli-linux-arm64/-/cli-linux-arm64-$OPENCODE_VERSION.tgz"
 license=$(sum "$aur/LICENSE")
 shim=$(sum "$aur/opencode2")
 
@@ -25,7 +25,7 @@ pkgname=$name
 pkgver=$pkgver
 pkgrel=1
 pkgdesc='OpenCode beta - the AI coding agent for the terminal'
-url='https://github.com/anomalyco/opencode'
+url='https://github.com/Mackery6969/opencode'
 arch=('x86_64' 'aarch64')
 license=('MIT')
 depends=('glibc' 'gcc-libs' 'ripgrep')
@@ -53,7 +53,7 @@ pkgbase = $name
 ${t}pkgdesc = OpenCode beta - the AI coding agent for the terminal
 ${t}pkgver = $pkgver
 ${t}pkgrel = 1
-${t}url = https://github.com/anomalyco/opencode
+${t}url = https://github.com/Mackery6969/opencode
 ${t}arch = x86_64
 ${t}arch = aarch64
 ${t}license = MIT

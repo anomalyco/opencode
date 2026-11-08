@@ -1,4 +1,4 @@
-import { loadLocaleDict, normalizeLocale, type Locale, type Platform } from "@opencode/app/desktop"
+import { loadLocaleDict, normalizeLocale, type Locale, type Platform } from "@Mackery6969/app/desktop"
 import { storedLocaleValue } from "./locale-value"
 
 // The stored language lives in the main process's SQLite store, behind the IPC port. A copy of the

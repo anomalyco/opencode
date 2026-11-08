@@ -1,12 +1,12 @@
 {
-  "name": "@opencode/pty",
+  "name": "@Mackery6969/pty",
   "version": "0.5.0",
   "description": "Persistent PTY service for OpenCode",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anomalyco/opencode.git",
+    "url": "git+https://github.com/Mackery6969/opencode.git",
     "directory": "packages/process-daemon/npm"
   },
   "exports": {
@@ -25,14 +25,14 @@
     "index.js"
   ],
   "optionalDependencies": {
-    "@opencode/pty-darwin-arm64": "0.5.0",
-    "@opencode/pty-darwin-x64": "0.5.0",
-    "@opencode/pty-linux-arm64-gnu": "0.5.0",
-    "@opencode/pty-linux-arm64-musl": "0.5.0",
-    "@opencode/pty-linux-x64-gnu": "0.5.0",
-    "@opencode/pty-linux-x64-musl": "0.5.0",
-    "@opencode/pty-win32-arm64": "0.5.0",
-    "@opencode/pty-win32-x64": "0.5.0"
+    "@Mackery6969/pty-darwin-arm64": "0.5.0",
+    "@Mackery6969/pty-darwin-x64": "0.5.0",
+    "@Mackery6969/pty-linux-arm64-gnu": "0.5.0",
+    "@Mackery6969/pty-linux-arm64-musl": "0.5.0",
+    "@Mackery6969/pty-linux-x64-gnu": "0.5.0",
+    "@Mackery6969/pty-linux-x64-musl": "0.5.0",
+    "@Mackery6969/pty-win32-arm64": "0.5.0",
+    "@Mackery6969/pty-win32-x64": "0.5.0"
   },
   "publishConfig": {
     "access": "public"

@@ -1,5 +1,5 @@
 import type { Component, Owner } from "solid-js"
-import type { PluginInfo } from "@opencode/client/promise"
+import type { PluginInfo } from "@Mackery6969/client/promise"
 import type {
   CodeBlockProps,
   Context,
@@ -9,9 +9,9 @@ import type {
   Live,
   SessionRef,
   SessionScreen,
-} from "@opencode/plugin/gui"
-import type { BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
-import type { Bridge, BridgeMessage, EnableState, Installed } from "@opencode/plugin/gui/host"
+} from "@Mackery6969/plugin/gui"
+import type { BuiltinPanelTab } from "@Mackery6969/plugin/gui/builtin"
+import type { Bridge, BridgeMessage, EnableState, Installed } from "@Mackery6969/plugin/gui/host"
 import type { JSHandle } from "@playwright/test"
 import type { mountCodeBlocks, mountThemes } from "./plugin-host.fixture"
 import { expect, sourceURL, story } from "../../stories/playwright/story"

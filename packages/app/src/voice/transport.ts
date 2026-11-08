@@ -1,5 +1,5 @@
-import type { OpenCodeClient } from "@opencode/client/promise"
-import { uuid } from "@opencode/util/uuid"
+import type { OpenCodeClient } from "@Mackery6969/client/promise"
+import { uuid } from "@Mackery6969/util/uuid"
 import { decodeEvent, type VoiceEvent } from "./protocol"
 import { delegatorInstructions, liveInstructions, tools } from "./spec"
 import {

@@ -14,7 +14,7 @@
 import os from "os"
 import path from "path"
 import stripAnsi from "strip-ansi"
-import type { SessionMessageAssistantTool } from "@opencode/client/promise"
+import type { SessionMessageAssistantTool } from "@Mackery6969/client/promise"
 import { LANGUAGE_EXTENSIONS } from "../util/filetype"
 import { Locale } from "../util/locale"
 import {

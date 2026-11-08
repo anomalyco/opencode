@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { ClientError, OpenCode } from "@opencode/client/promise"
+import { ClientError, OpenCode } from "@Mackery6969/client/promise"
 import { createMiniConnection } from "../../src/mini"
 
 const endpoint = { url: process.argv[2]! }

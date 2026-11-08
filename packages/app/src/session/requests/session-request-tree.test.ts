@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { FormInfo, PermissionRequest, SessionInfo } from "@opencode/client/promise"
+import type { FormInfo, PermissionRequest, SessionInfo } from "@Mackery6969/client/promise"
 import { sessionPermissionRequest, sessionFormRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
 
 // SAFETY: the request tree reads only a session's id and parentID.

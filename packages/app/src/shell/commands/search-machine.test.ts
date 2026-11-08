@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionInfo } from "@opencode/client/promise"
+import type { SessionInfo } from "@Mackery6969/client/promise"
 import type { CommandPaletteEntry } from "./palette"
 import {
   INITIAL_SESSION_SOURCE_STATE,

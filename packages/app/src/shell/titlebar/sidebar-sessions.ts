@@ -1,4 +1,4 @@
-import type { OpenCodeEvent, SessionInfo } from "@opencode/client/promise"
+import type { OpenCodeEvent, SessionInfo } from "@Mackery6969/client/promise"
 import { createStore } from "solid-js/store"
 import { mergeHomeSessionIndex } from "@/home/sessions/index"
 

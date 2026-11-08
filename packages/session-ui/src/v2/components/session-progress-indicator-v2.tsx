@@ -1,5 +1,5 @@
 import { type ComponentProps } from "solid-js"
-import { Spinner } from "@opencode/ui/spinner"
+import { Spinner } from "@Mackery6969/ui/spinner"
 import "./session-progress-indicator-v2.css"
 
 // The app's one activity spinner, shared by the activity chip, subagent rows, task cards and loading tabs.

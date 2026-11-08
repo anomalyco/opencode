@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Ipc } from "@opencode/plugin/gui"
+import { Ipc } from "@Mackery6969/plugin/gui"
 
 /**
  * Turns on remote access and keeps this machine's display awake while another device uses it. The window asks the

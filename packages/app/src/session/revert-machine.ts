@@ -1,4 +1,4 @@
-import type { SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageUser } from "@Mackery6969/client/promise"
 import type { ContextItem, Prompt } from "@/composer/state"
 
 // A hung wait, media pin or revert request fails, so undo and redo cannot stay disabled forever.

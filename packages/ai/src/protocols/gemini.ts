@@ -1,5 +1,5 @@
 import { Effect, Option, Schema, Stream } from "effect"
-import { Tool } from "@opencode/schema/tool"
+import { Tool } from "@Mackery6969/schema/tool"
 import { Route } from "../route/client.js"
 import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"

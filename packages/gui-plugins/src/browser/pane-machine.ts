@@ -1,4 +1,4 @@
-import { Browser } from "@opencode/plugin-browser/rpc"
+import { Browser } from "@Mackery6969/plugin-browser/rpc"
 import { Option, Predicate, Schema } from "effect"
 import type { PaneCloseReason, PaneEvent } from "./ipc"
 

@@ -63,7 +63,7 @@ ${installRows}
   └── Try            opencode.try() for OpenCode Lite, nothing to install
 
   BUGS
-  ├── Report         github.com/anomalyco/opencode/issues/new
+  ├── Report         github.com/Mackery6969/opencode/issues/new
   ├── Include        what you saw, the steps, your OS and terminal
   ├── Version        opencode -v
   ├── Logs           opencode debug paths log

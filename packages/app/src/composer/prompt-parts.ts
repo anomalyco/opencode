@@ -1,5 +1,5 @@
 import type { ContentPart, ImageAttachmentPart, PathAttachmentPart, Prompt } from "./state"
-import { parseSessionMention, serializeSessionMention } from "@opencode/util/session-mention"
+import { parseSessionMention, serializeSessionMention } from "@Mackery6969/util/session-mention"
 
 export function serializePrompt(prompt: Prompt): Prompt {
   // Editor offsets measure titles; wire offsets measure stable session tokens.

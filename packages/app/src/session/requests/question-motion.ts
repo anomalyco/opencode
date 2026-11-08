@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js"
-import { observeReducedMotion, prefersReducedMotion } from "@opencode/ui/motion"
-import { motionTuning } from "@opencode/ui/motion-tuning"
+import { observeReducedMotion, prefersReducedMotion } from "@Mackery6969/ui/motion"
+import { motionTuning } from "@Mackery6969/ui/motion-tuning"
 
 // The question dock's motion (the switch between questions, the rolling count, the sliding progress bar, the footer
 // buttons, and the dock opening, closing and folding) is off unless this knob is on. Off, every change lands on the

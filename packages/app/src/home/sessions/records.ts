@@ -1,9 +1,9 @@
-import type { SessionInfo } from "@opencode/client/promise"
+import type { SessionInfo } from "@Mackery6969/client/promise"
 import type { LocalProject } from "@/shell/state/layout"
-import { displayName } from "@opencode/ui/project-avatar"
+import { displayName } from "@Mackery6969/ui/project-avatar"
 import { compareSessionTime } from "@/shell/layout/helpers"
 import { pathKey } from "@/workspaces/path-key"
-import { getFilename } from "@opencode/util/path"
+import { getFilename } from "@Mackery6969/util/path"
 
 export type HomeSessionRecord = {
   session: SessionInfo

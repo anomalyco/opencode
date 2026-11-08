@@ -1,13 +1,13 @@
-import { Bus } from "@opencode/core/bus"
-import { Config } from "@opencode/core/config"
-import { Integration } from "@opencode/core/integration"
-import { Model } from "@opencode/core/model"
-import { Plugin } from "@opencode/core/plugin"
-import { PluginHost } from "@opencode/core/plugin/host"
-import { ProviderPlugins } from "@opencode/core/plugin/provider"
-import { make, VLLMPlugin } from "@opencode/core/plugin/provider/vllm"
-import { Provider } from "@opencode/core/provider"
-import { Document, Event, Info } from "@opencode/schema/config"
+import { Bus } from "@Mackery6969/core/bus"
+import { Config } from "@Mackery6969/core/config"
+import { Integration } from "@Mackery6969/core/integration"
+import { Model } from "@Mackery6969/core/model"
+import { Plugin } from "@Mackery6969/core/plugin"
+import { PluginHost } from "@Mackery6969/core/plugin/host"
+import { ProviderPlugins } from "@Mackery6969/core/plugin/provider"
+import { make, VLLMPlugin } from "@Mackery6969/core/plugin/provider/vllm"
+import { Provider } from "@Mackery6969/core/provider"
+import { Document, Event, Info } from "@Mackery6969/schema/config"
 import { describe, expect } from "bun:test"
 import { Duration, Effect, Layer, Schema } from "effect"
 import { eventually } from "../lib/eventually"
@@ -79,7 +79,7 @@ describe("VLLMPlugin", () => {
           expect(yield* providers.get(providerID)).toEqual({
             id: providerID,
             name: "vLLM",
-            package: "@opencode/ai/providers/openai-compatible",
+            package: "@Mackery6969/ai/providers/openai-compatible",
             settings: { baseURL: `${server.url.origin}/v1`, provider: "vllm", apiKey: "" },
             activation: "enabled",
           })
@@ -169,7 +169,7 @@ describe("VLLMPlugin", () => {
           yield* providers.transform((editor) => {
             editor.update(providerID, (provider) => {
               provider.name = "vLLM"
-              provider.package = "@opencode/ai/providers/openai-compatible"
+              provider.package = "@Mackery6969/ai/providers/openai-compatible"
               provider.integrationID = Integration.ID.make("vllm")
               provider.activation = "auto"
             })

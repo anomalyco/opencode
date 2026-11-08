@@ -1,11 +1,11 @@
 import { Show, createMemo, type ComponentProps, type JSX } from "solid-js"
-import { ProgressCircle } from "@opencode/ui/progress-circle"
-import { Button } from "@opencode/ui/button"
-import { Menu } from "@opencode/ui/menu"
-import { Tooltip } from "@opencode/ui/tooltip"
-import { useI18n } from "@opencode/ui/context/i18n"
-import { lastAssistantWithUsage } from "@opencode/client/solid"
-import { usePlugin, type MountedSession } from "@opencode/plugin/gui"
+import { ProgressCircle } from "@Mackery6969/ui/progress-circle"
+import { Button } from "@Mackery6969/ui/button"
+import { Menu } from "@Mackery6969/ui/menu"
+import { Tooltip } from "@Mackery6969/ui/tooltip"
+import { useI18n } from "@Mackery6969/ui/context/i18n"
+import { lastAssistantWithUsage } from "@Mackery6969/client/solid"
+import { usePlugin, type MountedSession } from "@Mackery6969/plugin/gui"
 import { catalogModel, syncCatalog } from "./catalog"
 
 export function SessionContextUsage(props: {

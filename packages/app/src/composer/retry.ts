@@ -1,5 +1,5 @@
-import { checksum } from "@opencode/util/encode"
-import type { SessionMessage } from "@opencode/schema/session-message"
+import { checksum } from "@Mackery6969/util/encode"
+import type { SessionMessage } from "@Mackery6969/schema/session-message"
 import type { ComposerDelivery, ComposerSelection } from "./adapter"
 import { buildPromptRequest } from "./request"
 import type { ContextItem, Prompt } from "./schema"

@@ -1,6 +1,6 @@
 export * as SessionSkill from "./skill.js"
 
-import type { Session } from "@opencode/schema/session"
+import type { Session } from "@Mackery6969/schema/session"
 import { Effect } from "effect"
 import { Instance } from "../instance/service.js"
 import { Plugin } from "../plugin/service.js"

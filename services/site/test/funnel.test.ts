@@ -106,7 +106,7 @@ describe("funnel config", () => {
       "ide",
     )
     expect(downloadOf(new URL("https://open-vsx.org/extension/sst-dev/opencode"))?.target).toBe("ide")
-    expect(downloadOf(new URL("https://github.com/anomalyco/opencode/releases"))).toBeUndefined()
+    expect(downloadOf(new URL("https://github.com/Mackery6969/opencode/releases"))).toBeUndefined()
     expect(downloadOf(new URL("https://example.com/update/api/latest/desktop/opencode/x.dmg"))).toBeUndefined()
   })
 })

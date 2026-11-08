@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Fiber, Scope } from "effect"
 import { TestClock } from "effect/testing"
-import { ClaudeSessions } from "@opencode/core/plugin/provider/claude-agent/claude/sessions"
+import { ClaudeSessions } from "@Mackery6969/core/plugin/provider/claude-agent/claude/sessions"
 import { it } from "../../../../lib/effect"
 import { FakeClaude } from "../lib/fake-claude"
 import { TestSessions } from "../lib/sessions"

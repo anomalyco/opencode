@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { Installed } from "@opencode/plugin/gui/host"
+import type { Installed } from "@Mackery6969/plugin/gui/host"
 import {
   createStartupGateState,
   selectDisabled,

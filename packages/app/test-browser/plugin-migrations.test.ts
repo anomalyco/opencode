@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { createRoot } from "solid-js"
-import { BuiltinPanel, type BuiltinStoreDeclaration } from "@opencode/plugin/gui/builtin"
+import { BuiltinPanel, type BuiltinStoreDeclaration } from "@Mackery6969/plugin/gui/builtin"
 import type { Platform } from "@/runtime/platform/platform"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { legacyKeys } from "@/runtime/plugin/panel-keys"

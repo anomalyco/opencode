@@ -11,7 +11,7 @@ import {
 import { createTestRenderer } from "@opentui/core/testing"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
-import type { FormInfo } from "@opencode/client/promise"
+import type { FormInfo } from "@Mackery6969/client/promise"
 import { Keymap } from "../../src/context/keymap"
 import type { ClipboardContent, ClipboardService } from "../../src/context/clipboard"
 import {

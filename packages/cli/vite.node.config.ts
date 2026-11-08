@@ -169,12 +169,12 @@ const __filename = import.meta.filename
 const __dirname = import.meta.dirname
 const require = __cjs_mod__.createRequire(import.meta.url)
 const __ocPluginModules = ${JSON.stringify({
-    "@opencode/plugin": "opencode:plugin-v2",
-    "@opencode/plugin/promise/plugin": "opencode:plugin-promise-plugin",
-    "@opencode/plugin/promise/tool": "opencode:plugin-promise-tool",
-    "@opencode/plugin/effect": "opencode:plugin-v2-effect",
-    "@opencode/plugin/effect/plugin": "opencode:plugin-v2-effect-plugin",
-    "@opencode/plugin/effect/tool": "opencode:plugin-v2-effect-tool",
+    "@Mackery6969/plugin": "opencode:plugin-v2",
+    "@Mackery6969/plugin/promise/plugin": "opencode:plugin-promise-plugin",
+    "@Mackery6969/plugin/promise/tool": "opencode:plugin-promise-tool",
+    "@Mackery6969/plugin/effect": "opencode:plugin-v2-effect",
+    "@Mackery6969/plugin/effect/plugin": "opencode:plugin-v2-effect-plugin",
+    "@Mackery6969/plugin/effect/tool": "opencode:plugin-v2-effect-tool",
   })}
 const __ocPluginSources = ${JSON.stringify({
     "opencode:plugin-v2": promiseModule,

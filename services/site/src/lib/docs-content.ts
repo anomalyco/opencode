@@ -164,7 +164,7 @@ export const docsIntro = {
   },
   docker: [
     "Docker images use versioned tags, for example ",
-    { code: "ghcr.io/anomalyco/opencode:2.0.0" },
+    { code: "ghcr.io/Mackery6969/opencode:2.0.0" },
     ".",
   ] satisfies RichText,
   connect: [

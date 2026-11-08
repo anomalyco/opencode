@@ -1,6 +1,6 @@
 import type { JSX } from "solid-js"
-import { FileIcon } from "@opencode/ui/file-icon"
-import { getFilename } from "@opencode/util/path"
+import { FileIcon } from "@Mackery6969/ui/file-icon"
+import { getFilename } from "@Mackery6969/util/path"
 
 /** A file tab's trigger content. The selected tab's icon colour comes from the tab CSS. */
 export function FileVisual(props: { path: string; temporary?: boolean; notFound?: boolean }): JSX.Element {

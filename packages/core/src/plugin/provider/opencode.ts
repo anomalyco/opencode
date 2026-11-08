@@ -1,8 +1,8 @@
 import { isDeepStrictEqual } from "node:util"
 import { Duration, Effect, Equal, FiberHandle, Option, Schema, Scope, Semaphore, Stream } from "effect"
-import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
-import { define } from "@opencode/plugin/effect/plugin"
-import type { SessionHttpResponse } from "@opencode/plugin/effect/session"
+import type { IntegrationOAuthMethodRegistration } from "@Mackery6969/plugin/effect/integration"
+import { define } from "@Mackery6969/plugin/effect/plugin"
+import type { SessionHttpResponse } from "@Mackery6969/plugin/effect/session"
 import {
   FetchHttpClient,
   HttpBody,

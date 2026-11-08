@@ -1,4 +1,4 @@
-import type { ProjectListOutput, WorktreeDirectory } from "@opencode/client/promise"
+import type { ProjectListOutput, WorktreeDirectory } from "@Mackery6969/client/promise"
 
 export type Project = Omit<ProjectListOutput[number], "canonical"> & {
   worktree: string

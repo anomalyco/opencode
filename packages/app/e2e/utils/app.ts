@@ -1,6 +1,6 @@
 import { expect, type Page, type Request } from "@playwright/test"
-import type { SessionMessageInfo } from "@opencode/client/promise"
-import { base64Encode, checksum } from "@opencode/util/encode"
+import type { SessionMessageInfo } from "@Mackery6969/client/promise"
+import { base64Encode, checksum } from "@Mackery6969/util/encode"
 
 // The mocked default server. Production builds connect to their own origin, so CI points this at the app.
 export const SERVER = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`

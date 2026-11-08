@@ -1,11 +1,11 @@
 import { Meta, Title } from "@solidjs/meta"
-import { ProviderIcon } from "@opencode/ui/provider-icon"
+import { ProviderIcon } from "@Mackery6969/ui/provider-icon"
 import {
   type LabUsageModelEntry,
   type MarketDay,
   type ModelUsagePoint,
   type StatsLabData,
-} from "@opencode/stats-core/domain/home"
+} from "@Mackery6969/stats-core/domain/home"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, createUniqueId, For, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"

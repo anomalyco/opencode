@@ -3,7 +3,7 @@ import { createRoot, getOwner } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createChildStoreManager } from "./child-store"
 import { ServerScope } from "@/runtime/server/scope"
-import type { Data } from "@opencode/client/solid"
+import type { Data } from "@Mackery6969/client/solid"
 import type { persisted } from "@/runtime/persistence/storage"
 
 const persist: typeof persisted = (_target, _schema, initial) => [

@@ -1,5 +1,5 @@
 import type { Accessor } from "solid-js"
-import type { SessionUserActions } from "@opencode/session-ui/actions"
+import type { SessionUserActions } from "@Mackery6969/session-ui/actions"
 
 type PendingActions = NonNullable<SessionUserActions["pending"]>
 

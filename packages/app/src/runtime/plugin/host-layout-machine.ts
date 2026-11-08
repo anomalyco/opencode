@@ -1,4 +1,4 @@
-import type { OpenOptions } from "@opencode/plugin/gui"
+import type { OpenOptions } from "@Mackery6969/plugin/gui"
 
 /** A narrow-screen view selected for a session that is not routed waits this long for the navigation that routes it. */
 export const MOBILE_VIEW_PENDING_TTL_MS = 5_000

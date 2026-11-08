@@ -13,7 +13,7 @@ import Shell from "@/shell/shell"
 import { requireServerKey } from "./session"
 import { PluginAttachment } from "@/runtime/plugin/root"
 
-export const File = lazy(() => import("@opencode/session-ui/file").then((module) => ({ default: module.File })))
+export const File = lazy(() => import("@Mackery6969/session-ui/file").then((module) => ({ default: module.File })))
 
 const loadSessionRoute = () => Promise.all([import("@/session/route"), File.preload()]).then(([module]) => module)
 

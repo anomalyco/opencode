@@ -1,8 +1,8 @@
-import type { Data } from "@opencode/client/solid"
-import { isSessionNotFoundError, type OpenCodeEvent, type SessionInfo } from "@opencode/client/promise"
+import type { Data } from "@Mackery6969/client/solid"
+import { isSessionNotFoundError, type OpenCodeEvent, type SessionInfo } from "@Mackery6969/client/promise"
 import { onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { uuid } from "@opencode/util/uuid"
+import { uuid } from "@Mackery6969/util/uuid"
 
 type SessionMutation = { readonly id: string; readonly type: "remove"; readonly sessionID: string }
 

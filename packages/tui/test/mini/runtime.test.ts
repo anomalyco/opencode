@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import { OpenCode } from "@opencode/client/promise"
+import { OpenCode } from "@Mackery6969/client/promise"
 import { runInteractiveDeferredMode } from "../../src/mini/runtime"
 import type { LifecycleInput } from "../../src/mini/runtime.lifecycle"
 import type { FooterEvent, MiniHost } from "../../src/mini/types"

@@ -1,4 +1,4 @@
-import type { FormAnswer, FormInfo, FormOption, FormStringField } from "@opencode/client/promise"
+import type { FormAnswer, FormInfo, FormOption, FormStringField } from "@Mackery6969/client/promise"
 
 export const WEBSEARCH_PROVIDERS_TIMEOUT_MS = 15_000
 

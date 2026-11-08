@@ -53,7 +53,7 @@ if (process.env.MCP_WIRE_LOG) {
   }
 }
 
-// Like servers that refuse to run without a root (https://github.com/anomalyco/opencode/issues/2308).
+// Like servers that refuse to run without a root (https://github.com/Mackery6969/opencode/issues/2308).
 if (process.env.MCP_REQUIRE_ROOTS) {
   const receive = transport.onmessage
   transport.onmessage = (message) => {

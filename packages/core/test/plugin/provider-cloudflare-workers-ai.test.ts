@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Credential } from "@opencode/core/credential"
-import { Plugin } from "@opencode/core/plugin"
-import { PluginHost } from "@opencode/core/plugin/host"
-import { CloudflareWorkersAIPlugin } from "@opencode/core/plugin/provider/cloudflare-workers-ai"
-import { Provider } from "@opencode/core/provider"
-import { Integration } from "@opencode/core/integration"
+import { Credential } from "@Mackery6969/core/credential"
+import { Plugin } from "@Mackery6969/core/plugin"
+import { PluginHost } from "@Mackery6969/core/plugin/host"
+import { CloudflareWorkersAIPlugin } from "@Mackery6969/core/plugin/provider/cloudflare-workers-ai"
+import { Provider } from "@Mackery6969/core/provider"
+import { Integration } from "@Mackery6969/core/integration"
 import { withEnv } from "../fixture/env"
 import { drain } from "../lib/clock"
 import { testEffect } from "../lib/effect"
@@ -58,7 +58,7 @@ describe("CloudflareWorkersAIPlugin", () => {
     withEnv({ CLOUDFLARE_ACCOUNT_ID: "acct", CLOUDFLARE_API_KEY: "key" }, () =>
       Effect.gen(function* () {
         const catalog = yield* seed((provider) => {
-          provider.package = "@opencode/ai/providers/cloudflare-workers-ai"
+          provider.package = "@Mackery6969/ai/providers/cloudflare-workers-ai"
         })
         yield* addPlugin()
         const integrations = yield* Integration.Service
@@ -66,7 +66,7 @@ describe("CloudflareWorkersAIPlugin", () => {
           type: "key",
           label: "API key",
         })
-        expect(required(yield* catalog.get(providerID)).package).toBe("@opencode/ai/providers/cloudflare-workers-ai")
+        expect(required(yield* catalog.get(providerID)).package).toBe("@Mackery6969/ai/providers/cloudflare-workers-ai")
       }),
     ),
   )
@@ -75,7 +75,7 @@ describe("CloudflareWorkersAIPlugin", () => {
     withEnv({ CLOUDFLARE_ACCOUNT_ID: "acct" }, () =>
       Effect.gen(function* () {
         const catalog = yield* seed((provider) => {
-          provider.package = "@opencode/ai/providers/cloudflare-workers-ai"
+          provider.package = "@Mackery6969/ai/providers/cloudflare-workers-ai"
         })
         yield* addPlugin()
         expect(required(yield* catalog.get(providerID)).settings).toEqual({ accountId: "acct" })
@@ -87,7 +87,7 @@ describe("CloudflareWorkersAIPlugin", () => {
     withEnv({ CLOUDFLARE_ACCOUNT_ID: undefined }, () =>
       Effect.gen(function* () {
         const catalog = yield* seed((provider) => {
-          provider.package = "@opencode/ai/providers/cloudflare-workers-ai"
+          provider.package = "@Mackery6969/ai/providers/cloudflare-workers-ai"
         })
         const credentials = yield* Credential.Service
         yield* credentials.create({
@@ -104,7 +104,7 @@ describe("CloudflareWorkersAIPlugin", () => {
     withEnv({ CLOUDFLARE_ACCOUNT_ID: undefined }, () =>
       Effect.gen(function* () {
         const catalog = yield* seed((provider) => {
-          provider.package = "@opencode/ai/providers/cloudflare-workers-ai"
+          provider.package = "@Mackery6969/ai/providers/cloudflare-workers-ai"
         })
         const credentials = yield* Credential.Service
         const first = yield* credentials.create({

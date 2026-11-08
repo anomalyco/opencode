@@ -1,4 +1,4 @@
-import { Reference } from "@opencode/core/reference"
+import { Reference } from "@Mackery6969/core/reference"
 import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
 import { response } from "../location"

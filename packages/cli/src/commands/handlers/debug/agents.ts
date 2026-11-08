@@ -1,9 +1,9 @@
 import { EOL } from "os"
 import { Effect } from "effect"
-import { OpenCode } from "@opencode/client"
+import { OpenCode } from "@Mackery6969/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
-import { Service } from "@opencode/client/effect/service"
+import { Service } from "@Mackery6969/client/effect/service"
 import { ServerConnection } from "../../../services/server-connection"
 
 export default Runtime.handler(

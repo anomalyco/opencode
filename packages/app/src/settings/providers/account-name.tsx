@@ -1,4 +1,4 @@
-import { InlineInput } from "@opencode/ui/inline-input"
+import { InlineInput } from "@Mackery6969/ui/inline-input"
 import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
 import { createInlineRename } from "@/settings/rename"

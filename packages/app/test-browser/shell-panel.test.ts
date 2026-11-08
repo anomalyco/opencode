@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, setSystemTime, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import type { SessionActivityItem } from "@/session/composer/activity-chips"
-import type { ShellOutputInput, ShellOutputOutput } from "@opencode/client/promise"
+import type { ShellOutputInput, ShellOutputOutput } from "@Mackery6969/client/promise"
 import { createShellPanel, createShellTail } from "@/session/composer/shell-panel"
 
 const server: SessionActivityItem = {

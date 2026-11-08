@@ -7,10 +7,10 @@ import type {
   SessionMessageUser,
   SessionStatus,
   SessionStructuredError,
-} from "@opencode/client/promise"
-import { EventManifest } from "@opencode/schema/event-manifest"
-import { SessionMessage } from "@opencode/schema/session-message"
-import type { TimelineDetail } from "@opencode/session-ui/timeline/detail"
+} from "@Mackery6969/client/promise"
+import { EventManifest } from "@Mackery6969/schema/event-manifest"
+import { SessionMessage } from "@Mackery6969/schema/session-message"
+import type { TimelineDetail } from "@Mackery6969/session-ui/timeline/detail"
 import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test"
 import { Schema } from "effect"
 import { SERVER, seed, sessionHref } from "./app"

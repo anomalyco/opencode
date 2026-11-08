@@ -1,4 +1,4 @@
-import { useDialog, useDialogLayer } from "@opencode/ui/context/dialog"
+import { useDialog, useDialogLayer } from "@Mackery6969/ui/context/dialog"
 import { createSignal, onCleanup, startTransition, untrack } from "solid-js"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"

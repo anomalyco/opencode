@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // Writes src/gui/icon-name.ts: the icon names GUI SDK fields accept, from the app's icon catalog in packages/ui. The
-// published SDK cannot depend on @opencode/ui, so it carries the names; packages/gui-plugins fails its typecheck when
+// published SDK cannot depend on @Mackery6969/ui, so it carries the names; packages/gui-plugins fails its typecheck when
 // they drift (src/icon-name.typecheck.ts).
 
 import { fileURLToPath } from "node:url"

@@ -1,4 +1,4 @@
-@import "@opencode/ui/document-surface.css";
+@import "@Mackery6969/ui/document-surface.css";
 
 [data-slot="artifact-view"] {
   --opencode-diffs-bg: var(--v2-background-bg-layer-01);

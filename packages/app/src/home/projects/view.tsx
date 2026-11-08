@@ -8,13 +8,13 @@ import {
   getProjectAvatarSource,
   getProjectAvatarVariant,
   ProjectAvatar,
-} from "@opencode/ui/project-avatar"
-import { Icon } from "@opencode/ui/icon"
-import { IconButton } from "@opencode/ui/icon-button"
-import { Button } from "@opencode/ui/button"
-import { Loader } from "@opencode/ui/loader"
-import { Menu } from "@opencode/ui/menu"
-import { Tooltip } from "@opencode/ui/tooltip"
+} from "@Mackery6969/ui/project-avatar"
+import { Icon } from "@Mackery6969/ui/icon"
+import { IconButton } from "@Mackery6969/ui/icon-button"
+import { Button } from "@Mackery6969/ui/button"
+import { Loader } from "@Mackery6969/ui/loader"
+import { Menu } from "@Mackery6969/ui/menu"
+import { Tooltip } from "@Mackery6969/ui/tooltip"
 import type { HomeProjectSelection, LocalProject } from "@/shell/state/layout"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useLanguage } from "@/runtime/i18n/language"

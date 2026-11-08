@@ -1,5 +1,5 @@
 import type { DatabaseSync } from "node:sqlite"
-import type { EnableState } from "@opencode/plugin/gui/host"
+import type { EnableState } from "@Mackery6969/plugin/gui/host"
 
 /** Explicit settings only: both startup readers and the manager resolve absent rows through the same SDK rule. */
 export function readEnableState(db: DatabaseSync): readonly EnableState[] {

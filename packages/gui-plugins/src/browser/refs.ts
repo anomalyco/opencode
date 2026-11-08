@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import type { Persisted } from "@opencode/plugin/gui/main"
+import type { Persisted } from "@Mackery6969/plugin/gui/main"
 
 /** Main storage's `refs` store: the end of the last block of refs main reserved, so refs stay unique across reloads. */
 export const RefsStore = { schema: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)), initial: 0 }

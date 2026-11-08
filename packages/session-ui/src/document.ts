@@ -1,4 +1,4 @@
-import type { FileDiffInfo, SessionMessageInfo, SessionStatus } from "@opencode/client/promise"
+import type { FileDiffInfo, SessionMessageInfo, SessionStatus } from "@Mackery6969/client/promise"
 
 export type SessionDocument = {
   sessionID: string

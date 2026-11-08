@@ -1,4 +1,4 @@
-import type { FileContent } from "@opencode/plugin/gui"
+import type { FileContent } from "@Mackery6969/plugin/gui"
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 

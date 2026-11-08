@@ -8,7 +8,7 @@ import { faces } from "../src/lib/contributor-faces"
 import type { GithubSnapshot } from "../src/lib/github-snapshot"
 
 const root = path.resolve(import.meta.dir, "..")
-const api = "https://api.github.com/repos/anomalyco/opencode"
+const api = "https://api.github.com/repos/Mackery6969/opencode"
 const headers = {
   Accept: "application/vnd.github+json",
   "User-Agent": "OpenCode-Console",

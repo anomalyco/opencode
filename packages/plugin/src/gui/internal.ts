@@ -1,5 +1,5 @@
 // The window host's internals that the public SDK's helpers read. `gui/host` re-exports them for the hosts; the
-// public `@opencode/plugin/gui` does not.
+// public `@Mackery6969/plugin/gui` does not.
 
 import { createContext, type Accessor, type JSX } from "solid-js"
 import type { Context } from "./context.js"

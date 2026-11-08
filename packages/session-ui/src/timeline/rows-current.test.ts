@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Predicate } from "effect"
-import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@Mackery6969/client/promise"
 import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
 import { timelinePresets } from "./detail"
 import { createTimelineProjection, Timeline, TimelineRow } from "./projection"

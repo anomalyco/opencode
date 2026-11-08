@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import os from "os"
 import path from "path"
-import { Global } from "@opencode/util/global"
+import { Global } from "@Mackery6969/util/global"
 
 describe("Core test environment", () => {
   test("disables public npm security audits", () => {

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
+import type { OpenCodeEvent, SessionMessageInfo } from "@Mackery6969/client/promise"
 import {
   NO_PROVIDER,
   REMOTE_SERVER,

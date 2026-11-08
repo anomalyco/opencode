@@ -1,4 +1,4 @@
-import type { IntegrationMethod } from "@opencode/client/promise"
+import type { IntegrationMethod } from "@Mackery6969/client/promise"
 
 type ProviderAuthMethod = Extract<IntegrationMethod, { type: "key" | "oauth" }>
 

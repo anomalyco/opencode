@@ -6,7 +6,7 @@ import {
   themeModes,
   type ResolvedTheme,
   type SurfaceName,
-} from "@opencode/theme/tui"
+} from "@Mackery6969/theme/tui"
 import {
   allThemes,
   getOpenCode2Theme,

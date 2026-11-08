@@ -1,15 +1,15 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode/stories",
+  "name": "@Mackery6969/stories",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --port 6006"
   },
   "devDependencies": {
-    "@opencode/client": "workspace:*",
-    "@opencode/session-ui": "workspace:*",
-    "@opencode/ui": "workspace:*",
+    "@Mackery6969/client": "workspace:*",
+    "@Mackery6969/session-ui": "workspace:*",
+    "@Mackery6969/ui": "workspace:*",
     "@playwright/test": "catalog:",
     "@solidjs/meta": "catalog:",
     "@tailwindcss/vite": "catalog:",

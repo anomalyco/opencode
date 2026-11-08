@@ -1,7 +1,7 @@
-import { Service, type Endpoint } from "@opencode/client/effect/service"
-import { ClientError, OpenCode, type OpenCodeClient } from "@opencode/client/promise"
-import type { MiniFrontendInput } from "@opencode/tui/mini"
-import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
+import { Service, type Endpoint } from "@Mackery6969/client/effect/service"
+import { ClientError, OpenCode, type OpenCodeClient } from "@Mackery6969/client/promise"
+import type { MiniFrontendInput } from "@Mackery6969/tui/mini"
+import { noTimeoutFetch } from "@Mackery6969/util/no-timeout-fetch"
 import { setTimeout } from "node:timers/promises"
 import { readStdin } from "./util/io"
 import { createMiniHost, INTERACTIVE_INPUT_ERROR, usingInteractiveStdin } from "./mini-host"
@@ -36,7 +36,7 @@ export async function runMini(input: MiniCommandInput) {
     validate(input)
     await usingInteractiveStdin(async (terminal) => {
       const initialInput = mergeInput(process.stdin.isTTY ? undefined : await readStdin(), input.prompt)
-      const frontendTask = import("@opencode/tui/mini")
+      const frontendTask = import("@Mackery6969/tui/mini")
       const directory = localDirectory()
       const connection = createMiniConnection(input.server)
       const sdk = connection.sdk

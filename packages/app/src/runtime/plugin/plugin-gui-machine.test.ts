@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { BridgePluginGui, BridgePluginGuis } from "@opencode/plugin/gui/host"
+import type { BridgePluginGui, BridgePluginGuis } from "@Mackery6969/plugin/gui/host"
 import {
   createPluginGuiState,
   transitionPluginGui,

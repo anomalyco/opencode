@@ -1,5 +1,5 @@
 /// <reference path="../env.d.ts" />
-import { tool } from "@opencode/plugin"
+import { tool } from "@Mackery6969/plugin"
 async function githubFetch(endpoint: string, options: RequestInit = {}) {
   const response = await fetch(`https://api.github.com${endpoint}`, {
     ...options,
@@ -24,7 +24,7 @@ interface PR {
 export default tool({
   description: `Use this tool to search GitHub pull requests by title and description.
 
-This tool searches PRs in the anomalyco/opencode repository and returns LLM-friendly results including:
+This tool searches PRs in the Mackery6969/opencode repository and returns LLM-friendly results including:
 - PR number and title
 - Author
 - State (open/closed/merged)

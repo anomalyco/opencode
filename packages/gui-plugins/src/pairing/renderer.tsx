@@ -1,6 +1,6 @@
 import { lazy, onCleanup, Suspense } from "solid-js"
-import { Command, SettingsPage, type Plugin } from "@opencode/plugin/gui"
-import { onIdle } from "@opencode/plugin/gui/builtin"
+import { Command, SettingsPage, type Plugin } from "@Mackery6969/plugin/gui"
+import { onIdle } from "@Mackery6969/plugin/gui/builtin"
 import { Pairing } from "./contract"
 import type definition from "./index"
 

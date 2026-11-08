@@ -1,5 +1,5 @@
 import { createSignal, onCleanup, untrack } from "solid-js"
-import type { Bridge } from "@opencode/plugin/gui/host"
+import type { Bridge } from "@Mackery6969/plugin/gui/host"
 import {
   createStartupGateState,
   transitionStartupGate,

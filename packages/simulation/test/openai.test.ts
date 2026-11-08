@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { DEFAULT_BASE_URL, PATH } from "@opencode/ai/protocols/openai-chat"
+import { DEFAULT_BASE_URL, PATH } from "@Mackery6969/ai/protocols/openai-chat"
 import { Effect, Stream } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { HttpClientError } from "effect/http/HttpClientError"

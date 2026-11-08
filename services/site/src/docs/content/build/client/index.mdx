@@ -2,7 +2,7 @@
 title: "JavaScript"
 ---
 
-`@opencode/client` is the TypeScript client for the OpenCode HTTP
+`@Mackery6969/client` is the TypeScript client for the OpenCode HTTP
 API. Use it when your application connects to an OpenCode server over the
 network. Its native types and methods are generated from the same contract as the
 [API reference](/api). Plugin RPC types come from imported RPC definitions.
@@ -10,7 +10,7 @@ network. Its native types and methods are generated from the same contract as th
 ## Install
 
 ```sh
-bun add @opencode/client
+bun add @Mackery6969/client
 ```
 
 ## Create a client
@@ -18,7 +18,7 @@ bun add @opencode/client
 Create a client with the server URL, then call methods grouped by API resource:
 
 ```ts
-import { OpenCode } from "@opencode/client"
+import { OpenCode } from "@Mackery6969/client"
 
 const client = OpenCode.make({
   baseUrl: "http://localhost:4096",
@@ -90,7 +90,7 @@ for await (const event of client.event.subscribe({ types: ["config.updated"] }))
 Import a plugin's shared contract and pass it to `client.rpc`:
 
 ```ts
-import { OpenCode } from "@opencode/client"
+import { OpenCode } from "@Mackery6969/client"
 import { Acme } from "opencode-acme-plugin/rpc"
 
 const acme = client.rpc(Acme)
@@ -148,7 +148,7 @@ definition and registration API. Any HTTP client can also invoke the generic
 
 The main client entrypoints are browser-compatible and do not include local
 process management. In a Node application, import the native Promise service
-API from `@opencode/client/service`.
+API from `@Mackery6969/client/service`.
 
 - `Service.discover()` returns a healthy registered endpoint without starting
   a process.
@@ -157,8 +157,8 @@ API from `@opencode/client/service`.
 - `Service.headers(endpoint)` creates the authentication headers for a client.
 
 ```ts
-import { OpenCode } from "@opencode/client"
-import { Service } from "@opencode/client/service"
+import { OpenCode } from "@Mackery6969/client"
+import { Service } from "@Mackery6969/client/service"
 
 const endpoint = await Service.ensure()
 const client = OpenCode.make({

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Fiber, Layer, References } from "effect"
 import { SqlClient } from "effect/sql"
-import { sqliteLayer as bunSqliteLayer } from "@opencode/core/database/sqlite.bun"
-import { sqliteLayer as workerdSqliteLayer } from "@opencode/core/database/sqlite.workerd"
+import { sqliteLayer as bunSqliteLayer } from "@Mackery6969/core/database/sqlite.bun"
+import { sqliteLayer as workerdSqliteLayer } from "@Mackery6969/core/database/sqlite.workerd"
 import { makeDurableObjectStorage } from "./fixture/durable-object-storage"
 
 // The holder keeps the connection across yields, so the queued fiber parks in

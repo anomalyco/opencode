@@ -308,7 +308,7 @@ Plugin hooks are governed by the existing plugin integration resource: blocking 
 {
   "providers": {
     "company-ai": {
-      "package": "@opencode/ai/providers/openai-compatible",
+      "package": "@Mackery6969/ai/providers/openai-compatible",
       "settings": { "baseURL": "https://ai.company.example/v1" },
     },
   },

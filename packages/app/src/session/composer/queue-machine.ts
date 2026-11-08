@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect"
-import type { PromptAttachment, SessionInboxInfo } from "@opencode/client/promise"
+import type { PromptAttachment, SessionInboxInfo } from "@Mackery6969/client/promise"
 import type { ComposerDelivery } from "@/composer/adapter"
 import type { ComposerStateTarget } from "@/composer/submission-state"
 import type { ContextItem, ImageAttachmentPart, PathAttachmentPart, Prompt } from "@/composer/state"

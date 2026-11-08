@@ -1,5 +1,5 @@
 import { createMemo, createSignal, onCleanup, runWithOwner, untrack } from "solid-js"
-import type { FormInfo } from "@opencode/client/promise"
+import type { FormInfo } from "@Mackery6969/client/promise"
 import type { ServerSDK } from "@/runtime/server/client"
 import { ScopedKey } from "@/runtime/server/scope"
 import { showToast } from "@/shell/notifications/toast"

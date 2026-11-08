@@ -1,4 +1,4 @@
-import type { SessionInfo } from "@opencode/client/promise"
+import type { SessionInfo } from "@Mackery6969/client/promise"
 import { queryOptions, skipToken } from "@tanstack/solid-query"
 import type { ServerConnection } from "@/runtime/server/registry"
 import type { ServerCtx } from "@/runtime/server/runtime"

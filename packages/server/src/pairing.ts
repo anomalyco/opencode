@@ -1,7 +1,7 @@
 export * as ServerPairing from "./pairing"
 
 import { Cache, Context, Duration, Effect, Layer } from "effect"
-import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { makeGlobalNode } from "@Mackery6969/util/effect/app-node"
 import { randomBytes } from "node:crypto"
 
 const TTL = Duration.minutes(5)
@@ -11,7 +11,7 @@ export interface Interface {
   readonly consume: (code: string) => Effect.Effect<boolean>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/ServerPairing") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/ServerPairing") {}
 
 // Codes are inserted via Cache.set and removed via invalidateWhen, so the lookup never runs.
 const noLookup = () => Effect.die(new Error("ServerPairing cache must be used via set/invalidateWhen, never get"))

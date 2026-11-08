@@ -1,11 +1,11 @@
 export * as UsageLimits from "./usage-limits.js"
 
-import { Model } from "@opencode/schema/model"
-import { Money } from "@opencode/schema/money"
-import { Provider } from "@opencode/schema/provider"
-import { UsageLimits } from "@opencode/schema/usage-limits"
-import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { httpClient } from "@opencode/util/effect/app-node-platform"
+import { Model } from "@Mackery6969/schema/model"
+import { Money } from "@Mackery6969/schema/money"
+import { Provider } from "@Mackery6969/schema/provider"
+import { UsageLimits } from "@Mackery6969/schema/usage-limits"
+import { makeLocationNode } from "@Mackery6969/util/effect/app-node"
+import { httpClient } from "@Mackery6969/util/effect/app-node-platform"
 import { Context, Duration, Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ConsoleAccess } from "./console-access.js"
@@ -24,7 +24,7 @@ export interface Interface {
   readonly get: () => Effect.Effect<Info | undefined, UnavailableError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/UsageLimits") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/UsageLimits") {}
 
 export const layer = Layer.effect(
   Service,

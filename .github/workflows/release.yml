@@ -49,7 +49,7 @@ defaults:
 
 jobs:
   plan:
-    if: github.repository == 'anomalyco/opencode'
+    if: github.repository == 'Mackery6969/opencode'
     runs-on: ubuntu-24.04
     permissions:
       contents: read

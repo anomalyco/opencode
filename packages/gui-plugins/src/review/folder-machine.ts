@@ -1,4 +1,4 @@
-import type { FileDiffInfo } from "@opencode/client/promise"
+import type { FileDiffInfo } from "@Mackery6969/client/promise"
 import { expandReviewFolders, isReviewFolder, normalizePath } from "./kinds"
 
 /** How many times a failed folder load retries before the folder shows it failed, as TanStack Query retried it. */

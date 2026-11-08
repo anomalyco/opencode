@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { Host } from "@opencode/plugin/host"
+import { Host } from "@Mackery6969/plugin/host"
 import { configurationTarget } from "../src/commands/handlers/plugin/add"
 import { tmpdir } from "./fixture/tmpdir"
 

@@ -12,7 +12,7 @@ cat > "$tap/opencode-v2.rb" <<FORMULA
 
 class OpencodeV2 < Formula
   desc "OpenCode V2 - the AI coding agent for the terminal"
-  homepage "https://github.com/anomalyco/opencode"
+  homepage "https://github.com/Mackery6969/opencode"
   version "$OPENCODE_VERSION"
   license "MIT"
 

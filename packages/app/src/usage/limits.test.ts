@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { UsageLimitsBudget, UsageLimitsInfo } from "@opencode/client/promise"
+import type { UsageLimitsBudget, UsageLimitsInfo } from "@Mackery6969/client/promise"
 import { modelUsage, usageView } from "./limits"
 
 const RESET = Date.UTC(2026, 10, 1)

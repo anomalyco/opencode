@@ -41,7 +41,7 @@ it.effect("Meta selects Messages and lowers native search alongside ordinary fun
         },
       ],
     })
-    const entrypoint = yield* Effect.promise(() => import("@opencode/ai/providers/meta/messages"))
+    const entrypoint = yield* Effect.promise(() => import("@Mackery6969/ai/providers/meta/messages"))
     expect(entrypoint.model("muse-spark-1.3", {}).route.id).toBe("meta-messages")
   }),
 )

@@ -1,5 +1,5 @@
-import type { BuiltinCatalog } from "@opencode/plugin/gui/builtin"
-import type { Messages } from "@opencode/plugin/gui/main"
+import type { BuiltinCatalog } from "@Mackery6969/plugin/gui/builtin"
+import type { Messages } from "@Mackery6969/plugin/gui/main"
 import { Predicate } from "effect"
 
 export const WATCH_RETRY_MS = 1_000

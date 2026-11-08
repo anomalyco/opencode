@@ -1,5 +1,5 @@
-import type { OpenCodeEvent } from "@opencode/client"
-import type { SelectedEvent, SubscribeOptions } from "@opencode/client/promise/api"
+import type { OpenCodeEvent } from "@Mackery6969/client"
+import type { SelectedEvent, SubscribeOptions } from "@Mackery6969/client/promise/api"
 
 type EventType = Exclude<OpenCodeEvent["type"], "server.connected">
 

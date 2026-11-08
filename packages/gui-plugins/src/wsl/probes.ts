@@ -1,6 +1,6 @@
 import { createSignal, onCleanup, untrack } from "solid-js"
 import type { Accessor } from "solid-js"
-import { createKeyed, type IpcClient } from "@opencode/plugin/gui"
+import { createKeyed, type IpcClient } from "@Mackery6969/plugin/gui"
 import type { Wsl, WslInstalledDistro, WslServersState } from "./contract"
 import { addServerProbePlan, type AddServerProbePlan, type WslAddServerView } from "./model"
 import {

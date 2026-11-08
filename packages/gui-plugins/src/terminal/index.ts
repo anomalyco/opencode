@@ -1,5 +1,5 @@
-import { builtinCatalog } from "@opencode/plugin/gui/builtin"
-import { Plugin } from "@opencode/plugin/gui"
+import { builtinCatalog } from "@Mackery6969/plugin/gui/builtin"
+import { Plugin } from "@Mackery6969/plugin/gui"
 import en from "./i18n/en"
 
 /** Published as `terminal.toggle`; the desktop menu names it. */

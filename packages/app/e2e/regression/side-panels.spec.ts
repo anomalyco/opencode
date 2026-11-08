@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import { fileDiff, openSession } from "../utils/workspace"
 import { openReviewLauncher } from "../utils/side-panel"
-import { base64Encode } from "@opencode/util/encode"
+import { base64Encode } from "@Mackery6969/util/encode"
 
 test("review content stays aligned with the side region in both directions", async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 900 })

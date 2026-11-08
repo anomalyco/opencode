@@ -1,5 +1,5 @@
 import { createMemo, createSignal, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
-import { runsOn, type Bridge, type Entry } from "@opencode/plugin/gui/host"
+import { runsOn, type Bridge, type Entry } from "@Mackery6969/plugin/gui/host"
 import { builtins } from "./builtins"
 import { PluginGuiLoader, type PluginGui } from "./plugins"
 import { createMenubarItems, MenubarItemsProvider } from "./menubar-items"

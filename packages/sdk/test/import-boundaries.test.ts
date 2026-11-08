@@ -10,20 +10,7 @@ const server = resolve(import.meta.dir, "../../server")
 // each writing a 23 MB bundle to disk, ran past 5s on loaded Windows runners. The build still parses and links about
 // 2,600 source files, hence the longer timeout.
 test("bundles the Promise and Effect clients with the in-memory host", async () => {
-  const entrypoints = { promise: join(directory, "promise-entry.ts"), effect: join(directory, "effect-entry.ts") }
-  const result = await Bun.build({
-    entrypoints: Object.values(entrypoints),
-    files: {
-      [entrypoints.promise]: 'export * from "@opencode/sdk"',
-      [entrypoints.effect]: 'export * from "@opencode/sdk/effect"',
-    },
-    target: "bun",
-    format: "esm",
-    packages: "bundle",
-    metafile: true,
-  })
-  const outputs = Object.values(result.metafile?.outputs ?? {}).filter((output) => output.entryPoint)
-  expect(outputs).toHaveLength(2)
+  const bundles = await Promise.all([bundleInputs("@Mackery6969/sdk"), bundleInputs("@Mackery6969/sdk/effect")])
 
   for (const output of outputs) {
     // Metafile paths are relative to the working directory.

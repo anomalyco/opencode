@@ -1,8 +1,8 @@
-import type { LocationRef, UsageLimitsInfo } from "@opencode/client/promise"
-import { Button } from "@opencode/ui/button"
-import { useDialog } from "@opencode/ui/context/dialog"
-import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
-import { Loader } from "@opencode/ui/loader"
+import type { LocationRef, UsageLimitsInfo } from "@Mackery6969/client/promise"
+import { Button } from "@Mackery6969/ui/button"
+import { useDialog } from "@Mackery6969/ui/context/dialog"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitleGroup } from "@Mackery6969/ui/dialog"
+import { Loader } from "@Mackery6969/ui/loader"
 import {
   createEffect,
   createMemo,

@@ -2,7 +2,7 @@
 
 ## Sources
 
-- PR #9817: https://github.com/anomalyco/opencode/pull/9817
+- PR #9817: https://github.com/Mackery6969/opencodede/pull/9817
 
 ## Do Not Translate (Locale Additions)
 

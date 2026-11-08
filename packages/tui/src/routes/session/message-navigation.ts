@@ -1,4 +1,4 @@
-import type { SessionMessageInfo } from "@opencode/client"
+import type { SessionMessageInfo } from "@Mackery6969/client"
 
 type MessageChild = {
   readonly id?: string

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, setSystemTime, test } from "bun:test"
-import type { SessionInfo } from "@opencode/client/promise"
+import type { SessionInfo } from "@Mackery6969/client/promise"
 import type { ServerCtx } from "@/runtime/server/runtime"
 import { parseVoiceDelegation } from "@/session/timeline/voice-delegation"
 import { continuedHeader, header, headerLapse } from "./handoff"

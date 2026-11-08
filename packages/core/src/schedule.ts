@@ -3,8 +3,8 @@ export * as Schedule from "./schedule.js"
 import { randomUUID } from "node:crypto"
 import { and, asc, eq, gt, isNull, lte, min, or, sql } from "drizzle-orm"
 import { Cause, Clock, Context, Cron, DateTime, Effect, Latch, Layer, Option, Result, Schedule as EffectSchedule, Schema } from "effect"
-import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
-import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Node, makeGlobalNode } from "@Mackery6969/util/effect/app-node"
+import { LayerNode } from "@Mackery6969/util/effect/layer-node"
 import {
   Condition,
   ConditionInput,
@@ -19,7 +19,7 @@ import {
   type StoredCheck,
   toCreateInput,
   When,
-} from "@opencode/schema/schedule"
+} from "@Mackery6969/schema/schedule"
 import { App } from "./app.js"
 import { Config } from "./config.js"
 import { Database } from "./database/database.js"
@@ -81,7 +81,7 @@ export interface Interface {
   readonly run: Effect.Effect<never>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Schedule") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/Schedule") {}
 
 type Row = typeof ScheduleTable.$inferSelect
 

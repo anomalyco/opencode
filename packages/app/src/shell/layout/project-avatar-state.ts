@@ -1,5 +1,5 @@
 import { createMemo, type Accessor } from "solid-js"
-import type { SessionInfo } from "@opencode/client/promise"
+import type { SessionInfo } from "@Mackery6969/client/promise"
 import { useGlobal, useServerCtx, type ServerCtx } from "@/runtime/server/runtime"
 import { sessionPermissionRequest, sessionFormRequest } from "@/session/requests/session-request-tree"
 import { needsUser } from "@/session/requests/auto-approve-machine"

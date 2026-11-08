@@ -2,7 +2,7 @@
 title: "Overview"
 ---
 
-`@opencode/sdk` hosts OpenCode directly inside your application. Unlike the
+`@Mackery6969/sdk` hosts OpenCode directly inside your application. Unlike the
 [network client](/build/client), it assembles the OpenCode server and routes API
 calls through its HTTP router in memory. It opens no HTTP listener and adds no
 network hop between the client and server.
@@ -12,7 +12,7 @@ For Cloudflare Durable Objects, see the [Cloudflare guide](/build/sdk/cloudflare
 Install the SDK:
 
 ```sh
-bun add @opencode/sdk
+bun add @Mackery6969/sdk
 ```
 
 ## Create a host
@@ -21,7 +21,7 @@ bun add @opencode/sdk
 release its router, Location services, fibers, and scoped plugin registrations:
 
 ```ts
-import { OpenCode } from "@opencode/sdk"
+import { OpenCode } from "@Mackery6969/sdk"
 
 await using opencode = await OpenCode.create()
 const session = await opencode.sessions.create({
@@ -38,7 +38,7 @@ Call `await opencode.close()` explicitly when explicit resource management is
 not available.
 
 The embedded host uses the same Promise values, declared errors, request
-options, and `AsyncIterable` streams as `@opencode/client`. It exposes the
+options, and `AsyncIterable` streams as `@Mackery6969/client`. It exposes the
 full generated client and adds the convenience aliases `sessions` and `events`
 for the session and event groups.
 
@@ -76,8 +76,8 @@ Customize your OpenCode instance by registering plugins. Pass plugins to
 the embedded host starts:
 
 ```ts
-import { Plugin } from "@opencode/plugin"
-import { OpenCode } from "@opencode/sdk"
+import { Plugin } from "@Mackery6969/plugin"
+import { OpenCode } from "@Mackery6969/sdk"
 
 const plugin = Plugin.define({
   id: "customize-agent",

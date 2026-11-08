@@ -1,7 +1,7 @@
-import { ClientError, OpenCode } from "@opencode/client/promise"
+import { ClientError, OpenCode } from "@Mackery6969/client/promise"
 import { Predicate } from "effect"
 import path from "node:path"
-import type { ServerEndpoint } from "@opencode/plugin/gui/main"
+import type { ServerEndpoint } from "@Mackery6969/plugin/gui/main"
 
 type Memory = Readonly<Record<"rss" | "heapTotal" | "heapUsed" | "external" | "arrayBuffers", number>>
 

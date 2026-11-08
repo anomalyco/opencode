@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { OpenCodeClient } from "@opencode/client/promise"
+import type { OpenCodeClient } from "@Mackery6969/client/promise"
 import { fetchSessionExport, sessionExportFilename } from "./export"
 
 /* oxlint-disable anti-slop/require-safety-comment-for-type-assertion, anti-slop/no-chained-type-assertions -- partial fixtures stand in for the client methods the export calls */

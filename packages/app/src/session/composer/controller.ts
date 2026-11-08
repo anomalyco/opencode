@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, on, onMount, untrack, type Accessor } from "solid-js"
-import { useDialog } from "@opencode/ui/context/dialog"
+import { useDialog } from "@Mackery6969/ui/context/dialog"
 import type { ComposerControls } from "@/composer/adapter"
 import { setCursorPosition } from "@/composer/editor/dom"
 import { promptLength } from "@/composer/prompt-parts"

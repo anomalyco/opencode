@@ -8,7 +8,7 @@ import {
   type DesktopMenu,
   type DesktopMenuEntry,
   type DesktopMenuRole,
-} from "@opencode/app/desktop-menu"
+} from "@Mackery6969/app/desktop-menu"
 import { MenuCommandTriggered } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 

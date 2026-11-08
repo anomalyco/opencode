@@ -1,7 +1,7 @@
-import { OpenCode } from "@opencode/client/promise"
-import { useLanguage } from "@opencode/app/desktop"
-import { Loader } from "@opencode/ui/loader"
-import { showToast, toaster, Toast } from "@opencode/ui/toast"
+import { OpenCode } from "@Mackery6969/client/promise"
+import { useLanguage } from "@Mackery6969/app/desktop"
+import { Loader } from "@Mackery6969/ui/loader"
+import { showToast, toaster, Toast } from "@Mackery6969/ui/toast"
 import { createEffect, createRoot, createSignal, onCleanup, onMount } from "solid-js"
 import type { ServerReadyData } from "../shared/ipc-contract"
 import {

@@ -1,8 +1,8 @@
 import { Effect, Option, Schema, Stream } from "effect"
 import path from "node:path"
-import { define } from "@opencode/plugin/effect/plugin"
-import { FSUtil } from "@opencode/util/fs-util"
-import { Global } from "@opencode/util/global"
+import { define } from "@Mackery6969/plugin/effect/plugin"
+import { FSUtil } from "@Mackery6969/util/fs-util"
+import { Global } from "@Mackery6969/util/global"
 import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
 import { Provider } from "../../provider.js"
@@ -165,10 +165,10 @@ export const GoogleVertexPlugin = define({
     yield* ctx.provider.transform((evt) => {
       for (const item of evt.list()) {
         if (
-          !item.provider.package.startsWith("@opencode/ai/providers/google-vertex") &&
+          !item.provider.package.startsWith("@Mackery6969/ai/providers/google-vertex") &&
           !(
             item.provider.id === Provider.ID.googleVertex &&
-            item.provider.package === "@opencode/ai/providers/openai-compatible"
+            item.provider.package === "@Mackery6969/ai/providers/openai-compatible"
           )
         )
           continue
@@ -193,10 +193,10 @@ export const GoogleVertexPlugin = define({
     yield* ctx.model.transform((models) => {
       for (const item of models.provider.list()) {
         if (
-          !item.provider.package.startsWith("@opencode/ai/providers/google-vertex") &&
+          !item.provider.package.startsWith("@Mackery6969/ai/providers/google-vertex") &&
           !(
             item.provider.id === Provider.ID.googleVertex &&
-            item.provider.package === "@opencode/ai/providers/openai-compatible"
+            item.provider.package === "@Mackery6969/ai/providers/openai-compatible"
           )
         )
           continue

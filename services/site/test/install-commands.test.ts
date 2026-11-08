@@ -46,8 +46,8 @@ describe("install commands", () => {
     commands.forEach((command) => v1.forEach((item) => expect(command).not.toMatch(item.pattern)))
     expect(installs.map((item) => item.command)).toEqual([
       "curl -fsSL https://opencode.ai/v2/install | bash",
-      "npm install -g @opencode/cli",
-      "bun install -g --trust @opencode/cli",
+      "npm install -g @Mackery6969/cli",
+      "bun install -g --trust @Mackery6969/cli",
       "brew install anomalyco/tap/opencode-v2",
       "paru -S opencode-beta",
     ])

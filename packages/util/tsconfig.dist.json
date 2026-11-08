@@ -2,8 +2,8 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "paths": {
-      "@opencode/util/effect/layer-node": ["./dist/effect/layer-node.d.ts"],
-      "@opencode/util/effect/app-node": ["./dist/effect/app-node.d.ts"]
+      "@Mackery6969/util/effect/layer-node": ["./dist/effect/layer-node.d.ts"],
+      "@Mackery6969/util/effect/app-node": ["./dist/effect/app-node.d.ts"]
     }
   },
   "include": ["../core/test/effect/layer-node/layer-node-types.test.ts"]

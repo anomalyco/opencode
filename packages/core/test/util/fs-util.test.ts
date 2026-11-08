@@ -1,7 +1,7 @@
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, FileSystem, Layer, PlatformError } from "effect"
-import { FSUtil } from "@opencode/util/fs-util"
+import { FSUtil } from "@Mackery6969/util/fs-util"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.empty)

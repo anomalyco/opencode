@@ -1,4 +1,4 @@
-import type { Goal } from "@opencode/schema/goal"
+import type { Goal } from "@Mackery6969/schema/goal"
 
 /** How long `get` may take before the snapshot counts as failed. */
 export const GOAL_SNAPSHOT_TIMEOUT_MS = 15_000

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionMessage } from "@opencode/schema/session-message"
+import type { SessionMessage } from "@Mackery6969/schema/session-message"
 import path from "node:path"
 import { tmpdir } from "../fixture/tmpdir"
 import { assistantMessage, fileDiff, makeSession, startWire } from "./wire-fixture"

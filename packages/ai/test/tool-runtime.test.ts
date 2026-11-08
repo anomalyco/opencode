@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Content } from "@opencode/schema/tool"
+import { Content } from "@Mackery6969/schema/tool"
 import { Effect, Schema, Stream } from "effect"
 import { ai, LLMEvent, LLMResponse, toDefinitions, ToolCallPart, ToolChoice, ToolOutput } from "../src/effect.js"
 import { Auth, LLMClient } from "../src/route.js"

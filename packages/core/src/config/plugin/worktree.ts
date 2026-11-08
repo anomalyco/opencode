@@ -1,10 +1,10 @@
 export * as ConfigWorktreePlugin from "./worktree.js"
 
-import { define } from "@opencode/plugin/effect/plugin"
+import { define } from "@Mackery6969/plugin/effect/plugin"
 import { Effect } from "effect"
 import path from "path"
 import { Config } from "../../config.js"
-import { Global } from "@opencode/util/global"
+import { Global } from "@Mackery6969/util/global"
 import { Location } from "../../location.js"
 import { AbsolutePath } from "../../schema.js"
 import { WorktreeStrategies } from "../../worktree/strategies.js"

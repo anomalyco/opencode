@@ -1,2 +1,2 @@
-export * as SessionMessage from "@opencode/schema/session-message"
-export * from "@opencode/schema/session-message"
+export * as SessionMessage from "@Mackery6969/schema/session-message"
+export * from "@Mackery6969/schema/session-message"

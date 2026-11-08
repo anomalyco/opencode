@@ -1,21 +1,21 @@
 import { describe, expect } from "bun:test"
-import { Document, Event, Info, type Entry } from "@opencode/schema/config"
-import { ConfigPolicy } from "@opencode/schema/config/policy"
-import { Permission } from "@opencode/schema/permission"
-import { Config } from "@opencode/core/config"
-import { Integration } from "@opencode/core/integration"
-import { ConfigPolicyPlugin } from "@opencode/core/config/plugin/policy"
-import { Bus } from "@opencode/core/bus"
-import { Plugin } from "@opencode/core/plugin"
-import { PluginHooks } from "@opencode/core/plugin/hooks"
-import { PluginHost } from "@opencode/core/plugin/host"
-import { Provider } from "@opencode/core/provider"
-import { Session } from "@opencode/core/session"
-import { Credential } from "@opencode/core/credential"
-import { ConfigIntegration } from "@opencode/core/config/integration"
-import { WebSearch } from "@opencode/core/websearch"
-import { WebSearchExa } from "@opencode/core/plugin/websearch/exa"
-import { WebSearchTinyFish } from "@opencode/core/plugin/websearch/tinyfish"
+import { Document, Event, Info, type Entry } from "@Mackery6969/schema/config"
+import { ConfigPolicy } from "@Mackery6969/schema/config/policy"
+import { Permission } from "@Mackery6969/schema/permission"
+import { Config } from "@Mackery6969/core/config"
+import { Integration } from "@Mackery6969/core/integration"
+import { ConfigPolicyPlugin } from "@Mackery6969/core/config/plugin/policy"
+import { Bus } from "@Mackery6969/core/bus"
+import { Plugin } from "@Mackery6969/core/plugin"
+import { PluginHooks } from "@Mackery6969/core/plugin/hooks"
+import { PluginHost } from "@Mackery6969/core/plugin/host"
+import { Provider } from "@Mackery6969/core/provider"
+import { Session } from "@Mackery6969/core/session"
+import { Credential } from "@Mackery6969/core/credential"
+import { ConfigIntegration } from "@Mackery6969/core/config/integration"
+import { WebSearch } from "@Mackery6969/core/websearch"
+import { WebSearchExa } from "@Mackery6969/core/plugin/websearch/exa"
+import { WebSearchTinyFish } from "@Mackery6969/core/plugin/websearch/tinyfish"
 import { Effect, Schema } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { waitUntil } from "../lib/eventually"
@@ -371,13 +371,13 @@ describe("integration policy", () => {
             type: "document",
             integrationID: origin,
             info: decode({
-              providers: { "acme-gateway": { package: "@opencode/ai/providers/openai-compatible", models: {} } },
+              providers: { "acme-gateway": { package: "@Mackery6969/ai/providers/openai-compatible", models: {} } },
             }),
           }),
           new Document({
             type: "document",
             info: decode({
-              providers: { "my-llm": { package: "@opencode/ai/providers/openai-compatible", models: {} } },
+              providers: { "my-llm": { package: "@Mackery6969/ai/providers/openai-compatible", models: {} } },
             }),
           }),
         ])

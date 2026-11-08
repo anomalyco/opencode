@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import path from "node:path"
-import { OpenCode, type LocationGetOutput, type ModelRef, type SessionInfo } from "@opencode/client/promise"
+import { OpenCode, type LocationGetOutput, type ModelRef, type SessionInfo } from "@Mackery6969/client/promise"
 import { createWorktreeLocation, resolveSessionTarget, SessionTargetMutationError } from "../src/session-target"
 
 function location(directory: string): LocationGetOutput {

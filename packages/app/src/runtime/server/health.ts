@@ -12,7 +12,7 @@ import {
   type ServerProbeResult,
 } from "./health-machine"
 import { endpointCredentials } from "./machine"
-import { ClientError, isUnauthorizedError, OpenCode } from "@opencode/client"
+import { ClientError, isUnauthorizedError, OpenCode } from "@Mackery6969/client"
 import { Accessor, batch, createComputed, createSignal, onCleanup, untrack } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 

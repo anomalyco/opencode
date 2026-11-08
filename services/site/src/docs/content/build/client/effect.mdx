@@ -2,11 +2,11 @@
 title: "Effect"
 ---
 
-`@opencode/client/effect` is the Effect-native client for the OpenCode HTTP API. It returns typed Effects and Streams
+`@Mackery6969/client/effect` is the Effect-native client for the OpenCode HTTP API. It returns typed Effects and Streams
 and decodes responses into OpenCode schema values.
 
 ```sh
-bun add @opencode/client effect@4.0.1
+bun add @Mackery6969/client effect@4.0.1
 ```
 
 ## Create a client
@@ -14,7 +14,7 @@ bun add @opencode/client effect@4.0.1
 Create a client with the server URL, then call methods grouped by API resource.
 
 ```ts
-import { AbsolutePath, Location, OpenCode } from "@opencode/client/effect"
+import { AbsolutePath, Location, OpenCode } from "@Mackery6969/client/effect"
 import { Effect } from "effect"
 import { FetchHttpClient } from "effect/http"
 
@@ -110,7 +110,7 @@ definitions, schemas, registration, and live subscription semantics.
 
 ## Local background service
 
-The Node-only `@opencode/client/effect/service` entrypoint discovers, starts, authenticates, and stops the local
+The Node-only `@Mackery6969/client/effect/service` entrypoint discovers, starts, authenticates, and stops the local
 background service as Effects.
 
 ```sh
@@ -121,8 +121,8 @@ Create an authenticated client for the ensured service.
 
 ```ts
 import { NodeFileSystem } from "@effect/platform-node"
-import { OpenCode } from "@opencode/client/effect"
-import { Service } from "@opencode/client/effect/service"
+import { OpenCode } from "@Mackery6969/client/effect"
+import { Service } from "@Mackery6969/client/effect/service"
 import { Effect } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
 

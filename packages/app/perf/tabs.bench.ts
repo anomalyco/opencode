@@ -3,7 +3,7 @@
 //
 // Set OPENCODE_PERF_SESSION to a session export (`opencode export <id>`) to add two cases on your own session.
 import { readFileSync } from "node:fs"
-import type { SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessageInfo } from "@Mackery6969/client/promise"
 import type { Page } from "@playwright/test"
 import { bench, web, type Case } from "@hona/strobe"
 import { pageMessagesFrom, sessionHref } from "../e2e/utils/app"

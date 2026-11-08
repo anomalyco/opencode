@@ -1,8 +1,8 @@
 import { batch, createRoot, createSignal, getOwner, onCleanup, untrack } from "solid-js"
 import { createStore, reconcile, unwrap } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import type { Browser } from "@opencode/plugin-browser/rpc"
-import { createKeyed, type SessionRef, type SetupContext } from "@opencode/plugin/gui"
+import type { Browser } from "@Mackery6969/plugin-browser/rpc"
+import { createKeyed, type SessionRef, type SetupContext } from "@Mackery6969/plugin/gui"
 import { readHref } from "./comment"
 import {
   openBinding,

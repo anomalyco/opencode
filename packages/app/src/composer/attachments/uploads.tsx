@@ -1,8 +1,8 @@
 import { createEffect, createRoot, createSignal, For, on, onCleanup, untrack } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { Icon } from "@opencode/ui/icon"
-import { Toast, toaster } from "@opencode/ui/toast"
-import { abort } from "@opencode/util/abort"
+import { Icon } from "@Mackery6969/ui/icon"
+import { Toast, toaster } from "@Mackery6969/ui/toast"
+import { abort } from "@Mackery6969/util/abort"
 import { useLanguage } from "@/runtime/i18n/language"
 import {
   INITIAL_UPLOAD_MACHINE_STATE,

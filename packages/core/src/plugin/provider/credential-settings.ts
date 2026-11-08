@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import type { Context } from "@opencode/plugin/effect/plugin"
+import type { Context } from "@Mackery6969/plugin/effect/plugin"
 import { Credential } from "../../credential.js"
 import type { Provider } from "../../provider.js"
 import { ProviderRefresh } from "./refresh.js"

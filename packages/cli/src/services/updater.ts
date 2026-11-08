@@ -1,6 +1,6 @@
-import { Global } from "@opencode/util/global"
-import { AppProcess } from "@opencode/util/process"
-import { EffectFlock } from "@opencode/util/effect-flock"
+import { Global } from "@Mackery6969/util/global"
+import { AppProcess } from "@Mackery6969/util/process"
+import { EffectFlock } from "@Mackery6969/util/effect-flock"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "../version"
 import { Context, Duration, Effect, FileSystem, Layer, Option, Ref, Schema } from "effect"
 import { ChildProcess } from "effect/process"
@@ -117,7 +117,7 @@ export interface Interface {
   ) => { readonly command: ReadonlyArray<string>; readonly run: Effect.Effect<void, Error> } | undefined
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/cli/Updater") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/cli/Updater") {}
 
 export function decodePolicy(text: string): Policy | undefined {
   // The CLI only projects this host-level preference instead of initializing
@@ -154,7 +154,7 @@ const make = Effect.gen(function* () {
     if (Object.values(manifest.bin ?? {}).some((bin) => path.resolve(directory, bin) === executable))
       return manifest.name
   }).pipe(Effect.orElseSucceed(() => undefined))
-  // "opencode" is Homebrew Core's formula; the others are published to anomalyco/tap.
+  // "opencode" is Homebrew Core's formula; the others are published to the Mackery6969 tap.
   const installedFormula = ["opencode", "opencode-beta", "opencode-v2"].find((name) =>
     executable.includes(`${path.sep}Cellar${path.sep}${name}${path.sep}`),
   )
@@ -273,7 +273,6 @@ const make = Effect.gen(function* () {
   }
 
   const release = Effect.fnUntraced(function* (method?: Method) {
-    const distribution = method === "brew" ? "homebrew" : "npm"
     // Homebrew Core builds its formula on its own schedule, so the tap release does not describe it.
     const core = method === "brew" && installedFormula === "opencode"
     const response = yield* Effect.tryPromise({
@@ -281,8 +280,9 @@ const make = Effect.gen(function* () {
         fetch(
           core
             ? "https://formulae.brew.sh/api/formula/opencode.json"
-            : `https://opencode.ai/update/api/${encodeURIComponent(channel)}/${encodeURIComponent(OPENCODE_ARTIFACT)}/${distribution}?current=${encodeURIComponent(OPENCODE_VERSION)}`,
+            : `https://api.github.com/repos/Mackery6969/opencode/releases/latest`,
           {
+            headers: { Accept: "application/vnd.github+json" },
             signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
           },
         ),
@@ -304,7 +304,7 @@ const make = Effect.gen(function* () {
           retry: "Try again in a few minutes.",
         }),
       )
-    const data: { version?: string; metadata?: { package?: string }; versions?: { stable?: string } } =
+    const data: { version?: string; metadata?: { package?: string }; versions?: { stable?: string }; tag_name?: string } =
       yield* Effect.tryPromise({
         try: () => response.json(),
         catch: (cause) =>
@@ -317,8 +317,10 @@ const make = Effect.gen(function* () {
             { cause },
           ),
       })
-    const version = core ? data.versions?.stable : data.version
-    const packageName = core ? "opencode" : data.metadata?.package
+    const version = core
+      ? data.versions?.stable
+      : data.tag_name?.replace(/^v/, "")
+    const packageName = core ? "opencode" : "@Mackery6969/cli"
     if (!version || !packageName)
       return yield* Effect.fail(
         new UpgradeError({
@@ -480,8 +482,8 @@ const make = Effect.gen(function* () {
           const installer = path.join(directory, "install")
           yield* runUpgrade({
             method,
-            command: ["curl", "-fsSL", "-o", installer, "https://opencode.ai/v2/install"],
-            displayCommand: ["curl", "-fsSL", "https://opencode.ai/v2/install"],
+            command: ["curl", "-fsSL", "-o", installer, "https://raw.githubusercontent.com/Mackery6969/opencode/main/install.sh"],
+            displayCommand: ["curl", "-fsSL", "https://raw.githubusercontent.com/Mackery6969/opencode/main/install.sh"],
             title: "Could not download the OpenCode installer",
             retry: "Check your network, then run opencode upgrade again.",
           })

@@ -1,4 +1,4 @@
-import { Plugin } from "@opencode/plugin"
+import { Plugin } from "@Mackery6969/plugin"
 
 export default Plugin.define({
   id: "test.worktree-delegate",

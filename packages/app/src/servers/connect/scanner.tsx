@@ -1,6 +1,6 @@
 import QrScanner from "qr-scanner"
 import { createMemo, createSignal, onCleanup, onMount, Show, untrack } from "solid-js"
-import { Button } from "@opencode/ui/button"
+import { Button } from "@Mackery6969/ui/button"
 import { useLanguage } from "@/runtime/i18n/language"
 import { pairingLink } from "./pairing"
 import type { RedeemPairing } from "./redeem"

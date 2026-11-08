@@ -1,4 +1,4 @@
-import type { FormAnswer, FormField, FormValue } from "@opencode/client/promise"
+import type { FormAnswer, FormField, FormValue } from "@Mackery6969/client/promise"
 
 /** How long opening the browser may take before the link is shown to open by hand; desktop IPC can hang. */
 export const FORM_BROWSER_OPEN_TIMEOUT_MS = 5_000

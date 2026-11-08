@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import type { Plugin } from "@opencode/plugin/tui"
+import type { Plugin } from "@Mackery6969/plugin/tui"
 import { BoxRenderable, MouseButton } from "@opentui/core"
 import { Portal, useTerminalDimensions } from "@opentui/solid"
 import { createSignal, onCleanup } from "solid-js"

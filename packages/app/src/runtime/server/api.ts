@@ -1,4 +1,4 @@
-import { OpenCode, withMediaRefs, type MediaRequestOptions } from "@opencode/client/promise"
+import { OpenCode, withMediaRefs, type MediaRequestOptions } from "@Mackery6969/client/promise"
 import type { ServerConnection } from "@/runtime/server/registry"
 import { decode64 } from "@/runtime/persistence/base64"
 

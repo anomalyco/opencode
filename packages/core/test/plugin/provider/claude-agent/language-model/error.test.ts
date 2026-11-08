@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import type { SDKAssistantMessage, SDKMessage, SDKRateLimitEvent } from "@anthropic-ai/claude-agent-sdk"
-import { ConvertClaudeStream } from "@opencode/core/plugin/provider/claude-agent/language-model/convert-claude-stream"
+import { ConvertClaudeStream } from "@Mackery6969/core/plugin/provider/claude-agent/language-model/convert-claude-stream"
 import { Recorder } from "../lib/recorder"
 
 function assistant() {

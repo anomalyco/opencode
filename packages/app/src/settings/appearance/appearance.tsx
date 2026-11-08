@@ -1,6 +1,6 @@
 import { Component, Show } from "solid-js"
-import { Select } from "@opencode/ui/select"
-import { TextInput } from "@opencode/ui/text-input"
+import { Select } from "@Mackery6969/ui/select"
+import { TextInput } from "@Mackery6969/ui/text-input"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { SettingsList } from "@/settings/list"

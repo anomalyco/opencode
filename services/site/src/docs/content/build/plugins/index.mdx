@@ -7,7 +7,7 @@ Plugins modify OpenCode's behavior and add new features. A plugin is one package
 part, or any combination.
 
 ```ts title=".opencode/plugins/example/index.ts"
-import { Plugin } from "@opencode/plugin"
+import { Plugin } from "@Mackery6969/plugin"
 
 export default Plugin.define({
   id: "example",
@@ -21,7 +21,7 @@ Migrating an existing OpenCode 1 plugin? Follow the [V1 plugin migration guide](
 
 ## Parts
 
-Each part is an export of the package. Every part's SDK comes from the one `@opencode/plugin` dependency.
+Each part is an export of the package. Every part's SDK comes from the one `@Mackery6969/plugin` dependency.
 
 ```json title="package.json"
 {
@@ -36,17 +36,17 @@ Each part is an export of the package. Every part's SDK comes from the one `@ope
   },
   "files": ["src", "dist"],
   "dependencies": {
-    "@opencode/plugin": "latest"
+    "@Mackery6969/plugin": "latest"
   }
 }
 ```
 
-- **Server** (`.` or `./server`) runs in the OpenCode server with `@opencode/plugin`. It adds tools, hooks,
+- **Server** (`.` or `./server`) runs in the OpenCode server with `@Mackery6969/plugin`. It adds tools, hooks,
   integrations, commands, and agents. See [Server](/build/plugins/server), or [Effect plugins](/build/plugins/effect)
   for the Effect API.
-- **TUI** (`./tui`) runs in the terminal UI with `@opencode/plugin/tui`. See [TUI](/build/plugins/cli).
+- **TUI** (`./tui`) runs in the terminal UI with `@Mackery6969/plugin/tui`. See [TUI](/build/plugins/cli).
 - **GUI** (`./gui-experimental`) runs its `setup` in every OpenCode Desktop window and its `main` in the desktop app's
-  main process, with `@opencode/plugin/gui`. See [GUI](/build/plugins/gui).
+  main process, with `@Mackery6969/plugin/gui`. See [GUI](/build/plugins/gui).
 - **RPC** (`./rpc`) is a typed contract that the server part implements and the other parts and clients call. See
   [RPC](/build/plugins/rpc).
 

@@ -3,9 +3,9 @@ export * as Watcher from "./watcher.js"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper.js"
 import type ParcelWatcher from "@parcel/watcher"
-import { makeGlobalNode } from "@opencode/util/effect/app-node"
-import { FSUtil } from "@opencode/util/fs-util"
-import { isRecord } from "@opencode/util/record"
+import { makeGlobalNode } from "@Mackery6969/util/effect/app-node"
+import { FSUtil } from "@Mackery6969/util/fs-util"
+import { isRecord } from "@Mackery6969/util/record"
 import { Cause, Context, Effect, Layer, PubSub, RcMap, Stream } from "effect"
 import { lazy } from "../util/lazy.js"
 import { watch } from "node:fs"
@@ -57,7 +57,7 @@ export interface NativeInterface {
 }
 
 /** Uses fs.watch for immediate entries and Parcel for recursive directories. */
-export class Native extends Context.Service<Native, NativeInterface>()("@opencode/Watcher/Native") {}
+export class Native extends Context.Service<Native, NativeInterface>()("@Mackery6969/Watcher/Native") {}
 
 export interface Interface {
   /** onReady runs after native acquisition and listener registration, when the stream is consumed. */
@@ -68,7 +68,7 @@ export interface Options {
   readonly enabled?: boolean
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Watcher") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/Watcher") {}
 
 interface TestInterface extends Interface {
   /** Delivers one update to every active watch whose target covers `update.path`. */
@@ -77,7 +77,7 @@ interface TestInterface extends Interface {
   readonly subscriptions: () => Effect.Effect<readonly WatchInput[]>
 }
 
-export class Test extends Context.Service<Test, TestInterface>()("@opencode/Watcher/Test") {}
+export class Test extends Context.Service<Test, TestInterface>()("@Mackery6969/Watcher/Test") {}
 
 export const layer = (options?: Options) =>
   Layer.effect(

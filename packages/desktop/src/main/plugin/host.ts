@@ -1,5 +1,5 @@
 import { app, BrowserWindow } from "electron"
-import { builtins } from "@opencode/gui-plugins/main"
+import { builtins } from "@Mackery6969/gui-plugins/main"
 import {
   pluginIdAvailable,
   runsOn,
@@ -8,7 +8,7 @@ import {
   type BridgeMenubarItem,
   type Entry,
   type Scope,
-} from "@opencode/plugin/gui/host"
+} from "@Mackery6969/plugin/gui/host"
 import {
   MenubarItem,
   type Plugin,
@@ -31,9 +31,9 @@ import {
   type ServerEndpoint,
   type ServerEndpoints,
   type Windows,
-} from "@opencode/plugin/gui/main"
-import type { BuiltinCatalog, BuiltinMainContext, Lifecycle } from "@opencode/plugin/gui/builtin"
-import type { OpenCodeClient, PluginGuiBundle } from "@opencode/client"
+} from "@Mackery6969/plugin/gui/main"
+import type { BuiltinCatalog, BuiltinMainContext, Lifecycle } from "@Mackery6969/plugin/gui/builtin"
+import type { OpenCodeClient, PluginGuiBundle } from "@Mackery6969/client"
 import { Exit, Match, Predicate, Schema } from "effect"
 import type { PluginEndpoint, PluginInstalled } from "../../shared/ipc-rpc/plugins"
 import {
@@ -125,7 +125,7 @@ type Listing = {
   readonly skipped: ReadonlyMap<string, string>
 }
 
-const loadClient = () => import("@opencode/client")
+const loadClient = () => import("@Mackery6969/client")
 
 /** The client of the app's own server, made once the client module loaded and again when the endpoint changes. */
 type SidecarClient = {

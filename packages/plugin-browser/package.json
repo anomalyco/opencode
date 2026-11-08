@@ -1,13 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode/plugin-browser",
+  "name": "@Mackery6969/plugin-browser",
   "version": "2.2.5",
   "description": "OpenCode's desktop browser plugin",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anomalyco/opencode.git",
+    "url": "git+https://github.com/Mackery6969/opencode.git",
     "directory": "packages/plugin-browser"
   },
   "publishConfig": {
@@ -29,8 +29,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@opencode/plugin": "workspace:*",
-    "@opencode/schema": "workspace:*",
+    "@Mackery6969/plugin": "workspace:*",
+    "@Mackery6969/schema": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

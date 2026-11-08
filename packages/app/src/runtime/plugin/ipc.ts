@@ -1,8 +1,8 @@
 import { untrack } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { Exit, Schema } from "effect"
-import type { Ipc, IpcCallOptions, IpcClient, IpcSpec } from "@opencode/plugin/gui"
-import type { Bridge } from "@opencode/plugin/gui/host"
+import type { Ipc, IpcCallOptions, IpcClient, IpcSpec } from "@Mackery6969/plugin/gui"
+import type { Bridge } from "@Mackery6969/plugin/gui/host"
 import {
   createIpcState,
   selectIpcAvailable,

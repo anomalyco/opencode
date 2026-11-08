@@ -1,7 +1,7 @@
-import { PersistentPty } from "@opencode/schema/persistent-pty"
-import { Pty } from "@opencode/schema/pty"
-import { PtyTicket } from "@opencode/schema/pty-ticket"
-import { Session } from "@opencode/schema/session"
+import { PersistentPty } from "@Mackery6969/schema/persistent-pty"
+import { Pty } from "@Mackery6969/schema/pty"
+import { PtyTicket } from "@Mackery6969/schema/pty-ticket"
+import { Session } from "@Mackery6969/schema/session"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
 import {

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@Mackery6969/client/promise"
 import { selectSessionUserMessages, selectVisibleSessionUserMessages } from "./session-domain"
 
 const user = (id: string): SessionMessageUser => ({

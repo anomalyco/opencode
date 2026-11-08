@@ -1,18 +1,18 @@
 import { describe, expect } from "bun:test"
-import { LanguageModel } from "@opencode/ai/effect"
-import { OpenAIChat } from "@opencode/ai/protocols"
+import { LanguageModel } from "@Mackery6969/ai/effect"
+import { OpenAIChat } from "@Mackery6969/ai/protocols"
 import { Effect, Fiber, Layer, Ref, Stream } from "effect"
-import { Integration } from "@opencode/core/integration"
-import { Credential } from "@opencode/core/credential"
-import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
-import { LayerNode } from "@opencode/util/effect/layer-node"
-import { Bus } from "@opencode/core/bus"
-import { Location } from "@opencode/core/location"
-import { Model } from "@opencode/core/model"
-import { ModelResolver } from "@opencode/core/model-resolver"
-import { Provider } from "@opencode/core/provider"
-import { AbsolutePath } from "@opencode/core/schema"
-import { Money } from "@opencode/schema/money"
+import { Integration } from "@Mackery6969/core/integration"
+import { Credential } from "@Mackery6969/core/credential"
+import { AppNodeBuilder } from "@Mackery6969/core/effect/app-node-builder"
+import { LayerNode } from "@Mackery6969/util/effect/layer-node"
+import { Bus } from "@Mackery6969/core/bus"
+import { Location } from "@Mackery6969/core/location"
+import { Model } from "@Mackery6969/core/model"
+import { ModelResolver } from "@Mackery6969/core/model-resolver"
+import { Provider } from "@Mackery6969/core/provider"
+import { AbsolutePath } from "@Mackery6969/core/schema"
+import { Money } from "@Mackery6969/schema/money"
 import { withEnv } from "./fixture/env"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
@@ -43,7 +43,7 @@ describe("Provider and Model", () => {
         yield* providers.transform((editor) => editor.update(providerID, () => {}))
         yield* models.transform((editor) =>
           editor.update(providerID, modelID, (model) => {
-            model.package = path === "aisdk" ? Provider.aisdk("@ai-sdk/fixture") : "@opencode/ai/providers/openai"
+            model.package = path === "aisdk" ? Provider.aisdk("@ai-sdk/fixture") : "@Mackery6969/ai/providers/openai"
             model.settings = {
               apiKey: path === "empty-key" ? "" : "fixture-key",
               baseURL: "https://fixture.example/v1",
@@ -477,12 +477,12 @@ describe("Provider and Model", () => {
       })
 
       expect(required(yield* providers.get(providerID))).toMatchObject({
-        package: "@opencode/ai/providers/amazon-bedrock",
+        package: "@Mackery6969/ai/providers/amazon-bedrock",
         settings: { region: "us-east-1" },
         body: { tag: "provider" },
       })
       const model = required(yield* models.get(providerID, modelID))
-      expect(model.package).toBe("@opencode/ai/providers/amazon-bedrock")
+      expect(model.package).toBe("@Mackery6969/ai/providers/amazon-bedrock")
       expect(model.settings).not.toHaveProperty("reasoningConfig")
       expect(model.body).toMatchObject({
         additionalModelRequestFields: { thinking: { type: "adaptive" }, output_config: { effort: "high" } },

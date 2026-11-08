@@ -1,13 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode/plugin-figma",
+  "name": "@Mackery6969/plugin-figma",
   "version": "2.2.5",
   "description": "Figma MCP integration and official Figma skills for OpenCode",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anomalyco/opencode.git",
+    "url": "git+https://github.com/Mackery6969/opencode.git",
     "directory": "packages/plugins/figma"
   },
   "publishConfig": {
@@ -31,7 +31,7 @@
     "gray-matter": "4.0.3"
   },
   "peerDependencies": {
-    "@opencode/plugin": "^2.0.27 || ^0.0.0-dev"
+    "@Mackery6969/plugin": "^2.0.27 || ^0.0.0-dev"
   },
   "devDependencies": {
     "@tsconfig/bun": "1.0.9",

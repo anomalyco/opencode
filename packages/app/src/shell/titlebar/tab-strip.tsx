@@ -26,12 +26,12 @@ import { useCommand } from "@/shell/commands/command"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { createTabComposerState } from "@/composer/persistence"
-import { base64Encode } from "@opencode/util/encode"
+import { base64Encode } from "@Mackery6969/util/encode"
 import { showToast } from "@/shell/notifications/toast"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
-import { Button } from "@opencode/ui/button"
-import { useDialog } from "@opencode/ui/context/dialog"
-import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
+import { Button } from "@Mackery6969/ui/button"
+import { useDialog } from "@Mackery6969/ui/context/dialog"
+import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@Mackery6969/ui/dialog"
 import { sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { sessionTitle } from "@/session/title"
 import { errorMessage } from "@/shell/layout/helpers"
@@ -45,7 +45,7 @@ import {
   type SessionTabView,
 } from "./tab-load-machine"
 import { setSidebarUnread } from "@/shell/sidebar-peek"
-import type { SessionInfo } from "@opencode/client/promise"
+import type { SessionInfo } from "@Mackery6969/client/promise"
 
 export const previousSessionCommand = { id: "session.previous", keybind: "alt+arrowup" }
 

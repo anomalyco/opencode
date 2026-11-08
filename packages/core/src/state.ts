@@ -47,7 +47,7 @@ type RegistrationGroup = {
   readonly report: (failure: Failure, refresh: Effect.Effect<void>) => void
 }
 
-const CurrentGroup = Context.Reference<RegistrationGroup | undefined>("@opencode/State/CurrentGroup", {
+const CurrentGroup = Context.Reference<RegistrationGroup | undefined>("@Mackery6969/State/CurrentGroup", {
   defaultValue: () => undefined,
 })
 
@@ -80,7 +80,7 @@ type Batch = {
   readonly notifications: Set<Effect.Effect<void>>
 }
 
-const CurrentBatch = Context.Reference<Batch | undefined>("@opencode/State/CurrentBatch", {
+const CurrentBatch = Context.Reference<Batch | undefined>("@Mackery6969/State/CurrentBatch", {
   defaultValue: () => undefined,
 })
 /** Coalesces notifications until the effect completes. Reads inside stay fresh; nothing is rolled back. */
