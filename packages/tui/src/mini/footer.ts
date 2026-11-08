@@ -450,6 +450,12 @@ export class RunFooter implements FooterApi {
       this.setCurrentModel(next.selection)
     }
 
+    if (next.type === "turn.end") {
+      this.flush()
+      this.completeScrollback()
+      return
+    }
+
     if (next.type === "turn.duration") {
       this.finishStartup()
       const agent = this.turnAgent ?? this.currentAgent()

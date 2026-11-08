@@ -7,7 +7,6 @@ import {
   CodeRenderable,
   ImageRenderable,
   MarkdownRenderable,
-  RendererControlState,
   TextRenderable,
   getTreeSitterClient,
   type TreeSitterClient,
@@ -458,7 +457,8 @@ export class RunScrollbackStream {
       this.pendingTurn = false
       const body = entryBody(commit, { shellOutput: this.shellOutput(), mono: this.mono })
       this.writeSpacer(separatorRows(this.rendered, commit, body) || (!this.rendered && this.wrote ? 1 : 0))
-      this.turnOpen = await this.writeSemanticMarker("C")
+      this.renderer.writeScrollbackSequence("\x1b]133;C\x07")
+      this.turnOpen = true
       this.rendered = undefined
     }
 
@@ -544,30 +544,8 @@ export class RunScrollbackStream {
     this.pendingTurn = false
     if (!this.turnOpen) return
     await this.complete()
-    await this.writeSemanticMarker("D")
+    if (!this.destroyed && !this.renderer.isDestroyed) this.renderer.writeScrollbackSequence("\x1b]133;D\x07")
     this.turnOpen = false
-  }
-
-  private async writeSemanticMarker(marker: "C" | "D"): Promise<boolean> {
-    await this.renderer.idle()
-    if (
-      this.destroyed ||
-      this.renderer.isDestroyed ||
-      this.renderer.controlState === RendererControlState.EXPLICIT_SUSPENDED
-    ) {
-      return false
-    }
-    const driver = this.renderer.nativeScene.driver
-    const row = driver.resourceContext.renderLib.sessionSplitControl(driver.context, driver.session, {
-      kind: "output-offset",
-      surfaceOffset: Math.max(0, this.renderer.terminalHeight - this.renderer.height),
-    })
-    // Frames restore the cursor to the footer. Anchor the marker to the transcript, then restore it.
-    const column = marker === "C" ? 1 : Math.max(1, this.renderer.terminalWidth)
-    const bytes = new TextEncoder().encode(`\x1b7\x1b[${Math.max(1, row)};${column}H\x1b]133;${marker}\x07\x1b8`)
-    if (driver.write(bytes)) return true
-    await driver.idle()
-    return driver.write(bytes)
   }
 
   public async writeTurnSummary(input: { agent: string; model: string; duration: string }): Promise<void> {
