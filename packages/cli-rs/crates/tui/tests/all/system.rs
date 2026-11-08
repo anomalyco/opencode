@@ -302,7 +302,14 @@ fn plugin_manager_matches_typescript() {
     mounted.tui.keymap.dispatch("plugins.list", None);
     wait_for(&app, "team.plugins");
     assert_dialog(&app, "E.18b/plugins", "Plugins");
-    assert_eq!(mounted.requests("/api/plugin"), ["GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp"]);
+    // The startup read of the plugin manager (`syncServerPlugins`), then the dialog's.
+    assert_eq!(
+        mounted.requests("/api/plugin"),
+        [
+            "GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp",
+            "GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp"
+        ]
+    );
 
     app.press("down");
     assert_dialog(&app, "E.18b/plugins-failed", "Plugins");
@@ -352,7 +359,7 @@ fn plugin_manager_toggles_checks_and_updates() {
     app.press("down");
     wait_for(&app, "update ctrl+u");
     app.press("ctrl+u");
-    app.wait_until(WAIT, || mounted.requests("/api/plugin").len() == 3);
+    app.wait_until(WAIT, || mounted.requests("/api/plugin").len() == 4);
     let update = mounted
         .log
         .lock()
@@ -370,6 +377,7 @@ fn plugin_manager_toggles_checks_and_updates() {
     assert_eq!(
         mounted.requests("/api/plugin"),
         [
+            "GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp",
             "GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp",
             "POST /api/plugin/update?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp",
             "GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp",

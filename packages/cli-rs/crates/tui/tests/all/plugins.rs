@@ -83,12 +83,23 @@ deref_harness!(Plugins);
 
 /// The TUI on `route` with the sample's `build` in `<config>/plugins/sample`.
 fn open(route: Route, text: &str, build: &[u8]) -> Plugins {
+    open_with(route, text, build, |_| None)
+}
+
+/// [`open`], with the roots `roots` gives for the temp directory.
+fn open_with(
+    route: Route,
+    text: &str,
+    build: &[u8],
+    roots: impl FnOnce(&Path) -> Option<opencode_tui::app::Roots>,
+) -> Plugins {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
     let plugin = config.join("plugins/sample");
     std::fs::create_dir_all(&plugin).unwrap();
     std::fs::write(plugin.join(entry_file()), build).unwrap();
-    let harness = support::mount(80, 24, Deps { route, ..support::deps(Arc::new(fake(text.to_owned()))) });
+    let deps = Deps { route, roots: roots(root.path()), ..support::deps(Arc::new(fake(text.to_owned()))) };
+    let harness = support::mount(80, 24, deps);
     external(&harness.tui, External { config_dir: config, cwd: root.path().to_path_buf() });
     Plugins { harness, plugin, _root: root }
 }
@@ -217,6 +228,35 @@ fn a_major_abi_mismatch_is_refused_with_its_reason() {
     h.app.press("enter");
     let screen = h.wait_for("plugin ABI 2.0 is not supported");
     print_excerpt("error details of a major mismatch", &screen);
+}
+
+// Expected: a plugin built on the frozen 1.3 SDK, which stores objects or arrays, stores an array in real TUI storage,
+// reads it back at once, and finds it on disk (bigboi-3).
+#[test]
+fn a_1_3_plugin_stores_an_array() {
+    let h = open_with(Route::Home, "", &build("abi-1-3"), |root| {
+        support::roots(support::home_paths(&root.join("home")), "test")
+    });
+    h.wait_for("sample plugin 1.3: home.footer");
+    let storage = h.tui.storage().unwrap();
+    let file = storage.file("plugin.sample.list").unwrap();
+    opencode_local::storage::write_json_atomic(&file, &json!([7])).unwrap();
+    h.tui.keymap.dispatch("sample.list", None);
+    h.wait_for("list [7] then [1,2]");
+    let written = h
+        .app
+        .wait_until(support::WAIT, || storage.load("plugin.sample.list", &Value::Null).ok() == Some(json!([1, 2])));
+    assert!(written, "{:?}", storage.load("plugin.sample.list", &Value::Null));
+}
+
+// Expected: a plugin that fails to load shows TS's error toast, which offers to open the plugin manager, and the home
+// footer counts it (carbon-5).
+#[test]
+fn a_plugin_that_fails_to_load_shows_a_toast_and_the_footer_counts_it() {
+    let h = open(Route::Home, "", &build("major-2"));
+    let screen = h.wait_for("Plugin failed:");
+    assert!(screen.contains("Open plugins"), "{screen}");
+    h.wait_for("⊙ 1 plugin failed");
 }
 
 /// Replaces `path` as editors and build tools do: a new file renamed over the old one.

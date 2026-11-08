@@ -22,7 +22,7 @@ const FOLD: &str = "sidebar.todo.fold";
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("view");
     setup.command(Command { name: FOLD.to_owned(), ..Command::default() }, |host, _| {
-        host.storage_set("view", json!({ "open": !open(host) }));
+        host.storage_merge("view", serde_json::Map::from_iter([("open".to_owned(), json!(!open(host)))]));
     });
     let last: RefCell<Option<Last>> = RefCell::default();
     setup.slot(Placement::append(slot::SIDEBAR_CONTENT), move |read, input, changed| {

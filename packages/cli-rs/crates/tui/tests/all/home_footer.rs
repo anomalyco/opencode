@@ -8,7 +8,7 @@ use std::ffi::c_void;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use opencode_api::generated::V2Event;
+use opencode_api::generated::{SessionID, V2Event};
 use opencode_plugin::abi;
 use opencode_tui::{Deps, Route};
 use opentui::prelude::*;
@@ -159,4 +159,74 @@ fn a_status_claim_shows_in_the_home_footer_without_the_footer_plugin() {
     let h = mount(100, &["-opencode.home.footer"], vec![abi::Plugin { id: "test.status", setup: status }.into()]);
     h.wait_for("status none");
     assert!(!h.app.text().contains("2 MCP"), "{}", h.app.text());
+}
+
+/// The home at `width` columns, whose server lists `failed` failed plugins after a moment, so the answer comes after the
+/// footer's first renders.
+fn mount_failing(width: u16, failed: &'static [&'static str]) -> Harness {
+    let fake = Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/plugin") => {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            let plugins: Vec<_> = failed
+                .iter()
+                .map(|name| json!({
+                    "source": { "type": "package", "target": name }, "features": { "server": true },
+                    "state": { "status": "failed", "error": "Cannot find module" },
+                }))
+                .chain([json!({ "source": { "type": "builtin" }, "features": { "server": true }, "state": { "status": "active" } })])
+                .collect();
+            (200, list(DIRECTORY, json!(plugins)))
+        }
+        _ => support::base(seen, DIRECTORY),
+    });
+    let deps = Deps {
+        config: support::config(support::decode(r#"{ "animations": false }"#)),
+        route: Route::Home,
+        ..support::deps(Arc::new(fake))
+    };
+    support::mount(width, 30, deps)
+}
+
+// Expected: the footer counts the failed server plugins once their list arrives, which tells the claims `local`, with
+// `/plugins` from 80 columns; a click on the count opens the plugin manager, and the new failure shows TS's error
+// toast that offers to open it (carbon-5).
+#[test]
+fn the_footer_counts_failed_plugins_and_a_toast_tells_of_them() {
+    let h = mount_failing(100, &["team-audit"]);
+    let screen = h.wait_for("1 plugin failed");
+    let line = screen.lines().find(|line| line.contains("1 plugin failed")).unwrap();
+    assert!(line.contains("⊙ 1 plugin failed /plugins"), "{screen}");
+    let screen = h.wait_for("Plugin failed: team-audit");
+    assert!(screen.contains("Run /plugins to view details.") && screen.contains("Open plugins"), "{screen}");
+    h.tui.toasts.dismiss();
+    h.wait_gone("Open plugins");
+    let (x, y) = support::at(&h.app.text(), "/plugins").unwrap();
+    h.app.click(x, y);
+    h.wait_for("Plugins");
+    h.wait_for("team-audit");
+
+    let h = mount_failing(70, &["one", "two"]);
+    let screen = h.wait_for("⊙ 2 plugins failed");
+    let line = screen.lines().find(|line| line.contains("⊙ 2 plugins failed")).unwrap();
+    assert!(!line.contains("/plugins"), "{screen}");
+    let screen = h.wait_for("one, two");
+    assert!(screen.contains("2 plugins failed") && screen.contains("Open plugins"), "{screen}");
+}
+
+// Expected: a toast about a session without a title takes the session's title, as TS `toast.title ??
+// session.title` (carbon-6).
+#[test]
+fn a_session_toast_without_a_title_takes_the_sessions() {
+    let h = mount(100, &[], Vec::new());
+    h.tui.navigate(support::session_route("ses_a"));
+    let known = || h.tui.data.read(|state| state.session(&SessionID("ses_a".to_owned())).is_some());
+    h.wait("the session", known);
+    h.tui.navigate(Route::Home);
+    opencode_plugin::Host::toast(
+        &*h.tui,
+        &abi::Toast::new(abi::Variant::Info, "Finished background job").session("ses_a"),
+    );
+    let screen = h.wait_for("Finished background job");
+    let line = screen.lines().find(|line| line.contains("› Open")).unwrap_or_default();
+    assert!(line.contains("Fix the parser"), "{screen}");
 }

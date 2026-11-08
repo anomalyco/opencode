@@ -230,6 +230,7 @@ pub fn install(tui: &Rc<Tui>) {
                     changed(&tui);
                 }
                 crate::frame::reload(&tui, &storage);
+                crate::plugins::host::reload_storage(&tui);
             }
         }));
     }

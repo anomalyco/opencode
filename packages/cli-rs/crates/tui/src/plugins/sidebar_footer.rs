@@ -18,9 +18,7 @@ const KEY: &str = "getting-started";
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key(KEY);
     setup.command(Command { name: DISMISS.to_owned(), ..Command::default() }, |host, _| {
-        let mut value = host.storage_get(KEY).filter(|value| value.is_object()).unwrap_or_else(|| json!({}));
-        value["dismissed"] = json!(true);
-        host.storage_set(KEY, value);
+        host.storage_merge(KEY, serde_json::Map::from_iter([("dismissed".to_owned(), json!(true))]));
     });
     setup.slot(Placement::append(slot::SIDEBAR_FOOTER), |read, input, changed| {
         // The card follows the terminal height and the stored dismissal, the location the session.

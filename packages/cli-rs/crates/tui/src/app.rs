@@ -218,6 +218,7 @@ impl Tui {
         }
         crate::features::title::sync(self, &changes);
         crate::features::events::sync(self, &changes);
+        crate::plugins::host::sync(self);
         self.local.sync(&changes);
         crate::tabs::sync(self, &changes);
         crate::frame::refresh(self);
