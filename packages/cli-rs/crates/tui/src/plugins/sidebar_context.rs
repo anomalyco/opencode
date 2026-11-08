@@ -1,52 +1,115 @@
 //! The sidebar's context section (E.14, row F04, `feature-plugins/sidebar/context.tsx`): the tokens of the last
-//! reply, the share of the model's context they use, and the session's cost. [`SessionUsage`] and [`money`]
-//! also serve the prompt footer.
+//! reply, the share of the model's context they use, and the session's cost. It is a plugin of the one API (O-67).
+//! [`SessionUsage`] and [`money`] also serve the prompt footer.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 use opencode_api::generated::{ModelInfo, SessionID, SessionMessageCompaction, SessionMessageInfo};
-use opencode_plugin::{Definition, Placement, slot};
-use opencode_store::{Catalog, Changes, Location, MessageExt, State};
-use opentui::prelude::*;
+use opencode_plugin::abi::{self, Changed, Node, Placement, Render, Span};
+use opencode_plugin::slot;
+use opencode_store::{Changes, Location, MessageExt, State};
 
-use crate::app::Tui;
-use crate::routes::session::sidebar::{Section, location_changed, sync_catalogs};
+use crate::routes::session::sidebar::location_changed;
 
-pub fn plugin() -> Definition<Tui> {
-    Definition::new("opencode.sidebar.context", |cx| {
-        cx.slot(Placement::append(slot::SIDEBAR_CONTENT), |tui, input| {
-            let session = SessionID(input.session_id.clone().unwrap_or_default());
-            let cache = SessionUsage::default();
-            Box::new(Section::new(
-                tui,
-                Some(session.clone()),
-                move |tui, changes| model(tui, &session, &cache, changes),
-                view,
-            ))
-        });
-    })
+pub fn plugin() -> abi::Plugin {
+    abi::Plugin { id: "opencode.sidebar.context", setup }
 }
 
-fn model(tui: &Tui, session: &SessionID, cache: &SessionUsage, changes: &Changes) -> Option<(Option<Usage>, f64)> {
-    sync_catalogs(tui, session, &[Catalog::Model]);
-    let (usage, cost) = tui.data.read(|state| (cache.read(state, changes, session), state.cost(session)));
-    (usage.is_some() || cost > 0.0).then_some((usage, cost))
+fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let last: RefCell<Option<Last>> = RefCell::default();
+    setup.slot(Placement::append(slot::SIDEBAR_CONTENT), move |read, input, changed| {
+        let Some(session) = input.session_id.as_deref() else {
+            return Render::Hide;
+        };
+        let mut last = last.borrow_mut();
+        let fresh = changed.all || last.as_ref().is_none_or(|last| last.session != session);
+        let last = match &mut *last {
+            Some(last) if !fresh => last,
+            last => last.insert(Last { session: session.to_owned(), ..Last::default() }),
+        };
+        let model = last.update(read, changed, fresh);
+        if !fresh && last.shown == Some(model) {
+            return Render::Keep;
+        }
+        last.shown = Some(model);
+        model.map_or(Render::Hide, |model| Render::Show(view(model)))
+    });
+    Ok(())
 }
 
-fn view(tui: &Tui, (usage, cost): &(Option<Usage>, f64)) -> View {
-    let theme = tui.page();
-    let app = &tui.app;
-    let root = View::new(app).child(&Text::new(app, "Context").fg(theme.text.base).bold());
+/// What the section shows: the usage and the cost, or nothing.
+type Model = Option<(Option<Usage>, f64)>;
+
+/// What the section last read for its session. It reads the session again only when its info or status changed,
+/// the models when its location changed, and the messages when their list changed or a message changed in place from
+/// the one the last usage came from on.
+#[derive(Default)]
+struct Last {
+    session: String,
+    location: Option<abi::LocationRef>,
+    boundary: Option<String>,
+    models: Option<Vec<ModelInfo>>,
+    usage: Option<Usage>,
+    from: usize,
+    cost: f64,
+    shown: Option<Model>,
+}
+
+impl Last {
+    fn update(&mut self, read: &dyn abi::Read, changed: &Changed, fresh: bool) -> Model {
+        let info = fresh || changed.session(&self.session);
+        if info {
+            let session = read.session(&self.session).map(|session| session.info);
+            self.location = session
+                .as_ref()
+                .map(|info| abi::LocationRef { directory: info.location.directory.0.clone(), workspace: None });
+            self.boundary = session.and_then(|info| info.revert).map(|revert| revert.message_id.0);
+        }
+        // The cost of a root counts its family's.
+        if fresh || !changed.sessions.is_empty() {
+            self.cost = read.family(&self.session).cost;
+        }
+        let models = info || self.location.as_ref().is_some_and(|location| changed.location(location));
+        if models {
+            self.models = self.location.as_ref().and_then(|location| read.models(Some(location)));
+        }
+        let mut stale = models || changed.list(&self.session);
+        if !stale && changed.messages.iter().any(|(session, _)| *session == self.session) {
+            read.messages(&self.session, &mut |messages| {
+                stale = messages.get(self.from..).unwrap_or_default().iter().any(|message| {
+                    changed.messages.iter().any(|(session, id)| *session == self.session && id == message.id())
+                });
+            });
+        }
+        if stale {
+            (self.usage, self.from) = match self.location {
+                Some(_) => {
+                    let mut found = (None, 0);
+                    read.messages(&self.session, &mut |messages| {
+                        found = usage(messages, self.models.as_deref(), self.boundary.as_deref());
+                    });
+                    found
+                }
+                None => (None, 0),
+            };
+        }
+        (self.usage.is_some() || self.cost > 0.0).then_some((self.usage, self.cost))
+    }
+}
+
+fn view((usage, cost): (Option<Usage>, f64)) -> Node {
+    let muted = |text: String| Node::text([Span::new(text).fg("text.muted")]);
+    let mut children = vec![Node::text([Span::new("Context").fg("text.base").bold()])];
     if let Some(usage) = usage {
-        root.add(&Text::new(app, format!("{} tokens", grouped(usage.tokens))).fg(theme.text.muted));
+        children.push(muted(format!("{} tokens", grouped(usage.tokens))));
         if let Some(percent) = usage.percent {
-            root.add(&Text::new(app, format!("{percent}% used")).fg(theme.text.muted));
+            children.push(muted(format!("{percent}% used")));
         }
     }
-    if *cost > 0.0 {
-        root.add(&Text::new(app, format!("{} spent", money(*cost))).fg(theme.text.muted));
+    if cost > 0.0 {
+        children.push(muted(format!("{} spent", money(cost))));
     }
-    root
+    Node::column(children)
 }
 
 /// The context use of the last reply with tokens (`contextUsage`).

@@ -2,20 +2,27 @@
 //! entries, external plugins with hot reload (P.4, `docs/P.4.md`), and the calls the TUI's slots, plugin
 //! routes, and Markdown make.
 
-use std::cell::RefCell;
+use std::cell::{Cell, OnceCell, RefCell};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
+use opencode_api::generated::{
+    ModelInfo, ModelRef, ProviderID, ProviderInfo, SessionID, SessionMessageInfo, UsageLimitsInfo,
+};
+use opencode_plugin::abi;
 use opencode_plugin::loader::native::Native;
 use opencode_plugin::loader::{Backend, Configured, Loader};
+use opencode_plugin::node::{assign, refill, theme_color};
 use opencode_plugin::{Definition, Registry, SlotInput, SlotMount, Slotted, Toast};
-use opencode_store::Changes;
+use opencode_store::location::{Catalog, Location};
+use opencode_store::{Changes, State};
 use opencode_ui::bind;
 use opencode_ui::dialog::DialogKeymap;
 use opencode_ui::markdown::CodeBlockRenderers;
 use opencode_ui::theme::Theme;
 use opencode_ui::toast::{ToastOptions, Variant};
+use opentui::keymap::Disposer;
 use opentui::prelude::*;
 
 use crate::app::Tui;
@@ -82,6 +89,190 @@ impl opencode_plugin::Host for Tui {
     fn remount(&self) {
         self.navigate(self.route());
     }
+
+    fn read(&self, f: &mut dyn FnMut(&dyn abi::Read)) {
+        f(&Reader { tui: self, theme: OnceCell::new() });
+    }
+
+    fn changed(changes: &Changes, changed: &mut abi::Changed) {
+        changed.all = changes.all;
+        // A selection is part of the session's info to a plugin.
+        let sessions = changes.session.iter().chain(&changes.status).chain(changes.selected.keys());
+        refill(&mut changed.sessions, sessions, |into, id| assign(into, &id.0));
+        refill(&mut changed.lists, &changes.messages, |into, id| assign(into, &id.0));
+        let messages = changes.message.iter().flat_map(|(session, ids)| ids.iter().map(move |id| (session, id)));
+        refill(&mut changed.messages, messages, |(into_session, into_id), (session, id)| {
+            assign(into_session, &session.0);
+            assign(into_id, &id.0);
+        });
+        refill(&mut changed.locations, &changes.locations, |into, location| {
+            assign(&mut into.directory, &location.directory);
+            match &location.workspace_id {
+                Some(workspace) => assign(into.workspace.get_or_insert_default(), workspace),
+                None => into.workspace = None,
+            }
+        });
+        (changed.local, changed.size, changed.woken) = (false, false, false);
+    }
+
+    fn watch(&self, push: Rc<dyn Fn(&abi::Changed)>) -> Option<Disposer> {
+        let local = abi::Changed { local: true, ..abi::Changed::default() };
+        let listener = {
+            let (push, local) = (push.clone(), local.clone());
+            self.local.subscribe(move || push(&local))
+        };
+        // Settings listeners stay registered, so this one lets go of `push` and does nothing once disposed.
+        let weak = Rc::downgrade(&push);
+        self.settings.on_change(move |_| {
+            if let Some(push) = weak.upgrade() {
+                push(&local);
+            }
+        });
+        let resize = {
+            let push = push.clone();
+            self.app.on_resize(move |_, _, _| push(&abi::Changed { size: true, ..abi::Changed::default() }))
+        };
+        let app = self.app.clone();
+        Some(Disposer::new(move || {
+            listener.dispose();
+            app.remove_handler(resize);
+            drop(push);
+        }))
+    }
+}
+
+/// The catalog loads plugin reads asked for, which start once the current event is handled, and a session ID buffer,
+/// so a read by ID allocates nothing.
+#[derive(Default)]
+pub struct Reads {
+    needs: RefCell<Vec<(Catalog, Location)>>,
+    key: Cell<SessionID>,
+}
+
+impl Reads {
+    fn need(&self, tui: &Tui, catalog: Catalog, location: Location) {
+        let mut needs = self.needs.borrow_mut();
+        if needs.iter().any(|(known, at)| *known == catalog && *at == location) {
+            return;
+        }
+        needs.push((catalog, location));
+        if needs.len() > 1 {
+            return;
+        }
+        // Outside every plugin callback and store read: a load writes to the store.
+        let weak = tui.weak();
+        tui.app.defer(move |_| {
+            let Some(tui) = weak.upgrade() else { return };
+            let needs = std::mem::take(&mut *tui.reads.needs.borrow_mut());
+            for (catalog, location) in needs {
+                drop(tui.data.catalog_sync(catalog, Some(&location)));
+            }
+        });
+    }
+}
+
+/// The TUI as the one API's renders read it (O-67). Every read is pure; a catalog that is not loaded asks
+/// [`Reads::need`] for the load.
+struct Reader<'a> {
+    tui: &'a Tui,
+    theme: OnceCell<Theme>,
+}
+
+impl Reader<'_> {
+    /// Runs `f` on the store and session `id`.
+    fn session<R>(&self, id: &str, f: impl FnOnce(&State, &SessionID) -> R) -> R {
+        let mut key = self.tui.reads.key.take();
+        assign(&mut key.0, id);
+        let result = self.tui.data.read(|state| f(state, &key));
+        self.tui.reads.key.set(key);
+        result
+    }
+
+    /// `location`, or where the TUI works.
+    fn location(&self, location: Option<&abi::LocationRef>) -> Location {
+        match location {
+            Some(location) => {
+                Location { directory: location.directory.clone(), workspace_id: location.workspace.clone() }
+            }
+            None => self.tui.local.catalog_location(),
+        }
+    }
+}
+
+impl abi::Read for Reader<'_> {
+    fn theme_mode(&self) -> abi::ThemeMode {
+        match self.tui.theme.borrow().mode() {
+            ThemeMode::Light => abi::ThemeMode::Light,
+            _ => abi::ThemeMode::Dark,
+        }
+    }
+
+    fn color(&self, token: &str) -> Option<abi::Rgba> {
+        theme_color(self.theme.get_or_init(|| self.tui.page()), token)
+    }
+
+    fn session(&self, id: &str) -> Option<abi::Session> {
+        self.session(id, |state, id| {
+            let info = state.session(id)?.clone();
+            Some(abi::Session { info, status: status(state.status(id)) })
+        })
+    }
+
+    fn family(&self, id: &str) -> abi::Family {
+        self.session(id, |state, id| abi::Family {
+            members: state
+                .family(id)
+                .iter()
+                .filter_map(|member| state.session(member))
+                .map(|info| abi::Member {
+                    id: info.id.0.clone(),
+                    parent: info.parent_id.as_ref().map(|parent| parent.0.clone()),
+                    status: status(state.status(&info.id)),
+                    updated: info.time.updated,
+                })
+                .collect(),
+            cost: state.cost(id),
+        })
+    }
+
+    fn messages(&self, id: &str, visit: &mut dyn FnMut(&[SessionMessageInfo])) {
+        // The store's reads nest, so `visit` may read again.
+        self.session(id, |state, id| visit(state.messages(id)));
+    }
+
+    fn models(&self, location: Option<&abi::LocationRef>) -> Option<Vec<ModelInfo>> {
+        let location = self.location(location);
+        let models = self.tui.data.read(|state| state.location(Some(&location)).and_then(|data| data.model.clone()));
+        if models.is_none() {
+            self.tui.reads.need(self.tui, Catalog::Model, location);
+        }
+        models
+    }
+
+    fn model(&self) -> Option<ModelRef> {
+        let selection = self.tui.local.selection()?;
+        Some(ModelRef {
+            id: selection.model.model_id,
+            provider_id: ProviderID(selection.model.provider_id),
+            variant: selection.variant,
+        })
+    }
+
+    fn limits(&self) -> Option<UsageLimitsInfo> {
+        self.tui.local.usage().flatten()
+    }
+
+    fn providers(&self) -> Option<Vec<ProviderInfo>> {
+        let location = self.location(None);
+        self.tui.data.read(|state| state.location(Some(&location)).and_then(|data| data.provider.clone()))
+    }
+}
+
+fn status(status: opencode_store::SessionStatus) -> abi::SessionStatus {
+    match status {
+        opencode_store::SessionStatus::Idle => abi::SessionStatus::Idle,
+        opencode_store::SessionStatus::Running => abi::SessionStatus::Running,
+    }
 }
 
 /// The built-ins in TS order (`plugin/builtins.ts`), with the ones from other crates ([`crate::Deps::builtins`],
@@ -91,8 +282,8 @@ pub fn builtins(external: Vec<Definition<Tui>>) -> Vec<Definition<Tui>> {
         super::home_footer::plugin(),
         super::prompt_footer::plugin(),
         super::btw::plugin(),
-        super::sidebar_context::plugin(),
-        super::sidebar_limit::plugin(),
+        super::sidebar_context::plugin().into(),
+        super::sidebar_limit::plugin().into(),
         super::sidebar_mcp::plugin(),
         super::sidebar_todo::plugin(),
         super::sidebar_footer::plugin(),

@@ -3,6 +3,7 @@
 
 use crate::support::{self, WAIT};
 
+use std::ffi::c_void;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,6 +12,7 @@ use std::time::Duration;
 use opencode_api::generated::V2Event;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
+use opencode_plugin::abi;
 use opencode_tui::{Deps, Tui};
 use opentui::prelude::*;
 use opentui::testing::TestApp;
@@ -185,6 +187,16 @@ impl Harness {
         self.tui.data.apply(&[event]);
     }
 
+    /// `session.step.ended` of `ses_a`'s reply `message`, with `input` tokens.
+    fn ended(&self, seq: u64, message: &str, input: u64) {
+        let tokens = json!({ "input": input, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } });
+        self.apply(
+            "session.step.ended",
+            seq,
+            json!({ "sessionID": "ses_a", "assistantMessageID": message, "finish": "stop", "cost": 0, "tokens": tokens }),
+        );
+    }
+
     /// The number the next widget gets, which counts the widgets created so far.
     fn next_widget(&self) -> u32 {
         View::new(&self.app).id()
@@ -259,24 +271,140 @@ fn the_sidebar_and_footer_skip_other_sessions_and_follow_their_own() {
     assert_eq!(h.next_widget(), before + 1, "{}", h.app.text());
 
     // The session's own step ends show, from an earlier reply until the last one has tokens.
-    let ended = |seq: u64, message: &str, input: u64| {
-        let tokens = json!({ "input": input, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } });
-        h.apply(
-            "session.step.ended",
-            seq,
-            json!({ "sessionID": "ses_a", "assistantMessageID": message, "finish": "stop", "cost": 0, "tokens": tokens }),
-        );
-    };
     // The usage limits toast covers the section's first lines; its share and the prompt footer show.
-    ended(21, "msg_029b", 2_000);
+    h.ended(21, "msg_029b", 2_000);
     h.wait_for("1% used");
     h.wait_for("2.0K (1%)");
-    ended(22, "msg_030b", 12_000);
+    h.ended(22, "msg_030b", 12_000);
     h.wait_for("6% used");
     h.wait_for("12.0K (6%)");
-    ended(23, "msg_029b", 30_000);
+    h.ended(23, "msg_029b", 30_000);
     let screen = h.settle();
     assert!(screen.contains("6% used") && screen.contains("12.0K (6%)"), "{screen}");
+}
+
+// Expected: the context section drops the usage when a revert boundary moves before the reply it came from, shows it
+// again when the revert clears, and drops it when a compaction joins the message list, a change that names no
+// message.
+#[test]
+fn the_sidebar_usage_goes_on_a_revert_or_a_list_change() {
+    let h = mount_at(170, "ses_a", json!({ "animations": false }));
+    h.wait_for("Answer 30 three.");
+    h.ended(1, "msg_030b", 12_000);
+    h.wait_for("6% used");
+    h.tui.toasts.dismiss();
+    h.wait_for("12,000 tokens");
+
+    let revert = json!({ "sessionID": "ses_a", "revert": { "messageID": "msg_030a" } });
+    h.apply("session.revert.staged", 2, revert);
+    h.wait("the usage to go", || !h.app.text().contains("12,000 tokens"));
+    h.apply("session.revert.cleared", 3, json!({ "sessionID": "ses_a" }));
+    h.wait_for("12,000 tokens");
+
+    let compaction = json!({ "sessionID": "ses_a", "reason": "manual", "text": "Summary" });
+    h.apply("session.compaction.ended", 4, compaction);
+    h.wait("the usage to go", || !h.app.text().contains("12,000 tokens"));
+    assert!(!h.app.text().contains("6% used"), "{}", h.app.text());
+}
+
+/// A sidebar claim that reads another location's models inside the messages visitor.
+fn elsewhere(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.slot(abi::Placement::append("sidebar.content"), |read, input, _| {
+        let session = input.session_id.clone().unwrap_or_default();
+        let mut text = String::new();
+        read.messages(&session, &mut |messages| {
+            let location = abi::LocationRef { directory: "/elsewhere".to_owned(), workspace: None };
+            let models =
+                read.models(Some(&location)).map_or("none".to_owned(), |models| format!("{} models", models.len()));
+            text = format!("{} msgs {models}", messages.len());
+        });
+        abi::Render::Show(abi::Node::text([abi::Span::new(text)]))
+    });
+    Ok(())
+}
+
+// Expected: a catalog read inside the messages visitor, of a catalog nobody loaded, returns `None` without writing to
+// the store under its read (which panics); the host loads the catalog once the render returns, and the claim then
+// shows it.
+#[test]
+fn a_catalog_read_inside_the_messages_visitor_loads_after_the_render() {
+    let memory = Memory::new(routes());
+    let deps = Deps {
+        config: support::config(support::decode(r#"{ "animations": false }"#)),
+        route: support::session_route("ses_a"),
+        events: true,
+        builtins: vec![abi::Plugin { id: "test.elsewhere", setup: elsewhere }.into()],
+        ..support::deps(Arc::new(memory.clone()))
+    };
+    let support::Harness { app, tui } = support::mount(170, 30, deps);
+    let h = Harness { app, tui, memory };
+    h.wait_for("60 msgs 1 models");
+    let asked = h.memory.requests().iter().any(|logged| {
+        logged.path == "/api/model"
+            && logged.query.get("location[directory]").is_some_and(|values| values.contains(&"/elsewhere".to_owned()))
+    });
+    assert!(asked, "{:?}", h.memory.requests());
+}
+
+#[allow(unsafe_code)]
+unsafe extern "C" fn context_create(
+    host: *const abi::HostApi,
+    options: abi::Bytes,
+    instance: *mut *mut c_void,
+    out: *mut abi::Owned,
+) -> i32 {
+    let plugin = opencode_tui::plugins::sidebar_context::plugin();
+    // SAFETY: the loader passes what `PluginApi::create` documents.
+    unsafe { abi::runtime::create("loopback.sidebar.context", plugin.setup, host, options, instance, out) }
+}
+
+#[allow(unsafe_code)]
+unsafe extern "C" fn limit_create(
+    host: *const abi::HostApi,
+    options: abi::Bytes,
+    instance: *mut *mut c_void,
+    out: *mut abi::Owned,
+) -> i32 {
+    let plugin = opencode_tui::plugins::sidebar_limit::plugin();
+    // SAFETY: the loader passes what `PluginApi::create` documents.
+    unsafe { abi::runtime::create("loopback.sidebar.limit", plugin.setup, host, options, instance, out) }
+}
+
+/// The frames of the sidebar's context and limit sections while a session's replies end. With `loopback`, the
+/// sections are wired through the byte shims of the C ABI (`Loopback`) instead of running in process.
+fn sidebar_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
+    let others = ["-opencode.sidebar.mcp", "-opencode.sidebar.todo"];
+    let plugins: Vec<&str> = if loopback {
+        [&others[..], &["-opencode.sidebar.context", "-opencode.sidebar.limit"]].concat()
+    } else {
+        others.to_vec()
+    };
+    let h = mount_at(170, "ses_a", json!({ "animations": false, "plugins": plugins }));
+    if loopback {
+        for create in [context_create as _, limit_create as _] {
+            let (definition, _) = opencode_plugin::loader::native::loopback(&h.tui, create).unwrap();
+            opencode_tui::plugins::host::add(&h.tui, definition);
+        }
+    }
+    h.wait_for("Answer 30 three.");
+    h.wait_for("Running low on Big Pickle");
+    h.tui.toasts.dismiss();
+    h.wait_for("$5 remaining");
+    let mut frames = vec![h.app.render()];
+    for (seq, message, input) in [(1, "msg_029b", 2_000), (2, "msg_030b", 12_000), (3, "msg_029b", 30_000)] {
+        h.ended(seq, message, input);
+        h.settle();
+        frames.push(h.app.render());
+    }
+    let screen = h.app.text();
+    assert!(screen.contains("6% used") && screen.contains("12,000 tokens"), "{screen}");
+    frames
+}
+
+// Expected: the context and limit sections draw the same cells through the C ABI's byte shims as in process.
+#[test]
+fn the_sidebar_sections_draw_the_same_through_the_c_abi_loopback() {
+    assert_eq!(sidebar_frames(true), sidebar_frames(false));
 }
 
 /// Holds the usage limits answer until the test releases it.
