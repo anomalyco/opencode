@@ -8,4 +8,10 @@ disallowed-methods = [
     { path = "url::quirks::set_host", reason = "the idna_adapter stub asserts on some non-ASCII hosts" },
     { path = "url::quirks::set_hostname", reason = "the idna_adapter stub asserts on some non-ASCII hosts" },
     { path = "url::Url::set_host", reason = "the idna_adapter stub asserts on some non-ASCII hosts; check the host with opencode_api_types::js::parse_url first" },
+    { path = "reqwest::Client::new", reason = "use opencode_api::transport::client_builder: its clients leave redirects to transport::fetch" },
+    { path = "reqwest::Client::builder", reason = "use opencode_api::transport::client_builder: its clients leave redirects to transport::fetch" },
+    { path = "reqwest::ClientBuilder::new", reason = "use opencode_api::transport::client_builder: its clients leave redirects to transport::fetch" },
+    { path = "reqwest::ClientBuilder::redirect", reason = "redirects go through opencode_api::transport::fetch, which resolves Location with js::join_url" },
+    { path = "reqwest::RequestBuilder::send", reason = "use opencode_api::transport::fetch: it follows redirects through js::join_url" },
+    { path = "reqwest::Client::execute", reason = "use opencode_api::transport::fetch: it follows redirects through js::join_url" },
 ]

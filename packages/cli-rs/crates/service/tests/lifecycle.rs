@@ -243,16 +243,11 @@ async fn run_counting(options: &Options) -> (Result<Ensured, ensure::Error>, usi
 }
 
 async fn status(url: &str) -> serde_json::Value {
-    opencode_api::transport::http_client()
+    let request = opencode_api::transport::http_client()
         .get(format!("{}/api/info", url.trim_end_matches('/')))
         .basic_auth("opencode", Some("private"))
-        .timeout(Duration::from_secs(1))
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap()
+        .timeout(Duration::from_secs(1));
+    opencode_api::transport::fetch(request).await.unwrap().json().await.unwrap()
 }
 
 macro_rules! needs_bun {

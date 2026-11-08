@@ -575,7 +575,7 @@ impl Otlp {
         for (key, value) in &self.headers {
             request = request.header(key.as_str(), value.as_str());
         }
-        request.send().await.is_ok_and(|response| response.status().is_success())
+        opencode_api::transport::fetch(request).await.is_ok_and(|response| response.status().is_success())
     }
 }
 
