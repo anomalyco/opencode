@@ -22,8 +22,11 @@ abi-1-0 = []
 minor-newer = []
 major-2 = []
 requires-future = []
+# A 1.3 plugin (`src/v1_3.rs`) on the frozen 1.3 ABI crate, for the version tests.
+abi-1-3 = ["dep:abi-1-3"]
 
 [dependencies]
 opencode-plugin-abi = { path = "../../../plugin-abi" }
+abi-1-3 = { package = "opencode-plugin-abi-1-3", path = "abi-1-3", optional = true }
 
 [workspace]

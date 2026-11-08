@@ -27,19 +27,32 @@
 //! caught at every boundary and reported to the host, which shows them in its plugin manager; the plugin's own
 //! panic hook is silenced so nothing prints over the TUI. Keep the default `panic = "unwind"`. Other languages
 //! implement the same structs and JSON by hand.
+//!
+//! # One API (O-67)
+//!
+//! The host's built-in plugins use the same [`Setup`], closures and types, called in process with Rust values; an
+//! external plugin gets them over this ABI. A render (a code fence so far) receives a [`Read`]: it reads and returns
+//! a value, and has no effects. Every other host call waits until the outermost plugin callback has returned, so a
+//! plugin never reenters itself through the host.
+//!
+//! Renders in this form (ABI 1.4) are opt-in on the wire: [`Setup`] sets [`Manifest::render`], and the host sends
+//! [`Request::RenderFence`] only to a plugin that sets it. A 1.3 plugin gets the old requests and answers in the old
+//! format. A plugin built with this crate sets [`PluginApi::requires_minor`] to 4, so a 1.3 host refuses it.
 
 #![allow(unsafe_code)]
 
+use std::borrow::Cow;
 use std::ffi::c_void;
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
 
 /// The major version: changes only with a deliberate breaking change, and a mismatch refuses the plugin.
 pub const ABI_MAJOR: u32 = 1;
 /// The minor version: grows when entries are appended. 1.0 is the core; 1.1 adds [`PluginApi::describe`]; 1.2 adds
-/// [`HostApi::theme_mode`]; 1.3 adds [`HostApi::wake`].
-pub const ABI_MINOR: u32 = 3;
+/// [`HostApi::theme_mode`]; 1.3 adds [`HostApi::wake`]; 1.4 adds [`Manifest::render`] and [`Request::RenderFence`].
+pub const ABI_MINOR: u32 = 4;
 
 /// The symbol every plugin exports, of type [`EntryFn`].
 pub const ENTRY: &str = "opencode_plugin_v1";
@@ -169,7 +182,7 @@ pub struct HostApiV1_2 {
     pub theme_mode: Option<unsafe extern "C" fn(*mut c_void) -> u32>,
 }
 
-/// Dark or light, from [`Host::theme_mode`].
+/// Dark or light, from [`Host::theme_mode`] and [`Read::theme_mode`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ThemeMode {
     Dark,
@@ -242,6 +255,17 @@ pub struct Manifest {
     pub routes: Vec<String>,
     /// Storage keys, stored by the host as `plugin.<id>.<key>`.
     pub storage: Vec<String>,
+    /// 2 when the plugin answers the render requests of ABI 1.4 ([`Request::RenderFence`]) instead of the old ones
+    /// ([`Request::Fence`]). [`Setup`] sets it; absent (0) in a 1.3 plugin.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub render: u32,
+}
+
+/// What [`Manifest::render`] is for the render requests of ABI 1.4.
+pub const RENDER: u32 = 2;
+
+fn is_zero(value: &u32) -> bool {
+    *value == 0
 }
 
 /// A command: in the palette when `palette` is set, as `/slash`, and on `keybind` (such as `ctrl+shift+h`).
@@ -272,15 +296,42 @@ pub struct SlotClaim {
     pub path: String,
 }
 
-/// Styled text. A color is a theme token path (`text.muted`, `markdown.heading`) or `#rrggbb`; an unknown token
-/// draws in `text.base`.
+/// A color: a theme token path (`text.muted`, `markdown.heading`) or `#rrggbb`. On the wire it is that text. An
+/// unknown token draws in `text.base`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Color {
+    Token(Cow<'static, str>),
+}
+
+impl Color {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Color::Token(token) => token,
+        }
+    }
+}
+
+impl From<&'static str> for Color {
+    fn from(token: &'static str) -> Self {
+        Color::Token(Cow::Borrowed(token))
+    }
+}
+
+impl From<String> for Color {
+    fn from(token: String) -> Self {
+        Color::Token(Cow::Owned(token))
+    }
+}
+
+/// Styled text.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Span {
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fg: Option<String>,
+    pub fg: Option<Color>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub bg: Option<String>,
+    pub bg: Option<Color>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub bold: bool,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -296,7 +347,7 @@ impl Span {
         Self { text: text.into(), ..Self::default() }
     }
 
-    pub fn fg(mut self, color: impl Into<String>) -> Self {
+    pub fn fg(mut self, color: impl Into<Color>) -> Self {
         self.fg = Some(color.into());
         self
     }
@@ -314,25 +365,59 @@ fn is_false(value: &bool) -> bool {
 /// One row; the host draws rows without wrapping and scrolls a wide fence sideways.
 pub type Line = Vec<Span>;
 
-/// A fenced Markdown code block.
+/// A fenced Markdown code block, as [`Setup::code_block`] renders it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Fence {
     pub language: String,
     pub info: String,
     pub code: String,
-    /// The message is still streaming and the fence has not closed.
+    /// The message is still streaming, so the block may be incomplete.
     pub streaming: bool,
+    /// The closing fence has arrived.
+    pub closed: bool,
+    /// The host's name for this block. It stays the same while the block changes, across renders that return
+    /// [`Fenced::Lines`] or [`Fenced::Keep`], so a plugin can keep its own state for the block by key.
+    pub key: u64,
 }
 
-/// From the host to the plugin. Results: `Fence` → `Option<Vec<Line>>`, `Slot` and `Route` → `Vec<Line>`,
-/// `Command` → `null`.
+/// What a fence render returns.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum Fenced {
+    /// The host's plain code view.
+    Code,
+    /// What the block showed before; the code view when it showed nothing of the plugin's.
+    Keep,
+    /// Rows the host draws without wrapping, scrolling sideways when wide.
+    Lines { lines: Vec<Line> },
+}
+
+/// From the host to the plugin. Results: `Fence` → `Option<Vec<Line>>`, `RenderFence` → [`Fenced`], `Slot` and
+/// `Route` → `Vec<Line>`, `Command` → `null`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum Request {
-    Fence(Fence),
-    Slot { claim: usize, session_id: Option<String> },
-    Route { name: String },
-    Command { name: String, input: Option<String> },
+    /// The fence request of ABI 1.3, sent to a plugin whose manifest has no [`Manifest::render`]. `streaming` is set
+    /// while the message streams and the fence is open.
+    Fence {
+        language: String,
+        info: String,
+        code: String,
+        streaming: bool,
+    },
+    Slot {
+        claim: usize,
+        session_id: Option<String>,
+    },
+    Route {
+        name: String,
+    },
+    Command {
+        name: String,
+        input: Option<String>,
+    },
+    /// 1.4: renders a fence through [`Setup::code_block`].
+    RenderFence(Fence),
 }
 
 /// From the plugin to the host. Results: `StorageGet` → `Option<String>` (JSON text), everything else `null`.
@@ -382,6 +467,13 @@ pub enum Toast {
     Success,
     Warning,
     Error,
+}
+
+/// What a render reads from the host. It has no effects, so a render may call it at any time; the host answers from
+/// what it has.
+pub trait Read {
+    /// Whether the page theme is dark or light (TS `api.themeMode`).
+    fn theme_mode(&self) -> ThemeMode;
 }
 
 /// The host, as a plugin calls it. Valid while the instance lives.
@@ -464,6 +556,12 @@ impl Host {
     }
 }
 
+impl Read for Host {
+    fn theme_mode(&self) -> ThemeMode {
+        Host::theme_mode(self).unwrap_or(ThemeMode::Dark)
+    }
+}
+
 /// Wakes the host from any thread (ABI 1.3), from [`Host::waker`]: the host then asks the plugin's mounted slot
 /// claims and routes for their rows again, so a plugin that works on its own thread can show the result.
 ///
@@ -495,7 +593,8 @@ impl Waker {
     }
 }
 
-type FenceFn = Box<dyn Fn(&Fence) -> Option<Vec<Line>>>;
+/// A registered fence render.
+pub type FenceFn = Rc<dyn Fn(&dyn Read, &Fence) -> Fenced>;
 type SlotFn = Box<dyn Fn(Option<&str>) -> Vec<Line>>;
 type RouteFn = Box<dyn Fn() -> Vec<Line>>;
 type CommandFn = Box<dyn Fn(Option<&str>)>;
@@ -538,10 +637,10 @@ impl Setup {
         self.manifest.commands.push(command);
     }
 
-    /// Renders Markdown fences of `language`; `None` keeps the plain code view.
-    pub fn code_block(&mut self, language: &str, render: impl Fn(&Fence) -> Option<Vec<Line>> + 'static) {
+    /// Renders Markdown fences of `language`.
+    pub fn code_block(&mut self, language: &str, render: impl Fn(&dyn Read, &Fence) -> Fenced + 'static) {
         self.manifest.fences.push(language.to_owned());
-        self.fences.push((language.to_owned(), Box::new(render)));
+        self.fences.push((language.to_owned(), Rc::new(render)));
     }
 
     /// Claims a place in the slot tree; `render` receives the slot's session ID, if it has one.
@@ -556,13 +655,43 @@ impl Setup {
         self.routes.push((name.to_owned(), Box::new(render)));
     }
 
+    /// A setup for a plugin the host runs in process: it has no ABI host, so [`Setup::host`] answers every request
+    /// with an error. The host takes the registrations back with [`Setup::manifest`] and [`Setup::fences`].
+    #[doc(hidden)]
+    pub fn in_process(id: &str, options: Option<String>) -> Self {
+        Self::new(id, options, std::ptr::null())
+    }
+
+    #[doc(hidden)]
+    pub fn manifest(&self) -> &Manifest {
+        &self.manifest
+    }
+
+    #[doc(hidden)]
+    pub fn fences(&self) -> &[(String, FenceFn)] {
+        &self.fences
+    }
+
+    fn new(id: &str, options: Option<String>, host: *const HostApi) -> Self {
+        Self {
+            manifest: Manifest { id: id.to_owned(), render: RENDER, ..Manifest::default() },
+            options,
+            host: Host { api: host },
+            fences: Vec::new(),
+            slots: Vec::new(),
+            routes: Vec::new(),
+            commands: Vec::new(),
+        }
+    }
+
     fn handle(&self, request: Request) -> Result<serde_json::Value, String> {
         let json = |value: Result<serde_json::Value, serde_json::Error>| value.map_err(|error| error.to_string());
         match request {
-            Request::Fence(fence) => {
+            Request::Fence { .. } => Err("this plugin renders fences through render-fence".to_owned()),
+            Request::RenderFence(fence) => {
                 let render =
                     self.fences.iter().find(|(language, _)| *language == fence.language).map(|(_, render)| render);
-                json(serde_json::to_value(render.and_then(|render| render(&fence))))
+                json(serde_json::to_value(render.map_or(Fenced::Code, |render| render(&self.host, &fence))))
             }
             Request::Slot { claim, session_id } => {
                 let render = self.slots.get(claim).ok_or("no such slot claim")?;
@@ -581,12 +710,20 @@ impl Setup {
     }
 }
 
+/// A plugin the host runs in process: its ID and setup, as [`export_plugin!`] takes them.
+#[derive(Clone, Copy)]
+pub struct Plugin {
+    pub id: &'static str,
+    pub setup: fn(&mut Setup) -> Result<(), String>,
+}
+
 /// Exports a plugin: `export_plugin!("my.plugin", setup)` with `fn setup(setup: &mut Setup) -> Result<(), String>`.
-/// It exports the current [`PluginApi`], with the crate's version as its [`Metadata`].
+/// It exports the current [`PluginApi`], with the crate's version as its [`Metadata`]. It requires a 1.4 host, which
+/// sends the render requests [`Setup`] answers.
 #[macro_export]
 macro_rules! export_plugin {
     ($id:expr, $setup:path) => {
-        $crate::export_plugin!(@version $crate::ABI_MAJOR, $crate::ABI_MINOR, 0, $id, $setup);
+        $crate::export_plugin!(@version $crate::ABI_MAJOR, $crate::ABI_MINOR, 4, $id, $setup);
     };
     // A plugin that pretends to be built against another version, for the loader's tests.
     (@version $major:expr, $minor:expr, $requires:expr, $id:expr, $setup:path) => {
@@ -663,15 +800,7 @@ pub mod runtime {
         let options = unsafe { options.as_slice() };
         guard(out, || {
             let options = (!options.is_empty()).then(|| String::from_utf8_lossy(options).into_owned());
-            let mut registered = Setup {
-                manifest: Manifest { id: id.to_owned(), ..Manifest::default() },
-                options,
-                host: Host { api: host },
-                fences: Vec::new(),
-                slots: Vec::new(),
-                routes: Vec::new(),
-                commands: Vec::new(),
-            };
+            let mut registered = Setup::new(id, options, host);
             if instance.is_null() {
                 return Err("no instance pointer".to_owned());
             }
@@ -839,6 +968,40 @@ mod tests {
         assert_eq!(Host { api: &api }.storage_set("count", "{}"), Err("the host takes no requests".to_owned()));
         let api = HostApi { call: Some(call), ..api };
         assert_eq!(Host { api: &api }.storage_set("count", "{}"), Err("the host takes no requests".to_owned()));
+    }
+
+    // Expected: the 1.3 requests, rows and manifest keep their JSON byte for byte; only a plugin of this crate sets
+    // the render marker, and its fence answers in the 1.4 form.
+    #[test]
+    fn the_1_3_wire_format_is_unchanged() {
+        let fence = Request::Fence { language: "x".into(), info: "x y".into(), code: "a".into(), streaming: true };
+        assert_eq!(
+            serde_json::to_string(&fence).unwrap(),
+            r#"{"type":"fence","language":"x","info":"x y","code":"a","streaming":true}"#
+        );
+        let line = vec![Span::new("a").fg("text.muted").bold(), Span { bg: Some("#102030".into()), ..Span::new("b") }];
+        let json = r##"[{"text":"a","fg":"text.muted","bold":true},{"text":"b","bg":"#102030"}]"##;
+        assert_eq!(serde_json::to_string(&line).unwrap(), json);
+        assert_eq!(serde_json::from_str::<Line>(json).unwrap(), line);
+        let old: Manifest =
+            serde_json::from_str(r#"{"id":"old","commands":[],"fences":["x"],"slots":[],"routes":[],"storage":[]}"#)
+                .unwrap();
+        assert_eq!(old.render, 0);
+        assert!(!serde_json::to_string(&old).unwrap().contains("render"));
+
+        let mut setup = Setup::in_process("new", None);
+        setup.code_block("x", |_, fence| match fence.key {
+            0 => Fenced::Code,
+            _ => Fenced::Lines { lines: vec![vec![Span::new(fence.code.clone())]] },
+        });
+        assert_eq!(setup.manifest().render, RENDER);
+        let fence =
+            Fence { language: "x".into(), info: "x".into(), code: "a".into(), streaming: false, closed: true, key: 7 };
+        let answer = setup.handle(Request::RenderFence(fence)).unwrap();
+        assert_eq!(answer, serde_json::json!({ "type": "lines", "lines": [[{ "text": "a" }]] }));
+        let unknown =
+            Fence { language: "y".into(), info: "y".into(), code: "a".into(), streaming: false, closed: true, key: 7 };
+        assert_eq!(setup.handle(Request::RenderFence(unknown)).unwrap(), serde_json::json!({ "type": "code" }));
     }
 
     // Expected: the shims answer a null instance with an error, ignore a null `out` or a null `destroy`, and never

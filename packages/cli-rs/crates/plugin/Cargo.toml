@@ -22,3 +22,5 @@ unicode-width.workspace = true
 
 [dev-dependencies]
 opencode-util.workspace = true
+# The LaTeX built-in, run through the C ABI's byte shims in the loader's tests.
+opencode-latex.workspace = true
