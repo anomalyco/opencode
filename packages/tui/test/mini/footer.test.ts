@@ -98,6 +98,7 @@ async function setup(
   input: {
     mono?: boolean
     tools?: MiniSettings["tools"]
+    turnSummary?: MiniSettings["turn_summary"]
     theme?: RunTuiConfig["theme"]
     startup?: { version: string; detail: string }
     cursorRow?: number
@@ -142,7 +143,12 @@ async function setup(
     theme: mono ? RUN_THEME_MONO : RUN_THEME_FALLBACK,
     tuiConfig: createTuiResolvedConfig({ theme: input.theme }),
     miniSettings: {
-      current: { ...resolveMiniSettings(), mono, ...(input.tools ? { tools: input.tools } : {}) },
+      current: {
+        ...resolveMiniSettings(),
+        mono,
+        ...(input.tools ? { tools: input.tools } : {}),
+        ...(input.turnSummary ? { turn_summary: input.turnSummary } : {}),
+      },
       update: input.update,
     },
     onPermissionReply: () => {},
@@ -153,6 +159,53 @@ async function setup(
   })
   return { ...app, footer, output }
 }
+
+test("OSC 133 turn markers precede output and follow the summary", async () => {
+  const app = await setup({ cursorRow: 1 })
+  try {
+    app.footer.event({ type: "turn.send" })
+    app.footer.append({ kind: "user", text: "hello", phase: "start", source: "system" })
+    app.footer.append({ kind: "assistant", text: "answer", phase: "final", source: "assistant" })
+    app.footer.event({ type: "turn.duration", duration: "2.2s" })
+    app.footer.event({ type: "turn.idle" })
+    await app.footer.idle()
+    await app.renderer.nativeScene.driver.idle()
+    const output = app.output.join("")
+    const markers = Array.from(output.matchAll(/\x1b\]133;([CD])\x07/g), (match) => match[1])
+    expect(markers).toEqual(["C", "D"])
+    expect(output.indexOf("\x1b]133;C\x07")).toBeLessThan(output.indexOf("hello"))
+    expect(output.indexOf("\x1b]133;D\x07")).toBeGreaterThan(output.indexOf("2.2s"))
+    expect(output).toMatch(/\x1b7\x1b\[\d+;1H\x1b\]133;C\x07\x1b8/)
+    expect(output).toMatch(/\x1b7\x1b\[\d+;112H\x1b\]133;D\x07\x1b8/)
+  } finally {
+    app.footer.destroy()
+    app.renderer.destroy()
+  }
+})
+
+test("OSC 133 closes turns without a summary and does not mark replayed history", async () => {
+  const app = await setup({ cursorRow: 1, turnSummary: "hide" })
+  try {
+    app.footer.append({ kind: "user", text: "old prompt", phase: "start", source: "system" })
+    await app.footer.idle()
+    await app.renderer.nativeScene.driver.idle()
+    expect(app.output.join("")).not.toContain("\x1b]133;")
+    app.output.length = 0
+    for (let turn = 0; turn < 2; turn++) {
+      app.footer.event({ type: "turn.send" })
+      app.footer.append({ kind: "user", text: "new prompt", phase: "start", source: "system" })
+      app.footer.append({ kind: "error", text: "interrupted", phase: "final", source: "system" })
+      app.footer.event({ type: "turn.idle" })
+      await app.footer.idle()
+    }
+    await app.renderer.nativeScene.driver.idle()
+    const markers = Array.from(app.output.join("").matchAll(/\x1b\]133;([CD])\x07/g), (match) => match[1])
+    expect(markers).toEqual(["C", "D", "C", "D"])
+  } finally {
+    app.footer.destroy()
+    app.renderer.destroy()
+  }
+})
 
 test.each([1, 5, 24])("startup preserves the terminal prompt row from cursor row %s", async (cursorRow) => {
   const app = await setup({ mono: false, startup: { version: "test", detail: "/project" }, cursorRow })
