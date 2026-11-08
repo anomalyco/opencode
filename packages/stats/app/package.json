@@ -5,11 +5,18 @@
   "private": true,
   "type": "module",
   "license": "MIT",
+  "imports": {
+    "#resource": {
+      "production": "./src/lib/resource.cloudflare.ts",
+      "default": "./src/lib/resource.node.ts"
+    }
+  },
   "scripts": {
     "typecheck": "bun check --no-script",
     "typecheck:tsc": "tsc --noEmit",
     "dev": "vite dev --host 0.0.0.0",
     "build": "vite build",
+    "build:og": "bun ./script/build-og-worker.ts",
     "start": "vite start",
     "test": "bun test --only-failures"
   },
@@ -18,6 +25,7 @@
     "@opencode/nav-menus": "workspace:*",
     "@opencode/stats-core": "workspace:*",
     "@opencode/ui": "workspace:*",
+    "@resvg/resvg-wasm": "2.6.2",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",
@@ -25,6 +33,7 @@
     "effect": "catalog:",
     "i18n-iso-countries": "7.14.0",
     "nitro": "3.0.260903-beta",
+    "satori": "0.63.2",
     "solid-js": "catalog:",
     "sst": "catalog:",
     "vite": "8.2.4"
@@ -33,7 +42,8 @@
     "@types/bun": "catalog:",
     "@types/d3-scale": "4.0.9",
     "@typescript/native": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "wawoff2": "2.0.1"
   },
   "engines": {
     "node": ">=24"

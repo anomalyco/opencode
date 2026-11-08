@@ -1,5 +1,6 @@
 import { ProviderIcon } from "@opencode/ui/provider-icon"
 import { For, Show } from "solid-js"
+import { providerIconId } from "../lib/provider-icon"
 import { catalogSlug, formatCatalogLabName, type ModelCatalogEntry } from "./model-catalog"
 
 export type ComparisonModelRef = {
@@ -160,11 +161,4 @@ function ComparisonLabLogo(props: { model: ComparisonModelRef }) {
 
 function modelKey(model: ComparisonModelRef) {
   return `${catalogSlug(model.lab)}/${catalogSlug(model.slug)}`
-}
-
-function providerIconId(provider: string) {
-  const id = provider.toLowerCase().replace(/[^a-z0-9]+/g, "")
-  if (id === "moonshot") return "moonshotai"
-  if (id === "zhipu") return "zhipuai"
-  return id
 }
