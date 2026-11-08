@@ -1,6 +1,6 @@
 //! The LaTeX plugin (P.2, `docs/P.2.md`): `opencode.latex` draws `latex` and `math` Markdown fences as Unicode
 //! math in terminal cells, as `packages/latex/src/plugin.ts` does. [`parse`] and [`layout`] port the TypeScript
-//! parser and layout; [`renderer`] is the Markdown adapter (`markdown.ts`).
+//! parser and layout; [`plugin`] renders the fences (`markdown.ts`), on the one plugin API (O-67).
 
 pub mod layout;
 pub mod parse;
@@ -12,23 +12,24 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use opencode_plugin::{Definition, Host};
-use opencode_ui::theme::Theme;
-use opentui::prelude::*;
-use opentui::widget::CodeBlock;
+use opencode_plugin_abi::{Fence, Fenced, Line, Plugin, Setup, Span};
 
 pub use layout::{Layout, Options};
 pub use parse::ParseError;
 
-/// The plugin: one renderer for both fence languages, as TS registers.
-pub fn plugin<H: Host>() -> Definition<H> {
-    Definition::new("opencode.latex", |setup| {
-        let render = Rc::new(renderer());
-        for language in ["latex", "math"] {
-            let render = render.clone();
-            setup.code_block(language, move |block, theme| render(block, theme));
-        }
-    })
+/// The plugin, on the one plugin API (O-67).
+pub fn plugin() -> Plugin {
+    Plugin { id: "opencode.latex", setup }
+}
+
+/// One renderer for both fence languages, as TS registers.
+fn setup(setup: &mut Setup) -> Result<(), String> {
+    let render = Rc::new(renderer());
+    for language in ["latex", "math"] {
+        let render = render.clone();
+        setup.code_block(language, move |_, fence| render(fence));
+    }
+    Ok(())
 }
 
 /// Lays out `source` as display math (TS `renderLatex` in strict mode).
@@ -41,91 +42,74 @@ pub fn render_with(source: &str, options: &Options) -> Result<Layout, ParseError
 }
 
 /// The Markdown code-block renderer (TS `createLatexCodeBlockRenderer`): the formula in a horizontally scrolling
-/// row, or `None` so Markdown shows the source when it does not parse. While the document streams and the fence is
-/// open, a block whose text extends the last formula that rendered keeps showing that formula.
-pub fn renderer() -> impl Fn(&CodeBlock<'_>, &Theme) -> Option<AnyWidget> {
-    // The source of each formula shown while streaming, by widget ID, so its block can keep it.
-    let shown: RefCell<HashMap<u32, String>> = RefCell::default();
-    move |block, theme| {
-        let streaming = block.streaming && !block.closed;
-        let layout = render(block.code).ok();
-        let previous = block.previous.map(Widget::id);
+/// row, or the code view when it does not parse. While the document streams and the fence is open, a block whose
+/// text extends the last formula that rendered keeps showing that formula.
+fn renderer() -> impl Fn(&Fence) -> Fenced {
+    // The source of each formula shown while streaming, by fence key, so its block can keep it.
+    let shown: RefCell<HashMap<u64, String>> = RefCell::default();
+    move |fence| {
+        let streaming = fence.streaming && !fence.closed;
+        let layout = render(&fence.code).ok();
         let mut shown = shown.borrow_mut();
-        let retained = previous.and_then(|id| shown.get(&id)).is_some_and(|source| block.code.starts_with(source));
+        let retained = shown.get(&fence.key).is_some_and(|source| fence.code.starts_with(source.as_str()));
         if layout.is_none() && streaming && retained {
-            return block.previous.cloned();
+            return Fenced::Keep;
         }
-        if let Some(id) = previous {
-            shown.remove(&id);
-        }
-        let layout = layout?;
-        let widget = formula(block.app, &layout, theme);
+        shown.remove(&fence.key);
+        let Some(layout) = layout else {
+            return Fenced::Code;
+        };
         if streaming {
-            shown.insert(widget.id(), block.code.to_owned());
+            shown.insert(fence.key, fence.code.clone());
         }
-        Some(widget)
+        Fenced::Lines { lines: formula(&layout) }
     }
 }
 
-/// The formula's widget: structure in the muted text color, relations bold, and a row that scrolls sideways instead
-/// of wrapping. TS adds a row of top margin; the Rust Markdown already puts a blank row between blocks.
-fn formula(app: &App, layout: &Layout, theme: &Theme) -> AnyWidget {
-    let (text, subdued) = (theme.text.base, theme.text.muted);
-    let mut spans: Vec<Span<'static>> = Vec::new();
-    for (index, row) in layout.cells.iter().enumerate() {
-        let mut column = 0;
-        while column < row.len() {
-            let cell = row[column].as_ref();
-            let char = cell.map_or(" ", |cell| cell.text.as_str());
-            let style = cell.map(|cell| &cell.style);
-            let structural = char.chars().count() == 1
-                && char.chars().next().is_some_and(|c| {
-                    "()[]{}|\u{221a}".contains(c)
-                        || ('\u{239b}'..='\u{23ad}').contains(&c)
-                        || ('\u{2500}'..='\u{257f}').contains(&c)
-                });
-            let mut attributes = Attributes::NONE;
-            if style.is_some_and(|style| style.bold) || ["=", "<", ">", "≠", "≡", "≤", "≥", "≈"].contains(&char)
-            {
-                attributes |= Attributes::BOLD;
+/// The formula's rows: structure in the muted text color, relations bold. The host draws them in a row that
+/// scrolls sideways instead of wrapping. TS adds a row of top margin; the Rust Markdown already puts a blank row
+/// between blocks.
+fn formula(layout: &Layout) -> Vec<Line> {
+    layout
+        .cells
+        .iter()
+        .map(|row| {
+            let mut line = Line::new();
+            let mut column = 0;
+            while column < row.len() {
+                let cell = row[column].as_ref();
+                let char = cell.map_or(" ", |cell| cell.text.as_str());
+                let style = cell.map(|cell| &cell.style);
+                let structural = char.chars().count() == 1
+                    && char.chars().next().is_some_and(|c| {
+                        "()[]{}|\u{221a}".contains(c)
+                            || ('\u{239b}'..='\u{23ad}').contains(&c)
+                            || ('\u{2500}'..='\u{257f}').contains(&c)
+                    });
+                let span = Span {
+                    fg: Some(if structural { "text.muted" } else { "text.base" }.into()),
+                    bold: style.is_some_and(|style| style.bold)
+                        || ["=", "<", ">", "≠", "≡", "≤", "≥", "≈"].contains(&char),
+                    italic: style.is_some_and(|style| style.italic),
+                    dim: style.is_some_and(|style| style.dim),
+                    ..Span::default()
+                };
+                push(&mut line, char, span);
+                // A wide glyph already takes the next cell.
+                column += layout::cell_width(char).max(1) as usize;
             }
-            if style.is_some_and(|style| style.italic) {
-                attributes |= Attributes::ITALIC;
-            }
-            if style.is_some_and(|style| style.dim) {
-                attributes |= Attributes::DIM;
-            }
-            let style = Style { attributes, ..Style::new().fg(if structural { subdued } else { text }) };
-            push(&mut spans, char, style);
-            // A wide glyph already takes the next cell.
-            column += layout::cell_width(char).max(1) as usize;
-        }
-        if index + 1 < layout.height {
-            push(&mut spans, "\n", Style::new().fg(text));
-        }
-    }
-    let content = Text::new(app, spans)
-        .width(Length::percent(100.0))
-        .min_width(layout.width as f32)
-        .height(layout.height as f32)
-        .wrap(WrapMode::None)
-        .selectable(false)
-        .shrink(0.0);
-    ScrollBox::new(app)
-        .width(Length::percent(100.0))
-        .height(layout.height as f32)
-        .shrink(0.0)
-        .axes(true, false)
-        .scrollbars(false)
-        .child(&content)
-        .as_any()
+            line
+        })
+        .collect()
 }
 
 /// Appends `text` to the last span when the style matches, so a row is a few spans rather than one per cell.
-fn push(spans: &mut Vec<Span<'static>>, text: &str, style: Style) {
-    if let Some(last) = spans.last_mut().filter(|last| last.style == style) {
-        last.content.to_mut().push_str(text);
+fn push(line: &mut Line, text: &str, span: Span) {
+    let same =
+        |last: &&mut Span| (&last.fg, last.bold, last.italic, last.dim) == (&span.fg, span.bold, span.italic, span.dim);
+    if let Some(last) = line.last_mut().filter(same) {
+        last.text.push_str(text);
         return;
     }
-    spans.push(Span::styled(text.to_owned(), style));
+    line.push(Span { text: text.to_owned(), ..span });
 }
