@@ -8,6 +8,16 @@ const buffered = (request: { readonly path: string; readonly method: string }) =
     ? new Response(new ReadableStream({ start() {} }), { headers: { "content-type": "text/event-stream" } })
     : undefined
 
+describe("acp event stream that opened", () => {
+  test("a later request is served after the connect timeout has passed", async () => {
+    await using wire = await startWire({ connectTimeout: "100 millis" })
+    await wire.initialize()
+    await wire.newSession()
+    await Bun.sleep(300)
+    await wire.newSession()
+  })
+})
+
 describe("acp event stream that never opens", () => {
   test("opening a session fails with a clear error instead of hanging", async () => {
     await using wire = await startWire({ connectTimeout: "100 millis", fetch: buffered })

@@ -1554,9 +1554,10 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       })().catch((error) => error)
       state.connected = false
       if (controller.signal.aborted || input.footer.isClosed) return
-      // A stream that never opens is not a dropped connection: reconnecting would only hide the
-      // buffering proxy behind a reconnect loop that never settles.
-      if (error instanceof StreamStalledError) return readyReject(error)
+      // A stream that never opened is not a dropped connection: reconnecting would only hide the
+      // buffering proxy behind a reconnect loop that never settles. Once the session is running, a
+      // stall is a dropped connection, so it goes through the reconnect path below.
+      if (error instanceof StreamStalledError && state.initial) return readyReject(error)
       input.trace?.write("recv.reconnect", { error: formatUnknownError(error) })
       write([], { phase: "running", status: "reconnecting" })
       if (input.reconnect) {

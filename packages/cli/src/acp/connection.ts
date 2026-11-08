@@ -32,6 +32,8 @@ const connectionDeadlines = new WeakMap<object, number>()
  */
 export const awaitConnected = (connected: Deferred.Deferred<void>) =>
   Effect.gen(function* () {
+    // A stream that opened long ago is still open: the deadline only bounds waiting for one that never did.
+    if (Option.isSome(yield* Deferred.poll(connected))) return
     const timeout = yield* ConnectedTimeout
     const deadline = connectionDeadlines.get(connected) ?? Date.now() + Duration.toMillis(timeout)
     connectionDeadlines.set(connected, deadline)

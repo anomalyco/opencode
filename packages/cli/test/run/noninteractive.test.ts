@@ -845,10 +845,17 @@ describe("runNonInteractivePrompt", () => {
 
   test("a stream that never sends anything fails the run instead of hanging", async () => {
     // A proxy that answers the subscribe request and holds the body open: next() never settles.
+    let closed = false
     const client = {
       event: {
         subscribe: () => ({
-          [Symbol.asyncIterator]: () => ({ next: () => new Promise<never>(() => {}) }),
+          [Symbol.asyncIterator]: () => ({
+            next: () => new Promise<never>(() => {}),
+            return: async () => {
+              closed = true
+              return { done: true, value: undefined }
+            },
+          }),
         }),
       },
     } as unknown as Parameters<typeof runNonInteractivePrompt>[0]["client"]
@@ -876,9 +883,49 @@ describe("runNonInteractivePrompt", () => {
       jest.advanceTimersByTime(10_000)
       const guard = new Promise<string>((resolve) => realSetTimeout(() => resolve("still waiting"), 2_000))
       expect(await Promise.race([outcome, guard])).toContain("accepted the event stream but sent nothing within 10s")
+      // The subscription is closed rather than left open behind the error.
+      expect(closed).toBe(true)
     } finally {
       jest.useRealTimers()
     }
+  })
+
+  test("cancelling before the first event closes the subscription instead of waiting", async () => {
+    const controller = new AbortController()
+    let closed = false
+    const client = {
+      event: {
+        subscribe: () => ({
+          [Symbol.asyncIterator]: () => ({
+            next: () => new Promise<never>(() => {}),
+            return: async () => {
+              closed = true
+              return { done: true, value: undefined }
+            },
+          }),
+        }),
+      },
+    } as unknown as Parameters<typeof runNonInteractivePrompt>[0]["client"]
+    const pending = runNonInteractivePrompt({
+      client,
+      sessionID: "ses_1",
+      location,
+      message: "hello",
+      files: [],
+      thinking: false,
+      format: "default",
+      auto: false,
+      standalone: false,
+      signal: controller.signal,
+      renderTool: () => Promise.resolve(),
+      renderToolError: () => Promise.resolve(),
+    })
+    await Bun.sleep(5)
+    controller.abort()
+    const started = performance.now()
+    expect(await pending).toBeUndefined()
+    expect(performance.now() - started).toBeLessThan(500)
+    expect(closed).toBe(true)
   })
 
   test("cancelling mid-turn interrupts the Session and ignores the transport errors that follow", async () => {

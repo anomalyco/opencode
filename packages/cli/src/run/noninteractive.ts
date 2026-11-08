@@ -63,10 +63,13 @@ const FIRST_EVENT_TIMEOUT = 10_000
 /**
  * Waits for the first event of the subscription. A proxy, tunnel or VPN can answer the subscribe
  * request and then hold the response open without forwarding anything, which leaves `next()`
- * pending forever, so the wait is bounded and reported instead.
+ * pending forever, so the wait is bounded and reported instead. Cancelling the run ends the wait
+ * at once rather than after the deadline.
  */
-async function firstEvent(stream: AsyncIterator<Event>) {
+async function firstEvent(stream: AsyncIterator<Event>, signal: AbortSignal) {
+  if (signal.aborted) throw signal.reason
   let timer: ReturnType<typeof setTimeout> | undefined
+  let abort: (() => void) | undefined
   const stalled = new Promise<never>((_, reject) => {
     timer = setTimeout(
       () =>
@@ -79,10 +82,18 @@ async function firstEvent(stream: AsyncIterator<Event>) {
     )
     timer.unref?.()
   })
+  const cancelled = new Promise<never>((_, reject) => {
+    abort = () => reject(signal.reason)
+    signal.addEventListener("abort", abort, { once: true })
+  })
+  // The races that lose still settle, and the handlers keep that from being reported as unhandled.
+  stalled.catch(() => {})
+  cancelled.catch(() => {})
   try {
-    return await Promise.race([stream.next(), stalled])
+    return await Promise.race([stream.next(), stalled, cancelled])
   } finally {
     clearTimeout(timer)
+    if (abort) signal.removeEventListener("abort", abort)
   }
 }
 
@@ -94,8 +105,30 @@ async function firstEvent(stream: AsyncIterator<Event>) {
  */
 export async function runNonInteractivePrompt(input: Input) {
   const controller = new AbortController()
+  // SIGINT and SIGTERM must interrupt the opening wait too, so the subscription is opened under the
+  // caller's signal and closed again whatever happens to the run.
+  const abort = () => controller.abort()
+  if (input.signal.aborted) abort()
+  else input.signal.addEventListener("abort", abort, { once: true })
   const stream = input.client.event.subscribe({ signal: controller.signal })[Symbol.asyncIterator]()
-  if ((await firstEvent(stream)).done) throw new Error("Event stream disconnected before prompt admission")
+  try {
+    return await run(input, stream, controller.signal)
+  } finally {
+    input.signal.removeEventListener("abort", abort)
+    controller.abort()
+    void stream.return?.(undefined).catch(() => {})
+  }
+}
+
+async function run(input: Input, stream: AsyncIterator<Event>, signal: AbortSignal) {
+  try {
+    if ((await firstEvent(stream, input.signal)).done)
+      throw new Error("Event stream disconnected before prompt admission")
+  } catch (error) {
+    // The caller aborts on SIGINT or SIGTERM and sets the exit code itself.
+    if (input.signal.aborted) return
+    throw error
+  }
 
   const messageID = SessionMessage.ID.create()
   const render = renderer(input)
@@ -171,11 +204,11 @@ export async function runNonInteractivePrompt(input: Input) {
   const consume = async () => {
     while (true) {
       const next = await stream.next().catch((error) => {
-        if (controller.signal.aborted) return { done: true as const, value: undefined }
+        if (signal.aborted) return { done: true as const, value: undefined }
         throw error
       })
       if (next.done) {
-        if (controller.signal.aborted) return
+        if (signal.aborted) return
         throw new Error("Event stream disconnected during prompt execution")
       }
       const event = next.value
@@ -312,27 +345,22 @@ export async function runNonInteractivePrompt(input: Input) {
     }
   }
 
-  try {
-    const running = lifecycle()
-    const aborted = new Promise<undefined>((resolve) =>
-      input.signal.addEventListener("abort", () => resolve(undefined), { once: true }),
-    )
-    const settled = await Promise.race([running, aborted])
-    // Requests failing during or after cancellation (e.g. the private server shutting down) are ignored.
-    if (!settled) {
-      running.catch(() => {})
-      return await cancel().catch(() => {})
-    }
-    state.phase = "settled"
-    await render.reconcile(settled.messages)
-    const error = finalError(settled, state)
-    if (!error) return
-    process.exitCode = 1
-    render.error(error)
-  } finally {
-    controller.abort()
-    void stream.return?.(undefined).catch(() => {})
+  const running = lifecycle()
+  const aborted = new Promise<undefined>((resolve) =>
+    input.signal.addEventListener("abort", () => resolve(undefined), { once: true }),
+  )
+  const settled = await Promise.race([running, aborted])
+  // Requests failing during or after cancellation (e.g. the private server shutting down) are ignored.
+  if (!settled) {
+    running.catch(() => {})
+    return await cancel().catch(() => {})
   }
+  state.phase = "settled"
+  await render.reconcile(settled.messages)
+  const error = finalError(settled, state)
+  if (!error) return
+  process.exitCode = 1
+  render.error(error)
 }
 
 /** The run's exit code comes from here alone: the first stored idle marker after this run's prompt. */
