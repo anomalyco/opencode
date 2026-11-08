@@ -191,7 +191,11 @@ const layer = Layer.effect(
           type: credential.value.type,
           active: activated,
         })
-        yield* bus.publish(Event.Updated, {}, { global: true })
+        yield* bus.publish(
+          Event.Updated,
+          { integrationID: credential.integrationID, credentialID: credential.id },
+          { global: true },
+        )
         if (activated)
           yield* bus.publish(
             Event.Switched,
@@ -249,7 +253,11 @@ const layer = Layer.effect(
           labelChanged: updates.label !== undefined && updates.label !== credential.label,
         })
         if (updates.label !== undefined && updates.label !== credential.label)
-          yield* bus.publish(Event.Updated, {}, { global: true })
+          yield* bus.publish(
+            Event.Updated,
+            { integrationID: credential.integrationID, credentialID: id },
+            { global: true },
+          )
       }),
       remove: Effect.fn("Credential.remove")(function* (id) {
         const removed = yield* db
@@ -283,7 +291,12 @@ const layer = Layer.effect(
           active: removed.switched,
           ...(removed.switched ? { replacementID: removed.credentialID } : {}),
         })
-        yield* bus.publish(Event.Updated, {}, { global: true })
+        if (removed.integrationID)
+          yield* bus.publish(
+            Event.Updated,
+            { integrationID: removed.integrationID, credentialID: id },
+            { global: true },
+          )
         if (removed.switched)
           yield* bus.publish(
             Event.Switched,
