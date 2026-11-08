@@ -19,7 +19,7 @@ use opencode_api::generated::{
     IntegrationOauthCancelInput, IntegrationOauthCompleteInput, IntegrationOauthConnectInput,
     IntegrationOauthStatusInput, LocationQueryInput, ModelDefaultInput, SessionMessageShellExit,
 };
-use opencode_api::js::{number_to_string, parse_number};
+use opencode_api::js::{UrlError, number_to_string, parse_number, parse_url};
 use opencode_ui::form;
 use opencode_util::{bail, err, error};
 use serde_json::{Value, json};
@@ -607,7 +607,7 @@ fn login(context: &Context, args: &AuthLoginArgs) -> error::Result<()> {
 
 fn find_integration(server: &Server, target: Option<&str>) -> error::Result<IntegrationInfo> {
     if let Some(target) = target
-        && url::Url::parse(target).is_ok_and(|url| matches!(url.scheme(), "http" | "https"))
+        && is_web_url(target)?
     {
         let mut progress = prompt::spinner();
         progress.start("Discovering authentication provider...");
@@ -630,6 +630,14 @@ fn find_integration(server: &Server, target: Option<&str>) -> error::Result<Inte
     }
     let id = select_integration(choices, "integration")?;
     resolve_integration(&integrations, &id).cloned()
+}
+
+// A target that is an http(s) URL names a provider to discover; a non-ASCII host cannot be one.
+fn is_web_url(target: &str) -> error::Result<bool> {
+    match parse_url(target) {
+        Err(error @ UrlError::NonAsciiHost(_)) => bail!("{error}"),
+        url => Ok(url.is_ok_and(|url| matches!(url.scheme(), "http" | "https"))),
+    }
 }
 
 fn login_choices(integrations: &[IntegrationInfo]) -> Vec<IntegrationChoice> {
@@ -1267,7 +1275,11 @@ fn validate_text(field: &FormField, value: &str) -> Option<String> {
     }
     use opencode_api::generated::FormStringFieldFormat as Format;
     match &field.format {
-        Some(Format::Uri) if url::Url::parse(value).is_err() => Some("Expected a URL".to_owned()),
+        Some(Format::Uri) => match parse_url(value) {
+            Err(error @ UrlError::NonAsciiHost(_)) => Some(error.to_string()),
+            Err(_) => Some("Expected a URL".to_owned()),
+            Ok(_) => None,
+        },
         Some(Format::Email) if !form::email(value) => Some("Expected an email address".to_owned()),
         Some(Format::Date) if !form::date(value) => Some("Expected a date".to_owned()),
         Some(Format::DateTime) if !form::date_time(value) => Some("Expected a date and time".to_owned()),
@@ -1462,6 +1474,33 @@ pub(super) fn pad_end(text: &str, width: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn uri_fields_reject_non_ascii_hosts() {
+        let field = FormField::String(opencode_api::generated::FormStringField {
+            format: Some(opencode_api::generated::FormStringFieldFormat::Uri),
+            ..Default::default()
+        });
+        let host = ": a host name must be ASCII; write an international name in its punycode (xn--) form";
+        for url in ["https://Bücher.example", "https://%42%C3%BCcher.example"] {
+            assert_eq!(validate_text(&field, url), Some(format!("{url}{host}")));
+        }
+        assert_eq!(validate_text(&field, "nope"), Some("Expected a URL".to_owned()));
+        assert_eq!(validate_text(&field, "https://xn--bcher-kva.example"), None);
+    }
+
+    #[test]
+    fn login_targets_with_non_ascii_hosts_are_not_integration_names() {
+        assert!(is_web_url("https://xn--bcher-kva.example").unwrap());
+        assert!(!is_web_url("anthropic").unwrap());
+        assert!(!is_web_url("ftp://example.com").unwrap());
+        for url in ["https://bücher.example", "https://Bücher.example", "https://%42%C3%BCcher.example"] {
+            assert_eq!(
+                is_web_url(url).unwrap_err().to_string(),
+                format!("{url}: a host name must be ASCII; write an international name in its punycode (xn--) form")
+            );
+        }
+    }
 
     #[test]
     fn completed_lines_print_each_line_once() {

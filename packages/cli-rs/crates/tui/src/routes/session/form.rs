@@ -1532,26 +1532,5 @@ fn open_url(input: &str) -> bool {
     if let Some(opener) = OPENER.get() {
         return opener(input);
     }
-    let Ok(url) = url::Url::parse(input) else {
-        return false;
-    };
-    if !matches!(url.scheme(), "http" | "https") {
-        return false;
-    }
-    let mut command = if cfg!(target_os = "macos") {
-        std::process::Command::new("open")
-    } else if cfg!(windows) {
-        let mut command = std::process::Command::new("cmd");
-        command.args(["/c", "start", ""]);
-        command
-    } else {
-        std::process::Command::new("xdg-open")
-    };
-    command
-        .arg(url.as_str())
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .is_ok()
+    crate::features::links::open_url(input).is_ok()
 }

@@ -660,6 +660,7 @@ dependencies = [
  "indexmap",
  "serde",
  "serde_json",
+ "url",
 ]
 
 [[package]]

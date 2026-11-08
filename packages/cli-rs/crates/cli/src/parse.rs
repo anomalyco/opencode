@@ -745,7 +745,10 @@ fn parse_int(text: &str) -> Result<i64, &'static str> {
 // commands.ts: an HTTP(S) URL without credentials, query, or fragment, without trailing slashes.
 fn pairing_url(value: &str) -> Result<String, &'static str> {
     let error = "Expected an HTTP(S) server URL without credentials, query parameters, or a fragment";
-    let url = url::Url::parse(value).map_err(|_| error)?;
+    let url = opencode_api::js::parse_url(value).map_err(|parse| match parse {
+        opencode_api::js::UrlError::NonAsciiHost(_) => opencode_api::js::ASCII_HOST,
+        _ => error,
+    })?;
     let plain = matches!(url.scheme(), "http" | "https")
         && url.username().is_empty()
         && url.password().is_none()
