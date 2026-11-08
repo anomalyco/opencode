@@ -646,6 +646,38 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("marks the Session idle on a failed execution terminal", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession({ time_created: 0, time_updated: 0 })
+      const bus = yield* Bus.Service
+      const times = () =>
+        db
+          .select({
+            busy: SessionTable.time_busy,
+            idle: SessionTable.time_idle,
+            outcome: SessionTable.idle_outcome,
+            updated: SessionTable.time_updated,
+          })
+          .from(SessionTable)
+          .get()
+          .pipe(Effect.orDie)
+
+      yield* TestClock.setTime(10)
+      yield* bus.publish(SessionEvent.Execution.Started, { sessionID })
+      expect(yield* times()).toEqual({ busy: 10, idle: null, outcome: null, updated: 0 })
+
+      yield* TestClock.setTime(40)
+      yield* bus.publish(SessionEvent.Execution.Failed, {
+        sessionID,
+        error: {
+          type: "aborted",
+          message: "Execution was orphaned by a server restart and cannot be resumed.",
+        },
+      })
+      expect(yield* times()).toEqual({ busy: 10, idle: 40, outcome: "failed", updated: 0 })
+    }),
+  )
+
   it.effect("updates only the newest incomplete assistant projection", () =>
     Effect.gen(function* () {
       const db = yield* seedSession()
