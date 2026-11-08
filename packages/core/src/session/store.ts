@@ -80,10 +80,12 @@ export interface Interface {
   /** Releases the claim and resets resume accounting. Terminal events call this on commit. */
   readonly release: (sessionID: Session.ID) => Effect.Effect<void>
   /**
-   * Clears orphaned child claims except children owned by recoverable
-   * background subagent jobs.
+   * Child Sessions holding an execution claim that no recoverable background
+   * subagent job owns. The restart sweep terminalizes them one by one; only a
+   * terminal event releases the claim, so a crash mid-sweep leaves the
+   * remaining claims for the next boot.
    */
-  readonly releaseChildClaims: (recoverable: ReadonlyArray<Session.ID>) => Effect.Effect<void>
+  readonly orphanedChildClaims: (recoverable: ReadonlyArray<Session.ID>) => Effect.Effect<ReadonlyArray<Session.ID>>
   /**
    * Durably counts one more resume of an orphaned claim, returning the new
    * total — or undefined when the Session no longer exists.
@@ -235,10 +237,10 @@ const layer = Layer.effect(
           .run()
           .pipe(Effect.orDie)
       }),
-      releaseChildClaims: Effect.fn("SessionStore.releaseChildClaims")((recoverable) =>
-        db
-          .update(SessionTable)
-          .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
+      orphanedChildClaims: Effect.fn("SessionStore.orphanedChildClaims")(function* (recoverable) {
+        const rows = yield* db
+          .select({ sessionID: SessionTable.id })
+          .from(SessionTable)
           .where(
             and(
               isNotNull(SessionTable.time_suspended),
@@ -246,9 +248,10 @@ const layer = Layer.effect(
               recoverable.length > 0 ? notInArray(SessionTable.id, Array.from(recoverable)) : undefined,
             ),
           )
-          .run()
-          .pipe(Effect.orDie, Effect.asVoid),
-      ),
+          .all()
+          .pipe(Effect.orDie)
+        return rows.map((row) => row.sessionID)
+      }),
       countResume: Effect.fn("SessionStore.countResume")(function* (sessionID) {
         const row = yield* db
           .update(SessionTable)
