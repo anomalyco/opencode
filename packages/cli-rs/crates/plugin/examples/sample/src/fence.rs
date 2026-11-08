@@ -14,7 +14,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
                 Span::new(line.to_uppercase()).fg("markdown.heading").bold(),
             ]
         });
-        Fenced::Lines { lines: lines.collect() }
+        Fenced::Lines { lines: lines.collect(), fg: None, drag: false }
     });
     setup.code_block("sample-panic", |_, _| panic!("sample fence panicked"));
     setup.code_block("sample-mode", |host, _| {
@@ -22,7 +22,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
             ThemeMode::Dark => "dark",
             ThemeMode::Light => "light",
         };
-        Fenced::Lines { lines: vec![vec![Span::new(format!("sample mode {mode}"))]] }
+        Fenced::Lines { lines: vec![vec![Span::new(format!("sample mode {mode}"))]], fg: None, drag: false }
     });
     Ok(())
 }

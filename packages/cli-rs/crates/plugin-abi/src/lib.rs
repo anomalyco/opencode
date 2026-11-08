@@ -51,7 +51,8 @@ use serde::{Deserialize, Serialize};
 /// The major version: changes only with a deliberate breaking change, and a mismatch refuses the plugin.
 pub const ABI_MAJOR: u32 = 1;
 /// The minor version: grows when entries are appended. 1.0 is the core; 1.1 adds [`PluginApi::describe`]; 1.2 adds
-/// [`HostApi::theme_mode`]; 1.3 adds [`HostApi::wake`]; 1.4 adds [`Manifest::render`] and [`Request::RenderFence`].
+/// [`HostApi::theme_mode`]; 1.3 adds [`HostApi::wake`]; 1.4 adds [`Manifest::render`], [`Request::RenderFence`] and
+/// [`HostRequest::Color`].
 pub const ABI_MINOR: u32 = 4;
 
 /// The symbol every plugin exports, of type [`EntryFn`].
@@ -296,20 +297,14 @@ pub struct SlotClaim {
     pub path: String,
 }
 
-/// A color: a theme token path (`text.muted`, `markdown.heading`) or `#rrggbb`. On the wire it is that text. An
+/// A color: a theme token path (`text.muted`, `markdown.heading`), a scale step (`categorical.3.300`,
+/// `interactive.500`), `#rrggbb`, or an [`Rgba`]. On the wire it is that text, an [`Rgba`] as `#rrggbbaa`. An
 /// unknown token draws in `text.base`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Color {
+    Rgba(Rgba),
     Token(Cow<'static, str>),
-}
-
-impl Color {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Color::Token(token) => token,
-        }
-    }
 }
 
 impl From<&'static str> for Color {
@@ -321,6 +316,50 @@ impl From<&'static str> for Color {
 impl From<String> for Color {
     fn from(token: String) -> Self {
         Color::Token(Cow::Owned(token))
+    }
+}
+
+impl From<Rgba> for Color {
+    fn from(rgba: Rgba) -> Self {
+        Color::Rgba(rgba)
+    }
+}
+
+/// A color with alpha; the host blends a translucent one over what is below it. On the wire it is `#rrggbbaa`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Rgba {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
+}
+
+impl Rgba {
+    pub const fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self { r, g, b, a }
+    }
+
+    /// `#rrggbbaa`, or `#rrggbb` for an opaque color.
+    pub fn parse(text: &str) -> Option<Self> {
+        let hex = text.strip_prefix('#').filter(|hex| matches!(hex.len(), 6 | 8) && hex.is_ascii())?;
+        let channel = |index: usize| u8::from_str_radix(hex.get(index..index + 2)?, 16).ok();
+        let a = if hex.len() == 8 { channel(6)? } else { 255 };
+        Some(Self::new(channel(0)?, channel(2)?, channel(4)?, a))
+    }
+}
+
+impl Serialize for Rgba {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let Self { r, g, b, a } = self;
+        serializer.collect_str(&format_args!("#{r:02x}{g:02x}{b:02x}{a:02x}"))
+    }
+}
+
+impl<'de> Deserialize<'de> for Rgba {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let text = Cow::<str>::deserialize(deserializer)?;
+        // Only the 8-digit form: `#rrggbb` stays a token, so 1.3 rows read back as they were written.
+        Self::parse(&text).filter(|_| text.len() == 9).ok_or_else(|| serde::de::Error::custom("not #rrggbbaa"))
     }
 }
 
@@ -378,6 +417,9 @@ pub struct Fence {
     /// The host's name for this block. It stays the same while the block changes, across renders that return
     /// [`Fenced::Lines`] or [`Fenced::Keep`], so a plugin can keep its own state for the block by key.
     pub key: u64,
+    /// The terminal's width in columns, for a plugin that lays out to fit it.
+    #[serde(default)]
+    pub width: u16,
 }
 
 /// What a fence render returns.
@@ -388,8 +430,15 @@ pub enum Fenced {
     Code,
     /// What the block showed before; the code view when it showed nothing of the plugin's.
     Keep,
-    /// Rows the host draws without wrapping, scrolling sideways when wide.
-    Lines { lines: Vec<Line> },
+    /// Rows the host draws without wrapping, scrolling sideways when wide: on a horizontal wheel, or with `drag`
+    /// on a left drag, which swallows a horizontal wheel. `fg` draws spans without their own.
+    Lines {
+        lines: Vec<Line>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fg: Option<Color>,
+        #[serde(default, skip_serializing_if = "is_false")]
+        drag: bool,
+    },
 }
 
 /// From the host to the plugin. Results: `Fence` → `Option<Vec<Line>>`, `RenderFence` → [`Fenced`], `Slot` and
@@ -420,7 +469,8 @@ pub enum Request {
     RenderFence(Fence),
 }
 
-/// From the plugin to the host. Results: `StorageGet` → `Option<String>` (JSON text), everything else `null`.
+/// From the plugin to the host. Results: `StorageGet` → `Option<String>` (JSON text), `Color` → `Option<Rgba>`,
+/// everything else `null`.
 /// A host that does not know a request answers it with an error.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
@@ -449,6 +499,10 @@ pub enum HostRequest {
     StorageKey {
         key: String,
     },
+    /// 1.4: [`Read::color`].
+    Color {
+        token: String,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -474,6 +528,9 @@ pub enum Toast {
 pub trait Read {
     /// Whether the page theme is dark or light (TS `api.themeMode`).
     fn theme_mode(&self) -> ThemeMode;
+    /// A color of the page theme: a token path such as `text.muted`, or a scale step such as `categorical.3.300`
+    /// or `interactive.500`. `None` when the theme has no such color.
+    fn color(&self, token: &str) -> Option<Rgba>;
 }
 
 /// The host, as a plugin calls it. Valid while the instance lives.
@@ -559,6 +616,11 @@ impl Host {
 impl Read for Host {
     fn theme_mode(&self) -> ThemeMode {
         Host::theme_mode(self).unwrap_or(ThemeMode::Dark)
+    }
+
+    fn color(&self, token: &str) -> Option<Rgba> {
+        let value = self.request(&HostRequest::Color { token: token.to_owned() }).ok()?;
+        serde_json::from_value(value).ok().flatten()
     }
 }
 
@@ -992,16 +1054,43 @@ mod tests {
         let mut setup = Setup::in_process("new", None);
         setup.code_block("x", |_, fence| match fence.key {
             0 => Fenced::Code,
-            _ => Fenced::Lines { lines: vec![vec![Span::new(fence.code.clone())]] },
+            _ => Fenced::Lines { lines: vec![vec![Span::new(fence.code.clone())]], fg: None, drag: false },
         });
         assert_eq!(setup.manifest().render, RENDER);
-        let fence =
-            Fence { language: "x".into(), info: "x".into(), code: "a".into(), streaming: false, closed: true, key: 7 };
-        let answer = setup.handle(Request::RenderFence(fence)).unwrap();
+        let fence = Fence {
+            language: "x".into(),
+            info: "x".into(),
+            code: "a".into(),
+            streaming: false,
+            closed: true,
+            key: 7,
+            width: 80,
+        };
+        let answer = setup.handle(Request::RenderFence(fence.clone())).unwrap();
         assert_eq!(answer, serde_json::json!({ "type": "lines", "lines": [[{ "text": "a" }]] }));
-        let unknown =
-            Fence { language: "y".into(), info: "y".into(), code: "a".into(), streaming: false, closed: true, key: 7 };
+        let unknown = Fence { language: "y".into(), ..fence };
         assert_eq!(setup.handle(Request::RenderFence(unknown)).unwrap(), serde_json::json!({ "type": "code" }));
+    }
+
+    // Expected: what 1.4 adds for Mermaid is optional on the wire: an `Rgba` is `#rrggbbaa` and reads back as one,
+    // `#rrggbb` stays a token, `fg` and `drag` are left out when unset, and a fence without `width` reads as 0.
+    #[test]
+    fn the_1_4_colors_and_rows_round_trip() {
+        let line = vec![Span { bg: Some(Rgba::new(255, 255, 255, 20).into()), ..Span::new("a").fg("#102030") }];
+        let fenced = Fenced::Lines { lines: vec![line], fg: Some(Rgba::new(1, 2, 3, 255).into()), drag: true };
+        let json = r##"{"type":"lines","lines":[[{"text":"a","fg":"#102030","bg":"#ffffff14"}]],"fg":"#010203ff","drag":true}"##;
+        assert_eq!(serde_json::to_string(&fenced).unwrap(), json);
+        assert_eq!(serde_json::from_str::<Fenced>(json).unwrap(), fenced);
+        let plain = Fenced::Lines { lines: Vec::new(), fg: None, drag: false };
+        assert_eq!(serde_json::to_string(&plain).unwrap(), r#"{"type":"lines","lines":[]}"#);
+        let fence: Fence =
+            serde_json::from_str(r#"{"language":"x","info":"x","code":"a","streaming":false,"closed":true,"key":1}"#)
+                .unwrap();
+        assert_eq!(fence.width, 0);
+        let request = HostRequest::Color { token: "categorical.3.300".into() };
+        assert_eq!(serde_json::to_string(&request).unwrap(), r#"{"type":"color","token":"categorical.3.300"}"#);
+        assert_eq!(Rgba::parse("#0a0b0c"), Some(Rgba::new(10, 11, 12, 255)));
+        assert_eq!(Rgba::parse("#0a0b0"), None);
     }
 
     // Expected: the shims answer a null instance with an error, ignore a null `out` or a null `destroy`, and never
