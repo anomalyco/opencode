@@ -1,6 +1,5 @@
 import { execFileSync } from "node:child_process"
-import { createHash } from "node:crypto"
-import { readdirSync, readFileSync } from "node:fs"
+import { readdirSync } from "node:fs"
 import path from "node:path"
 import { LOCALES } from "../packages/stats/app/src/lib/language"
 import { domain, zoneID } from "./stage"
@@ -122,9 +121,6 @@ function createOgWorker() {
       name,
       contentFile: path.join(dir, name),
       contentType: types[path.extname(name)],
-      contentSha256: createHash("sha256")
-        .update(new Uint8Array(readFileSync(path.join(dir, name))))
-        .digest("hex"),
     })),
   })
   return new cloudflare.WorkersDeployment("StatsOgDeployment", {
