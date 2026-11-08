@@ -1,7 +1,7 @@
 //! The simulation UI endpoint, `OPENCODE_DRIVE` (H.4): a WebSocket server that drives a headless app as
 //! `packages/simulation/src/frontend` drives the TS TUI. Requests run on the UI thread, one at a time; each action
 //! feeds the bytes Core's mock input would send to the app's input parser, then paints a frame, as `actions.ts`
-//! calls `renderOnce`. Mapping: opentui-rust `docs/headless.md`.
+//! calls `renderOnce`. Mapping: OpenTUI's `packages/rust/crates/opentui/docs/headless.md`.
 
 pub mod capture;
 pub mod keys;

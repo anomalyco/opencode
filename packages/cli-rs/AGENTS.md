@@ -1,6 +1,6 @@
 # cli-rs
 
-The Rust client, `opencode-rs`, on opentui-rust. The plan and decisions live outside this repository, in
+The Rust client, `opencode-rs`, on OpenTUI's Rust crates. The plan and decisions live outside this repository, in
 `/home/simon/src/opendocs/oc-rust/plan.md` and `decisions.md`. The root `AGENTS.md` applies too.
 
 ## Running cargo
@@ -9,21 +9,24 @@ The Rust client, `opencode-rs`, on opentui-rust. The plan and decisions live out
   `cargo -C` is unstable. Without that config `opentui-sys` fails with "set OPENTUI_LIB_DIR". Run
   cargo through the package script, which runs in this directory:
   `bun run --cwd packages/cli-rs cargo check -p opencode-api`.
-- `script/opentui-lib.sh` (or `bun run --cwd packages/cli-rs opentui-lib`) fills
-  `~/.cache/opencode-rs/opentui/<platform>` with native artifacts whose `opentui.h` matches
-  opentui-rust's bindings. Rerun it when the build fails with the header hash message. A shell
-  `OPENTUI_LIB_DIR` wins over the config.
-- opentui is a path dependency on the local opentui-rust checkout, linked statically. A change on
-  opentui-rust `main` shows up in the next build, with no lock change.
+- opentui comes from `packages/rust` of `anomalyco/opentui`, pinned by git `rev` in `Cargo.toml` and linked
+  statically. That checkout has no native library: `.cargo/config.toml` points `OPENTUI_LIB_DIR` at
+  `~/.cache/opentui-native/x86_64-linux`, which `/home/simon/src/opendocs/native-hardening/tools/abi-artifacts.py`
+  fills with the artifacts whose `opentui.h` matches the bindings at that `rev`. When the build fails with the
+  header hash message, rerun it. A shell `OPENTUI_LIB_DIR` wins over the config.
+- A change to OpenTUI's Rust crates is a pull request into `packages/rust` of `anomalyco/opentui`. A re-pin runs
+  `abi-artifacts.py` first, then commits the new `rev` with its `Cargo.lock`. The `rev` may name the head of an
+  open pull request; re-pin to the merge commit on `main` once it merges.
 
 ## Checks
 
 Fast checks only, scoped with `-p` to the crates a step touches: `cargo fmt --check`, `cargo check`,
 `cargo clippy --all-targets -- -D warnings`, and `cargo test`. Add one targeted parity scenario and single
-TypeScript test files. No root `bun run check`, no full Bun suites, no opentui-rust `test.sh`, no
+TypeScript test files. No root `bun run check`, no full Bun suites, no OpenTUI `packages/rust/test.sh`, no
 OpenTUI suites, no benchmarks. Put `timeout` on anything that could hang.
 
-Run `cargo fmt` before every final commit; `cargo fmt --check` must be clean. `rustfmt.toml` is opentui-rust's.
+Run `cargo fmt` before every final commit; `cargo fmt --check` must be clean. `rustfmt.toml` matches OpenTUI's
+`packages/rust/rustfmt.toml`.
 
 The integration tests of `opencode-tui` and `opencode-ui` link the static OpenTUI set, so each crate
 has one test binary, `tests/all/main.rs`, with one module per area and the shared helpers under
@@ -43,10 +46,10 @@ with `cargo test -p opencode-tui --test all <module>::`, the unit tests with `--
 
 - Deviations from the TypeScript client go in `parity/deviations/<row>-<slug>.md`: the TypeScript
   behavior, the Rust behavior, and the reason. A difference without a file is a failure.
-- opentui-rust handles are not `Send`. Network work runs on tokio through `App::spawn`; never block the
+- OpenTUI handles are not `Send`. Network work runs on tokio through `App::spawn`; never block the
   UI thread.
 - Every queue between tasks and the UI is bounded.
-- Where the TypeScript TUI uses `flexGrow`, use `grow().basis(Length::Auto)`: opentui-rust's `grow()`
+- Where the TypeScript TUI uses `flexGrow`, use `grow().basis(Length::Auto)`: OpenTUI's `grow()`
   alone sets basis 0, which lays out differently.
 - Generated files are committed; regenerate with `bun run --cwd packages/cli-rs generate`, which runs
   every `script/gen/*.ts`. Parity fixtures regenerate with `bun run --cwd packages/cli-rs fixtures`.
