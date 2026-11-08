@@ -314,7 +314,7 @@ impl Local {
     }
 
     /// The location the catalog and the usage limits are read for (`location.ref ?? data.location.default()`).
-    fn catalog_location(&self) -> Location {
+    pub(crate) fn catalog_location(&self) -> Location {
         let location = self.state.borrow().location.clone();
         location.unwrap_or_else(|| self.tui_location())
     }
