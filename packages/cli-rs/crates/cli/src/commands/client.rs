@@ -160,7 +160,7 @@ process.exit(0)
         };
         register(4096);
         let env = Env { ts_bin: Some("/nonexistent/opencode-ts".to_owned()), ..Env::default() };
-        let context = Context { server: ServerFlags { standalone: false, server: None } };
+        let context = Context { server: ServerFlags { standalone: false, server: None }, args: Vec::new() };
         let transport = Arc::new(Restarting::default());
         let server = connect_in(&context, &paths, &env, false, true, transport.clone()).await.unwrap();
         register(5000);
@@ -192,7 +192,7 @@ process.exit(0)
         })
         .unwrap();
         let env = Env { ts_bin: Some(program.to_string_lossy().into_owned()), ..Env::default() };
-        let context = Context { server: ServerFlags { standalone: true, server: None } };
+        let context = Context { server: ServerFlags { standalone: true, server: None }, args: Vec::new() };
         // The commands bind the result as these lines do; `let (_, client)` stopped the server here.
         let server = connect_in(&context, &paths, &env, false, false, Arc::new(Reqwest::default())).await.unwrap();
         let info = server.client.server_info().await;
