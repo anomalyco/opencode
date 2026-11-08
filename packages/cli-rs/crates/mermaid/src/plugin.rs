@@ -1,128 +1,66 @@
-//! The `opencode.merman` plugin (`plugin.ts`, `createMermaidCodeBlockRenderer`) and its diagram widget
-//! (`StaticDiagramRenderable`).
+//! The `opencode.merman` plugin (`plugin.ts`, `createMermaidCodeBlockRenderer`), on the one plugin API (O-67). The
+//! host draws its rows as TS `StaticDiagramRenderable` does: full width, the diagram's height, no wrap, not
+//! selectable, in a white default foreground, scrolled sideways by a left drag.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
 
-use opencode_plugin::{Definition, Host, Setup};
-use opentui::input::{MouseButton, MouseEventKind};
-use opentui::prelude::{App, Attributes, Color, Length, Span, Style, Text, Widget, WrapMode};
-use opentui::widget::{AnyWidget, CodeBlock, Content};
-use unicode_width::UnicodeWidthStr;
+use opencode_plugin_abi::{Color, Fenced, Plugin, Rgba, Setup, Span};
 
+use crate::flowchart::drawing::italic;
 use crate::{Diagram, Kind, Palette, Rendered, render};
 
 pub const ID: &str = "opencode.merman";
 
-pub fn plugin<H: Host>() -> Definition<H> {
-    Definition::new(ID, |setup: &mut Setup<'_, H>| {
-        let renderer = Rc::new(Renderer::default());
-        let host = Rc::downgrade(setup.host());
-        setup.code_block("mermaid", move |block, theme| {
-            let mode = host.upgrade()?.theme_mode();
-            renderer.render(block, &Palette::from_theme(theme, mode))
-        });
-    })
+/// The plugin, on the one plugin API (O-67).
+pub fn plugin() -> Plugin {
+    Plugin { id: ID, setup }
 }
 
-/// The `mermaid` code-block renderer. It remembers the kind each diagram widget shows, so a fence whose newest
-/// text does not parse keeps its last diagram of the same kind while it streams.
-#[derive(Default)]
-pub struct Renderer {
-    kinds: RefCell<HashMap<u32, Kind>>,
-}
-
-impl Renderer {
-    pub fn render(&self, block: &CodeBlock<'_>, palette: &Palette) -> Option<AnyWidget> {
-        let previous = block.previous.map(|widget| (widget.clone(), self.kinds.borrow_mut().remove(&widget.id())));
-        let diagram = match render(block.code, block.app.size().0, palette) {
+/// The `mermaid` fence render. It remembers the kind each block shows, by fence key, so a fence whose newest text
+/// does not parse keeps its last diagram of the same kind while it streams.
+fn setup(setup: &mut Setup) -> Result<(), String> {
+    let kinds: RefCell<HashMap<u64, Kind>> = RefCell::default();
+    setup.code_block("mermaid", move |read, fence| {
+        let mut kinds = kinds.borrow_mut();
+        let previous = kinds.remove(&fence.key);
+        let diagram = match render(&fence.code, fence.width, &Palette::read(read)) {
             Rendered::Diagram(diagram) => diagram,
-            Rendered::Code => return None,
+            Rendered::Code => return Fenced::Code,
             Rendered::Syntax { kind, prefix } => {
-                if let Some((widget, Some(previous))) = previous
-                    && previous == kind
-                {
-                    self.kinds.borrow_mut().insert(widget.id(), kind);
-                    return Some(widget);
+                if previous == Some(kind) {
+                    kinds.insert(fence.key, kind);
+                    return Fenced::Keep;
                 }
-                prefix?
+                let Some(prefix) = prefix else {
+                    return Fenced::Code;
+                };
+                prefix
             }
         };
-        let widget = widget(block.app, &diagram).as_any();
-        self.kinds.borrow_mut().insert(widget.id(), diagram.kind);
-        Some(widget)
-    }
+        kinds.insert(fence.key, diagram.kind);
+        fenced(&diagram)
+    });
+    Ok(())
 }
 
-/// TS `StaticDiagramRenderable`: full width, the diagram's height, no wrap, not selectable. TS also sets one row
-/// of top margin, which Core's Markdown uses as the gap before the block; the Rust Markdown widget puts that gap
-/// between blocks itself, so a margin here would double it.
-pub fn widget(app: &App, diagram: &Diagram) -> Text {
-    let mut spans: Vec<Span<'static>> = Vec::new();
-    for (index, line) in diagram.lines.iter().enumerate() {
-        if index > 0 {
-            spans.push(Span::raw("\n"));
-        }
-        for run in line {
-            let mut style = Style::new().add(Attributes::from_bits(run.attributes));
-            if let Some(fg) = run.fg {
-                style = style.fg(fg);
-            }
-            if let Some(bg) = run.bg {
-                style = style.bg(bg);
-            }
-            spans.push(Span::styled(run.text.clone(), style));
-        }
-    }
-    let content_width = diagram
+/// A diagram's rows as the host draws them. TS sets one row of top margin, which Core's Markdown uses as the gap
+/// before the block; the Rust Markdown puts that gap between blocks itself.
+pub fn fenced(diagram: &Diagram) -> Fenced {
+    let lines = diagram
         .lines
         .iter()
-        .map(|line| line.iter().map(|run| UnicodeWidthStr::width(run.text.as_str())).sum::<usize>())
-        .max()
-        .unwrap_or(0) as f64;
-    let text = Text::new(app, Content(spans))
-        // TS `TextRenderable`'s default fg, which unstyled cells (blank interiors, run gaps) keep.
-        .fg(Color::rgb(255, 255, 255))
-        .wrap(WrapMode::None)
-        .selectable(false)
-        .width(Length::percent(100.0))
-        .height(diagram.height() as u16);
-    // A left drag scrolls a diagram wider than the transcript sideways; horizontal wheel events stop here.
-    let drag: Rc<Cell<Option<u16>>> = Rc::default();
-    let scroll = Rc::new(Cell::new(0.0));
-    let this = text.clone();
-    text.on_mouse(move |cx, event| match event.kind {
-        MouseEventKind::Down(MouseButton::Left) => {
-            cx.app().clear_selection();
-            drag.set(Some(event.x));
-            cx.prevent_default();
-            cx.stop_propagation();
-        }
-        MouseEventKind::Drag(MouseButton::Left) => {
-            cx.prevent_default();
-            cx.stop_propagation();
-            let Some(start) = drag.get() else {
-                return;
-            };
-            drag.set(Some(event.x));
-            let dx = f64::from(event.x) - f64::from(start);
-            let max = (content_width - f64::from(this.rect().width)).max(0.0);
-            let next = (scroll.get() - dx).clamp(0.0, max);
-            if next != scroll.get() {
-                scroll.set(next);
-                this.scroll_to(next, 0.0);
-            }
-        }
-        MouseEventKind::Up(MouseButton::Left) => {
-            drag.set(None);
-            cx.prevent_default();
-            cx.stop_propagation();
-        }
-        MouseEventKind::ScrollLeft | MouseEventKind::ScrollRight => {
-            cx.prevent_default();
-            cx.stop_propagation();
-        }
-        _ => {}
-    })
+        .map(|line| {
+            line.iter()
+                .map(|run| Span {
+                    fg: run.fg.map(Color::Rgba),
+                    bg: run.bg.map(Color::Rgba),
+                    italic: run.attributes & italic() != 0,
+                    ..Span::new(run.text.clone())
+                })
+                .collect()
+        })
+        .collect();
+    // TS `TextRenderable`'s default fg, which unstyled cells (blank interiors, run gaps) keep.
+    Fenced::Lines { lines, fg: Some(Color::Rgba(Rgba::new(255, 255, 255, 255))), drag: true }
 }

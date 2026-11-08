@@ -2,12 +2,13 @@
 //! parity/oracle/P.3-mermaid.ts from the TS plugin) and compares each styled line with TS.
 
 use opencode_mermaid::{Palette, Rendered, render};
+use opencode_plugin::node::Reader;
+use opencode_plugin_abi::Rgba;
 use opencode_ui::theme::{Catalog, ThemeMode};
-use opentui::prelude::Color;
 
 const CORPUS: &str = include_str!("../../../parity/fixtures/P.3/corpus.json");
 
-fn hex(color: Option<Color>) -> String {
+fn hex(color: Option<Rgba>) -> String {
     color.map_or("-".to_string(), |c| format!("{:02x}{:02x}{:02x}{:02x}", c.r, c.g, c.b, c.a))
 }
 
@@ -72,7 +73,7 @@ fn diagrams_match_typescript() {
     let styles: Vec<String> =
         corpus["styles"].as_array().unwrap().iter().map(|s| s.as_str().unwrap().to_string()).collect();
     let theme = Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme;
-    let palette = Palette::from_theme(&theme, ThemeMode::Dark);
+    let palette = Palette::read(&Reader::new(&theme, ThemeMode::Dark));
     let only = std::env::var("MERMAID_ONLY").ok();
     let mut failures: Vec<String> = Vec::new();
     let mut total = 0;
