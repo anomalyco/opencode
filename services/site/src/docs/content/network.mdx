@@ -117,6 +117,7 @@ TLS handshake only sends it to servers that ask for one.
 
 - `cert` and `key` are PEM text. Use `{file:...}` to read them from files. A file that can't be read leaves `tls` unset.
 - `passphrase` is only needed for an encrypted key.
+- Works on the Bun and Node builds. A server on Cloudflare Workers can't present a client certificate through `fetch`.
 - Requests with a client certificate don't follow redirects, so the certificate isn't presented to another host.
 
 Every model request of that provider presents the certificate: chat, compaction, image and decision models. A provider
