@@ -82,8 +82,11 @@ impl opencode_plugin::Host for Tui {
                 }
             });
         }
-        self.reads.changed(self);
         Ok(())
+    }
+
+    fn storage_changed(&self) {
+        self.reads.changed(self);
     }
 
     fn toast(&self, toast: &abi::Toast) {
@@ -108,6 +111,17 @@ impl opencode_plugin::Host for Tui {
             options = options.action("Open", bind!(self, |tui| tui.navigate(route.clone())));
         }
         self.toasts.show(options);
+    }
+
+    fn failed(&self, id: &str) {
+        let toast =
+            ToastOptions::new(Variant::Error, "Run /plugins to view details.").title(format!("Plugin failed: {id}"));
+        self.toasts.show(toast.action(
+            "Open plugins",
+            bind!(self, |tui| {
+                tui.keymap.dispatch("plugins.list", None);
+            }),
+        ));
     }
 
     fn attention(&self, attention: &abi::Attention) {
@@ -221,13 +235,14 @@ pub struct Reads {
     key: Cell<SessionID>,
     /// The JSON text of each storage key read or written, so a write shows at once and storage works without disk.
     stored: RefCell<HashMap<String, Option<String>>>,
-    /// The mounted claims' pushes, which a storage write calls with `local` once the current event is handled.
+    /// The mounted claims' pushes, which a storage write calls with `local` from the effect queue.
     watchers: RefCell<Vec<Weak<Push>>>,
     telling: Cell<bool>,
 }
 
 impl Reads {
-    /// Tells the mounted claims that the storage changed, outside every plugin callback; writes in one event tell once.
+    /// Tells the mounted claims that the storage changed. The plugins queue it after a write, so it is in order with
+    /// their other effects; it tells at the end of the queue, once for every write queued before then.
     fn changed(&self, tui: &Tui) {
         if self.telling.replace(true) {
             return;
