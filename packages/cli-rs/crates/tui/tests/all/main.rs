@@ -37,6 +37,7 @@ mod sessions;
 mod settings;
 mod shared_state;
 mod shell;
+mod sidebar;
 mod system;
 mod system_commands;
 mod tabs;

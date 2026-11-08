@@ -25,14 +25,20 @@ use super::session_list::dialog_theme;
 use crate::app::Tui;
 use crate::routes::Route;
 
-/// Registers `mcp.list` (`/mcps`) and its binding as `app.tsx:158,967-975` do.
+/// Registers `mcp.list` (`/mcps`) and its binding as `app.tsx:158,967-975` do. With a server's name as its input
+/// (the sidebar's MCP section), it opens on that server, and on its error when it failed.
 pub fn install(tui: &Rc<Tui>) {
-    let command = TuiCommand::new("mcp.list", bind!(tui, |tui, _, _| show(&tui)))
-        .bind(Bind::Off)
-        .title("MCP servers")
-        .group("Agent")
-        .palette()
-        .slash("mcps");
+    let weak = tui.weak();
+    let command = TuiCommand::new("mcp.list", move |input: Option<&str>, _| {
+        if let Some(tui) = weak.upgrade() {
+            show_server(&tui, input.map(str::to_owned), input.is_some());
+        }
+    })
+    .bind(Bind::Off)
+    .title("MCP servers")
+    .group("Agent")
+    .palette()
+    .slash("mcps");
     tui.keymap.install(
         "mcp",
         [
