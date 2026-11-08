@@ -7278,7 +7278,8 @@ body {
   --stats-text: #ffffff;
   --stats-muted: #d4d4d4;
   --stats-faint: #a3a3a3;
-  --stats-accent-text: #8190ff;
+  --stats-accent: #6b8fff;
+  --stats-accent-text: #6b8fff;
   --stats-theme-icon-active: #fafafa;
   --stats-bar-idle: #303030;
   --stats-dot: #303030;
@@ -7296,6 +7297,7 @@ body {
   --lab-usage-bar: #3a3a3a;
   --lab-usage-line: #a3a3a3;
   --lab-usage-band: #242424;
+  --lab-usage-active: #6b8fff;
 }
 
 [data-page="stats"][data-theme="dark"] [data-component="model-usage-chart"][data-variant="model-trend"],
@@ -7305,6 +7307,7 @@ body {
   --model-trend-bar: #3a3a3a;
   --model-trend-line: #a3a3a3;
   --model-trend-band: #242424;
+  --model-trend-active: #6b8fff;
 }
 
 [data-page="stats"][data-theme="dark"] [data-component="chart-tooltip"],
@@ -7447,7 +7450,8 @@ body {
     --stats-text: #ffffff;
     --stats-muted: #d4d4d4;
     --stats-faint: #a3a3a3;
-    --stats-accent-text: #8190ff;
+    --stats-accent: #6b8fff;
+    --stats-accent-text: #6b8fff;
     --stats-theme-icon-active: #fafafa;
     --stats-bar-idle: #303030;
     --stats-dot: #303030;
@@ -7464,6 +7468,7 @@ body {
     --lab-usage-bar: #3a3a3a;
     --lab-usage-line: #a3a3a3;
     --lab-usage-band: #242424;
+    --lab-usage-active: #6b8fff;
   }
 
   :root:not([data-stats-theme="light"])
@@ -7472,6 +7477,7 @@ body {
     --model-trend-bar: #3a3a3a;
     --model-trend-line: #a3a3a3;
     --model-trend-band: #242424;
+    --model-trend-active: #6b8fff;
   }
 
   :root:not([data-stats-theme="light"]) [data-page="stats"]:not([data-theme="light"]) [data-component="chart-tooltip"] {

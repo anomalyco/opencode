@@ -13,7 +13,7 @@
   --ink: var(--nav-menu-ink, light-dark(hsl(0 0% 8%), hsl(0 0% 95%)));
   --weak: var(--nav-menu-weak, light-dark(hsl(0 0% 40%), hsl(0 0% 64%)));
   --popover: var(--nav-menu-popover, light-dark(hsl(0 0% 100%), hsl(0 0% 10%)));
-  --link: var(--nav-menu-link, light-dark(#3b5cf6, #4f8bff));
+  --link: var(--nav-menu-link, light-dark(#3b5cf6, #6b8fff));
   --bar: var(--nav-menu-bar, light-dark(hsl(0 0% 40%), hsl(0 0% 62%)));
   --icon: var(--nav-menu-icon, light-dark(hsl(0 0% 40%), hsl(0 0% 56%)));
   --tint: color-mix(in srgb, var(--link) 10%, var(--popover));
@@ -295,7 +295,7 @@
   }
 
   &:focus-visible {
-    outline: 2px solid var(--nav-menu-link, light-dark(#3b5cf6, #4f8bff));
+    outline: 2px solid var(--nav-menu-link, light-dark(#3b5cf6, #6b8fff));
     outline-offset: 2px;
   }
 
@@ -433,7 +433,7 @@
   }
 
   :is([data-nav-logo], [data-nav-product], [data-nav-name]):focus-visible {
-    outline: 2px solid var(--nav-menu-link, light-dark(#3b5cf6, #4f8bff));
+    outline: 2px solid var(--nav-menu-link, light-dark(#3b5cf6, #6b8fff));
     outline-offset: 2px;
   }
 
