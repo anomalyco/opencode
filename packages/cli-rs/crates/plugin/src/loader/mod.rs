@@ -78,11 +78,21 @@ pub struct Loader<H: Host> {
     seen: RefCell<HashMap<String, Seen>>,
     /// The targets of the last reconcile, so a removed one leaves the registry whatever its status.
     listed: RefCell<Vec<String>>,
+    /// The last failure of each target since it last loaded, so a reconcile tells only of a new one.
+    failed: RefCell<HashMap<String, String>>,
 }
 
 impl<H: Host> Loader<H> {
     pub fn new(backend: Rc<dyn Backend<H>>, config_dir: PathBuf, cwd: PathBuf, configured: Vec<Configured>) -> Self {
-        Self { backend, config_dir, cwd, configured, seen: RefCell::default(), listed: RefCell::default() }
+        Self {
+            backend,
+            config_dir,
+            cwd,
+            configured,
+            seen: RefCell::default(),
+            listed: RefCell::default(),
+            failed: RefCell::default(),
+        }
     }
 
     /// The discovered directories, then the configured entries, merged by local path (TS `mergePluginTargets`:
@@ -160,6 +170,7 @@ impl<H: Host> Loader<H> {
             .collect::<Vec<_>>();
         for target in stale.into_iter().chain(removed) {
             self.seen.borrow_mut().remove(&target);
+            self.failed.borrow_mut().remove(&target);
             registry.unload(&target);
             registry.set_unloaded(&target, None);
             changed = true;
@@ -195,7 +206,7 @@ impl<H: Host> Loader<H> {
         let bytes = match std::fs::read(&file) {
             Ok(bytes) => bytes,
             Err(error) => {
-                return self.fail(registry, name, 0, format!("{}: {error}", file.display()));
+                return self.fail(host, registry, name, 0, format!("{}: {error}", file.display()));
             }
         };
         let mut hasher = DefaultHasher::new();
@@ -212,7 +223,7 @@ impl<H: Host> Loader<H> {
         });
         let (definition, error) = match loaded {
             Ok(loaded) => loaded,
-            Err(error) => return self.fail(registry, name, digest, error),
+            Err(error) => return self.fail(host, registry, name, digest, error),
         };
         log::info!("plugin {} loaded from {}", definition.id, file.display());
         let reload: Rc<RefCell<Option<String>>> = Rc::default();
@@ -233,16 +244,18 @@ impl<H: Host> Loader<H> {
             ..definition
         };
         if let Some(error) = registry.load(host, definition.external(name, failure)) {
-            return self.fail(registry, name, digest, error);
+            return self.fail(host, registry, name, digest, error);
         }
         self.seen.borrow_mut().insert(name.to_owned(), Seen { digest, reload });
+        self.failed.borrow_mut().remove(name);
         true
     }
 
     /// Records that the build of `target` failed: the running previous version, if any, keeps running and
-    /// reports the failure; otherwise the target is listed as failed.
-    fn fail(&self, registry: &Registry<H>, target: &str, digest: u64, error: String) -> bool {
+    /// reports the failure; otherwise the target is listed as failed. A new failure tells the host.
+    fn fail(&self, host: &H, registry: &Registry<H>, target: &str, digest: u64, error: String) -> bool {
         log::error!("plugin {target} failed to load: {error}");
+        let new = self.failed.borrow_mut().insert(target.to_owned(), error.clone()).as_ref() != Some(&error);
         let mut seen = self.seen.borrow_mut();
         match seen.get_mut(target) {
             Some(previous) => {
@@ -253,6 +266,10 @@ impl<H: Host> Loader<H> {
                 seen.insert(target.to_owned(), Seen { digest, reload: Rc::default() });
                 registry.set_unloaded(target, Some(Status::Failed(error)));
             }
+        }
+        drop(seen);
+        if new {
+            host.failed(target);
         }
         true
     }

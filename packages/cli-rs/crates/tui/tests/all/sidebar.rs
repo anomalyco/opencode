@@ -109,6 +109,68 @@ fn dismissing_the_card_stores_the_new_value() {
     assert!(written, "{:?}", storage.load(key, &Value::Null));
 }
 
+const VIEW: &str = "plugin.opencode.sidebar.mcp.view";
+const CARD: &str = "plugin.opencode.sidebar.footer.getting-started";
+
+impl Sidebar {
+    /// Writes `value` under `key` as another client does.
+    fn write(&self, key: &str, value: Value) {
+        let file = self.tui.storage().unwrap().file(key).unwrap();
+        opencode_local::storage::write_json_atomic(&file, &value).unwrap();
+    }
+
+    /// Waits until `key` holds `value` on disk.
+    #[track_caller]
+    fn on_disk(&self, key: &str, value: Value) {
+        let storage = self.tui.storage().unwrap();
+        let written =
+            self.app.wait_until(support::WAIT, || storage.load(key, &Value::Null).ok() == Some(value.clone()));
+        assert!(written, "{key}: {:?}", storage.load(key, &Value::Null));
+    }
+}
+
+// Expected: folding the MCP list changes only `open` in the stored view, so a field another client stored there stays
+// (bigboi-1).
+#[test]
+fn a_fold_keeps_the_other_fields_of_the_view() {
+    let h = mount(&[], true);
+    h.write(VIEW, json!({ "open": true, "sibling": 1 }));
+    h.servers();
+    h.click("MCP");
+    h.wait_for("MCP (1 active, 2 errors)");
+    h.on_disk(VIEW, json!({ "open": false, "sibling": 1 }));
+}
+
+// Expected: another client's writes show in the sections, and a fold or a dismissal after them keeps what that client
+// stored.
+#[test]
+fn the_sections_take_in_another_clients_writes() {
+    let h = mount(&[], true);
+    h.servers();
+    h.write(VIEW, json!({ "open": false, "other": 2 }));
+    h.wait_for("MCP (1 active, 2 errors)");
+    h.click("MCP");
+    h.wait_for("sentry");
+    h.on_disk(VIEW, json!({ "open": true, "other": 2 }));
+    h.write(CARD, json!({ "seen": 3 }));
+    h.app.wait_until(std::time::Duration::from_millis(300), || false);
+    h.click("✕");
+    h.wait_gone("Getting started");
+    h.on_disk(CARD, json!({ "seen": 3, "dismissed": true }));
+}
+
+// Expected: quick writes to one key land on disk in the order they were made.
+#[test]
+fn quick_writes_land_in_order() {
+    let h = mount(&[], true);
+    for count in 0..40 {
+        h.tui.storage_write("plugin.test.count", &json!({ "count": count }).to_string()).unwrap();
+    }
+    h.on_disk("plugin.test.count", json!({ "count": 39 }));
+    h.app.wait_until(std::time::Duration::from_millis(200), || false);
+    h.on_disk("plugin.test.count", json!({ "count": 39 }));
+}
+
 // Expected: a mounted section listens to the settings until it unmounts, so mounting the sidebar's slots many times
 // leaves no listener behind.
 #[test]

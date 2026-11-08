@@ -61,10 +61,20 @@ pub trait Host: 'static {
     /// Tells the mounted claims that the plugins' storage changed ([`abi::Changed::local`]). Called from the effect
     /// queue, in order with the plugin's other effects.
     fn storage_changed(&self) {}
+    /// Sets `fields` in the object stored under storage key `key` and keeps its other fields; a host with storage
+    /// sets them in the latest stored object under the storage lock.
+    fn storage_merge(&self, key: &str, fields: serde_json::Map<String, serde_json::Value>) -> Result<(), String> {
+        let mut object = match self.storage_read(key).and_then(|json| serde_json::from_str(&json).ok()) {
+            Some(serde_json::Value::Object(object)) => object,
+            _ => serde_json::Map::new(),
+        };
+        object.extend(fields);
+        self.storage_write(key, &serde_json::Value::Object(object).to_string())
+    }
     /// Shows `toast`; with a session, it offers to open the session unless the session's family is on screen.
     fn toast(&self, _toast: &abi::Toast) {}
-    /// Says that external plugin `id` failed while it ran, after its claims drew empty. Called outside every plugin
-    /// callback.
+    /// Says that external plugin `id` failed: it did not load or set up (`id` is its target then), or it panicked
+    /// while it ran, after its claims drew empty. Called outside every plugin callback.
     fn failed(&self, id: &str) {
         self.toast(
             &abi::Toast::new(abi::Variant::Error, "Run /plugins to view details.")
@@ -372,6 +382,14 @@ impl<H: Host> abi::Host for Scoped<'_, H> {
         let Some(stored) = self.scope.stored(key) else { return };
         // The host shows it to reads at once; the claims hear of it in queue order.
         match self.host.storage_write(&stored, &value.to_string()) {
+            Ok(()) => self.defer(|host| host.storage_changed()),
+            Err(error) => log::warn!("storage {stored}: {error}"),
+        }
+    }
+
+    fn storage_merge(&self, key: &str, fields: serde_json::Map<String, serde_json::Value>) {
+        let Some(stored) = self.scope.stored(key) else { return };
+        match self.host.storage_merge(&stored, fields) {
             Ok(()) => self.defer(|host| host.storage_changed()),
             Err(error) => log::warn!("storage {stored}: {error}"),
         }
