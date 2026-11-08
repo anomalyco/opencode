@@ -1,4 +1,8 @@
 import { describe, expect, mock, test } from "bun:test"
+import { readdir, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import { buildOgWorker } from "../script/build-og-worker"
 import { isDataBypassPath, parsePath } from "../src/lib/data-path"
 import type { OgCard } from "../src/og/card"
 
@@ -11,11 +15,13 @@ const { labOgCard, modelOgCard, ogImageAlt, ogImageUrl, ogVersion } = await impo
 // `#resource` resolves to this same module, so take the real functions before replacing it.
 const resource = { ...(await import("../src/lib/resource.node")) }
 const renders: OgCard[] = []
+const failing = new Set<string>()
 const cached = new Map<string, Response>()
 mock.module("#resource", () => ({
   ...resource,
   renderOgCard: (card: OgCard) => {
     renders.push(card)
+    if (failing.has(card.path)) return Promise.reject(new Error("The renderer is down"))
     return resource.renderOgCard(card)
   },
   edgeCache: () => ({
@@ -171,11 +177,16 @@ describe("image URL", () => {
 
 describe("og.png response", () => {
   const card = modelOgCard(inkling)!
+  // A dev stage's origin: its cache entries must not land on production's keys.
+  const origin = "https://dev.opencode.ai"
+  const image = `${card.path}/og.png`
+  const banner = Bun.file(new URL("../public/banner.png", import.meta.url))
 
   // The first render compiles satori's, HarfBuzz's and resvg's Wasm in-process.
-  test("renders a 1200x630 PNG with a long cache for a versioned URL", async () => {
+  test("renders a 1200x630 PNG with a long cache for the current version", async () => {
     const response = await ogResponse({
-      path: card.path,
+      origin,
+      path: image,
       version: ogVersion(card),
       head: false,
       card: async () => card,
@@ -192,26 +203,68 @@ describe("og.png response", () => {
 
   test("any other version gets today's card with the pages' short cache, without a new render", async () => {
     const version = ogVersion(card)
-    await ogResponse({ path: card.path, version, head: false, card: async () => card })
+    await ogResponse({ origin, path: image, version, head: false, card: async () => card })
     const before = renders.length
     for (const other of ["random-1", "random-2", "../x", null]) {
-      const response = await ogResponse({ path: card.path, version: other, head: true, card: async () => card })
+      const response = await ogResponse({ origin, path: image, version: other, head: true, card: async () => card })
       expect(response.headers.get("Content-Type")).toBe("image/png")
       expect(response.headers.get("Cache-Control")).toBe("public, max-age=60, s-maxage=300, must-revalidate")
       expect(response.body).toBeNull()
     }
     expect(renders.length).toBe(before)
-    expect([...cached.keys()]).toEqual([`https://opencode.ai${card.path}/og.png?v=${version}`])
+    expect([...cached.keys()]).toEqual([`${origin}${image}?v=${version}`])
   }, 30_000)
 
-  test("falls back to the banner for a moment when a card fails or the page doesn't exist", async () => {
-    const banner = new Uint8Array(await Bun.file(new URL("../public/banner.png", import.meta.url)).arrayBuffer())
+  test("when a card fails to render, the banner stands in and is cached for a minute", async () => {
+    const lab = labOgCard(thinkingMachines)!
+    failing.add(lab.path)
+    const before = renders.length
+    for (const _ of [1, 2]) {
+      const response = await ogResponse({
+        origin,
+        path: `${lab.path}/og.png`,
+        version: ogVersion(lab),
+        head: false,
+        card: async () => lab,
+      })
+      expect(response.headers.get("Cache-Control")).toBe("public, max-age=60, s-maxage=60")
+      expect(new Uint8Array(await response.arrayBuffer())).toEqual(await banner.bytes())
+    }
+    // The second request is served from the cache, not another failed render.
+    expect(renders.length).toBe(before + 1)
+    expect(cached.has(`${origin}${lab.path}/og.png?v=${ogVersion(lab)}`)).toBe(true)
+  })
+
+  test("pages that don't exist or fail to load get the banner, uncached", async () => {
+    const keys = cached.size
     for (const load of [async () => undefined, () => Promise.reject(new Error("PlanetScale is down"))]) {
-      const response = await ogResponse({ path: card.path, version: "abc", head: false, card: load })
+      const response = await ogResponse({
+        origin,
+        path: "/data/nowhere/og.png",
+        version: "abc",
+        head: false,
+        card: load,
+      })
       expect(response.status).toBe(200)
       expect(response.headers.get("Content-Type")).toBe("image/png")
       expect(response.headers.get("Cache-Control")).toBe("public, max-age=60, s-maxage=60")
-      expect(new Uint8Array(await response.arrayBuffer())).toEqual(banner)
+      expect(new Uint8Array(await response.arrayBuffer())).toEqual(await banner.bytes())
     }
+    expect(cached.size).toBe(keys)
   })
+})
+
+describe("OG Worker build", () => {
+  // The deploy builds and uploads this; building it here fails the PR instead.
+  test("bundles the Worker with the Wasm and font modules it imports", async () => {
+    const out = path.join(tmpdir(), `stats-og-${process.pid}`)
+    await buildOgWorker(out)
+    const files = await readdir(out)
+    const imports = [...(await Bun.file(path.join(out, "index.mjs")).text()).matchAll(/from"\.\/([\w.-]+)"/g)].map(
+      (match) => match[1],
+    )
+    expect(imports.length).toBe(7)
+    expect(files.toSorted()).toEqual(["index.mjs", ...imports].toSorted())
+    await rm(out, { recursive: true, force: true })
+  }, 30_000)
 })

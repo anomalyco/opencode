@@ -75,6 +75,7 @@ const pageMiddleware = createMiddleware({
     if (!format) return
     if (format === "og")
       return ogResponse({
+        origin: url.origin,
         path,
         version: url.searchParams.get("v"),
         head: request.method === "HEAD",
