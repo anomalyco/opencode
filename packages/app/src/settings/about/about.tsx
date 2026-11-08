@@ -1,5 +1,5 @@
-import { createEffect, createResource, onCleanup } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createEffect, createMemo, createResource, createSignal, onCleanup, untrack } from "solid-js"
+import { writeClipboard } from "@opencode/session-ui/copy"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -10,6 +10,13 @@ import legal from "./legal.svg"
 import anomalyBrush from "./anomaly-brush.svg"
 import { AnimatedWordmark } from "./animated-wordmark"
 import { FALLBACK_OTHER_CONTRIBUTORS, loadOtherContributorCount } from "./contributors"
+import {
+  INITIAL_ABOUT_COPY_STATE,
+  selectAboutCopyView,
+  transitionAboutCopy,
+  type AboutCopyEffect,
+  type AboutCopyEvent,
+} from "./machine"
 
 const writers = [
   "thdxr",
@@ -36,9 +43,11 @@ export function SettingsAbout(props: { active: boolean }) {
   const language = useLanguage()
   const platform = usePlatform()
   const dialog = useDialog()
-  const [copy, setCopy] = createStore({ pending: false, copied: false, forceCopied: false })
+  const [copyState, setCopyState] = createSignal(INITIAL_ABOUT_COPY_STATE)
+  const copy = createMemo(() => selectAboutCopyView(copyState()))
   const version = () => platform.version ?? language.t("settings.about.devVersion")
   const versionLabel = () => language.t("settings.about.version", { version: version() })
+  let copyTimer: ReturnType<typeof setTimeout> | undefined
 
   const [otherContributors] = createResource(
     () => props.active || undefined,
@@ -46,33 +55,42 @@ export function SettingsAbout(props: { active: boolean }) {
     { initialValue: FALLBACK_OTHER_CONTRIBUTORS },
   )
 
-  createEffect(() => {
-    if (!copy.copied) return
+  const dispatchCopy = (event: AboutCopyEvent) =>
+    untrack(() => {
+      const previous = copyState()
+      const next = transitionAboutCopy(previous, event)
 
-    const close = setTimeout(() => setCopy("forceCopied", false), 2000)
-    const reset = setTimeout(() => setCopy("copied", false), 2120)
-
-    onCleanup(() => {
-      clearTimeout(close)
-      clearTimeout(reset)
+      if (next.state !== previous) setCopyState(next.state)
+      next.effects.forEach(runCopyEffect)
     })
-  })
 
-  const copyVersion = async () => {
-    if (copy.pending) return
+  function runCopyEffect(effect: AboutCopyEffect) {
+    if (effect.type === "timer.clear") return clearTimeout(copyTimer)
 
-    setCopy({ pending: true, copied: false, forceCopied: false })
+    if (effect.type === "timer.schedule") {
+      clearTimeout(copyTimer)
+      copyTimer = setTimeout(() => dispatchCopy({ type: effect.event, attempt: effect.attempt }), effect.delayMs)
 
-    await (platform.writeClipboardText?.(versionLabel()) ?? navigator.clipboard.writeText(versionLabel()))
-      .then(() => setCopy({ copied: true, forceCopied: true }))
-      .catch(() =>
-        showToast({
-          variant: "error",
-          title: language.t("settings.about.copyVersionFailed"),
-        }),
-      )
-      .finally(() => setCopy("pending", false))
+      return
+    }
+
+    if (effect.type === "toast.failed")
+      return showToast({ variant: "error", title: language.t("settings.about.copyVersionFailed") })
+
+    const attempt = effect.attempt
+    // Plain-HTTP LAN origins have no `navigator.clipboard`; `writeClipboard` falls back to a selected textarea there.
+    void Promise.try(() =>
+      platform.writeClipboardText ? platform.writeClipboardText(effect.text).then(() => true) : writeClipboard(effect.text),
+    ).then(
+      (written) => dispatchCopy({ type: written ? "copy.succeeded" : "copy.failed", attempt }),
+      () => dispatchCopy({ type: "copy.failed", attempt }),
+    )
   }
+
+  createEffect(() => {
+    if (!props.active) dispatchCopy({ type: "hidden" })
+  })
+  onCleanup(() => dispatchCopy({ type: "disposed" }))
 
   const credit = (name: string) => (
     <bdi dir="ltr">
@@ -107,16 +125,16 @@ export function SettingsAbout(props: { active: boolean }) {
       <div class="settings-about-intro">
         <div class="settings-about-version-line">
           <Tooltip
-            value={language.t(copy.copied ? "common.copied" : "ui.message.copy")}
+            value={language.t(copy().copied ? "common.copied" : "ui.message.copy")}
             placement="top"
-            forceOpen={copy.forceCopied ? true : undefined}
+            forceOpen={copy().forceOpen}
           >
             <button
               type="button"
               class="settings-about-version"
-              disabled={copy.pending}
-              aria-label={language.t(copy.copied ? "common.copied" : "ui.message.copy")}
-              onClick={() => void copyVersion()}
+              disabled={copy().disabled}
+              aria-label={language.t(copy().copied ? "common.copied" : "ui.message.copy")}
+              onClick={() => dispatchCopy({ type: "copy.requested", text: versionLabel() })}
             >
               <span>
                 {language.rich("settings.about.version", {

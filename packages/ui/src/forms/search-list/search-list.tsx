@@ -12,6 +12,7 @@ import {
 } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Icon } from "@opencode/ui/icon"
+import { MenuScroll } from "../../components/menu-scroll"
 import { TextInput } from "../text-input/text-input"
 import { createTypeahead } from "../typeahead/controller"
 import { searchListMove, searchListTarget } from "./navigation"
@@ -186,8 +187,9 @@ export function SearchList<T>(props: {
   createEffect(() => props.onActive?.(typeahead.activeItem()))
 
   // A new query starts from the top. Results that arrive later for the same query bring a chosen row back into view,
-  // but leave the list where the wheel put it while the first row is still the default.
+  // but leave the list where the wheel put it while the first row is still the default or the pointer took the row.
   let revealed = props.query
+  let pointed: string | undefined
 
   createEffect(
     on(
@@ -196,7 +198,7 @@ export function SearchList<T>(props: {
         const fresh = props.query !== revealed
         revealed = props.query
 
-        if (!fresh && typeahead.activeItem() === all[0]) return
+        if (!fresh && (typeahead.activeItem() === all[0] || activeKey() === pointed)) return
         const frame = requestAnimationFrame(reveal)
         onCleanup(() => cancelAnimationFrame(frame))
       },
@@ -204,7 +206,12 @@ export function SearchList<T>(props: {
     ),
   )
 
-  props.ref?.({ active: typeahead.activeItem, setActive: typeahead.setActive })
+  const choose = (key: string | undefined) => {
+    pointed = undefined
+    typeahead.setActive(key)
+  }
+
+  props.ref?.({ active: typeahead.activeItem, setActive: choose })
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.isComposing) return
@@ -231,7 +238,7 @@ export function SearchList<T>(props: {
     const target = all[step(from)]
 
     if (target === undefined) return
-    typeahead.setActive(props.key(target))
+    choose(props.key(target))
     reveal()
   }
 
@@ -253,7 +260,7 @@ export function SearchList<T>(props: {
     },
     onInput: (event) => {
       // A new query starts again from its first row.
-      typeahead.setActive(undefined)
+      choose(undefined)
       props.onQuery(event.currentTarget.value)
     },
     onKeyDown,
@@ -273,7 +280,9 @@ export function SearchList<T>(props: {
     },
     onMouseMove: (event) => {
       // A static cursor must not take the active row while the keyboard scrolls rows beneath it.
-      if (event.movementX !== 0 || event.movementY !== 0) typeahead.setActive(key)
+      if (event.movementX === 0 && event.movementY === 0) return
+      pointed = key
+      typeahead.setActive(key)
     },
     // Focus stays in the field.
     onMouseDown: (event) => event.preventDefault(),
@@ -307,10 +316,9 @@ export function SearchList<T>(props: {
           {(custom) => custom()(field)}
         </Show>
         <div data-slot="search-list-body" hidden={!open()}>
-          <div
+          <MenuScroll
             data-slot="search-list-scroll"
-            data-scrollable
-            ref={(element) => (viewport = element)}
+            viewportRef={(element) => (viewport = element)}
             onScroll={(event) => {
               edges()
               props.onScroll?.(event.currentTarget.scrollTop)
@@ -364,7 +372,7 @@ export function SearchList<T>(props: {
             <Show when={rows().length === 0}>
               <div data-slot="search-list-empty">{props.empty}</div>
             </Show>
-          </div>
+          </MenuScroll>
           <Show when={props.footer}>
             <div data-slot="search-list-footer">{props.footer}</div>
           </Show>

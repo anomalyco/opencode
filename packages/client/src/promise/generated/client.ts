@@ -269,6 +269,8 @@ import type {
   ExperimentalArtifactsDeleteOutput,
   ExperimentalArtifactsViewInput,
   ExperimentalArtifactsViewOutput,
+  ExperimentalJobListInput,
+  ExperimentalJobListOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1681,6 +1683,25 @@ export function make(options: ClientOptions) {
             requestOptions,
           ),
       },
+      job: {
+        list: (input?: ExperimentalJobListInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalJobListOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/job`,
+              query: {
+                sessionID: input?.["sessionID"],
+                kind: input?.["kind"],
+                status: input?.["status"],
+                descendants: input?.["descendants"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+      },
       migration: {
         v1: {
           status: (requestOptions?: RequestOptions) =>
@@ -2236,7 +2257,7 @@ export function make(options: ClientOptions) {
             path: `/api/skill`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401, 404],
+            declaredStatuses: [400, 401, 404, 503],
             empty: false,
           },
           requestOptions,

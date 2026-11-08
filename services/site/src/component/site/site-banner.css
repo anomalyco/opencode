@@ -1,0 +1,246 @@
+/* Settings › Announcement style "banner": a full-width blue bar above the page, matching the
+   footer's letters bar (site.css: 8px shorter than its 3.25rem height, blue, white 15px label and light
+   chevron; dark mode's blue darkened so white keeps 4.5:1). The host (Site's root, the product nav
+   demos) carries data-banner while it is on. --banner-height opens and closes it in 300ms and pushes
+   the page down; registered, so it animates and the host's fixed elements (--banner-offset) move with
+   the bar instead of jumping. Saved on, the pre-paint attribute opens it before first paint, with no
+   animation. */
+@property --banner-height {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+[data-banner-host] {
+  --banner-height: 0px;
+  --banner-offset: max(0px, calc(var(--banner-height) - var(--banner-scroll, 0px)));
+  transition: --banner-height 300ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+
+  &[data-banner] {
+    --banner-height: calc(2.75rem + env(safe-area-inset-top, 0px));
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+
+  > [data-component="announcement-banner"] {
+    /* The link blue in light mode; dark mode keeps the deeper light-mode blue, as the lighter dark
+       link blue gives white only 3:1. */
+    --bar-blue: light-dark(var(--link, #3b5cf6), #3b5cf6);
+    position: relative;
+    z-index: 11;
+    flex-shrink: 0;
+    height: var(--banner-height);
+    overflow: hidden;
+
+    a {
+      position: absolute;
+      inset-inline-start: 0;
+      inset-inline-end: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.625rem;
+      height: calc(2.75rem + env(safe-area-inset-top, 0px));
+      /* Room on both sides for the × at the right end, so the message stays centred. */
+      padding: env(safe-area-inset-top, 0px) 5rem 0;
+      background: var(--bar-blue);
+      font-family: var(--font-sans, "Inter", sans-serif);
+      font-size: var(--fs-ui);
+      font-weight: 500;
+      white-space: nowrap;
+      text-decoration: none;
+    }
+
+    [data-slot="message"] {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* "NEW", the bar's highlight: the bar's blue in mono caps on a solid highlight-white badge,
+       padded like the chip style. */
+    [data-slot="new"] {
+      flex-shrink: 0;
+      padding: 4px 8px;
+      background: var(--bar-highlight);
+      color: var(--bar-blue);
+      font: 700 12px/1 var(--font-mono, monospace);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    /* × at the right end, centred on the GitHub mark's vertical line below it: the fixed corner
+       mark beside the sidebar and on bare pages; on small screens the top bar's mark, left of the
+       menu button (the button ends 2rem in from the page edge, the mark sits 0.5rem before it).
+       A 40px target, in the body colour (the shared styles below). */
+    [data-slot="dismiss"] {
+      position: absolute;
+      --dismiss-centre: calc(var(--github-right, 1.5rem) + var(--github-size, 2.5rem) / 2);
+      inset-inline-end: calc(var(--page-offset, 0px) + var(--dismiss-centre) - 20px);
+      bottom: 6px;
+      z-index: 1;
+      display: grid;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+    }
+
+    /* Settings › Banner label "plain": "NEW" in plain highlight caps at the message's cap height
+       (16px OpenTUI Mono caps are 11px tall, the same as the message's Inter caps at 15px, and sit on
+       its baseline), no badge; the gap stays the badge version's, without the badge's padding. */
+    &[data-label="plain"] [data-slot="new"] {
+      padding: 0;
+      background: none;
+      color: var(--bar-highlight);
+      font-size: var(--fs-read);
+      letter-spacing: 0.06em;
+    }
+  }
+}
+
+/* The two blue bars, the announcement banner above and the footer's letters bar (site.css), share
+   one look: a highlight in solid white ("NEW", "Like letters?") and a body at 92% white (the message
+   or the font line, with its chevron, and the banner's ×), 4.5:1 on the blue. Hover and keyboard
+   focus bring the body to full white in 150ms and nudge the chevron 2px right; focus adds a white
+   ring inset in the bar; a press dims the blue a little. */
+:is([data-component="letters-bar"], [data-component="announcement-banner"]) {
+  --bar-highlight: #fff;
+  --bar-body: rgb(255 255 255 / 0.92);
+
+  a {
+    color: var(--bar-highlight);
+  }
+
+  [data-slot="body"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+    color: var(--bar-body);
+    transition: color 150ms ease;
+  }
+
+  /* The home announcement's light chevron (icons.tsx), drawn for 13px text, scaled to the 15px
+     text (10/13 em) with its stroke kept at 1px. */
+  [data-slot="chevron-right"] {
+    flex-shrink: 0;
+    width: calc(1em * 10 / 13);
+    height: calc(1em * 10 / 13);
+    transition: translate 150ms var(--ease-out, ease-out);
+
+    path {
+      vector-effect: non-scaling-stroke;
+    }
+  }
+
+  [data-slot="dismiss"] {
+    color: var(--bar-body);
+    transition: color 150ms ease;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    a:hover [data-slot="body"],
+    [data-slot="dismiss"]:hover {
+      color: var(--bar-highlight);
+    }
+
+    a:hover [data-slot="chevron-right"] {
+      translate: calc(2px * var(--x-dir, 1)) 0;
+    }
+  }
+
+  a:focus-visible [data-slot="body"],
+  [data-slot="dismiss"]:focus-visible {
+    color: var(--bar-highlight);
+  }
+
+  a:focus-visible [data-slot="chevron-right"] {
+    translate: calc(2px * var(--x-dir, 1)) 0;
+  }
+
+  a:focus-visible {
+    outline: 2px solid var(--bar-highlight);
+    outline-offset: -6px;
+  }
+
+  [data-slot="dismiss"]:focus-visible {
+    outline: 2px solid var(--bar-highlight);
+    outline-offset: -8px;
+  }
+
+  a:active {
+    background-color: color-mix(in srgb, var(--bar-blue) 90%, #000);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="body"],
+    [data-slot="chevron-right"],
+    [data-slot="dismiss"] {
+      transition: none;
+    }
+  }
+}
+
+/* Small screens: the content starts on the page edge and stops short of the ×, which moves over
+   the top bar's GitHub mark (bare pages keep the corner mark). */
+@media (max-width: 60rem) {
+  [data-banner-host] > [data-component="announcement-banner"] a {
+    justify-content: flex-start;
+    padding-inline-start: var(--edge, 1.5rem);
+    padding-inline-end: calc(var(--edge, 1.5rem) + 5.5rem);
+  }
+
+  [data-site]:not([data-bare]) > [data-component="announcement-banner"] [data-slot="dismiss"] {
+    --dismiss-centre: calc(var(--edge) + env(safe-area-inset-right, 0px) + 3.375rem);
+  }
+}
+
+/* Phones and tablets (up to 960px): the message keeps all its words, on up to two lines in a taller
+   bar (3.75rem, the same height however long the message, so opening and closing push the page by
+   one fixed amount). A Design mode message too long even for two lines ends in an ellipsis. */
+@media (max-width: 60rem) {
+  [data-banner-host][data-banner] {
+    --banner-height: calc(3.75rem + env(safe-area-inset-top, 0px));
+  }
+
+  [data-banner-host] > [data-component="announcement-banner"] {
+    a {
+      height: calc(3.75rem + env(safe-area-inset-top, 0px));
+      white-space: normal;
+      line-height: 1.3;
+    }
+
+    [data-slot="message"] {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+    }
+
+    [data-slot="dismiss"] {
+      bottom: calc((3.75rem - 40px) / 2);
+    }
+  }
+}
+
+/* Phones: the message drops its link text ("See what's new in 2.2"; the whole bar is the link) and
+   the × moves to the bar's end, so two lines hold the longer translations too. */
+@media (max-width: 40rem) {
+  [data-banner-host] > [data-component="announcement-banner"] {
+    a {
+      padding-inline-end: calc(var(--edge, 1.5rem) + 1.75rem);
+    }
+
+    [data-slot="link-text"] {
+      display: none;
+    }
+  }
+
+  [data-site]:not([data-bare]) > [data-component="announcement-banner"] [data-slot="dismiss"][data-slot] {
+    inset-inline-end: calc(var(--edge, 1.5rem) - 12px);
+  }
+}

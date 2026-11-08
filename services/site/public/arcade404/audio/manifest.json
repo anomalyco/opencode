@@ -1,0 +1,173 @@
+{
+  "_note": "Placeholder sounds built from Kenney CC0 samples, BigSoundBank CC0 floppy recordings, the OpenCode 2.0 startup recipes and synthesis while ElevenLabs credits were unavailable. Each sound's top-level files are option 1 (the default); sounds with alternatives list them all, option 1 first, in variants. Swap for the ElevenLabs versions later (flow cbE44lmYNqiwvWHn6I85). Prefer .webm (Opus); .mp3 is the fallback. For a gapless ambience loop, decode with Web Audio (AudioBufferSourceNode.loop = true) rather than <audio loop>.",
+  "sounds": {
+    "ambience": {
+      "files": {
+        "webm": "/arcade404/audio/ambience.webm",
+        "mp3": "/arcade404/audio/ambience.mp3"
+      },
+      "duration": 28.0,
+      "loop": true,
+      "channels": 2,
+      "volume": 0.5,
+      "loudness_lufs": -28.0,
+      "source": "Synthesised (room tone, mains hum, fluorescent buzz, wind, distant bleeps) + creaks from Kenney RPG Audio",
+      "licence": "Synthesised: original work; creaks: Kenney (kenney.nl), CC0 1.0",
+      "placeholder": true
+    },
+    "coin-pickup": {
+      "files": {
+        "webm": "/arcade404/audio/coin-pickup-slide.webm",
+        "mp3": "/arcade404/audio/coin-pickup-slide.mp3"
+      },
+      "duration": 1.204,
+      "loop": false,
+      "channels": 1,
+      "volume": 0.7,
+      "loudness_lufs": -18.0,
+      "source": "Kenney RPG Audio (handleCoins2), Casino Audio (chips-collide-3), Impact Sounds (footstep_concrete_002), Interface Sounds (scratch_004) + synthesised scrape and coin ring",
+      "licence": "Kenney (kenney.nl), CC0 1.0",
+      "placeholder": true,
+      "variants": [
+        {
+          "id": "coin-pickup-slide",
+          "label": "Slide across dusty floor, then clink",
+          "files": {
+            "webm": "/arcade404/audio/coin-pickup-slide.webm",
+            "mp3": "/arcade404/audio/coin-pickup-slide.mp3"
+          },
+          "duration": 1.274,
+          "loudness_lufs": -18.5,
+          "source": "Synthesised decelerating dusty slide + Kenney Impact Sounds (footstep_concrete_003/004, impactMetal_light_002), Casino Audio (chips-collide-2)",
+          "licence": "Kenney (kenney.nl), CC0 1.0"
+        }
+      ]
+    },
+    "coin-insert": {
+      "files": {
+        "webm": "/arcade404/audio/coin-insert.webm",
+        "mp3": "/arcade404/audio/coin-insert.mp3"
+      },
+      "duration": 1.327,
+      "loop": false,
+      "channels": 1,
+      "volume": 0.8,
+      "loudness_lufs": -19.7,
+      "source": "Kenney Impact Sounds (impactMetal_light_003, impactTin_medium, impactMetal_medium_001), Casino Audio (chips-collide-1), RPG Audio (handleCoins, metalLatch), Sci-fi Sounds (impactMetal_004) + synthesised coin ring and thump",
+      "licence": "Kenney (kenney.nl), CC0 1.0",
+      "placeholder": true
+    },
+    "coin-reject": {
+      "files": {
+        "webm": "/arcade404/audio/coin-reject.webm",
+        "mp3": "/arcade404/audio/coin-reject.mp3"
+      },
+      "duration": 1.495,
+      "loop": false,
+      "channels": 1,
+      "volume": 0.8,
+      "loudness_lufs": -18.4,
+      "source": "Kenney Impact Sounds (impactPlate_light_003, impactMetal_light_002, impactTin_medium), RPG Audio (metalLatch) + synthesised coin ring",
+      "licence": "Kenney (kenney.nl), CC0 1.0",
+      "placeholder": true
+    },
+    "power-up": {
+      "files": {
+        "webm": "/arcade404/audio/power-up.webm",
+        "mp3": "/arcade404/audio/power-up.mp3"
+      },
+      "duration": 3.57,
+      "loop": false,
+      "channels": 1,
+      "volume": 0.7,
+      "loudness_lufs": -18.6,
+      "source": "Kenney RPG Audio (metalClick), UI Audio (click3), Sci-fi Sounds (spaceEngineLow_000) + synthesised CRT thump, degauss, 15.7 kHz whine, fan and hum",
+      "licence": "Kenney (kenney.nl), CC0 1.0",
+      "placeholder": true
+    },
+    "glitch": {
+      "files": {
+        "webm": "/arcade404/audio/glitch.webm",
+        "mp3": "/arcade404/audio/glitch.mp3"
+      },
+      "duration": 0.977,
+      "loop": false,
+      "channels": 1,
+      "volume": 0.6,
+      "loudness_lufs": -18.0,
+      "source": "Kenney Interface Sounds (glitch_001-004) + synthesised static, crackle and CRT switch-off",
+      "licence": "Kenney (kenney.nl), CC0 1.0",
+      "placeholder": true
+    },
+    "boot": {
+      "files": {
+        "webm": "/arcade404/audio/boot-post.webm",
+        "mp3": "/arcade404/audio/boot-post.mp3"
+      },
+      "duration": 4.98,
+      "loop": false,
+      "channels": 1,
+      "volume": 0.5,
+      "loudness_lufs": -18.0,
+      "source": "Kenney UI Audio (click2/4/5, mouseclick1), Sci-fi Sounds (computerNoise_001) + synthesised beeps and disk-seek chirps",
+      "licence": "Kenney (kenney.nl), CC0 1.0",
+      "placeholder": true,
+      "variants": [
+        {
+          "id": "boot-post",
+          "label": "1980s PC POST: beep, fan, floppy seek",
+          "files": {
+            "webm": "/arcade404/audio/boot-post.webm",
+            "mp3": "/arcade404/audio/boot-post.mp3"
+          },
+          "duration": 5.27,
+          "loudness_lufs": -18.0,
+          "source": "Floppy head seeks: BigSoundBank 1396 (3.5-inch floppy reading, 4.58-7.98 s, the region the OpenCode article uses); power switch: Kenney RPG Audio (metalClick); synthesised fan, hum, drive spin-up and PC-speaker beep",
+          "licence": "BigSoundBank, Joseph Sardin, CC0 1.0 (bigsoundbank.com/licenses.html); Kenney (kenney.nl), CC0 1.0; rest Synthesised: original work"
+        }
+      ]
+    },
+    "start": {
+      "files": {
+        "webm": "/arcade404/audio/start.webm",
+        "mp3": "/arcade404/audio/start.mp3"
+      },
+      "duration": 2.366,
+      "loop": false,
+      "channels": 1,
+      "volume": 0.6,
+      "loudness_lufs": -18.0,
+      "source": "Synthesised 8-bit pulse/triangle arpeggio",
+      "licence": "Synthesised: original work, no third-party material",
+      "placeholder": true
+    },
+    "menu-move": {
+      "files": {
+        "webm": "/arcade404/audio/menu-move.webm",
+        "mp3": "/arcade404/audio/menu-move.mp3"
+      },
+      "duration": 0.068,
+      "loop": false,
+      "channels": 1,
+      "volume": 0.35,
+      "loudness_lufs": -19.3,
+      "source": "Synthesised 8-bit pulse blip",
+      "licence": "Synthesised: original work, no third-party material",
+      "placeholder": true
+    },
+    "menu-select": {
+      "files": {
+        "webm": "/arcade404/audio/menu-select.webm",
+        "mp3": "/arcade404/audio/menu-select.mp3"
+      },
+      "duration": 0.185,
+      "loop": false,
+      "channels": 1,
+      "volume": 0.4,
+      "loudness_lufs": -18.0,
+      "source": "Synthesised 8-bit two-tone pulse blip",
+      "licence": "Synthesised: original work, no third-party material",
+      "placeholder": true
+    }
+  }
+}

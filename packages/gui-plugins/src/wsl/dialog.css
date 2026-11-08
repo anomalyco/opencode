@@ -187,12 +187,12 @@
   width: 100%;
 }
 
-.settings-wsl-distro-group [data-slot="radio-v2-items"] {
+.settings-wsl-distro-group[data-component="radio-v2"] [data-slot="radio-v2-items"] {
   width: 100%;
   gap: 0;
 }
 
-.settings-wsl-distro-row {
+.settings-wsl-distro-row[data-slot="radio-v2-item"] {
   box-sizing: border-box;
   width: 100%;
   min-height: 62px;
@@ -375,7 +375,7 @@
   width: 100%;
 }
 
-.settings-wsl-catalog-row {
+.settings-wsl-catalog-row[data-slot="radio-v2-item"] {
   min-height: 48px;
 }
 

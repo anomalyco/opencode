@@ -2,13 +2,13 @@ import { Schema } from "effect"
 import { LLM } from "@opencode/schema/llm"
 import { ContentBlockID, ToolCallID } from "./ids.js"
 import {
+  AssistantMessage,
   Message,
   CompactionPart,
   ToolCallPart,
   ToolOutput,
   ToolResultPart,
   ToolResultValue,
-  type ContentPart,
 } from "./messages.js"
 import { ProviderMetadata } from "./options.js"
 import { Media } from "../media.js"
@@ -290,7 +290,7 @@ export const Finish = Schema.Struct({
   reason: FinishReasonDetails,
   usage: Schema.optional(Usage),
   /** The final assistant message, set by `ai.stream` and `ai.loop`. */
-  message: Schema.optional(Message),
+  message: Schema.optional(AssistantMessage),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.Finish" })
 export type Finish = Schema.Schema.Type<typeof Finish>
@@ -453,7 +453,7 @@ interface ToolInputAssembly {
 
 interface ResponseState {
   readonly events: LLMEvent[]
-  readonly message: Message
+  readonly message: AssistantMessage
   readonly usage?: Usage
   readonly finishReason?: FinishReasonDetails
   readonly textParts: Readonly<Record<string, ContentAssembly>>
@@ -485,18 +485,20 @@ const appendEvent = (state: ResponseState, event: LLMEvent): ResponseState => {
 }
 
 type ContentKind = "text" | "reasoning"
+type AssistantPart = AssistantMessage["content"][number]
 
-const contentPart = (type: ContentKind, text: string, providerMetadata: ProviderMetadata | undefined): ContentPart =>
+const contentPart = (type: ContentKind, text: string, providerMetadata: ProviderMetadata | undefined): AssistantPart =>
   providerMetadata === undefined ? { type, text } : { type, text, providerMetadata }
 
-const contentWith = (state: ResponseState, content: ReadonlyArray<ContentPart>): ResponseState => ({
+const contentWith = (state: ResponseState, content: ReadonlyArray<AssistantPart>): ResponseState => ({
   ...state,
   message: Message.assistant(content),
 })
 
-const appendContent = (state: ResponseState, part: ContentPart) => contentWith(state, [...state.message.content, part])
+const appendContent = (state: ResponseState, part: AssistantPart) =>
+  contentWith(state, [...state.message.content, part])
 
-const replaceContent = (state: ResponseState, index: number, part: ContentPart) =>
+const replaceContent = (state: ResponseState, index: number, part: AssistantPart) =>
   contentWith(
     state,
     state.message.content.map((item, itemIndex) => (itemIndex === index ? part : item)),
@@ -599,7 +601,7 @@ const reduceToolInputEnd = (state: ResponseState, event: ToolInputEnd): Response
   }
 }
 
-const toolCallContent = (event: ToolCall): ContentPart =>
+const toolCallContent = (event: ToolCall): AssistantPart =>
   ToolCallPart.make({
     id: event.id,
     name: event.name,
@@ -609,7 +611,7 @@ const toolCallContent = (event: ToolCall): ContentPart =>
     ...(event.providerMetadata === undefined ? {} : { providerMetadata: event.providerMetadata }),
   })
 
-const toolResultContent = (event: ToolResult): ContentPart =>
+const toolResultContent = (event: ToolResult): AssistantPart =>
   ToolResultPart.make({
     id: event.id,
     name: event.name,
@@ -669,7 +671,7 @@ const reduceResponseState = (state: ResponseState, event: LLMEvent): ResponseSta
 }
 
 export class LLMResponse extends Schema.Class<LLMResponse>("LLM.Response")({
-  message: Message,
+  message: AssistantMessage,
   events: Schema.Array(LLMEvent),
   usage: Schema.optional(Usage),
   finishReason: FinishReasonDetails,

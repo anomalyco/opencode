@@ -2,7 +2,7 @@ import { expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import {
   ai,
-  type ContentPart,
+  type AssistantMessage,
   type FinishReason,
   type LanguageModel,
   type LLM,
@@ -66,10 +66,8 @@ export const weatherToolLoopRequest = (input: {
     system: input.system ?? "Use the get_weather tool, then answer in one short sentence.",
     prompt: "What is the weather in Paris?",
     cache: "none",
-    generation:
-      input.temperature === false
-        ? { maxTokens: input.maxTokens ?? 80 }
-        : { maxTokens: input.maxTokens ?? 80, temperature: input.temperature ?? 0 },
+    maxTokens: input.maxTokens ?? 80,
+    temperature: input.temperature === false ? undefined : (input.temperature ?? 0),
   })
 
 export const goldenWeatherToolLoopRequest = (input: {
@@ -154,7 +152,7 @@ const encryptedReasoningOptions = {
 
 type AssistantTextExpectation = string | RegExp
 
-type UserStep = { readonly type: "user"; readonly content: Message.ContentInput }
+type UserStep = { readonly type: "user"; readonly content: Message.UserContentInput }
 type AssistantStep = {
   readonly type: "assistant"
   readonly text?: AssistantTextExpectation
@@ -171,7 +169,7 @@ type AssistantStep = {
 }
 type ConversationStep = UserStep | AssistantStep
 
-const user = (content: Message.ContentInput): ConversationStep => ({ type: "user", content })
+const user = (content: Message.UserContentInput): ConversationStep => ({ type: "user", content })
 
 const assistant = {
   expectText: (
@@ -213,7 +211,7 @@ const assertAssistantToolCall = (response: LLMResponse, expected: NonNullable<As
 // encrypted reasoning + text, text, or tool call. Keep mixed interleavings in
 // focused protocol tests where event order can be asserted directly.
 const assistantMessageFromResponse = (response: LLMResponse, step: AssistantStep) => {
-  const content: ContentPart[] = []
+  const content: Array<AssistantMessage["content"][number]> = []
   if (step.reasoning === "openai-encrypted") {
     const reasoning = response.events.find(
       (event): event is Extract<LLMEvent, { readonly type: "reasoning-end" }> =>
@@ -250,7 +248,7 @@ const runGeneratedConversation = (context: GoldenScenarioContext, steps: Readonl
           tools: step.tools,
           toolChoice: step.toolChoice,
           providerOptions: step.providerOptions,
-          generation: generation(context, step.maxTokens ?? context.maxTokens ?? 80),
+          ...generation(context, step.maxTokens ?? context.maxTokens ?? 80),
         }),
       )
       if (step.text !== undefined) assertAssistantText(response.text, step.text)
@@ -317,7 +315,7 @@ const runImageToolResultScenario = (context: GoldenScenarioContext) =>
         model: context.model,
         system: "Read images carefully. Reply only with the visible text, lowercase, no punctuation.",
         cache: "none",
-        generation: generation(context, context.maxTokens ?? 40),
+        ...generation(context, context.maxTokens ?? 40),
         messages: [
           Message.user("Use the read_screenshot tool, then reply with the words shown."),
           Message.assistant([{ type: "tool-call", id: "call_screenshot_1", name: screenshotToolName, input: {} }]),

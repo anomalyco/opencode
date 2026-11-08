@@ -38,7 +38,9 @@ story("cycles full prompts with plain arrows without opening the picker", async 
   await input.press("ArrowUp")
   await input.press("ArrowUp")
   await expect(input).toHaveText("Review the composer layout\nKeep keyboard navigation accessible")
-  await input.fill("")
+  // A history step places the caret a frame later. Keys flush it first; a fill's direct selection would lose to it.
+  await input.press("ControlOrMeta+a")
+  await input.press("Delete")
   await input.press("ArrowUp")
   await expect(input).toHaveText("Explain the latest changes")
   await expect(component.getByRole("img", { name: "layout.png", exact: true })).toHaveCount(0)
@@ -60,7 +62,8 @@ story("cycles full prompts with plain arrows without opening the picker", async 
   await input.press("ArrowUp")
   await expect(input).toHaveText("R!eview the composer layout\nKeep keyboard navigation accessible")
 
-  await input.fill("")
+  await input.press("ControlOrMeta+a")
+  await input.press("Delete")
   await input.press("ArrowUp")
   await expect(input).toHaveText("Explain the latest changes")
   await input.press("Enter")
@@ -70,7 +73,8 @@ story("cycles full prompts with plain arrows without opening the picker", async 
   await expect(input).toHaveText("Explain the latest changes")
   await expect(options).toHaveCount(0)
 
-  await input.fill("!")
+  await input.press("ControlOrMeta+a")
+  await input.press("!")
   await expect(input).toBeEmpty()
   await input.press("ArrowUp")
   await expect(input).toHaveText("bun typecheck")
@@ -110,7 +114,7 @@ story(
     await expect(component.getByRole("option", { selected: true })).toHaveText("Explain the latest changes")
     await expect(
       component.getByRole("option", { name: "Explain the latest changes", exact: true }).locator("bdi"),
-    ).toHaveCSS("font-weight", "400")
+    ).toHaveCSS("font-weight", "440")
     await search.press("ArrowDown")
     await expect(component.getByRole("option", { selected: true })).toHaveText(
       "Review the composer layout Keep keyboard navigation accessible",
@@ -191,6 +195,30 @@ story(
     await expect(composer).toHaveCSS("height", `${restoredHeight}px`)
     await expect(component.getByRole("img", { name: "layout.png", exact: true })).toBeVisible()
     await expect(component.getByText("Keep the search separate from the draft", { exact: true })).toBeVisible()
+
+    // A click elsewhere cancels the preview too; it used to leave the previewed prompt in place of the draft.
+    await input.press("Shift+ArrowUp")
+    await expect(input).toHaveText("Explain the latest changes")
+    await page.mouse.click(1, 1)
+    await expect(options).toHaveCount(0)
+    await expect(input).toBeEmpty()
+    await expect(component.getByRole("img", { name: "layout.png", exact: true })).toBeVisible()
+    await expect(component.getByText("Keep the search separate from the draft", { exact: true })).toBeVisible()
+
+    // A click into the draft keeps the previewed prompt to edit.
+    await input.press("Shift+ArrowUp")
+    await expect(search).toBeFocused()
+    await input.click()
+    await expect(options).toHaveCount(0)
+    await expect(input).toHaveText("Explain the latest changes")
+
+    // Opening the file picker while browsing keeps the way back to the draft; it used to end browsing.
+    await input.fill("")
+    await input.press("ArrowUp")
+    await expect(input).toHaveText("Explain the latest changes")
+    await input.press("ControlOrMeta+u")
+    await input.press("ArrowDown")
+    await expect(input).toBeEmpty()
   },
 )
 
@@ -412,6 +440,9 @@ for (const direction of ["ltr", "rtl"]) {
         await expect(add).toBeInViewport()
         await add.click()
         await expect(page.getByRole("menuitem", { name: "Images and files" })).toBeVisible()
+        // The menu takes focus a task after it opens. Closed before that, it returns focus to the trigger later still,
+        // taking it from the prompt this test fills next.
+        await expect(page.getByRole("menu")).toBeFocused()
         await page.keyboard.press("Escape")
         await expect(add).toBeFocused()
         expect(await add.boundingBox()).toEqual(fixedAdd)
@@ -458,6 +489,8 @@ story("keeps toolbar focus rings whole and keyboard-only", async ({ mount, page 
   // A menu the pointer opened returns focus to its trigger without a ring, even when Escape closes it.
   await variant.click()
   await expect(page.getByRole("menuitemradio", { name: "high", exact: true })).toBeVisible()
+  // The menu takes focus a task after it opens; an Escape before that rings the trigger, which still holds focus.
+  await expect(page.getByRole("menu")).toBeFocused()
   await page.keyboard.press("Escape")
   await expect(variant).toBeFocused()
   await expect(variant).toHaveCSS("outline-style", "none")

@@ -1,7 +1,6 @@
-import { batch, createMemo, createSignal, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
-import { pluginEnabled, runsOn, type Bridge, type Entry } from "@opencode/plugin/gui/host"
+import { createMemo, createSignal, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
+import { runsOn, type Bridge, type Entry } from "@opencode/plugin/gui/host"
 import { builtins } from "./builtins"
-import { createInstalled } from "./installed"
 import { PluginGuiLoader, type PluginGui } from "./plugins"
 import { createMenubarItems, MenubarItemsProvider } from "./menubar-items"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -9,7 +8,7 @@ import { PluginHostProvider, usePluginHost } from "./host"
 import { createIpcClients } from "./ipc"
 import { createPluginAttachment, createHostApis, PluginAttachmentProvider, type HostApis } from "./host-apis"
 import { PluginCommands } from "./commands"
-import { PluginStyles } from "./render"
+import { PluginStyles, PluginThemes } from "./render"
 import { PluginServersProvider } from "./servers"
 import { PluginServerEndpoints } from "./server-shell"
 import { createContext, useContext } from "solid-js"
@@ -48,43 +47,30 @@ export function PluginRoot(props: ParentProps) {
   const menubar = createMenubarItems(bridge)
   const ipcs = createIpcClients(bridge)
   onCleanup(ipcs.dispose)
-  const installed = createInstalled(bridge)
 
   const os = platform.platform === "desktop" ? platform.os : undefined
 
   const localBuiltins = builtins.filter((definition) => runsOn(definition, os))
 
-  // The GUIs of the plugins on the app's own server, as main sends them.
-  const [plugins, setPlugins] = createSignal<readonly PluginGui[]>([])
-  // Plugins whose GUI cannot load because a built-in claims the id, as main reports them; Extensions › Plugins shows
-  // them.
-  const [reserved, setReserved] = createSignal<readonly string[]>([])
+  // The GUIs of the plugins on the app's own server, as main sends them, and the plugins whose GUI cannot load because a
+  // built-in claims the id, which Extensions › Plugins shows. Settled once the loader first publishes, even empty after
+  // a failure. The web runs built-ins only.
+  const [loaded, setLoaded] = createSignal<{
+    settled: boolean
+    plugins: readonly PluginGui[]
+    reserved: readonly string[]
+  }>({ settled: !bridge, plugins: [], reserved: [] })
 
   // The same definitions in the same order are no change, so a refetch that found nothing new restarts nothing.
   const definitions = createMemo<readonly Entry[]>(
-    () => [...localBuiltins, ...plugins().map((plugin) => plugin.definition)],
+    () => [...localBuiltins, ...loaded().plugins.map((plugin) => plugin.definition)],
     [],
     {
       equals: (a, b) => a.length === b.length && a.every((definition, index) => definition === b[index]),
     },
   )
 
-  // Only enable preferences cross this boundary.
-  const disabled = createMemo(() => {
-    const state = installed.enableState()
-
-    if (!state) return undefined
-
-    return new Set(
-      definitions().flatMap((definition) =>
-        pluginEnabled({ id: definition.id, builtin: builtins.some((builtin) => builtin.id === definition.id) }, state)
-          ? []
-          : [definition.id],
-      ),
-    )
-  })
-
-  const failed = (id: string) => installed.list().some((item) => item.id === id && item.error !== undefined)
+  const builtinIds = new Set(builtins.map((builtin) => builtin.id))
 
   return (
     <HostApisContext.Provider value={apis}>
@@ -92,33 +78,32 @@ export function PluginRoot(props: ParentProps) {
         value={
           bridge && {
             bridge,
-            set: (next, ids) =>
-              batch(() => {
-                setPlugins(next)
-                setReserved(ids)
-              }),
-            reserved,
+            set: (plugins, reserved) => setLoaded({ settled: true, plugins, reserved }),
+            reserved: () => loaded().reserved,
           }
         }
       >
         <PluginHostProvider
           definitions={definitions}
-          disabled={disabled}
+          bridge={bridge}
+          builtins={builtinIds}
+          servers
           apis={apis.apis}
           whenMounted={apis.whenMounted}
           ipc={bridge ? (token) => ipcs.client(token) : undefined}
-          plugin={(id) => plugins().find((plugin) => plugin.definition.id === id)}
+          plugin={(id) => loaded().plugins.find((plugin) => plugin.definition.id === id)}
           generation={ipcs.generation}
-          failed={failed}
+          ipcFailed={ipcs.failed}
         >
           <PluginStyles />
+          <PluginThemes loaded={() => loaded().settled} />
           {PluginHotReload && (
             <Suspense>
               <PluginHotReload />
             </Suspense>
           )}
           <MenubarItemsProvider value={menubar}>
-            <PluginServersProvider failed={failed}>{props.children}</PluginServersProvider>
+            <PluginServersProvider>{props.children}</PluginServersProvider>
           </MenubarItemsProvider>
         </PluginHostProvider>
       </PluginsContext.Provider>

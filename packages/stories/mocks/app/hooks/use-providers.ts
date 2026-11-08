@@ -1,5 +1,12 @@
+import type { Accessor } from "solid-js"
+import { useServer } from "@/runtime/server/current"
+import { useProviders } from "../../../../app/src/providers/catalog/providers"
+
+export { popularProviders, syncWhileBooting } from "../../../../app/src/providers/catalog/providers"
+
+export { useStoryProviders as useProviders }
+
 const model_id = "claude-3-7-sonnet"
-export { popularProviders } from "@/providers/catalog/order"
 
 const provider = {
   id: "anthropic",
@@ -35,11 +42,17 @@ const catalog = [
   { id: "alibaba-coding-plan", name: "Alibaba Coding Plan", models: {} },
 ]
 
-export function useProviders() {
+function useStoryProviders(directory: Accessor<string | undefined> = () => undefined) {
+  const server = useServer()
+
+  if ("sdk" in server.ctx) return useProviders(directory)
+
   return {
+    ready: () => true,
     all: () => new Map(catalog.map((item) => [item.id, item])),
     default: () => ({ anthropic: model_id }),
     connected: () => [provider],
+    anyConnection: () => true,
     paid: () => [provider],
     popular: () => popular,
   }

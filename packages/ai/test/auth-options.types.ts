@@ -83,7 +83,7 @@ OpenAI.configure({
   baseURL: "https://gateway.example.com/v1",
 }).responses("gpt-4.1-mini")
 OpenAI.configure({
-  generation: { maxTokens: 100 },
+  maxTokens: 100,
   providerOptions: { store: false },
 }).responses("gpt-4.1-mini")
 
@@ -100,7 +100,7 @@ OpenAI.configure({ apiKey: 123 })
 OpenAI.configure({ bogus: true })
 
 // @ts-expect-error common generation options remain typed.
-OpenAI.configure({ generation: { maxTokens: "many" } })
+OpenAI.configure({ maxTokens: "many" })
 
 // @ts-expect-error provider-native options remain typed.
 OpenAI.configure({ providerOptions: { store: "false" } })

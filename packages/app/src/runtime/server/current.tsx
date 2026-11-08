@@ -1,4 +1,4 @@
-import { createMemo, Show, type ParentProps } from "solid-js"
+import { Show, type JSX, type ParentProps } from "solid-js"
 import { createSimpleContext } from "@opencode/ui/context"
 import { ServerConnection } from "./registry"
 import { useGlobal, type ServerCtx } from "./runtime"
@@ -27,19 +27,18 @@ const context = createSimpleContext({
 
 export const useServer = context.use
 
-// Must be keyed by connection. A server that rejected our credentials gets a new controller, so the children remount
-// with it. They wait until the server is healthy: a controller created before its new credentials fails every load.
-export function ServerProvider(props: ParentProps<{ conn: ServerConnection.Any }>) {
+// Keyed by controller: while the server rejects our credentials the children unmount and `signedOut` shows instead,
+// and they mount again with the controller its new credentials start.
+export function ServerProvider(props: ParentProps<{ conn: ServerConnection.Any; signedOut?: JSX.Element }>) {
   const global = useGlobal()
   const key = ServerConnection.key(props.conn)
 
-  const ctx = createMemo<ServerCtx>(
-    (previous) => (global.servers.health[key]?.healthy ? global.serverCtx(key) : undefined) ?? previous,
-    global.ensureServerCtx(props.conn),
-  )
-
   return (
-    <Show when={ctx()} keyed>
+    <Show
+      when={global.serverCtx(key)}
+      keyed
+      fallback={<Show when={global.serverSignedOut(key)}>{props.signedOut}</Show>}
+    >
       {(ctx) => (
         <context.provider conn={props.conn} ctx={ctx}>
           {props.children}
