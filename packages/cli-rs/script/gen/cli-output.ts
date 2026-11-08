@@ -1,6 +1,7 @@
 // Records what the TypeScript CLI prints for help, completions, and usage errors, with colors (FORCE_COLOR=1),
-// into crates/cli/tests/fixtures/cli. The Rust tests in crates/cli/src/tests/output.rs compare their own output
-// with these files byte for byte, and with the colors stripped for a run without a terminal.
+// into crates/cli/tests/fixtures/cli. Each usage error records the environment it ran in. The Rust tests in
+// crates/cli/src/tests/output.rs compare their own output with these files byte for byte, and with the colors
+// stripped for a run without a terminal.
 import path from "node:path"
 import { mkdir, rm } from "node:fs/promises"
 import { Commands } from "../../../cli/src/commands/commands"
@@ -73,6 +74,17 @@ const errors: string[][] = [
   ["auth", "list", "extra"],
   ["service", "status", "extra", "more"],
   ["-x"],
+  ["run", "--bogus", "-s", "--also-bogus"],
+  ["run", "--unknown", "--model", "--another"],
+  ["debug", "--bogus", "nope", "--also-bogus"],
+]
+
+// Usage errors in another environment than FORCE_COLOR=1, recorded with it.
+const environments: { args: string[]; env: Record<string, string> }[] = [
+  { args: ["run", "--bogus"], env: { FORCE_COLOR: "false" } },
+  { args: ["run", "--bogus"], env: { FORCE_COLOR: "FALSE" } },
+  { args: ["run", "--bogus"], env: { FORCE_COLOR: "0" } },
+  { args: ["run", "--bogus", "--worse"], env: { FORCE_COLOR: "1", NO_COLOR: "1" } },
 ]
 
 const root = Commands as unknown as Node
@@ -88,8 +100,8 @@ await rm(out, { recursive: true, force: true })
 await mkdir(path.join(out, "help"), { recursive: true })
 await mkdir(path.join(out, "completions"), { recursive: true })
 
-const run = async (args: string[]) => {
-  const box = await sandbox({ FORCE_COLOR: "1" })
+const run = async (args: string[], env: Record<string, string> = { FORCE_COLOR: "1" }) => {
+  const box = await sandbox(env)
   const proc = Bun.spawn(command("ts", args), {
     cwd: box.cwd,
     env: box.env,
@@ -103,7 +115,7 @@ const run = async (args: string[]) => {
     proc.exited,
   ])
   await rm(box.root, { recursive: true, force: true })
-  return { args, exit, stdout, stderr }
+  return { args, env, exit, stdout, stderr }
 }
 
 // A few processes at a time: each one starts the whole TypeScript CLI.
@@ -135,6 +147,9 @@ await pool(["bash", "zsh", "fish", "powershell"], 4, async (shell) => {
   const stdout = expectClean(await run(["--completions", shell]))
   await Bun.write(path.join(out, "completions", `${shell}.txt`), stdout)
 })
-const records = await pool(errors, 6, run)
+const records = [
+  ...(await pool(errors, 6, (args) => run(args))),
+  ...(await pool(environments, 4, (item) => run(item.args, item.env))),
+]
 await Bun.write(path.join(out, "errors.json"), JSON.stringify(records, null, 2) + "\n")
 console.log(`cli-output: wrote ${paths.length} help pages, 4 completion scripts, ${records.length} errors to ${out}`)

@@ -21,20 +21,33 @@ pub fn name() -> String {
 /// `TerminalCapabilities.canColor`: never for `TERM=dumb` or with `NO_COLOR`, always with `FORCE_COLOR`, else when
 /// stdout is a terminal. Errors on stderr follow stdout too, as in Effect.
 pub fn colors() -> bool {
-    let var = |name| std::env::var(name).ok().filter(|value: &String| !value.is_empty());
+    can_color(|name| std::env::var(name).ok(), std::io::stdout().is_terminal())
+}
+
+/// Whether Bun colors `console.error` output, which wraps the TypeScript CLI's error section in red.
+pub fn stderr_colors() -> bool {
+    bun_colors(|name| std::env::var(name).ok(), std::io::stderr().is_terminal())
+}
+
+/// `colors` over the variables `var` gives and whether stdout is a terminal.
+pub(crate) fn can_color(var: impl Fn(&str) -> Option<String>, terminal: bool) -> bool {
+    let var = |name| var(name).filter(|value| !value.is_empty());
     if var("TERM").as_deref() == Some("dumb") || var("NO_COLOR").is_some() {
         return false;
     }
-    var("FORCE_COLOR").is_some_and(|value| value != "0" && !value.eq_ignore_ascii_case("false"))
-        || std::io::stdout().is_terminal()
+    forcing(var("FORCE_COLOR")) || terminal
 }
 
-/// Whether Bun colors `console.error` output, which wraps the TypeScript CLI's error section in red: with
-/// `FORCE_COLOR`, never with `NO_COLOR`, else when stderr is a terminal.
-pub fn stderr_colors() -> bool {
-    let var = |name| std::env::var(name).ok().filter(|value: &String| !value.is_empty());
-    var("FORCE_COLOR").is_some_and(|value| value != "0")
-        || (var("NO_COLOR").is_none() && std::io::stderr().is_terminal())
+/// `stderr_colors` over the variables `var` gives and whether stderr is a terminal: with `FORCE_COLOR`, never
+/// with `NO_COLOR`, else on a terminal.
+pub(crate) fn bun_colors(var: impl Fn(&str) -> Option<String>, terminal: bool) -> bool {
+    let var = |name| var(name).filter(|value| !value.is_empty());
+    forcing(var("FORCE_COLOR")) || (var("NO_COLOR").is_none() && terminal)
+}
+
+// `0` and `false` (in any case) do not force colors, in Effect and in Bun.
+fn forcing(value: Option<String>) -> bool {
+    value.is_some_and(|value| !value.is_empty() && value != "0" && !value.eq_ignore_ascii_case("false"))
 }
 
 /// Prints the help of the command at `names` (below the root) to stdout.
@@ -66,17 +79,41 @@ pub fn error_output(errors: &[String], colors: bool, stderr_colors: bool) -> Str
     }
 }
 
-/// `formatErrors`: an `ERROR` section, or `ERRORS` with one line each.
+/// `formatErrors`: an `ERROR` section, or `ERRORS` with one line each, grouped by kind in the order each kind
+/// first appears.
 pub fn render_errors(errors: &[String], colors: bool) -> String {
     let (bold, red, reset) = match colors {
         true => ("\x1b[1m", "\x1b[31m", "\x1b[0m"),
         false => ("", "", ""),
     };
     let title = if errors.len() == 1 { "ERROR" } else { "ERRORS" };
+    let mut kinds: Vec<&str> = Vec::new();
+    for kind in errors.iter().map(|error| tag(error)) {
+        if !kinds.contains(&kind) {
+            kinds.push(kind);
+        }
+    }
+    let grouped = kinds.into_iter().flat_map(|kind| errors.iter().filter(move |error| tag(error) == kind));
     std::iter::once(format!("\n{bold}{red}{title}{reset}"))
-        .chain(errors.iter().map(|error| format!("  {}{reset}", escape_controls(error))))
+        .chain(grouped.map(|error| format!("  {}{reset}", escape_controls(error))))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+// The `_tag` of the Effect `CliError` that `parse` wrote as `message`.
+fn tag(message: &str) -> &'static str {
+    [
+        ("Unrecognized flag: ", "UnrecognizedOption"),
+        ("Unknown subcommand ", "UnknownSubcommand"),
+        ("Invalid value for ", "InvalidValue"),
+        ("Missing value for ", "InvalidValue"),
+        ("Missing required flag: ", "MissingOption"),
+        ("Missing required argument: ", "MissingArgument"),
+        ("Unexpected positional ", "UnexpectedArgument"),
+    ]
+    .into_iter()
+    .find(|(prefix, _)| message.starts_with(prefix))
+    .map_or("Error", |(_, tag)| tag)
 }
 
 // Control characters other than tab, newline, and carriage return print as `\xNN`.
