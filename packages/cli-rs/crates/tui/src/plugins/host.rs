@@ -3,19 +3,21 @@
 //! routes, and Markdown make.
 
 use std::cell::{Cell, OnceCell, RefCell};
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::time::Duration;
 
 use opencode_api::generated::{
-    ModelInfo, ModelRef, ProviderID, ProviderInfo, SessionID, SessionMessageInfo, UsageLimitsInfo,
+    IntegrationInfo, McpServer, ModelInfo, ModelRef, ProviderID, ProviderInfo, SessionID, SessionMessageInfo,
+    UsageLimitsInfo, VcsInfo,
 };
 use opencode_plugin::abi;
 use opencode_plugin::loader::native::Native;
 use opencode_plugin::loader::{Backend, Configured, Loader};
 use opencode_plugin::node::{assign, refill, theme_color};
 use opencode_plugin::{Definition, Registry, SlotInput, SlotMount, Slotted, Toast};
-use opencode_store::location::{Catalog, Location};
+use opencode_store::location::{Catalog, Location, LocationData};
 use opencode_store::{Changes, State};
 use opencode_ui::bind;
 use opencode_ui::dialog::DialogKeymap;
@@ -54,17 +56,31 @@ impl opencode_plugin::Host for Tui {
     }
 
     fn storage_read(&self, key: &str) -> Option<String> {
-        let value = self.storage()?.load(key, &serde_json::Value::Null).ok()?;
-        (!value.is_null()).then(|| value.to_string())
+        if let Some(json) = self.reads.stored.borrow().get(key) {
+            return json.clone();
+        }
+        let value = self.storage().and_then(|storage| storage.load(key, &serde_json::Value::Null).ok());
+        let json = value.filter(|value| !value.is_null()).map(|value| value.to_string());
+        self.reads.stored.borrow_mut().insert(key.to_owned(), json.clone());
+        json
     }
 
     fn storage_write(&self, key: &str, json: &str) -> Result<(), String> {
-        let storage = self.storage().ok_or("this TUI has no storage")?;
         let value: serde_json::Value = serde_json::from_str(json).map_err(|error| error.to_string())?;
-        storage
-            .update(key, &serde_json::json!({}), |stored| *stored = value)
-            .map(|_| ())
-            .map_err(|error| error.to_string())
+        if !value.is_object() {
+            return Err("a stored value is an object".to_owned());
+        }
+        self.reads.stored.borrow_mut().insert(key.to_owned(), Some(json.to_owned()));
+        if let Some(storage) = self.storage() {
+            let key = key.to_owned();
+            self.app.runtime().spawn_blocking(move || {
+                if let Err(error) = storage.update(&key, &serde_json::json!({}), |stored| *stored = value) {
+                    log::error!("Failed to store {key}: {error}");
+                }
+            });
+        }
+        self.reads.changed(self);
+        Ok(())
     }
 
     fn toast(&self, variant: Toast, title: Option<&str>, message: &str) {
@@ -88,6 +104,10 @@ impl opencode_plugin::Host for Tui {
 
     fn remount(&self) {
         self.navigate(self.route());
+    }
+
+    fn dispatch(&self, name: &str, input: Option<&str>) {
+        self.keymap.dispatch(name, input);
     }
 
     fn read(&self, f: &mut dyn FnMut(&dyn abi::Read)) {
@@ -121,35 +141,59 @@ impl opencode_plugin::Host for Tui {
             let (push, local) = (push.clone(), local.clone());
             self.local.subscribe(move || push(&local))
         };
-        // Settings listeners stay registered, so this one lets go of `push` and does nothing once disposed.
-        let weak = Rc::downgrade(&push);
-        self.settings.on_change(move |_| {
-            if let Some(push) = weak.upgrade() {
-                push(&local);
-            }
-        });
+        let settings = {
+            let push = push.clone();
+            self.settings.subscribe(move |_| push(&local))
+        };
         let resize = {
             let push = push.clone();
             self.app.on_resize(move |_, _, _| push(&abi::Changed { size: true, ..abi::Changed::default() }))
         };
+        let mut watchers = self.reads.watchers.borrow_mut();
+        watchers.retain(|watcher| watcher.strong_count() > 0);
+        watchers.push(Rc::downgrade(&push));
         let app = self.app.clone();
         Some(Disposer::new(move || {
             listener.dispose();
+            settings.dispose();
             app.remove_handler(resize);
             drop(push);
         }))
     }
 }
 
-/// The catalog loads plugin reads asked for, which start once the current event is handled, and a session ID buffer,
-/// so a read by ID allocates nothing.
+/// What a mounted claim's [`opencode_plugin::Host::watch`] calls.
+type Push = dyn Fn(&abi::Changed);
+
+/// The catalog loads plugin reads asked for, which start once the current event is handled, a session ID buffer, so a
+/// read by ID allocates nothing, and the plugins' storage.
 #[derive(Default)]
 pub struct Reads {
     needs: RefCell<Vec<(Catalog, Location)>>,
     key: Cell<SessionID>,
+    /// The JSON text of each storage key read or written, so a write shows at once and storage works without disk.
+    stored: RefCell<HashMap<String, Option<String>>>,
+    /// The mounted claims' pushes, which a storage write calls with `local` once the current event is handled.
+    watchers: RefCell<Vec<Weak<Push>>>,
+    telling: Cell<bool>,
 }
 
 impl Reads {
+    /// Tells the mounted claims that the storage changed, outside every plugin callback; writes in one event tell once.
+    fn changed(&self, tui: &Tui) {
+        if self.telling.replace(true) {
+            return;
+        }
+        let weak = tui.weak();
+        tui.app.defer(move |_| {
+            let Some(tui) = weak.upgrade() else { return };
+            tui.reads.telling.set(false);
+            let pushes: Vec<_> = tui.reads.watchers.borrow().iter().filter_map(Weak::upgrade).collect();
+            let local = abi::Changed { local: true, ..abi::Changed::default() };
+            pushes.iter().for_each(|push| push(&local));
+        });
+    }
+
     fn need(&self, tui: &Tui, catalog: Catalog, location: Location) {
         let mut needs = self.needs.borrow_mut();
         if needs.iter().any(|(known, at)| *known == catalog && *at == location) {
@@ -186,6 +230,21 @@ impl Reader<'_> {
         let result = self.tui.data.read(|state| f(state, &key));
         self.tui.reads.key.set(key);
         result
+    }
+
+    /// `catalog` of `location` through `get`; a catalog that is not loaded asks for the load.
+    fn catalog<T>(
+        &self,
+        location: Option<&abi::LocationRef>,
+        catalog: Catalog,
+        get: impl FnOnce(&LocationData) -> Option<T>,
+    ) -> Option<T> {
+        let location = self.location(location);
+        let value = self.tui.data.read(|state| state.location(Some(&location)).and_then(get));
+        if value.is_none() {
+            self.tui.reads.need(self.tui, catalog, location);
+        }
+        value
     }
 
     /// `location`, or where the TUI works.
@@ -241,12 +300,7 @@ impl abi::Read for Reader<'_> {
     }
 
     fn models(&self, location: Option<&abi::LocationRef>) -> Option<Vec<ModelInfo>> {
-        let location = self.location(location);
-        let models = self.tui.data.read(|state| state.location(Some(&location)).and_then(|data| data.model.clone()));
-        if models.is_none() {
-            self.tui.reads.need(self.tui, Catalog::Model, location);
-        }
-        models
+        self.catalog(location, Catalog::Model, |data| data.model.clone())
     }
 
     fn model(&self) -> Option<ModelRef> {
@@ -266,6 +320,27 @@ impl abi::Read for Reader<'_> {
         let location = self.location(None);
         self.tui.data.read(|state| state.location(Some(&location)).and_then(|data| data.provider.clone()))
     }
+
+    fn info(&self) -> abi::Info {
+        let location = self.location(None);
+        abi::Info {
+            version: self.tui.startup.args.version.clone(),
+            size: self.tui.app.size(),
+            location: abi::LocationRef { directory: location.directory, workspace: location.workspace_id },
+        }
+    }
+
+    fn mcp_servers(&self, location: Option<&abi::LocationRef>) -> Option<Vec<McpServer>> {
+        self.catalog(location, Catalog::McpServer, |data| data.mcp_server.clone())
+    }
+
+    fn integrations(&self, location: Option<&abi::LocationRef>) -> Option<Vec<IntegrationInfo>> {
+        self.catalog(location, Catalog::Integration, |data| data.integration.clone())
+    }
+
+    fn vcs(&self, location: Option<&abi::LocationRef>) -> Option<VcsInfo> {
+        self.catalog(location, Catalog::Vcs, |data| data.vcs.clone())
+    }
 }
 
 fn status(status: opencode_store::SessionStatus) -> abi::SessionStatus {
@@ -284,9 +359,9 @@ pub fn builtins(external: Vec<Definition<Tui>>) -> Vec<Definition<Tui>> {
         super::btw::plugin(),
         super::sidebar_context::plugin().into(),
         super::sidebar_limit::plugin().into(),
-        super::sidebar_mcp::plugin(),
-        super::sidebar_todo::plugin(),
-        super::sidebar_footer::plugin(),
+        super::sidebar_mcp::plugin().into(),
+        super::sidebar_todo::plugin().into(),
+        super::sidebar_footer::plugin().into(),
         crate::plugins::notifications::plugin(),
         crate::dialogs::plugins::plugin(),
         super::stats::plugin(),

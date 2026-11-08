@@ -12,7 +12,7 @@ use std::rc::Rc;
 
 use opencode_api::generated::{LocationPublicRef, SessionID};
 use opencode_local::cli_config::Sidebar as SidebarSetting;
-use opencode_plugin::{SlotInput, SlotMount, Slotted, slot};
+use opencode_plugin::{SlotInput, SlotMount, slot};
 use opencode_store::{Changes, State};
 use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
@@ -124,14 +124,9 @@ pub fn mount(tui: &Tui, row: &View, session: &SessionID) -> Sidebar {
             return;
         }
         inner.layout(&tui);
-        // The footer's card follows the terminal height.
-        if inner.placed.get() != Place::Hidden
-            && let Some(footer) = inner.slots.borrow().last()
-        {
-            footer.sync(&tui, &Changes::everything());
-        }
     });
-    tui.settings.on_change(bind!(inner, |inner, tui| inner.layout(tui)));
+    let settings = tui.settings.subscribe(bind!(inner, |inner, tui| inner.layout(tui)));
+    inner.layers.borrow_mut().push(settings);
     install_layers(tui, &inner);
     let sidebar = Sidebar { inner };
     sidebar.inner.layout(tui);
@@ -293,76 +288,6 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
     }
 }
 
-/// One sidebar section of a built-in plugin: `model` reads what it shows, or `None` to hide it, and `render`
-/// builds its view from that. While the sidebar shows, a change batch that touches `scope` (see [`touches`];
-/// `None` for any change) reads the model again, and the section renders again only when the model differs.
-pub struct Section<M> {
-    root: View,
-    scope: Option<SessionID>,
-    model: ReadModel<M>,
-    render: Render<M>,
-    shown: RefCell<Option<Option<M>>>,
-}
-
-type ReadModel<M> = Box<dyn Fn(&Tui, &Changes) -> Option<M>>;
-type Render<M> = Box<dyn Fn(&Tui, &M) -> View>;
-
-impl<M: PartialEq + 'static> Section<M> {
-    pub fn new(
-        tui: &Tui,
-        scope: Option<SessionID>,
-        model: impl Fn(&Tui, &Changes) -> Option<M> + 'static,
-        render: impl Fn(&Tui, &M) -> View + 'static,
-    ) -> Self {
-        let section = Self {
-            root: View::new(&tui.app).column().shrink(0.0),
-            scope,
-            model: Box::new(model),
-            render: Box::new(render),
-            shown: RefCell::new(None),
-        };
-        section.refresh(tui, &Changes::everything());
-        section
-    }
-
-    fn refresh(&self, tui: &Tui, changes: &Changes) {
-        let model = (self.model)(tui, changes);
-        if self.shown.borrow().as_ref() == Some(&model) {
-            return;
-        }
-        self.root.clear();
-        match &model {
-            Some(model) => {
-                self.root.add(&(self.render)(tui, model));
-                self.root.visible(true);
-            }
-            None => {
-                self.root.visible(false);
-            }
-        }
-        *self.shown.borrow_mut() = Some(model);
-        tui.app.request_redraw();
-    }
-}
-
-impl<M: PartialEq + 'static> Slotted<Tui> for Section<M> {
-    fn root(&self) -> View {
-        self.root.clone()
-    }
-
-    fn sync(&self, tui: &Tui, changes: &Changes) {
-        if changes.is_empty() {
-            return;
-        }
-        if let Some(session) = &self.scope
-            && !tui.data.read(|state| touches(state, changes, session))
-        {
-            return;
-        }
-        self.refresh(tui, changes);
-    }
-}
-
 /// Whether `changes` touch what a view of `session` reads: the info, status, messages, pending items and
 /// permissions of its family, its location, and the projects. A session the store does not know takes every
 /// change, since its views read the default location.
@@ -389,68 +314,4 @@ pub fn touches(state: &State, changes: &Changes, session: &SessionID) -> bool {
 pub fn location_changed(changes: &Changes, location: &LocationPublicRef) -> bool {
     changes.all
         || changes.locations.iter().any(|item| item.directory == location.directory.0 && item.workspace_id.is_none())
-}
-
-/// A plugin's stored `{ open: true }` (`storage.store("view")`), as the MCP and todo sections keep it. Without
-/// TUI storage it lives in memory.
-pub struct Fold {
-    key: String,
-    open: Cell<bool>,
-}
-
-impl Fold {
-    pub fn load(tui: &Tui, key: String) -> Rc<Self> {
-        let open = tui
-            .storage()
-            .and_then(|storage| storage.load(&key, &json!({ "open": true })).ok())
-            .and_then(|value| value.get("open").and_then(serde_json::Value::as_bool))
-            .unwrap_or(true);
-        Rc::new(Self { key, open: Cell::new(open) })
-    }
-
-    pub fn open(&self) -> bool {
-        self.open.get()
-    }
-
-    /// Flips the flag, writes it off the UI thread, and renders the sidebar again.
-    pub fn toggle(&self, tui: &Tui) {
-        let open = !self.open.get();
-        self.open.set(open);
-        tui.resync();
-        let Some(storage) = tui.storage() else { return };
-        let key = self.key.clone();
-        tui.app.runtime().spawn_blocking(move || {
-            let result = storage.update(&key, &json!({ "open": true }), |value| {
-                value["open"] = json!(open);
-            });
-            if let Err(error) = result {
-                log::error!("Failed to persist sidebar state: {error}");
-            }
-        });
-    }
-}
-
-/// A row that runs `run` on a press (`onMouseDown`) or a release (`onMouseUp`) of the left button.
-pub fn on_click(view: &impl Widget, down: bool, run: impl Fn() + 'static) {
-    view.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
-        let hit = match event.kind {
-            MouseEventKind::Down(MouseButton::Left) => down,
-            MouseEventKind::Up(MouseButton::Left) => !down,
-            _ => false,
-        };
-        if hit {
-            run();
-        }
-    });
-}
-
-/// Reads the session location's `catalogs` once per invalidation: TS reads a catalog the first time a view asks
-/// for it, and the sections ask before the session's location is known.
-pub fn sync_catalogs(tui: &Tui, session: &SessionID, catalogs: &[opencode_store::Catalog]) {
-    let location =
-        tui.data.read(|state| state.session(session).map(|info| opencode_store::Location::from(&info.location)));
-    let Some(location) = location else { return };
-    for catalog in catalogs {
-        drop(tui.data.catalog_sync(*catalog, Some(&location)));
-    }
 }
