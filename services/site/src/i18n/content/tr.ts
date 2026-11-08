@@ -390,7 +390,7 @@ export const content = {
         },
       },
       install:
-        "Tek satır Browse'u kurar, bulduğu ajanlara ekler ve eklentiyle eşler. Windows'ta irm https://opencode.ai/browse/install.ps1 | iex komutunu çalıştırın. Ya da ajanınızdan kurmasını isteyin.",
+        "Önce [Chrome uzantısını] yükleyin. Kalan adımlarda size yol gösterir. CLI'yi doğrudan yüklemek için (buna ihtiyacınız olmamalı) bunlardan birini kullanın.",
     },
   },
   apps: {
@@ -820,6 +820,7 @@ export const content = {
     },
     about: {
       title: "OpenCode hakkında",
+      body: "OpenCode ve ürünleri için uzun ve kısa sürümlerde, kopyalanmaya hazır tanıtım metinleri.",
       boilerplate: {
         long: "OpenCode açık kaynaklı bir kodlama ajanıdır. Masaüstü uygulaması, terminal arayüzü, mobil uygulama ve SDK olarak gelir ve Claude, GPT ve Gemini dahil her sağlayıcının modelleriyle çalışır. OpenCode MIT lisanslıdır ve Anomaly tarafından geliştirilir. 220.000'den fazla GitHub yıldızı ve 1.000'den fazla katkıcısı vardır, her ay 22 milyondan fazla geliştirici onu kullanır.",
         short:

@@ -12,7 +12,7 @@ import { createBuiltins } from "./intrinsics.js"
 import { Interpreter } from "./interpreter.js"
 import type { Value } from "./objects.js"
 import { formatLocation, sourceLocation } from "./model.js"
-import { Driver, SUSPENDED } from "./driver.js"
+import { callPath, Driver, SUSPENDED } from "./driver.js"
 import { Interruption } from "./signals.js"
 import { Source } from "./source.js"
 import type { Vm } from "../vm.js"
@@ -59,7 +59,7 @@ export const execute = <R>(
     bindings === undefined
       ? undefined
       : (ctx) => Object.entries(bindings).map(([name, value]) => [name, fromJson(ctx, value)] as const),
-    extensions.length > 0,
+    extensions.some((extension) => extension.snapshot === undefined),
   )
 
 export const executeProgram = <R>(
@@ -74,7 +74,12 @@ export const executeProgram = <R>(
   finishExecution(startProgram({ prepared, limits, hooks, globals, lossy }, code, bindings).run())
 
 /** A program ready to run on the VM: nothing runs until `run`. */
-export const startProgram = <R>(setup: Setup<R>, code: string, bindings?: Globals<R>): Running<R> =>
+export const startProgram = <R>(
+  setup: Setup<R>,
+  code: string,
+  bindings?: Globals<R>,
+  runId: string = crypto.randomUUID(),
+): Running<R> =>
   new Running(setup, 0, () => {
     if (code.trim().length === 0) {
       return { ok: false, error: { kind: "ParseError", message: "Code cannot be empty." }, toolCalls: [] }
@@ -82,6 +87,7 @@ export const startProgram = <R>(setup: Setup<R>, code: string, bindings?: Global
     const parsed = parseProgram(code)
     if (!parsed.ok) return { ok: false, error: parsed.error, toolCalls: [] }
     const runtime = instantiate(setup, bindings)
+    runtime.vm.hosts.runId = runId
     runtime.vm.start(parsed.source)
     return runtime
   })
@@ -109,6 +115,14 @@ export const resumeProgram = <R>(
       }
       const fresh = instantiate(resumed)
       const snapshot = restoreInto(state, fresh.vm)
+      for (const call of fresh.vm.calls()) {
+        if (call.status !== "started") continue
+        if (call.request.kind !== "tool" || fresh.tools.mode(call.request.path)?._tag !== "CodeModeDurable") {
+          throw new SnapshotError(
+            `The pending durable call ${call.key} (${callPath(call)}) cannot resume because that tool is no longer a durable tool in this runtime.`,
+          )
+        }
+      }
       return new Running(resumed, snapshot.header.budget.activeMs, () => fresh, true)
     },
     catch: (error) => (error instanceof SnapshotError ? error : new SnapshotError(String(error))),
@@ -191,7 +205,6 @@ export class Running<R> {
       self.driver = new Driver(prepared.vm, prepared.tools, yield* Effect.context<R>())
       if (roundTrip) self.driver.checkpoint = Effect.sync(() => self.trip())
       self.startedAt = Date.now()
-      yield* Deferred.succeed(self.started, undefined)
       return yield* self.execute()
     }).pipe(
       Effect.onExit((exit) =>
@@ -233,6 +246,7 @@ export class Running<R> {
     const base = Effect.gen(function* () {
       const driver = self.driver
       if (self.resuming) driver.resume()
+      yield* Deferred.succeed(self.started, undefined)
       const outcome = yield* driver.run()
       if (outcome === SUSPENDED) return self.suspended!
       self.finished = true
@@ -315,6 +329,12 @@ export class Running<R> {
         running,
       })
     }
+    // Idempotent calls in flight are saved as queued so they run again on resume under the same key.
+    const idempotent = vm.calls().filter((call) => call.status === "running")
+    for (const call of idempotent) call.status = "queued"
+    const restoreRunning = () => {
+      for (const call of idempotent) call.status = "running"
+    }
     const limits = this.setup.limits
     const saved = attempt(() =>
       vm.capture({
@@ -328,6 +348,7 @@ export class Running<R> {
       }),
     )
     if (!saved.ok) {
+      restoreRunning()
       const error = saved.error
       return new SuspendError({
         message: `The run's state couldn't be saved: ${error instanceof Error ? error.message : String(error)}`,
@@ -338,6 +359,7 @@ export class Running<R> {
     if (maxBytes !== undefined) {
       const size = toBytes(snapshot).byteLength
       if (size > maxBytes) {
+        restoreRunning()
         return new SuspendError({
           message: `The run's state takes ${size} bytes, more than the ${maxBytes}-byte limit, so it couldn't be suspended.`,
           running: [],
@@ -348,8 +370,8 @@ export class Running<R> {
   }
 
   // The round-trip test mode's checkpoint: saves the state to bytes and continues in a brand-new runtime. States that
-  // hold live host values (an extension call in flight, a function an extension returned) can't round-trip, so they
-  // are skipped; a lost value anywhere else is a codec gap and fails the run.
+  // hold live host values (an extension call in flight, a function an extension without `snapshot` hooks returned)
+  // can't round-trip, so they are skipped; a lost value anywhere else is a codec gap and fails the run.
   private trip(): void {
     const driver = this.driver
     if (this.trips >= ROUND_TRIP_MAX) {
@@ -362,12 +384,20 @@ export class Running<R> {
     }
     if (driver.holdsHostValues) return
     this.trips++
-    const saved = this.ctx.vm.capture({ strict: !this.setup.lossy })
+    const attempted = attempt(() => this.ctx.vm.capture({ strict: !this.setup.lossy }))
+    // An extension's `snapshot` hooks may refuse to save a value, which fails a suspend, not the run.
+    if (!attempted.ok) {
+      const error = attempted.error
+      if (error instanceof SnapshotError && error.message.startsWith("The extension ")) return
+      throw error
+    }
+    const saved = attempted.value
     const bytes = toBytes(saved.snapshot)
     this.skip = Math.floor(saved.snapshot.records.length / 200 + bytes.byteLength / 100_000)
     if (saved.lost.length > 0) return
     const fresh = instantiate(this.setup)
     restoreInto(fromBytes(bytes), fresh.vm)
+    for (const [key, invocation] of this.ctx.tools.invocations) fresh.tools.invocations.set(key, invocation)
     this.ctx = fresh
     driver.vm = fresh.vm
     driver.tools = fresh.tools

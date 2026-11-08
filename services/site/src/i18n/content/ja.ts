@@ -281,7 +281,7 @@ export const content = {
         allowlists: { title: "許可リスト", body: "セッションのタブを、指定したサイトだけに制限できます。" },
       },
       install:
-        "1行でBrowseをインストールし、見つけたエージェントに追加して拡張機能とペアリングします。Windowsでは irm https://opencode.ai/browse/install.ps1 | iex を実行します。エージェントに設定を頼むこともできます。",
+        "まず [Chrome 拡張機能] をインストールしてください。残りの手順は拡張機能が案内します。CLI を直接インストールする場合は(通常は不要です)、次のいずれかを使ってください。",
     },
   },
   apps: {
@@ -514,6 +514,7 @@ export const content = {
     },
     about: {
       title: "OpenCodeについて",
+      body: "OpenCodeと各製品の紹介文です。長文版と短文版があり、そのままコピーして使えます。",
       boilerplate: {
         long: "OpenCodeはオープンソースのコーディングエージェントです。デスクトップアプリ、ターミナルUI、モバイルアプリ、SDKとして提供され、Claude、GPT、Geminiなど、あらゆるプロバイダーのモデルで動作します。OpenCodeはMITライセンスで、Anomalyが開発しています。GitHubスターは220,000以上、コントリビューターは1,000人以上で、毎月2,200万人以上の開発者が利用しています。",
         short:

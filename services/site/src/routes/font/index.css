@@ -322,6 +322,16 @@
         display: none;
       }
 
+      /* The buttons are drawn 4px taller than the 25px logo mark, overhanging it by 2px above and
+         below (1px lower than the bar's centre line, as the mark's centre is 28.5px).
+         tap-targets.css's ::after keeps each one a 44px target. */
+      [data-slot="tools"] [data-component="site-button"] {
+        height: 29px;
+        margin-top: 1px;
+        padding-inline: 10px;
+        gap: 6px;
+      }
+
       .letter-output {
         margin-block: auto 0;
       }

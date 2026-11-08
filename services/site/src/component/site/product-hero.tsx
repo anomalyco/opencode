@@ -1,9 +1,7 @@
 import { Link } from "@solidjs/meta"
 import { createEffect, createSignal, Index, on, onCleanup, onMount, Show } from "solid-js"
 import { useI18n } from "~/context/i18n"
-import { imageSources, posterFile, stillSizes, videoSources } from "./media"
-import { prefersReducedMotion, rescueMedia } from "./products"
-import { pageScheme } from "./videos"
+import { imageSources, pageScheme, posterFile, prefersReducedMotion, rescueMedia, stillSizes, videoSources } from "./media"
 
 type HeroFile = { src?: string; poster: string }
 
@@ -165,6 +163,16 @@ export function ProductHero(props: { slug: string; media: HeroMedia | undefined;
       </Show>
     </div>
   )
+}
+
+/**
+ * A hero with a still per theme and no video yet, framed like the themed heroes in videos.ts. Browse's
+ * (product-videos/heroes/browse-landscape-*.webp) is an HTML scene of OpenCode driving an agent tab,
+ * rendered with Playwright.
+ */
+export function heroStills(slug: string) {
+  const file = (theme: string) => `/product-videos/heroes/${slug}-landscape-${theme}.webp`
+  return { poster: file("light"), themes: { light: { poster: file("light") }, dark: { poster: file("dark") } } }
 }
 
 /** A hero poster's preload: its AVIF copies for the hero's size (media.tsx), or the file itself. */

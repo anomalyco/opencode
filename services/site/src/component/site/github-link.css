@@ -1,5 +1,5 @@
 /* The GitHub mark (site.tsx): the mark in the primary ink, the 40px circle round it the link. Beside the sidebar it is fixed in the top-right corner, centred on the logo row
-   and on the same vertical axis as the voice orb in the bottom-right corner; on small screens it
+   and as far from the right edge as from the top; on small screens it
    sits in the top bar, left of the menu button. Bare pages (the font page) have no top bar, so
    there it stays in the corner at every width. */
 [data-site] {
@@ -12,6 +12,17 @@
 
   @media (max-width: 40rem) {
     --github-right: calc(0.75rem + (4.5rem - var(--github-size)) / 2 + env(safe-area-inset-right, 0px));
+  }
+
+  /* Beside the sidebar the mark mirrors the logo across the top: it sits as far from the right edge
+     (of the window, or of the capped layout) as from the top. Its link is centred on the logo row, so
+     the link's right inset equals its top inset, --top + --logo-height / 2 - --github-size / 2
+     (the 20px mark then 27.5px from both edges at the default logo size). The controls that sit
+     beside it or clear it follow --github-right. */
+  @media (min-width: 60.0625rem) {
+    --github-right: calc(
+      var(--top) + var(--logo-height) / 2 - var(--github-size) / 2 + env(safe-area-inset-right, 0px)
+    );
   }
 
   /* The link is the full 40px target round the 20px mark. No backing: over a dark or light surface it takes that

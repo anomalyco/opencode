@@ -269,7 +269,7 @@ export const content = {
         allowlists: { title: "Hvitelister", body: "Begrens fanene til en sesjon til nettstedene du oppgir." },
       },
       install:
-        "Én linje installerer Browse, legger det til i agentene den finner og kobler til utvidelsen. På Windows kjører du irm https://opencode.ai/browse/install.ps1 | iex. Eller be agenten din sette det opp.",
+        "Installer [Chrome-utvidelsen] først. Den guider deg gjennom resten av stegene. Vil du installere CLI-en direkte (det skal du ikke trenge), bruk en av disse.",
     },
   },
   apps: {
@@ -501,6 +501,7 @@ export const content = {
     },
     about: {
       title: "Om OpenCode",
+      body: "Beskrivelser av OpenCode og produktene i lang og kort versjon, klare til å kopieres.",
       boilerplate: {
         long: "OpenCode er en kodeagent med åpen kildekode. Den finnes som skrivebordsapp, terminal-UI, mobilapp og SDK, og fungerer med modeller fra alle leverandører, blant annet Claude, GPT og Gemini. OpenCode er MIT-lisensiert og laget av Anomaly. Den har over 220 000 GitHub-stjerner og mer enn 1 000 bidragsytere, og over 22 millioner utviklere bruker den hver måned.",
         short:

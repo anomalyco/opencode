@@ -14,8 +14,8 @@
     "test": "bun test --only-failures"
   },
   "dependencies": {
-    "@ibm/plex": "6.4.1",
     "@kobalte/core": "catalog:",
+    "@opencode/nav-menus": "workspace:*",
     "@opencode/stats-core": "workspace:*",
     "@opencode/ui": "workspace:*",
     "@solidjs/meta": "catalog:",

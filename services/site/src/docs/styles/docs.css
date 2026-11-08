@@ -9,6 +9,7 @@
 @import "../../component/site/phone-menu.css";
 @import "../../component/site/tap-targets.css";
 @import "../../component/site/docs-lockup.css";
+@import "../../component/site/nav-menus.css";
 @import "../../component/site/on-this-page.css";
 @import "../../component/site/search-palette.css";
 @import "../../component/site/docs-variants.css";
@@ -139,7 +140,7 @@
    pass under it (client.ts sets data-fade-top and data-fade-bottom). Phones keep hard cuts. */
 @media (min-width: 60.0625rem) {
   [data-site] [data-component="sidebar"] > [data-component="section-nav"] {
-    --fade: 2rem;
+    --fade: 2.5rem;
     /* The nav is cap-trimmed, so it gives back the line above the first item for focus rings. */
     margin-top: -4px;
     padding-top: 4px;
@@ -190,6 +191,53 @@
   }
 }
 
+/* Search dialog, Clean: with nothing typed it is just the field, with no results list and no divider.
+   The list fades and slides in under the field when a query fills it, so the panel's growth reads as
+   one motion rather than a jump. */
+[data-site] [data-search-dialog] {
+  [data-slot="results"] {
+    animation: docs-search-results var(--search-duration) var(--ease-out);
+
+    &:empty {
+      display: none;
+    }
+  }
+
+  [data-slot="field"]:has(+ [data-slot="results"]:empty) {
+    border-bottom-color: transparent;
+  }
+
+  [data-slot="empty"] a {
+    color: var(--text-strong);
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+      outline-offset: 2px;
+    }
+  }
+
+  @media (pointer: coarse) {
+    [data-slot="option"] {
+      min-height: 2.75rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="results"] {
+      animation: none;
+    }
+  }
+}
+
+@keyframes docs-search-results {
+  from {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+}
+
 /* Phones: search in the top bar, before the GitHub mark, with the same 44px target. */
 [data-site] [data-component="topbar"] [data-slot="search-button"] {
   display: grid;
@@ -215,7 +263,7 @@
 }
 
 /* ───────────── Article ─────────────
-   Reading text in Inter at the reading size within the measure (DESIGN.md), section titles in OpenTUI
+   Reading text in Inter at the reading size, capped at about 90 characters, section titles in OpenTUI
    Mono. Typography 4 (docs-variants.css) sets h3 to h6 and the heading rhythm. */
 [data-site] [data-component="docs-article"] {
   font: 400 var(--fs-read) / 1.6 var(--font-sans);
@@ -244,8 +292,27 @@
     scroll-margin-top: 2rem;
   }
 
-  :is(p, ul, ol, blockquote, dl) {
-    max-width: var(--measure);
+  /* Text stops at about 90 characters (42 body ems of Inter, so headings share it); blocks (code,
+     tables, callouts, tabs, file trees, cards, steps, the API and config blocks) keep the full
+     column, and text inside a block fills that block. Narrower columns are under the cap. */
+  --text-measure: calc(42 * var(--fs-read));
+
+  :is(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote, dl, summary):not(
+    [data-component="steps"],
+    :is(
+        [data-component="callout"],
+        [data-component="code-frame"],
+        [data-component="code-tabs"],
+        [data-component="plan-tabs"],
+        [data-component="docs-card"],
+        [data-component="api-operation"],
+        [data-component="cli-command"],
+        table,
+        figure
+      )
+      *
+  ) {
+    max-width: var(--text-measure);
   }
 
   p {

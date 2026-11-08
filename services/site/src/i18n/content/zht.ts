@@ -198,7 +198,7 @@ export const content = {
         allowlists: { title: "允許清單", body: "將工作階段的分頁限制在你指定的網站內。" },
       },
       install:
-        "一行指令安裝 Browse，將它加入找到的代理並配對擴充功能。在 Windows 上執行 irm https://opencode.ai/browse/install.ps1 | iex。也可以請代理幫你設定。",
+        "請先安裝 [Chrome 擴充功能]，它會引導你完成其餘步驟。如需直接安裝 CLI（通常不需要），可使用以下任一指令。",
     },
   },
   apps: {
@@ -420,6 +420,7 @@ export const content = {
     },
     about: {
       title: "關於 OpenCode",
+      body: "OpenCode 及其產品的介紹，有長短兩個版本，可直接複製。",
       boilerplate: {
         long: "OpenCode 是一個開源編碼代理。它提供桌面應用程式、終端機介面、行動應用程式和 SDK，並支援任何供應商的模型，包括 Claude、GPT 和 Gemini。OpenCode 採用 MIT 授權，由 Anomaly 打造。它在 GitHub 上擁有超過 220,000 顆星星和 1,000 多位貢獻者，每月有超過 2200 萬名開發者使用。",
         short: "OpenCode 是 Anomaly 推出的開源編碼代理，提供桌面、終端機和行動應用程式以及 SDK。",

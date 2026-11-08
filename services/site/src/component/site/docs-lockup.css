@@ -78,9 +78,12 @@
     }
   }
 
+  /* 8px under the highlight, as the nav menus open (packages/nav-menus; the panel's 1px ring is the 9th), and with
+     Settings › Menu align "edge" (the default, site.css) its edge on the highlight's. src/docs/client.ts brings it in
+     with the nav menus' motion. */
   [data-slot="menu"] {
     position: absolute;
-    top: calc(100% + 6px);
+    top: calc(100% + 9px);
     /* The labels start at the trigger's text: its 6px padding, less the row's 14px padding (as in
        public/nav-demo/switcher.css). */
     inset-inline-start: calc(6px - 14px);
@@ -89,7 +92,6 @@
     background: var(--popover-bg);
     box-shadow: var(--popover-shadow);
     transform-origin: top var(--x-start, left);
-    animation: docs-lockup-in 160ms var(--ease-out);
   }
 
   /* Padding, hover and focus come from the shared menu row style in site.css. */
@@ -169,7 +171,6 @@
     background: var(--popover-bg);
     box-shadow: var(--popover-shadow);
     transform-origin: top var(--x-start, left);
-    animation: docs-lockup-in 160ms var(--ease-out);
 
     /* Bridges the gap to the menu, so the pointer can cross it without closing the flyout. */
     &::before {
@@ -180,19 +181,6 @@
       inset-inline-end: 100%;
       width: 8px;
     }
-  }
-}
-
-@keyframes docs-lockup-in {
-  from {
-    opacity: 0;
-    transform: scale(0.97) translateY(-2px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-component="docs-lockup"] [data-slot="menu"] {
-    animation: none;
   }
 }
 
@@ -349,14 +337,15 @@
     color: var(--text-strong);
   }
 
-  /* 5px either side of the 10px chevron, and 2px after the word. */
+  /* 5px either side of the 10px chevron, and 2px after the word: the shared chevron tokens (packages/nav-menus), so
+     the product chevron on Data, the Console and the status page matches it. */
   [data-slot="toggle"] {
-    width: 20px;
-    margin-inline-start: 2px;
+    width: var(--nav-chevron-width);
+    margin-inline-start: var(--nav-chevron-gap);
 
     [data-slot="chevron"] {
-      width: 10px;
-      height: 10px;
+      width: var(--nav-chevron-glyph);
+      height: var(--nav-chevron-glyph);
     }
 
     &[aria-expanded="true"] [data-slot="chevron"] {
@@ -377,25 +366,25 @@
   }
 }
 
-/* The chevron rests muted; no specificity, so the shared states below win. */
+/* The chevron rests at strong ink and fills as the product chevrons do (packages/nav-menus); no specificity, so the
+   shared states below win. */
 :where([data-site] [data-component="docs-lockup"] [data-slot="toggle"]) {
-  color: var(--text-weak);
+  --lockup-hover: var(--nav-chevron-hover);
+  --lockup-press: var(--nav-chevron-press);
+  color: var(--nav-chevron-ink);
 }
 
 /* Every interactive segment of the lockup (the section word, its chevron, the combined trigger and
    the version) shares one set of states, as the Data and Console product names do
-   (public/nav-demo/switcher.css): hover fills with the logo's inner square beside it (--logo-inner,
-   site.css) with the text at full strength, pressed and open one step further from the page, and a
-   2px ring for the keyboard. Neutral grey whatever Settings › Menu color. The visible fill is the
+   (public/nav-demo/switcher.css): hover fills with half the logo's inner square beside it
+   (--logo-inner, site.css) over the page, with the text at full strength; pressed and open take the
+   full inner-square colour, the next step from the page; and a 2px ring for the keyboard. Neutral grey whatever Settings › Menu color. The visible fill is the
    logo mark's height (the lockup row is the mark's height and top); a transparent ::before keeps
    each hit area 32px tall beside the sidebar and 44px for touch. The separator isn't interactive. */
 [data-site] [data-component="docs-lockup"] {
   --segment-height: 32px;
-  --lockup-hover: var(--logo-inner);
-  --lockup-press: light-dark(
-    color-mix(in srgb, var(--logo-inner) 94%, black),
-    color-mix(in srgb, var(--logo-inner) 94%, white)
-  );
+  --lockup-hover: color-mix(in srgb, var(--logo-inner) 50%, transparent);
+  --lockup-press: var(--logo-inner);
 
   @media (max-width: 60rem), (pointer: coarse) {
     --segment-height: 44px;
@@ -441,6 +430,22 @@
   &:focus-visible {
     outline: 2px solid var(--link);
     outline-offset: 2px;
+  }
+}
+
+/* The section word also opens the OpenCode product menu on hover (packages/nav-menus), so hovered, open and pressed it
+   takes the one name fill every OpenCode nav shares (--nav-name-hover), never a darker one; the chevron keeps its own
+   states for the sections menu. */
+[data-site] [data-component="docs-lockup"] [data-slot="word"][data-nav-product] {
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      background: var(--nav-name-hover);
+    }
+  }
+
+  &:active,
+  &[aria-expanded="true"] {
+    background: var(--nav-name-hover);
   }
 }
 

@@ -365,7 +365,7 @@ export const content = {
         },
       },
       install:
-        "Una riga installa Browse, lo aggiunge agli agenti che trova e abbina l'estensione. Su Windows, esegui irm https://opencode.ai/browse/install.ps1 | iex. Oppure chiedi al tuo agente di configurarlo.",
+        "Installa prima l'[estensione di Chrome]. Ti guida nel resto dei passaggi. Per installare la CLI direttamente (non dovrebbe servirti), usa uno di questi.",
     },
   },
   apps: {
@@ -767,6 +767,7 @@ export const content = {
     },
     about: {
       title: "Chi è OpenCode",
+      body: "Descrizioni di OpenCode e dei suoi prodotti in versione lunga e breve, pronte da copiare.",
       boilerplate: {
         long: "OpenCode è un agente di coding open source. È disponibile come app desktop, UI da terminale, app mobile e SDK, e funziona con modelli di qualsiasi provider, tra cui Claude, GPT e Gemini. OpenCode ha licenza MIT ed è sviluppato da Anomaly. Ha oltre 220.000 stelle su GitHub e più di 1.000 contributori, e oltre 22 milioni di sviluppatori lo usano ogni mese.",
         short:

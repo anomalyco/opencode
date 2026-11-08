@@ -2,7 +2,7 @@ import "./products-arrows.css"
 import { createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useI18n } from "~/context/i18n"
 import { CarouselArrows } from "./carousel-arrows"
-import { prefersReducedMotion } from "./products"
+import { prefersReducedMotion } from "./media"
 
 /**
  * The products carousel's previous and next, for a mouse, whose wheel can't scroll the cards

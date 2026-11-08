@@ -54,12 +54,12 @@ function item(entry: ChangelogEntry) {
 <guid isPermaLink="true">${url}</guid>
 <pubDate>${new Date(`${entry.date}T12:00:00Z`).toUTCString()}</pubDate>
 <description>${escape(plain(entry.summary || entry.title))}</description>
-<content:encoded><![CDATA[${html(entry).replaceAll("]]>", "]]&gt;")}]]></content:encoded>
+<content:encoded><![CDATA[${html(entry, url).replaceAll("]]>", "]]&gt;")}]]></content:encoded>
 </item>`
 }
 
 /** An entry as simple HTML for feed readers: summary, highlights, then the lists. */
-function html(entry: ChangelogEntry) {
+function html(entry: ChangelogEntry, url: string) {
   const list = (title: string, notes: ChangelogNote[]) =>
     notes.length > 0 &&
     `<h3>${title}</h3><ul>${notes
@@ -73,6 +73,8 @@ function html(entry: ChangelogEntry) {
     ...entry.features.map(
       (feature) => `<h3>${inline(feature.title)}</h3>${feature.body ? `<p>${inline(feature.body)}</p>` : ""}`,
     ),
+    entry.hiddenFeatures > 0 &&
+      `<p><a href="${escape(url)}">See all highlights in ${escape(entry.releases[0].tag)}</a></p>`,
     entry.breaking.length > 0 &&
       `<h3>Breaking changes</h3>${entry.breaking.map((change) => `<p>${change.title ? `<strong>${inline(change.title)}</strong> ` : ""}${inline(change.body)}</p>`).join("")}`,
     list("Improvements", entry.improved),

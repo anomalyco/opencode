@@ -6,10 +6,9 @@
 // Loads are returning visits: each run navigates from about:blank with the HTTP cache warm, so they
 // measure parsing, running and hydrating the page's code, not the network. Interactions start from a
 // fresh load of the home page, so each run is the first ⌘K, hover or click after a load.
-import { bench, url, web, type Context, type PrepareContext, type RunCase } from "@hona/strobe"
+import { bench, url, web, type Context, type RunCase } from "@hona/strobe"
 
 const desktop = { width: 1440, height: 900 }
-const phone = { width: 390, height: 844 }
 const card = '[data-component="products"][data-layout="carousel"] [data-component="product-card"] [data-slot="media"]'
 
 // Absolute: page.goto resolves a relative path against about:blank after the reset.
@@ -23,16 +22,9 @@ const load = (path: string): RunCase<unknown> => ({
 })
 
 // Each target's input: a desktop has a mouse, a phone a touch screen, and the site takes different
-// paths for each (preloading links as they scroll into view, autoplaying card videos). Headless
-// Chromium as strobe 0.14 launches it has neither and matches (hover: none), so until strobe gives it
-// a mouse, point STROBE_BROWSER at a wrapper that runs Chrome with
-// --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4.
-// The phone target turns touch emulation on, and setup refuses a page with the wrong input.
-const touch = async (ctx: PrepareContext<unknown>) => {
-  const session = await ctx.playwright.context.newCDPSession(ctx.playwright.page)
-  await session.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 })
-}
-
+// paths for each (preloading links as they scroll into view, autoplaying card videos). strobe refuses
+// a page that doesn't see its target's input (DeviceMismatch). On the phone a scroll is a finger's
+// swipes and a click a tap; a phone has no hover, so card-hover and search (⌘K) stay on the desktop.
 const reload = async (ctx: Context<unknown>) => {
   await ctx.page.goto(new URL("/", ctx.url).href)
   await ctx.page.idle()
@@ -41,16 +33,11 @@ const reload = async (ctx: Context<unknown>) => {
 export default bench({
   targets: {
     desktop: web({ url: "/", viewport: desktop }),
-    phone: web({ url: "/", viewport: phone, scale: 3, prepare: touch }),
+    phone: web({ url: "/", emulate: "mobile" }),
     // The live site, for reference only: `--target production --blocks 5 --head .` (nothing to build).
     production: url("https://opencode.ai/", { viewport: desktop }),
   },
-  async setup({ page, target }) {
-    const mouse = await page.eval(() => matchMedia("(hover: hover) and (pointer: fine)").matches)
-    if (mouse !== (target !== "phone"))
-      throw new Error(`the ${target} page ${mouse ? "has" : "lacks"} a mouse; see the input note in site.bench.ts`)
-    await page.idle()
-  },
+  setup: ({ page }) => page.idle(),
   cases: {
     "load-home": load("/"),
     "load-product": { ...load("/product"), targets: ["desktop", "production"] },
@@ -85,6 +72,7 @@ export default bench({
     },
     "card-open": {
       primary: "main.work",
+      targets: ["desktop", "phone", "production"],
       run: async ({ page }) => {
         await page.click(card, { until: '[data-component="product-hero"]' })
         await page.idle()

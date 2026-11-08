@@ -528,13 +528,15 @@
     justify-content: center;
   }
 
-  /* Exactly as wide as the button and its chevron together, from the button's left edge (the
-     split is the menu's positioning box); a label that doesn't fit ends in an ellipsis. */
+  /* From the button's inline-start edge (the split is the menu's positioning box), at least as wide
+     as the button and its chevron together and wider when a row needs it (a shorter translated
+     button, as in Arabic), so every label shows in full; placeMenu caps it 16px from the window's
+     edges, and only then does a label end in an ellipsis. */
   [data-slot="menu"][data-slot="menu"] {
     inset-inline-start: 0;
     inset-inline-end: auto;
-    width: 100%;
-    min-width: 0;
+    width: max-content;
+    min-width: 100%;
     transform-origin: bottom var(--x-start, left);
 
     [data-slot="store"] {
