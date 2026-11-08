@@ -9,12 +9,14 @@ publish.workspace = true
 [lints]
 workspace = true
 
+# The plugin depends on the plugin API alone; the host turns what it returns into widgets.
 [dependencies]
-opentui.workspace = true
-opencode-plugin.workspace = true
-opencode-ui.workspace = true
+opencode-plugin-abi.workspace = true
 unicode-segmentation = "1"
 
 [dev-dependencies]
+opencode-plugin.workspace = true
+opencode-ui.workspace = true
+opentui.workspace = true
 opencode-parity.workspace = true
 serde_json.workspace = true

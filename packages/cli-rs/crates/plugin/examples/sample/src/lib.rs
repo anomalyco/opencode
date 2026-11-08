@@ -2,6 +2,15 @@
 //! fence and a command that panic, so the loader's tests can show a panic is caught. A thread of its own counts
 //! ticks and wakes the host, so the slot updates itself. The `v2` feature changes
 //! what it draws, so a rebuild proves hot reload. Each variant is its own feature, so cargo keeps every build.
+//!
+//! The fences ([`fence`]) are on the one API of ABI 1.4; the rest is still the 1.3 surface. The `abi-1-3` feature
+//! builds [`v1_3`] instead: a plugin written against ABI 1.3, on a frozen copy of that crate.
+
+#![cfg_attr(feature = "abi-1-3", allow(dead_code, unused_imports))]
+
+mod fence;
+#[cfg(feature = "abi-1-3")]
+mod v1_3;
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -48,27 +57,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     });
     setup.command(command("sample.open", "Open the sample route", Some("sample")), move |_| host.open_route("hello"));
     setup.command(command("sample.panic", "Panic in the sample plugin", None), |_| panic!("sample command panicked"));
-    setup.code_block("sample", |fence| {
-        if fence.code.trim().is_empty() {
-            return None;
-        }
-        let lines = fence.code.lines().map(|line| {
-            vec![
-                Span::new(format!("SAMPLE {VERSION} ")).fg("text.muted"),
-                Span::new(line.to_uppercase()).fg("markdown.heading").bold(),
-            ]
-        });
-        Some(lines.collect())
-    });
-    setup.code_block("sample-panic", |_| panic!("sample fence panicked"));
-    setup.code_block("sample-mode", move |_| {
-        let mode = match host.theme_mode() {
-            Some(ThemeMode::Dark) => "dark",
-            Some(ThemeMode::Light) => "light",
-            None => "unknown",
-        };
-        Some(vec![vec![Span::new(format!("sample mode {mode}"))]])
-    });
+    fence::setup(setup)?;
     // Ticks every `tick_ms` (a second by default), `ticks` times (no limit by default), on a host that offers a
     // waker (ABI 1.3).
     let option = |name: &str| {
@@ -160,7 +149,13 @@ fn count(host: opencode_plugin_abi::Host) -> u64 {
         .unwrap_or(0)
 }
 
-#[cfg(not(any(feature = "abi-1-0", feature = "minor-newer", feature = "major-2", feature = "requires-future")))]
+#[cfg(not(any(
+    feature = "abi-1-0",
+    feature = "abi-1-3",
+    feature = "minor-newer",
+    feature = "major-2",
+    feature = "requires-future"
+)))]
 export_plugin!("sample", setup);
 
 // Built against ABI 1.0: the shorter table, without `describe`.

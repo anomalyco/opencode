@@ -31,19 +31,18 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use opencode_plugin_abi::{
-    self as abi, ABI_MAJOR, ABI_MINOR, Bytes, HostApi, HostRequest, Line, Manifest, Owned, PluginApi, PluginApiV1_0,
-    Request,
+    self as abi, ABI_MAJOR, ABI_MINOR, Bytes, Fenced, HostApi, HostRequest, Line, Manifest, Owned, PluginApi,
+    PluginApiV1_0, Request,
 };
 use opencode_ui::keymap::{Bind, KeymapLayer, Slash, TuiCommand};
-use opencode_ui::theme::Theme;
 use opencode_util::dl;
 use opentui::app::ProxyError;
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
-use opentui::style::Color;
 use serde::de::DeserializeOwned;
 
 use super::Backend;
+use crate::node::{Fences, lines_widget};
 use crate::{Definition, ErrorFn, Host, Kind, Placement, Setup, Slotted, Toast};
 
 /// The host's minor version: it serves every entry and request up to it.
@@ -65,73 +64,78 @@ pub struct Inspected {
 impl Native {
     /// Opens `library` and checks its version without setting it up.
     pub fn inspect(&self, library: &[u8]) -> Result<Inspected, String> {
-        let library = Library::open(library)?;
+        let library = Library::open(library, HOST_MINOR)?;
         Ok(Inspected { major: ABI_MAJOR, minor: library.minor, version: library.metadata().version })
     }
 }
 
 impl<H: Host> Backend<H> for Native {
     fn load(&self, host: &Rc<H>, library: &[u8], options: Option<&str>) -> Result<(Definition<H>, ErrorFn), String> {
-        let library = Rc::new(Library::open(library)?);
-        let metadata = library.metadata();
-        if let Some(version) = &metadata.version {
-            log::info!("plugin library version {version}, ABI {ABI_MAJOR}.{}", library.minor);
-        }
-        let options = options.map(str::to_owned);
-        // Setup runs on each activation only, so a disabled plugin starts nothing. A plugin without `describe`
-        // (ABI 1.0) tells its ID only from setup, so for it setup runs once now, and that instance is destroyed.
-        let id = match metadata.id {
-            Some(id) => id,
-            None => Instance::create(&library, Rc::downgrade(host), "", options.as_deref())?.1.id,
-        };
-        let failure: Rc<RefCell<Option<String>>> = Rc::default();
-        let definition = Definition::new(id, {
-            let failure = failure.clone();
-            move |setup: &mut Setup<'_, H>| {
-                let host = Rc::downgrade(setup.host());
-                let instance = Instance::create(&library, host.clone(), setup.id(), options.as_deref()).and_then(
-                    |(instance, manifest)| match manifest.id == setup.id() {
-                        true => Ok((instance, manifest)),
-                        false => Err(format!("setup returned plugin ID {}, not {}", manifest.id, setup.id())),
-                    },
-                );
-                let (instance, manifest) = match instance {
-                    Ok(instance) => instance,
-                    Err(error) => {
-                        log::error!("plugin {} failed: {error}", setup.id());
-                        *failure.borrow_mut() = Some(error);
-                        return;
-                    }
-                };
-                *failure.borrow_mut() = None;
-                let woken = instance.shared.wake.id;
-                let guest = Rc::new_cyclic(|guest: &Weak<Guest<H>>| {
-                    let guest = guest.clone();
-                    let handler = setup.host().app().on_message(move |_, message: &Woken| {
-                        if let Some(guest) = guest.upgrade().filter(|_| message.0 == woken) {
-                            guest.redraw();
-                        }
-                    });
-                    Guest {
-                        instance,
-                        busy: Cell::new(false),
-                        failure: failure.clone(),
-                        host,
-                        id: setup.id().to_owned(),
-                        layer: RefCell::new(None),
-                        claims: RefCell::default(),
-                        handler,
+        define(host, Library::open(library, HOST_MINOR)?, options)
+    }
+}
+
+/// The definition of the plugin `library` holds; setup runs on each activation.
+fn define<H: Host>(host: &Rc<H>, library: Library, options: Option<&str>) -> Result<(Definition<H>, ErrorFn), String> {
+    let library = Rc::new(library);
+    let metadata = library.metadata();
+    if let Some(version) = &metadata.version {
+        log::info!("plugin library version {version}, ABI {ABI_MAJOR}.{}", library.minor);
+    }
+    let options = options.map(str::to_owned);
+    // Setup runs on each activation only, so a disabled plugin starts nothing. A plugin without `describe`
+    // (ABI 1.0) tells its ID only from setup, so for it setup runs once now, and that instance is destroyed.
+    let id = match metadata.id {
+        Some(id) => id,
+        None => Instance::create(&library, Rc::downgrade(host), "", options.as_deref())?.1.id,
+    };
+    let failure: Rc<RefCell<Option<String>>> = Rc::default();
+    let definition = Definition::new(id, {
+        let failure = failure.clone();
+        move |setup: &mut Setup<'_, H>| {
+            let host = Rc::downgrade(setup.host());
+            let instance = Instance::create(&library, host.clone(), setup.id(), options.as_deref()).and_then(
+                |(instance, manifest)| match manifest.id == setup.id() {
+                    true => Ok((instance, manifest)),
+                    false => Err(format!("setup returned plugin ID {}, not {}", manifest.id, setup.id())),
+                },
+            );
+            let (instance, manifest) = match instance {
+                Ok(instance) => instance,
+                Err(error) => {
+                    log::error!("plugin {} failed: {error}", setup.id());
+                    *failure.borrow_mut() = Some(error);
+                    return;
+                }
+            };
+            *failure.borrow_mut() = None;
+            let woken = instance.shared.wake.id;
+            let guest = Rc::new_cyclic(|guest: &Weak<Guest<H>>| {
+                let guest = guest.clone();
+                let handler = setup.host().app().on_message(move |_, message: &Woken| {
+                    if let Some(guest) = guest.upgrade().filter(|_| message.0 == woken) {
+                        guest.redraw();
                     }
                 });
-                register(setup, &guest, &manifest);
-                // What setup asked for (toasts, routes) happens now that the plugin is active.
-                let effects = std::mem::take(&mut guest.instance.shared.ctx.borrow_mut().effects);
-                guest.apply(effects);
-            }
-        });
-        let error: ErrorFn = Rc::new(move || failure.borrow().clone());
-        Ok((definition, error))
-    }
+                Guest {
+                    instance,
+                    busy: Cell::new(false),
+                    failure: failure.clone(),
+                    host,
+                    id: setup.id().to_owned(),
+                    layer: RefCell::new(None),
+                    claims: RefCell::default(),
+                    handler,
+                }
+            });
+            register(setup, &guest, &manifest);
+            // What setup asked for (toasts, routes) happens now that the plugin is active.
+            let effects = std::mem::take(&mut guest.instance.shared.ctx.borrow_mut().effects);
+            guest.apply(effects);
+        }
+    });
+    let error: ErrorFn = Rc::new(move || failure.borrow().clone());
+    Ok((definition, error))
 }
 
 /// An open library's entries. The library stays loaded for the life of the process.
@@ -145,7 +149,8 @@ struct Library {
 }
 
 impl Library {
-    fn open(bytes: &[u8]) -> Result<Self, String> {
+    /// Opens a library for a host of minor version `host_minor`.
+    fn open(bytes: &[u8], host_minor: u32) -> Result<Self, String> {
         static OPENED: AtomicUsize = AtomicUsize::new(0);
         let dir = std::env::temp_dir().join(format!("opencode-rs-plugins-{}", std::process::id()));
         std::fs::create_dir_all(&dir).map_err(|error| format!("{}: {error}", dir.display()))?;
@@ -160,13 +165,13 @@ impl Library {
         let entry = unsafe { library.symbol::<abi::EntryFn>(abi::ENTRY) }
             .map_err(|_| format!("not an opencode-rs plugin: no `{}` symbol", abi::ENTRY))?;
         // SAFETY: as above; the table it returns lives as long as the library.
-        let opened = Self::from_table(unsafe { entry() })?;
+        let opened = Self::from_table(unsafe { entry() }, host_minor)?;
         library.leak();
         Ok(opened)
     }
 
     /// Checks the table `api` points to and takes its entries. Nothing past the `size` it declares is read.
-    fn from_table(api: *const PluginApi) -> Result<Self, String> {
+    fn from_table(api: *const PluginApi, host_minor: u32) -> Result<Self, String> {
         if api.is_null() {
             return Err(format!("`{}` returned no table", abi::ENTRY));
         }
@@ -184,7 +189,7 @@ impl Library {
         if major != ABI_MAJOR {
             return Err(format!(
                 "plugin ABI {major}.{minor} is not supported: this opencode-rs loads ABI {ABI_MAJOR}.x plugins \
-                 (up to {ABI_MAJOR}.{HOST_MINOR}); rebuild the plugin against opencode-plugin-abi {ABI_MAJOR}"
+                 (up to {ABI_MAJOR}.{host_minor}); rebuild the plugin against opencode-plugin-abi {ABI_MAJOR}"
             ));
         }
         if size < size_of::<PluginApiV1_0>() {
@@ -192,9 +197,9 @@ impl Library {
         }
         // SAFETY: the 1.0 core is within `size`; its callbacks are nullable.
         let core = unsafe { &*api.cast::<PluginApiV1_0>() };
-        if core.requires_minor > HOST_MINOR {
+        if core.requires_minor > host_minor {
             return Err(format!(
-                "plugin needs host ABI {ABI_MAJOR}.{} or newer, this opencode-rs has {ABI_MAJOR}.{HOST_MINOR}; \
+                "plugin needs host ABI {ABI_MAJOR}.{} or newer, this opencode-rs has {ABI_MAJOR}.{host_minor}; \
                  update opencode-rs",
                 core.requires_minor
             ));
@@ -626,13 +631,20 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
     }
     for language in &manifest.fences {
         let guest = guest.clone();
+        // A 1.4 plugin renders through `RenderFence`; a 1.3 plugin gets the 1.3 request.
+        let fences = (manifest.render >= abi::RENDER).then(Fences::default);
         setup.code_block(language.clone(), move |block, theme| {
-            let request = Request::Fence(abi::Fence {
+            if let Some(fences) = &fences {
+                return fences.render(block, theme, |fence| {
+                    guest.request("render-fence", &Request::RenderFence(fence)).unwrap_or(Fenced::Code)
+                });
+            }
+            let request = Request::Fence {
                 language: block.language.to_owned(),
                 info: block.info.to_owned(),
                 code: block.code.to_owned(),
                 streaming: block.streaming && !block.closed,
-            });
+            };
             let lines = guest.request::<Option<Vec<Line>>>("render-fence", &request).flatten()?;
             Some(lines_widget(block.app, theme, &lines, true))
         });
@@ -701,69 +713,6 @@ impl<H: Host> Slotted<H> for Rc<Claim<H>> {
             self.draw(host);
         }
     }
-}
-
-/// Rows of spans as one no-wrap text. A fence scrolls sideways, as the LaTeX and Mermaid renderers do.
-fn lines_widget(app: &App, theme: &Theme, lines: &[Line], scroll: bool) -> AnyWidget {
-    let width = lines
-        .iter()
-        .map(|line| line.iter().map(|span| unicode_width::UnicodeWidthStr::width(span.text.as_str())).sum::<usize>())
-        .max()
-        .unwrap_or(0);
-    let height = lines.len().max(1) as f32;
-    let mut spans: Vec<Span<'static>> = Vec::new();
-    for (index, line) in lines.iter().enumerate() {
-        if index > 0 {
-            spans.push(Span::styled("\n", Style::new().fg(theme.text.base)));
-        }
-        spans.extend(line.iter().map(|span| {
-            let mut attributes = Attributes::NONE;
-            for (set, attribute) in [
-                (span.bold, Attributes::BOLD),
-                (span.italic, Attributes::ITALIC),
-                (span.underline, Attributes::UNDERLINE),
-                (span.dim, Attributes::DIM),
-            ] {
-                if set {
-                    attributes |= attribute;
-                }
-            }
-            let fg = color(theme, span.fg.as_deref()).unwrap_or(theme.text.base);
-            let mut style = Style::new().fg(fg);
-            if let Some(bg) = color(theme, span.bg.as_deref()) {
-                style = style.bg(bg);
-            }
-            Span::styled(span.text.clone(), Style { attributes, ..style })
-        }));
-    }
-    let text = Text::new(app, spans)
-        .width(Length::percent(100.0))
-        .min_width(width as f32)
-        .height(height)
-        .wrap(WrapMode::None)
-        .selectable(false)
-        .shrink(0.0);
-    if !scroll {
-        return text.as_any();
-    }
-    ScrollBox::new(app)
-        .width(Length::percent(100.0))
-        .height(height)
-        .shrink(0.0)
-        .axes(true, false)
-        .scrollbars(false)
-        .child(&text)
-        .as_any()
-}
-
-/// A theme token path, or `#rrggbb`.
-fn color(theme: &Theme, value: Option<&str>) -> Option<Color> {
-    let value = value?;
-    if let Some(hex) = value.strip_prefix('#').filter(|hex| hex.len() == 6) {
-        let channel = |index: usize| u8::from_str_radix(&hex[index..index + 2], 16).ok();
-        return Some(Color::rgb(channel(0)?, channel(2)?, channel(4)?));
-    }
-    theme.get(value).copied()
 }
 
 #[cfg(test)]

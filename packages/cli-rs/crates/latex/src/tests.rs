@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use opencode_plugin::node::Fences;
 use opencode_ui::markdown::CodeBlockRenderers;
 use opencode_ui::theme::{Catalog, Theme, ThemeMode};
 use opentui::prelude::*;
@@ -80,13 +81,27 @@ fn app(width: u16, height: u16) -> (TestApp, Theme) {
     (TestApp::with_options(width, height, options), theme)
 }
 
-/// `TextPart`'s Markdown with the LaTeX renderer for `latex` and `math`, as the plugin host registers it.
+/// The host as the plugin reads it: dark.
+struct Dark;
+
+impl opencode_plugin_abi::Read for Dark {
+    fn theme_mode(&self) -> opencode_plugin_abi::ThemeMode {
+        opencode_plugin_abi::ThemeMode::Dark
+    }
+}
+
+/// `TextPart`'s Markdown with the plugin's renderers for `latex` and `math`, through the host's fence adapter, as
+/// the plugin host registers them.
 fn markdown(app: &TestApp, theme: &Theme, streaming: bool) -> Markdown {
-    let render = Rc::new(crate::renderer());
+    let mut setup = opencode_plugin_abi::Setup::in_process("opencode.latex", None);
+    (crate::plugin().setup)(&mut setup).unwrap();
     let mut renderers = CodeBlockRenderers::default();
-    for language in ["latex", "math"] {
-        let (render, theme) = (render.clone(), theme.clone());
-        renderers.register(language, Rc::new(move |block| render(block, &theme)));
+    for (language, render) in setup.fences() {
+        let (render, theme, fences) = (render.clone(), theme.clone(), Fences::default());
+        renderers.register(
+            language.clone(),
+            Rc::new(move |block| fences.render(block, &theme, |fence| render(&Dark, &fence))),
+        );
     }
     let syntax = opencode_ui::code::syntax_theme(theme);
     opencode_ui::markdown::view(app, theme, &syntax, &renderers, true, streaming)

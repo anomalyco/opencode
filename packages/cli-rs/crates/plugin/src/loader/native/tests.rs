@@ -158,15 +158,41 @@ fn a_panicking_command_fails_the_plugin() {
 #[test]
 fn versions_follow_the_abi_rules() {
     let load = |library: &[u8], options: Option<&str>| Native.load(&host(), library, options).err();
-    // The current build is 1.3; a 1.0 build has the shorter table and still loads and works on this 1.3 host.
+    // The current build is 1.4; a 1.0 build has the shorter table and still loads and works on this 1.4 host.
     let current = build("");
-    assert_eq!(Native.inspect(&current).unwrap(), Inspected { major: 1, minor: 3, version: Some("0.1.0".to_owned()) });
+    assert_eq!(Native.inspect(&current).unwrap(), Inspected { major: 1, minor: 4, version: Some("0.1.0".to_owned()) });
     let old = build("abi-1-0");
     assert_eq!(Native.inspect(&old).unwrap(), Inspected { major: 1, minor: 0, version: None });
     let host = host();
     let registry = active(&host, &old);
     let screen = markdown(&host, &registry, "```sample\nold\n```\n");
     assert!(screen.contains("SAMPLE v1 OLD"), "{screen}");
+
+    // A plugin built on the frozen 1.3 crate gets the 1.3 requests and draws its rows, its slot and its route.
+    let v1_3 = build("abi-1-3");
+    assert_eq!(Native.inspect(&v1_3).unwrap(), Inspected { major: 1, minor: 3, version: Some("0.1.0".to_owned()) });
+    // A fresh host, so the commands of the plugins above are not in its keymap.
+    let host = crate::loader::tests::host();
+    let registry = active(&host, &v1_3);
+    let screen = markdown(&host, &registry, "```sample\nold\n```\n\n```sample-mode\nx\n```\n");
+    assert!(screen.contains("SAMPLE 1.3 OLD") && screen.contains("sample mode dark, streaming false"), "{screen}");
+    let parent = View::new(host.app());
+    let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+    host.app().root().clear();
+    host.app().root().add(&parent);
+    host.app().root().add(&registry.route(&*host, "sample", "hello").unwrap().root());
+    host.app.render();
+    let screen = host.app.text();
+    assert!(screen.contains("sample plugin 1.3: home.footer") && screen.contains("Sample route hello"), "{screen}");
+    assert!(matches!(host.keymap().dispatch("sample.hello", None), RunResult::Ok));
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(*host.toasts.borrow(), [(Toast::Success, None, "Hello from sample 1.3".to_owned())]);
+
+    // A 1.3 host refuses a plugin of this crate, which needs the 1.4 render requests.
+    assert_eq!(
+        Library::open(&current, 3).err().unwrap(),
+        "plugin needs host ABI 1.4 or newer, this opencode-rs has 1.3; update opencode-rs"
+    );
 
     // A plugin built against a newer minor version loads and uses what this host offers.
     let newer = build("minor-newer");
@@ -178,12 +204,12 @@ fn versions_follow_the_abi_rules() {
     // Only a major mismatch, or a plugin that needs a newer host, is refused, with a clear reason.
     assert_eq!(
         load(&build("major-2"), None).unwrap(),
-        "plugin ABI 2.0 is not supported: this opencode-rs loads ABI 1.x plugins (up to 1.3); rebuild the \
+        "plugin ABI 2.0 is not supported: this opencode-rs loads ABI 1.x plugins (up to 1.4); rebuild the \
          plugin against opencode-plugin-abi 1"
     );
     assert_eq!(
         load(&build("requires-future"), None).unwrap(),
-        "plugin needs host ABI 1.99 or newer, this opencode-rs has 1.3; update opencode-rs"
+        "plugin needs host ABI 1.99 or newer, this opencode-rs has 1.4; update opencode-rs"
     );
     assert!(load(b"not a library", None).unwrap().starts_with("cannot load the library"));
     // Setup runs on activation, so a setup that fails fails the plugin there.
@@ -276,7 +302,7 @@ fn a_rebuild_whose_setup_fails_keeps_the_running_version() {
 // `destroy` is allowed.
 #[test]
 fn a_malformed_table_is_refused_without_reading_it() {
-    let refused = |api: *const PluginApi| Library::from_table(api).err().unwrap();
+    let refused = |api: *const PluginApi| Library::from_table(api, HOST_MINOR).err().unwrap();
     assert_eq!(refused(std::ptr::null()), "`opencode_plugin_v1` returned no table");
     let short: [usize; 1] = [size_of::<usize>()];
     assert_eq!(refused(short.as_ptr().cast()), "plugin table is 8 bytes, shorter than its version header");
@@ -302,7 +328,7 @@ fn a_malformed_table_is_refused_without_reading_it() {
     let api = PluginApi { call: Some(abi::runtime::call), ..api };
     assert_eq!(refused(&api), "plugin table has a null `free` callback");
     let api = PluginApi { free: Some(abi::runtime::free), ..api };
-    let library = Library::from_table(&api).unwrap();
+    let library = Library::from_table(&api, HOST_MINOR).unwrap();
     assert!(library.destroy.is_none() && library.describe.is_none());
 }
 
@@ -385,4 +411,88 @@ fn setup_reaches_the_host() {
     host.app.advance(Duration::from_millis(1));
     assert_eq!(*host.toasts.borrow(), [(Toast::Info, None, "sample setup: count 5, light, stored".to_owned())]);
     assert_eq!(host.storage.borrow().get("plugin.sample.count").map(String::as_str), Some("{\"count\":6}"));
+}
+
+/// The version text of the sample's fences compiled into this test.
+const VERSION: &str = "v1";
+
+/// The sample's fences, compiled in rather than loaded.
+#[path = "../../../examples/sample/src/fence.rs"]
+mod sample_fence;
+
+// Expected: the sample's fences, compiled into the host and run in process, draw what the same source draws from the
+// library through the C ABI.
+#[test]
+fn the_sample_fence_draws_the_same_in_process_and_through_the_library() {
+    let host = host();
+    let plugin = abi::Plugin { id: "sample", setup: sample_fence::setup };
+    let in_process = Registry::new(vec![plugin.into()], []);
+    in_process.activate(&host);
+    let library = active(&host, &build(""));
+    let text = "```sample\nhello\n```\n\n```sample-mode\nx\n```\n";
+    let direct = markdown(&host, &in_process, text);
+    assert!(direct.contains("SAMPLE v1 HELLO") && direct.contains("sample mode dark"), "{direct}");
+    assert_eq!(markdown(&host, &library, text), direct);
+}
+
+/// Streams `chunks` into one Markdown view with the registry's renderers, returning the screen after each.
+fn stream(host: &Rc<TestHost>, registry: &Registry<TestHost>, chunks: &[&str]) -> Vec<String> {
+    let theme = host.theme();
+    let syntax = opencode_ui::code::syntax_theme(&theme);
+    let view = opencode_ui::markdown::view(host.app(), &theme, &syntax, &registry.code_blocks(&theme), true, true);
+    host.app().root().clear();
+    host.app().root().add(&view);
+    chunks
+        .iter()
+        .map(|chunk| {
+            view.append(chunk);
+            host.app.render();
+            host.app.text()
+        })
+        .collect()
+}
+
+unsafe extern "C" fn latex_create(
+    host: *const HostApi,
+    options: Bytes,
+    instance: *mut *mut c_void,
+    out: *mut Owned,
+) -> i32 {
+    let plugin = opencode_latex::plugin();
+    // SAFETY: the loader passes what `PluginApi::create` documents.
+    unsafe { abi::runtime::create(plugin.id, plugin.setup, host, options, instance, out) }
+}
+
+// Expected: the LaTeX built-in, wired through the byte shims of the C ABI (`Loopback`), keeps its formula across
+// a chunk that does not parse, as it does in process, with the host's fence keys crossing the wire.
+#[test]
+fn latex_streams_the_same_through_the_c_abi_loopback() {
+    let host = host();
+    let in_process = Registry::new(vec![opencode_latex::plugin().into()], []);
+    in_process.activate(&host);
+    let api = PluginApi {
+        size: size_of::<PluginApi>(),
+        major: ABI_MAJOR,
+        minor: ABI_MINOR,
+        requires_minor: 4,
+        create: Some(latex_create),
+        call: Some(abi::runtime::call),
+        destroy: Some(abi::runtime::destroy),
+        free: Some(abi::runtime::free),
+        describe: None,
+    };
+    // The shims silence the process's panic hook, as a plugin's own; this test binary keeps its own.
+    let hook = std::panic::take_hook();
+    let (definition, error) = define(&host, Library::from_table(&api, HOST_MINOR).unwrap(), None).unwrap();
+    let loopback = Registry::new(Vec::new(), []);
+    loopback.load(&host, definition.external("latex.so", error));
+    std::panic::set_hook(hook);
+    assert_eq!(entry(&loopback.entries(), "latex.so").status, Status::Active);
+
+    let chunks = ["```latex\n\\frac{a_1+b_1}{c_1+d_1}", "+\\frac{a_", "2+b_2}{c_2+d_2}"];
+    let direct = stream(&host, &in_process, &chunks);
+    assert_eq!(direct[1], direct[0]);
+    assert!(direct[0].contains("───") && !direct[0].contains("\\frac"), "{}", direct[0]);
+    assert!(direct[2] != direct[0] && !direct[2].contains("\\frac"), "{}", direct[2]);
+    assert_eq!(stream(&host, &loopback, &chunks), direct);
 }

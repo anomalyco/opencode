@@ -1,9 +1,10 @@
 //! The Rust plugin API (P.1, `docs/P.1.md`): the in-process form of `@opencode/plugin/tui`. Built-in
 //! plugins and the LaTeX and Mermaid plugins register slots, keymap layers, routes, and code-block renderers
 //! through [`Setup`]; the host mounts them through [`Registry`]. [`loader`] finds and loads external plugins
-//! (P.4).
+//! (P.4). A plugin of the one API (O-67, `opencode-plugin-abi`) becomes a [`Definition`] too, with [`From`].
 
 pub mod loader;
+pub mod node;
 pub mod slot;
 
 use std::cell::{Cell, RefCell};
@@ -117,6 +118,28 @@ impl<H: Host> Definition<H> {
     /// The target of an external plugin.
     pub fn target(&self) -> Option<&str> {
         self.external.as_ref().map(|(target, _)| target.as_str())
+    }
+}
+
+/// A plugin of the one API, run in process: its closures get Rust values, with no JSON step. It may register code
+/// fences so far; the rest of its surface moves here with the built-ins that need it.
+impl<H: Host> From<opencode_plugin_abi::Plugin> for Definition<H> {
+    fn from(plugin: opencode_plugin_abi::Plugin) -> Self {
+        Definition::new(plugin.id, move |setup: &mut Setup<'_, H>| {
+            let mut api = opencode_plugin_abi::Setup::in_process(setup.id(), None);
+            if let Err(error) = (plugin.setup)(&mut api) {
+                log::error!("plugin {} failed: {error}", setup.id());
+                return;
+            }
+            let manifest = api.manifest();
+            if !(manifest.commands.is_empty() && manifest.slots.is_empty() && manifest.routes.is_empty()) {
+                log::error!("plugin {}: only code fences run in process so far", setup.id());
+            }
+            for (language, render) in api.fences() {
+                let render = node::code_block(Rc::downgrade(setup.host()), render.clone());
+                setup.registration.code_blocks.push((language.clone(), render));
+            }
+        })
     }
 }
 
