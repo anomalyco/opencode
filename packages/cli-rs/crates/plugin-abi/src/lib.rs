@@ -38,8 +38,8 @@ use serde::{Deserialize, Serialize};
 /// The major version: changes only with a deliberate breaking change, and a mismatch refuses the plugin.
 pub const ABI_MAJOR: u32 = 1;
 /// The minor version: grows when entries are appended. 1.0 is the core; 1.1 adds [`PluginApi::describe`]; 1.2 adds
-/// [`HostApi::theme_mode`].
-pub const ABI_MINOR: u32 = 2;
+/// [`HostApi::theme_mode`]; 1.3 adds [`HostApi::wake`].
+pub const ABI_MINOR: u32 = 3;
 
 /// The symbol every plugin exports, of type [`EntryFn`].
 pub const ENTRY: &str = "opencode_plugin_v1";
@@ -128,6 +128,11 @@ pub struct HostApi {
     /// Whether the page theme is dark ([`THEME_DARK`]) or light ([`THEME_LIGHT`]), as TS plugins read
     /// `api.themeMode`.
     pub theme_mode: Option<unsafe extern "C" fn(ctx: *mut c_void) -> u32>,
+    // 1.3
+    /// Asks the host to request the rows of the plugin's mounted slot claims and routes again, on its UI thread.
+    /// Callable from any thread until the host destroys the instance; wakes that arrive before the host handles
+    /// one count once. A plugin reads it as [`Host::waker`].
+    pub wake: Option<unsafe extern "C" fn(ctx: *mut c_void)>,
 }
 
 /// [`HostApi::theme_mode`] results.
@@ -145,6 +150,20 @@ pub struct HostApiV1_1 {
     pub ctx: *mut c_void,
     pub call: Option<unsafe extern "C" fn(*mut c_void, Bytes, *mut Owned) -> i32>,
     pub free: Option<unsafe extern "C" fn(Owned)>,
+}
+
+/// The 1.2 layout of [`HostApi`], a prefix of it, without `wake`; kept to test that plugins read only what such a
+/// host offers.
+#[doc(hidden)]
+#[repr(C)]
+pub struct HostApiV1_2 {
+    pub size: usize,
+    pub major: u32,
+    pub minor: u32,
+    pub ctx: *mut c_void,
+    pub call: Option<unsafe extern "C" fn(*mut c_void, Bytes, *mut Owned) -> i32>,
+    pub free: Option<unsafe extern "C" fn(Owned)>,
+    pub theme_mode: Option<unsafe extern "C" fn(*mut c_void) -> u32>,
 }
 
 /// Dark or light, from [`Host::theme_mode`].
@@ -432,6 +451,38 @@ impl Host {
             _ => None,
         }
     }
+
+    /// A handle that wakes the host from any thread; `None` from a host older than 1.3.
+    pub fn waker(&self) -> Option<Waker> {
+        // SAFETY: the host keeps `api` alive until it destroys the instance; `size` says which entries it has.
+        let api = unsafe { self.api.as_ref()? };
+        let end = std::mem::offset_of!(HostApi, wake) + size_of::<Option<unsafe extern "C" fn()>>();
+        (api.size >= end && api.wake.is_some()).then_some(Waker { api: self.api })
+    }
+}
+
+/// Wakes the host from any thread (ABI 1.3), from [`Host::waker`]: the host then asks the plugin's mounted slot
+/// claims and routes for their rows again, so a plugin that works on its own thread can show the result. Valid
+/// until the host destroys the instance, so a thread that holds one must stop before the plugin's state drops.
+#[derive(Clone, Copy)]
+pub struct Waker {
+    api: *const HostApi,
+}
+
+// SAFETY: a 1.3 host's `wake` may be called from any thread, and the table does not change while the instance lives.
+unsafe impl Send for Waker {}
+unsafe impl Sync for Waker {}
+
+impl Waker {
+    pub fn wake(&self) {
+        // SAFETY: `waker` checked that the table has a `wake`; the table outlives the instance's threads.
+        unsafe {
+            let api = &*self.api;
+            if let Some(wake) = api.wake {
+                wake(api.ctx);
+            }
+        }
+    }
 }
 
 type FenceFn = Box<dyn Fn(&Fence) -> Option<Vec<Line>>>;
@@ -709,13 +760,51 @@ mod tests {
     fn the_theme_mode_is_read_only_when_the_host_offers_it() {
         let ctx = std::ptr::null_mut();
         let (call, free) = (Some(call as _), Some(free as _));
-        let current =
-            HostApi { size: size_of::<HostApi>(), major: 1, minor: 2, ctx, call, free, theme_mode: Some(light) };
+        let current = HostApi {
+            size: size_of::<HostApi>(),
+            major: 1,
+            minor: 3,
+            ctx,
+            call,
+            free,
+            theme_mode: Some(light),
+            wake: None,
+        };
         assert_eq!(Host { api: &current }.theme_mode(), Some(ThemeMode::Light));
         let null = HostApi { theme_mode: None, ..current };
         assert_eq!(Host { api: &null }.theme_mode(), None);
         let old = HostApiV1_1 { size: size_of::<HostApiV1_1>(), major: 1, minor: 1, ctx, call, free };
         assert_eq!(Host { api: std::ptr::from_ref(&old).cast() }.theme_mode(), None);
+    }
+
+    unsafe extern "C" fn wake(ctx: *mut c_void) {
+        // SAFETY: the test passes a live counter.
+        unsafe { &*ctx.cast::<std::sync::atomic::AtomicUsize>() }.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    // Expected: a plugin wakes a 1.3 host from another thread, and gets no waker, without reading past the table, from
+    // a 1.2 host or a 1.3 host that leaves the entry null.
+    #[test]
+    fn a_waker_wakes_the_host_from_another_thread_when_the_host_offers_it() {
+        let wakes = std::sync::atomic::AtomicUsize::new(0);
+        let ctx = std::ptr::from_ref(&wakes).cast_mut().cast();
+        let (call, free) = (Some(call as _), Some(free as _));
+        let api = HostApi {
+            size: size_of::<HostApi>(),
+            major: 1,
+            minor: 3,
+            ctx,
+            call,
+            free,
+            theme_mode: None,
+            wake: Some(wake),
+        };
+        let waker = Host { api: &api }.waker().unwrap();
+        std::thread::spawn(move || waker.wake()).join().unwrap();
+        assert_eq!(wakes.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert!(Host { api: &HostApi { wake: None, ..api } }.waker().is_none());
+        let old = HostApiV1_2 { size: size_of::<HostApiV1_2>(), major: 1, minor: 2, ctx, call, free, theme_mode: None };
+        assert!(Host { api: std::ptr::from_ref(&old).cast() }.waker().is_none());
     }
 
     // Expected: a C host that passes no table, or leaves `call` or `free` null, gets errors, not a jump to address 0.
@@ -725,9 +814,18 @@ mod tests {
         assert_eq!(host.storage_get("count"), None);
         assert_eq!(host.storage_set("count", "{}"), Err("no host".to_owned()));
         assert_eq!(host.theme_mode(), None);
+        assert!(host.waker().is_none());
         let ctx = std::ptr::null_mut();
-        let api =
-            HostApi { size: size_of::<HostApi>(), major: 1, minor: 2, ctx, call: None, free: None, theme_mode: None };
+        let api = HostApi {
+            size: size_of::<HostApi>(),
+            major: 1,
+            minor: 3,
+            ctx,
+            call: None,
+            free: None,
+            theme_mode: None,
+            wake: None,
+        };
         assert_eq!(Host { api: &api }.storage_set("count", "{}"), Err("the host takes no requests".to_owned()));
         let api = HostApi { call: Some(call), ..api };
         assert_eq!(Host { api: &api }.storage_set("count", "{}"), Err("the host takes no requests".to_owned()));

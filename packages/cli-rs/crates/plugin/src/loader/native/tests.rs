@@ -158,9 +158,9 @@ fn a_panicking_command_fails_the_plugin() {
 #[test]
 fn versions_follow_the_abi_rules() {
     let load = |library: &[u8], options: Option<&str>| Native.load(&host(), library, options).err();
-    // The current build is 1.2; a 1.0 build has the shorter table and still loads and works on this 1.2 host.
+    // The current build is 1.3; a 1.0 build has the shorter table and still loads and works on this 1.3 host.
     let current = build("");
-    assert_eq!(Native.inspect(&current).unwrap(), Inspected { major: 1, minor: 2, version: Some("0.1.0".to_owned()) });
+    assert_eq!(Native.inspect(&current).unwrap(), Inspected { major: 1, minor: 3, version: Some("0.1.0".to_owned()) });
     let old = build("abi-1-0");
     assert_eq!(Native.inspect(&old).unwrap(), Inspected { major: 1, minor: 0, version: None });
     let host = host();
@@ -178,12 +178,12 @@ fn versions_follow_the_abi_rules() {
     // Only a major mismatch, or a plugin that needs a newer host, is refused, with a clear reason.
     assert_eq!(
         load(&build("major-2"), None).unwrap(),
-        "plugin ABI 2.0 is not supported: this opencode-rs loads ABI 1.x plugins (up to 1.2); rebuild the \
+        "plugin ABI 2.0 is not supported: this opencode-rs loads ABI 1.x plugins (up to 1.3); rebuild the \
          plugin against opencode-plugin-abi 1"
     );
     assert_eq!(
         load(&build("requires-future"), None).unwrap(),
-        "plugin needs host ABI 1.99 or newer, this opencode-rs has 1.2; update opencode-rs"
+        "plugin needs host ABI 1.99 or newer, this opencode-rs has 1.3; update opencode-rs"
     );
     assert!(load(b"not a library", None).unwrap().starts_with("cannot load the library"));
     // Setup runs on activation, so a setup that fails fails the plugin there.
@@ -275,6 +275,25 @@ fn a_malformed_table_is_refused_without_reading_it() {
     let api = PluginApi { free: Some(abi::runtime::free), ..api };
     let library = Library::from_table(&api).unwrap();
     assert!(library.destroy.is_none() && library.describe.is_none());
+}
+
+// Expected: a plugin's own thread wakes the host (ABI 1.3), which asks its mounted claim for its rows again without a
+// change batch, and the claim shows what the thread counted.
+#[test]
+fn a_wake_from_a_plugin_thread_draws_its_claims_again() {
+    let host = host();
+    let (definition, error) = Native.load(&host, &build(""), Some("{\"tick_ms\":5}")).unwrap();
+    let registry = Registry::new(Vec::new(), []);
+    registry.load(&host, definition.external("sample.so", error));
+    let parent = View::new(host.app());
+    let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+    host.app().root().add(&parent);
+    let ticked = host.app.wait_until(Duration::from_secs(10), || {
+        host.app.render();
+        let screen = host.app.text();
+        screen.contains(" ticks") && !screen.contains(" 0 ticks")
+    });
+    assert!(ticked, "{}", host.app.text());
 }
 
 // Expected: setup runs against the live host, under its ID: it reads and writes a storage key it declared, reads

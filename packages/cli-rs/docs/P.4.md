@@ -20,7 +20,8 @@ exports one symbol, `opencode_plugin_v1`, that returns a `#[repr(C)]` table, `Pl
 
 The host passes a `HostApi` table of the same shape (`size`, `major`, `minor`, `ctx`, `call`, `free`, and since
 1.2 the nullable `theme_mode(ctx)`, dark or light, which a plugin reads as `Host::theme_mode` and gets `None` from
-an older host). Past
+an older host, and since 1.3 the nullable `wake(ctx)`, callable from any thread, which a plugin reads as
+`Host::waker`). Past
 the tables, everything crosses as JSON in byte buffers: the `Manifest`, a `Request` from the host (`fence`,
 `slot`, `route`, `command`), and a `HostRequest` from the plugin (`log`, `toast`, `storage-get`,
 `storage-set`, `open-route`). Each side frees the buffers it allocated, so each keeps its own allocator.
@@ -28,14 +29,14 @@ the tables, everything crosses as JSON in byte buffers: the `Manifest`, a `Reque
 Versions only grow by appending:
 
 - A new entry goes at the end of a table and is optional. A reader treats entries past the other side's
-  `size` as absent, so a plugin built against ABI 1.0 loads on a 1.2 host.
+  `size` as absent, so a plugin built against ABI 1.0 loads on a 1.3 host.
 - JSON payloads only gain optional fields; readers ignore fields they do not know.
 - A plugin built against a newer minor version loads on an older host and uses what the host offers: the host
   answers a request it does not know with an error. A plugin that cannot work without a newer host sets
   `requires_minor`, and the host refuses it with a message naming both versions.
 - Only a deliberate major-version break refuses a plugin. The host reads `major` before anything else, and
   the plugin manager shows why: "plugin ABI 2.0 is not supported: this opencode-rs loads ABI 1.x plugins
-  (up to 1.2); rebuild the plugin against opencode-plugin-abi 1".
+  (up to 1.3); rebuild the plugin against opencode-plugin-abi 1".
 
 A Rust-ABI `dylib` was rejected because it breaks with every compiler or crate version.
 
@@ -60,8 +61,12 @@ wrapping; a fence scrolls sideways like the LaTeX and Mermaid renderers. `Setup:
 `options` of the plugin's `plugins` entry as JSON text. Other languages implement the same structs and JSON.
 
 What does not cross: arbitrary widget trees, mouse handlers, and live store access (`api.state`). A slot or
-route is drawn when it mounts, asks for its rows again with each change batch of the store, and redraws when
-they differ.
+route is drawn when it mounts, asks for its rows again with each change batch of the store and each wake, and
+redraws when they differ. Every call into a plugin runs on the UI thread, so a render must return quickly. Slow
+work, such as network I/O, runs on the plugin's own thread, which calls `Waker::wake` when it has something to
+show; the host posts the wake through the app's proxy, and wakes before it handles one count once. A waker is
+valid until the host destroys the instance, so the plugin stops its threads when its state drops (the sample's
+`Ticker`).
 
 ## Discovery
 
