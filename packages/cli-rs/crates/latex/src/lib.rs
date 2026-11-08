@@ -62,7 +62,7 @@ fn renderer() -> impl Fn(&Fence) -> Fenced {
         if streaming {
             shown.insert(fence.key, fence.code.clone());
         }
-        Fenced::Lines { lines: formula(&layout) }
+        Fenced::Lines { lines: formula(&layout), fg: None, drag: false }
     }
 }
 

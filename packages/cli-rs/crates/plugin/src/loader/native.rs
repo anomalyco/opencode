@@ -42,7 +42,7 @@ use opentui::prelude::*;
 use serde::de::DeserializeOwned;
 
 use super::Backend;
-use crate::node::{Fences, lines_widget};
+use crate::node::{Fences, Scroll, lines_widget, theme_color};
 use crate::{Definition, ErrorFn, Host, Kind, Placement, Setup, Slotted, Toast};
 
 /// The host's minor version: it serves every entry and request up to it.
@@ -477,6 +477,10 @@ fn handle<H: Host>(ctx: &mut Ctx<H>, request: HostRequest) -> Result<serde_json:
             host.storage_write(&stored, &value)?;
         }
         HostRequest::OpenRoute { name } => ctx.effects.push(Effect::Route(name)),
+        HostRequest::Color { token } => {
+            let color = ctx.host.upgrade().and_then(|host| theme_color(&host.theme(), &token));
+            return Ok(serde_json::to_value(color).unwrap_or_default());
+        }
         HostRequest::StorageKey { key } => {
             if !ctx.keys.contains(&key) {
                 ctx.keys.push(key);
@@ -646,7 +650,7 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
                 streaming: block.streaming && !block.closed,
             };
             let lines = guest.request::<Option<Vec<Line>>>("render-fence", &request).flatten()?;
-            Some(lines_widget(block.app, theme, &lines, true))
+            Some(lines_widget(block.app, theme, &lines, None, Scroll::Wheel))
         });
     }
     for (claim, slot) in manifest.slots.iter().enumerate() {
@@ -696,7 +700,7 @@ impl<H: Host> Claim<H> {
         }
         self.view.clear();
         if !lines.is_empty() {
-            self.view.add(&lines_widget(host.app(), &host.theme(), &lines, false));
+            self.view.add(&lines_widget(host.app(), &host.theme(), &lines, None, Scroll::None));
         }
         self.lines.replace(lines);
         host.app().request_redraw();

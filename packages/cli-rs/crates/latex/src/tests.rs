@@ -88,6 +88,10 @@ impl opencode_plugin_abi::Read for Dark {
     fn theme_mode(&self) -> opencode_plugin_abi::ThemeMode {
         opencode_plugin_abi::ThemeMode::Dark
     }
+
+    fn color(&self, _: &str) -> Option<opencode_plugin_abi::Rgba> {
+        None
+    }
 }
 
 /// `TextPart`'s Markdown with the plugin's renderers for `latex` and `math`, through the host's fence adapter, as
