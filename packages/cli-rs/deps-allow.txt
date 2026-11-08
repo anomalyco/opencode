@@ -1,7 +1,10 @@
 # Third-party crates in the shipped graph of opencode-cli for x86_64-unknown-linux-gnu (normal and build edges,
-# not dev), one name per line (all versions of a crate share it), sorted. Marks: `build` (has a build script), `cc`
-# (the build script compiles C with `cc`), `proc-macro`. crates/cli/tests/deps.rs fails unless this file equals the
-# graph. The [tests] section at the end lists what only tests and other workspace members use.
+# not dev, default features), one name per line (all versions of a crate share it), sorted. Third-party is every
+# crate but the workspace members and OpenTUI's opentui and opentui-sys. Marks: `build` (has a build script), `cc`
+# (the build script compiles C with `cc`), `proc-macro`, and a source other than crates.io: `git`, `path`
+# (vendored), `registry`. crates/cli/tests/deps.rs fails unless this file equals the graph. The [tests] section
+# lists what only tests and other workspace members add, and [optional] what non-default features add; a crate
+# from an earlier section is listed again when its marks there differ.
 #
 # Adding a line needs an orchestrator decision (O-58: an O- entry in decisions.md). A crate that leaves the graph
 # leaves this file in the same commit.
@@ -129,3 +132,31 @@ zmij build
 # Third-party crates only the rest of the workspace reaches, over normal, build and dev edges with default features:
 # tests, examples, and members opencode-cli does not ship. The same rules apply: a new line needs an orchestrator
 # decision. Empty: tests use only crates that ship.
+
+[optional]
+# Third-party crates only non-default features bring in, over normal, build and dev edges of the whole workspace
+# with --all-features: the grammars of opencode-ui's `grammars-all`. The same rules apply.
+
+tree-sitter-agda build cc
+tree-sitter-c build cc
+tree-sitter-c-sharp build cc
+tree-sitter-clojure-orchard build cc
+tree-sitter-cpp build cc
+tree-sitter-elixir build cc
+tree-sitter-fsharp build cc
+tree-sitter-haskell build cc
+tree-sitter-hcl build cc git
+tree-sitter-java build cc
+tree-sitter-julia build cc
+tree-sitter-lua build cc
+tree-sitter-make build cc
+tree-sitter-nix build cc
+tree-sitter-ocaml build cc
+tree-sitter-php build cc
+tree-sitter-r build cc
+tree-sitter-ruby build cc
+tree-sitter-scala build cc
+tree-sitter-toml-ng build cc
+tree-sitter-vim build cc
+tree-sitter-vue-next build cc
+tree-sitter-xml build cc
