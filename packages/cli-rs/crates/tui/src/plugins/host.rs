@@ -10,13 +10,14 @@ use std::time::Duration;
 
 use opencode_api::generated::{
     IntegrationInfo, McpServer, ModelInfo, ModelRef, ProviderID, ProviderInfo, SessionID, SessionMessageInfo,
-    UsageLimitsInfo, VcsInfo,
+    UsageLimitsInfo, V2Event, VcsInfo,
 };
+use opencode_local::cli_config::AttentionSoundName;
 use opencode_plugin::abi;
 use opencode_plugin::loader::native::Native;
 use opencode_plugin::loader::{Backend, Configured, Loader};
 use opencode_plugin::node::{assign, refill, theme_color};
-use opencode_plugin::{Definition, Registry, SlotInput, SlotMount, Slotted, Toast};
+use opencode_plugin::{Definition, Registry, SlotInput, SlotMount, Slotted};
 use opencode_store::location::{Catalog, Location, LocationData};
 use opencode_store::{Changes, State};
 use opencode_ui::bind;
@@ -28,6 +29,8 @@ use opentui::keymap::Disposer;
 use opentui::prelude::*;
 
 use crate::app::Tui;
+use crate::features::attention::focus::When;
+use crate::features::attention::notify::{self, Request, Sound};
 use crate::routes::Route;
 
 pub type Plugins = Registry<Tui>;
@@ -83,18 +86,63 @@ impl opencode_plugin::Host for Tui {
         Ok(())
     }
 
-    fn toast(&self, variant: Toast, title: Option<&str>, message: &str) {
-        let variant = match variant {
-            Toast::Info => Variant::Info,
-            Toast::Success => Variant::Success,
-            Toast::Warning => Variant::Warning,
-            Toast::Error => Variant::Error,
+    fn toast(&self, toast: &abi::Toast) {
+        let variant = match toast.variant {
+            abi::Variant::Info => Variant::Info,
+            abi::Variant::Success => Variant::Success,
+            abi::Variant::Warning => Variant::Warning,
+            abi::Variant::Error => Variant::Error,
         };
-        let mut options = ToastOptions::new(variant, message);
-        if let Some(title) = title {
-            options = options.title(title);
+        let mut options = ToastOptions::new(variant, toast.message.clone());
+        options.title = toast.title.clone();
+        // A toast about a session offers to open it, unless the session's family is on screen.
+        let Some(session) = toast.session.as_ref().map(|id| SessionID(id.clone())) else {
+            return self.toasts.show(options);
+        };
+        let here = match self.route() {
+            Route::Session { id: open } => self.data.read(|state| state.root(&open) == state.root(&session)),
+            _ => false,
+        };
+        if !here {
+            let route = Route::Session { id: session };
+            options = options.action("Open", bind!(self, |tui| tui.navigate(route.clone())));
         }
         self.toasts.show(options);
+    }
+
+    fn attention(&self, attention: &abi::Attention) {
+        let when = |when| match when {
+            abi::When::Always => When::Always,
+            abi::When::Focused => When::Focused,
+            abi::When::Blurred => When::Blurred,
+        };
+        let sound = attention.sound.as_ref().map(|sound| Sound {
+            name: match sound.name {
+                abi::SoundName::Default => AttentionSoundName::Default,
+                abi::SoundName::Question => AttentionSoundName::Question,
+                abi::SoundName::Permission => AttentionSoundName::Permission,
+                abi::SoundName::Error => AttentionSoundName::Error,
+                abi::SoundName::Done => AttentionSoundName::Done,
+                abi::SoundName::SubagentDone => AttentionSoundName::SubagentDone,
+            },
+            when: when(sound.when),
+            volume: sound.volume,
+        });
+        let request = Request {
+            title: attention.title.clone(),
+            message: attention.message.clone(),
+            notification: attention.notify.map(when),
+            sound,
+        };
+        notify::notify(self, &request);
+    }
+
+    fn on_event(&self, run: Rc<dyn Fn(&V2Event)>) -> Option<Disposer> {
+        Some(crate::features::events::subscribe(self, move |_, event| run(event)))
+    }
+
+    fn slot(&self, parent: &View, path: &str, input: &SlotInput) -> Option<SlotMount<Self>> {
+        Some(self.plugins.mount(self, parent, path, input, |_| {}))
     }
 
     fn open_route(&self, id: &str, name: &str) {
@@ -341,6 +389,14 @@ impl abi::Read for Reader<'_> {
     fn vcs(&self, location: Option<&abi::LocationRef>) -> Option<VcsInfo> {
         self.catalog(location, Catalog::Vcs, |data| data.vcs.clone())
     }
+
+    fn route(&self) -> abi::Route {
+        match self.tui.route() {
+            Route::Home => abi::Route::Home,
+            Route::Session { id } => abi::Route::Session { id: id.0 },
+            Route::Plugin { id, name } => abi::Route::Plugin { id, name },
+        }
+    }
 }
 
 fn status(status: opencode_store::SessionStatus) -> abi::SessionStatus {
@@ -354,7 +410,7 @@ fn status(status: opencode_store::SessionStatus) -> abi::SessionStatus {
 /// Mermaid and LaTeX) in their TS place after `stats`. The storybook (F14) is excepted (Q17).
 pub fn builtins(external: Vec<Definition<Tui>>) -> Vec<Definition<Tui>> {
     let mut builtins = vec![
-        super::home_footer::plugin(),
+        super::home_footer::plugin().into(),
         super::prompt_footer::plugin(),
         super::btw::plugin(),
         super::sidebar_context::plugin().into(),
@@ -362,7 +418,7 @@ pub fn builtins(external: Vec<Definition<Tui>>) -> Vec<Definition<Tui>> {
         super::sidebar_mcp::plugin().into(),
         super::sidebar_todo::plugin().into(),
         super::sidebar_footer::plugin().into(),
-        crate::plugins::notifications::plugin(),
+        crate::plugins::notifications::plugin().into(),
         crate::dialogs::plugins::plugin(),
         super::stats::plugin(),
     ];

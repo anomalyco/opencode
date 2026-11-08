@@ -13,14 +13,22 @@ use opentui::testing::TestApp;
 use opencode_plugin_abi::types::{ModelRef, SessionInfo, SessionMessageInfo};
 
 use super::*;
-use crate::{Entry, Source, Toast, abi};
+use crate::{Entry, Source, abi};
+
+/// An event handler of [`Host::on_event`].
+type Handler = Rc<dyn Fn(&abi::types::V2Event)>;
 
 /// A host that records what plugins ask of it.
 pub(super) struct TestHost {
     pub app: TestApp,
     keymap: DialogKeymap,
     pub storage: RefCell<HashMap<String, String>>,
-    pub toasts: RefCell<Vec<(Toast, Option<String>, String)>>,
+    pub toasts: RefCell<Vec<abi::Toast>>,
+    pub attention: RefCell<Vec<abi::Attention>>,
+    /// The event handlers of [`Host::on_event`], which [`TestHost::emit`] calls.
+    pub events: Rc<RefCell<Vec<Handler>>>,
+    /// The registry nested slots mount from.
+    pub registry: RefCell<std::rc::Weak<crate::Registry<TestHost>>>,
     pub routes: RefCell<Vec<(String, String)>>,
     pub remounts: Cell<usize>,
     /// The mode it reports, whatever the theme's background.
@@ -89,9 +97,26 @@ impl Host for TestHost {
         Ok(())
     }
 
-    fn toast(&self, variant: Toast, title: Option<&str>, message: &str) {
-        let title = title.map(str::to_owned);
-        self.toasts.borrow_mut().push((variant, title, message.to_owned()));
+    fn toast(&self, toast: &abi::Toast) {
+        self.toasts.borrow_mut().push(toast.clone());
+    }
+
+    fn attention(&self, attention: &abi::Attention) {
+        self.attention.borrow_mut().push(attention.clone());
+    }
+
+    fn on_event(&self, run: Rc<dyn Fn(&abi::types::V2Event)>) -> Option<opentui::keymap::Disposer> {
+        self.events.borrow_mut().push(run.clone());
+        let events = Rc::downgrade(&self.events);
+        Some(opentui::keymap::Disposer::new(move || {
+            if let Some(events) = events.upgrade() {
+                events.borrow_mut().retain(|known| !Rc::ptr_eq(known, &run));
+            }
+        }))
+    }
+
+    fn slot(&self, parent: &View, path: &str, input: &crate::SlotInput) -> Option<crate::SlotMount<Self>> {
+        Some(self.registry.borrow().upgrade()?.mount(self, parent, path, input, |_| {}))
     }
 
     fn open_route(&self, id: &str, name: &str) {
@@ -111,12 +136,23 @@ impl Host for TestHost {
     }
 }
 
+impl TestHost {
+    /// Calls the event handlers with `event`, as the host's event loop would.
+    pub fn emit(&self, event: &abi::types::V2Event) {
+        let handlers = self.events.borrow().clone();
+        handlers.iter().for_each(|handler| handler(event));
+    }
+}
+
 pub(super) fn host() -> Rc<TestHost> {
     Rc::new(TestHost {
         app: TestApp::new(60, 10),
         keymap: DialogKeymap::new(Keybinds::defaults(), Options::default()),
         storage: RefCell::default(),
         toasts: RefCell::default(),
+        attention: RefCell::default(),
+        events: Rc::default(),
+        registry: RefCell::default(),
         routes: RefCell::default(),
         remounts: Cell::new(0),
         mode: Cell::new(ThemeMode::Dark),

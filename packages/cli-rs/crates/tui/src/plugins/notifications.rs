@@ -1,79 +1,47 @@
 //! The notifications plugin (E.19a, row F09, `feature-plugins/system/notifications.ts`): asks for attention when
 //! a session is done, a subagent is done, a form or a permission waits, or a session fails, and shows failures
-//! as toasts. [`Tracker`] is the event logic; [`plugin`] feeds it the store's events.
+//! as toasts. [`Tracker`] is the event logic; [`plugin`] feeds it the server's events. It is a plugin of the one API
+//! (O-67).
 
 use std::cell::RefCell;
 use std::collections::HashSet;
 
-use opencode_api::generated::{SessionID, V2Event};
-use opencode_local::cli_config::AttentionSoundName;
-use opencode_plugin::{Definition, Setup};
-use opencode_store::{SessionStatus, State};
-use opencode_ui::bind;
-use opencode_ui::toast::{ToastOptions, Variant};
-
-use crate::app::Tui;
-use crate::features::attention::focus::When;
-use crate::features::attention::notify::{self, Request, Sound};
-use crate::routes::Route;
+use opencode_api::generated::V2Event;
+use opencode_plugin::abi::{self, Attention, Sound, SoundName, Toast, Variant, When};
 
 pub const ID: &str = "opencode.notifications";
 
-pub fn plugin() -> Definition<Tui> {
-    Definition::new(ID, |setup: &mut Setup<'_, Tui>| {
-        let tui = setup.host();
-        let tracker = RefCell::new(Tracker::default());
-        let subscription = crate::features::events::subscribe(tui, move |tui, event| {
-            if !follows(event) {
-                return;
-            }
-            let actions = tui.data.read(|state| tracker.borrow_mut().event(event, &Snapshot(state)));
-            for action in actions {
-                run(tui, action);
-            }
-        });
-        setup.on_dispose(move || drop(subscription));
-    })
+pub fn plugin() -> abi::Plugin {
+    abi::Plugin { id: ID, setup }
 }
 
-fn follows(event: &V2Event) -> bool {
-    matches!(
-        event,
-        V2Event::FormCreated(_)
-            | V2Event::FormReplied(_)
-            | V2Event::FormCancelled(_)
-            | V2Event::PermissionAsked(_)
-            | V2Event::PermissionReplied(_)
-            | V2Event::SessionExecutionStarted(_)
-            | V2Event::SessionExecutionSucceeded(_)
-            | V2Event::SessionExecutionInterrupted(_)
-            | V2Event::SessionExecutionFailed(_)
-    )
-}
+/// The events [`Tracker`] follows.
+const EVENTS: [&str; 9] = [
+    "form.created",
+    "form.replied",
+    "form.cancelled",
+    "permission.asked",
+    "permission.replied",
+    "session.execution.started",
+    "session.execution.succeeded",
+    "session.execution.interrupted",
+    "session.execution.failed",
+];
 
-fn run(tui: &Tui, action: Action) {
-    match action {
-        Action::Notify(request) => {
-            notify::notify(tui, &request);
+fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let tracker = RefCell::new(Tracker::default());
+    setup.on_event(&EVENTS, move |host, event| {
+        for action in tracker.borrow_mut().event(event, &Reads(host)) {
+            match action {
+                Action::Notify(attention) => host.attention(attention),
+                // A session-scoped toast (the plugin API's `toast.show` with `sessionID`).
+                Action::Toast { session, message } => {
+                    host.toast(Toast::new(Variant::Error, message).title("Session failed").session(session));
+                }
+            }
         }
-        Action::Toast { session, message } => toast(tui, &session, message),
-    }
-}
-
-/// A session-scoped toast (the plugin API's `toast.show` with `sessionID`): outside that session's family it
-/// offers to open the session.
-fn toast(tui: &Tui, session: &str, message: String) {
-    let toast = ToastOptions::new(Variant::Error, message).title("Session failed");
-    let id = SessionID(session.to_owned());
-    let here = match tui.route() {
-        Route::Session { id: open } => tui.data.read(|state| state.root(&open) == state.root(&id)),
-        _ => false,
-    };
-    if here {
-        tui.toasts.show(toast);
-        return;
-    }
-    tui.toasts.show(toast.action("Open", bind!(tui, |tui| tui.navigate(Route::Session { id: id.clone() }))));
+    });
+    Ok(())
 }
 
 /// What [`Tracker`] reads about sessions.
@@ -84,32 +52,29 @@ trait Sessions {
     fn running_child(&self, id: &str) -> bool;
 }
 
-struct Snapshot<'a>(&'a State);
+struct Reads<'a>(&'a dyn abi::Read);
 
-impl Sessions for Snapshot<'_> {
+impl Sessions for Reads<'_> {
     fn title(&self, id: &str) -> Option<String> {
-        self.0.session(&SessionID(id.to_owned()))?.title.clone()
+        self.0.session(id)?.info.title
     }
 
     fn parent(&self, id: &str) -> Option<String> {
-        let parent = self.0.session(&SessionID(id.to_owned()))?.parent_id.clone();
-        parent.map(|parent| parent.0)
+        Some(self.0.session(id)?.info.parent_id?.0)
     }
 
     fn running_child(&self, id: &str) -> bool {
         // Only direct children: a grandchild reports to its own parent, so waiting on it could mean no sound at
         // all. Running shells don't count, or a session with a dev server running would never play one.
-        self.0.family(&SessionID(id.to_owned())).iter().any(|child| {
-            child.0 != id
-                && self.parent(&child.0).as_deref() == Some(id)
-                && self.0.status(child) == SessionStatus::Running
+        self.0.family(id).members.iter().any(|member| {
+            member.id != id && member.parent.as_deref() == Some(id) && member.status == abi::SessionStatus::Running
         })
     }
 }
 
 #[derive(Debug, PartialEq)]
 enum Action {
-    Notify(Request),
+    Notify(Attention),
     Toast { session: String, message: String },
 }
 
@@ -133,7 +98,7 @@ impl Tracker {
                         sessions,
                         Some(&form.session_id),
                         "Input needs response".to_owned(),
-                        AttentionSoundName::Question,
+                        SoundName::Question,
                         Some(form.title.clone()),
                     ));
                 }
@@ -150,7 +115,7 @@ impl Tracker {
                         sessions,
                         Some(&event.data.session_id.0),
                         "Permission needs input".to_owned(),
-                        AttentionSoundName::Permission,
+                        SoundName::Permission,
                         None,
                     ));
                 }
@@ -185,7 +150,7 @@ impl Tracker {
                 }
                 let error = &event.data.error;
                 if error.r#type != "provider.free-limit" && error.r#type != "provider.go-limit" {
-                    actions.push(request(sessions, Some(id), error.message.clone(), AttentionSoundName::Error, None));
+                    actions.push(request(sessions, Some(id), error.message.clone(), SoundName::Error, None));
                     actions.push(Action::Toast { session: id.clone(), message: error.message.clone() });
                 }
                 self.ended(id, sessions, &mut actions);
@@ -202,8 +167,7 @@ impl Tracker {
         if self.errored.remove(id) {
             return;
         }
-        let sound =
-            if sessions.parent(id).is_some() { AttentionSoundName::SubagentDone } else { AttentionSoundName::Done };
+        let sound = if sessions.parent(id).is_some() { SoundName::SubagentDone } else { SoundName::Done };
         actions.push(request(sessions, Some(id), "Session done".to_owned(), sound, None));
     }
 }
@@ -213,14 +177,14 @@ fn request(
     sessions: &impl Sessions,
     session: Option<&str>,
     message: String,
-    sound: AttentionSoundName,
+    sound: SoundName,
     title: Option<String>,
 ) -> Action {
     let subagent = session.and_then(|id| sessions.parent(id)).is_some();
-    Action::Notify(Request {
+    Action::Notify(Attention {
         title: title.or_else(|| session.and_then(|id| sessions.title(id))),
         message,
-        notification: (!subagent).then_some(When::Blurred),
+        notify: (!subagent).then_some(When::Blurred),
         sound: Some(Sound { name: sound, when: When::Always, volume: None }),
     })
 }
@@ -312,11 +276,11 @@ mod tests {
         event(serde_json::json!({ "type": format!("permission.{kind}"), "data": data }))
     }
 
-    fn notified(title: &str, message: &str, sound: AttentionSoundName, blurred: bool) -> Action {
-        Action::Notify(Request {
+    fn notified(title: &str, message: &str, sound: SoundName, blurred: bool) -> Action {
+        Action::Notify(Attention {
             title: Some(title.to_owned()),
             message: message.to_owned(),
-            notification: blurred.then_some(When::Blurred),
+            notify: blurred.then_some(When::Blurred),
             sound: Some(Sound { name: sound, when: When::Always, volume: None }),
         })
     }
@@ -326,14 +290,35 @@ mod tests {
     }
 
     fn done() -> Action {
-        notified("Demo session", "Session done", AttentionSoundName::Done, true)
+        notified("Demo session", "Session done", SoundName::Done, true)
+    }
+
+    // Expected: each event the plugin follows crosses the C ABI as JSON and reads back as the same value.
+    #[test]
+    fn the_followed_events_read_back_from_json_as_written() {
+        let events = [
+            form("created", "form-1", "session", "Confirm"),
+            form("replied", "form-1", "session", ""),
+            form("cancelled", "form-1", "session", ""),
+            permission("asked", "per_1"),
+            permission("replied", "per_1"),
+            execution("started", "session"),
+            execution("succeeded", "session"),
+            execution("interrupted", "session"),
+            failed("session", "unknown"),
+        ];
+        assert_eq!(events.iter().map(V2Event::tag).collect::<Vec<_>>(), EVENTS);
+        for event in events {
+            let json = serde_json::to_string(&event).unwrap();
+            assert_eq!(serde_json::from_str::<V2Event>(&json).unwrap(), event, "{json}");
+        }
     }
 
     #[test]
     fn failures_toast_once_per_execution_except_usage_limits() {
         let fake = Fake::new();
         let mut tracker = Tracker::default();
-        let boom = || notified("Demo session", "boom", AttentionSoundName::Error, true);
+        let boom = || notified("Demo session", "boom", SoundName::Error, true);
         let toast = || Action::Toast { session: "session".to_owned(), message: "boom".to_owned() };
         let started = || execution("started", "session");
         let actions = run(
@@ -358,8 +343,8 @@ mod tests {
     fn forms_and_permissions_notify_once_until_resolved() {
         let fake = Fake::new();
         let mut tracker = Tracker::default();
-        let question = |title| notified(title, "Input needs response", AttentionSoundName::Question, true);
-        let asked = || notified("Demo session", "Permission needs input", AttentionSoundName::Permission, true);
+        let question = |title| notified(title, "Input needs response", SoundName::Question, true);
+        let asked = || notified("Demo session", "Permission needs input", SoundName::Permission, true);
         let actions = run(
             &fake,
             &mut tracker,
@@ -421,8 +406,8 @@ mod tests {
         assert_eq!(
             actions,
             [
-                notified("Questions", "Input needs response", AttentionSoundName::Question, false),
-                notified("Subagent session", "Session done", AttentionSoundName::SubagentDone, false),
+                notified("Questions", "Input needs response", SoundName::Question, false),
+                notified("Subagent session", "Session done", SoundName::SubagentDone, false),
             ]
         );
     }
@@ -451,6 +436,6 @@ mod tests {
             &[execution("started", "session"), failed("session", "unknown"), execution("succeeded", "session")],
         );
         assert_eq!(actions.len(), 2, "{actions:?}");
-        assert_eq!(actions[0], notified("Demo session", "boom", AttentionSoundName::Error, true));
+        assert_eq!(actions[0], notified("Demo session", "boom", SoundName::Error, true));
     }
 }
