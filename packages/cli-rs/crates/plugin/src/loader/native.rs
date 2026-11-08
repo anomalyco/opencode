@@ -42,8 +42,9 @@ use opentui::prelude::*;
 use serde::de::DeserializeOwned;
 
 use super::Backend;
-use crate::node::{Fences, Scroll, lines_widget, theme_color};
-use crate::{Definition, ErrorFn, Host, Kind, Placement, Setup, Slotted, Toast};
+use crate::node::{Fences, Mount, Scroll, SlotRender, lines_widget, theme_color};
+use crate::slot::placement;
+use crate::{Definition, ErrorFn, Host, Setup, Slotted, Toast};
 
 /// The host's minor version: it serves every entry and request up to it.
 pub const HOST_MINOR: u32 = ABI_MINOR;
@@ -486,8 +487,38 @@ fn handle<H: Host>(ctx: &mut Ctx<H>, request: HostRequest) -> Result<serde_json:
                 ctx.keys.push(key);
             }
         }
+        HostRequest::Session { id } => return read(ctx, |read| serde_json::to_value(read.session(&id))),
+        HostRequest::Family { id } => return read(ctx, |read| serde_json::to_value(read.family(&id))),
+        HostRequest::Messages { id } => {
+            return read(ctx, |read| {
+                let mut value = Ok(serde_json::Value::Null);
+                read.messages(&id, &mut |messages| value = serde_json::to_value(messages));
+                value
+            });
+        }
+        HostRequest::Models { location } => {
+            return read(ctx, |read| serde_json::to_value(read.models(location.as_ref())));
+        }
+        HostRequest::Model => return read(ctx, |read| serde_json::to_value(read.model())),
+        HostRequest::Limits => return read(ctx, |read| serde_json::to_value(read.limits())),
+        HostRequest::Providers => return read(ctx, |read| serde_json::to_value(read.providers())),
     }
     Ok(serde_json::Value::Null)
+}
+
+/// Answers a read through the host's [`Host::read`], as a built-in reads in process.
+fn read<H: Host>(
+    ctx: &Ctx<H>,
+    answer: impl FnOnce(&dyn abi::Read) -> serde_json::Result<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let host = ctx.host.upgrade().ok_or("the host is gone")?;
+    let (mut answer, mut value) = (Some(answer), Ok(serde_json::Value::Null));
+    host.read(&mut |read| {
+        if let Some(answer) = answer.take() {
+            value = answer(read);
+        }
+    });
+    value.map_err(|error| error.to_string())
 }
 
 /// One activation's instance, as registrations call it.
@@ -500,7 +531,7 @@ struct Guest<H: Host> {
     /// The commands' keymap layer, until deactivation or a panic removes it.
     layer: RefCell<Option<Disposer>>,
     /// The mounted slot claims and routes, which a wake draws again.
-    claims: RefCell<Vec<Weak<Claim<H>>>>,
+    claims: RefCell<Vec<Weak<dyn Drawn<H>>>>,
     /// The handler of this instance's [`Woken`].
     handler: HandlerId,
 }
@@ -556,12 +587,12 @@ impl<H: Host> Guest<H> {
         let Some(host) = self.host.upgrade() else {
             return;
         };
-        let claims: Vec<Rc<Claim<H>>> = {
+        let claims: Vec<Rc<dyn Drawn<H>>> = {
             let mut claims = self.claims.borrow_mut();
             claims.retain(|claim| claim.strong_count() > 0);
             claims.iter().filter_map(Weak::upgrade).collect()
         };
-        claims.iter().for_each(|claim| claim.draw(&host));
+        claims.iter().for_each(|claim| claim.woken(&host));
     }
 
     /// Applies the effects of a call once the current event is handled, as the host would for a built-in.
@@ -655,14 +686,25 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
     }
     for (claim, slot) in manifest.slots.iter().enumerate() {
         let guest = guest.clone();
-        let kind = match slot.kind {
-            abi::SlotKind::Prepend => Kind::Prepend,
-            abi::SlotKind::Append => Kind::Append,
-            abi::SlotKind::Before => Kind::Before,
-            abi::SlotKind::After => Kind::After,
-            abi::SlotKind::Replace => Kind::Replace,
-        };
-        setup.slot(Placement::new(kind, slot.path.clone()), move |host, input| {
+        // A 1.4 claim renders through `Render`; a 1.3 claim gets the 1.3 request.
+        if manifest.render >= abi::RENDER && slot.render {
+            let owner = Rc::downgrade(setup.host());
+            let render: SlotRender<H> = {
+                let guest = guest.clone();
+                Rc::new(move |_, input, changed| {
+                    let request = Request::Render { claim, input: input.clone(), changed: changed.clone() };
+                    guest.request("render-slot", &request).unwrap_or(abi::Render::Hide)
+                })
+            };
+            setup.slot(placement(slot), move |host, input| {
+                let input = abi::SlotInput { session_id: input.session_id.clone() };
+                let mount = Mount::new(host, owner.clone(), input, render.clone());
+                guest.claims.borrow_mut().push(Rc::downgrade(&mount) as Weak<dyn Drawn<H>>);
+                Box::new(mount)
+            });
+            continue;
+        }
+        setup.slot(placement(slot), move |host, input| {
             let request = Request::Slot { claim, session_id: input.session_id.clone() };
             Box::new(Claim::mount(host, &guest, "render-slot", request))
         });
@@ -688,7 +730,7 @@ impl<H: Host> Claim<H> {
     fn mount(host: &H, guest: &Rc<Guest<H>>, export: &'static str, request: Request) -> Rc<Self> {
         let view = View::new(host.app()).shrink(0.0);
         let claim = Rc::new(Self { guest: guest.clone(), export, request, view, lines: RefCell::default() });
-        guest.claims.borrow_mut().push(Rc::downgrade(&claim));
+        guest.claims.borrow_mut().push(Rc::downgrade(&claim) as Weak<dyn Drawn<H>>);
         claim.draw(host);
         claim
     }
@@ -717,6 +759,48 @@ impl<H: Host> Slotted<H> for Rc<Claim<H>> {
             self.draw(host);
         }
     }
+}
+
+/// A mounted claim or route that a wake draws again.
+trait Drawn<H: Host> {
+    fn woken(&self, host: &H);
+}
+
+impl<H: Host> Drawn<H> for Claim<H> {
+    fn woken(&self, host: &H) {
+        self.draw(host);
+    }
+}
+
+impl<H: Host> Drawn<H> for Mount<H> {
+    fn woken(&self, host: &H) {
+        self.draw(host, &abi::Changed { woken: true, ..abi::Changed::default() });
+    }
+}
+
+/// The definition of a built-in whose `create` is `create`, wired through the byte shims of the C ABI as a loaded
+/// library is, for the tests that prove a built-in on that path (`Loopback`).
+#[doc(hidden)]
+pub fn loopback<H: Host>(
+    host: &Rc<H>,
+    create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
+) -> Result<(Definition<H>, ErrorFn), String> {
+    let api = PluginApi {
+        size: size_of::<PluginApi>(),
+        major: ABI_MAJOR,
+        minor: ABI_MINOR,
+        requires_minor: 4,
+        create: Some(create),
+        call: Some(abi::runtime::call),
+        destroy: Some(abi::runtime::destroy),
+        free: Some(abi::runtime::free),
+        describe: None,
+    };
+    // The shims silence the process's panic hook, as a plugin's own; the process here keeps its own.
+    let hook = std::panic::take_hook();
+    let defined = Library::from_table(&api, HOST_MINOR).and_then(|library| define(host, library, None));
+    std::panic::set_hook(hook);
+    defined
 }
 
 #[cfg(test)]

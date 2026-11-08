@@ -10,8 +10,10 @@ use opencode_ui::theme::{Catalog, Theme, ThemeMode};
 use opentui::prelude::*;
 use opentui::testing::TestApp;
 
+use opencode_plugin_abi::types::{ModelRef, SessionInfo, SessionMessageInfo};
+
 use super::*;
-use crate::{Entry, Source, Toast};
+use crate::{Entry, Source, Toast, abi};
 
 /// A host that records what plugins ask of it.
 pub(super) struct TestHost {
@@ -23,6 +25,40 @@ pub(super) struct TestHost {
     pub remounts: Cell<usize>,
     /// The mode it reports, whatever the theme's background.
     pub mode: Cell<ThemeMode>,
+    /// The messages of its one session, `ses_1`, titled "Sample".
+    pub messages: RefCell<Vec<SessionMessageInfo>>,
+}
+
+/// What [`TestHost`]'s renders read.
+struct Fixture<'a> {
+    host: &'a TestHost,
+    theme: Theme,
+}
+
+impl abi::Read for Fixture<'_> {
+    fn theme_mode(&self) -> abi::ThemeMode {
+        crate::node::Reader::new(&self.theme, self.host.mode.get()).theme_mode()
+    }
+
+    fn color(&self, token: &str) -> Option<abi::Rgba> {
+        crate::node::theme_color(&self.theme, token)
+    }
+
+    fn session(&self, id: &str) -> Option<abi::Session> {
+        let info = SessionInfo { title: Some("Sample".to_owned()), ..SessionInfo::default() };
+        (id == "ses_1").then_some(abi::Session { info, status: abi::SessionStatus::Idle })
+    }
+
+    fn messages(&self, id: &str, visit: &mut dyn FnMut(&[SessionMessageInfo])) {
+        match id {
+            "ses_1" => visit(&self.host.messages.borrow()),
+            _ => visit(&[]),
+        }
+    }
+
+    fn model(&self) -> Option<ModelRef> {
+        Some(ModelRef { id: "big".to_owned(), provider_id: "opencode".into(), variant: None })
+    }
 }
 
 impl Host for TestHost {
@@ -65,6 +101,10 @@ impl Host for TestHost {
     fn remount(&self) {
         self.remounts.set(self.remounts.get() + 1);
     }
+
+    fn read(&self, f: &mut dyn FnMut(&dyn abi::Read)) {
+        f(&Fixture { host: self, theme: self.theme() });
+    }
 }
 
 pub(super) fn host() -> Rc<TestHost> {
@@ -76,6 +116,7 @@ pub(super) fn host() -> Rc<TestHost> {
         routes: RefCell::default(),
         remounts: Cell::new(0),
         mode: Cell::new(ThemeMode::Dark),
+        messages: RefCell::default(),
     })
 }
 

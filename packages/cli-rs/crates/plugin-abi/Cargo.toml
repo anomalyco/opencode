@@ -8,5 +8,7 @@ publish.workspace = true
 
 # A plugin crate depends on this one alone, so it stays free of the TUI and its native libraries.
 [dependencies]
+# The session, message and catalog values renders read.
+opencode-api-types.workspace = true
 serde.workspace = true
 serde_json.workspace = true
