@@ -21,6 +21,11 @@ const RESUME_EXHAUSTED = {
   message: "Execution was interrupted repeatedly and will not be resumed automatically.",
 } as const
 
+const ORPHANED_ON_RESTART = {
+  type: "aborted",
+  message: "Execution was orphaned by a server restart and cannot be resumed.",
+} as const
+
 export interface Options {
   /**
    * Times a single turn may be resumed before it is terminalized instead.
@@ -231,7 +236,20 @@ export const layer = (options?: Options) =>
           const suspended = new Set(
             [...(yield* store.listSuspended()), ...children].filter((sessionID) => !active.has(sessionID)),
           )
-          yield* store.releaseChildClaims(children)
+          // Child claims that no background Job can recover have no resume path,
+          // so the sweep is their only terminal. Failing each one releases the
+          // claim and marks the Session idle; otherwise a subagent suspended by
+          // the restart keeps counting as active forever.
+          yield* Effect.forEach(
+            yield* store.orphanedChildClaims(children),
+            (sessionID) =>
+              bus.publish(
+                SessionEvent.Execution.Failed,
+                { sessionID, error: ORPHANED_ON_RESTART },
+                { commit: () => store.release(sessionID) },
+              ),
+            { discard: true },
+          )
           yield* Effect.forEach(
             // Admit shell outcomes before a recovered child can start its first model request.
             pending.toSorted((a, b) => Number(a.recovery.kind === "subagent") - Number(b.recovery.kind === "subagent")),
