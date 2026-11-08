@@ -212,11 +212,6 @@
       font-size: var(--mono-size);
     }
 
-    /* The open list's current-item bar sits on the screen's edge; the labels stay on the content edge. */
-    [data-component="contents-menu"] a::before {
-      inset-inline-start: calc(-1 * var(--edge));
-    }
-
     [data-component="sidebar"][data-section-nav] {
       position: sticky;
       top: calc(var(--topbar-height) + env(safe-area-inset-top, 0px));
@@ -232,14 +227,19 @@
     [data-component="section-nav"] {
       position: relative;
 
+      /* The row spans the screen, its padding putting the label and chevron back in place, so its
+         press fill reaches both edges (on-this-page.css says why a painted outset isn't enough). */
       [data-slot="section-toggle"] {
         position: relative;
+        width: calc(100% + 2 * var(--edge));
+        margin-inline: calc(-1 * var(--edge));
+        padding-inline: var(--edge);
 
         &::before,
         &::after {
           content: "";
           position: absolute;
-          inset-inline: calc(-1 * var(--edge));
+          inset-inline: 0;
           height: 1px;
           background: var(--border);
           pointer-events: none;
@@ -285,6 +285,16 @@
         overscroll-behavior: contain;
         background: var(--bg);
         border-bottom: 1px solid var(--border);
+
+        /* Each page is a row across the whole list, filled edge to edge while pressed. */
+        [data-component="docs-nav"] a {
+          margin-inline: calc(-1 * var(--edge));
+          padding-inline: var(--edge);
+
+          &:active {
+            background: var(--row-press);
+          }
+        }
       }
     }
   }
