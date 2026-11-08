@@ -480,7 +480,6 @@ export const dict = {
 
   "settings.general.row.shell.title": "터미널 셸",
   "settings.general.row.shell.description": "터미널 및 에이전트 도구에서 사용하는 셸",
-    "터미널에서 사용할 셸을 선택하세요. 호환되는 셸은 에이전트 도구 호출에도 사용됩니다.",
   "settings.general.row.shell.autoDefault": "자동 (기본값)",
   "settings.general.row.shell.terminalOnly": "터미널 전용",
   "settings.general.row.mobileTitlebarBottom.title": "하단 탐색",
@@ -602,7 +601,6 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "마지막 활성 세션",
   "settings.workspaces.deleteAll": "모든 작업 공간 삭제",
   "settings.workspaces.delete.warning": "이 작업은 작업 트리와 해당 브랜치를 영구적으로 삭제합니다.",
-    "아래 표시된 병합되지 않은 변경 사항을 포함하여 작업 공간 디렉터리와 브랜치가 영구적으로 제거됩니다.",
   "settings.workspaces.deleteAll.warning":
     "병합되지 않은 변경 사항, 연결된 세션 또는 활성 위치가 있는 워크트리는 유지됩니다.",
   "settings.workspaces.delete.blocked.active": "활성 작업 공간은 삭제할 수 없습니다.",
