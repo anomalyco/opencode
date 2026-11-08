@@ -7,9 +7,11 @@ import path from "path"
 import { Config } from "../config.js"
 import { Database } from "../database/database.js"
 import { DatabaseBatch } from "../database/batch.js"
+import { EventTable } from "../event/sql.js"
 import { Bus } from "../bus.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Model } from "@opencode/schema/model"
+import { Event } from "@opencode/schema/event"
 import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
 import { SessionMessageUpdater } from "./message-updater.js"
@@ -1130,7 +1132,7 @@ const layer = Layer.effectDiscard(
     )
     yield* bus.project(SessionEvent.RevertEvent.Committed, (event) =>
       Effect.gen(function* () {
-        const boundary = yield* db
+        const message = yield* db
           .select({ seq: SessionMessageTable.seq })
           .from(SessionMessageTable)
           .where(
@@ -1138,27 +1140,78 @@ const layer = Layer.effectDiscard(
           )
           .get()
           .pipe(Effect.orDie)
-        if (!boundary) return yield* Effect.die(new Error(`Revert boundary message not found: ${event.data.to}`))
-        yield* db
-          .delete(SessionMessageTable)
+        if (message) {
+          // The message seq is the message-history cutoff. The inbox cutoff
+          // is the boundary's original enqueue seq, recovered from the
+          // durable event log: an inbox item enqueued after the boundary but
+          // before its delivery still belongs to the reverted suffix. Without
+          // an enqueue record (e.g. a forked message) fall back to the
+          // message seq, the previous behavior.
+          const admitted = yield* db
+            .select({ seq: EventTable.seq })
+            .from(EventTable)
+            .where(
+              and(
+                eq(EventTable.aggregate_id, event.data.sessionID),
+                eq(
+                  EventTable.type,
+                  Event.versionedType(
+                    SessionEvent.InboxEnqueued.type,
+                    SessionEvent.InboxEnqueued.durable.version,
+                  ),
+                ),
+                sql`json_extract(${EventTable.data}, '$.inboxID') = ${event.data.to}`,
+              ),
+            )
+            .get()
+            .pipe(Effect.orDie)
+          const inboxCutoff = admitted?.seq ?? message.seq
+          yield* db
+            .delete(SessionMessageTable)
+            .where(
+              and(eq(SessionMessageTable.session_id, event.data.sessionID), gte(SessionMessageTable.seq, message.seq)),
+            )
+            .run()
+            .pipe(Effect.orDie)
+          yield* db
+            .delete(SessionInboxTable)
+            .where(
+              and(
+                eq(SessionInboxTable.session_id, event.data.sessionID),
+                gte(SessionInboxTable.enqueued_seq, inboxCutoff),
+              ),
+            )
+            .run()
+            .pipe(Effect.orDie)
+          yield* setSession(db, event.data.sessionID, { revert: null, time_updated: event.created })
+          yield* InstructionState.rewind(db, event.data.sessionID, message.seq)
+          yield* SessionBlob.releaseFrom(db, event.data.sessionID, message.seq)
+          return
+        }
+        // Still unpromoted: the boundary lives only in session_inbox and has
+        // no message seq, so there is nothing to delete from message history
+        // and no sequence-scoped instruction or blob state to rewind. Delete
+        // only the pending inbox suffix at or after its enqueue position.
+        const inbox = yield* db
+          .select({ enqueuedSeq: SessionInboxTable.enqueued_seq })
+          .from(SessionInboxTable)
           .where(
-            and(eq(SessionMessageTable.session_id, event.data.sessionID), gte(SessionMessageTable.seq, boundary.seq)),
+            and(eq(SessionInboxTable.session_id, event.data.sessionID), eq(SessionInboxTable.id, event.data.to)),
           )
-          .run()
+          .get()
           .pipe(Effect.orDie)
+        if (!inbox) return yield* Effect.die(new Error(`Revert boundary message not found: ${event.data.to}`))
         yield* db
           .delete(SessionInboxTable)
           .where(
             and(
               eq(SessionInboxTable.session_id, event.data.sessionID),
-              gte(SessionInboxTable.enqueued_seq, boundary.seq),
+              gte(SessionInboxTable.enqueued_seq, inbox.enqueuedSeq),
             ),
           )
           .run()
           .pipe(Effect.orDie)
         yield* setSession(db, event.data.sessionID, { revert: null, time_updated: event.created })
-        yield* InstructionState.rewind(db, event.data.sessionID, boundary.seq)
-        yield* SessionBlob.releaseFrom(db, event.data.sessionID, boundary.seq)
       }),
     )
     yield* bus.subscribe([SessionEvent.Step.Ended, SessionEvent.Step.Failed, SessionEvent.UsageRecorded]).pipe(
