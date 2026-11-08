@@ -133,6 +133,23 @@ fn the_sample_claims_the_home_footer_and_runs_its_command() {
     print_excerpt("plugin manager with the sample active", &screen);
 }
 
+// Expected: an external slot claim asks for its rows again with each change batch, so it shows state the plugin
+// changed since it was mounted.
+#[test]
+fn an_external_claim_draws_again_on_a_change_batch() {
+    let h = open(Route::Home, "", &build(""));
+    h.wait_for("home.footer, 0 hellos");
+    h.tui.keymap.dispatch("sample.hello", None);
+    h.wait_for("Hello from sample v1 (1)");
+    let event = json!({
+        "id": "evt_1", "created": 10_000, "type": "session.execution.started",
+        "durable": { "aggregateID": "ses_p", "seq": 1, "version": 1 },
+        "data": { "sessionID": "ses_p" },
+    });
+    h.tui.data.apply(&[serde_json::from_value(event).unwrap()]);
+    h.wait_for("home.footer, 1 hellos");
+}
+
 #[test]
 fn a_panicking_plugin_shows_as_failed_in_the_plugin_manager() {
     let h = open(session_route(), "Crash:\n\n```sample-panic\nboom\n```", &build(""));

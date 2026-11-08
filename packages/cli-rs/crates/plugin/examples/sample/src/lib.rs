@@ -2,6 +2,9 @@
 //! fence and a command that panic, so the loader's tests can show a panic is caught. The `v2` feature changes
 //! what it draws, so a rebuild proves hot reload. Each variant is its own feature, so cargo keeps every build.
 
+use std::cell::Cell;
+use std::rc::Rc;
+
 use opencode_plugin_abi::{Command, Line, Setup, SlotKind, Span, ThemeMode, Toast, export_plugin};
 
 const VERSION: &str = if cfg!(feature = "v2") { "v2" } else { "v1" };
@@ -22,7 +25,11 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         };
         host.toast(Toast::Info, &format!("sample setup: count {count}, {mode}, {stored}"));
     }
+    // Hellos said by this instance, which the slot shows once the host draws it again.
+    let hellos = Rc::new(Cell::new(0u64));
+    let said = hellos.clone();
     setup.command(command("sample.hello", "Say hello", Some("hello")), move |_| {
+        said.set(said.get() + 1);
         let count = count(host) + 1;
         if let Err(error) = host.storage_set("count", &format!("{{\"count\":{count}}}")) {
             host.log(opencode_plugin_abi::Level::Warn, &error);
@@ -52,8 +59,9 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         };
         Some(vec![vec![Span::new(format!("sample mode {mode}"))]])
     });
-    setup.slot(SlotKind::Append, "home.footer", |_| {
-        vec![vec![Span::new(format!("sample plugin {VERSION}: home.footer")).fg("text.muted")]]
+    setup.slot(SlotKind::Append, "home.footer", move |_| {
+        let text = format!("sample plugin {VERSION}: home.footer, {} hellos", hellos.get());
+        vec![vec![Span::new(text).fg("text.muted")]]
     });
     setup.route("hello", move || -> Vec<Line> {
         vec![
