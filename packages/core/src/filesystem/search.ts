@@ -13,6 +13,8 @@ import { Protected } from "./protected.js"
 
 export interface Interface {
   readonly find: (input: FileSystem.FindInput) => Effect.Effect<FileSystem.Entry[]>
+  /** Indexed files whose basename is exactly `name`, as paths relative to the Location. */
+  readonly byName: (name: string) => Effect.Effect<RelativePath[]>
 }
 
 export interface Options {
@@ -25,7 +27,11 @@ const REFRESH_INTERVAL = Duration.toMillis("10 seconds")
 type Prepared = ReturnType<typeof fuzzysort.prepare>
 
 function emptyIndex() {
-  return { files: new Map<string, Prepared>(), directories: new Map<string, Prepared>() }
+  return {
+    files: new Map<string, Prepared>(),
+    directories: new Map<string, Prepared>(),
+    names: new Map<string, RelativePath[]>(),
+  }
 }
 
 function search(index: ReturnType<typeof emptyIndex>, input: FileSystem.FindInput) {
@@ -74,6 +80,10 @@ const ripgrepLayer = Layer.effect(
           Effect.sync(() => {
             next.files.set(entry.path, previous.files.get(entry.path) ?? fuzzysort.prepare(entry.path))
             const parts = entry.path.split("/")
+            const name = parts[parts.length - 1]
+            const named = next.names.get(name)
+            if (named) named.push(entry.path)
+            else next.names.set(name, [entry.path])
             parts.slice(0, -1).forEach((_, offset) => {
               const directory = parts.slice(0, offset + 1).join("/") + path.sep
               if (!next.directories.has(directory))
@@ -108,11 +118,17 @@ const ripgrepLayer = Layer.effect(
           yield* refresh
           return search(index, input)
         }),
+      byName: (name) =>
+        Effect.gen(function* () {
+          yield* refresh
+          return index.names.get(name)?.slice() ?? []
+        }),
     })
   }),
 )
 
 const FFF_SCAN_WAIT = Duration.seconds(3)
+const FFF_NAME_LIMIT = 10_000
 
 type CreatePicker = (options: Fff.Init) => Fff.Result<Fff.Picker>
 
@@ -213,6 +229,21 @@ export const makeFffLayer = (create: CreatePicker) =>
                   type: item.type,
                 })
               })
+          }),
+        byName: (name) =>
+          Effect.gen(function* () {
+            const finder = yield* picker
+            if (!finder) return []
+            // Glob metacharacters become single-character wildcards; the exact name is checked below.
+            const found = finder.glob(`**/${name.replace(/[*?[\]{}\\!]/g, "?")}`, { pageSize: FFF_NAME_LIMIT })
+            if (!found.ok) {
+              yield* Effect.logWarning("fff glob failed", { error: found.error })
+              return []
+            }
+            return found.value.items
+              .map((item) => item.relativePath.replaceAll("\\", "/"))
+              .filter((relative) => relative.split("/").at(-1) === name)
+              .map((relative) => RelativePath.make(relative))
           }),
       })
     }),

@@ -6,7 +6,7 @@ import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "../../location.js"
-import { Ripgrep } from "../../ripgrep.js"
+import { FileSystemSearch } from "../../filesystem/search.js"
 import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
 import { SessionInstructions } from "../../session/instructions.js"
@@ -41,7 +41,7 @@ export const Plugin = {
     const sessionInstructions = yield* SessionInstructions.Service
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
-    const ripgrep = yield* Ripgrep.Service
+    const search = yield* FileSystemSearch.Service
 
     yield* ctx.tool
       .transform((editor) =>
@@ -207,29 +207,31 @@ export const Plugin = {
         .slice(0, 3)
     }
 
-    // Readable same-name files elsewhere in the repository, nearest first. A timeout kills the ripgrep child.
+    // Readable same-name files elsewhere in the repository, nearest first, from the in-memory file index.
     const elsewhere = Effect.fn("ReadTool.elsewhere")(function* ({ input, requested, context }: Missing) {
       if (!location.vcs || !FSUtil.contains(location.directory, requested.absolute)) return []
-      const name = basename(requested.absolute)
       const segments = requested.resource.split("/")
       const shared = (path: string) => path.split("/").findIndex((part, offset) => part !== segments[offset])
-      // Glob metacharacters become single-character wildcards; the exact name is checked below.
-      const pattern = `**/${name.replace(/[*?[\]{}\\!]/g, "?")}`
-      const found = yield* ripgrep.glob({ cwd: location.directory, pattern, limit: ELSEWHERE_LIMIT }).pipe(
-        Effect.timeout("2 seconds"),
-        Effect.orElseSucceed(() => []),
-      )
-      // ripgrep returns files in walk order, so a capped list can miss the nearest copy of a common name.
-      if (found.length >= ELSEWHERE_LIMIT) return []
-      const candidates = found
-        .map((entry) => entry.path)
-        .filter((path) => path !== requested.resource && path.split("/").at(-1) === name)
+      const candidates = (yield* search.byName(basename(requested.absolute)))
+        .filter((path) => path !== requested.resource)
         .sort((a, b) => shared(b) - shared(a))
-      const readable = yield* Effect.filter(candidates, (path) =>
-        permission.allows({ action: "read", resources: [path], save: ["*"], ...Permission.invocation(context) }),
-      )
+        .slice(0, ELSEWHERE_CANDIDATES)
+      // Each permission check loads rules and runs plugin hooks, so stop once three are readable.
+      const readable: string[] = []
+      for (const path of candidates) {
+        if (readable.length === 3) break
+        if (
+          yield* permission.allows({
+            action: "read",
+            resources: [path],
+            save: ["*"],
+            ...Permission.invocation(context),
+          })
+        )
+          readable.push(path)
+      }
       const absolute = isAbsolute(input) || input.startsWith("~/")
-      return readable.slice(0, 3).map((path) => (absolute ? join(location.directory, path) : path))
+      return readable.map((path) => (absolute ? join(location.directory, path) : path))
     })
 
     const didYouMean = (suggestions: string[]) =>
@@ -274,7 +276,7 @@ export const Plugin = {
   }),
 }
 
-const ELSEWHERE_LIMIT = 200
+const ELSEWHERE_CANDIDATES = 50
 
 const canonical = (name: string) =>
   name

@@ -9,6 +9,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "@opencode/core/location"
 import { Image } from "@opencode/core/image"
 import { Permission } from "@opencode/core/permission"
+import { FileSystemSearch } from "@opencode/core/filesystem/search"
 import { Ripgrep } from "@opencode/core/ripgrep"
 import { Session } from "@opencode/core/session"
 import { Skill } from "@opencode/core/skill"
@@ -38,7 +39,7 @@ const readToolNode = makeLocationNode({
     SessionInstructions.node,
     Skill.node,
     FSUtil.node,
-    Ripgrep.node,
+    FileSystemSearch.node,
     Location.node,
   ],
 })
@@ -81,10 +82,14 @@ const reader = Layer.succeed(
     },
   }),
 )
+// The real ripgrep-backed file index, fed these paths by its one scan.
 let indexedFiles: string[] = []
 const ripgrep = Layer.mock(Ripgrep.Service, {
-  glob: () =>
-    Effect.succeed(indexedFiles.map((file) => FileSystem.Entry.make({ path: RelativePath.make(file), type: "file" }))),
+  find: (input) =>
+    Effect.forEach(
+      indexedFiles.map((file) => FileSystem.Entry.make({ path: RelativePath.make(file), type: "file" })),
+      (entry) => (input.onEntry ? input.onEntry(entry) : Effect.void).pipe(Effect.as(entry)),
+    ),
 })
 let allow = true
 let deniedResource: string | undefined
@@ -114,13 +119,18 @@ const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) }, { vcs })),
 )
+const plainLocationLayer = Layer.succeed(
+  Location.Service,
+  Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) })),
+)
 const unavailableImage = Layer.mock(Image.Service, {
   normalize: () => Effect.fail(new Image.ResizerUnavailableError()),
 })
-const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
+const readLayer = (imageLayer: Layer.Layer<Image.Service>, locationLayer: Layer.Layer<Location.Service>) =>
   Layer.mergeAll(
     AppNodeBuilder.build(LayerNode.group([Tool.node, readToolNode, Skill.node]), [
       ReadToolFileSystem.node.replace(reader),
+      FileSystemSearch.node.replace(FileSystemSearch.configured({ fff: false })),
       Ripgrep.node.replace(ripgrep),
       Permission.node.replace(permission),
       Config.node.replace(config),
@@ -132,8 +142,9 @@ const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
     config,
     imageLayer,
   )
-const it = testEffect(readLayer(imageLayer))
-const itWithoutResizer = testEffect(readLayer(unavailableImage))
+const it = testEffect(readLayer(imageLayer, locationLayer))
+const itWithoutResizer = testEffect(readLayer(unavailableImage, locationLayer))
+const itOutsideRepo = testEffect(readLayer(imageLayer, plainLocationLayer))
 const sessionID = Session.ID.make("ses_read_tool_test")
 
 describe("ReadTool", () => {
@@ -822,10 +833,44 @@ describe("ReadTool", () => {
       directoryEntryDetails = ["config.ts", "db.ts"].map((name) => ({ name, type: "file" as const }))
       expect(yield* read("conifg.ts")).toBe("File not found: conifg.ts\n\nDid you mean one of these?\nconfig.ts")
       expect(yield* read("ui.ts")).toBe("File not found: ui.ts")
-      // A name common enough to fill the search cap gives no repo-wide suggestions, since the nearest may be missing.
-      indexedFiles = Array.from({ length: 200 }, (_, index) => `pkg${index}/queue.rs`)
-      directoryEntryDetails = []
-      expect(yield* read("lib/queue.rs")).toBe("File not found: lib/queue.rs")
+    }),
+  )
+
+  it.effect("suggests the nearest copies of a common name and skips unreadable ones", () =>
+    Effect.gen(function* () {
+      // The nearest copies come last in scan order, after hundreds of others.
+      indexedFiles = [
+        ...Array.from({ length: 300 }, (_, index) => `pkg${index}/index.ts`),
+        "lib/a/index.ts",
+        "lib/b/index.ts",
+        "lib/c/index.ts",
+        "lib/index.ts",
+      ]
+      deniedResource = "lib/b/index.ts"
+      readFailure = new Environment.NotFound({ path: path.join(process.cwd(), "lib", "d", "index.ts") })
+      const registry = yield* Tool.Service
+      const result = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-common", name: "read", input: { path: "lib/d/index.ts" } },
+      })
+      expect(result.error?.message).toBe(
+        "File not found: lib/d/index.ts\n\nDid you mean one of these?\nlib/a/index.ts\nlib/c/index.ts\nlib/index.ts",
+      )
+    }),
+  )
+
+  itOutsideRepo.effect("does not search for same-name files outside a repository", () =>
+    Effect.gen(function* () {
+      indexedFiles = ["tests/queue.rs"]
+      readFailure = new Environment.NotFound({ path: path.join(process.cwd(), "lib", "queue.rs") })
+      const registry = yield* Tool.Service
+      const result = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-plain", name: "read", input: { path: "lib/queue.rs" } },
+      })
+      expect(result.error?.message).toBe("File not found: lib/queue.rs")
     }),
   )
 
