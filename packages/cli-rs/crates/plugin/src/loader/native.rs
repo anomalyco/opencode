@@ -7,8 +7,8 @@
 //! - a panic fails the plugin: it is not called again, its fences fall back to the code view, its slots and routes
 //!   draw empty, the plugin manager lists it as `failed` with the message, and a toast says so. Enabling it again
 //!   in the plugin manager starts a fresh instance;
-//! - host effects (toasts, routes, dispatches) wait until the plugin returns, so it never reenters itself through the
-//!   host.
+//! - host effects (toasts, attention, routes, dispatches) wait until the plugin returns, so it never reenters itself
+//!   through the host.
 //!
 //! Every call into a plugin runs on the UI thread. A plugin that works on its own thread calls `wake` (ABI 1.3),
 //! which posts through the app's proxy; the host then asks that plugin's mounted claims for their rows again. A wake
@@ -45,7 +45,7 @@ use serde::de::DeserializeOwned;
 use super::Backend;
 use crate::node::{Fences, Mount, Scroll, SlotRender, lines_widget, theme_color};
 use crate::slot::placement;
-use crate::{Definition, ErrorFn, Host, Setup, Slotted, Toast, tui_command};
+use crate::{Definition, ErrorFn, Host, Setup, Slotted, tui_command};
 
 /// The host's minor version: it serves every entry and request up to it.
 pub const HOST_MINOR: u32 = ABI_MINOR;
@@ -265,9 +265,10 @@ struct Wake {
 struct Woken(u64);
 
 enum Effect {
-    Toast(Toast, String),
+    Toast(abi::Toast),
     Route(String),
     Dispatch(String, Option<String>),
+    Attention(abi::Attention),
 }
 
 /// One plugin instance; dropping it destroys the instance in the plugin.
@@ -460,14 +461,8 @@ fn handle<H: Host>(ctx: &mut Ctx<H>, request: HostRequest) -> Result<serde_json:
             };
             log::log!(level, "plugin {}: {message}", ctx.id);
         }
-        HostRequest::Toast { variant, message } => {
-            let variant = match variant {
-                abi::Toast::Info => Toast::Info,
-                abi::Toast::Success => Toast::Success,
-                abi::Toast::Warning => Toast::Warning,
-                abi::Toast::Error => Toast::Error,
-            };
-            ctx.effects.push(Effect::Toast(variant, message));
+        HostRequest::Toast { variant, message, title, session } => {
+            ctx.effects.push(Effect::Toast(abi::Toast { variant, title, message, session }));
         }
         HostRequest::StorageGet { key: name } => {
             let stored = key(ctx, &name)?;
@@ -512,7 +507,9 @@ fn handle<H: Host>(ctx: &mut Ctx<H>, request: HostRequest) -> Result<serde_json:
             return read(ctx, |read| serde_json::to_value(read.integrations(location.as_ref())));
         }
         HostRequest::Vcs { location } => return read(ctx, |read| serde_json::to_value(read.vcs(location.as_ref()))),
+        HostRequest::Route => return read(ctx, |read| serde_json::to_value(read.route())),
         HostRequest::Dispatch { name, input } => ctx.effects.push(Effect::Dispatch(name, input)),
+        HostRequest::Attention(attention) => ctx.effects.push(Effect::Attention(attention)),
     }
     Ok(serde_json::Value::Null)
 }
@@ -587,7 +584,10 @@ impl<H: Host> Guest<H> {
             if let Some(layer) = layer {
                 layer.dispose();
             }
-            host.toast(Toast::Error, Some(&format!("Plugin failed: {id}")), "Run /plugins to view details.");
+            host.toast(
+                &abi::Toast::new(abi::Variant::Error, "Run /plugins to view details.")
+                    .title(format!("Plugin failed: {id}")),
+            );
         });
         None
     }
@@ -615,9 +615,10 @@ impl<H: Host> Guest<H> {
         self.defer(move |host| {
             for effect in effects {
                 match effect {
-                    Effect::Toast(variant, message) => host.toast(variant, None, &message),
+                    Effect::Toast(toast) => host.toast(&toast),
                     Effect::Route(name) => host.open_route(&id, &name),
                     Effect::Dispatch(name, input) => host.dispatch(&name, input.as_deref()),
+                    Effect::Attention(attention) => host.attention(&attention),
                 }
             }
         });
@@ -696,9 +697,9 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
                     guest.request("render-slot", &request).unwrap_or(abi::Render::Hide)
                 })
             };
+            let path = slot.path.clone();
             setup.slot(placement(slot), move |host, input| {
-                let input = abi::SlotInput { session_id: input.session_id.clone() };
-                let mount = Mount::new(host, owner.clone(), input, render.clone());
+                let mount = Mount::new(host, owner.clone(), &path, input, render.clone());
                 guest.claims.borrow_mut().push(Rc::downgrade(&mount) as Weak<dyn Drawn<H>>);
                 Box::new(mount)
             });
@@ -708,6 +709,18 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
             let request = Request::Slot { claim, session_id: input.session_id.clone() };
             Box::new(Claim::mount(host, &guest, "render-slot", request))
         });
+    }
+    for (handler, types) in manifest.events.iter().enumerate() {
+        let (guest, types) = (guest.clone(), types.clone());
+        let subscription = setup.host().on_event(Rc::new(move |event| {
+            if types.iter().any(|kind| kind == event.tag()) {
+                let request = Request::Event { handler, event: Box::new(event.clone()) };
+                guest.request::<serde_json::Value>("on-event", &request);
+            }
+        }));
+        if let Some(subscription) = subscription {
+            setup.on_dispose(move || drop(subscription));
+        }
     }
     for name in &manifest.routes {
         let guest = guest.clone();

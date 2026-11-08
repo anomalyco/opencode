@@ -3,13 +3,15 @@
 //! ticks and wakes the host, so the slot updates itself. The `v2` feature changes
 //! what it draws, so a rebuild proves hot reload. Each variant is its own feature, so cargo keeps every build.
 //!
-//! The fences ([`fence`]) and the sidebar claim ([`slot`]) are on the one API of ABI 1.4; the rest is still the 1.3
+//! The fences ([`fence`]), the sidebar claim ([`slot`]) and the home claims with their event handler ([`home`]) are on
+//! the one API of ABI 1.4; the rest is still the 1.3
 //! surface, with commands that take the 1.4 host and ignore it. The `abi-1-3` feature builds [`v1_3`] instead: a plugin written against ABI 1.3, on a frozen copy of
 //! that crate.
 
 #![cfg_attr(feature = "abi-1-3", allow(dead_code, unused_imports))]
 
 mod fence;
+mod home;
 mod slot;
 #[cfg(feature = "abi-1-3")]
 mod v1_3;
@@ -21,7 +23,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use opencode_plugin_abi::{Command, Line, Setup, SlotKind, Span, ThemeMode, Toast, Waker, export_plugin};
+use opencode_plugin_abi::{Command, Line, Setup, SlotKind, Span, ThemeMode, Variant, Waker, export_plugin};
 
 const VERSION: &str = if cfg!(feature = "v2") { "v2" } else { "v1" };
 
@@ -44,7 +46,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
             Ok(()) => "stored".to_owned(),
             Err(error) => error,
         };
-        host.toast(Toast::Info, &format!("sample setup: count {count}, {mode}, {stored}"));
+        host.toast(Variant::Info, &format!("sample setup: count {count}, {mode}, {stored}"));
     }
     // Hellos said by this instance, which the slot shows once the host draws it again.
     let hellos = Rc::new(Cell::new(0u64));
@@ -55,7 +57,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         if let Err(error) = host.storage_set("count", &format!("{{\"count\":{count}}}")) {
             host.log(opencode_plugin_abi::Level::Warn, &error);
         }
-        host.toast(Toast::Success, &format!("Hello from sample {VERSION} ({count})"));
+        host.toast(Variant::Success, &format!("Hello from sample {VERSION} ({count})"));
     });
     setup
         .command(command("sample.open", "Open the sample route", Some("sample")), move |_, _| host.open_route("hello"));
@@ -63,6 +65,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         .command(command("sample.panic", "Panic in the sample plugin", None), |_, _| panic!("sample command panicked"));
     fence::setup(setup)?;
     slot::setup(setup)?;
+    home::setup(setup)?;
     // Ticks every `tick_ms` (a second by default), `ticks` times (no limit by default), on a host that offers a
     // waker (ABI 1.3).
     let option = |name: &str| {

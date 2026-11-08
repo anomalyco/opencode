@@ -82,7 +82,7 @@ fn the_sample_registers_a_command_a_fence_a_slot_and_a_route() {
     assert!(matches!(host.keymap().dispatch("sample.hello", None), RunResult::Ok));
     assert!(host.toasts.borrow().is_empty());
     host.app.advance(Duration::from_millis(1));
-    assert_eq!(*host.toasts.borrow(), [(Toast::Success, None, "Hello from sample v1 (1)".to_owned())]);
+    assert_eq!(*host.toasts.borrow(), [abi::Toast::new(abi::Variant::Success, "Hello from sample v1 (1)")]);
     assert_eq!(host.storage.borrow().get("plugin.sample.count").map(String::as_str), Some("{\"count\":1}"));
     assert!(matches!(host.keymap().dispatch("sample.open", None), RunResult::Ok));
     host.app.advance(Duration::from_millis(1));
@@ -112,7 +112,7 @@ fn a_panicking_fence_fails_the_plugin_and_falls_back_to_the_code() {
     host.app.advance(Duration::from_millis(1));
     assert_eq!(
         *host.toasts.borrow(),
-        [(Toast::Error, Some("Plugin failed: sample".to_owned()), "Run /plugins to view details.".to_owned())]
+        [abi::Toast::new(abi::Variant::Error, "Run /plugins to view details.").title("Plugin failed: sample")]
     );
     // A failed plugin is not called again: its fences keep the code view, its commands do nothing.
     let screen = markdown(&host, &registry, "```sample\nquiet\n```\n");
@@ -187,7 +187,7 @@ fn versions_follow_the_abi_rules() {
     assert!(screen.contains("sample plugin 1.3: home.footer") && screen.contains("Sample route hello"), "{screen}");
     assert!(matches!(host.keymap().dispatch("sample.hello", None), RunResult::Ok));
     host.app.advance(Duration::from_millis(1));
-    assert_eq!(*host.toasts.borrow(), [(Toast::Success, None, "Hello from sample 1.3".to_owned())]);
+    assert_eq!(*host.toasts.borrow(), [abi::Toast::new(abi::Variant::Success, "Hello from sample 1.3")]);
 
     // A 1.3 host refuses a plugin of this crate, which needs the 1.4 render requests.
     assert_eq!(
@@ -410,7 +410,7 @@ fn setup_reaches_the_host() {
     registry.load(&host, definition.external("sample.so", error));
     assert_eq!(status(&registry), Status::Active);
     host.app.advance(Duration::from_millis(1));
-    assert_eq!(*host.toasts.borrow(), [(Toast::Info, None, "sample setup: count 5, light, stored".to_owned())]);
+    assert_eq!(*host.toasts.borrow(), [abi::Toast::new(abi::Variant::Info, "sample setup: count 5, light, stored")]);
     assert_eq!(host.storage.borrow().get("plugin.sample.count").map(String::as_str), Some("{\"count\":6}"));
 }
 
@@ -578,4 +578,87 @@ fn mermaid_streams_the_same_through_the_c_abi_loopback() {
     assert!(direct[1] != direct[0] && !text[1].contains("flowchart"), "{}", text[1]);
     assert_eq!(direct[2], direct[1]);
     assert_eq!(stream(&host, &loopback, &chunks), direct);
+}
+
+/// The sample's home claims and event handler, compiled in rather than loaded.
+#[path = "../../../examples/sample/src/home.rs"]
+mod sample_home;
+
+fn succeeded(session: &str) -> abi::types::V2Event {
+    serde_json::from_value(serde_json::json!({
+        "id": "evt_1", "created": 1, "type": "session.execution.succeeded",
+        "durable": { "aggregateID": session, "seq": 1, "version": 1 }, "data": { "sessionID": session },
+    }))
+    .unwrap()
+}
+
+/// The sample's home row as `registry` mounts `home.footer`, before and after a session's run succeeds and the host
+/// syncs the slot, with the toasts the event showed.
+fn home(host: &Rc<TestHost>, registry: &Rc<Registry<TestHost>>) -> (Vec<String>, Vec<abi::Toast>) {
+    host.toasts.borrow_mut().clear();
+    *host.registry.borrow_mut() = Rc::downgrade(registry);
+    let parent = View::new(host.app()).column();
+    let mounted = registry.mount(&**host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+    host.app().root().clear();
+    host.app().root().add(&parent);
+    let row = |host: &TestHost| {
+        host.app.render();
+        host.app.text().lines().find(|line| line.contains("sample home:")).unwrap_or_default().trim_end().to_owned()
+    };
+    let mut rows = vec![row(host)];
+    host.emit(&succeeded("ses_1"));
+    host.emit(&succeeded("ses_2"));
+    host.app.advance(Duration::from_millis(1));
+    mounted.sync(host, &());
+    rows.push(row(host));
+    (rows, host.toasts.borrow().clone())
+}
+
+// Expected: the sample's event handler gets the event it asked for and shows a toast about its session, and its home
+// claim's nested `home.footer.status` slot keeps the sample's status claim mounted and renders it again on a sync,
+// the same in process and from the library, where the event crosses the C ABI as JSON.
+#[test]
+fn the_sample_home_and_event_act_the_same_in_process_and_through_the_library() {
+    let host = host();
+    let plugin = abi::Plugin { id: "sample", setup: sample_home::setup };
+    let in_process = Rc::new(Registry::new(vec![plugin.into()], []));
+    in_process.activate(&host);
+    let direct = home(&host, &in_process);
+    assert_eq!(direct.0, ["sample home: 0 done", "sample home: 2 done"]);
+    let toast = |id: &str| abi::Toast::new(abi::Variant::Info, format!("sample: {id} is done")).session(id);
+    assert_eq!(direct.1, [toast("ses_1"), toast("ses_2")]);
+    in_process.set_active(&host, "sample", false);
+    let library = Rc::new(active(&host, &build("still")));
+    assert_eq!(home(&host, &library), direct);
+}
+
+fn nesting(setup: &mut abi::Setup) -> Result<(), String> {
+    let paths = ["sidebar.content", "home.footer", "home.footer.nope", "home", "home.footer.status"];
+    setup.slot(abi::Placement::append("home.footer"), move |_, _, _| {
+        abi::Render::Show(abi::Node::row(paths.iter().map(|path| abi::Node::slot(*path)).collect()))
+    });
+    for path in ["sidebar.content", "home.footer.status"] {
+        setup.slot(abi::Placement::append(path), move |_, _, _| {
+            abi::Render::Show(abi::Node::text([abi::Span::new(format!("[{path}]"))]))
+        });
+    }
+    Ok(())
+}
+
+// Expected: a claim shows only published slots inside its own; a slot outside it, itself, an ancestor, or a path the
+// host does not publish draws nothing.
+#[test]
+fn a_nested_slot_must_be_a_published_slot_inside_the_claims_own() {
+    let host = host();
+    let registry = Rc::new(Registry::new(vec![abi::Plugin { id: "nesting", setup: nesting }.into()], []));
+    registry.activate(&host);
+    *host.registry.borrow_mut() = Rc::downgrade(&registry);
+    let parent = View::new(host.app()).column();
+    let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+    host.app().root().add(&parent);
+    host.app.render();
+    let screen = host.app.text();
+    assert!(screen.contains("[home.footer.status]"), "{screen}");
+    assert!(!screen.contains("[sidebar.content]"), "{screen}");
+    assert_eq!(screen.matches('[').count(), 1, "{screen}");
 }

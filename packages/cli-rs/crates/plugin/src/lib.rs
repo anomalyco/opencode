@@ -54,7 +54,21 @@ pub trait Host: 'static {
     fn storage_write(&self, _key: &str, _json: &str) -> Result<(), String> {
         Err("no storage".to_owned())
     }
-    fn toast(&self, _variant: Toast, _title: Option<&str>, _message: &str) {}
+    /// Shows `toast`; with a session, it offers to open the session unless the session's family is on screen.
+    fn toast(&self, _toast: &abi::Toast) {}
+    /// Asks for the user's attention. Called outside every plugin callback.
+    fn attention(&self, _attention: &abi::Attention) {}
+    /// Calls `run` with each server event, after the host has applied it, until the disposer is dropped.
+    fn on_event(&self, _run: Rc<dyn Fn(&abi::types::V2Event)>) -> Option<Disposer> {
+        None
+    }
+    /// Mounts slot `path` with `input` into `parent`, for a claim's [`abi::Node::Slot`].
+    fn slot(&self, _parent: &View, _path: &str, _input: &SlotInput) -> Option<SlotMount<Self>>
+    where
+        Self: Sized,
+    {
+        None
+    }
     /// Opens the route plugin `id` registered as `name`.
     fn open_route(&self, _id: &str, _name: &str) {}
     /// Mounts the current route again, so changed slot claims and code-block renderers show.
@@ -80,15 +94,6 @@ pub trait Host: 'static {
     fn watch(&self, _push: Rc<dyn Fn(&abi::Changed)>) -> Option<Disposer> {
         None
     }
-}
-
-/// A toast's variant, for [`Host::toast`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Toast {
-    Info,
-    Success,
-    Warning,
-    Error,
 }
 
 /// A mounted slot claim or plugin route: its root view, and a sync with each change batch. A plain
@@ -145,7 +150,7 @@ impl<H: Host> Definition<H> {
 }
 
 /// A plugin of the one API, run in process: its closures get Rust values, with no JSON step. It may register code
-/// fences, slot claims and commands so far; the rest of its surface moves here with the built-ins that need it.
+/// fences, slot claims, commands and event handlers so far; the rest of its surface moves here with the built-ins that need it.
 impl<H: Host> From<abi::Plugin> for Definition<H> {
     fn from(plugin: abi::Plugin) -> Self {
         Definition::new(plugin.id, move |setup: &mut Setup<'_, H>| {
@@ -175,6 +180,17 @@ impl<H: Host> From<abi::Plugin> for Definition<H> {
                     out
                 });
                 setup.claim(slot::placement(claim), render);
+            }
+            for (types, run) in api.events() {
+                let (types, run, scope) = (types.to_vec(), run.clone(), scope.clone());
+                let subscription = setup.host().on_event(Rc::new(move |event| {
+                    if !types.iter().any(|kind| kind == event.tag()) {
+                        return;
+                    }
+                    let Some(host) = scope.host.upgrade() else { return };
+                    host.read(&mut |read| run(&Scoped { read, host: &*host, scope: &scope }, event));
+                }));
+                setup.registration.disposers.extend(subscription);
             }
             let commands: Vec<TuiCommand> = api
                 .commands()
@@ -297,6 +313,10 @@ impl<H: Host> abi::Read for Scoped<'_, H> {
     fn vcs(&self, location: Option<&abi::LocationRef>) -> Option<abi::types::VcsInfo> {
         self.read.vcs(location)
     }
+
+    fn route(&self) -> abi::Route {
+        self.read.route()
+    }
 }
 
 impl<H: Host> abi::Host for Scoped<'_, H> {
@@ -309,10 +329,26 @@ impl<H: Host> abi::Host for Scoped<'_, H> {
     }
 
     fn dispatch(&self, name: &str, input: Option<&str>) {
-        let (host, name, input) = (self.scope.host.clone(), name.to_owned(), input.map(str::to_owned));
+        let (name, input) = (name.to_owned(), input.map(str::to_owned));
+        self.defer(move |host| host.dispatch(&name, input.as_deref()));
+    }
+
+    fn toast(&self, toast: abi::Toast) {
+        self.defer(move |host| host.toast(&toast));
+    }
+
+    fn attention(&self, attention: abi::Attention) {
+        self.defer(move |host| host.attention(&attention));
+    }
+}
+
+impl<H: Host> Scoped<'_, H> {
+    /// Runs `effect` once the current event is handled, outside every plugin callback.
+    fn defer(&self, effect: impl FnOnce(&H) + 'static) {
+        let host = self.scope.host.clone();
         self.host.app().defer(move |_| {
             if let Some(host) = host.upgrade() {
-                host.dispatch(&name, input.as_deref());
+                effect(&host);
             }
         });
     }
@@ -348,9 +384,9 @@ impl<H: Host> Setup<'_, H> {
     /// Claims a place in the slot tree with a render of the one API, on either path.
     pub(crate) fn claim(&mut self, placement: Placement, render: node::SlotRender<H>) {
         let owner = Rc::downgrade(self.host);
+        let path = placement.target.clone();
         self.slot(placement, move |host, input| {
-            let input = abi::SlotInput { session_id: input.session_id.clone() };
-            Box::new(node::Mount::new(host, owner.clone(), input, render.clone()))
+            Box::new(node::Mount::new(host, owner.clone(), &path, input, render.clone()))
         });
     }
 
