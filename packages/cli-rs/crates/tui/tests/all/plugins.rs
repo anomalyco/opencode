@@ -5,11 +5,15 @@
 
 use crate::support::{self, Fake, Harness, deref_harness};
 
+use std::cell::{Cell, RefCell};
+use std::ffi::c_void;
 use std::path::Path;
 use std::process::Command;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use opencode_plugin::abi;
 use opencode_plugin::loader::entry_file;
 use opencode_tui::plugins::host::{External, external};
 use opencode_tui::{Deps, Route};
@@ -178,7 +182,9 @@ fn a_panicking_command_is_caught_and_enabling_restarts_the_plugin() {
     h.wait_for("sample plugin v1: home.footer");
     h.tui.keymap.dispatch("sample.panic", None);
     assert_eq!(h.status(), opencode_plugin::Status::Failed("run-command panicked: sample command panicked".to_owned()));
-    h.wait_for("Plugin failed: sample");
+    // Its claims draw empty, and the toast offers the plugin manager, as in TS.
+    let screen = h.wait_for("Plugin failed: sample");
+    assert!(screen.contains("Open plugins") && !screen.contains("sample plugin v1: home.footer"), "{screen}");
     h.tui.keymap.dispatch("plugins.list", None);
     h.wait_for("view error space");
     h.app.press("space");
@@ -224,5 +230,112 @@ fn print_excerpt(title: &str, screen: &str) {
     println!("----- {title} -----");
     for line in screen.lines().filter(|line| !line.trim().is_empty()) {
         println!("{line}");
+    }
+}
+
+/// Commands that act in one order, and a home claim that records `step` on each render with `local` after `seen` was
+/// stored: `probe.act` dispatches `probe.first`, which stores `step`, then stores `seen` itself.
+fn probe(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.storage_key("seen");
+    setup.storage_key("step");
+    let command = |name: &str| abi::Command { name: name.to_owned(), ..abi::Command::default() };
+    setup.command(command("probe.act"), |host, _| {
+        host.dispatch("probe.first", None);
+        host.storage_set("seen", json!({ "tick": 1 }));
+    });
+    setup.command(command("probe.first"), |host, _| host.storage_set("step", json!({ "ran": true })));
+    let renders = RefCell::new(Vec::new());
+    setup.slot(abi::Placement::append("home.footer"), move |read, _, changed| {
+        if changed.local && read.storage_get("seen").is_some() {
+            renders.borrow_mut().push(read.storage_get("step").is_some_and(|step| step["ran"] == true));
+        }
+        abi::Render::Show(abi::Node::text([abi::Span::new(format!("probe renders {:?}", renders.borrow()))]))
+    });
+    Ok(())
+}
+
+#[allow(unsafe_code)]
+unsafe extern "C" fn probe_create(
+    host: *const abi::HostApi,
+    options: abi::Bytes,
+    instance: *mut *mut c_void,
+    out: *mut abi::Owned,
+) -> i32 {
+    // SAFETY: the loader passes what `PluginApi::create` documents.
+    unsafe { abi::runtime::create("probe", probe, host, options, instance, out) }
+}
+
+/// The TUI's home with `setup` active, in process or wired through the C ABI's byte shims (`Loopback`).
+fn home_with(
+    setup: fn(&mut abi::Setup) -> Result<(), String>,
+    create: unsafe extern "C" fn(*const abi::HostApi, abi::Bytes, *mut *mut c_void, *mut abi::Owned) -> i32,
+    loopback: bool,
+    deps: Deps,
+) -> Harness {
+    let h = support::mount(100, 30, Deps { route: Route::Home, ..deps });
+    let definition = match loopback {
+        true => opencode_plugin::loader::native::loopback(&h.tui, create).unwrap().0,
+        false => abi::Plugin { id: "probe", setup }.into(),
+    };
+    opencode_tui::plugins::host::add(&h.tui, definition);
+    h
+}
+
+// Expected: a dispatch and a storage write run in the order the command asked for them, on both paths: the claims
+// hear of the storage once, after the dispatched command stored its own key, and render once, seeing it.
+#[test]
+fn a_dispatch_and_a_storage_write_reach_the_claims_in_call_order() {
+    for loopback in [false, true] {
+        let h = home_with(probe, probe_create, loopback, support::deps(Arc::new(fake(String::new()))));
+        h.wait_for("probe renders []");
+        h.tui.keymap.dispatch("probe.act", None);
+        h.wait_for("probe renders [true]");
+        h.app.wait_until(Duration::from_millis(100), || false);
+        let screen = h.wait_for("probe renders [true]");
+        assert!(!screen.contains("false"), "loopback {loopback}: {screen}");
+    }
+}
+
+/// A handler of `rpc.example.updated`, which counts it in plugin state, and a home claim that shows the count.
+fn updates(setup: &mut abi::Setup) -> Result<(), String> {
+    let seen = Rc::new(Cell::new(0));
+    let counted = seen.clone();
+    setup.on_event(&["rpc.example.updated"], move |_, _| counted.set(counted.get() + 1));
+    setup.slot(abi::Placement::append("home.footer"), move |_, _, _| {
+        abi::Render::Show(abi::Node::text([abi::Span::new(format!("updates {}", seen.get()))]))
+    });
+    Ok(())
+}
+
+#[allow(unsafe_code)]
+unsafe extern "C" fn updates_create(
+    host: *const abi::HostApi,
+    options: abi::Bytes,
+    instance: *mut *mut c_void,
+    out: *mut abi::Owned,
+) -> i32 {
+    // SAFETY: the loader passes what `PluginApi::create` documents.
+    unsafe { abi::runtime::create("probe", updates, host, options, instance, out) }
+}
+
+// Expected: an event that changes only plugin state, with no store batch and no storage write, renders the plugin's
+// claims again, on both paths.
+#[test]
+fn an_event_handler_renders_its_plugins_claims_again() {
+    for loopback in [false, true] {
+        let memory = opencode_api::memory::Memory::new(vec![opencode_api::memory::Route::json(
+            "GET",
+            "/api/session",
+            200,
+            &json!({ "data": [], "cursor": {} }),
+        )]);
+        let deps = Deps { events: true, ..support::deps(Arc::new(memory.clone())) };
+        let h = home_with(updates, updates_create, loopback, deps);
+        h.wait_for("updates 0");
+        memory.emit(&json!({
+            "id": "evt_rpc", "created": 1, "type": "rpc.example.updated",
+            "location": { "directory": support::DIRECTORY }, "data": {},
+        }));
+        h.wait_for("updates 1");
     }
 }

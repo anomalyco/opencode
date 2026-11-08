@@ -937,7 +937,7 @@ pub enum Request {
         input: Option<String>,
     },
     /// 1.4: renders a fence through [`Setup::code_block`].
-    RenderFence(Fence),
+    RenderFence(RenderFence),
     /// 1.4: renders a slot claim of [`Setup::slot`], which [`Manifest::slots`] names by index.
     Render {
         claim: usize,
@@ -950,6 +950,18 @@ pub enum Request {
         handler: usize,
         event: Box<V2Event>,
     },
+}
+
+/// A fence for the render of [`Setup::code_block`] that [`Manifest::fences`] names by `index`. The host matches a fence
+/// to its render by the language it registered, which [`Fence::language`] may not be: the host normalizes a language
+/// (`ts` becomes `typescript`), so the plugin finds its render by `index`. A host that sends no `index` matches by
+/// language.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct RenderFence {
+    #[serde(flatten)]
+    pub fence: Fence,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index: Option<usize>,
 }
 
 /// From the plugin to the host. Results: `StorageGet` → `Option<String>` (JSON text), `Color` → `Option<Rgba>`, the
@@ -1225,11 +1237,14 @@ pub trait Host: Read {
     fn toast(&self, toast: Toast);
     /// Asks for the user's attention.
     fn attention(&self, attention: Attention);
+    /// Opens the plugin's route `name`.
+    fn open_route(&self, name: &str);
 }
 
-/// The host, as a plugin calls it. Valid while the instance lives.
+/// The host table, as the plugin calls it. It is valid until the host destroys the instance, so it is the plugin's
+/// own: a 1.4 plugin gets it only as the [`Read`] or [`Host`] of one callback.
 #[derive(Clone, Copy)]
-pub struct HostHandle {
+struct HostHandle {
     api: *const HostApi,
 }
 
@@ -1237,14 +1252,13 @@ impl HostHandle {
     fn request(&self, request: &HostRequest) -> Result<serde_json::Value, String> {
         let json = serde_json::to_vec(request).map_err(|error| error.to_string())?;
         let mut out = Owned::EMPTY;
-        // SAFETY: the host keeps `api` alive until it destroys the instance this handle belongs to.
-        let api = unsafe { self.api.as_ref() }.ok_or("no host")?;
-        let (Some(call), Some(free)) = (api.call, api.free) else {
+        let core = self.core().ok_or("no host")?;
+        let (Some(call), Some(free)) = (core.call, core.free) else {
             return Err("the host takes no requests".to_owned());
         };
         // SAFETY: `call` writes `out`, which `free` takes back.
         let (status, bytes) = unsafe {
-            let status = call(api.ctx, Bytes::new(&json), &mut out);
+            let status = call(core.ctx, Bytes::new(&json), &mut out);
             let bytes = out.to_vec();
             free(out);
             (status, bytes)
@@ -1255,42 +1269,39 @@ impl HostHandle {
         }
     }
 
+    /// The core every host table has, the 1.1 layout; `None` for a null, misaligned or shorter table. Nothing is read
+    /// through the table's own type, which may be longer than the host's.
+    fn core(&self) -> Option<&HostApiV1_1> {
+        if self.api.is_null() || !self.api.is_aligned() {
+            return None;
+        }
+        // SAFETY: the host keeps the table alive until it destroys the instance, and every table starts with `size`.
+        let size = unsafe { std::ptr::addr_of!((*self.api).size).read() };
+        // SAFETY: `size` covers the core, a prefix of the table.
+        (size >= size_of::<HostApiV1_1>()).then(|| unsafe { &*self.api.cast::<HostApiV1_1>() })
+    }
+
+    /// Whether the table's `size` covers the entry that ends at `end`.
+    fn covers(&self, end: usize) -> Option<&HostApiV1_1> {
+        self.core().filter(|core| core.size >= end)
+    }
+
     /// The JSON text stored under one of the plugin's storage keys.
-    pub fn storage_get(&self, key: &str) -> Option<String> {
+    fn storage_text(&self, key: &str) -> Option<String> {
         let value = self.request(&HostRequest::StorageGet { key: key.to_owned() }).ok()?;
         serde_json::from_value(value).ok().flatten()
     }
 
-    /// Stores JSON text (an object or an array) under one of the plugin's storage keys.
-    pub fn storage_set(&self, key: &str, value: &str) -> Result<(), String> {
-        self.request(&HostRequest::StorageSet { key: key.to_owned(), value: value.to_owned() }).map(drop)
-    }
-
-    /// Shows a toast once the current call returns.
-    pub fn toast(&self, variant: Variant, message: &str) {
-        Host::toast(self, Toast::new(variant, message));
-    }
-
-    /// Opens one of the plugin's routes once the current call returns.
-    pub fn open_route(&self, name: &str) {
-        let _ = self.request(&HostRequest::OpenRoute { name: name.to_owned() });
-    }
-
-    pub fn log(&self, level: Level, message: &str) {
+    fn log(&self, level: Level, message: &str) {
         let _ = self.request(&HostRequest::Log { level, message: message.to_owned() });
     }
 
     /// Whether the page theme is dark or light; `None` from a host older than 1.2.
-    pub fn theme_mode(&self) -> Option<ThemeMode> {
-        // SAFETY: the host keeps `api` alive until it destroys the instance; `size` says which entries it has.
-        let mode = unsafe {
-            let api = self.api.as_ref()?;
-            let end = std::mem::offset_of!(HostApi, theme_mode) + size_of::<Option<unsafe extern "C" fn()>>();
-            if api.size < end {
-                return None;
-            }
-            (api.theme_mode?)(api.ctx)
-        };
+    fn mode(&self) -> Option<ThemeMode> {
+        type Entry = Option<unsafe extern "C" fn(*mut c_void) -> u32>;
+        let core = self.covers(std::mem::offset_of!(HostApi, theme_mode) + size_of::<Entry>())?;
+        // SAFETY: `size` covers the entry; the host keeps it valid while the instance lives.
+        let mode = unsafe { (std::ptr::addr_of!((*self.api).theme_mode).read()?)(core.ctx) };
         match mode {
             THEME_DARK => Some(ThemeMode::Dark),
             THEME_LIGHT => Some(ThemeMode::Light),
@@ -1299,17 +1310,18 @@ impl HostHandle {
     }
 
     /// A handle that wakes the host from any thread; `None` from a host older than 1.3.
-    pub fn waker(&self) -> Option<Waker> {
-        // SAFETY: the host keeps `api` alive until it destroys the instance; `size` says which entries it has.
-        let api = unsafe { self.api.as_ref()? };
-        let end = std::mem::offset_of!(HostApi, wake) + size_of::<Option<unsafe extern "C" fn()>>();
-        (api.size >= end && api.wake.is_some()).then_some(Waker { api: self.api })
+    fn waker(&self) -> Option<Waker> {
+        type Entry = Option<unsafe extern "C" fn(*mut c_void)>;
+        let core = self.covers(std::mem::offset_of!(HostApi, wake) + size_of::<Entry>())?;
+        // SAFETY: `size` covers the entry.
+        let wake = unsafe { std::ptr::addr_of!((*self.api).wake).read()? };
+        Some(Waker { data: core.ctx, wake })
     }
 }
 
 impl Read for HostHandle {
     fn theme_mode(&self) -> ThemeMode {
-        HostHandle::theme_mode(self).unwrap_or(ThemeMode::Dark)
+        self.mode().unwrap_or(ThemeMode::Dark)
     }
 
     fn color(&self, token: &str) -> Option<Rgba> {
@@ -1348,7 +1360,7 @@ impl Read for HostHandle {
     }
 
     fn storage_get(&self, key: &str) -> Option<serde_json::Value> {
-        HostHandle::storage_get(self, key).and_then(|json| serde_json::from_str(&json).ok())
+        self.storage_text(key).and_then(|json| serde_json::from_str(&json).ok())
     }
 
     fn info(&self) -> Info {
@@ -1374,7 +1386,8 @@ impl Read for HostHandle {
 
 impl Host for HostHandle {
     fn storage_set(&self, key: &str, value: serde_json::Value) {
-        if let Err(error) = HostHandle::storage_set(self, key, &value.to_string()) {
+        let request = HostRequest::StorageSet { key: key.to_owned(), value: value.to_string() };
+        if let Err(error) = self.request(&request) {
             self.log(Level::Warn, &format!("storage {key}: {error}"));
         }
     }
@@ -1391,6 +1404,10 @@ impl Host for HostHandle {
     fn attention(&self, attention: Attention) {
         let _ = self.request(&HostRequest::Attention(attention));
     }
+
+    fn open_route(&self, name: &str) {
+        let _ = self.request(&HostRequest::OpenRoute { name: name.to_owned() });
+    }
 }
 
 impl HostHandle {
@@ -1400,34 +1417,41 @@ impl HostHandle {
     }
 }
 
-/// Wakes the host from any thread (ABI 1.3), from [`HostHandle::waker`]: the host then asks the plugin's mounted slot
-/// claims and routes for their rows again, so a plugin that works on its own thread can show the result.
+/// Wakes the host from any thread, from [`Setup::waker`] (over the C ABI, a 1.3 host's [`HostApi::wake`]): the host
+/// then renders the plugin's mounted slot claims and routes again, with [`Changed::woken`], so a plugin that works on
+/// its own thread can show the result.
 ///
 /// A wake is a redraw hint, not a message: it delivers nothing and drains nothing. Many wakes may become one redraw,
-/// so the rows the host asks for must show every result that is ready, not one per wake. The host never loses the
-/// last wake, even when its queue is full.
+/// so a render must show every result that is ready, not one per wake. The host never loses the last wake, even when
+/// its queue is full.
 ///
-/// The host table a `Waker` points to is valid only until `destroy` returns. A thread that holds one must stop
-/// before then: stop and join it when the instance's state drops, as the sample plugin's `Ticker` does. A detached
+/// A `Waker` is valid only until the plugin is disposed: until `destroy` returns over the C ABI, until the plugin's
+/// [`Setup::on_dispose`] callbacks have run in process. A thread that holds one must stop before then: stop and join
+/// it when the plugin's state drops or in [`Setup::on_dispose`], as the sample plugin's `Ticker` does. A detached
 /// task that may still run, such as a cancelled async task, is not enough.
 #[derive(Clone, Copy)]
 pub struct Waker {
-    api: *const HostApi,
+    data: *mut c_void,
+    wake: unsafe extern "C" fn(*mut c_void),
 }
 
-// SAFETY: a 1.3 host's `wake` may be called from any thread, and the table does not change while the instance lives.
+// SAFETY: `wake` may be called from any thread with `data` while the plugin lives, as `Waker::new` requires.
 unsafe impl Send for Waker {}
 unsafe impl Sync for Waker {}
 
 impl Waker {
+    /// A waker that calls `wake(data)`.
+    ///
+    /// # Safety
+    /// `wake(data)` must be callable from any thread until the plugin is disposed.
+    #[doc(hidden)]
+    pub unsafe fn new(data: *mut c_void, wake: unsafe extern "C" fn(*mut c_void)) -> Self {
+        Self { data, wake }
+    }
+
     pub fn wake(&self) {
-        // SAFETY: `waker` checked that the table has a `wake`; the table outlives the instance's threads.
-        unsafe {
-            let api = &*self.api;
-            if let Some(wake) = api.wake {
-                wake(api.ctx);
-            }
-        }
+        // SAFETY: as `Waker::new` requires; a plugin stops its threads before it is disposed.
+        unsafe { (self.wake)(self.data) }
     }
 }
 
@@ -1446,17 +1470,47 @@ type RouteFn = Box<dyn Fn() -> Vec<Line>>;
 pub type CommandFn = Rc<dyn Fn(&dyn Host, Option<&str>)>;
 /// A registered event handler.
 pub type EventFn = Rc<dyn Fn(&dyn Host, &V2Event)>;
+/// A registered dispose callback.
+pub type DisposeFn = Box<dyn FnOnce(&dyn Host)>;
 
 /// What a plugin registers (the C-ABI form of P.1's `Setup`). The instance keeps it until the host destroys it.
+///
+/// A callback reaches the host only through the [`Read`] or [`Host`] it is called with, so a render cannot have
+/// effects. Setup itself reaches it through [`Setup::host`], which no callback can keep:
+///
+/// ```compile_fail,E0521
+/// # use opencode_plugin_abi::*;
+/// fn setup(setup: &mut Setup) -> Result<(), String> {
+///     let host = setup.host();
+///     setup.slot(Placement::append("home.footer"), move |_, _, _| {
+///         host.dispatch("x.hello", None);
+///         Render::Hide
+///     });
+///     Ok(())
+/// }
+/// ```
+///
+/// ```
+/// # use opencode_plugin_abi::*;
+/// fn setup(setup: &mut Setup) -> Result<(), String> {
+///     setup.host().toast(Toast::new(Variant::Info, "setup may show a toast"));
+///     setup.command(Command { name: "x.hello".into(), ..Command::default() }, |host, _| {
+///         host.toast(Toast::new(Variant::Info, "a command may too"));
+///     });
+///     Ok(())
+/// }
+/// ```
 pub struct Setup {
     manifest: Manifest,
     options: Option<String>,
     host: HostHandle,
+    waker: Option<Waker>,
     fences: Vec<(String, FenceFn)>,
     slots: Vec<SlotFn>,
     routes: Vec<(String, RouteFn)>,
     commands: Vec<CommandFn>,
     events: Vec<EventFn>,
+    disposers: Vec<DisposeFn>,
 }
 
 impl Setup {
@@ -1469,9 +1523,21 @@ impl Setup {
         self.options.as_deref()
     }
 
-    /// The host, for renderers and commands to keep.
-    pub fn host(&self) -> HostHandle {
-        self.host
+    /// The host while setup runs: its reads, and effects that wait until setup has returned. In process it answers
+    /// nothing yet.
+    pub fn host(&self) -> &dyn Host {
+        &self.host
+    }
+
+    /// What wakes the host from the plugin's own threads; `None` from a host older than 1.3.
+    pub fn waker(&self) -> Option<Waker> {
+        self.waker
+    }
+
+    /// Runs `run` when the host disposes the plugin: on deactivation, unload and reload. Callbacks run in reverse
+    /// order, before the plugin's state drops. Stop the plugin's threads here or when its state drops.
+    pub fn on_dispose(&mut self, run: impl FnOnce(&dyn Host) + 'static) {
+        self.disposers.push(Box::new(run));
     }
 
     /// Declares storage key `key`; [`Read::storage_get`] and [`Host::storage_set`] accept declared keys only.
@@ -1528,6 +1594,18 @@ impl Setup {
         Self::new(id, options, std::ptr::null())
     }
 
+    /// Sets what [`Setup::waker`] returns, for a plugin the host runs in process.
+    #[doc(hidden)]
+    pub fn set_waker(&mut self, waker: Waker) {
+        self.waker = Some(waker);
+    }
+
+    /// The dispose callbacks, in registration order, for a plugin the host runs in process.
+    #[doc(hidden)]
+    pub fn take_disposers(&mut self) -> Vec<DisposeFn> {
+        std::mem::take(&mut self.disposers)
+    }
+
     #[doc(hidden)]
     pub fn manifest(&self) -> &Manifest {
         &self.manifest
@@ -1560,26 +1638,38 @@ impl Setup {
     }
 
     fn new(id: &str, options: Option<String>, host: *const HostApi) -> Self {
+        let host = HostHandle { api: host };
         Self {
             manifest: Manifest { id: id.to_owned(), render: RENDER, ..Manifest::default() },
             options,
-            host: HostHandle { api: host },
+            host,
+            waker: host.waker(),
             fences: Vec::new(),
             slots: Vec::new(),
             routes: Vec::new(),
             commands: Vec::new(),
             events: Vec::new(),
+            disposers: Vec::new(),
         }
+    }
+
+    /// Runs the dispose callbacks, last registered first.
+    fn dispose(&mut self) {
+        let disposers = std::mem::take(&mut self.disposers);
+        disposers.into_iter().rev().for_each(|run| run(&self.host));
     }
 
     fn handle(&self, request: Request) -> Result<serde_json::Value, String> {
         let json = |value: Result<serde_json::Value, serde_json::Error>| value.map_err(|error| error.to_string());
         match request {
             Request::Fence { .. } => Err("this plugin renders fences through render-fence".to_owned()),
-            Request::RenderFence(fence) => {
-                let render =
-                    self.fences.iter().find(|(language, _)| *language == fence.language).map(|(_, render)| render);
-                json(serde_json::to_value(render.map_or(Fenced::Code, |render| render(&self.host, &fence))))
+            Request::RenderFence(RenderFence { fence, index }) => {
+                let render = match index {
+                    Some(index) => self.fences.get(index),
+                    None => self.fences.iter().find(|(language, _)| *language == fence.language),
+                };
+                let fenced = render.map_or(Fenced::Code, |(_, render)| render(&self.host, &fence));
+                json(serde_json::to_value(fenced))
             }
             Request::Slot { claim, session_id } => match self.slots.get(claim).ok_or("no such slot claim")? {
                 SlotFn::Lines(render) => json(serde_json::to_value(render(session_id.as_deref()))),
@@ -1737,8 +1827,11 @@ pub mod runtime {
             return;
         }
         // SAFETY: as documented.
-        let setup = unsafe { Box::from_raw(instance.cast::<Setup>()) };
-        let _ = catch_unwind(AssertUnwindSafe(move || drop(setup)));
+        let mut setup = unsafe { Box::from_raw(instance.cast::<Setup>()) };
+        let _ = catch_unwind(AssertUnwindSafe(move || {
+            setup.dispose();
+            drop(setup);
+        }));
     }
 
     /// # Safety
@@ -1805,11 +1898,46 @@ mod tests {
             theme_mode: Some(light),
             wake: None,
         };
-        assert_eq!(HostHandle { api: &current }.theme_mode(), Some(ThemeMode::Light));
+        assert_eq!(HostHandle { api: &current }.mode(), Some(ThemeMode::Light));
         let null = HostApi { theme_mode: None, ..current };
-        assert_eq!(HostHandle { api: &null }.theme_mode(), None);
+        assert_eq!(HostHandle { api: &null }.mode(), None);
         let old = HostApiV1_1 { size: size_of::<HostApiV1_1>(), major: 1, minor: 1, ctx, call, free };
-        assert_eq!(HostHandle { api: std::ptr::from_ref(&old).cast() }.theme_mode(), None);
+        assert_eq!(HostHandle { api: std::ptr::from_ref(&old).cast() }.mode(), None);
+    }
+
+    unsafe extern "C" fn answer(ctx: *mut c_void, _: Bytes, out: *mut Owned) -> i32 {
+        // SAFETY: the test passes a live counter.
+        unsafe { &*ctx.cast::<std::sync::atomic::AtomicUsize>() }.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        unsafe { *out = Owned::EMPTY };
+        OK
+    }
+
+    // Expected: a table whose `size` does not cover the 1.1 core, or a misaligned table, is no host: its `call` is
+    // not read past `size`, let alone called.
+    #[test]
+    fn a_table_shorter_than_its_core_is_not_read() {
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        let ctx = std::ptr::from_ref(&calls).cast_mut().cast();
+        let api = HostApi {
+            size: std::mem::offset_of!(HostApi, ctx),
+            major: 1,
+            minor: 0,
+            ctx,
+            call: Some(answer),
+            free: Some(free),
+            theme_mode: Some(light),
+            wake: Some(wake),
+        };
+        let host = HostHandle { api: &api };
+        assert_eq!(host.request(&HostRequest::Route), Err("no host".to_owned()));
+        assert_eq!((host.mode(), host.waker().is_none()), (None, true));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+        let bytes = [0u64; 16];
+        let misaligned = HostHandle { api: bytes.as_ptr().cast::<u8>().wrapping_add(1).cast() };
+        assert_eq!(misaligned.request(&HostRequest::Route), Err("no host".to_owned()));
+        let full = HostHandle { api: &HostApi { size: size_of::<HostApi>(), ..api } };
+        assert!(full.request(&HostRequest::Route).is_err_and(|error| error.contains("EOF")));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 
     unsafe extern "C" fn wake(ctx: *mut c_void) {
@@ -1845,10 +1973,11 @@ mod tests {
     // Expected: a C host that passes no table, or leaves `call` or `free` null, gets errors, not a jump to address 0.
     #[test]
     fn a_null_host_or_host_callback_is_an_error() {
+        let set = HostRequest::StorageSet { key: "count".into(), value: "{}".into() };
         let host = HostHandle { api: std::ptr::null() };
-        assert_eq!(host.storage_get("count"), None);
-        assert_eq!(host.storage_set("count", "{}"), Err("no host".to_owned()));
-        assert_eq!(host.theme_mode(), None);
+        assert_eq!(host.storage_text("count"), None);
+        assert_eq!(host.request(&set), Err("no host".to_owned()));
+        assert_eq!(host.mode(), None);
         assert!(host.waker().is_none());
         let ctx = std::ptr::null_mut();
         let api = HostApi {
@@ -1861,9 +1990,9 @@ mod tests {
             theme_mode: None,
             wake: None,
         };
-        assert_eq!(HostHandle { api: &api }.storage_set("count", "{}"), Err("the host takes no requests".to_owned()));
+        assert_eq!(HostHandle { api: &api }.request(&set), Err("the host takes no requests".to_owned()));
         let api = HostApi { call: Some(call), ..api };
-        assert_eq!(HostHandle { api: &api }.storage_set("count", "{}"), Err("the host takes no requests".to_owned()));
+        assert_eq!(HostHandle { api: &api }.request(&set), Err("the host takes no requests".to_owned()));
     }
 
     // Expected: the 1.3 requests, rows and manifest keep their JSON byte for byte; only a plugin of this crate sets
@@ -1900,10 +2029,18 @@ mod tests {
             key: 7,
             width: 80,
         };
-        let answer = setup.handle(Request::RenderFence(fence.clone())).unwrap();
+        let request = |fence: &Fence, index| Request::RenderFence(RenderFence { fence: fence.clone(), index });
+        let answer = setup.handle(request(&fence, None)).unwrap();
         assert_eq!(answer, serde_json::json!({ "type": "lines", "lines": [[{ "text": "a" }]] }));
-        let unknown = Fence { language: "y".into(), ..fence };
-        assert_eq!(setup.handle(Request::RenderFence(unknown)).unwrap(), serde_json::json!({ "type": "code" }));
+        let unknown = Fence { language: "y".into(), ..fence.clone() };
+        assert_eq!(setup.handle(request(&unknown, None)).unwrap(), serde_json::json!({ "type": "code" }));
+        // A host that normalized the language names the render by index; the render sees the normalized language.
+        let json = r#"{"type":"render-fence","language":"y","info":"x","code":"a","streaming":false,"closed":true,"key":7,"width":80,"index":0}"#;
+        assert_eq!(serde_json::to_string(&request(&unknown, Some(0))).unwrap(), json);
+        assert_eq!(serde_json::from_str::<Request>(json).unwrap(), request(&unknown, Some(0)));
+        let answer = setup.handle(serde_json::from_str(json).unwrap()).unwrap();
+        assert_eq!(answer, serde_json::json!({ "type": "lines", "lines": [[{ "text": "a" }]] }));
+        assert_eq!(setup.handle(request(&fence, Some(1))).unwrap(), serde_json::json!({ "type": "code" }));
     }
 
     // Expected: what 1.4 adds for Mermaid is optional on the wire: an `Rgba` is `#rrggbbaa` and reads back as one,

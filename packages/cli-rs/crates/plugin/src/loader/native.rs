@@ -7,8 +7,11 @@
 //! - a panic fails the plugin: it is not called again, its fences fall back to the code view, its slots and routes
 //!   draw empty, the plugin manager lists it as `failed` with the message, and a toast says so. Enabling it again
 //!   in the plugin manager starts a fresh instance;
-//! - host effects (toasts, attention, routes, dispatches) wait until the plugin returns, so it never reenters itself
-//!   through the host.
+//! - host effects (toasts, attention, routes, dispatches, storage notifications) wait until the plugin returns, on the
+//!   effect queue in-process plugins share, so it never reenters itself through the host.
+//!
+//! An instance lives while its plugin is active: deactivation, unload and reload destroy it at once, whatever still
+//! holds a claim, route or fence of it, which then draw nothing.
 //!
 //! Every call into a plugin runs on the UI thread. A plugin that works on its own thread calls `wake` (ABI 1.3),
 //! which posts through the app's proxy; the host then asks that plugin's mounted claims for their rows again. A wake
@@ -28,8 +31,8 @@ use std::ffi::c_void;
 use std::mem::{offset_of, size_of};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::{Rc, Weak};
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::time::Duration;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use opencode_plugin_abi::{
     self as abi, ABI_MAJOR, ABI_MINOR, Bytes, Fenced, HostApi, HostRequest, Line, Manifest, Owned, PluginApi,
@@ -37,15 +40,15 @@ use opencode_plugin_abi::{
 };
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_util::dl;
-use opentui::app::ProxyError;
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
 use serde::de::DeserializeOwned;
 
 use super::Backend;
-use crate::node::{Fences, Mount, Scroll, SlotRender, lines_widget, theme_color};
+use crate::activation::{Activation, Drawn, Wake};
+use crate::node::{Fences, Scroll, SlotRender, lines_widget, theme_color};
 use crate::slot::placement;
-use crate::{Definition, ErrorFn, Host, Setup, Slotted, tui_command};
+use crate::{Definition, ErrorFn, Host, Setup, Slotted, defer, tui_command};
 
 /// The host's minor version: it serves every entry and request up to it.
 pub const HOST_MINOR: u32 = ABI_MINOR;
@@ -111,29 +114,19 @@ fn define<H: Host>(host: &Rc<H>, library: Library, options: Option<&str>) -> Res
                 }
             };
             *failure.borrow_mut() = None;
-            let woken = instance.shared.wake.id;
-            let guest = Rc::new_cyclic(|guest: &Weak<Guest<H>>| {
-                let guest = guest.clone();
-                let handler = setup.host().app().on_message(move |_, message: &Woken| {
-                    if let Some(guest) = guest.upgrade().filter(|_| message.0 == woken) {
-                        guest.redraw();
-                    }
-                });
-                Guest {
-                    instance,
-                    busy: Cell::new(false),
-                    failure: failure.clone(),
-                    host,
-                    id: setup.id().to_owned(),
-                    layer: RefCell::new(None),
-                    claims: RefCell::default(),
-                    handler,
-                }
+            let activation = Activation::new(setup.host(), instance.shared.wake.clone());
+            let guest = Rc::new(Guest {
+                instance: RefCell::new(Some(instance)),
+                busy: Cell::new(false),
+                failure: failure.clone(),
+                host,
+                id: setup.id().to_owned(),
+                layer: RefCell::new(None),
+                activation,
             });
             register(setup, &guest, &manifest);
             // What setup asked for (toasts, routes) happens now that the plugin is active.
-            let effects = std::mem::take(&mut guest.instance.shared.ctx.borrow_mut().effects);
-            guest.apply(effects);
+            guest.apply(guest.effects());
         }
     });
     let error: ErrorFn = Rc::new(move || failure.borrow().clone());
@@ -251,24 +244,16 @@ struct Ctx<H: Host> {
 /// What [`HostApi::ctx`] points to: the context of the UI thread's callbacks, and what `wake` reads from any thread.
 struct Shared<H: Host> {
     ctx: RefCell<Ctx<H>>,
-    wake: Wake,
+    wake: Arc<Wake>,
 }
-
-/// An instance's wakes: `pending` while a [`Woken`] waits for the UI thread, so a burst posts one.
-struct Wake {
-    id: u64,
-    pending: AtomicBool,
-    proxy: Option<AppProxy>,
-}
-
-/// Posted by `wake`: the instance whose claims draw again.
-struct Woken(u64);
 
 enum Effect {
     Toast(abi::Toast),
     Route(String),
     Dispatch(String, Option<String>),
     Attention(abi::Attention),
+    /// A storage write, which the host already shows to reads, for the claims to hear of.
+    Stored,
 }
 
 /// One plugin instance; dropping it destroys the instance in the plugin.
@@ -288,9 +273,7 @@ impl<H: Host> Instance<H> {
         id: &str,
         options: Option<&str>,
     ) -> Result<(Self, Manifest), String> {
-        static INSTANCES: AtomicU64 = AtomicU64::new(0);
-        let proxy = host.upgrade().map(|host| host.app().proxy());
-        let wake = Wake { id: INSTANCES.fetch_add(1, Ordering::Relaxed), pending: AtomicBool::new(false), proxy };
+        let wake = Arc::new(Wake::new(host.upgrade().map(|host| host.app().proxy())));
         let ctx = RefCell::new(Ctx { host, id: id.to_owned(), keys: Vec::new(), effects: Vec::new() });
         let shared = Box::new(Shared { ctx, wake });
         let api = Box::new(HostApi {
@@ -406,33 +389,7 @@ unsafe extern "C" fn host_wake<H: Host>(ctx: *mut c_void) {
     // SAFETY: `ctx` is this instance's `Shared<H>`, which lives until `destroy` returns. Only `wake`, which is
     // `Sync`, is read off the UI thread.
     let wake = unsafe { &*std::ptr::addr_of!((*ctx.cast::<Shared<H>>()).wake) };
-    let _ = catch_unwind(AssertUnwindSafe(|| {
-        if wake.pending.swap(true, Ordering::AcqRel) {
-            return;
-        }
-        let Some(proxy) = &wake.proxy else {
-            wake.pending.store(false, Ordering::Release);
-            return;
-        };
-        match proxy.send(Woken(wake.id)) {
-            Ok(()) => {}
-            Err(ProxyError::Closed) => wake.pending.store(false, Ordering::Release),
-            // The UI thread is behind. The wake stays pending, so later ones join it, and a thread delivers it once
-            // the queue has room, as `App::spawn` does with a completion. That thread holds no pointer into the
-            // instance, so it may outlive it; a `Woken` for a destroyed instance finds no handler.
-            Err(ProxyError::Full) => {
-                let (proxy, id) = (proxy.clone(), wake.id);
-                let retry = std::thread::Builder::new().name("plugin-wake".to_owned()).spawn(move || {
-                    while proxy.send(Woken(id)) == Err(ProxyError::Full) {
-                        std::thread::sleep(Duration::from_millis(1));
-                    }
-                });
-                if retry.is_err() {
-                    wake.pending.store(false, Ordering::Release);
-                }
-            }
-        }
-    }));
+    wake.post();
 }
 
 unsafe extern "C" fn host_free(owned: Owned) {
@@ -473,6 +430,7 @@ fn handle<H: Host>(ctx: &mut Ctx<H>, request: HostRequest) -> Result<serde_json:
             let stored = key(ctx, &name)?;
             let host = ctx.host.upgrade().ok_or("the host is gone")?;
             host.storage_write(&stored, &value)?;
+            ctx.effects.push(Effect::Stored);
         }
         HostRequest::OpenRoute { name } => ctx.effects.push(Effect::Route(name)),
         HostRequest::Color { token } => {
@@ -531,7 +489,8 @@ fn read<H: Host>(
 
 /// One activation's instance, as registrations call it.
 struct Guest<H: Host> {
-    instance: Instance<H>,
+    /// The instance, until the registration's disposal takes it, which destroys it.
+    instance: RefCell<Option<Instance<H>>>,
     busy: Cell<bool>,
     failure: Rc<RefCell<Option<String>>>,
     host: Weak<H>,
@@ -539,33 +498,27 @@ struct Guest<H: Host> {
     /// The commands' keymap layer, until deactivation or a panic removes it.
     layer: RefCell<Option<Disposer>>,
     /// The mounted slot claims and routes, which a wake draws again.
-    claims: RefCell<Vec<Weak<dyn Drawn<H>>>>,
-    /// The handler of this instance's [`Woken`].
-    handler: HandlerId,
-}
-
-impl<H: Host> Drop for Guest<H> {
-    fn drop(&mut self) {
-        if let Some(host) = self.host.upgrade() {
-            host.app().remove_handler(self.handler);
-        }
-    }
+    activation: Rc<Activation<H>>,
 }
 
 impl<H: Host> Guest<H> {
-    /// Sends one request. A failed plugin is not called again; a panic fails it.
+    /// Sends one request. A failed or destroyed plugin is not called; a panic fails it, and its claims draw empty.
     fn request<T: DeserializeOwned>(&self, export: &str, request: &Request) -> Option<T> {
         if self.failure.borrow().is_some() {
             return None;
         }
-        if self.busy.replace(true) {
-            log::warn!("plugin {}: {export} called while the plugin runs", self.id);
-            return None;
-        }
-        let result = self.instance.call(request);
-        self.busy.set(false);
-        let effects = std::mem::take(&mut self.instance.shared.ctx.borrow_mut().effects);
-        self.apply(effects);
+        let result = {
+            let instance = self.instance.borrow();
+            let instance = instance.as_ref()?;
+            if self.busy.replace(true) {
+                log::warn!("plugin {}: {export} called while the plugin runs", self.id);
+                return None;
+            }
+            let result = instance.call(request);
+            self.busy.set(false);
+            result
+        };
+        self.apply(self.effects());
         let error = match result {
             Ok(value) => {
                 return serde_json::from_value(value)
@@ -580,58 +533,46 @@ impl<H: Host> Guest<H> {
         let id = self.id.clone();
         // The layer goes once the key that may have run the panicking command is handled.
         let layer = self.layer.borrow_mut().take();
-        self.defer(move |host| {
+        defer(&self.host, move |host| {
             if let Some(layer) = layer {
                 layer.dispose();
             }
-            host.toast(
-                &abi::Toast::new(abi::Variant::Error, "Run /plugins to view details.")
-                    .title(format!("Plugin failed: {id}")),
-            );
+            host.failed(&id);
         });
+        self.activation.invalidate();
         None
     }
 
-    /// Draws the mounted claims again, after the plugin woke the host.
-    fn redraw(&self) {
-        self.instance.shared.wake.pending.store(false, Ordering::Release);
-        let Some(host) = self.host.upgrade() else {
-            return;
-        };
-        let claims: Vec<Rc<dyn Drawn<H>>> = {
-            let mut claims = self.claims.borrow_mut();
-            claims.retain(|claim| claim.strong_count() > 0);
-            claims.iter().filter_map(Weak::upgrade).collect()
-        };
-        claims.iter().for_each(|claim| claim.woken(&host));
+    /// Sends a request to a handler, then invalidates the claims, whose state it may have changed.
+    fn handle(&self, export: &str, request: &Request) {
+        self.request::<serde_json::Value>(export, request);
+        self.activation.invalidate();
     }
 
-    /// Applies the effects of a call once the current event is handled, as the host would for a built-in.
+    /// The effects the instance asked for since they were last taken.
+    fn effects(&self) -> Vec<Effect> {
+        let instance = self.instance.borrow();
+        instance
+            .as_ref()
+            .map(|instance| std::mem::take(&mut instance.shared.ctx.borrow_mut().effects))
+            .unwrap_or_default()
+    }
+
+    /// Queues the effects of a call on the effect queue, as the host would for a built-in.
     fn apply(&self, effects: Vec<Effect>) {
         if effects.is_empty() {
             return;
         }
         let id = self.id.clone();
-        self.defer(move |host| {
+        defer(&self.host, move |host| {
             for effect in effects {
                 match effect {
                     Effect::Toast(toast) => host.toast(&toast),
                     Effect::Route(name) => host.open_route(&id, &name),
                     Effect::Dispatch(name, input) => host.dispatch(&name, input.as_deref()),
                     Effect::Attention(attention) => host.attention(&attention),
+                    Effect::Stored => host.storage_changed(),
                 }
-            }
-        });
-    }
-
-    fn defer(&self, f: impl FnOnce(&H) + 'static) {
-        let Some(host) = self.host.upgrade() else {
-            return;
-        };
-        let weak = self.host.clone();
-        host.app().set_timeout(Duration::ZERO, move |_| {
-            if let Some(host) = weak.upgrade() {
-                f(&host);
             }
         });
     }
@@ -639,6 +580,13 @@ impl<H: Host> Guest<H> {
 
 /// Registers what the manifest lists, each calling into `guest`.
 fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &Manifest) {
+    // Registered first, so it runs last: the instance is destroyed now, on deactivation, unload and reload, even while
+    // a route, a claim or a dialog's fences of it are still mounted, which then draw nothing.
+    let disposed = guest.clone();
+    setup.on_dispose(move || {
+        let instance = disposed.instance.borrow_mut().take();
+        drop(instance);
+    });
     let commands: Vec<TuiCommand> = manifest
         .commands
         .iter()
@@ -646,8 +594,7 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
             let guest = guest.clone();
             let name = command.name.clone();
             tui_command(command, move |input| {
-                let request = Request::Command { name: name.clone(), input: input.map(str::to_owned) };
-                guest.request::<serde_json::Value>("run-command", &request);
+                guest.handle("run-command", &Request::Command { name: name.clone(), input: input.map(str::to_owned) });
             })
         })
         .collect();
@@ -665,18 +612,20 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
             Err(error) => log::error!("plugin {} keymap layer: {error}", setup.id()),
         }
     }
-    for language in &manifest.fences {
-        let guest = guest.clone();
-        // A 1.4 plugin renders through `RenderFence`; a 1.3 plugin gets the 1.3 request.
+    for (index, language) in manifest.fences.iter().enumerate() {
+        let (guest, language) = (guest.clone(), language.clone());
+        // A 1.4 plugin renders through `RenderFence`, which names the registration, as the host may have normalized
+        // the language the block has; a 1.3 plugin gets the 1.3 request, with the language it registered.
         let fences = (manifest.render >= abi::RENDER).then(Fences::default);
         setup.code_block(language.clone(), move |block, theme| {
             if let Some(fences) = &fences {
                 return fences.render(block, theme, |fence| {
-                    guest.request("render-fence", &Request::RenderFence(fence)).unwrap_or(Fenced::Code)
+                    let request = Request::RenderFence(abi::RenderFence { fence, index: Some(index) });
+                    guest.request("render-fence", &request).unwrap_or(Fenced::Code)
                 });
             }
             let request = Request::Fence {
-                language: block.language.to_owned(),
+                language: language.clone(),
                 info: block.info.to_owned(),
                 code: block.code.to_owned(),
                 streaming: block.streaming && !block.closed,
@@ -689,20 +638,12 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
         let guest = guest.clone();
         // A 1.4 claim renders through `Render`; a 1.3 claim gets the 1.3 request.
         if manifest.render >= abi::RENDER && slot.render {
-            let owner = Rc::downgrade(setup.host());
-            let render: SlotRender<H> = {
-                let guest = guest.clone();
-                Rc::new(move |_, input, changed| {
-                    let request = Request::Render { claim, input: input.clone(), changed: changed.clone() };
-                    guest.request("render-slot", &request).unwrap_or(abi::Render::Hide)
-                })
-            };
-            let path = slot.path.clone();
-            setup.slot(placement(slot), move |host, input| {
-                let mount = Mount::new(host, owner.clone(), &path, input, render.clone());
-                guest.claims.borrow_mut().push(Rc::downgrade(&mount) as Weak<dyn Drawn<H>>);
-                Box::new(mount)
+            let activation = guest.activation.clone();
+            let render: SlotRender<H> = Rc::new(move |_, input, changed| {
+                let request = Request::Render { claim, input: input.clone(), changed: changed.clone() };
+                guest.request("render-slot", &request).unwrap_or(abi::Render::Hide)
             });
+            setup.claim(placement(slot), render, &activation);
             continue;
         }
         setup.slot(placement(slot), move |host, input| {
@@ -714,8 +655,7 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
         let (guest, types) = (guest.clone(), types.clone());
         let subscription = setup.host().on_event(Rc::new(move |event| {
             if types.iter().any(|kind| kind == event.tag()) {
-                let request = Request::Event { handler, event: Box::new(event.clone()) };
-                guest.request::<serde_json::Value>("on-event", &request);
+                guest.handle("on-event", &Request::Event { handler, event: Box::new(event.clone()) });
             }
         }));
         if let Some(subscription) = subscription {
@@ -743,7 +683,7 @@ impl<H: Host> Claim<H> {
     fn mount(host: &H, guest: &Rc<Guest<H>>, export: &'static str, request: Request) -> Rc<Self> {
         let view = View::new(host.app()).shrink(0.0);
         let claim = Rc::new(Self { guest: guest.clone(), export, request, view, lines: RefCell::default() });
-        guest.claims.borrow_mut().push(Rc::downgrade(&claim) as Weak<dyn Drawn<H>>);
+        guest.activation.track(Rc::downgrade(&claim) as Weak<dyn Drawn<H>>);
         claim.draw(host);
         claim
     }
@@ -774,20 +714,9 @@ impl<H: Host> Slotted<H> for Rc<Claim<H>> {
     }
 }
 
-/// A mounted claim or route that a wake draws again.
-trait Drawn<H: Host> {
-    fn woken(&self, host: &H);
-}
-
 impl<H: Host> Drawn<H> for Claim<H> {
     fn woken(&self, host: &H) {
         self.draw(host);
-    }
-}
-
-impl<H: Host> Drawn<H> for Mount<H> {
-    fn woken(&self, host: &H) {
-        self.draw(host, &abi::Changed { woken: true, ..abi::Changed::default() });
     }
 }
 
