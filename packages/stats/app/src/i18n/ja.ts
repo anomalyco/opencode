@@ -25,6 +25,7 @@ export const dict = {
   "header.githubAria": "GitHubでOpenCodeにスターを付ける",
   "header.github": "GitHub",
   "header.tryOpenCode": "OpenCodeを試す",
+  "header.tryOpenCodeShort": "今すぐ試す",
   "header.openNav": "ナビゲーションを開く",
   "header.closeNav": "ナビゲーションを閉じる",
   "theme.groupLabel": "テーマ",

@@ -136,6 +136,114 @@
   }
 }
 
+/* Phones and tablets: the section menu is a bar stuck under the top bar from page load, with one
+   edge-to-edge line above and one below. The top line stands in for the top bar's hairline, and the
+   Contents bar pins under this one (--contents-top), its top line on this bar's bottom line, so each
+   join has one line. The bar names the current page as the nav marks it ("[-] Intro"); open, the
+   nav drops over the page and scrolls when it's longer than the window. */
+@media (max-width: 60rem) {
+  [data-site][data-layout="docs"] {
+    --contents-top: calc(var(--topbar-height) + env(safe-area-inset-top, 0px) + var(--row-height));
+
+    /* Jumps land below the bar on pages without a Contents bar (on-this-page.css adds that one). */
+    &:not(:has([data-component="contents-menu"])) [data-component="docs-article"] :is(h2, h3, h4, h5, h6)[id] {
+      scroll-margin-top: calc(var(--contents-top) + 1rem);
+    }
+
+    [data-component="topbar"]::after {
+      display: none;
+    }
+
+    /* The bar's bottom line is the Contents bar's top join too, so the Contents bar only fades in
+       its own bottom line when it pins: one line at each join, through the moment it sticks. */
+    [data-component="contents-menu"] summary::before {
+      display: none;
+    }
+
+    /* The Contents bar and its list in the nav's type: OpenTUI Mono at the nav's size. */
+    [data-component="contents-menu"] :is(summary, a) {
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+    }
+
+    /* The open list's current-item bar sits on the screen's edge; the labels stay on the content edge. */
+    [data-component="contents-menu"] a::before {
+      inset-inline-start: calc(-1 * var(--edge));
+    }
+
+    [data-component="sidebar"][data-section-nav] {
+      position: sticky;
+      top: calc(var(--topbar-height) + env(safe-area-inset-top, 0px));
+      z-index: 9;
+      background: var(--bg);
+    }
+
+    /* The desktop nav's scroll box would clip the lines and the open list. */
+    [data-component="sidebar"][data-section-nav] > [data-component="section-nav"] {
+      overflow: visible;
+    }
+
+    [data-component="section-nav"] {
+      position: relative;
+
+      [data-slot="section-toggle"] {
+        position: relative;
+
+        &::before,
+        &::after {
+          content: "";
+          position: absolute;
+          inset-inline: calc(-1 * var(--edge));
+          height: 1px;
+          background: var(--border);
+          pointer-events: none;
+        }
+
+        &::before {
+          top: 0;
+        }
+
+        &::after {
+          bottom: 0;
+        }
+      }
+
+      [data-slot="current"] {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        min-width: 0;
+        -webkit-text-stroke: var(--title-stroke);
+
+        /* Just the page's title, on the content edge like the Contents bar's label below it; the
+           open list keeps the nav's "[-]" markers. */
+        [data-slot="box"] {
+          display: none;
+        }
+
+        [data-slot="label"] {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      }
+
+      [data-slot="section-body"] {
+        position: absolute;
+        top: 100%;
+        inset-inline: calc(-1 * var(--edge));
+        max-height: calc(100dvh - var(--contents-top) - 1rem);
+        padding-inline: var(--edge);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
+      }
+    }
+  }
+}
+
 /* Beside the article the nav scrolls under the logo and lockup, and fades out at an edge while items
    pass under it (client.ts sets data-fade-top and data-fade-bottom). Phones keep hard cuts. */
 @media (min-width: 60.0625rem) {
@@ -159,6 +267,12 @@
   }
 }
 
+/* The line above Previous / Next is a divider like the docs' others (tables, code frames, the bars),
+   not ink (Pagination 4 in docs-variants.css draws it in --text-strong; doubled to outrank it). */
+[data-site][data-page="docs"] [data-component="docs-article"] [data-component="pagination"][data-component] {
+  border-top-color: var(--border);
+}
+
 /* ───────────── Right rail: search over Contents ───────────── */
 [data-site] [data-component="docs-aside"] {
   display: flex;
@@ -168,6 +282,14 @@
 
   > [data-component="on-this-page"] {
     align-self: stretch;
+
+    /* "CONTENTS" does the left nav's group titles' job, so it is drawn like them ("CONFIGURE"). */
+    [data-slot="heading"] {
+      font-size: var(--fs-micro);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
   }
 
   [data-slot="search"] {
@@ -179,8 +301,9 @@
     color: var(--text-weak);
     transition: color 150ms ease;
 
+    /* ⌘K at the label's size, in its muted colour. */
     kbd {
-      font-size: var(--fs-meta);
+      font-size: inherit;
     }
 
     @media (hover: hover) and (pointer: fine) {
@@ -195,6 +318,11 @@
    The list fades and slides in under the field when a query fills it, so the panel's growth reads as
    one motion rather than a jump. */
 [data-site] [data-search-dialog] {
+  /* Esc at the field's size; phones swap it for Cancel, already at that size. */
+  [data-slot="esc"] {
+    font-size: var(--fs-input);
+  }
+
   [data-slot="results"] {
     animation: docs-search-results var(--search-duration) var(--ease-out);
 
@@ -227,6 +355,27 @@
   @media (prefers-reduced-motion: reduce) {
     [data-slot="results"] {
       animation: none;
+    }
+  }
+}
+
+/* Phones: Cancel's text ends on the results' text end (their 0.875rem inset), not at the screen
+   edge; its 44px hit area still reaches the edge, and the field gives up the width. */
+@media (max-width: 40rem) {
+  [data-site] [data-search-dialog][data-style] {
+    [data-slot="field"] {
+      padding-inline-end: 0.875rem;
+    }
+
+    [data-slot="close"] {
+      position: relative;
+
+      &::after {
+        content: "";
+        position: absolute;
+        inset-block: 0;
+        inset-inline: -0.5rem -0.875rem;
+      }
     }
   }
 }

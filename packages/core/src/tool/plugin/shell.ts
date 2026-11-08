@@ -74,15 +74,15 @@ const Output = Schema.Struct({
 
 type Output = typeof Output.Type
 
-const resultMessages = (output: Output) => {
-  const notice = output.status === "running" ? BACKGROUND_INSTRUCTION : ShellResult.notice(output)
+const resultMessages = (output: Output, timeout?: number) => {
+  const notice = output.status === "running" ? BACKGROUND_INSTRUCTION : ShellResult.notice(output, timeout)
   return [...(output.output ? [output.output] : []), ...(notice ? [notice] : [])]
 }
 
-const toolResult = (output: Output) => {
+const toolResult = (output: Output, timeout?: number) => {
   return {
     output,
-    content: resultMessages(output).map((text) => ({ type: "text" as const, text })),
+    content: resultMessages(output, timeout).map((text) => ({ type: "text" as const, text })),
     metadata: {
       status: output.status,
       ...ShellResult.metadata(output),
@@ -153,7 +153,7 @@ export const Plugin = {
         if (!info || info.status === "running") return
         const output = info.status === "completed" ? yield* Deferred.await(settled) : undefined
         const text = output
-          ? resultMessages(output).join("\n\n")
+          ? (info.output ?? "")
           : info.status === "error"
             ? (info.error ?? "Command failed")
             : "Cancelled"
@@ -183,10 +183,10 @@ export const Plugin = {
           description: description(),
           input: Input,
           output: Output,
-          execute: (input, context) =>
-            Effect.gen(function* () {
-              const timeout = input.background === true ? (input.timeout ?? 0) : (input.timeout ?? DEFAULT_TIMEOUT_MS)
-              let finalTimeout = timeout
+          execute: (input, context) => {
+            const timeout = input.background === true ? (input.timeout ?? 0) : (input.timeout ?? DEFAULT_TIMEOUT_MS)
+            let finalTimeout = timeout
+            return Effect.gen(function* () {
               const info = yield* shell.create(
                 {
                   command: input.command,
@@ -210,17 +210,10 @@ export const Plugin = {
               const run = Effect.gen(function* () {
                 const result = yield* shell.result(info)
                 if (!result.capture) return yield* new Shell.NotFoundError({ id: info.id })
-                const output = ShellResult.output(result)
-                return {
-                  ...output,
-                  output: output.timeout
-                    ? `${output.output}\n\nCommand exceeded timeout of ${finalTimeout} ms. Retry with a larger timeout if the command is expected to take longer.`
-                    : output.output,
-                  status: "completed" as const,
-                }
+                return { ...ShellResult.output(result), status: "completed" as const }
               }).pipe(
                 Effect.tap((output) => Deferred.succeed(settled, output)),
-                Effect.map((output) => resultMessages(output).join("\n\n")),
+                Effect.map((output) => resultMessages(output, finalTimeout).join("\n\n")),
                 Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)),
               )
               const job = yield* jobs.start({
@@ -249,6 +242,7 @@ export const Plugin = {
                 .pipe(Effect.onInterrupt(() => jobs.cancel(job.id).pipe(Effect.ignore)))
               if (result?.type === "backgrounded") {
                 yield* shell.timeout(info.id, 0)
+                finalTimeout = 0
                 yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
                 return backgroundResult(info.id, info.file)
               }
@@ -258,11 +252,12 @@ export const Plugin = {
 
               return yield* Deferred.await(settled)
             }).pipe(
-              Effect.map(toolResult),
+              Effect.map((output) => toolResult(output, finalTimeout)),
               Effect.mapError(
                 (error) => new ToolFailure({ message: `Unable to execute command: ${input.command}`, error }),
               ),
-            ),
+            )
+          },
         }),
       )
       .pipe(Effect.orDie)

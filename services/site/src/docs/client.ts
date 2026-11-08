@@ -7,6 +7,7 @@ import { downloadOf, surfaceOf, targetOf } from "../lib/funnel-config"
 import { base } from "./config"
 import { closeNavMenus, installNavMenus } from "@opencode/nav-menus"
 import { fanMotion } from "../component/site/fan-motion"
+import { holdOpenMenu } from "../component/site/menu-hold"
 
 // The page reports to the Console's funnel like the site's (lib/funnel.ts). The docs are English, at the host's root
 // like the site; their config is built in, as a chunk would bring Vite's preload helper with it.
@@ -144,8 +145,19 @@ function toggleSection(open?: boolean) {
   const nav = $("[data-component=section-nav]")!
   const next = open ?? !nav.hasAttribute("data-open")
   nav.toggleAttribute("data-open", next)
+  // The section list and the Contents list drop over the same page, so one closes the other.
+  const contents = $<HTMLDetailsElement>("[data-component=contents-menu][open]")
+  if (next && contents) contents.open = false
   $("[data-slot=section-toggle]", nav)!.setAttribute("aria-expanded", String(next))
+  holdOpenMenu()
 }
+
+// The Contents bar's list holds the page still while it's open (component/site/menu-hold.ts).
+document.addEventListener(
+  "toggle",
+  (event) => (event.target as Element).matches("[data-component=contents-menu]") && holdOpenMenu(),
+  true,
+)
 
 function toggleMenu(open: boolean) {
   const toggle = $('[data-component="menu-toggle"]')!
@@ -196,9 +208,16 @@ function openLockup(root: HTMLElement, focus?: "first" | "last" | "current") {
   closeNavMenus()
   lockup = root
   const menu = menuOf(root)
-  const word = $("[data-slot=word]", root)!
-  const box = word.getBoundingClientRect()
-  menu.style.setProperty("--menu-text", `${(html.dir === "rtl" ? html.clientWidth - box.right : box.left) + 6}px`)
+  // Phones: the labels start at the bar's logo mark and the "›" centres on its menu button, from the inline
+  // start and end edges (docs-lockup.css).
+  const logo = $("[data-component=topbar] [data-slot=logo] [data-slot=icon]")?.getBoundingClientRect()
+  const button = $("[data-component=menu-toggle]")?.getBoundingClientRect()
+  if (logo?.width && button?.width) {
+    const rtl = html.dir === "rtl"
+    const centre = button.left + button.width / 2
+    menu.style.setProperty("--menu-label", `${rtl ? html.clientWidth - logo.right : logo.left}px`)
+    menu.style.setProperty("--menu-chevron", `${rtl ? centre : html.clientWidth - centre}px`)
+  }
   menu.dataset.submenu = matchMedia("(max-width: 60rem), (hover: none), (pointer: coarse)").matches
     ? "nested"
     : "flyout"
@@ -324,6 +343,8 @@ on("pointerdown", (event) => {
   if (lockup && !lockup.contains(target)) closeLockup()
   const contents = $<HTMLDetailsElement>("[data-component=contents-menu][open]")
   if (contents && !contents.contains(target)) contents.open = false
+  const section = $("[data-component=section-nav][data-open]")
+  if (section && !section.contains(target)) toggleSection(false)
 })
 
 // Arrow keys, Home and End move between tabs.

@@ -170,14 +170,13 @@ function Dropdown(props: {
 }) {
   const [open, setOpen] = createSignal(false)
   const [subOpen, setSubOpen] = createSignal(false)
-  // On phones the menu is a full-width sheet; its labels are indented to the trigger's text.
-  const [textX, setTextX] = createSignal(0)
+  // On phones the labels start at the bar's logo mark and the "›" centres on its menu button (docs-lockup.css).
+  const [edges, setEdges] = createSignal<{ "--menu-label"?: string; "--menu-chevron"?: string }>({})
   const items: HTMLAnchorElement[] = []
   const subItems: HTMLAnchorElement[] = []
   let root: HTMLDivElement | undefined
   let menu: HTMLDivElement | undefined
   let combined: HTMLButtonElement | undefined
-  let word: HTMLAnchorElement | undefined
   let toggleButton: HTMLButtonElement | undefined
   // Both forms render; Settings › Docs nav shows one (docs-lockup.css), so use whichever is shown.
   const splitShown = () => !!toggleButton && toggleButton.offsetParent !== null
@@ -189,11 +188,21 @@ function Dropdown(props: {
     )
 
   const show = (focus?: number) => {
-    // The trigger's text start from the window's inline-start edge: its left, or right to left the
-    // distance from its right edge to the window's.
-    const trigger = splitShown() ? word : combined
-    const box = trigger?.getBoundingClientRect()
-    setTextX((box && trigger ? (isRtl(trigger) ? document.documentElement.clientWidth - box.right : box.left) : 0) + 6)
+    const logo = document
+      .querySelector("[data-component=topbar] [data-slot=logo] [data-slot=icon]")
+      ?.getBoundingClientRect()
+    const button = document.querySelector("[data-component=menu-toggle]")?.getBoundingClientRect()
+    const width = document.documentElement.clientWidth
+    const rtl = !!menu && isRtl(menu)
+    const centre = button ? button.left + button.width / 2 : 0
+    setEdges(
+      logo?.width && button?.width
+        ? {
+            "--menu-label": `${rtl ? width - logo.right : logo.left}px`,
+            "--menu-chevron": `${rtl ? centre : width - centre}px`,
+          }
+        : {},
+    )
     setNested(
       siteSettings.docsSubmenu === "nested" ||
         window.matchMedia("(max-width: 60rem), (hover: none), (pointer: coarse)").matches,
@@ -290,7 +299,6 @@ function Dropdown(props: {
         {(split) => (
           <>
             <a
-              ref={word}
               data-slot="word"
               data-design="docsNav sectionMenuStyle menuActive menuColor menuAlign docsSubmenu"
               href={props.items[currentIndex()].href}
@@ -332,7 +340,7 @@ function Dropdown(props: {
         role="menu"
         aria-label={props.menuLabel}
         data-submenu={nested() ? "nested" : "flyout"}
-        style={{ "--menu-text": `${textX()}px` }}
+        style={edges()}
         onKeyDown={(event) => {
           // Nested versions are rows of this menu, so the arrows walk through them in place.
           const rows = nested()
@@ -408,7 +416,13 @@ function Dropdown(props: {
                     onClick={() => (subOpen() && nested() ? setSubOpen(false) : openSub(sub(), false))}
                   >
                     <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                      <path d="M4.5 3L7.5 6L4.5 9" stroke="currentColor" stroke-width="1.25" stroke-linecap="square" />
+                      <path
+                        d="M4.5 3L7.5 6L4.5 9"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="square"
+                        vector-effect="non-scaling-stroke"
+                      />
                     </svg>
                   </button>
                   <div

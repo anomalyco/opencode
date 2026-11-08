@@ -468,7 +468,7 @@ export function addProductToggles() {
     chevron.setAttribute("aria-haspopup", "menu")
     chevron.setAttribute("aria-expanded", "false")
     chevron.setAttribute("aria-label", "OpenCode products")
-    chevron.innerHTML = `<svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5"/></svg>`
+    chevron.innerHTML = `<svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`
     name.after(chevron)
   })
 }

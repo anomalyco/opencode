@@ -21,18 +21,14 @@ import {
   route,
   strip,
 } from "./lib/language"
+import { isDataBypassPath, parsePath, type Target, type TextFormat } from "./lib/data-path"
 import { noindexOutsideProduction } from "./lib/noindex"
 import { loadComparePage, loadHomePage, loadLabPage, loadModelPage } from "./lib/page-data"
+import { labOgCard, modelOgCard } from "./og/card-data"
+import { ogResponse } from "./og/response"
 import { canonicalModelEntry, catalogModelPath, findModelCatalogLab, loadModelCatalog } from "./routes/model-catalog"
 import { statsPageCacheControl } from "./routes/stats-cache"
 
-type Format = "markdown" | "json" | "text"
-type Target =
-  | { kind: "home" }
-  | { kind: "llms" }
-  | { kind: "lab"; lab: string }
-  | { kind: "model"; lab: string; model: string }
-  | { kind: "compare"; params: string[] }
 type Rendered = {
   body: string | object | undefined
   path?: string
@@ -40,13 +36,11 @@ type Rendered = {
   unavailable?: boolean
 }
 
-const reservedSegments = new Set(["api", "_server", "_build", "stats", "sitemap.xml", "banner.jpg", "banner.png"])
-const extensionFormats = { ".md": "markdown", ".json": "json" } as const satisfies Record<string, Format>
 const contentTypes = {
   markdown: "text/markdown",
   json: "application/json",
   text: "text/plain",
-} as const satisfies Record<Format, string>
+} as const satisfies Record<TextFormat, string>
 
 const pageMiddleware = createMiddleware({
   onRequest: async (event) => {
@@ -79,6 +73,14 @@ const pageMiddleware = createMiddleware({
     }
 
     if (!format) return
+    if (format === "og")
+      return ogResponse({
+        origin: url.origin,
+        path,
+        version: url.searchParams.get("v"),
+        head: request.method === "HEAD",
+        card: () => loadOgCard(parsed.target),
+      })
     return formatResponse(await render(parsed.target, format), format, { negotiated, head: request.method === "HEAD" })
   },
 })
@@ -108,49 +110,6 @@ function localizedRedirect(request: Request, url: URL) {
   return new Response(null, { status: 308, headers })
 }
 
-function isDataBypassPath(pathname: string) {
-  return (
-    pathname.startsWith(`${basePath}/_build/`) ||
-    pathname.startsWith(`${basePath}/api/`) ||
-    pathname.startsWith(`${basePath}/stats/`) ||
-    pathname.startsWith(`${basePath}/_server`) ||
-    pathname === `${basePath}/banner.jpg` ||
-    pathname === `${basePath}/banner.png` ||
-    pathname === `${basePath}/sitemap.xml` ||
-    pathname.endsWith("/llms.txt") ||
-    pathname.endsWith(".md") ||
-    pathname.endsWith(".json")
-  )
-}
-
-function parsePath(path: string) {
-  const segments = path.split("/").filter(Boolean).slice(1)
-  if (segments.some((segment) => !/^[\w.-]+$/.test(segment))) return undefined
-  const last = segments.at(-1) ?? ""
-  const extension = (Object.keys(extensionFormats) as (keyof typeof extensionFormats)[]).find(
-    (value) => last.endsWith(value) && last.length > value.length,
-  )
-  const parts = extension ? [...segments.slice(0, -1), last.slice(0, -extension.length)] : segments
-  const target = parseTarget(parts, extension !== undefined)
-  if (!target) return undefined
-  if (target.kind === "llms") return { target, extension: "", format: "text" as const }
-  return { target, extension: extension ?? "", format: extension && extensionFormats[extension] }
-}
-
-function parseTarget(parts: string[], formatted: boolean): Target | undefined {
-  if (parts.length === 0) return { kind: "home" }
-  if (parts.length === 1 && parts[0] === "index" && formatted) return { kind: "home" }
-  if (parts.length === 1 && parts[0] === "llms.txt" && !formatted) return { kind: "llms" }
-  if (parts[0] === "compare") {
-    if (parts.length !== 3 && parts.length !== 5) return undefined
-    return { kind: "compare", params: parts.slice(1) }
-  }
-  if (reservedSegments.has(parts[0])) return undefined
-  if (parts.length === 1) return { kind: "lab", lab: parts[0] }
-  if (parts.length === 2) return { kind: "model", lab: parts[0], model: parts[1] }
-  return undefined
-}
-
 async function canonicalPath(target: Target) {
   if (target.kind !== "lab" && target.kind !== "model") return undefined
   const catalog = await loadModelCatalog()
@@ -162,7 +121,13 @@ async function canonicalPath(target: Target) {
   return entry && catalogModelPath(entry)
 }
 
-async function render(target: Target, format: Format): Promise<Rendered> {
+async function loadOgCard(target: Target) {
+  if (target.kind === "lab") return labOgCard(await loadLabPage(target.lab))
+  if (target.kind === "model") return modelOgCard(await loadModelPage(target.lab, target.model))
+  return undefined
+}
+
+async function render(target: Target, format: TextFormat): Promise<Rendered> {
   if (target.kind === "llms") {
     const [home, catalog] = await Promise.all([loadHomePage(), loadModelCatalog()])
     return { body: llmsTxt(home, catalog), updatedAt: home.updatedAt }
@@ -195,7 +160,7 @@ async function render(target: Target, format: Format): Promise<Rendered> {
   return { body: compareMarkdown(data, target.params), unavailable: data.catalog.models.length === 0 }
 }
 
-function formatResponse(rendered: Rendered, format: Format, options: { negotiated: boolean; head: boolean }) {
+function formatResponse(rendered: Rendered, format: TextFormat, options: { negotiated: boolean; head: boolean }) {
   const headers = new Headers({
     "Content-Type": `${contentTypes[format]}; charset=utf-8`,
     "Cache-Control": statsPageCacheControl,

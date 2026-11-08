@@ -53,6 +53,9 @@ html:has([data-site][data-theme="dark"]) {
   /* Light follows Settings › Light background (pure white unless set). */
   --bg: light-dark(#fff, #0c0c0c);
   --bg-weak: light-dark(hsl(0, 0%, 96%), hsl(0, 0%, 10%));
+  /* A pressed full-width row on phones (the docs' sticky rows, the Contents list, the DOCS menu): a
+     subtle surface tint, lighter than the chevrons' and menus' press fills. */
+  --row-press: var(--bg-weak);
   /* The product cards' media backdrop (products.css), which their covers and reels are graded to in
      both themes. */
   --card-media-bg: #161616;
@@ -1599,25 +1602,6 @@ html:has([data-site][data-theme="dark"]) {
     );
     --menu-open: var(--menu-hover);
     --menu-hint: var(--link);
-  }
-
-  /* A hovered, focused or pressed current row (or one whose submenu is open) turns its whole active
-     bar the link blue, in either Menu color, so the current row still answers the pointer: about 5:1
-     on the light pop-up and 5.8:1 on the dark one. */
-  &[data-menu-active="bar"]
-    :is(
-      [data-component="language-picker"] [data-slot="item"][data-selected="true"],
-      [data-component="docs-lockup"] [role="menuitem"][aria-current="page"]
-    ):is(
-      :hover:not(:is([data-slot="menu"], [data-slot="dropdown"]):has(:focus-visible:not(:hover)) *),
-      :focus-visible,
-      :active,
-      [data-open]:not(
-          [data-slot="menu"]:has(:is([role="menuitem"]:hover, :focus-visible):not([data-slot="parent"] *)) *
-        )
-        > *
-    )::before {
-    background: var(--link);
   }
 
   /* Every menu's rows span it edge to edge, with a square tint on hover. */
@@ -3370,25 +3354,28 @@ html:has([data-site][data-theme="dark"]) {
   grid-template-rows: 0fr;
   transition: grid-template-rows 300ms var(--ease-out);
 
-  /* The opening itself is the bar's blue, so the bar reads as one blue surface rising from the
-     bottom edge, which takes the blue at once (site.tsx), with no page colour between them. */
   [data-slot="clip"] {
     min-height: 0;
     overflow: hidden;
-    background: var(--bar-blue);
   }
 
-  /* The link slides up into the bar as it opens, and back down as it closes. */
+  /* The bar's room in the page, which the opening grows to and the page moves up with. */
   [data-slot="slide"] {
-    position: relative;
+    height: calc(var(--letters-bar-height) + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* The label slides up into the bar as it opens, and back down as it closes. */
+  a > span {
     opacity: 0;
-    translate: 0 100%;
+    translate: 0 calc(var(--letters-bar-height) + env(safe-area-inset-bottom, 0px));
     transition:
       translate 300ms var(--ease-out),
       opacity 200ms ease;
   }
 
   a {
+    position: relative;
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3407,7 +3394,7 @@ html:has([data-site][data-theme="dark"]) {
   &[data-shown] {
     grid-template-rows: 1fr;
 
-    [data-slot="slide"] {
+    a > span {
       opacity: 1;
       translate: 0;
     }
@@ -3421,7 +3408,7 @@ html:has([data-site][data-theme="dark"]) {
 
     /* Important, past the page-wide reduced-motion rule that zeroes every transition on small
        screens: a fade is the reduced form of this motion, not none. */
-    [data-slot="slide"] {
+    a > span {
       translate: 0;
       transition: opacity 200ms ease;
       transition-duration: 200ms !important;
@@ -3433,9 +3420,19 @@ html:has([data-site][data-theme="dark"]) {
    with the bottom's blue. */
 [data-site][data-letters-motion="instant"] [data-component="letters-bar"] {
   &,
-  [data-slot="slide"] {
+  a > span {
     transition: none;
   }
+}
+
+/* While the bar fills the bottom of the screen (site.tsx), the whole bar is pinned to the bottom
+   edge, so it is blue at full height in the same frame as iOS Safari's bottom toolbar area, while
+   its room in the page grows and the page moves up behind it. Once open it is exactly where the
+   page puts it. */
+[data-site][data-letters-end] [data-component="letters-bar"] a {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 1;
 }
 
 /* Settings › Footer › columns: the sidebar column stays empty. Under the link columns, a bar across

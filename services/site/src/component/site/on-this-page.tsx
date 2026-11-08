@@ -2,6 +2,7 @@ import { useI18n } from "~/context/i18n"
 import "./on-this-page.css"
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { Chevron } from "./icons"
+import { holdOpenMenu } from "./menu-hold"
 
 type ContentsItem = {
   id: string
@@ -143,11 +144,12 @@ export function ContentsMenu(props: { items: ContentsItem[] }) {
       document.removeEventListener("keydown", escape)
       window.removeEventListener("scroll", stuck)
       window.removeEventListener("resize", stuck)
+      document.documentElement.removeAttribute("data-menu-hold")
     })
   })
 
   return (
-    <details ref={menu} data-component="contents-menu">
+    <details ref={menu} data-component="contents-menu" on:toggle={holdOpenMenu}>
       <summary>
         <span data-slot="label">{i18n.t("site.contents")}</span>
         <Chevron />
