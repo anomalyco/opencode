@@ -439,7 +439,8 @@ export function createHostApis() {
           const cancel = write((value) => {
             if (context.signal.aborted) return skip()
             context.signal.removeEventListener("abort", abort)
-            void value.notify(plugin, options).then(resolve)
+            // Settles on failure too: an unsettled notification promise would hold the delivery lock forever.
+            void value.notify(plugin, options).then(resolve, skip)
           }, skip)
         }),
     }),

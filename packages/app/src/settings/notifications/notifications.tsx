@@ -2,6 +2,7 @@ import { Component } from "solid-js"
 import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
 import { useSettings } from "@/settings/model"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
@@ -62,7 +63,17 @@ const SoundSetting: Component<{
 export const SettingsNotifications: Component = () => {
   const language = useLanguage()
   const settings = useSettings()
+  const platform = usePlatform()
   const sounds = createSoundSettingsController()
+
+  const enable = (checked: boolean, set: (value: boolean) => void) => {
+    set(checked)
+
+    // Enabling a channel is the user gesture the browser needs before it can show its permission prompt; a request
+    // from a background notification is never granted on Android.
+    if (checked && platform.platform === "web" && Notification.permission === "default")
+      void Notification.requestPermission().catch(() => "denied")
+  }
 
   return (
     <>
@@ -88,7 +99,7 @@ export const SettingsNotifications: Component = () => {
               <div data-action="settings-notifications-agent">
                 <Switch
                   checked={settings.notifications.agent()}
-                  onChange={(checked) => settings.notifications.setAgent(checked)}
+                  onChange={(checked) => enable(checked, settings.notifications.setAgent)}
                 />
               </div>
             </SettingsRow>
@@ -100,7 +111,7 @@ export const SettingsNotifications: Component = () => {
               <div data-action="settings-notifications-permissions">
                 <Switch
                   checked={settings.notifications.permissions()}
-                  onChange={(checked) => settings.notifications.setPermissions(checked)}
+                  onChange={(checked) => enable(checked, settings.notifications.setPermissions)}
                 />
               </div>
             </SettingsRow>
@@ -113,7 +124,7 @@ export const SettingsNotifications: Component = () => {
                 <Switch
                   hideLabel
                   checked={settings.notifications.questions()}
-                  onChange={(checked) => settings.notifications.setQuestions(checked)}
+                  onChange={(checked) => enable(checked, settings.notifications.setQuestions)}
                 >
                   {language.t("settings.general.notifications.questions.title")}
                 </Switch>
@@ -127,7 +138,7 @@ export const SettingsNotifications: Component = () => {
               <div data-action="settings-notifications-errors">
                 <Switch
                   checked={settings.notifications.errors()}
-                  onChange={(checked) => settings.notifications.setErrors(checked)}
+                  onChange={(checked) => enable(checked, settings.notifications.setErrors)}
                 />
               </div>
             </SettingsRow>
