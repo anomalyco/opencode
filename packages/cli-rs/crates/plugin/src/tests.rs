@@ -320,6 +320,53 @@ fn rows(host: &TestHost) -> Vec<String> {
     host.app.render().text().lines().map(|line| line.trim_end().to_owned()).collect()
 }
 
+// Expected: a claim's root node is a flex item of the slot's parent, as in TS's `<Slot>` fragment: in a row slot a
+// growing root fills the row (carbon's probe 2, `home.footer.status`), and a shrinking root that may go below its
+// content's width gives up room as `prompt.footer` does (`prompt/footer.tsx:72`).
+#[test]
+fn a_claim_root_grows_in_a_row_slot() {
+    use abi::{Layout, Node, Render, Span};
+    let host = host();
+    let grow = rendering("grow", Placement::append(slot::HOME_FOOTER), || {
+        let spacer = Node::column(Vec::new()).layout(Layout::default().grow());
+        Render::Show(
+            Node::row(vec![Node::text([Span::new("L")]), spacer, Node::text([Span::new("R")])])
+                .layout(Layout::default().grow()),
+        )
+    });
+    let registry = Registry::new(vec![grow], []);
+    registry.activate(&host);
+    let parent = View::new(host.app()).row().width(30);
+    let _mount = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |parent| {
+        parent.add(&Text::new(host.app(), "content").shrink(0.0));
+    });
+    host.app().root().add(&parent);
+    assert_eq!(rows(&host)[0], format!("contentL{}R", " ".repeat(21)));
+}
+
+#[test]
+fn a_claim_root_shrinks_in_a_row_slot() {
+    use abi::{Layout, Node, Render, Span};
+    let host = host();
+    let shrink = rendering("shrink", Placement::append(slot::PROMPT_FOOTER), || {
+        Render::Show(
+            Node::text([Span::new("abcdefghijklmnop")])
+                .wrap(abi::Wrap::None)
+                .truncate()
+                .layout(Layout::default().shrink(true).min_width_zero()),
+        )
+    });
+    let registry = Registry::new(vec![shrink], []);
+    registry.activate(&host);
+    let parent = View::new(host.app()).row().width(20);
+    let _mount = registry.mount(&*host, &parent, slot::PROMPT_FOOTER, &SlotInput::default(), |parent| {
+        parent.add(&Text::new(host.app(), "0123456789").shrink(0.0));
+    });
+    host.app().root().add(&parent);
+    let row = &rows(&host)[0];
+    assert!(row.starts_with("0123456789abc") && row.chars().count() <= 20, "{row:?}");
+}
+
 // Expected: a replaced node frees its widgets, a hoverable, clickable text among them, so the click action, which
 // holds the host weakly, is dropped each time (bigboi's probe: ten replacements leave the count where it was).
 #[test]
