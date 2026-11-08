@@ -3,9 +3,9 @@
 export const legalHistory = {
   "/legal/privacy-policy": [
     {
-      sha: "3eec8d989ff94ad9c5e08f9a078297f270dc7040",
+      sha: "9e9b551e3a72b12b839ba3fe266a0db89c909602",
       date: "2026-11-08",
-      subject: "docs(legal): cover hosted agent sessions and their retention",
+      subject: "docs(legal): cover hosted agent sessions and their retention (#62789)",
       effective: "Nov 9, 2026",
       first: false,
       added: [
@@ -32,8 +32,8 @@ export const legalHistory = {
       addedCount: 23,
       removedCount: 5,
       source:
-        "https://github.com/anomalyco/opencode/blob/3eec8d989ff94ad9c5e08f9a078297f270dc7040/services/site/src/lib/legal/privacy-policy.ts",
-      diff: "https://github.com/anomalyco/opencode/commit/3eec8d989ff94ad9c5e08f9a078297f270dc7040#diff-13f1bdb3583f198406200946a0d6bde1bc1f9271e4e629272db2023a211e2819",
+        "https://github.com/anomalyco/opencode/blob/9e9b551e3a72b12b839ba3fe266a0db89c909602/services/site/src/lib/legal/privacy-policy.ts",
+      diff: "https://github.com/anomalyco/opencode/commit/9e9b551e3a72b12b839ba3fe266a0db89c909602#diff-13f1bdb3583f198406200946a0d6bde1bc1f9271e4e629272db2023a211e2819",
     },
     {
       sha: "9c7212c99a69b9d1c644fc30ad79068124aab1a7",
