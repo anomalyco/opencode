@@ -59,14 +59,17 @@ pub struct Pairing {
 
 /// The links of `pairing.code` on each of the server's URLs.
 pub fn pairing(server: &ServerInfo, pairing: &PairingCode) -> Pairing {
-    let link =
-        |base: &url::Url| base.join(&format!("/auth/connect/{}", pairing.code)).map(String::from).unwrap_or_default();
-    let urls: Vec<url::Url> = server.urls.iter().filter_map(|url| url::Url::parse(url).ok()).collect();
+    let link = |base: &url::Url| {
+        opencode_api::js::join_url(base, &format!("/auth/connect/{}", pairing.code))
+            .map(String::from)
+            .unwrap_or_default()
+    };
+    let urls: Vec<url::Url> = server.urls.iter().filter_map(|url| opencode_api::js::parse_url(url).ok()).collect();
     let localhost = server
         .urls
         .first()
-        .and_then(|url| url::Url::parse(url).ok())
-        .and_then(|mut local| local.set_host(Some("localhost")).ok().map(|()| local))
+        .and_then(|url| opencode_api::js::parse_url(url).ok())
+        .and_then(|mut local| opencode_api::js::set_host(&mut local, Some("localhost")).ok().map(|()| local))
         .map(|local| link(&local));
     Pairing {
         links: urls.iter().map(link).collect(),

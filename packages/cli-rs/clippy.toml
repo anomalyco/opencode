@@ -1,0 +1,11 @@
+disallowed-methods = [
+    { path = "url::Url::parse", reason = "use opencode_api_types::js::parse_url: the idna_adapter stub asserts on some non-ASCII hosts" },
+    { path = "url::Url::join", reason = "use opencode_api_types::js::join_url: the idna_adapter stub asserts on some non-ASCII hosts" },
+    { path = "url::Url::options", reason = "use opencode_api_types::js::parse_url: the idna_adapter stub asserts on some non-ASCII hosts" },
+    { path = "url::Url::parse_with_params", reason = "use opencode_api_types::js::parse_url: the idna_adapter stub asserts on some non-ASCII hosts" },
+    { path = "url::ParseOptions::parse", reason = "use opencode_api_types::js::parse_url: the idna_adapter stub asserts on some non-ASCII hosts" },
+    { path = "url::Host::parse", reason = "use opencode_api_types::js::parse_url: the idna_adapter stub asserts on some non-ASCII hosts" },
+    { path = "url::quirks::set_host", reason = "the idna_adapter stub asserts on some non-ASCII hosts" },
+    { path = "url::quirks::set_hostname", reason = "the idna_adapter stub asserts on some non-ASCII hosts" },
+    { path = "url::Url::set_host", reason = "the idna_adapter stub asserts on some non-ASCII hosts; check the host with opencode_api_types::js::parse_url first" },
+]

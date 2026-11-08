@@ -155,14 +155,12 @@ impl Logger {
             .as_ref()
             .and_then(|dir| std::fs::create_dir_all(dir).ok().map(|()| dir.join(file_name(&options.channel))));
         let file = path.as_ref().and_then(|path| OpenOptions::new().create(true).append(true).open(path).ok());
-        let otlp = options.endpoint.map(|endpoint| {
-            Otlp {
-                url: format!("{endpoint}/v1/logs"),
-                headers: parse_headers(options.headers.as_deref()),
-                resource: options.resource,
-            }
-            .start()
-        });
+        let otlp = options
+            .endpoint
+            .and_then(|endpoint| opencode_api::js::parse_url(&format!("{endpoint}/v1/logs")).ok())
+            .map(|url| {
+                Otlp { url, headers: parse_headers(options.headers.as_deref()), resource: options.resource }.start()
+            });
         Self { level: options.level, path: file.as_ref().and(path), file, print: options.print, otlp }
     }
 
@@ -509,7 +507,7 @@ enum Message {
 }
 
 struct Otlp {
-    url: String,
+    url: url::Url,
     headers: Vec<(String, String)>,
     resource: Value,
 }
@@ -569,7 +567,7 @@ impl Otlp {
 
     async fn post(&self, client: &reqwest::Client, body: Value) -> bool {
         let mut request = client
-            .post(&self.url)
+            .post(self.url.clone())
             .header("content-type", "application/json")
             .header("user-agent", format!("opencode-rs/{}", crate::help::VERSION))
             .timeout(OTLP_SHUTDOWN)

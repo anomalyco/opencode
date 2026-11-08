@@ -20,6 +20,17 @@ ASCII; write an international name in its punycode (xn--) form", from:
 
 A pasted `file://` path with a non-ASCII host stays as typed, as any other non-local host does.
 
+URLs from other sources go through the same boundary (`parse_url`, `join_url` and `set_host`),
+and `clippy.toml` forbids calling `url`'s parsers anywhere else:
+
+- a service registration whose URL has a non-ASCII host is an error with the message above, and
+  discovery treats it as not answering;
+- a server URL with a non-ASCII host (`pair`, `/pair`) gets no link in the TUI, and in the CLI
+  keeps the `<url>/auth/connect/<code>` fallback;
+- an ACP resource or link whose URI has a non-ASCII host is treated as an unparsable URI: its
+  name comes from the last path segment, and an embedded text resource is labelled with the URI;
+- an OTLP endpoint (`OTEL_EXPORTER_OTLP_ENDPOINT`) with a non-ASCII host exports nothing.
+
 The stub also stops `url` from checking UTS 46 rules on punycode labels, so a malformed `xn--`
 label parses where TypeScript rejects it; the server or DNS rejects it later.
 

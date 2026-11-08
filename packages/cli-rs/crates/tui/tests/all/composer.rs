@@ -362,7 +362,7 @@ fn the_client_mcp_experiment_serves_the_terminal_tools() {
 
 #[test]
 fn the_client_mcp_socket_follows_a_restarted_service() {
-    let at = |url: &str, password: &str| (url::Url::parse(url).unwrap(), Some(Auth::password(password)));
+    let at = |url: &str, password: &str| (opencode_api::js::parse_url(url).unwrap(), Some(Auth::password(password)));
     let endpoint = Arc::new(Mutex::new(at("http://127.0.0.1:4096/", "old")));
     let harness = mount_with(Some(endpoint.clone()));
     harness.experiment(true);
