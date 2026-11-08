@@ -2756,7 +2756,7 @@
      (the site serves no 500 weight); 12px uppercase keeps them reading as labels. */
   --ref-head: var(--text-strong);
   --code-number: light-dark(#737373, #858585);
-  --code-mark: light-dark(#3b5cf6, #4f8bff);
+  --code-mark: light-dark(#3b5cf6, #6b8fff);
   --code-mark-tint: light-dark(#eff2fe, #1e2637);
   --code-del: light-dark(#d61f1f, #f04c4c);
   --code-add: light-dark(#1a9347, #2dd269);
