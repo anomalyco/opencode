@@ -7,6 +7,7 @@ import { Goal } from "@opencode/schema/goal"
 import { Session } from "@opencode/schema/session"
 import { isExactRootFallback } from "@opencode/util/session-title-fallback"
 import { Cause, Clock, DateTime, Duration, Effect, FiberMap, Option, Schema, Stream } from "effect"
+import { BusyError } from "../session/error.js"
 import CONTINUATION from "./goal/continuation.txt"
 import JUDGE from "./goal/judge.txt"
 import KICKOFF from "./goal/kickoff.txt"
@@ -56,6 +57,25 @@ export const Plugin = define({
       yield* rpc.events
         .emit("changed", { sessionID, goal: goal ?? null })
         .pipe(Effect.catchCause((cause) => Effect.logWarning("failed to publish a goal change", { sessionID, cause })))
+    })
+
+    // A staged revert parks queued input until the user commits or clears it, so a command that
+    // queues work must commit first — but only then. Commands that queue nothing (pause, clear,
+    // usage errors, unknown commands) must leave the revert alone, or the user loses the undone
+    // messages and redo history for nothing. The session is re-read here because the revert may
+    // have been resolved since the command was invoked. If a run is active the commit waits: the
+    // kickoff stays parked, as it does today, instead of failing a goal that is already written.
+    const commitStagedRevert = Effect.fn("GoalPlugin.commitStagedRevert")(function* (sessionID: Session.ID) {
+      const session = yield* ctx.session.get({ sessionID })
+      if (!session.revert) return
+      yield* ctx.session.revert.commit({ sessionID }).pipe(
+        Effect.catchIf(
+          (error): error is BusyError => error instanceof BusyError,
+          () => Effect.logWarning("goal command left a staged revert in place while the session was busy", {
+            sessionID,
+          }),
+        ),
+      )
     })
 
     // The loop's own writes only apply to the goal they were decided on. Storage has no compare-and-set, so this
@@ -374,6 +394,7 @@ export const Plugin = define({
                 updatedAt: yield* Clock.currentTimeMillis,
               }
               yield* write(input.sessionID, resumed)
+              yield* commitStagedRevert(input.sessionID)
               return yield* ctx.session.synthetic({
                 sessionID: input.sessionID,
                 text: continuation(resumed, ["The user resumed the goal."]),
@@ -423,6 +444,8 @@ export const Plugin = define({
                 metadata,
                 delivery: input.delivery,
               })
+            // The prompt path above commits a staged revert itself, once preparation succeeds.
+            yield* commitStagedRevert(input.sessionID)
             yield* ctx.session.synthetic({
               sessionID: input.sessionID,
               text: kickoff,

@@ -634,6 +634,11 @@ export function fromPromise(plugin: Plugin) {
             generate: adaptApiMethod(SessionEndpoints["session.generate"], host.session.generate),
             command: adaptApiMethod(SessionEndpoints["session.command"], host.session.command),
             compact: adaptApiMethod(SessionEndpoints["session.compact"], host.session.compact),
+            revert: {
+              stage: adaptApiMethod(SessionEndpoints["session.revert.stage"], host.session.revert.stage),
+              clear: adaptApiMethod(SessionEndpoints["session.revert.clear"], host.session.revert.clear),
+              commit: adaptApiMethod(SessionEndpoints["session.revert.commit"], host.session.revert.commit),
+            },
             synthetic: adaptApiMethod(SessionEndpoints["session.synthetic"], host.session.synthetic),
             interrupt: adaptApiMethod(SessionEndpoints["session.interrupt"], host.session.interrupt),
             update: adaptApiMethod(SessionEndpoints["session.update"], host.session.update),
