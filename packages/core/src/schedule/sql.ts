@@ -27,9 +27,13 @@ export const ScheduleTable = sqliteTable(
     run_count: integer().notNull().default(0),
     checks: integer().notNull().default(0),
     failures: integer().notNull().default(0),
+    /** Consecutive shell action runs that failed; reset by a successful run. */
+    run_failures: integer().notNull().default(0),
     last_fired_at: integer(),
     last_message_id: text().$type<SessionMessage.ID>(),
     last_outcome: text().$type<Schedule.Outcome>(),
+    /** The last shell action run, written as `{ durationMs: 0, output: "" }` when it starts. */
+    last_run: text({ mode: "json" }).$type<Schedule.RunResult>(),
     /** The loop leaves a due row alone until then, e.g. while its location has schedules turned off. */
     retry_at: integer(),
     /** Condition state persisted across checks (e.g. previous stdout for shell `changes`). */

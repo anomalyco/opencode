@@ -1583,17 +1583,20 @@ const EndpointExperimentalPersistentPtyConnectToken =
     )
 
 const EndpointExperimentalScheduleCreate =
-  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleCreateInput) =>
+  (raw: RawClient["server.experimental"]) => (input?: ExperimentalScheduleCreateInput) =>
     preserveEffect<ExperimentalScheduleCreateOutput>()(
       raw["schedule.create"]({
         payload: {
-          sessionID: input["sessionID"],
-          name: input["name"],
-          when: input["when"],
-          if: input["if"],
-          until: input["until"],
-          ends: input["ends"],
-          prompt: input["prompt"],
+          sessionID: input?.["sessionID"],
+          name: input?.["name"],
+          when: input?.["when"],
+          if: input?.["if"],
+          until: input?.["until"],
+          ends: input?.["ends"],
+          prompt: input?.["prompt"],
+          run: input?.["run"],
+          cwd: input?.["cwd"],
+          timeout: input?.["timeout"],
         },
       }).pipe(
         Effect.mapError(mapClientError),
@@ -1602,9 +1605,9 @@ const EndpointExperimentalScheduleCreate =
     )
 
 const EndpointExperimentalScheduleList =
-  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleListInput) =>
+  (raw: RawClient["server.experimental"]) => (input?: ExperimentalScheduleListInput) =>
     preserveEffect<ExperimentalScheduleListOutput>()(
-      raw["schedule.list"]({ query: { sessionID: input["sessionID"] } }).pipe(
+      raw["schedule.list"]({ query: { sessionID: input?.["sessionID"] } }).pipe(
         Effect.mapError(mapClientError),
         Effect.map((value) => value.data),
       ),

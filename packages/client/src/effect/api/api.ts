@@ -2382,23 +2382,26 @@ export type ExperimentalPersistentPtyConnectTokenOperation<E = never> = (
 ) => Effect.Effect<ExperimentalPersistentPtyConnectTokenOutput, E>
 
 export type ExperimentalScheduleCreateInput = {
-  readonly sessionID: Session.ID
+  readonly sessionID?: Session.ID | undefined
   readonly name?: string | undefined
   readonly when?: Schedule.WhenInput | undefined
   readonly if?: Schedule.ConditionInput | undefined
   readonly until?: Schedule.ConditionInput | undefined
   readonly ends?: Schedule.Ends | undefined
-  readonly prompt: string
+  readonly prompt?: string | undefined
+  readonly run?: string | undefined
+  readonly cwd?: string | undefined
+  readonly timeout?: Schedule.DurationString | undefined
 }
 export type ExperimentalScheduleCreateOutput = Schedule.Info
 export type ExperimentalScheduleCreateOperation<E = never> = (
-  input: ExperimentalScheduleCreateInput,
+  input?: ExperimentalScheduleCreateInput,
 ) => Effect.Effect<ExperimentalScheduleCreateOutput, E>
 
-export type ExperimentalScheduleListInput = { readonly sessionID: Session.ID }
+export type ExperimentalScheduleListInput = { readonly sessionID?: Session.ID | undefined }
 export type ExperimentalScheduleListOutput = ReadonlyArray<Schedule.Info>
 export type ExperimentalScheduleListOperation<E = never> = (
-  input: ExperimentalScheduleListInput,
+  input?: ExperimentalScheduleListInput,
 ) => Effect.Effect<ExperimentalScheduleListOutput, E>
 
 export type ExperimentalScheduleGetInput = { readonly scheduleID: Schedule.ID }

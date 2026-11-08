@@ -7,26 +7,42 @@ import { Effect } from "effect"
 import { HttpApiSchema } from "effect/http-api"
 import { missingSession } from "./session-error"
 
-/** `schedule.*` in the `server.experimental` group. Every route needs experimental.schedules where the Session lives. */
+/**
+ * `schedule.*` in the `server.experimental` group. Session routes need experimental.schedules where the Session lives;
+ * a create, read or list without a `sessionID` needs it in the global config.
+ */
 export const makeSchedule = Effect.gen(function* () {
   const schedules = yield* Schedule.Service
 
-  const allowed = (sessionID: Session.ID) =>
+  const allowed = (sessionID?: Session.ID) =>
     schedules.enabled(sessionID).pipe(
       Effect.mapError(missingSession),
       Effect.flatMap((enabled) => (enabled ? Effect.void : Effect.fail(disabled()))),
     )
 
-  // A schedule whose Session is gone, or whose location has the flag off, reads as missing or forbidden like the rest.
+  // A schedule whose Session is gone reads as missing; one whose location (or the global config) has the flag off is
+  // forbidden like the rest.
   const find = (id: Schedule.ID) =>
     Effect.gen(function* () {
       const info = yield* schedules.get(id).pipe(Effect.mapError(missingSchedule))
-      if (info.sessionID === undefined) return yield* missingSchedule({ scheduleID: id })
       yield* allowed(info.sessionID).pipe(
         Effect.catchTag("SessionNotFoundError", () => Effect.fail(missingSchedule({ scheduleID: id }))),
       )
       return info
     })
+
+  // A session-less list spans every location, so hide rows whose Session lives where the flag is off. Distinct Sessions
+  // are deduped, keeping it to one enabled check and one config read per location.
+  const hiddenSessions = (data: ReadonlyArray<Schedule.Info>) =>
+    Effect.forEach(
+      new Set(data.flatMap((row) => (row.sessionID === undefined ? [] : [row.sessionID]))),
+      (sessionID) =>
+        schedules.enabled(sessionID).pipe(
+          Effect.catchTag("Session.NotFoundError", () => Effect.succeed(false)),
+          Effect.map((enabled) => (enabled ? [] : [sessionID])),
+        ),
+      { concurrency: "unbounded" },
+    ).pipe(Effect.map((groups) => new Set(groups.flat())))
 
   return {
     create: (payload: CreatePayload) =>
@@ -43,10 +59,17 @@ export const makeSchedule = Effect.gen(function* () {
           "Session.NotFoundError": (error) => Effect.fail(missingSession(error)),
         }),
       ),
-    list: (sessionID: Session.ID) =>
+    list: (sessionID?: Session.ID) =>
       allowed(sessionID).pipe(
         Effect.andThen(schedules.list({ sessionID })),
-        Effect.map((data) => ({ data })),
+        Effect.flatMap((data) => {
+          if (sessionID !== undefined) return Effect.succeed({ data })
+          return hiddenSessions(data).pipe(
+            Effect.map((hidden) => ({
+              data: data.filter((row) => row.sessionID === undefined || !hidden.has(row.sessionID)),
+            })),
+          )
+        }),
       ),
     get: (id: Schedule.ID) => find(id).pipe(Effect.map((data) => ({ data }))),
     pause: (id: Schedule.ID) =>

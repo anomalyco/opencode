@@ -78,7 +78,7 @@ export const Plugin = {
         editor.add({
           name: "schedule_create",
           description:
-            "Schedule a prompt that wakes this session later: once after a delay, at a time, every interval, on a cron, or gated by an `if` / `until` shell (`{ run }`) or Code Mode (`{ code }`) check. Returns the schedule with its next run (or `done` immediately if `until` already matches).",
+            "Schedule a prompt that wakes this session later, or a shell command that runs on its own: once after a delay, at a time, every interval, on a cron, or gated by an `if` / `until` shell (`{ run }`) or Code Mode (`{ code }`) check. Pass exactly one of `prompt` or `run`. Returns the schedule with its next run (or `done` immediately if `until` already matches).",
           input: Schedule.Request,
           output: View,
           options: { namespace: "opencode", codemode: true },
@@ -231,7 +231,7 @@ function toView(info: Schedule.Info): View {
     tz: info.tz,
     if: info.if,
     until: info.until,
-    prompt: info.action.prompt,
+    prompt: info.action.type === "prompt" ? info.action.prompt : `$ ${info.action.run}`,
     status: info.status,
     nextDueAt: local(info.nextDueAt),
     endsAt: local(info.endsAt),
