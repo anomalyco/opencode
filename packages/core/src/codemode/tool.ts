@@ -232,7 +232,10 @@ export const catalog = (inventory: Inventory) => {
       type: "tool",
       name: tool.path.split(".").at(-1) ?? tool.path,
       description: tool.description,
-      signature: tool.signature,
+      // Rendered only for the tools the catalog shows.
+      get signature() {
+        return tool.signature
+      },
       pinned: pinned.has(tool.path),
     }
   return {
