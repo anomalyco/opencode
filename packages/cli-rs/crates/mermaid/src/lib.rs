@@ -16,7 +16,7 @@ pub mod state;
 pub mod timeline;
 
 pub use palette::Palette;
-pub use plugin::{ID, Renderer, plugin, widget};
+pub use plugin::{ID, fenced, plugin};
 pub use render::{Diagram, Rendered, Run, render};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

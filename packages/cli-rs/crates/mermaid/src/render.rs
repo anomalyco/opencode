@@ -1,6 +1,6 @@
 //! Source to styled lines (`markdown.ts` `prepareDiagram` and the streaming fallback).
 
-use opentui::prelude::Color;
+use opencode_plugin_abi::Rgba;
 
 use crate::core::canvas::{Canvas, TRIM_BOTH, TRIM_BOTTOM, TRIM_NONE, Trim};
 use crate::core::color::{blend, ramp, rgb};
@@ -11,8 +11,8 @@ use crate::{flowchart, gantt, gitgraph, sequence, state, timeline};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Run {
     pub text: String,
-    pub fg: Option<Color>,
-    pub bg: Option<Color>,
+    pub fg: Option<Rgba>,
+    pub bg: Option<Rgba>,
     pub attributes: u8,
 }
 
@@ -226,8 +226,8 @@ fn runs<S: Copy + PartialEq, K: PartialEq>(
     grid: &Canvas<S>,
     trim: Trim,
     key: impl Fn(&crate::core::canvas::Cell<S>) -> K,
-    fg: impl Fn(Option<S>) -> Option<Color>,
-    bg: impl Fn(Option<S>) -> Option<Color>,
+    fg: impl Fn(Option<S>) -> Option<Rgba>,
+    bg: impl Fn(Option<S>) -> Option<Rgba>,
 ) -> Vec<Vec<Run>> {
     grid.runs(trim, key)
         .into_iter()
