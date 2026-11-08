@@ -6,7 +6,6 @@
 @import "../../component/site/site.css";
 @import "../../component/site/rtl.css";
 @import "../../component/site/github-link.css";
-@import "../../component/site/phone-menu.css";
 @import "../../component/site/tap-targets.css";
 @import "../../component/site/docs-lockup.css";
 @import "../../component/site/nav-menus.css";
@@ -151,6 +150,53 @@
     }
 
     [data-component="topbar"]::after {
+      display: none;
+    }
+
+    /* No menu button (the two bars are the docs' navigation); the GitHub mark takes its column. */
+    [data-component="topbar"] [data-component="github-link"] {
+      margin-inline-end: -0.75rem;
+    }
+
+    /* The Contents bar sits right under the section row from load (it follows the sidebar in the
+       frame), so both rows are stuck from the start and draw their lines from the start. An open row
+       and its list are one surface: the line between them goes, and the list's bottom edge stays. */
+    [data-docs-contents] {
+      margin: 0 var(--edge);
+
+      summary::after {
+        opacity: 1;
+        transition: none;
+      }
+
+      &[open] summary::after {
+        display: none;
+      }
+
+      /* The section's name, swapped in place (client.ts): each word is one line that ends in "…",
+         and the label clips the swap to its own line box. The leaving word lies over the new one. */
+      summary [data-slot="label"] {
+        position: relative;
+        flex: 1 1 auto;
+        min-width: 0;
+        margin-inline-end: 1rem;
+        overflow: clip;
+      }
+
+      [data-slot="word"] {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+
+        &[data-leaving] {
+          position: absolute;
+          inset: 0;
+        }
+      }
+    }
+
+    [data-component="section-nav"][data-open] [data-slot="section-toggle"]::after {
       display: none;
     }
 
