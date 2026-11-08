@@ -1,0 +1,12 @@
+# A frozen copy of `opencode-plugin-abi` at ABI 1.3 (`src/lib.rs` is unchanged from 8d3f59fade). The sample's
+# `abi-1-3` feature builds a 1.3 plugin against it, so the loader's tests load real 1.3 JSON. Never edit it.
+[package]
+name = "opencode-plugin-abi-1-3"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "raw_value"] }

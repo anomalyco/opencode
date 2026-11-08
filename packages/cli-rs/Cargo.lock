@@ -710,6 +710,7 @@ version = "0.1.0"
 dependencies = [
  "opencode-parity",
  "opencode-plugin",
+ "opencode-plugin-abi",
  "opencode-ui",
  "opentui",
  "serde_json",
@@ -785,6 +786,7 @@ name = "opencode-plugin"
 version = "0.1.0"
 dependencies = [
  "log",
+ "opencode-latex",
  "opencode-plugin-abi",
  "opencode-ui",
  "opencode-util",
