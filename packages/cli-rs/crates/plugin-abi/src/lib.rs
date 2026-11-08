@@ -130,8 +130,11 @@ pub struct HostApi {
     pub theme_mode: Option<unsafe extern "C" fn(ctx: *mut c_void) -> u32>,
     // 1.3
     /// Asks the host to request the rows of the plugin's mounted slot claims and routes again, on its UI thread.
-    /// Callable from any thread until the host destroys the instance; wakes that arrive before the host handles
-    /// one count once. A plugin reads it as [`Host::waker`].
+    /// It is a redraw hint: it carries no data and drains nothing for the plugin, which keeps its own results and
+    /// reads all of them when the host asks for rows. Wakes that arrive before the host handles one count once, and
+    /// the host never drops the last one. Callable from any thread, but `ctx` is valid only until `destroy` returns,
+    /// so a plugin stops and joins every thread that may call it before `destroy` returns. A plugin reads it as
+    /// [`Host::waker`].
     pub wake: Option<unsafe extern "C" fn(ctx: *mut c_void)>,
 }
 
@@ -462,8 +465,15 @@ impl Host {
 }
 
 /// Wakes the host from any thread (ABI 1.3), from [`Host::waker`]: the host then asks the plugin's mounted slot
-/// claims and routes for their rows again, so a plugin that works on its own thread can show the result. Valid
-/// until the host destroys the instance, so a thread that holds one must stop before the plugin's state drops.
+/// claims and routes for their rows again, so a plugin that works on its own thread can show the result.
+///
+/// A wake is a redraw hint, not a message: it delivers nothing and drains nothing. Many wakes may become one redraw,
+/// so the rows the host asks for must show every result that is ready, not one per wake. The host never loses the
+/// last wake, even when its queue is full.
+///
+/// The host table a `Waker` points to is valid only until `destroy` returns. A thread that holds one must stop
+/// before then: stop and join it when the instance's state drops, as the sample plugin's `Ticker` does. A detached
+/// task that may still run, such as a cancelled async task, is not enough.
 #[derive(Clone, Copy)]
 pub struct Waker {
     api: *const HostApi,

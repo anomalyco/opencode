@@ -10,7 +10,8 @@
 //! - host effects (toasts, routes) wait until the plugin returns, so it never reenters itself through the host.
 //!
 //! Every call into a plugin runs on the UI thread. A plugin that works on its own thread calls `wake` (ABI 1.3),
-//! which posts through the app's proxy; the host then asks that plugin's mounted claims for their rows again.
+//! which posts through the app's proxy; the host then asks that plugin's mounted claims for their rows again. A wake
+//! that finds the proxy's queue full is delivered once it has room, so the last one is never lost.
 //!
 //! Versions follow the ABI's rules: only a major mismatch, a too-short table, or a plugin that requires a newer
 //! host minor version is refused. Entries past the plugin's table size are absent.
@@ -36,6 +37,7 @@ use opencode_plugin_abi::{
 use opencode_ui::keymap::{Bind, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::theme::Theme;
 use opencode_util::dl;
+use opentui::app::ProxyError;
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
 use opentui::style::Color;
@@ -399,9 +401,27 @@ unsafe extern "C" fn host_wake<H: Host>(ctx: *mut c_void) {
         if wake.pending.swap(true, Ordering::AcqRel) {
             return;
         }
-        let sent = wake.proxy.as_ref().is_some_and(|proxy| proxy.send(Woken(wake.id)).is_ok());
-        if !sent {
+        let Some(proxy) = &wake.proxy else {
             wake.pending.store(false, Ordering::Release);
+            return;
+        };
+        match proxy.send(Woken(wake.id)) {
+            Ok(()) => {}
+            Err(ProxyError::Closed) => wake.pending.store(false, Ordering::Release),
+            // The UI thread is behind. The wake stays pending, so later ones join it, and a thread delivers it once
+            // the queue has room, as `App::spawn` does with a completion. That thread holds no pointer into the
+            // instance, so it may outlive it; a `Woken` for a destroyed instance finds no handler.
+            Err(ProxyError::Full) => {
+                let (proxy, id) = (proxy.clone(), wake.id);
+                let retry = std::thread::Builder::new().name("plugin-wake".to_owned()).spawn(move || {
+                    while proxy.send(Woken(id)) == Err(ProxyError::Full) {
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
+                });
+                if retry.is_err() {
+                    wake.pending.store(false, Ordering::Release);
+                }
+            }
         }
     }));
 }
