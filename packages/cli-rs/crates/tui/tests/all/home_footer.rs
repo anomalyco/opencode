@@ -128,3 +128,26 @@ fn footer_frames(loopback: bool) -> Vec<Vec<opentui::testing::Cell>> {
 fn the_home_footer_draws_the_same_through_the_c_abi_loopback() {
     assert_eq!(footer_frames(true), footer_frames(false));
 }
+
+/// A `home.footer.status` claim whose root grows: `L` at its start and `R` at its end.
+fn growing(setup: &mut abi::Setup) -> Result<(), String> {
+    use abi::{Layout, Node, Render, Span};
+    setup.slot(abi::Placement::append("home.footer.status"), |_, _, _| {
+        let spacer = Node::column(Vec::new()).layout(Layout::default().grow());
+        let row = Node::row(vec![Node::text([Span::new("L")]), spacer, Node::text([Span::new("R")])]);
+        Render::Show(row.layout(Layout::default().grow()))
+    });
+    Ok(())
+}
+
+// Expected: a status claim is a flex item of the footer's row, as in TS's `<Slot>` fragment, so a growing root takes
+// its share of the room between the MCP servers and the version with the footer's spacer (carbon's probe 2).
+#[test]
+fn a_growing_status_claim_fills_the_footer_row() {
+    let h = mount(100, &[], vec![abi::Plugin { id: "test.grow", setup: growing }.into()]);
+    h.wait_for("2 MCP");
+    let screen = h.app.text();
+    let line = screen.lines().find(|line| line.contains("2 MCP")).unwrap();
+    let (left, right) = (line.find(" L ").unwrap(), line.find(" R ").unwrap());
+    assert!(right - left > 30 && line.trim_end().ends_with("local"), "{screen}");
+}
