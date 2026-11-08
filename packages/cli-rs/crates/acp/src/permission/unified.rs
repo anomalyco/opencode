@@ -454,12 +454,16 @@ enum Change {
 /// `diffLines`: runs of `(change, lines)`, by jsdiff's own Myers search, whose tie-breaking (prefer the path that
 /// is further along the old text, and on a tie an insertion) decides where equal-cost changes land.
 fn diff_lines(old: &str, new: &str) -> Vec<(Change, usize)> {
+    search(old, new).0
+}
+
+/// The runs, and the most components alive at once.
+fn search(old: &str, new: &str) -> (Vec<(Change, usize)>, usize) {
     // `tokenize`: lines with their `\n` or `\r\n`; an empty text has none.
     let (old, new): (Vec<&str>, Vec<&str>) = (old.split_inclusive('\n').collect(), new.split_inclusive('\n').collect());
     let (old_len, new_len) = (old.len() as isize, new.len() as isize);
-    // Components form linked lists that paths share, so they live in an arena and are never changed.
-    let mut components: Vec<(Change, usize, Option<usize>)> = Vec::new();
-    let common = |components: &mut Vec<(Change, usize, Option<usize>)>, path: &mut Path, diagonal: isize| {
+    let mut arena = Arena::default();
+    let common = |arena: &mut Arena, path: &mut Path, diagonal: isize| {
         let mut old_pos = path.old_pos;
         let mut new_pos = old_pos - diagonal;
         let begin = old_pos;
@@ -471,8 +475,8 @@ fn diff_lines(old: &str, new: &str) -> Vec<(Change, usize)> {
             new_pos += 1;
         }
         if old_pos > begin {
-            components.push((Change::Same, (old_pos - begin) as usize, path.last));
-            path.last = Some(components.len() - 1);
+            // The new component takes over the path's hold on its predecessor.
+            path.last = Some(arena.push((Change::Same, (old_pos - begin) as usize, path.last)));
         }
         path.old_pos = old_pos;
         new_pos
@@ -481,9 +485,9 @@ fn diff_lines(old: &str, new: &str) -> Vec<(Change, usize)> {
     let mut best: Vec<Option<Path>> = vec![None; (2 * offset + 1) as usize];
     let slot = |diagonal: isize| (diagonal + offset) as usize;
     let mut first = Path { old_pos: -1, last: None };
-    let new_pos = common(&mut components, &mut first, 0);
+    let new_pos = common(&mut arena, &mut first, 0);
     if first.old_pos + 1 >= old_len && new_pos + 1 >= new_len {
-        return build(&components, first.last);
+        return (arena.build(first.last), arena.peak);
     }
     best[slot(0)] = Some(first);
     let (mut min_diagonal, mut max_diagonal) = (isize::MIN, isize::MAX);
@@ -494,27 +498,30 @@ fn diff_lines(old: &str, new: &str) -> Vec<(Change, usize)> {
             let add_path = best[slot(diagonal + 1)];
             let can_add = add_path.is_some_and(|path| (0..new_len).contains(&(path.old_pos - diagonal)));
             let can_remove = remove_path.is_some_and(|path| path.old_pos + 1 < old_len);
-            if !can_add && !can_remove {
-                best[slot(diagonal)] = None;
-                diagonal += 2;
-                continue;
-            }
-            let mut path = match (add_path, remove_path) {
-                (Some(add), remove) if !can_remove || (can_add && remove.unwrap().old_pos < add.old_pos) => {
-                    extend(&mut components, add, Change::Added, 0)
+            let replaced = if !can_add && !can_remove {
+                best[slot(diagonal)].take()
+            } else {
+                let mut path = match (add_path, remove_path) {
+                    (Some(add), remove) if !can_remove || (can_add && remove.unwrap().old_pos < add.old_pos) => {
+                        arena.extend(add, Change::Added, 0)
+                    }
+                    (_, remove) => arena.extend(remove.unwrap(), Change::Removed, 1),
+                };
+                let new_pos = common(&mut arena, &mut path, diagonal);
+                if path.old_pos + 1 >= old_len && new_pos + 1 >= new_len {
+                    return (arena.build(path.last), arena.peak);
                 }
-                (_, remove) => extend(&mut components, remove.unwrap(), Change::Removed, 1),
+                if path.old_pos + 1 >= old_len {
+                    max_diagonal = max_diagonal.min(diagonal - 1);
+                }
+                if new_pos + 1 >= new_len {
+                    min_diagonal = min_diagonal.max(diagonal + 1);
+                }
+                best[slot(diagonal)].replace(path)
             };
-            let new_pos = common(&mut components, &mut path, diagonal);
-            if path.old_pos + 1 >= old_len && new_pos + 1 >= new_len {
-                return build(&components, path.last);
-            }
-            best[slot(diagonal)] = Some(path);
-            if path.old_pos + 1 >= old_len {
-                max_diagonal = max_diagonal.min(diagonal - 1);
-            }
-            if new_pos + 1 >= new_len {
-                min_diagonal = min_diagonal.max(diagonal + 1);
+            // Like jsdiff, drop the paths no longer kept, and with them the components only they reached.
+            for dropped in [remove_path, replaced].into_iter().flatten() {
+                arena.release(dropped.last);
             }
             diagonal += 2;
         }
@@ -525,30 +532,76 @@ fn diff_lines(old: &str, new: &str) -> Vec<(Change, usize)> {
 #[derive(Clone, Copy)]
 struct Path {
     old_pos: isize,
+    /// The component this path holds a reference to.
     last: Option<usize>,
 }
 
-/// `addToPath`: one more line added or removed, as a new component (a longer copy of the last when it is the same
-/// change).
-fn extend(components: &mut Vec<(Change, usize, Option<usize>)>, path: Path, change: Change, old_step: isize) -> Path {
-    let component = match path.last.map(|last| components[last]) {
-        Some((last, count, previous)) if last == change => (change, count + 1, previous),
-        _ => (change, 1, path.last),
-    };
-    components.push(component);
-    Path { old_pos: path.old_pos + old_step, last: Some(components.len() - 1) }
+/// Components form linked lists that paths share. Each counts the paths and components that point at it; one that
+/// reaches zero goes back to the free list, as jsdiff's garbage collector would reclaim it.
+#[derive(Default)]
+struct Arena {
+    components: Vec<(Change, usize, Option<usize>)>,
+    refs: Vec<u32>,
+    free: Vec<usize>,
+    live: usize,
+    peak: usize,
 }
 
-/// `buildValues`: the list ending at `last`, in order.
-fn build(components: &[(Change, usize, Option<usize>)], mut last: Option<usize>) -> Vec<(Change, usize)> {
-    let mut out = Vec::new();
-    while let Some(index) = last {
-        let (change, count, previous) = components[index];
-        out.push((change, count));
-        last = previous;
+impl Arena {
+    /// A new component, held once by the caller; it takes over a reference to its predecessor.
+    fn push(&mut self, component: (Change, usize, Option<usize>)) -> usize {
+        self.live += 1;
+        self.peak = self.peak.max(self.live);
+        if let Some(index) = self.free.pop() {
+            self.components[index] = component;
+            self.refs[index] = 1;
+            return index;
+        }
+        self.components.push(component);
+        self.refs.push(1);
+        self.components.len() - 1
     }
-    out.reverse();
-    out
+
+    fn retain(&mut self, index: Option<usize>) {
+        if let Some(index) = index {
+            self.refs[index] += 1;
+        }
+    }
+
+    fn release(&mut self, mut index: Option<usize>) {
+        while let Some(at) = index {
+            self.refs[at] -= 1;
+            if self.refs[at] > 0 {
+                return;
+            }
+            self.free.push(at);
+            self.live -= 1;
+            index = self.components[at].2;
+        }
+    }
+
+    /// `addToPath`: one more line added or removed, as a new component (a longer copy of the last when it is the
+    /// same change). The returned path holds its own reference; `path` keeps its own.
+    fn extend(&mut self, path: Path, change: Change, old_step: isize) -> Path {
+        let component = match path.last.map(|last| self.components[last]) {
+            Some((last, count, previous)) if last == change => (change, count + 1, previous),
+            _ => (change, 1, path.last),
+        };
+        self.retain(component.2);
+        Path { old_pos: path.old_pos + old_step, last: Some(self.push(component)) }
+    }
+
+    /// `buildValues`: the list ending at `last`, in order.
+    fn build(&self, mut last: Option<usize>) -> Vec<(Change, usize)> {
+        let mut out = Vec::new();
+        while let Some(index) = last {
+            let (change, count, previous) = self.components[index];
+            out.push((change, count));
+            last = previous;
+        }
+        out.reverse();
+        out
+    }
 }
 
 #[cfg(test)]
@@ -586,5 +639,17 @@ mod tests {
         for [old, new, ranges] in cases {
             assert_eq!(structured_ranges(&old, &new), ranges, "{old:?} -> {new:?}");
         }
+    }
+
+    #[test]
+    fn search_keeps_only_reachable_components() {
+        // No common line: the search visits the whole grid, so keeping every component it makes holds about a
+        // million here (16,640 for 128 lines, over 512 MiB for 4,096). Only those of the live paths may remain.
+        let lines = 1024;
+        let old: String = (0..lines).map(|i| format!("    old {i}\n")).collect();
+        let new: String = (0..lines).map(|i| format!("    new {i}\n")).collect();
+        let (changes, peak) = search(&old, &new);
+        assert_eq!(changes, [(Change::Removed, lines), (Change::Added, lines)]);
+        assert!(peak <= 4 * lines, "{peak} components alive at once");
     }
 }
