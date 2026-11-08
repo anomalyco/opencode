@@ -1,7 +1,6 @@
 import { onCleanup } from "solid-js"
 import { Predicate } from "effect"
-
-type FocusLock = { pending: boolean; release?: VoidFunction }
+import { INITIAL_FOCUS_LOCK_STATE, transitionFocusLock, type FocusLockEvent } from "./focus-lock-machine"
 
 const FOCUS_LOCK = "opencode:notification-focus"
 
@@ -14,43 +13,52 @@ export function createNotificationCoordinator() {
 
   const claimed = new Set<string>()
 
-  const focus: FocusLock = { pending: false }
+  if (typeof window !== "undefined" && locks) {
+    let focusState = INITIAL_FOCUS_LOCK_STATE
+    const releases = new Map<number, VoidFunction>()
 
-  const updateFocus = () => {
-    if (typeof document === "undefined" || !document.hasFocus()) {
-      focus.release?.()
+    const dispatch = (event: FocusLockEvent) => {
+      const next = transitionFocusLock(focusState, event)
+      focusState = next.state
+      next.effects.forEach((effect) => {
+        const attempt = effect.attempt
 
-      return
+        if (effect.type === "lock.release") {
+          releases.get(attempt)?.()
+          releases.delete(attempt)
+
+          return
+        }
+
+        // A shared hold: every focused window keeps it, and an alert's exclusive request fails while any one does.
+        locks
+          .request(
+            FOCUS_LOCK,
+            { mode: "shared" },
+            () =>
+              new Promise<void>((resolve) => {
+                releases.set(attempt, resolve)
+                dispatch({ type: "lock.acquired", attempt })
+              }),
+          )
+          .catch(() => {
+            releases.delete(attempt)
+            dispatch({ type: "lock.failed", attempt })
+          })
+      })
     }
 
-    if (!locks || focus.pending || focus.release) return
+    const syncFocus = () => dispatch({ type: "focus.changed", focused: document.hasFocus() })
 
-    focus.pending = true
-    void locks
-      .request(FOCUS_LOCK, { mode: "shared" }, async () => {
-        focus.pending = false
-
-        if (!document.hasFocus()) return
-        await new Promise<void>((resolve) => {
-          focus.release = resolve
-        })
-        focus.release = undefined
-      })
-      .catch(() => {
-        focus.pending = false
-      })
-  }
-
-  if (typeof window !== "undefined") {
-    window.addEventListener("focus", updateFocus)
-    window.addEventListener("blur", updateFocus)
-    document.addEventListener("visibilitychange", updateFocus)
-    updateFocus()
+    window.addEventListener("focus", syncFocus)
+    window.addEventListener("blur", syncFocus)
+    document.addEventListener("visibilitychange", syncFocus)
+    syncFocus()
     onCleanup(() => {
-      window.removeEventListener("focus", updateFocus)
-      window.removeEventListener("blur", updateFocus)
-      document.removeEventListener("visibilitychange", updateFocus)
-      focus.release?.()
+      window.removeEventListener("focus", syncFocus)
+      window.removeEventListener("blur", syncFocus)
+      document.removeEventListener("visibilitychange", syncFocus)
+      dispatch({ type: "disposed" })
     })
   }
 

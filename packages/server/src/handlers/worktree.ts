@@ -50,7 +50,7 @@ function missingProject(error: Project.NotFoundError) {
 function message(error: Exclude<Worktree.Error, Project.NotFoundError>) {
   if (error instanceof Worktree.SourceDirectoryNotFoundError)
     return error.directory
-      ? `Worktree source not found: ${error.directory}`
+      ? `Cannot create a worktree from ${error.directory}: it is not a checkout of this project that supports worktrees, such as a git repository`
       : `Worktree source not found for project: ${error.projectID}`
   if (error instanceof Worktree.DestinationExistsError) return `Worktree destination already exists: ${error.directory}`
   if (error instanceof Worktree.DirectoryUnavailableError) return `Worktree directory unavailable: ${error.directory}`

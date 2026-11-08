@@ -1,5 +1,5 @@
 import { Cause, Context, Duration, Effect, Layer, Option, Result, Schedule, Schema, Semaphore } from "effect"
-import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http"
+import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ConfigProvider } from "@opencode/schema/config/provider"
 import { MaxTokensField, MediaInput } from "@opencode/schema/model-compatibility"
 import { ModelsDev } from "@opencode/schema/models-dev"
@@ -156,6 +156,7 @@ const BUILDS_OWN_URL = new Set([
   "@opencode/ai/providers/amazon-bedrock",
   "@opencode/ai/providers/azure/chat",
   "@opencode/ai/providers/azure/images",
+  "@opencode/ai/providers/azure/messages",
   "@opencode/ai/providers/azure/responses",
   "@opencode/ai/providers/cloudflare-ai-gateway",
   "@opencode/ai/providers/cloudflare-ai-gateway/decisions",
@@ -534,14 +535,12 @@ export const layer = (options?: Options) =>
       const bus = yield* Bus.Service
       const app = yield* App.Metadata
       const kv = yield* KV.Service
-      const http = HttpClient.filterStatusOk(
-        (yield* HttpClient.HttpClient).pipe(
-          HttpClient.retryTransient({
-            retryOn: "errors-and-responses",
-            times: 2,
-            schedule: Schedule.exponential(200).pipe(Schedule.jittered),
-          }),
-        ),
+      const http = (yield* HttpClient.HttpClient).pipe(
+        HttpClient.retryTransient({
+          retryOn: "errors-and-responses",
+          times: 2,
+          schedule: Schedule.exponential(200).pipe(Schedule.jittered),
+        }),
       )
 
       const source = options?.url || defaultSource
@@ -574,7 +573,13 @@ export const layer = (options?: Options) =>
           HttpClientRequest.setHeader("User-Agent", userAgent),
           HttpClientRequest.setHeaders(etag ? { "If-None-Match": etag } : {}),
           http.execute,
-          Effect.flatMap((res) => Effect.map(res.text, (text) => ({ text, etag: res.headers.etag }))),
+          Effect.flatMap((res) =>
+            etag && res.status === 304
+              ? Effect.undefined
+              : HttpClientResponse.filterStatusOk(res).pipe(
+                  Effect.flatMap((ok) => Effect.map(ok.text, (text) => ({ text, etag: ok.headers.etag }))),
+                ),
+          ),
           Effect.timeout("10 seconds"),
         )
 
@@ -624,6 +629,7 @@ export const layer = (options?: Options) =>
 
       const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
         const response = yield* fetchApi()
+        if (!response) return {}
         const catalog = yield* decodeCatalog(response.text)
         yield* writeCache(response.text, response.etag)
         return catalog
@@ -659,12 +665,7 @@ export const layer = (options?: Options) =>
                 Schema.decodeUnknownOption(CacheMeta)((yield* kv.get(metaKey)) ?? (yield* kv.get(key))),
               )
               if (!force && stored && Date.now() - stored.updatedAt < Duration.toMillis(ttl)) return
-              const response = yield* fetchApi(force ? undefined : stored?.etag).pipe(
-                Effect.catchIf(
-                  (error) => HttpClientError.isHttpClientError(error) && error.response?.status === 304,
-                  () => Effect.undefined,
-                ),
-              )
+              const response = yield* fetchApi(force ? undefined : stored?.etag)
               const digest = response && bodyDigest(response.text)
               // models.dev rarely changes between polls; skip invalidation and
               // the Refreshed event for a byte-identical body so downstream

@@ -1,7 +1,7 @@
 export * as DesktopFiles from "./index"
 
 import { execFile, spawn } from "node:child_process"
-import { clipboard, dialog, nativeImage, shell } from "electron"
+import { clipboard, dialog, nativeImage, shell, webContents } from "electron"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import type { DirectoryPickerOptions, FilePickerOptions, SaveFilePickerOptions } from "../../shared/ipc-contract"
 import { scoped } from "../native/logging"
@@ -19,15 +19,46 @@ export const layer = Layer.effect(
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
 
-    return Service.of(make(fs, path))
+    const pickedFiles = createPickedFileAuthorizations(
+      (file, maxBytes) => readAttachment(file, maxBytes).pipe(Effect.provideService(FileSystem.FileSystem, fs)),
+      watchRenderer,
+    )
+
+    yield* Effect.addFinalizer(() => Effect.sync(pickedFiles.dispose))
+
+    return Service.of(make(fs, path, pickedFiles))
   }),
 )
 
-function make(fs: FileSystem.FileSystem, path: Path.Path) {
-  const pickedFiles = createPickedFileAuthorizations((file, maxBytes) =>
-    readAttachment(file, maxBytes).pipe(Effect.provideService(FileSystem.FileSystem, fs)),
-  )
+// A renderer that reloads or closes drops its picked files: the next document never asked for them.
+function watchRenderer(sender: number, clear: () => void) {
+  const contents = webContents.fromId(sender)
 
+  if (!contents || contents.isDestroyed()) {
+    queueMicrotask(clear)
+
+    return () => {}
+  }
+
+  const navigated = (event: Electron.Event<{ isMainFrame: boolean; isSameDocument: boolean }>) => {
+    if (event.isMainFrame && !event.isSameDocument) clear()
+  }
+
+  contents.on("did-start-navigation", navigated)
+  contents.once("destroyed", clear)
+
+  return () => {
+    if (contents.isDestroyed()) return
+    contents.off("did-start-navigation", navigated)
+    contents.off("destroyed", clear)
+  }
+}
+
+function make(
+  fs: FileSystem.FileSystem,
+  path: Path.Path,
+  pickedFiles: ReturnType<typeof createPickedFileAuthorizations>,
+) {
   return {
     openDirectoryPicker: Effect.fn("DesktopFiles.openDirectoryPicker")(function* (options?: DirectoryPickerOptions) {
       const result = yield* Effect.promise(() =>
@@ -43,30 +74,37 @@ function make(fs: FileSystem.FileSystem, path: Path.Path) {
       return options?.multiple ? result.filePaths : result.filePaths[0]
     }),
     openFilePicker: Effect.fn("DesktopFiles.openFilePicker")(function* (sender: number, options?: FilePickerOptions) {
-      const result = yield* Effect.promise(() =>
-        dialog.showOpenDialog({
-          properties: ["openFile", ...(options?.multiple ? ["multiSelections" as const] : [])],
-          title: options?.title ?? nativeT("desktop.dialog.chooseFile"),
-          defaultPath: options?.defaultPath,
-          filters: pickerFilters(options?.extensions),
-        }),
-      )
+      const picker = pickedFiles.open(sender)
 
-      if (result.canceled) return null
+      if (picker === undefined) return null
 
-      const files = yield* Effect.forEach(
-        result.filePaths,
-        Effect.fnUntraced(function* (file) {
-          const info = yield* fs.stat(file)
+      return yield* Effect.gen(function* () {
+        const result = yield* Effect.promise(() =>
+          dialog.showOpenDialog({
+            properties: ["openFile", ...(options?.multiple ? ["multiSelections" as const] : [])],
+            title: options?.title ?? nativeT("desktop.dialog.chooseFile"),
+            defaultPath: options?.defaultPath,
+            filters: pickerFilters(options?.extensions),
+          }),
+        )
 
-          return { path: file, name: path.basename(file), size: Number(info.size) }
-        }),
-        { concurrency: "unbounded" },
-      )
+        if (result.canceled) return null
 
-      assertAttachmentBudget(files)
+        const files = yield* Effect.forEach(
+          result.filePaths,
+          Effect.fnUntraced(function* (file) {
+            const info = yield* fs.stat(file)
 
-      return { token: pickedFiles.add(sender, result.filePaths), files }
+            return { path: file, name: path.basename(file), size: Number(info.size) }
+          }),
+          { concurrency: "unbounded" },
+        )
+
+        assertAttachmentBudget(files)
+        const token = pickedFiles.grant(picker, result.filePaths)
+
+        return token === undefined ? null : { token, files }
+      }).pipe(Effect.ensuring(Effect.sync(() => pickedFiles.close(picker))))
     }),
     readPickedFile: pickedFiles.read,
     releasePickedFiles: pickedFiles.release,

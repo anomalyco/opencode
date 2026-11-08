@@ -1,18 +1,19 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
 import {
+  ai,
   AIClient,
   AIError,
-  Decision,
   DecisionClient,
   Generation,
-  Image,
   ImageClient,
   LanguageModel,
-  LLM,
   LLMClient,
+  LLMEvent,
   Media,
+  RawEvent,
 } from "@opencode/ai/effect"
+import { AI } from "@opencode/ai"
 import { Speech, SpeechClient, SpeechEvent, TranscriptionClient, Video, VideoClient } from "@opencode/ai/experimental"
 import { Route, Protocol, RequestExecutor, WebSocketTransport } from "@opencode/ai/route"
 import {
@@ -66,13 +67,13 @@ describe("public exports", () => {
   })
 
   test("root exposes app-facing runtime APIs", () => {
-    expect(LLM.request).toBeFunction()
+    expect(ai.request).toBeFunction()
     expect(LLMClient.Service).toBeFunction()
     expect(LLMClient.layer).toBeDefined()
     expect(AIError).toBeFunction()
     expect(LanguageModel.make).toBeFunction()
     expect(Media.bytes).toBeFunction()
-    expect(Image.generate).toBeFunction()
+    expect(ai.image.generate).toBeFunction()
     expect(Video.start).toBeFunction()
     expect(Video.resume).toBeFunction()
     expect(VideoClient.layer).toBeDefined()
@@ -83,9 +84,16 @@ describe("public exports", () => {
     expect(Generation).toBeFunction()
     expect(TestLLM.testLayer).toBeFunction()
     expect(TestLLM.Test.of).toBeFunction()
-    expect(Decision.generate).toBeFunction()
+    expect(ai.decision.generate).toBeFunction()
     expect(DecisionClient.layer).toBeDefined()
     expect(DecisionClient.fetchLayer).toBeDefined()
+  })
+
+  test("both entry points export the raw event type", () => {
+    const event: RawEvent = LLMEvent.raw({ data: { type: "ping" } })
+    const promiseEvent: AI.RawEvent = event
+    expect(RawEvent).toBe(AI.RawEvent)
+    expect(LLMEvent.is.raw(promiseEvent)).toBe(true)
   })
 
   test("AIClient.layerWith shares one executor across every client", async () => {

@@ -9,7 +9,15 @@ import {
   takeClosedTab,
   type ClosedTab,
 } from "./closed"
-import { findSessionTab, sessionIDHasOpenTab, tabHref, tabKey, type SessionTab, type Tab } from "./tabs"
+import {
+  findSessionTab,
+  sessionIDHasOpenTab,
+  tabHref,
+  tabKey,
+  tabMatchesRoute,
+  type SessionTab,
+  type Tab,
+} from "./tabs"
 import { Schema } from "effect"
 import { TabStorage } from "./schema"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -128,6 +136,22 @@ test("finds open root and routed session tabs", () => {
   expect(sessionIDHasOpenTab(tabs, server, "child")).toBe(true)
   expect(sessionIDHasOpenTab(tabs, server, "closed")).toBe(false)
   expect(sessionIDHasOpenTab(tabs, ServerConnection.Key.make("other"), "root")).toBe(false)
+})
+
+test("a tab owns the route that shows it, including its child session, whichever tab was remembered", () => {
+  const tab = { ...sessionTab("root"), routeSessionId: "child" }
+  const draft: Tab = { type: "draft", draftID: "draft", server, directory: "/project" }
+
+  expect(tabMatchesRoute(tab, { type: "session", server, sessionId: "root" })).toBe(true)
+  expect(tabMatchesRoute(tab, { type: "session", server, sessionId: "child" })).toBe(true)
+  expect(tabMatchesRoute(tab, { type: "session", server, sessionId: "other" })).toBe(false)
+  expect(tabMatchesRoute(tab, { type: "session", server: ServerConnection.Key.make("other"), sessionId: "root" })).toBe(
+    false,
+  )
+  expect(tabMatchesRoute(draft, { type: "draft", draftID: "draft" })).toBe(true)
+  expect(tabMatchesRoute(draft, { type: "draft", draftID: "other" })).toBe(false)
+  expect(tabMatchesRoute(tab, { type: "home" })).toBe(false)
+  expect(tabMatchesRoute(tab, { type: "settings" })).toBe(false)
 })
 
 describe("tab memory", () => {

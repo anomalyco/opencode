@@ -53,7 +53,7 @@ export async function mockWorkspace(page: Page, input: WorkspaceInput) {
     ...input.seed,
   })
 
-  return { server: SERVER, directory, projectID, sessions, pty: mock.pty, push: mock.push }
+  return { server: SERVER, directory, projectID, sessions, persistentPty: mock.persistentPty, push: mock.push }
 }
 
 // Opens a session (default: the first) and waits until its composer accepts input.

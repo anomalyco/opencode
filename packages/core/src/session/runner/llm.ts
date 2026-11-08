@@ -40,6 +40,8 @@ const CONTINUE_AFTER_INCOMPLETE_STREAM =
 const CONTINUE_AFTER_OUTPUT_LIMIT =
   "Your last response hit the output token limit (stop reason: length). Do not apologize, recap, or repeat yourself. Break the remaining work into smaller pieces."
 
+type DrainInput = Parameters<Interface["drain"]>[0]
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -58,7 +60,8 @@ const layer = Layer.effect(
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
 
-    const drain = Effect.fn("SessionRunner.drain")(function* (input: Parameters<Interface["drain"]>[0]) {
+    // Each drain is one turn and starts its own trace, whatever fiber woke it.
+    const drain = Effect.fn("SessionRunner.drain", { root: true })(function* (input: DrainInput) {
       const sessionID = input.sessionID
       let force = input.force
       let continuing = input.continuation !== undefined
@@ -234,6 +237,7 @@ const layer = Layer.effect(
       let initial: SessionContext.Loaded | undefined = first
       let recoverOverflow = true
       let recoverContinuation = true
+      let retryAttempt: number | undefined
       while (true) {
         // Reuse boundary preparation once; retries refresh context without delivering more input.
         const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
@@ -291,6 +295,7 @@ const layer = Layer.effect(
             // A tool call can arrive during a reload; its permission check reads the session's agent.
             executeTool: (call) => plugins.awaitActivation.pipe(Effect.andThen(prepared.executeTool(call))),
           },
+          retryAttempt,
           retry: (cause, error, proposed) =>
             retry.decide({
               cause,
@@ -309,6 +314,7 @@ const layer = Layer.effect(
               : Effect.succeed(false),
           ),
         })
+        retryAttempt = undefined
         const completed = yield* SessionStep.Outcome.$match(outcome, {
           Completed: Effect.fnUntraced(function* (outcome) {
             // The Session is about to go idle, which leaves the background summary time to finish.
@@ -318,13 +324,16 @@ const layer = Layer.effect(
               )
             return outcome.needsContinuation
           }),
-          Retry: (outcome) =>
-            retry.wait({
+          Retry: Effect.fnUntraced(function* (outcome) {
+            retryAttempt = outcome.decision.attempt
+            yield* retry.wait({
               decision: outcome.decision,
               error: outcome.error,
               assistantMessageID,
-            }),
+            })
+          }),
           Continue: Effect.fnUntraced(function* (outcome) {
+            retryAttempt = outcome.decision.attempt
             yield* retry.wait({
               decision: outcome.decision,
               error: outcome.error,
@@ -409,7 +418,7 @@ const layer = Layer.effect(
     const settleStaleToolCalls = Effect.fn("SessionRunner.settleStaleToolCalls")(function* (
       sessionID: SessionSchema.ID,
     ) {
-      for (const message of yield* store.context(sessionID)) {
+      for (const message of yield* SessionHistory.incompleteAssistants(db, sessionID)) {
         if (message.type !== "assistant") continue
         for (const tool of message.content) {
           if (tool.type !== "tool" || (tool.state.status !== "streaming" && tool.state.status !== "running")) continue
@@ -431,7 +440,9 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ drain })
+    return Service.of({
+      drain: (input) => drain(input).pipe(Effect.annotateSpans("session.id", input.sessionID)),
+    })
   }),
 )
 

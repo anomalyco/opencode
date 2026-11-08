@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image } from "../../src/effect.js"
+import { ai } from "../../src/effect.js"
 import { VercelAIGateway } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
@@ -19,7 +19,7 @@ const recorded = recordedTests({
 describe("Vercel AI Gateway Images recorded", () => {
   recorded.effect("generates an image", () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model,
         prompt: "A simple flat black circle centered on a plain white background.",
         providerOptions: { outputFormat: "webp" },
@@ -39,7 +39,7 @@ describe("Vercel AI Gateway Images recorded", () => {
     "sizes Grok through xAI provider options",
     () =>
       Effect.gen(function* () {
-        const response = yield* Image.generate({
+        const response = yield* ai.image.generate({
           model: VercelAIGateway.configure({ apiKey: process.env.AI_GATEWAY_API_KEY ?? "fixture" }).image(
             "spacexai/grok-imagine-image",
           ),

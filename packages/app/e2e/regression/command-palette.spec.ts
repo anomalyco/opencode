@@ -6,7 +6,8 @@ import {
   openPaletteWorkspace,
   paletteSession,
 } from "../utils/command-palette"
-import { mockWorkspace } from "../utils/workspace"
+import { REMOTE_SERVER, SERVER } from "../utils/app"
+import { mockRemoteServer, mockWorkspace } from "../utils/workspace"
 
 test.use({ serviceWorkers: "block", permissions: ["clipboard-read", "clipboard-write"] })
 
@@ -129,6 +130,91 @@ test("titlebar search lists recent sessions and opens the typed match", async ({
   await input.press("Enter")
   await expect(dialog).toHaveCount(0)
   await expect(page.getByRole("heading", { name: paletteSession.title, exact: true })).toBeVisible()
+})
+
+test("titlebar search asks for one bounded result set after a pause in typing", async ({ page }) => {
+  await openPaletteWorkspace(page, true)
+  const searches: URL[] = []
+  page.on("request", (request) => {
+    const url = new URL(request.url())
+
+    if (request.method() !== "GET" || url.pathname !== "/api/session") return
+
+    if (!url.searchParams.get("search")) return
+
+    searches.push(url)
+  })
+  await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  const input = dialog.getByRole("combobox")
+  await expect(dialog.getByRole("option", { name: /Palette fixture session/ })).toHaveAttribute("aria-selected", "true")
+
+  const searched = page.waitForRequest((request) => {
+    const url = new URL(request.url())
+
+    return (
+      request.method() === "GET" &&
+      url.pathname === "/api/session" &&
+      url.searchParams.get("search") === "Palette fixture"
+    )
+  })
+
+  // A burst of input in one task is one pause: every keystroke must supersede the last, and only the pause searches.
+  await input.evaluate((element) => {
+    // SAFETY: the dialog's combobox is SearchList's own text input, which is an HTMLInputElement.
+    const field = element as HTMLInputElement
+    const value = "Palette fixture"
+
+    for (let index = 1; index <= value.length; index++) {
+      field.value = value.slice(0, index)
+      field.dispatchEvent(new InputEvent("input", { bubbles: true }))
+    }
+  })
+
+  const request = new URL((await searched).url())
+  await expect(dialog.getByRole("option", { name: /Palette fixture session/ })).toBeVisible()
+  expect(searches).toHaveLength(1)
+  expect(request.searchParams.get("limit")).toBe("50")
+  expect(request.searchParams.get("parentID")).toBe("null")
+  expect(request.searchParams.get("archived")).toBe("false")
+  expect(request.searchParams.get("cursor")).toBeNull()
+})
+
+test("titlebar search shows one server's matches while another server's search fails", async ({ page }) => {
+  await mockRemoteServer(page, { name: "Remote" })
+  const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  // Only typed searches fail, so the remote server still lists its recent sessions.
+  await page.route(new RegExp(`^${escape(REMOTE_SERVER)}/api/session\\?.*search=[^&]`), (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({
+          status: 500,
+          json: { message: "Search failed" },
+          headers: { "access-control-allow-origin": "*" },
+        })
+      : route.fallback(),
+  )
+  await openPaletteWorkspace(page, true)
+  // The server matches more than titles, so only its answer can list this session. Registered after the local mock so
+  // this route answers first.
+  await page.route(new RegExp(`^${escape(SERVER)}/api/session\\?.*search=[^&]`), (route) =>
+    route.fulfill({
+      json: {
+        data: [
+          {
+            ...paletteSession,
+            id: "ses_palette_found",
+            location: { directory: paletteSession.directory },
+            title: "Matched on the server",
+          },
+        ],
+      },
+    }),
+  )
+  await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  await dialog.getByRole("combobox").fill("needle")
+  await expect(dialog.getByRole("option")).toHaveText([/Matched on the server/])
+  await expect(dialog.getByText("Request failed", { exact: true })).toHaveCount(0)
 })
 
 test("a working session keeps its project avatar in Search sessions and shows its activity ring in place of its age", async ({
@@ -349,7 +435,7 @@ test("appends search results without resetting the selected command", async ({ p
   await expect(dialog.getByRole("option", { name: "Copy Project ID", exact: true })).toHaveCount(0)
 })
 
-test("lists matching sessions above commands and jumps between sections with Alt and the arrows", async ({ page }) => {
+test("lists commands above matching sessions and jumps between sections with Alt and the arrows", async ({ page }) => {
   const { dialog, input } = await openCommandPalette(page)
   await page.route("**/api/session?*", (route) =>
     route.fulfill({
@@ -367,16 +453,17 @@ test("lists matching sessions above commands and jumps between sections with Alt
   )
   await input.fill("copy")
   const session = dialog.getByRole("option", { name: /Copy fixture/ })
-  await expect(session).toHaveAttribute("aria-selected", "true")
-  await expect(dialog.locator('[data-slot="search-list-header"]').first()).toHaveText("Session")
+  await expect(session).toBeVisible()
   const commands = dialog.getByRole("group", { name: "Commands", exact: true }).getByRole("option")
+  await expect(commands.first()).toHaveAttribute("aria-selected", "true")
+  await expect(dialog.locator('[data-slot="search-list-header"]').first()).toHaveText("Commands")
   await input.press("Alt+ArrowDown")
+  await expect(session).toHaveAttribute("aria-selected", "true")
+  await input.press("Alt+ArrowUp")
   await expect(commands.first()).toHaveAttribute("aria-selected", "true")
   await input.press("ArrowDown")
   await input.press("Alt+ArrowUp")
   await expect(commands.first()).toHaveAttribute("aria-selected", "true")
-  await input.press("Alt+ArrowUp")
-  await expect(session).toHaveAttribute("aria-selected", "true")
 })
 
 test("selects the first session when it arrives above automatically selected files", async ({ page }) => {

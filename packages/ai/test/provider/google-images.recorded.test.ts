@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image, Media } from "../../src/effect.js"
+import { ai, Media } from "../../src/effect.js"
 import { Google } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
@@ -19,7 +19,7 @@ const recorded = recordedTests({
 describe("Google Images recorded", () => {
   recorded.effect("generates an image", () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model,
         prompt: "A simple flat blue circle centered on a plain white background.",
         aspect: "1:1",
@@ -33,7 +33,7 @@ describe("Google Images recorded", () => {
 
   recorded.effect("edits an image", () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model,
         prompt:
           "Transform this minimal source into a bright orange sun icon with eight rounded rays on a pale blue background.",

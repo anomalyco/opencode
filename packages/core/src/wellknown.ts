@@ -136,9 +136,10 @@ const layer = Layer.effect(
       return { origin, integrationID: Integration.ID.make(origin), manifest }
     })
 
+    const readOrigins = kv.get(sourcesKey).pipe(Effect.map((value) => (Schema.is(Sources)(value) ? value : [])))
+
     const load = Effect.fn("WellKnown.load")(function* () {
-      const value = yield* kv.get(sourcesKey)
-      const origins = Schema.is(Sources)(value) ? value : []
+      const origins = yield* readOrigins
       const current = yield* Ref.get(cache)
       const entries = yield* Effect.forEach(origins, (origin) => {
         const cached = current.get(origin)
@@ -151,8 +152,7 @@ const layer = Layer.effect(
 
     const refresh = Effect.fn("WellKnown.refresh")(
       function* () {
-        const value = yield* kv.get(sourcesKey)
-        const origins = Schema.is(Sources)(value) ? value : []
+        const origins = yield* readOrigins
         if (!origins.length) return false
         const entries = yield* Effect.forEach(origins, loadEntry)
         const next = new Map(entries.map((entry) => [entry.origin, entry]))
@@ -174,8 +174,7 @@ const layer = Layer.effect(
           const origin = value.replace(/\/+$/, "")
           const entry = yield* loadEntry(origin)
           if (!entry.manifest.auth) return yield* Effect.fail(new Error(`No authentication method found at ${origin}`))
-          const sources = yield* kv.get(sourcesKey)
-          const origins = Schema.is(Sources)(sources) ? sources : []
+          const origins = yield* readOrigins
           yield* kv.set(sourcesKey, Array.from(new Set([...origins, origin])))
           yield* Ref.update(cache, (current) => new Map(current).set(origin, entry))
           yield* bus.publish(Event.Updated, {}, { global: true })
@@ -186,8 +185,7 @@ const layer = Layer.effect(
       remove: Effect.fn("WellKnown.remove")(
         function* (value) {
           const origin = value.replace(/\/+$/, "")
-          const sources = yield* kv.get(sourcesKey)
-          const origins = Schema.is(Sources)(sources) ? sources : []
+          const origins = yield* readOrigins
           yield* kv.set(
             sourcesKey,
             origins.filter((item) => item !== origin),

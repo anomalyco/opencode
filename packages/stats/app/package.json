@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/stats-app",
-  "version": "2.2.2",
+  "version": "2.2.5",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -14,8 +14,8 @@
     "test": "bun test --only-failures"
   },
   "dependencies": {
-    "@ibm/plex": "6.4.1",
     "@kobalte/core": "catalog:",
+    "@opencode/nav-menus": "workspace:*",
     "@opencode/stats-core": "workspace:*",
     "@opencode/ui": "workspace:*",
     "@solidjs/meta": "catalog:",
