@@ -234,7 +234,8 @@ const layer = () =>
         const command = yield* require(id)
         if (command.captureError) {
           return {
-            output: captureFailure(command.captureError),
+            // Report once, on the first page, so pollers that append each page do not repeat the notice.
+            output: (input?.cursor ?? 0) <= 0 ? captureFailure(command.captureError) : "",
             cursor: command.size,
             size: command.size,
             truncated: false,

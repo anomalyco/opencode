@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import path from "path"
-import { chmod, readdir } from "fs/promises"
+import { readdir, rm, writeFile } from "fs/promises"
 import { Deferred, Effect, Fiber, Layer, Queue, Scope, Sink, Stream } from "effect"
 import { ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
@@ -154,16 +154,23 @@ it.live("reports a capture failure instead of empty output when the output file 
     const data = path.join(tmp.path, "data")
     yield* Effect.gen(function* () {
       const shell = yield* Shell.Service
+      // Replace the project output dir with a regular file so opening "<dir>/<id>.out" fails for any user, root included.
       const dir = path.join(data, "shell")
       const projects = yield* Effect.promise(() => readdir(dir))
-      yield* Effect.acquireRelease(
-        Effect.promise(() => Promise.all(projects.map((project) => chmod(path.join(dir, project), 0o500)))),
-        () => Effect.promise(() => Promise.all(projects.map((project) => chmod(path.join(dir, project), 0o700)))),
+      yield* Effect.promise(() =>
+        Promise.all(
+          projects.map(async (project) => {
+            await rm(path.join(dir, project), { recursive: true })
+            await writeFile(path.join(dir, project), "")
+          }),
+        ),
       )
       const info = yield* shell.create({ shell: "/bin/sh", command: "echo hello", timeout: 0 })
       const { capture } = yield* shell.result(info)
       expect(capture?.output).toContain("output capture failed")
       expect(capture?.output).not.toBe("(no output)")
+      expect((yield* shell.output(info.id)).output).toContain("output capture failed")
+      expect((yield* shell.output(info.id, { cursor: 1 })).output).toBe("")
     }).pipe(
       Effect.provide(
         AppNodeBuilder.build(Shell.node, [
