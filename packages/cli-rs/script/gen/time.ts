@@ -1,4 +1,4 @@
-// Writes crates/util/fixtures/time.tsv: what the TypeScript client's `Date` and `Intl` calls give under Bun, in four
+// Writes crates/util/fixtures/time.tsv: what the TypeScript client's `Date` and `Intl` calls give under Bun, in five
 // time zones, for the known-answer tests of opencode-util's `time` module. Each zone runs in a child process with `TZ`
 // set, as the client reads it. A `zone` line starts each zone's rows, `kind input output...`, tab-separated:
 //
@@ -11,7 +11,7 @@
 // - `wall y m d h min`: `new Date(y, m - 1, d, h, min).getTime()`, as stats takes local midnights.
 // - `parse text`: `Date.parse(text)` (`refusalReset`, the date-time form check), `NaN` if rejected, and the date form
 //   check `validDate` (1 or 0).
-const zones = ["UTC", "America/New_York", "Australia/Lord_Howe", "Asia/Kathmandu"]
+const zones = ["UTC", "America/New_York", "Australia/Lord_Howe", "Asia/Kathmandu", "America/Havana"]
 
 if (process.argv[2] === "--zone") {
   process.stdout.write(rows(process.argv[3]).join("\n") + "\n")
@@ -81,8 +81,9 @@ function rows(zone: string) {
     }
   }
 
-  // Local midnights: each January 1, each first of a month, each day with a transition and the day after. Every
-  // quarter hour of the transition days of 2025 and of 1986 (Kathmandu's 15-minute gap).
+  // Local midnights: each January 1, each first of a month, each day with a transition and the day after. Every five
+  // minutes of the transition days of 2025 and 2026 and of 1986 (Kathmandu's 15-minute gap): gaps and overlaps at
+  // 02:00 (New York, Lord Howe's half hour) and at midnight (Havana, Kathmandu).
   const walls = new Set<string>()
   for (let year = 1900; year <= 2100; year++) walls.add(`${year}\t1\t1\t0\t0`)
   for (let year = 1990; year <= 2030; year++)
@@ -92,9 +93,9 @@ function rows(zone: string) {
       const date = new Date(at + shift)
       const [year, month, dom] = [date.getFullYear(), date.getMonth() + 1, date.getDate()]
       walls.add(`${year}\t${month}\t${dom}\t0\t0`)
-      if (shift !== 0 || (year !== 2025 && zone !== "Asia/Kathmandu")) continue
-      for (let quarter = 0; quarter < 96; quarter++)
-        walls.add(`${year}\t${month}\t${dom}\t${Math.floor(quarter / 4)}\t${(quarter % 4) * 15}`)
+      if (shift !== 0 || (year !== 2025 && year !== 2026 && zone !== "Asia/Kathmandu")) continue
+      for (let step = 0; step < 288; step++)
+        walls.add(`${year}\t${month}\t${dom}\t${Math.floor(step / 12)}\t${(step % 12) * 5}`)
     }
   }
   for (const wall of walls) {
