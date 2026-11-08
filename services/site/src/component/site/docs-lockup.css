@@ -328,10 +328,10 @@
     justify-content: center;
   }
 
-  /* OpenTUI Mono's caps sit 0.325px below its line box's centre; this puts them on the logo's centre. */
+  /* The product name's size and padding (packages/nav-menus): 15px, 20px on phones. */
   [data-slot="word"] {
-    padding: 0 6px 0.65px;
-    font: 700 15px/1 var(--font-mono);
+    padding: 0 6px var(--nav-name-pad, 0.65px);
+    font: 700 var(--nav-name-size, 15px) / 1 var(--font-mono);
     text-transform: uppercase;
     white-space: nowrap;
     color: var(--text-strong);
