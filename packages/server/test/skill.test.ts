@@ -1,12 +1,12 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import { expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Schedule } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { startServer } from "./fixture/server"
 
-it.live("waits for plugin initialization before listing skills", () =>
+it.live("lists configured skills once plugins activate", () =>
   Effect.gen(function* () {
     const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-skill-endpoint-")))
     yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "skills", "demo"), { recursive: true }))
@@ -22,12 +22,18 @@ it.live("waits for plugin initialization before listing skills", () =>
     const server = yield* startServer(tmp.path)
     const url = new URL("/api/skill", server.base)
     url.searchParams.set("location[directory]", tmp.path)
-    const response = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
-
-    expect(response.status).toBe(200)
-    const body: unknown = yield* Effect.promise(() => response.json())
-    if (!isRecord(body) || !Array.isArray(body["data"])) throw new Error("Expected a skill list response")
-    expect(body["data"].some((skill) => isRecord(skill) && skill["name"] === "demo")).toBeTrue()
+    // The list doesn't wait for plugins, so a cold Location fills in after activation.
+    yield* Effect.gen(function* () {
+      const response = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
+      expect(response.status).toBe(200)
+      const body: unknown = yield* Effect.promise(() => response.json())
+      if (!isRecord(body) || !Array.isArray(body["data"])) throw new Error("Expected a skill list response")
+      return body["data"].some((skill) => isRecord(skill) && skill["name"] === "demo")
+    }).pipe(
+      Effect.filterOrFail((ready) => ready),
+      Effect.retry(Schedule.spaced("10 millis")),
+      Effect.timeout("4 seconds"),
+    )
   }),
 )
 

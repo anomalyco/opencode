@@ -1,12 +1,12 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import { expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Schedule } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { startServer } from "./fixture/server"
 
-it.live("waits for plugin initialization before listing models", () =>
+it.live("lists configured models once plugins activate, filtered by type", () =>
   Effect.gen(function* () {
     const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-model-endpoint-")))
     yield* Effect.promise(() =>
@@ -26,14 +26,18 @@ it.live("waits for plugin initialization before listing models", () =>
     const server = yield* startServer(tmp.path)
     const url = new URL("/api/model", server.base)
     url.searchParams.set("location[directory]", tmp.path)
-    const response = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
-
-    expect(response.status).toBe(200)
-    const body: unknown = yield* Effect.promise(() => response.json())
-    if (!isRecord(body) || !Array.isArray(body["data"])) throw new Error("Expected a model list response")
-    expect(
-      body["data"].some((model) => isRecord(model) && model["providerID"] === "custom" && model["id"] === "chat"),
-    ).toBeTrue()
+    // The list doesn't wait for plugins, so a cold Location fills in after activation.
+    yield* Effect.gen(function* () {
+      const response = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
+      expect(response.status).toBe(200)
+      const body: unknown = yield* Effect.promise(() => response.json())
+      if (!isRecord(body) || !Array.isArray(body["data"])) throw new Error("Expected a model list response")
+      return body["data"].some((model) => isRecord(model) && model["providerID"] === "custom" && model["id"] === "chat")
+    }).pipe(
+      Effect.filterOrFail((ready) => ready),
+      Effect.retry(Schedule.spaced("10 millis")),
+      Effect.timeout("4 seconds"),
+    )
 
     url.searchParams.set("types", "image")
     const images = yield* Effect.promise(() => fetch(url, { headers: server.headers }))

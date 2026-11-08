@@ -202,6 +202,13 @@ const table = sqliteTable("session", {
 - Local `typecheck` scripts use `bun check`. CI and package publishing run `typecheck:tsc`, which uses the official TypeScript compiler (`@typescript/native`). When the two disagree, `tsc` is the source of truth; reproduce with `bun run typecheck:tsc` from the package directory.
 - `bun check` aims to match TypeScript 7.1, not the `7.0.2` that `process.versions.typescript` reports (oven-sh/bun#46536). When `bun check` and `tsc` from the pinned `@typescript/native` report different errors, file a minimal, dependency-free repro at https://github.com/oven-sh/bun/issues, with the output of both. `bun check` writes no declaration files, so declaration-emit errors such as TS5088 or TS2883 are expected to appear only in `tsc`; do not report those.
 
+## Plugin Loading
+
+- Plugins load in the background, and everything that reads plugin-provided state must tolerate that. Do not wait for a Location's plugins to finish activating (`Plugin.awaitActivation`) in server handlers, and never turn slow plugins into a timeout or 503.
+- Reads return what is loaded now. Clients refresh on the matching `*.updated` event (`model.updated`, `agent.updated`, `skill.updated`, `integration.updated`, `plugin.updated`, ...). An empty or partial list on a cold Location is expected, not a bug to fix on the server.
+- One-shot clients that read once and exit (CLI commands, ACP, SDK callers) wait on their side for the specific entry they need, for example by polling `plugin.list` or the list they read. See `packages/cli/src/services/plugin-startup.ts`.
+- When an operation needs one specific plugin-provided thing, wait for that thing (its hook, its MCP server), not for every plugin.
+
 ## Session Core
 
 - Keep durable events minimal: record irreducible new facts and do not repeat state derivable by folding the ordered aggregate history. Enrich projections and read models with previous or derived state when consumers need self-contained views.

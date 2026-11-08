@@ -2,7 +2,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { expect } from "bun:test"
 import { OpenCode } from "@opencode/client"
-import { Effect } from "effect"
+import { Effect, Schedule } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
@@ -25,7 +25,9 @@ it.live("manages local and plugin-backed artifacts through /api/experimental/art
     const pluginDir = path.join(dir, "custom-artifact-plugin")
 
     yield* Effect.promise(async () => {
-      await Promise.all([global, enabled, enabledOther, disabled, pluginDir].map((item) => fs.mkdir(item, { recursive: true })))
+      await Promise.all(
+        [global, enabled, enabledOther, disabled, pluginDir].map((item) => fs.mkdir(item, { recursive: true })),
+      )
       await fs.writeFile(
         path.join(pluginDir, "package.json"),
         JSON.stringify({ name: "custom-artifact-plugin", type: "module", exports: "./index.js" }),
@@ -90,11 +92,18 @@ export default {
     })
     const api = client(handler)
 
+    // Artifact reads don't wait for plugins, so wait for the plugin-registered provider first.
+    yield* Effect.promise(() => api.experimental.artifacts.providers({ location: { directory: enabled } })).pipe(
+      Effect.filterOrFail((providers) => providers.data.some((provider) => provider.id === "s3")),
+      Effect.retry(Schedule.spaced("10 millis")),
+      Effect.timeout("4 seconds"),
+    )
+
     yield* Effect.promise(async () => {
       // Disabled location returns ForbiddenError
-      await expect(
-        api.experimental.artifacts.list({ location: { directory: disabled } }),
-      ).rejects.toMatchObject({ _tag: "ForbiddenError" })
+      await expect(api.experimental.artifacts.list({ location: { directory: disabled } })).rejects.toMatchObject({
+        _tag: "ForbiddenError",
+      })
 
       // Providers list includes built-in local (default) and plugin-registered s3
       const providers = await api.experimental.artifacts.providers({ location: { directory: enabled } })
@@ -145,9 +154,7 @@ export default {
         title: "Standalone report",
         files: { "index.html": "<h1>no-session</h1>" },
       })
-      const sessionlessHtml = await handler(
-        new Request(`http://opencode.local${sessionless.data.url}`),
-      )
+      const sessionlessHtml = await handler(new Request(`http://opencode.local${sessionless.data.url}`))
       expect(sessionlessHtml.status).toBe(200)
       expect(await sessionlessHtml.text()).toContain("<h1>no-session</h1>")
 
