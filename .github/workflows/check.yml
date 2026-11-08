@@ -3,9 +3,35 @@ name: check
 on:
   push:
     branches: [dev]
+    paths:
+      - packages/**
+      - services/**
+      - package.json
+      - package.json.workspaces
+      - bun.lockb
+      - turbo.json
+      - .npmrc
+      - .npmrc.local
+      - .eslint*
+      - .oxlintrc*
+      - tsconfig*.json
+      - .github/workflows/check.yml
   pull_request:
     branches: [dev, beta]
     types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - packages/**
+      - services/**
+      - package.json
+      - package.json.workspaces
+      - bun.lockb
+      - turbo.json
+      - .npmrc
+      - .npmrc.local
+      - .eslint*
+      - .oxlintrc*
+      - tsconfig*.json
+      - .github/workflows/check.yml
   workflow_dispatch:
 
 concurrency:

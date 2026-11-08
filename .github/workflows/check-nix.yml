@@ -3,9 +3,15 @@ name: check-nix
 on:
   push:
     branches: [dev]
+    paths:
+      - nix/**
+      - .github/workflows/check-nix.yml
   pull_request:
     branches: [dev]
     types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - nix/**
+      - .github/workflows/check-nix.yml
   workflow_dispatch:
 
 concurrency:

@@ -5,8 +5,33 @@ on:
     branches:
       - dev
       - beta
+    paths:
+      - packages/**
+      - services/**
+      - package.json
+      - package.json.workspaces
+      - bun.lockb
+      - turbo.json
+      - .npmrc
+      - .github/workflows/check-test.yml
+      - '**/*.test.ts'
+      - '**/*.test.tsx'
+      - '**/*.spec.ts'
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - packages/**
+      - services/**
+      - package.json
+      - package.json.workspaces
+      - bun.lockb
+      - turbo.json
+      - .npmrc
+      - .github/workflows/check-test.yml
+      - '**/*.test.ts'
+      - '**/*.test.tsx'
+      - '**/*.spec.ts'
+      - e2e/**
   workflow_dispatch:
     inputs:
       quarantine:
