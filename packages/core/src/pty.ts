@@ -166,7 +166,15 @@ const layer = Layer.effect(
     const create = Effect.fn("Pty.create")(function* (input: CreateInput) {
       const id = ID.ascending()
       const command = input.command || (yield* shell.resolve({ priority: "config" }))
-      const args = ShellSelect.login(command) ? [...(input.args ?? []), "-l"] : [...(input.args ?? [])]
+      // A PTY starts with its own console, whose code page defaults to the system ANSI code
+      // page. Pin PowerShell to UTF-8 before it prints a prompt, otherwise the terminal
+      // receives GBK bytes on Chinese Windows. Explicit args mean the caller owns startup.
+      const args =
+        process.platform === "win32" && ShellSelect.ps(command) && !input.args?.length
+          ? ["-NoExit", "-Command", ShellSelect.PS_UTF8]
+          : ShellSelect.login(command)
+            ? [...(input.args ?? []), "-l"]
+            : [...(input.args ?? [])]
       const cwd = input.cwd || location.directory
       const env = {
         ...process.env,
