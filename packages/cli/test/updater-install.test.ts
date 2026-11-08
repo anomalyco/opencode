@@ -397,6 +397,19 @@ it.live("Homebrew tap upgrades accept the new keg when it is not listed last", (
   }),
 )
 
+it.live("Homebrew tap upgrades reject a version the tap cannot install", () =>
+  Effect.gen(function* () {
+    // `brew upgrade` takes no version argument, so asking for another version used to install the tap
+    // version and then report it as a stale tap. It fails before brew runs instead.
+    const test = yield* fixture(() => ({}), "@opencode/cli", false, "opencode-v2", "opencode-v2")
+    const error = yield* test.updater.upgrade("brew", "2.2.5").pipe(Effect.flip)
+    expect(error).toBeInstanceOf(Updater.UpgradeError)
+    expect((error as Updater.UpgradeError).title).toBe("Homebrew can only install the version in the tap")
+    expect(error.message).toContain("provides opencode-v2 2.3.4, not 2.2.5")
+    expect(test.commands).toEqual([])
+  }),
+)
+
 it.live("Homebrew tap upgrades succeed when the installed version cannot be read back", () =>
   Effect.gen(function* () {
     const test = yield* fixture(

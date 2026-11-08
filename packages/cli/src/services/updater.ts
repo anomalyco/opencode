@@ -229,7 +229,10 @@ const make = Effect.gen(function* () {
     if (installedWinget) return "winget"
     if (!installedPackage) return
 
-    const parts = executable.toLowerCase().split(path.sep).map((part) => part.replace(/^\./, ""))
+    const parts = executable
+      .toLowerCase()
+      .split(path.sep)
+      .map((part) => part.replace(/^\./, ""))
     const checks: Array<{ method: Method; command: string[] }> = [
       { method: "npm", command: ["npm", "list", "-g", "--depth=0", installedPackage] },
       { method: "pnpm", command: ["pnpm", "list", "-g", "--depth=0", installedPackage] },
@@ -437,12 +440,14 @@ const make = Effect.gen(function* () {
   const upgrade = Effect.fnUntraced(function* (method: Method, input: string) {
     if (!parseReleaseVersion(input)) return yield* Effect.fail(new Error(`Invalid version: ${input}`))
     const version = input.trim().replace(/^v/, "")
+    // Homebrew Core builds its own formula, so only a tap release describes what `brew upgrade` installs.
+    const tap = method === "brew" && installedFormula !== "opencode" ? yield* release(method) : undefined
     const packageName =
       method === "winget"
         ? wingetPackage
         : method === "brew" && installedFormula === "opencode"
           ? "opencode"
-          : (yield* release(method)).package
+          : (tap ?? (yield* release(method))).package
     const target = `${packageName}@${version}`
     if (installedPackage && packageName !== installedPackage && (method === "pnpm" || method === "yarn")) {
       return yield* Effect.fail(new Error(`Reinstall ${target} with ${method} to migrate from ${installedPackage}.`))
@@ -508,6 +513,17 @@ const make = Effect.gen(function* () {
           )
         }
         if (method === "brew") {
+          // `brew upgrade` takes no version argument, so the tap formula decides what lands. Asking for
+          // another version used to reach brew, install the tap version and then fail read-back with a
+          // stale-tap message that was not true.
+          if (tap && tap.version !== version)
+            return yield* Effect.fail(
+              new UpgradeError({
+                title: "Homebrew can only install the version in the tap",
+                detail: `The Homebrew tap provides ${tap.package} ${tap.version}, not ${version}. brew upgrade takes no version argument, so it cannot install ${version}.`,
+                retry: `Run opencode upgrade ${tap.version} to take the version the tap provides.`,
+              }),
+            )
           const result = yield* runUpgrade({ method, command: ["brew", "upgrade", packageName] })
           // Never report an update that Homebrew did not install. Homebrew Core is skipped: its
           // formula and index share one source, so a mismatch there is not a stale tap.
