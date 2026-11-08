@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
+import { afterEach, describe, expect, jest, mock, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "node:url"
@@ -231,6 +231,33 @@ afterEach(() => {
 })
 
 describe("V2 mini transport", () => {
+  test("a connection that never sends server.connected fails instead of reconnecting forever", async () => {
+    // A proxy answers the subscribe request and holds the body open, so the stream never yields.
+    const client = sdk({ streams: [feed()] })
+    const ui = footer()
+    const realSetTimeout = globalThis.setTimeout
+    jest.useFakeTimers()
+    try {
+      const pending = createSessionTransport({
+        sdk: client,
+        sessionID: "ses_1",
+        thinking: false,
+        replay: true,
+        footer: ui.api,
+        onCommit: () => {},
+      })
+      const outcome = pending.then(
+        () => "resolved",
+        (error: Error) => error.message,
+      )
+      jest.advanceTimersByTime(10_000)
+      const guard = new Promise<string>((resolve) => realSetTimeout(() => resolve("still connecting"), 2_000))
+      expect(await Promise.race([outcome, guard])).toContain("sent nothing within 10s")
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   test.each(["steer", "queue"] as const)("cancels the first local %s after attaching while busy", async (delivery) => {
     const events = feed()
     events.push(connected())

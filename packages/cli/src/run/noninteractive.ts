@@ -57,6 +57,35 @@ const QUESTION_CANCELLED_FEEDBACK =
 const PERMISSION_REJECTED_FEEDBACK =
   "This non-interactive run cannot ask the user for permission, so the request was rejected. Continue without this action."
 
+/** How long the run waits for the opening event before it reports a stalled stream. */
+const FIRST_EVENT_TIMEOUT = 10_000
+
+/**
+ * Waits for the first event of the subscription. A proxy, tunnel or VPN can answer the subscribe
+ * request and then hold the response open without forwarding anything, which leaves `next()`
+ * pending forever, so the wait is bounded and reported instead.
+ */
+async function firstEvent(stream: AsyncIterator<Event>) {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const stalled = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () =>
+        reject(
+          new Error(
+            `The OpenCode server accepted the event stream but sent nothing within ${FIRST_EVENT_TIMEOUT / 1000}s. Something between this client and the server, such as a proxy, tunnel or VPN, is probably buffering it.`,
+          ),
+        ),
+      FIRST_EVENT_TIMEOUT,
+    )
+    timer.unref?.()
+  })
+  try {
+    return await Promise.race([stream.next(), stalled])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /**
  * Runs one prompt to completion:
  *
@@ -66,7 +95,7 @@ const PERMISSION_REJECTED_FEEDBACK =
 export async function runNonInteractivePrompt(input: Input) {
   const controller = new AbortController()
   const stream = input.client.event.subscribe({ signal: controller.signal })[Symbol.asyncIterator]()
-  if ((await stream.next()).done) throw new Error("Event stream disconnected before prompt admission")
+  if ((await firstEvent(stream)).done) throw new Error("Event stream disconnected before prompt admission")
 
   const messageID = SessionMessage.ID.create()
   const render = renderer(input)

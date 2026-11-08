@@ -78,7 +78,9 @@ export class CatalogLoadError extends Schema.TaggedError<CatalogLoadError>()("AC
   cause: Schema.Defect(),
 }) {}
 
-export type CatalogError = CatalogNotReadyError | CatalogLoadError
+// A connection whose event stream never opened cannot supply a catalog either, so that failure
+// belongs to the same channel.
+export type CatalogError = CatalogNotReadyError | CatalogLoadError | EventStreamUnavailableError
 
 export type Error =
   | SessionNotFoundError

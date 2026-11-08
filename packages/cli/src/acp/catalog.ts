@@ -86,8 +86,8 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
   )
 
   const create = Effect.fnUntraced(function* (cwd: string) {
-    // Only the ordering of the subscription matters here, so a stream that never opens must not
-    // block the catalog: the loads below do not need it.
+    // The loads below do not need the stream, but the failure is reported here so that a silent
+    // connection fails once, at the first request, instead of on every request that follows.
     yield* ACPConnection.awaitConnected(connected)
     return {
       cwd,

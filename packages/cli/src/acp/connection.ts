@@ -12,6 +12,7 @@ import {
   type Stream,
 } from "@agentclientprotocol/sdk"
 import { Context, Deferred, Duration, Effect, Option } from "effect"
+import { ACPError } from "./error"
 
 export const Responded = Context.Reference<Effect.Effect<void>>("@opencode/cli/acp/Connection/Responded", {
   defaultValue: () => Effect.void,
@@ -22,14 +23,24 @@ export const ConnectedTimeout = Context.Reference<Duration.Input>("@opencode/cli
   defaultValue: () => Duration.seconds(10),
 })
 
+const connectionDeadlines = new WeakMap<object, number>()
+
 /**
- * Waits for the event stream to open and resolves false when it never did. Callers that only rely
- * on event ordering can continue; a caller that needs events reports the failure.
+ * Waits for the event stream to open and fails with EventStreamUnavailableError when it never did.
+ * The deadline is remembered per connection, so a caller that arrives after the stream was already
+ * declared silent fails at once instead of waiting the whole timeout again.
  */
 export const awaitConnected = (connected: Deferred.Deferred<void>) =>
   Effect.gen(function* () {
     const timeout = yield* ConnectedTimeout
-    return Option.isSome(yield* Deferred.await(connected).pipe(Effect.timeoutOption(timeout)))
+    const deadline = connectionDeadlines.get(connected) ?? Date.now() + Duration.toMillis(timeout)
+    connectionDeadlines.set(connected, deadline)
+    const remaining = deadline - Date.now()
+    const opened =
+      remaining > 0 &&
+      Option.isSome(yield* Deferred.await(connected).pipe(Effect.timeoutOption(Duration.millis(remaining))))
+    if (opened) return
+    return yield* new ACPError.EventStreamUnavailableError({ seconds: Duration.toSeconds(timeout) })
   })
 
 export interface Interface {

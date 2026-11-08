@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
+import { afterEach, describe, expect, jest, mock, spyOn, test } from "bun:test"
 import {
   ClientError,
   OpenCode,
@@ -841,6 +841,44 @@ describe("runNonInteractivePrompt", () => {
     expect(sdk.session.interrupt).toHaveBeenCalledWith({ sessionID: "ses_child" })
     expect(sdk.shell.remove).toHaveBeenCalledWith({ id: "sh_train", location: { directory: "/work tree" } })
     expect(sdk.shell.remove).not.toHaveBeenCalledWith(expect.objectContaining({ id: "sh_dev" }))
+  })
+
+  test("a stream that never sends anything fails the run instead of hanging", async () => {
+    // A proxy that answers the subscribe request and holds the body open: next() never settles.
+    const client = {
+      event: {
+        subscribe: () => ({
+          [Symbol.asyncIterator]: () => ({ next: () => new Promise<never>(() => {}) }),
+        }),
+      },
+    } as unknown as Parameters<typeof runNonInteractivePrompt>[0]["client"]
+    const realSetTimeout = globalThis.setTimeout
+    jest.useFakeTimers()
+    try {
+      const pending = runNonInteractivePrompt({
+        client,
+        sessionID: "ses_1",
+        location,
+        message: "hello",
+        files: [],
+        thinking: false,
+        format: "default",
+        auto: false,
+        standalone: false,
+        signal: new AbortController().signal,
+        renderTool: () => Promise.resolve(),
+        renderToolError: () => Promise.resolve(),
+      })
+      const outcome = pending.then(
+        () => "resolved",
+        (error: Error) => error.message,
+      )
+      jest.advanceTimersByTime(10_000)
+      const guard = new Promise<string>((resolve) => realSetTimeout(() => resolve("still waiting"), 2_000))
+      expect(await Promise.race([outcome, guard])).toContain("accepted the event stream but sent nothing within 10s")
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   test("cancelling mid-turn interrupts the Session and ignores the transport errors that follow", async () => {
