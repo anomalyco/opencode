@@ -39,6 +39,14 @@
   margin-block-start: 0;
 }
 
+.sidebar-project-actions {
+  pointer-events: none;
+}
+
+.sidebar-project-action {
+  pointer-events: auto;
+}
+
 .sidebar-project-actions::before {
   content: "";
   position: absolute;
@@ -61,7 +69,8 @@
     background-color: var(--v2-border-border-muted);
   }
 
-  .sidebar-project-header:not(:hover):not(:focus-within) .sidebar-project-action:not([aria-pressed="true"]) {
+  .sidebar-project-header:not(:hover):not(:focus-within):not([data-menu-open])
+    .sidebar-project-action:not([aria-pressed="true"]) {
     display: none;
   }
 }

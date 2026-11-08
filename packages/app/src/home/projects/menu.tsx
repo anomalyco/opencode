@@ -5,6 +5,8 @@ import { usePlatform } from "@/runtime/platform/platform"
 import type { ServerConnection } from "@/runtime/server/registry"
 import type { LocalProject } from "@/shell/state/layout"
 import { fileManagerApp } from "./file-manager"
+import { writeClipboard } from "@opencode/session-ui/copy"
+import { showToast } from "@/shell/notifications/toast"
 
 export function ProjectMenuItems(props: {
   server: ServerConnection.Any
@@ -24,6 +26,17 @@ export function ProjectMenuItems(props: {
 
   const platform = usePlatform()
 
+  const copyPath = () => {
+    const failed = () => showToast({ variant: "error", title: language.t("sidebar.project.copyPathFailed") })
+    void Promise.try(() =>
+      platform.writeClipboardText
+        ? platform.writeClipboardText(props.project.worktree).then(() => true)
+        : writeClipboard(props.project.worktree),
+    ).then((written) => {
+      if (!written) failed()
+    }, failed)
+  }
+
   return (
     <>
       <Menu.Item onSelect={() => props.onOpenProjectNewSession(props.server, props.project.worktree)}>
@@ -40,6 +53,7 @@ export function ProjectMenuItems(props: {
       <Menu.Item onSelect={() => props.onEditProject(props.server, props.project)}>
         {language.t("dialog.project.edit.title")}
       </Menu.Item>
+      <Menu.Item onSelect={copyPath}>{language.t("sidebar.project.copyPath")}</Menu.Item>
       <Show when={props.canRevealProject(props.server)}>
         <Menu.Item onSelect={() => props.onRevealProject(props.server, props.project)}>
           {language.t(

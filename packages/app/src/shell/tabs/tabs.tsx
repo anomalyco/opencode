@@ -526,13 +526,14 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         const draftID = draft.draftID ?? uuid()
         const tab = { ...draft, type: "draft" as const, draftID }
         memory.ensure(tabKey(tab), "prompt", () => createDraftComposerState(draftID, { prompt, model }))
+        // A cold draft page can suspend past the persistence flush, so commit the tab before routing.
+        setStore(
+          produce((tabs) => {
+            tabs.push(tab)
+          }),
+        )
         await startTransition(() => {
           preview.clear()
-          setStore(
-            produce((tabs) => {
-              tabs.push(tab)
-            }),
-          )
           navigate(draftHref(draftID))
         })
 

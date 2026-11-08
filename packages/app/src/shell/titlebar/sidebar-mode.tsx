@@ -22,9 +22,8 @@ import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
 import { Button } from "@opencode/ui/button"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Icon } from "@opencode/ui/icon"
-import { Select } from "@opencode/ui/select"
+import { Menu } from "@opencode/ui/menu"
 import { displayName } from "@opencode/ui/project-avatar"
-import { useSettings } from "@/settings/model"
 import { pathKey } from "@/workspaces/path-key"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
@@ -35,6 +34,10 @@ import { notifySessionTabsRemoved } from "./session-events"
 import { setSidebarUnread } from "@/shell/sidebar-peek"
 import type { SessionInfo } from "@opencode/client/promise"
 import { createSessionIndexes } from "@/home/sessions/queries"
+import { createProjectActions } from "@/home/projects/actions"
+import { ProjectMenuItems } from "@/home/projects/menu"
+import { isServerFailed } from "@/runtime/server/health-machine"
+import type { LocalProject } from "@/shell/state/layout"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Schema } from "effect"
 import { useQueryClient } from "@tanstack/solid-query"
@@ -439,10 +442,12 @@ export function SidebarMode(props: {
   const global = useGlobal()
   const language = useLanguage()
   const command = useCommand()
-  const settings = useSettings()
   const tabs = useTabs()
+  const projectActions = createProjectActions()
+  const [projectMenu, setProjectMenu] = createStore<{ open?: string }>({})
+  let projectMenuFocus: HTMLButtonElement | undefined
   const vertical = () => props.orientation === "vertical"
-  const grouped = () => vertical() && props.grouping && settings.appearance.tabGrouping() === "project"
+  const grouped = () => vertical() && props.grouping
   let listRef!: HTMLDivElement
   let boundsRef!: HTMLDivElement
   let scrollRef!: HTMLDivElement
@@ -525,12 +530,13 @@ export function SidebarMode(props: {
         ]),
     )
     candidates.forEach((tab, key) => {
-      if (tab.type !== "session") return
       const ctx = global.serverCtx(tab.server)
-      const session = ctx?.data.session.get(tab.sessionId) ?? indexed().get(key)?.session
+      const session =
+        tab.type === "session" ? (ctx?.data.session.get(tab.sessionId) ?? indexed().get(key)?.session) : undefined
       // Child sessions stay accessible through their parent's subagent view.
       if (session?.parentID) candidates.delete(key)
-      const project = session && ctx?.projects.forSession(session)
+      const project =
+        tab.type === "draft" ? ctx?.projects.forDirectory(tab.directory) : session && ctx?.projects.forSession(session)
       if (project && !projects.get(tab.server)?.has(pathKey(project.worktree))) candidates.delete(key)
     })
     const recent = [...candidates.values()]
@@ -556,7 +562,15 @@ export function SidebarMode(props: {
     if (!grouped()) return []
     const result = new Map<
       string,
-      { key: string; name: string; directory?: string; server?: string; connection: ServerConnection.Key; tabs: Tab[] }
+      {
+        key: string
+        name: string
+        directory?: string
+        server?: string
+        connection: ServerConnection.Key
+        project?: LocalProject
+        tabs: Tab[]
+      }
     >()
     const totals = new Map<string, string[]>()
     sidebar?.sources().forEach((source) =>
@@ -579,6 +593,7 @@ export function SidebarMode(props: {
           key,
           name: displayName(project),
           directory: project.worktree,
+          project,
           connection: server,
           server: servers.visible.length > 1 ? serverName(source.conn) : undefined,
           tabs: [],
@@ -614,6 +629,7 @@ export function SidebarMode(props: {
         key,
         name: root ? displayName(project ?? { worktree: root }) : language.t("sidebar.grouping.other"),
         directory: root,
+        project,
         connection: tab.server,
         server: servers.visible.length > 1 && conn ? serverName(conn) : undefined,
         tabs: [tab],
@@ -809,7 +825,10 @@ export function SidebarMode(props: {
     // Hover reads this outside rendering, so own its computation with the row.
     const active = createMemo(() => currentKey() === id)
     const group = () => tabGroups().get(id)
-    const sortDisabled = () => projectTabs().get(group()?.key ?? "")?.promoted.has(id)
+    const sortDisabled = () =>
+      projectTabs()
+        .get(group()?.key ?? "")
+        ?.promoted.has(id)
 
     const element = () => ref
     tabRefs.set(id, element)
@@ -881,6 +900,19 @@ export function SidebarMode(props: {
         {(group) => (
           <div
             class="sidebar-project-header mt-3 mb-1 min-w-0 rounded-md bg-v2-background-bg-layer-02 px-1.5 py-1"
+            data-menu-open={projectMenu.open === key ? "" : undefined}
+            onContextMenu={(event) => {
+              if (!group().project) return
+              event.preventDefault()
+              projectMenuFocus = event.currentTarget.querySelector<HTMLButtonElement>("h3 button") ?? undefined
+              setProjectMenu("open", key)
+            }}
+            onKeyDown={(event) => {
+              if (!group().project || !((event.shiftKey && event.key === "F10") || event.key === "ContextMenu")) return
+              event.preventDefault()
+              projectMenuFocus = event.currentTarget.querySelector<HTMLButtonElement>("h3 button") ?? undefined
+              setProjectMenu("open", key)
+            }}
             title={[
               group().name,
               group().directory,
@@ -931,19 +963,78 @@ export function SidebarMode(props: {
                 <span class="shrink-0 rounded px-1 text-[11px] leading-4 tabular-nums text-v2-text-text-faint">
                   {group().recent}/{group().total}
                 </span>
+                <Show when={group().project}>
+                  {(project) => (
+                    <Show when={servers.visible.find((conn) => ServerConnection.key(conn) === group().connection)}>
+                      {(conn) => (
+                        <Menu
+                          gutter={6}
+                          modal={false}
+                          placement="bottom-end"
+                          open={projectMenu.open === key}
+                          onOpenChange={(open) => setProjectMenu("open", open ? key : undefined)}
+                        >
+                          <Menu.Trigger
+                            as={IconButton}
+                            size="small"
+                            variant="ghost-muted"
+                            class="sidebar-project-action"
+                            icon={<Icon name="outline-dots" />}
+                            aria-label={language.t("sidebar.project.moreOptions", { project: group().name })}
+                          />
+                          <Menu.Portal>
+                            <Menu.Content
+                              onInteractOutside={() => {
+                                projectMenuFocus = undefined
+                              }}
+                              onCloseAutoFocus={(event) => {
+                                const focus = projectMenuFocus
+                                projectMenuFocus = undefined
+                                if (!focus?.isConnected) return
+                                event.preventDefault()
+                                requestAnimationFrame(() => focus.focus())
+                              }}
+                            >
+                              <ProjectMenuItems
+                                server={conn()}
+                                project={project()}
+                                unread={projectActions.hasUnread(conn(), project())}
+                                canImportSession={projectActions.canImportSession}
+                                importingSession={projectActions.importingSession()}
+                                canRevealProject={projectActions.canReveal}
+                                onOpenProjectNewSession={(conn, directory) => {
+                                  collapsed?.[1]((keys) => keys.filter((item) => item !== key))
+                                  projectActions.openNewSession(conn, directory)
+                                }}
+                                onImportSession={projectActions.importSession}
+                                onEditProject={projectActions.edit}
+                                onRevealProject={projectActions.reveal}
+                                onClearNotifications={projectActions.clearNotifications}
+                                onHideProject={(conn, project) => {
+                                  setProjectMenu("open", undefined)
+                                  projectActions.hide(conn, project)
+                                }}
+                              />
+                            </Menu.Content>
+                          </Menu.Portal>
+                        </Menu>
+                      )}
+                    </Show>
+                  )}
+                </Show>
                 <Show when={group().directory}>
                   {(directory) => (
                     <IconButton
                       size="small"
                       variant="ghost-muted"
                       class="sidebar-project-action"
-                      icon={<Icon name="plus-small" />}
+                      icon={<Icon name="edit" />}
                       aria-label={language.t("sidebar.project.newSession", { project: group().name })}
                       title={language.t("sidebar.project.newSession", { project: group().name })}
                       onClick={() => {
                         collapsed?.[1]((keys) => keys.filter((item) => item !== key))
-                        global.serverCtx(group().connection)?.projects.touch(directory())
-                        void tabs.newDraft({ server: group().connection, directory: directory() })
+                        const conn = servers.visible.find((item) => ServerConnection.key(item) === group().connection)
+                        if (conn) projectActions.openNewSession(conn, directory())
                       }}
                     />
                   )}
@@ -1119,18 +1210,49 @@ export function SidebarMode(props: {
           </section>
         </Show>
         <Show when={vertical() && props.grouping}>
-          <div class="mb-2 flex shrink-0 items-center gap-2 [app-region:no-drag]">
-            <h2 class="shrink-0 text-[13px] leading-4 font-medium text-v2-text-text-muted">
-              {language.t("sidebar.recent.title")}
+          <div class="mb-2 flex h-7 shrink-0 items-center justify-between gap-2 [app-region:no-drag]">
+            <h2 class="min-w-0 flex-1 text-[13px] leading-4 font-medium text-v2-text-text-muted">
+              {language.t("home.projects")}
             </h2>
-            <Select
-              options={["none", "project"] as const}
-              current={settings.appearance.tabGrouping()}
-              aria-label={language.t("sidebar.grouping.label")}
-              label={(option) => language.t(`sidebar.grouping.${option}`)}
-              onSelect={(option) => option && settings.appearance.setTabGrouping(option)}
-              class="min-w-0 flex-1"
-            />
+            <Show
+              when={servers.visible.length === 1}
+              fallback={
+                <Menu gutter={6} modal={false} placement="bottom-end">
+                  <Menu.Trigger
+                    as={IconButton}
+                    variant="ghost-muted"
+                    size="small"
+                    icon={<Icon name="folder-add-left" />}
+                    aria-label={language.t("home.project.add")}
+                    disabled={!servers.visible.length}
+                  />
+                  <Menu.Portal>
+                    <Menu.Content>
+                      <For each={servers.visible}>
+                        {(conn) => (
+                          <Menu.Item
+                            disabled={isServerFailed(global.servers.health[ServerConnection.key(conn)])}
+                            onSelect={() => projectActions.choose(conn)}
+                          >
+                            {serverName(conn)}
+                          </Menu.Item>
+                        )}
+                      </For>
+                    </Menu.Content>
+                  </Menu.Portal>
+                </Menu>
+              }
+            >
+              <IconButton
+                variant="ghost-muted"
+                size="small"
+                icon={<Icon name="folder-add-left" />}
+                aria-label={language.t("home.project.add")}
+                title={language.t("home.project.add")}
+                disabled={isServerFailed(global.servers.health[ServerConnection.key(servers.visible[0])])}
+                onClick={() => projectActions.choose(servers.visible[0])}
+              />
+            </Show>
           </div>
         </Show>
         <div

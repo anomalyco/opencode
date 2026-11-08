@@ -17,6 +17,7 @@ import { showToast } from "@/shell/notifications/toast"
 import { sessionLastRunLabel, sessionTabTitle } from "./tab-title"
 import { createSessionBranches } from "./session-branches"
 import { pathKey } from "@/workspaces/path-key"
+import { createSessionExporter } from "@/session/commands/export-session"
 import { TabPreviewPopover } from "./tab-popover"
 import {
   INITIAL_TAB_RENAME_STATE,
@@ -93,6 +94,7 @@ export function TabNavItem(
   },
 ) {
   const language = useLanguage()
+  const exporter = createSessionExporter()
   const [renameState, setRenameState] = createSignal(INITIAL_TAB_RENAME_STATE)
   const editing = () => isTabRenaming(renameState())
   const [titleOverflowing, setTitleOverflowing] = createSignal(false)
@@ -613,6 +615,16 @@ export function TabNavItem(
           <Menu.Item disabled={!props.session} onSelect={() => startRename("menu")}>
             {language.t("common.rename")}
           </Menu.Item>
+          <Show when={props.showSessionDetails}>
+            <Menu.Item
+              disabled={!props.session || exporter.exporting({ server: props.server, sessionID: props.session.id })}
+              onSelect={() => {
+                if (props.session) exporter.export({ server: props.server, sessionID: props.session.id })
+              }}
+            >
+              {language.t("common.export")}…
+            </Menu.Item>
+          </Show>
           <Show when={props.closable !== false}>
             <TabCloseMenuItems
               orientation={props.orientation}

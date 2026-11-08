@@ -852,6 +852,11 @@ export const dict = {
   "sidebar.inbox.time.now": "now",
   "sidebar.project.recentSessions": "Recent sessions",
   "sidebar.project.clearNotifications": "Clear notifications",
+  "sidebar.project.moreOptions": "More options for project {{project}}",
+  "sidebar.project.closed": "Closed project {{project}}",
+  "sidebar.project.reopen": "Reopen",
+  "sidebar.project.copyPath": "Copy path",
+  "sidebar.project.copyPathFailed": "Failed to copy project path",
 
   "settings.section.server": "Server",
   "settings.backToApp": "Back to app",
