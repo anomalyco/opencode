@@ -421,8 +421,11 @@ body {
 
 [data-page="stats"] [data-slot="menu-lines"] {
   position: relative;
-  width: 18px;
-  height: 8px;
+  width: 16px;
+  height: 8.5px;
+  /* Centred, the 8.5px box would start on a quarter pixel; this puts both lines on half pixels, so each is exactly 3
+     device pixels at 2×. */
+  margin-top: -0.5px;
 
   &::before,
   &::after {
@@ -431,7 +434,6 @@ body {
     left: 0;
     width: 100%;
     height: 1.5px;
-    border-radius: 1px;
     background: currentColor;
     transform-origin: 50% 50%;
     /* Closing: the cross unrotates, then the lines part; the two overlap so it reads as one motion. */
@@ -459,12 +461,12 @@ body {
   }
 
   &::before {
-    translate: 0 3.25px;
+    translate: 0 3.5px;
     rotate: 45deg;
   }
 
   &::after {
-    translate: 0 -3.25px;
+    translate: 0 -3.5px;
     rotate: -45deg;
   }
 }
