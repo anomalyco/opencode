@@ -319,10 +319,12 @@
   --nav-chevron-hover: var(--nav-name-hover);
   --nav-chevron-press: light-dark(#d2d2d2, #4b4b4b);
 
-  /* Phones: the docs sticky rows' 16px chevron, in a 26px box. */
+  /* Phones: the docs sticky rows' 16px chevron, in an 18px box close to the name, its target reaching 26px past it so
+     it stays 44px wide. */
   @media (max-width: 60rem) {
-    --nav-chevron-width: 26px;
+    --nav-chevron-width: 18px;
     --nav-chevron-glyph: 16px;
+    --nav-chevron-reach: 26px;
   }
   --nav-logo-box-w: calc(15px * 1.492);
   --nav-logo-box-h: 25px;
