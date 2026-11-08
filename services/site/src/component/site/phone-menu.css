@@ -6,8 +6,9 @@
   }
 
   @media (max-width: 60rem) {
-    /* Two lines that turn into an X. The lines end on the page edge; the button extends past it
-       so the tap target is 44px square. */
+    /* Two 1.5px lines, 16px long (the search glyph's width) and 7px apart, that turn into an X, centred on the
+       menu column (34px in from the screen's edge). The lines sit on half pixels so each is exactly 3 device pixels
+       at 2×. The tap target is 44px square. */
     [data-component="menu-toggle"] {
       position: relative;
       width: 2.75rem;
@@ -16,19 +17,18 @@
 
       [data-slot="line"] {
         position: absolute;
-        inset-inline-start: 0.75rem;
-        inset-inline-end: 0.75rem;
+        inset-inline: 14px;
         top: calc(50% - 0.5px);
-        height: 1px;
+        height: 1.5px;
         background: var(--text-strong);
         transition: transform 200ms var(--ease-out);
 
         &:first-child {
-          transform: translateY(-4.5px);
+          transform: translateY(-3.5px);
         }
 
         &:last-child {
-          transform: translateY(4.5px);
+          transform: translateY(3.5px);
         }
       }
 
@@ -71,12 +71,22 @@
         max-height: 100%;
         overflow-y: auto;
         overscroll-behavior: contain;
+        /* The "[n]" column centres on the top bar's logo mark above it: the mark's box starts at
+           --edge and is --phone-logo-height × 4/5 wide, and "[n]" is three mono characters (3ch)
+           wide, so the list starts half of each before the mark's centre. The labels keep their
+           gap after the numbers, so they share one column too. Mirrored right to left. */
+        --menu-start: calc(var(--edge) + var(--phone-logo-height, 30px) * 2 / 5 - 1.5ch);
         padding: 0.5rem calc(var(--edge) + env(safe-area-inset-right, 0px))
-          calc(1.5rem + env(safe-area-inset-bottom, 0px)) calc(var(--edge) + env(safe-area-inset-left, 0px));
+          calc(1.5rem + env(safe-area-inset-bottom, 0px)) calc(var(--menu-start) + env(safe-area-inset-left, 0px));
         font-family: var(--font-mono);
         /* The sheet's one job is this list: a step above the body copy, like a native menu. */
         font-size: var(--fs-large);
         line-height: 24px;
+
+        &:dir(rtl) {
+          padding-left: calc(var(--edge) + env(safe-area-inset-left, 0px));
+          padding-right: calc(var(--menu-start) + env(safe-area-inset-right, 0px));
+        }
       }
 
       [data-slot="panel"] > ul > li {

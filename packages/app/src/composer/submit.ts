@@ -12,7 +12,8 @@ import type {
   ComposerSession,
   ComposerSubmissionHandle,
 } from "./adapter"
-import { buildPromptRequest, noteComment, quoteComment } from "./request"
+import { buildPromptRequest, commentMentions, noteComment, quoteComment } from "./request"
+import { getDirectory, getFilename } from "@opencode/util/path"
 import { setCursorPosition } from "./editor/dom"
 import { blobDataUrl, resolveBlobUrl } from "@/runtime/persistence/drafts"
 import type { ModelSelection } from "@/providers/models/selection"
@@ -827,13 +828,38 @@ async function buildSubmissionRequest(session: ComposerSession, value: ComposerS
     })),
   )
 
+  const mentions = commentMentions(value.context)
+
   return buildPromptRequest({
     prompt: value.prompt,
     context: value.context,
     images,
     text: value.text,
     sessionDirectory: session.directory,
+    existingMentions: mentions.length > 0 ? await existingMentions(session, mentions) : undefined,
   })
+}
+
+// A comment's `@word` may be plain text such as `@here`, and the server rejects a prompt that attaches a missing
+// file. Lists each mention's folder instead of reading the file, so the check transfers no content.
+async function existingMentions(session: ComposerSession, mentions: string[]) {
+  const existing = new Set<string>()
+
+  await Promise.all(
+    [...new Set(mentions)].map(async (path) => {
+      const target = path.replace(/[\\/]+$/, "")
+      const parent = /[\\/]/.test(target) ? getDirectory(target) : undefined
+
+      const found = await session.file
+        .list({ path: parent, location: { directory: session.directory } })
+        .then((result) => result.data.some((entry) => getFilename(entry.path) === getFilename(target)))
+        .catch(() => false)
+
+      if (found) existing.add(path)
+    }),
+  )
+
+  return existing
 }
 
 function failSubmission(

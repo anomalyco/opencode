@@ -3,8 +3,9 @@ import { For, Show, type JSX } from "solid-js"
 import { useI18n } from "~/context/i18n"
 import { useArea } from "~/i18n/content"
 import { appsSource } from "~/i18n/content/areas/apps"
-import { ExternalArrow, HexMark, NewTab, OpenTUIMark, OpenTunnelMark } from "./icons"
-import { anomalyProducts } from "./links"
+import { useLanguage } from "~/context/language"
+import { BrowseMark, ExternalArrow, HexMark, NewTab, OpenTUIMark, OpenTunnelMark } from "./icons"
+import { anomalyProducts, appLink } from "./links"
 import { SectionHeading } from "./on-this-page"
 
 export type ProductListItem = {
@@ -84,25 +85,28 @@ export function ProductList(props: { items: readonly ProductListItem[] }) {
 }
 
 /**
- * "More from Anomaly": Anomaly's other open source products. The same section on /product and on
- * every product and extension page; `slot` is its data-slot, which each page's layout styles. Each
- * shows its flat mark, white on the black tile like GitHub's and GitLab's.
+ * "More from Anomaly": Anomaly's other open source products, on the extension pages (the product
+ * pages show the Companions shelf instead); `exclude` leaves out the page's own product. `slot` is
+ * its data-slot, which each page's layout styles. Each shows its flat mark, white on the black tile
+ * like GitHub's and GitLab's.
  */
-export function MoreFromAnomaly(props: { slot: string }) {
+export function MoreFromAnomaly(props: { slot: string; exclude?: string }) {
   const i18n = useI18n()
+  const language = useLanguage()
   const appCopy = useArea("apps", appsSource)
   return (
     <section data-component="block" data-slot={props.slot}>
       <SectionHeading id="more-from-anomaly" title={i18n.t("site.moreFromAnomaly")} label />
       <div data-slot="body">
         <ProductList
-          items={anomalyProducts.map((app) => ({
-            name: app.name,
-            description: appCopy()[app.id].body,
-            href: app.href,
-            external: true,
-            icon: anomalyMarks[app.id](),
-          }))}
+          items={anomalyProducts
+            .filter((app) => app.id !== props.exclude)
+            .map((app) => ({
+              name: app.name,
+              description: appCopy()[app.id].body,
+              ...appLink(app, language.route),
+              icon: anomalyMarks[app.id](),
+            }))}
         />
       </div>
     </section>
@@ -110,7 +114,8 @@ export function MoreFromAnomaly(props: { slot: string }) {
 }
 
 /** Each Anomaly product's mark in the list: the one place to switch a mark. */
-const anomalyMarks: Record<(typeof anomalyProducts)[number]["id"], () => JSX.Element> = {
+export const anomalyMarks: Record<(typeof anomalyProducts)[number]["id"], () => JSX.Element> = {
+  browse: () => <BrowseMark />,
   hex: () => <HexMark />,
   opentunnel: () => <OpenTunnelMark />,
   opentui: () => <OpenTUIMark />,

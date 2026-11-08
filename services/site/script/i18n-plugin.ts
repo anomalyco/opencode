@@ -115,24 +115,24 @@ export function i18nSlices(): Plugin {
     },
   }
 
-  /** For each locale, the files a page in it loads before hydration: its table (with the shell's strings) and its route's slice. */
+  /**
+   * For each locale, the files a page in it loads before hydration: its table (with the shell's
+   * strings) and its route's slice. `boundaries` has the other lazy boundaries' slices, for a page
+   * that knows before hydration it will load one (the Markdown view on a reload in it).
+   */
   function preloads() {
     const data = analyze()
     const src = `${root}src/`
+    const sliceFiles = (locale: string, routes: boolean) =>
+      Object.fromEntries(
+        Object.entries(data.boundaries)
+          .filter(([file]) => file.startsWith(`${src}routes/`) === routes)
+          .map(([file, slice]) => [file.slice(src.length), files.get(`virtual:i18n/${locale}/${data.shared[slice]}`) ?? null]),
+      )
     return Object.fromEntries(
       Object.keys(data.locales).map((locale) => [
         locale,
-        {
-          table: files.get(`virtual:i18n/${locale}`),
-          routes: Object.fromEntries(
-            Object.entries(data.boundaries)
-              .filter(([file]) => file.startsWith(`${src}routes/`))
-              .map(([file, slice]) => [
-                file.slice(src.length),
-                files.get(`virtual:i18n/${locale}/${data.shared[slice]}`) ?? null,
-              ]),
-          ),
-        },
+        { table: files.get(`virtual:i18n/${locale}`), routes: sliceFiles(locale, true), boundaries: sliceFiles(locale, false) },
       ]),
     )
   }

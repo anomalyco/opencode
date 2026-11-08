@@ -2,7 +2,7 @@
 
 Design-system rules for the opencode.ai site (`services/site`), compiled from David's reviews and decisions. Read them before you change UI or copy. Every component they mention is live at [/dev/components](/dev/components) on the dev server.
 
-Version 2026-11-05. Last changed 2026-11-05, OpenTUI Mono as the site's mono font, disabled splits share one line at the join, focus rings drawn inside adjacent and split buttons, and split buttons shown only as a pair.
+Version 2026-11-06. Last changed 2026-11-06, menus open on the side with room (`placeMenu`) and nothing moves the scroll position on load.
 
 To add a rule, add one line under its group. Mark a rule that is still being decided with _(provisional)_.
 
@@ -25,7 +25,7 @@ To add a rule, add one line under its group. Mark a rule that is still being dec
 - Use OpenTUI Mono (`--font-mono`), Anomaly's own font, for nav, labels, titles and code, and Inter (`--font-sans`) for body and reading text. → [Fonts](/dev/components#fonts)
 - Serve only fonts we own or that are openly licensed (OpenTUI Mono, the OpenCode font, Inter), never a commercial face. `test/fonts.test.ts` enforces it.
 - Step text once, at 960px. Only page titles (`--fs-h1`) and display titles are fluid. → [Type scale](/dev/components#type-scale)
-- Set inputs with `--fs-input`, 16px on touch, so iOS doesn't zoom. → [Signup form](/dev/components#signup)
+- Set inputs with `--fs-input`, 16px on touch, so iOS doesn't zoom.
 - Give section titles `--title-size` with the `--title-stroke` faux medium; the current nav item gets the same stroke.
 - Keep reading text within `--measure` (about 70 characters a line).
 - Let hero and product leads run as two long lines, with no max-width cap. Why — the cap was tried and removed by David.
@@ -54,6 +54,7 @@ To add a rule, add one line under its group. Mark a rule that is still being dec
 - Make icon tiles as tall as their text block. → [Product list](/dev/components#product-list)
 - Make action buttons in product headers equal width and right-aligned.
 - Keep product and companion tile sizes as they are until the size is decided. _(provisional)_ → [Companion shelf](/dev/components#companions)
+- Never move the scroll position on load. The browser restores it on reload and on return from another page, and the router on in-site back and forward (`app.tsx`).
 - Cause no layout shift (CLS 0). Reserve the space, and use skeletons where content streams in.
 - Decide when a layout stacks by the width of its own container (container queries) where the sidebar or the Contents rail narrows the column, not by the screen width alone. _(provisional)_
 
@@ -70,12 +71,15 @@ To add a rule, add one line under its group. Mark a rule that is still being dec
 - End every `target="_blank"` link with `<NewTab />` for screen readers. → [Icons](/dev/components#icons)
 - Use `component/faq.tsx` for every accordion. → [Accordion](/dev/components#faq)
 - Every dropdown uses the shared Dropdown component; no one-off menus. On the site that is `SiteMenu` (`component/site/site-menu.tsx`), which brings the shared menu look, keyboard support and the phone sheet.
+- Open every dropdown with `placeMenu` (`component/site/place-menu.ts`; SiteMenu already does). It opens below the trigger, above only when below has no room, and in the top layer, so a scrolling box such as the carousel never cuts it off.
+- A dropdown that opens from a button with an icon starts at the button's inline-start edge, and its row icons and labels sit exactly under the button's icon and label (within 0.5px; mirrored in RTL). Set the rows' inset and gap from the button's own tokens (`--icon-inset`, `--icon-gap` in `site.css`), never per menu. Phone bottom sheets are not anchored to the button, so they don't follow this. → [Split button](/dev/components#split-button)
 - Turn dropdowns into the shared bottom sheet (`sheet.tsx`) on touch phones. → [Bottom sheet](/dev/components#sheet)
 - Give long pages the Contents rail (`OnThisPage`) and its phone bar (`ContentsMenu`). → [Contents](/dev/components#contents)
 - Draw breadcrumbs with muted ancestors, `|` separators and the current page in ink. → [Breadcrumbs](/dev/components#breadcrumb)
 - Confirm copy actions in place ("Copied") through a live region; the site has no toasts. → [Copy buttons](/dev/components#copy-buttons)
 - On docs pages, the left nav's first item, the content's first item and the right rail's first item share one top line (text tops for the nav and the title, the box top for the search box).
 - A sidebar that scrolls under fixed chrome (the docs nav under the logo and lockup) fades out at its edges with a mask, only while items are under that edge; phones keep hard cuts on sticky bars.
+- Beside the sidebar, the OpenCode logo and the lockup beside it (DOCS) never move: fixed in the top-left corner at the same place on every page, at rest and scrolled. Whatever passes under them (a sidebar leaving with the article at the page's end) fades out under a strip of the page colour, shown only while something is under it. Phones keep their top bar.
 - No flat greys inside callouts or other tinted surfaces; grey layers blend with the surface (mix-blend-mode), except code and table bodies, which stay solid. → [Code inside callouts](/dev/docs-components#blend)
 - Code blocks and tables inside a tinted surface blend their header and borders with mix-blend-mode, so they take the surface's hue; code and table bodies stay solid, on the code body colour. → [Code inside callouts](/dev/docs-components#blend)
 - Docs code blocks copy with a text-only button in the header: "Copy" turns to "Copied" (or "Failed"), right-aligned in the width of the longest label so nothing moves. → [Code blocks](/dev/docs-components#code-blocks)

@@ -4,7 +4,7 @@
 // .output/public as its assets. cf's own build step can't detect this project, so it deploys prebuilt.
 //
 //   bun script/build.ts [--mode dev|production]
-import { cp, mkdir, rm } from "node:fs/promises"
+import { appendFile, cp, mkdir, rm } from "node:fs/promises"
 import path from "node:path"
 import {
   cleanBuildOutputDir,
@@ -15,6 +15,8 @@ import {
 } from "@cloudflare/build-output-utils"
 import { resolveAndParseConfig } from "@cloudflare/config"
 import { mediaFile } from "../src/lib/media"
+import { stageHeaders } from "../src/lib/noindex"
+import { retainAssets } from "./retain-assets"
 
 const root = path.resolve(import.meta.dir, "..")
 const modeIndex = process.argv.indexOf("--mode")
@@ -34,10 +36,11 @@ await requireSnapshot()
 await Bun.$`bun ./script/og.ts`.cwd(root).env(env)
 await Bun.$`bun ./textjs/script/build.ts`.cwd(root).env(env)
 await Bun.$`vite build`.cwd(root).env(env)
-// The V2 docs at /v2: prerendered pages, Markdown twins and search (src/docs/script/build.ts).
-await Bun.$`bun ./src/docs/script/build.ts --mode ${mode}`.cwd(root).env(env)
+// The V2 docs at /docs: prerendered pages, Markdown twins and search (src/docs/script/build.ts).
+await Bun.$`bun ./src/docs/script/build.ts`.cwd(root).env(env)
 await Bun.$`bun ./script/check-server-bundle.ts`.cwd(root).env(env)
 await Bun.$`bun ./script/check-client-bundle.ts`.cwd(root).env(env)
+await Bun.$`bun ./script/check-css-output.ts`.cwd(root).env(env)
 
 // @cloudflare/config's file loader refuses Bun; it resolves an imported config the same way.
 const parsed = await resolveAndParseConfig((await import("../cloudflare.config")).default, { isPreview: false, mode })
@@ -61,11 +64,16 @@ await cp(path.join(root, ".output", "public"), assets, {
 })
 const shipped = await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: assets, dot: true }))
 // Every opencode.json and V1 TUI config names these as its $schema; /openapi.json is the protocol's.
-// The V2 config names /v2/cli.json, and the docs link /v2/openapi.json.
-const fixed = ["config.json", "tui.json", "openapi.json", "v2/cli.json", "v2/openapi.json"].filter(
+// The V2 config names /v2/cli.json, and the docs link /docs/openapi.json.
+const fixed = ["config.json", "tui.json", "openapi.json", "v2/cli.json", "docs/openapi.json"].filter(
   (file) => !shipped.includes(file),
 )
 if (fixed.length) throw new Error(`fixed-URL files missing from Worker assets: ${fixed.join(", ")}`)
+// The stage's headers for the assets the Worker never sees; its own responses get them from src/lib/noindex.ts.
+const headers = Object.entries(stageHeaders(mode)).map(([name, value]) => `  ${name}: ${value}\n`)
+if (headers.length) await appendFile(path.join(assets, "_headers"), `\n/*\n${headers.join("")}`)
+// Open pages from earlier builds keep loading their code after this deploy (script/retain-assets.ts).
+await retainAssets(assets, mode === "dev" ? "https://dev.opencode.ai" : "https://opencode.ai")
 await writeAssets({ root, sourceDirectory: assets })
 
 const bundle = getWorkerBundleDir(root)

@@ -35,7 +35,7 @@ export const legalSummaries: Record<string, LegalNode[][]> = {
     ],
     ["You keep ownership of your Input and you own the Output. ", ["a", { href: "#your-ip" }, "Your IP"]],
     [
-      "We use Content to provide the Services, comply with the law, enforce our terms and keep the Services safe. On an unpaid account, we may also use it to develop and improve the Services. ",
+      "We use Content to provide the Services, comply with the law, enforce our terms and keep the Services safe. On an unpaid account, we may also use it to develop and improve the Services. We never use Content obtained or derived from a Connected Service for that. ",
       ["a", { href: "#your-ip" }, "Your IP"],
     ],
     [

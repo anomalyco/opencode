@@ -2,6 +2,7 @@ import { getDirectory, getFilename } from "@opencode/util/path"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Dialog, DialogBody } from "@opencode/ui/dialog"
 import { Keybind } from "@opencode/ui/keybind"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { SearchHighlight, SearchList, type SearchListRow } from "@opencode/ui/search-list"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -252,9 +253,21 @@ function PaletteSessionRow(props: {
         fallback={
           <Show when={props.item.updated}>
             {(updated) => (
-              <span class="command-palette-meta">
-                {getRelativeTime(new Date(updated()).toISOString(), props.language.t)}
-              </span>
+              <Tooltip
+                class="shrink-0"
+                placement="top"
+                value={new Intl.DateTimeFormat(props.language.intl(), {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                }).format(updated())}
+              >
+                <span class="command-palette-meta">
+                  {getRelativeTime(new Date(updated()).toISOString(), props.language.t, props.language.intl())}
+                </span>
+              </Tooltip>
             )}
           </Show>
         }

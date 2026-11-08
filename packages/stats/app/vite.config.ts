@@ -3,6 +3,7 @@ import path from "node:path"
 import { solidStart } from "@solidjs/start/config"
 import { nitro } from "nitro/vite"
 import { defineConfig, type PluginOption } from "vite"
+import { stageHeaders } from "./src/lib/noindex"
 
 export default defineConfig({
   base: "/data/",
@@ -25,9 +26,12 @@ export default defineConfig({
         order: "post",
         async handler() {
           const source = path.join(import.meta.dirname, ".output/public/data/_headers")
+          // The stage's headers for the assets the Worker never sees (src/lib/noindex.ts).
+          const stage = Object.entries(stageHeaders()).map(([name, value]) => `  ${name}: ${value}\n`)
           await writeFile(
             path.join(import.meta.dirname, ".output/public/_headers"),
-            (await readFile(source, "utf8")).replace(/^\//gm, "/data/"),
+            (await readFile(source, "utf8")).replace(/^\//gm, "/data/") +
+              (stage.length ? `\n/data/*\n${stage.join("")}` : ""),
           )
           await rm(source)
         },
@@ -38,7 +42,14 @@ export default defineConfig({
     allowedHosts: true,
   },
   build: {
+    rollupOptions: {
+      external: ["cloudflare:workers"],
+    },
     minify: "esbuild",
     cssMinify: true,
+    // Browsers with native light-dark(), as services/site targets. For older targets the minifier lowers light-dark()
+    // to --lightningcss-light/--lightningcss-dark variables set only where a rule declares color-scheme, and the shared
+    // nav menus (packages/nav-menus), which set theirs inline, lost every colour.
+    cssTarget: ["chrome123", "edge123", "firefox120", "safari17.5"],
   },
 })

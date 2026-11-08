@@ -1,6 +1,6 @@
 # Benchmarks
 
-The app's benchmarks run with [strobe](https://github.com/Hona/strobe). Each compares two builds in pairs of fresh
+The app's benchmarks run with [strobe](https://github.com/anomalyco/strobe). Each compares two builds in pairs of fresh
 launches (A B, B A, …) at normal speed, decides one primary metric per case with an interval, and refuses setups it
 cannot defend (a hidden window, a software GPU, a throttled CPU, a busy machine). The web cases run the production
 build on the e2e mock server, so they need no backend.
@@ -140,12 +140,17 @@ strobe bench packages/app/perf/timeline.bench.ts --filter "scroll*" --bisect <go
 
 ## Write a case
 
-- A file's `prepare` runs in Playwright before the first page load and mocks the server under the variant's own
-  origin (`new URL(url).origin`); `ctx.case` lets one file give each case its own fixture. What it returns is
-  `prepared` in `setup`, `run` and `reset`.
-- Mock on `cached(playwright.page, mock)` (`fixtures/mock.ts`), never on `playwright.page` itself: Playwright's routing
-  turns the browser's HTTP cache off for the whole page, so every reload would refetch every script. `cached` answers
-  the same routes through strobe's `mock`, which pauses only the API, and the e2e mock server runs on it unchanged.
+- A file's `prepare` runs before the first page load and mocks the server under the variant's own origin
+  (`new URL(ctx.url).origin`); `ctx.case` lets one file give each case its own fixture. What it returns is `prepared`
+  in `setup`, `run` and `reset`.
+- Mock on `cached(ctx)` (`fixtures/mock.ts`), never on `ctx.playwright.page` itself: Playwright's routing turns the
+  browser's HTTP cache off for the whole page, so every reload would refetch every script. `cached` answers the same
+  routes through strobe's `mock`, which pauses only the API, and the e2e mock server runs on it unchanged. Don't read
+  `ctx.playwright` in a bench file: it exists only in Chromium. Use `ctx.addInitScript` for init scripts, and seed
+  state in `setup` with `page.eval`.
+- Firefox: `strobe bench <file> --engine firefox --headless --check --primary cpu.work`. `main.*` metrics are
+  Chromium's, so those cases are refused without `--primary cpu.work`. In Firefox the mock server publishes no events
+  after a mutation (it has no Playwright page to push them through); `eventSource` still delivers.
 - `run` is measured; `reset` puts the state back between runs and is not. A case that should pay a first visit every
   run reloads in `reset`; park the pointer with `page.hover(...)` afterwards, because the app prefetches a tab's
   transcript when the pointer rests on it, and the pointer stays where the last click left it.

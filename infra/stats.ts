@@ -1,4 +1,6 @@
-import { EMAILOCTOPUS_API_KEY } from "./app"
+import { execFileSync } from "node:child_process"
+import { readdirSync } from "node:fs"
+import path from "node:path"
 import { LOCALES } from "../packages/stats/app/src/lib/language"
 import { domain, zoneID } from "./stage"
 
@@ -64,20 +66,70 @@ new sst.x.DevCommand("StatsStudio", {
 ////////////////
 
 export const publicUrl = `https://${domain}/data`
+const accountId = "15d29c8639fd3733b1b5486a2acfd968"
+
+// The private Worker that renders the pages' Open Graph images (packages/stats/app/src/og/worker.ts). Its Wasm and font
+// modules can't ship in the Stats Worker, which SST uploads as one file, so it is its own Worker with no URL or route,
+// reached only through the Stats Worker's OG_WORKER Service Binding. It is built here, before any resource reads its
+// files. `sst dev` deploys no Worker.
+const ogWorker = $dev ? undefined : createOgWorker()
 
 const app = new sst.cloudflare.x.SolidStart("Stats", {
   path: "packages/stats/app",
   buildCommand: "bun run build",
-  link: [database, EMAILOCTOPUS_API_KEY],
+  link: [database],
   environment: {
     PUBLIC_URL: publicUrl,
   },
   transform: {
-    server: {
-      url: false,
+    server: (args) => {
+      args.url = false
+      if (!ogWorker) return
+      args.transform = {
+        worker: (worker) => {
+          // The deployment's script name, so the binding waits for the OG Worker to have a live version.
+          worker.bindings = $util
+            .all([$output(worker.bindings ?? []), ogWorker.scriptName])
+            .apply(([bindings, service]) => [...bindings, { type: "service", name: "OG_WORKER", service }])
+        },
+      }
     },
   },
 })
+
+function createOgWorker() {
+  const root = path.join($cli.paths.root, "packages/stats/app")
+  execFileSync("bun", ["run", "build:og"], { cwd: root, stdio: "inherit" })
+  const dir = path.join(root, ".og-worker")
+  const types: Record<string, string> = {
+    ".mjs": "application/javascript+module",
+    ".wasm": "application/wasm",
+    ".bin": "application/octet-stream",
+  }
+  const worker = new cloudflare.Worker("StatsOg", {
+    accountId,
+    name: `${$app.name}-${$app.stage}-stats-og`,
+    subdomain: { enabled: false, previewsEnabled: false },
+    observability: { enabled: true },
+  })
+  const version = new cloudflare.WorkerVersion("StatsOgVersion", {
+    accountId,
+    workerId: worker.id,
+    mainModule: "index.mjs",
+    compatibilityDate: "2026-07-01",
+    modules: readdirSync(dir).map((name) => ({
+      name,
+      contentFile: path.join(dir, name),
+      contentType: types[path.extname(name)],
+    })),
+  })
+  return new cloudflare.WorkersDeployment("StatsOgDeployment", {
+    accountId,
+    scriptName: worker.name,
+    strategy: "percentage",
+    versions: [{ percentage: 100, versionId: version.id }],
+  })
+}
 
 // The site serves itself under /data and /<locale>/data, and these routes are its only way in: it has no custom domain
 // or workers.dev URL. An exact `/data` pattern misses `/data?query`, so each pattern is a `/data*` prefix. Route patterns
@@ -110,7 +162,7 @@ const statsHiddenModels = new sst.Secret("StatsHiddenModels", "")
 const r2SqlAuthToken = new sst.Secret("R2SqlAuthToken")
 const r2Sql = new sst.Linkable("R2Sql", {
   properties: {
-    accountId: "15d29c8639fd3733b1b5486a2acfd968",
+    accountId,
     bucket: `platform-${$app.stage}-lake`,
     namespace: "inference",
     table: "generation",

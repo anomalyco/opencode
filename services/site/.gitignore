@@ -37,7 +37,7 @@ Thumbs.db
 # packages/cli/script/schema.ts)
 /public/openapi.json
 /public/config.json
-/public/v2/openapi.json
+/public/docs/openapi.json
 /public/v2/cli.json
 
 # Written by script/github-snapshot.ts (bun run build)

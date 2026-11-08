@@ -8,12 +8,11 @@ import { ShareMeta } from "~/component/share-meta"
 import { ogImage } from "~/lib/og"
 import { breadcrumbData, JsonLd } from "~/component/structured-data"
 import { useI18n } from "~/context/i18n"
+import type { MarkdownContext } from "~/lib/markdown"
 import { useLanguage } from "~/context/language"
 import {
   legalDate,
-  legalHubMarkdown,
   legalMarkdown,
-  legalPages,
   legalTextChanged,
   legalVersions,
   type LegalDocumentContent,
@@ -508,6 +507,7 @@ function CopyMarkdown(props: { path: string }) {
         data-variant="neutral"
         data-slot="copy-markdown"
         data-state={state()}
+        data-funnel-copy="page-markdown"
         onPointerEnter={() => void load().catch(() => undefined)}
         onFocus={() => void load().catch(() => undefined)}
         onClick={() => void copy()}
@@ -687,7 +687,7 @@ function LegalHistory(props: { document: LegalDocumentContent; onBack?: () => vo
         </For>
       </ol>
       <p>
-        Follow changes to every legal document in a feed reader: <a href={feed}>RSS feed</a>.
+        Follow changes to every legal document with the <a href={feed}>RSS feed</a>.
       </p>
     </section>
   )
@@ -768,10 +768,13 @@ const legalGroups = [
  * picks how the documents are listed and Settings › Legal row hover how a row answers the pointer;
  * each document is a single link.
  */
-export function LegalHub() {
+export function LegalHub(props: {
+  documents: LegalDocumentContent[]
+  markdown: (context: MarkdownContext) => string
+}) {
   const i18n = useI18n()
   const language = useLanguage()
-  const markdown = useMarkdown("/legal", legalHubMarkdown)
+  const markdown = useMarkdown("/legal", props.markdown)
   const title = "OpenCode | Privacy policy, terms and legal updates"
   const description =
     "Every OpenCode legal document in one place, including the Privacy Policy and the Terms of Use, with their dates, version history and a feed of changes."
@@ -781,10 +784,10 @@ export function LegalHub() {
   const groups = legalGroups
     .map((group) => ({
       title: group.title,
-      documents: legalPages.filter((document) => group.paths.includes(document.path)),
+      documents: props.documents.filter((document) => group.paths.includes(document.path)),
     }))
     .filter((group) => group.documents.length > 0)
-  const grouped = () => style() === "grouped" && groups.length > 1 && legalPages.length > 3
+  const grouped = () => style() === "grouped" && groups.length > 1 && props.documents.length > 3
   const Item = (props: { document: LegalDocumentContent }) => {
     const changed = legalTextChanged(props.document)
     return (
@@ -849,7 +852,7 @@ export function LegalHub() {
       </Show>
       {/* The list is the page: no section titles. In "grouped" the group names are its only headings. */}
       <div data-component="legal-hub" lang="en" dir="ltr">
-        <Show when={grouped()} fallback={<List documents={legalPages} />}>
+        <Show when={grouped()} fallback={<List documents={props.documents} />}>
           <For each={groups}>
             {(group) => (
               <section data-slot="group" aria-labelledby={slug(group.title)}>

@@ -18,3 +18,8 @@ const modules = import.meta.glob<DocsModule>("./content/**/*.mdx")
 export const docsContent = new Map(
   Object.entries(modules).map(([file, load]) => [docsSlug(file.slice("./content/".length)), load]),
 )
+
+/** Every content page's source file under src/docs, by slug, for its "Edit this page" link. */
+export const docsFiles = new Map(
+  Object.keys(modules).map((file) => [docsSlug(file.slice("./content/".length)), file.slice(2)]),
+)
