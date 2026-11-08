@@ -830,14 +830,14 @@ describe("ReadTool", () => {
           yield* write(path.join(tmp.path, file))
 
         expect(yield* readMissing(tmp.path, "typo/conifg.ts")).toBe(
-          "File not found: typo/conifg.ts\n\nDid you mean one of these?\ntypo/config.ts",
+          `File not found: typo/conifg.ts\n\nDid you mean one of these?\n${path.join("typo", "config.ts")}`,
         )
         expect(yield* readMissing(tmp.path, "ext/config.yml")).toBe(
-          "File not found: ext/config.yml\n\nDid you mean one of these?\next/config.yaml",
+          `File not found: ext/config.yml\n\nDid you mean one of these?\n${path.join("ext", "config.yaml")}`,
         )
         expect(yield* readMissing(tmp.path, "short/ui.ts")).toBe("File not found: short/ui.ts")
         // Case-insensitive filesystems, such as macOS by default, simply read the file.
-        expect([undefined, "File not found: case/readme.md\n\nDid you mean one of these?\ncase/README.md"]).toContain(
+        expect([undefined, `File not found: case/readme.md\n\nDid you mean one of these?\n${path.join("case", "README.md")}`]).toContain(
           yield* readMissing(tmp.path, "case/readme.md"),
         )
       }),
