@@ -436,7 +436,14 @@ export function SearchPalette(props: SiteSearchProps & { openOnMount?: SearchVia
         >
           <div data-slot="field">
             <svg data-slot="icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.25" />
+              <circle
+                cx="7.43"
+                cy="7.43"
+                r="5.06"
+                stroke="currentColor"
+                stroke-width="1.5"
+                vector-effect="non-scaling-stroke"
+              />
               <path
                 d="M11 11L13.33 13.33"
                 stroke="currentColor"

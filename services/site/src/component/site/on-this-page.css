@@ -153,6 +153,14 @@
   --contents-top: calc(var(--topbar-height) + env(safe-area-inset-top, 0px) + var(--notice-height, 3rem));
 }
 
+/* While a phone dropdown under a sticky bar is open (menu-hold.ts), only its list scrolls: the page,
+   and with it the bars, hold still. Closing it leaves the page where it was. */
+@media (max-width: 60rem) {
+  html[data-menu-hold] {
+    overflow: hidden;
+  }
+}
+
 [data-site] [data-component="contents-menu"] {
   display: none;
   margin-block: 1.5rem 2.5rem;
@@ -214,6 +222,8 @@
     inset-inline-end: 0;
     display: flex;
     flex-direction: column;
+    /* Phones: menu-hold.ts sets the height from under the bar to the bottom of the visual viewport
+       when the list opens; this is the fallback. */
     max-height: calc(100dvh - var(--contents-top) - var(--contents-height) - 1rem);
     padding-bottom: 0.75rem;
     overflow-y: auto;
@@ -284,8 +294,8 @@
     }
 
     /* The label and the items start at the page content's edge, at body size; the items are 44px+
-       rows (17px Inter at 1.4 plus 11px above and below). The current item's pipe sits in the page's
-       left margin, 12px before the text; the open list spans the margins for that. */
+       rows (17px Inter at 1.4 plus 11px above and below). The current item's pipe sits on the screen's
+       edge; the open list spans the margins for that. */
     summary {
       font-size: var(--body-size);
     }
@@ -306,8 +316,11 @@
       padding-inline-start: 0;
       font-size: var(--body-size);
 
+      /* The current row's bar is on the screen's edge and as tall as the whole row. */
       &::before {
-        inset-inline-start: -12px;
+        inset-inline-start: calc(-1 * var(--edge));
+        top: 0;
+        height: 100%;
       }
     }
 

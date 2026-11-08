@@ -208,6 +208,13 @@
         }
       }
 
+      /* The marker's hyphen (1.5ch in: "[" and half its cell) sits on the logo mark's centre, 12px in
+         from the content edge (the 20px mark starts 2px in); the label follows. The open list moves
+         with it, so its markers stay under the row's. */
+      :is([data-slot="current"], [data-slot="section-body"] > [data-component="docs-nav"]) {
+        margin-inline-start: calc(12px - 1.5ch);
+      }
+
       [data-slot="current"] {
         display: flex;
         align-items: center;
@@ -273,6 +280,12 @@
       mask-image: linear-gradient(to bottom, transparent, black var(--fade) calc(100% - var(--fade)), transparent);
     }
   }
+}
+
+/* The line above Previous / Next is a divider like the docs' others (tables, code frames, the bars),
+   not ink (Pagination 4 in docs-variants.css draws it in --text-strong; doubled to outrank it). */
+[data-site][data-page="docs"] [data-component="docs-article"] [data-component="pagination"][data-component] {
+  border-top-color: var(--border);
 }
 
 /* ───────────── Right rail: search over Contents ───────────── */
