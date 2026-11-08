@@ -283,6 +283,18 @@ describe("CodeModeInstructions.update", () => {
     expect(update(before, after)).toContain(`Changed:\n  - ${signature} // Tool`)
   })
 
+  test("shows every new tool, without pointing to search, while the catalog lists every tool", () => {
+    const signature = (name: string) =>
+      `tools.wide.${name}({\n  /** ${"A long parameter description. ".repeat(4)} */\n  q: string,\n}): Promise<string>`
+    const wide = Array.from({ length: 30 }, (_, index) =>
+      entry(`wide.tool${index}`, `Tool ${index}`, signature(`tool${index}`)),
+    )
+    const text = update([echo], [echo, ...wide])!
+    expect(CodeModeCatalog.cost(text)).toBeGreaterThan(1_000)
+    expect(text).toContain("- wide (30 tools)\n")
+    expect(text).not.toContain("search")
+  })
+
   test("introduces search once, when the catalog stops listing every tool", () => {
     const wide = Array.from({ length: 200 }, (_, index) => entry(`bulk.tool${index}`, `Tool ${index}`))
     const text = update([echo], [echo, ...wide])

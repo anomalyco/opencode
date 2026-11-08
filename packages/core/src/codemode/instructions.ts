@@ -77,7 +77,8 @@ ${render(current)}`
     ]
   })
   const blocks = added.length + kept.filter((namespace) => namespace.added.length > 0).length
-  const share = blocks === 0 ? 0 : UPDATE_BUDGET / blocks
+  // A catalog that lists every tool already fits its own budget, and has not introduced `search`, so nothing is cut.
+  const share = complete(current) ? Infinity : blocks === 0 ? 0 : UPDATE_BUDGET / blocks
   const parts = ["The Code Mode tool catalog has changed."]
   if (added.length > 0) {
     parts.push(
