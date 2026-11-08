@@ -11,11 +11,26 @@ import {
   type SessionNotification,
   type Stream,
 } from "@agentclientprotocol/sdk"
-import { Context, Deferred, Effect } from "effect"
+import { Context, Deferred, Duration, Effect, Option } from "effect"
 
 export const Responded = Context.Reference<Effect.Effect<void>>("@opencode/cli/acp/Connection/Responded", {
   defaultValue: () => Effect.void,
 })
+
+/** Long enough for a slow tunnel, short enough that a stall is reported instead of hidden. */
+export const ConnectedTimeout = Context.Reference<Duration.Input>("@opencode/cli/acp/Connection/ConnectedTimeout", {
+  defaultValue: () => Duration.seconds(10),
+})
+
+/**
+ * Waits for the event stream to open and resolves false when it never did. Callers that only rely
+ * on event ordering can continue; a caller that needs events reports the failure.
+ */
+export const awaitConnected = (connected: Deferred.Deferred<void>) =>
+  Effect.gen(function* () {
+    const timeout = yield* ConnectedTimeout
+    return Option.isSome(yield* Deferred.await(connected).pipe(Effect.timeoutOption(timeout)))
+  })
 
 export interface Interface {
   readonly sessionUpdate: (params: SessionNotification) => Effect.Effect<void, RequestError>

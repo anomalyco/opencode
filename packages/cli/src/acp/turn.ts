@@ -21,7 +21,7 @@ import { findModel, type ACPCatalog } from "./catalog"
 import { ACPChild } from "./child"
 import { ACPClient } from "./client"
 import { currentModel } from "./config-option"
-import type { ACPConnection } from "./connection"
+import { ACPConnection } from "./connection"
 import { ACPElicitation } from "./elicitation"
 import { ACPError } from "./error"
 import { ACPPermission } from "./permission"
@@ -281,7 +281,12 @@ export const make = Effect.fnUntraced(function* (input: {
   const execute = (attached: Attached, prompt: ACPPrompt.Prepared, turn: Turn) =>
     Effect.gen(function* () {
       // The feed opens with `server.connected`, so every event the submission causes comes after it.
-      const connected = yield* take(turn.subscription)
+      // A buffered stream never delivers it, and submitting anyway would wait for events forever.
+      const timeout = yield* ACPConnection.ConnectedTimeout
+      const opened = yield* take(turn.subscription).pipe(Effect.timeoutOption(timeout))
+      if (Option.isNone(opened))
+        return yield* new ACPError.EventStreamUnavailableError({ seconds: Duration.toSeconds(timeout) })
+      const connected = opened.value
       if (connected.type !== "server.connected")
         return yield* Effect.die(new Error(`expected server.connected, got ${connected.type}`))
       const events = yield* consume(turn).pipe(Effect.forkScoped)

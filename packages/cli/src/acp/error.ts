@@ -55,6 +55,17 @@ export class ServerUnavailableError extends Schema.TaggedError<ServerUnavailable
   {},
 ) {}
 
+// A proxy between the CLI and the server can hold the event stream open without forwarding it. The
+// connection then looks alive forever, so waiting for the opening event has a deadline.
+export class EventStreamUnavailableError extends Schema.TaggedError<EventStreamUnavailableError>()(
+  "ACPEventStreamUnavailableError",
+  { seconds: Schema.Number },
+) {
+  override get message() {
+    return `The OpenCode server is reachable but sent no events within ${this.seconds}s. Something between this client and the server, such as a proxy, tunnel or VPN, is probably buffering the event stream.`
+  }
+}
+
 export class CatalogNotReadyError extends Schema.TaggedError<CatalogNotReadyError>()("ACPCatalogNotReadyError", {
   reason: Schema.Literals(["models", "agents"]),
 }) {
@@ -82,6 +93,7 @@ export type Error =
   | InvalidRequestError
   | ServiceFailureError
   | ServerUnavailableError
+  | EventStreamUnavailableError
 
 export type Failure = Error | RequestError | CatalogError
 
@@ -126,6 +138,8 @@ export function toRequestError(error: Error): RequestError {
       )
     case "ACPServerUnavailableError":
       return RequestError.internalError({ errorName: "ServerUnavailable" }, "OpenCode server is unavailable")
+    case "ACPEventStreamUnavailableError":
+      return RequestError.internalError({ errorName: "EventStreamUnavailable" }, error.message)
   }
   const exhaustive: never = error
   return exhaustive

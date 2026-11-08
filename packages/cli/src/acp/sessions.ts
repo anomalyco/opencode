@@ -122,7 +122,8 @@ export const make = Effect.fnUntraced(function* (input: {
 
   return {
     attach: Effect.fn("cli.acp.sessions.attach")(function* (session, cwd, mcpServers) {
-      yield* Deferred.await(connected)
+      // Attaching no longer blocks on a stream that never opens; the turn reports that failure.
+      yield* ACPConnection.awaitConnected(connected)
       const current = yield* input.catalog.get(cwd)
       const entry: Entry = {
         attached: {
