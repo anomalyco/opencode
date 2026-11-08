@@ -109,8 +109,10 @@ model requests, and the TLS handshake only sends it to servers that ask for one.
 }
 ```
 
-- `cert` and `key` are paths to PEM files: absolute, `~/`, or relative to the configuration file. They are read on each
-  request, so a rotated certificate is used without a restart.
+- `cert` and `key` are paths to PEM files: absolute, `~/`, or relative to the configuration file (or to the project for
+  config without a file, such as `OPENCODE_CONFIG_CONTENT`). They are read on each request, so a rotated certificate is
+  used without a restart.
+- Leave out `key` when `cert` points to one PEM file holding both the certificate and the key.
 - `passphrase` is only needed for an encrypted key. Use `{env:...}` or `{file:...}` to keep it out of the file.
 - Model requests with a client certificate don't follow redirects, so the certificate isn't presented to another host.
 

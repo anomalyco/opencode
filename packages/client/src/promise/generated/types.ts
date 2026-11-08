@@ -2495,7 +2495,7 @@ export type ConfigEntry =
         plugins?: Array<string | { package: string; options?: { [x: string]: JsonValue } }>
         worktree?: ConfigWorktree
         warming?: boolean | { prompt?: string; interval?: "auto" | (string & {}); duration?: string }
-        network?: { client_certificate?: { cert: string; key: string; passphrase?: string } }
+        network?: { client_certificate?: { cert: string; key?: string; passphrase?: string } }
         providers?: {
           [x: string]: {
             canonical?: ProviderID

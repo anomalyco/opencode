@@ -7,8 +7,9 @@ export class ClientCertificate extends Schema.Class<ClientCertificate>("Config.N
   cert: Schema.String.annotate({
     description: "Path to the PEM client certificate: absolute, `~/`, or relative to this configuration file",
   }),
-  key: Schema.String.annotate({
-    description: "Path to the PEM private key: absolute, `~/`, or relative to this configuration file",
+  key: Schema.String.pipe(optional).annotate({
+    description:
+      "Path to the PEM private key: absolute, `~/`, or relative to this configuration file. Defaults to `cert`, for a file holding both",
   }),
   passphrase: Schema.String.pipe(optional).annotate({
     description: "Passphrase for an encrypted private key. Use `{env:...}` or `{file:...}` to keep it out of the file",

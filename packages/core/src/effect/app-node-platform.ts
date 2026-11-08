@@ -3,12 +3,13 @@ import { Document } from "@opencode/schema/config"
 import { Effect, Layer, Option } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientError } from "effect/http"
 import { Socket } from "effect/socket"
-import os from "os"
 import path from "path"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { httpClient } from "@opencode/util/effect/app-node-platform"
 import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
 import { Config } from "../config.js"
+import { Location } from "../location.js"
 import { WebSocketConstructor } from "./websocket-constructor.js"
 
 // Bun's fetch ends a request after five quiet minutes, before provider routes' own header and chunk timeouts.
@@ -29,6 +30,7 @@ const withClientCertificate = Layer.effect(
   HttpClient.HttpClient,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
+    const global = yield* Global.Service
     const client = yield* HttpClient.HttpClient
     return HttpClient.transform(client, (effect, request) =>
       Effect.gen(function* () {
@@ -41,13 +43,19 @@ const withClientCertificate = Layer.effect(
         )
         const certificate = source?.info.network?.client_certificate
         if (!source || !certificate) return yield* effect
+        // Config without a file (inline content, wellknown) resolves relative paths against the Location, like `{file:}`.
+        const directory = source.path
+          ? path.dirname(source.path)
+          : Option.match(yield* Effect.serviceOption(Location.Service), {
+              onNone: () => global.home,
+              onSome: (location) => location.directory,
+            })
         const resolve = (file: string) =>
-          file.startsWith("~/")
-            ? path.join(os.homedir(), file.slice(2))
-            : path.resolve(source.path ? path.dirname(source.path) : "", file)
+          file.startsWith("~/") ? path.join(global.home, file.slice(2)) : path.resolve(directory, file)
         const tls = yield* Effect.all({
           cert: fs.readFileString(resolve(certificate.cert)),
-          key: fs.readFileString(resolve(certificate.key)),
+          // A combined PEM file holds both the certificate and its key.
+          key: fs.readFileString(resolve(certificate.key ?? certificate.cert)),
         }).pipe(
           Effect.mapError(
             (error) =>
@@ -80,7 +88,7 @@ const withClientCertificate = Layer.effect(
 export const requestExecutor = makeGlobalNode({
   service: RequestExecutor.Service,
   layer: RequestExecutor.layer.pipe(Layer.provide(withoutBunTimeout), Layer.provide(withClientCertificate)),
-  deps: [httpClient, FSUtil.node],
+  deps: [httpClient, FSUtil.node, Global.node],
 })
 
 export const llmClient = makeGlobalNode({ service: LLMClient.Service, layer: LLMClient.layer, deps: [requestExecutor] })
