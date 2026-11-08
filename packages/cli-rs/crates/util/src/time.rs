@@ -124,9 +124,9 @@ impl DateTime {
         format!("{}/{}/{}", self.date.month, self.date.day, Year(self.date.year))
     }
 
-    /// `%-I:%M<space>%p`.
-    pub fn short_time(&self, space: &str) -> String {
-        format!("{}:{:02}{space}{}", self.hour12(), self.minute, self.meridiem())
+    /// `%-I:%M %p`.
+    pub fn short_time(&self) -> String {
+        format!("{}:{:02} {}", self.hour12(), self.minute, self.meridiem())
     }
 
     /// `%-m/%-d/%Y, %-I:%M:%S %p`.
@@ -197,23 +197,27 @@ impl Zone {
         (MIN_YEAR..=MAX_YEAR).contains(&year).then(|| DateTime::from_millis(ms + i64::from(self.offset(ms)) * 1000))
     }
 
-    /// The instant whose wall clock reads `date` and `seconds` past its midnight, as `chrono`'s
-    /// `from_local_datetime(..).earliest()` picks it: in an overlap the reading with the smaller offset, which is the
-    /// later instant; at the start of a gap the transition itself; inside a gap `None`.
-    pub fn instant(self, date: Date, seconds: i64) -> Option<i64> {
+    /// The instant whose wall clock reads `date` and `seconds` past its midnight, as ECMAScript's `UTC(t)` (and so
+    /// `new Date(y, m, d, h, min)`) picks it: in an overlap the earlier instant; in a gap the reading moved forward by
+    /// the gap, that is, taken at the offset before the transition.
+    pub fn instant(self, date: Date, seconds: i64) -> i64 {
         let wall = date.days() * 86_400 + seconds;
         let offset = match self {
-            Zone::Fixed(offset) => return Some((wall - i64::from(offset)) * 1000),
+            Zone::Fixed(offset) => return (wall - i64::from(offset)) * 1000,
             Zone::Local => |at| i64::from(local_offset(at)),
         };
-        // Each offset in use within a day of the reading is a candidate. It fits if the zone has it at the instant it
-        // names, or just before, when that instant is a transition.
-        (-4..=4)
+        // Each offset in use within a day of the reading is a candidate; it fits if the zone has it at the instant it
+        // names. None fits in a gap, where the offsets before and after it each name an instant on the other side.
+        let exact = (-4..=4)
             .map(|step| offset(wall + step * 21_600))
-            .map(|candidate| (candidate, wall - candidate))
-            .filter(|(candidate, at)| offset(*at) == *candidate || offset(at - 1) == *candidate)
-            .map(|(_, at)| at * 1000)
-            .max()
+            .map(|candidate| wall - candidate)
+            .filter(|at| offset(*at) == wall - at)
+            .min();
+        let gap = || {
+            let one = offset(wall - offset(wall));
+            wall - one.min(offset(wall - one))
+        };
+        exact.unwrap_or_else(gap) * 1000
     }
 }
 
@@ -385,7 +389,7 @@ fn local_offset(seconds: i64) -> i32 {
 mod tests {
     use super::*;
 
-    const ZONES: [&str; 4] = ["UTC", "America/New_York", "Australia/Lord_Howe", "Asia/Kathmandu"];
+    const ZONES: [&str; 5] = ["UTC", "America/New_York", "Australia/Lord_Howe", "Asia/Kathmandu", "America/Havana"];
     const FORMATS: [&str; 3] = ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S"];
 
     // Texts that `Date.parse` and these parsers (as the date-time form check combines them) disagree on.
@@ -433,7 +437,7 @@ mod tests {
         time.is_some_and(|time| (1000..=9999).contains(&time.date.year))
     }
 
-    // Runs in the zone `TZ` names; `matches_typescript_in_four_zones` runs it under each.
+    // Runs in the zone `TZ` names; `matches_typescript_in_every_zone` runs it under each.
     #[test]
     fn matches_typescript_in_this_zone() {
         let Some(zone) = std::env::var("TZ").ok().filter(|zone| ZONES.contains(&zone.as_str())) else {
@@ -455,8 +459,8 @@ mod tests {
                         time.locale_string(),
                         time.date_string(),
                         time.numeric_date(),
-                        time.short_time(" "),
-                        time.short_time(" "),
+                        time.short_time(),
+                        time.short_time(),
                         time.month_day(),
                         time.hour.to_string(),
                         time.minute.to_string(),
@@ -481,22 +485,10 @@ mod tests {
         }
     }
 
-    // TS's `new Date(y, m, d, h, min)` moves a reading in a gap forward by the gap and picks the earlier instant in an
-    // overlap; `instant` gives `None` in a gap and the later instant in an overlap, as `chrono` did. Midnights agree.
     fn wall(row: &[&str], zone: &str) {
         let [year, month, day, hour, minute] = [1, 2, 3, 4, 5].map(|at| number(row[at]));
         let date = Date::new(year as i32, month as u32, day as u32).unwrap();
-        let reads = |ms: i64| {
-            Zone::Local
-                .at(ms)
-                .is_some_and(|time| (time.date, time.hour, time.minute) == (date, hour as u32, minute as u32))
-        };
-        let theirs = number(row[6]);
-        match Zone::Local.instant(date, hour * 3600 + minute * 60) {
-            Some(mine) if mine == theirs => {}
-            None => assert!(!reads(theirs), "{zone} {row:?}: not in a gap"),
-            Some(mine) => assert!(mine > theirs && reads(mine) && reads(theirs), "{zone} {row:?}: {mine}"),
-        }
+        assert_eq!(Zone::Local.instant(date, hour * 3600 + minute * 60), number(row[6]), "{zone} {row:?}");
     }
 
     // `Date.parse` (`refusalReset`, the date-time form check) and `validDate` (the date form check).
@@ -519,7 +511,7 @@ mod tests {
     }
 
     #[test]
-    fn matches_typescript_in_four_zones() {
+    fn matches_typescript_in_every_zone() {
         let children = ZONES.map(|zone| {
             let child = std::process::Command::new(std::env::current_exe().unwrap())
                 .args(["--exact", "time::tests::matches_typescript_in_this_zone", "--test-threads=1"])

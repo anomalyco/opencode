@@ -110,7 +110,7 @@ impl Drop for Page {
 /// Reads this year's stats in the local time zone, without tool details.
 fn load(tui: &Tui, content: &View) {
     let year = Zone::Local.at(time::now_ms()).unwrap_or_default().date.year;
-    let from = Zone::Local.instant(Date { year, month: 1, day: 1 }, 0).unwrap_or(0);
+    let from = Zone::Local.instant(Date { year, month: 1, day: 1 }, 0);
     let input = ExperimentalSessionStatsInput {
         from: Some(from as f64),
         timezone: Some(time_zone()),

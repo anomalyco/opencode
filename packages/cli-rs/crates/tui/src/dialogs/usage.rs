@@ -137,7 +137,7 @@ fn format_reset_at(at: f64, now: i64) -> String {
     let Some(date) = Zone::Local.at(at as i64) else {
         return "Invalid Date".into();
     };
-    let time = date.short_time(" ");
+    let time = date.short_time();
     if Zone::Local.at(now).is_some_and(|now| now.date == date.date) {
         return format!("{time} today");
     }
@@ -389,7 +389,7 @@ mod tests {
     #[test]
     fn resets_name_today_or_the_day() {
         let local = |hour: i64, minute: i64, day| {
-            Zone::Local.instant(time::Date { year: 2026, month: 11, day }, hour * 3600 + minute * 60).unwrap()
+            Zone::Local.instant(time::Date { year: 2026, month: 11, day }, hour * 3600 + minute * 60)
         };
         let now = local(9, 0, 4);
         let at = |hour, minute, day| local(hour, minute, day) as f64;
