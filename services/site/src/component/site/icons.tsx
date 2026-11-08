@@ -125,8 +125,21 @@ export function ChevronRight() {
 export function SearchIcon() {
   return (
     <svg data-slot="search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <circle cx="7" cy="7" r="4.75" stroke="currentColor" stroke-width="1.5" />
-      <path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" />
+      <circle
+        cx="7.58"
+        cy="7.58"
+        r="5.06"
+        stroke="currentColor"
+        stroke-width="1.5"
+        vector-effect="non-scaling-stroke"
+      />
+      <path
+        d="M11.15 11.15L13.48 13.48"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="square"
+        vector-effect="non-scaling-stroke"
+      />
     </svg>
   )
 }
