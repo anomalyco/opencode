@@ -31,7 +31,7 @@ describe("shell env", () => {
     expect(check("/bin/zsh")).toBe(false)
   })
 
-  test("loadShellEnv falls back to the login shell probe when the interactive probe times out", async () => {
+  test.skipIf(process.platform === "win32")("loadShellEnv falls back to the login shell probe when the interactive probe times out", async () => {
     const dir = mkdtempSync(join(tmpdir(), "shell-env-"))
     const script = join(dir, "slow-shell.sh")
     writeFileSync(script, "#!/bin/sh\nif [ \"$1\" = \"-il\" ]; then\n  sleep 6\nelse\n  env -0\nfi\n")
