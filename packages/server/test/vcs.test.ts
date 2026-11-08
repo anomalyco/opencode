@@ -22,7 +22,7 @@ it.live(
       )
       expect(before.status).toBe(200)
       const original = yield* Effect.promise(() => before.json())
-      const initialized = yield* Effect.promise(() => fetch(url, { method: "POST", headers: server.headers }))
+      const initialized = yield* init(url, server.headers)
       expect(initialized.status).toBe(204)
       expect(yield* Effect.promise(() => $`git -C ${tmp.path} rev-parse --is-inside-work-tree`.text())).toBe("true\n")
       url.pathname = "/api/location"
@@ -98,7 +98,7 @@ it.live(
       expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".git", "HEAD")).exists())).toBe(false)
       expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".hg", "requires")).exists())).toBe(false)
       url.searchParams.set("provider", "git")
-      const initialized = yield* Effect.promise(() => fetch(url, { method: "POST", headers: server.headers }))
+      const initialized = yield* init(url, server.headers)
       expect(initialized.status).toBe(204)
       expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".git", "HEAD")).exists())).toBe(true)
     }),
@@ -150,8 +150,12 @@ it.live("returns 501 when a registered VCS provider has no initializer", () =>
     const url = new URL("http://opencode.local/api/vcs/init")
     url.searchParams.set("location[directory]", tmp.path)
     url.searchParams.set("provider", "read-only")
-    const response = yield* Effect.promise(() => handler(new Request(url, { method: "POST" })))
-    expect(response.status).toBe(501)
+    // vcs.init doesn't wait for plugins, so retry until the plugin has registered its provider.
+    const response = yield* Effect.promise(() => handler(new Request(url, { method: "POST" }))).pipe(
+      Effect.filterOrFail((response) => response.status === 501),
+      Effect.retry(Schedule.spaced("10 millis")),
+      Effect.timeout("4 seconds"),
+    )
     expect(yield* Effect.promise(() => response.json())).toMatchObject({
       _tag: "VcsInitNotSupportedError",
       providerID: "read-only",
@@ -160,6 +164,14 @@ it.live("returns 501 when a registered VCS provider has no initializer", () =>
     expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".hg", "requires")).exists())).toBe(false)
   }),
 )
+
+// vcs.init doesn't wait for plugins, so retry while the built-in VCS provider is still registering.
+const init = (url: URL, headers: HeadersInit) =>
+  Effect.promise(() => fetch(url, { method: "POST", headers })).pipe(
+    Effect.filterOrFail((response) => response.status !== 400),
+    Effect.retry(Schedule.spaced("10 millis")),
+    Effect.timeout("4 seconds"),
+  )
 
 const describeHg = Bun.which("hg") ? describe : describe.skip
 
@@ -174,7 +186,7 @@ describeHg("Mercurial initialization", () => {
         const url = new URL("/api/vcs/init", server.base)
         url.searchParams.set("location[directory]", tmp.path)
         url.searchParams.set("provider", "hg")
-        const initialized = yield* Effect.promise(() => fetch(url, { method: "POST", headers: server.headers }))
+        const initialized = yield* init(url, server.headers)
         expect(initialized.status).toBe(204)
         expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".hg", "requires")).exists())).toBe(true)
         url.pathname = "/api/vcs"
