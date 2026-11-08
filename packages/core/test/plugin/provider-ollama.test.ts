@@ -328,6 +328,33 @@ describe("OllamaPlugin", () => {
       ),
     10_000,
   )
+
+  it.live("fills the catalog while the plugin activates, before the first refresh interval", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          fetch: async (request) => {
+            if (request.method === "GET") return Response.json({ models: [summary("qwen3:8b", "digest", "qwen3")] })
+            decodeShowRequest(await request.json())
+            return Response.json(show({ family: "qwen3", capabilities: ["completion", "tools"], context: 32_768 }))
+          },
+        }),
+      ),
+      ({ url }) =>
+        Effect.gen(function* () {
+          const modelState = yield* Model.Service
+          // A session resumed right after startup resolves its model before the interval fires, so
+          // activation itself has to leave the inventory in place.
+          yield* addPlugin(url.origin, "1 hour")
+          expect(yield* modelState.get(Provider.ID.make("ollama"), Model.ID.make("qwen3:8b"))).toMatchObject({
+            modelID: "qwen3:8b",
+            limit: { context: 32_768 },
+          })
+        }),
+      (server) => Effect.promise(() => server.stop(true)),
+    ),
+  )
 })
 
 function summary(model: string, digest: string, family = "llama") {
