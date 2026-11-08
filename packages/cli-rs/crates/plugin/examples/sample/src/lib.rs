@@ -1,11 +1,16 @@
 //! The sample native plugin: a command, a code-fence renderer, a slot claim, a route, and a storage key, plus a
-//! fence and a command that panic, so the loader's tests can show a panic is caught. The `v2` feature changes
+//! fence and a command that panic, so the loader's tests can show a panic is caught. A thread of its own counts
+//! ticks and wakes the host, so the slot updates itself. The `v2` feature changes
 //! what it draws, so a rebuild proves hot reload. Each variant is its own feature, so cargo keeps every build.
 
 use std::cell::Cell;
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::thread::JoinHandle;
+use std::time::Duration;
 
-use opencode_plugin_abi::{Command, Line, Setup, SlotKind, Span, ThemeMode, Toast, export_plugin};
+use opencode_plugin_abi::{Command, Line, Setup, SlotKind, Span, ThemeMode, Toast, Waker, export_plugin};
 
 const VERSION: &str = if cfg!(feature = "v2") { "v2" } else { "v1" };
 
@@ -64,9 +69,18 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         };
         Some(vec![vec![Span::new(format!("sample mode {mode}"))]])
     });
+    // Ticks every `tick_ms` (a second by default) on a host that offers a waker (ABI 1.3).
+    let tick = setup
+        .options()
+        .and_then(|options| options.split("\"tick_ms\":").nth(1))
+        .and_then(|rest| rest.chars().take_while(char::is_ascii_digit).collect::<String>().parse().ok())
+        .unwrap_or(1000);
+    let ticks = Arc::new(AtomicU64::new(0));
+    let ticker = host.waker().map(|waker| Ticker::start(waker, Duration::from_millis(tick), ticks.clone()));
     setup.slot(SlotKind::Append, "home.footer", move |_| {
-        let _ = &destroyed;
-        let text = format!("sample plugin {VERSION}: home.footer, {} hellos", hellos.get());
+        let _ = (&destroyed, &ticker);
+        let (hellos, ticks) = (hellos.get(), ticks.load(Ordering::Relaxed));
+        let text = format!("sample plugin {VERSION}: home.footer, {hellos} hellos, {ticks} ticks");
         vec![vec![Span::new(text).fg("text.muted")]]
     });
     setup.route("hello", move || -> Vec<Line> {
@@ -86,6 +100,41 @@ fn command(name: &str, title: &str, slash: Option<&str>) -> Command {
         slash: slash.map(str::to_owned),
         keybind: None,
         palette: true,
+    }
+}
+
+/// Counts ticks on its own thread and wakes the host after each. Dropping it, when the host destroys the instance,
+/// stops and joins the thread, so no wake comes after.
+struct Ticker {
+    stop: Arc<AtomicBool>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl Ticker {
+    fn start(waker: Waker, every: Duration, ticks: Arc<AtomicU64>) -> Self {
+        let stop = Arc::new(AtomicBool::new(false));
+        let stopped = stop.clone();
+        let thread = std::thread::spawn(move || {
+            loop {
+                std::thread::park_timeout(every);
+                if stopped.load(Ordering::Acquire) {
+                    return;
+                }
+                ticks.fetch_add(1, Ordering::Relaxed);
+                waker.wake();
+            }
+        });
+        Self { stop, thread: Some(thread) }
+    }
+}
+
+impl Drop for Ticker {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+        if let Some(thread) = self.thread.take() {
+            thread.thread().unpark();
+            let _ = thread.join();
+        }
     }
 }
 
