@@ -62,7 +62,7 @@ describe("CodeModeInstructions", () => {
       const removed = yield* readUpdate(CodeModeInstructions.make({ tools: [echo] }), { values: added.values })
       expect(removed.text).toBe(
         "The Code Mode tool catalog has changed.\n\n" +
-          "The `orders` tools are no longer available and must not be used.",
+          "The following tool namespaces are no longer available and must not be used: `orders`.",
       )
 
       expect(yield* readUpdate(CodeModeInstructions.make(), initialized)).toMatchObject({

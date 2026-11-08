@@ -37,9 +37,9 @@ export function render(catalog: CodeModeCatalog.Summary) {
 ${tools.join("\n")}`
 }
 
-// An update names the namespaces and tools that came or went and the signatures the model was shown that changed.
-// It leaves out shown tools shifting because other namespaces came or went, which changes nothing the model relies
-// on. New signatures share a fixed budget, and past it are counted.
+// An update names what changed for the model: namespaces and tools that came or went, and signatures it was shown
+// that changed, even if they are no longer shown. Shown tools shifting because other namespaces came or went is left
+// out. New signatures share a fixed budget while the catalog is partial, and the rest are counted.
 export function update(
   previous: CodeModeCatalog.Summary,
   current: CodeModeCatalog.Summary,
@@ -57,37 +57,35 @@ ${render(current)}`
     (before, after) => before.description !== after.description,
   )
   // A namespace whose description changed is restated as if new.
-  const added = [...namespaces.added, ...namespaces.changed.map((change) => change.current)]
-  const kept = current.namespaces.flatMap((namespace) => {
-    const before = previous.namespaces.find((item) => item.name === namespace.name)
-    if (!before || before.description !== namespace.description) return []
-    const known = new Set(before.tools)
-    const present = new Set(namespace.tools)
-    return [
-      {
-        name: namespace.name,
-        added: namespace.tools.filter((path) => !known.has(path)),
-        // Every signature the model was shown, whether or not it is still shown.
-        changed: before.entries.flatMap((entry) => {
-          const after = present.has(entry.path) ? lookup(entry.path) : undefined
-          return after === undefined || after.line === entry.line ? [] : [after]
-        }),
-        removed: before.tools.filter((path) => !present.has(path)),
-      },
-    ]
-  })
-  const blocks = added.length + kept.filter((namespace) => namespace.added.length > 0).length
-  // A catalog that lists every tool already fits its own budget, and has not introduced `search`, so nothing is cut.
-  const share = complete(current) ? Infinity : blocks === 0 ? 0 : UPDATE_BUDGET / blocks
+  const restated = [...namespaces.added, ...namespaces.changed.map((change) => change.current)]
+  const unchanged = new Set(
+    current.namespaces
+      .map((namespace) => namespace.name)
+      .filter((name) => !restated.some((item) => item.name === name)),
+  )
+  const kept = (path: string) => unchanged.has(path.split(".", 1)[0] ?? path)
+  const before = new Set(previous.namespaces.flatMap((namespace) => namespace.tools))
+  const after = new Set(current.namespaces.flatMap((namespace) => namespace.tools))
+  const added = [...after].filter((path) => kept(path) && !before.has(path))
+  const removed = [...before].filter((path) => kept(path) && !after.has(path))
+  const changed = previous.namespaces
+    .flatMap((namespace) => namespace.entries)
+    .filter((entry) => kept(entry.path) && after.has(entry.path))
+    .flatMap((entry) => {
+      const listing = lookup(entry.path)
+      return listing === undefined || listing.line === entry.line ? [] : [listing]
+    })
+  const budget = complete(current) ? Infinity : UPDATE_BUDGET / (restated.length + (added.length > 0 ? 1 : 0) || 1)
+
   const parts = ["The Code Mode tool catalog has changed."]
-  if (added.length > 0) {
+  if (restated.length > 0) {
     parts.push(
       [
         "New tools are available:",
-        ...added.map((namespace) => {
+        ...restated.map((namespace) => {
           const shown = fit(
             namespace.tools.flatMap((path) => lookup(path) ?? []),
-            share,
+            budget,
           )
           return [CodeModeCatalog.namespaceLine(namespace, shown.length), ...shown.map((entry) => entry.line)].join(
             "\n",
@@ -96,26 +94,38 @@ ${render(current)}`
       ].join("\n"),
     )
   }
-  const fresh = kept.flatMap((namespace) => {
-    if (namespace.added.length === 0) return []
+  if (added.length > 0) {
     const shown = fit(
-      namespace.added.flatMap((path) => lookup(path) ?? []),
-      share,
+      added.flatMap((path) => lookup(path) ?? []),
+      budget,
     )
-    const rest = namespace.added.length - shown.length
-    return [
-      ...shown.map((entry) => entry.line),
-      ...(rest === 0 ? [] : [`  - ${rest} more in \`${namespace.name}\`; search for them`]),
-    ]
-  })
-  if (fresh.length > 0) parts.push(["New:", ...fresh].join("\n"))
+    const rest = added.length - shown.length
+    parts.push(
+      [
+        "New tools are available in addition to those previously listed:",
+        ...shown.map((entry) => entry.line),
+        ...(rest === 0 ? [] : [`  - ${rest} more; search for them`]),
+      ].join("\n"),
+    )
+  }
   if (complete(previous) && !complete(current)) parts.push(searchNote)
-  const changed = kept.flatMap((namespace) => namespace.changed.map((entry) => entry.line))
-  if (changed.length > 0) parts.push(["Changed:", ...changed].join("\n"))
-  const gone = kept.flatMap((namespace) => namespace.removed.map(toolExpression))
-  if (gone.length > 0) parts.push(`No longer available: ${gone.join(", ")}`)
-  for (const namespace of namespaces.removed)
-    parts.push(`The \`${namespace.name}\` tools are no longer available and must not be used.`)
+  if (changed.length > 0) {
+    parts.push(
+      ["Changed tool listings supersede the previously listed ones:", ...changed.map((entry) => entry.line)].join("\n"),
+    )
+  }
+  if (removed.length > 0) {
+    parts.push(
+      `The following tools are no longer available and must not be called: ${removed.map(toolExpression).join(", ")}.`,
+    )
+  }
+  if (namespaces.removed.length > 0) {
+    parts.push(
+      `The following tool namespaces are no longer available and must not be used: ${namespaces.removed
+        .map((namespace) => `\`${namespace.name}\``)
+        .join(", ")}.`,
+    )
+  }
   if (parts.length === 1) return undefined
   const delta = parts.join("\n\n")
   if (delta.length < replacement.length) return delta

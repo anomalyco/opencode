@@ -2425,13 +2425,13 @@ describe("SessionRunnerLLM", () => {
     yield* Scope.close(beta, Exit.void)
     yield* s.runPrompt("Third")
     expect(updates(s.requests.at(-1)).at(-1)).toBe(
-      "The Code Mode tool catalog has changed.\n\nThe `beta` tools are no longer available and must not be used.",
+      "The Code Mode tool catalog has changed.\n\nThe following tool namespaces are no longer available and must not be used: `beta`.",
     )
 
     yield* register("alpha", 1, 12)
     yield* s.runPrompt("Fourth")
     expect(updates(s.requests.at(-1)).at(-1)).toBe(
-      `The Code Mode tool catalog has changed.\n\nNew:\n${signature("alpha", 12)}`,
+      `The Code Mode tool catalog has changed.\n\nNew tools are available in addition to those previously listed:\n${signature("alpha", 12)}`,
     )
 
     // Compaction restates the current catalog as the new baseline and has no update to send.
