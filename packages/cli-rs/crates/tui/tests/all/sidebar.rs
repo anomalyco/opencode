@@ -169,3 +169,26 @@ fn mcp_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
 fn the_mcp_section_acts_the_same_through_the_c_abi_loopback() {
     assert_eq!(mcp_frames(true), mcp_frames(false));
 }
+
+// Expected: a hidden sidebar mounts no section, so `local` and resizes render none of them; opening it mounts them,
+// and closing it again lets go of their listeners.
+#[test]
+fn a_hidden_sidebar_mounts_no_section() {
+    let h = support::mount(
+        100,
+        30,
+        Deps {
+            config: support::config(support::decode(r#"{ "animations": false }"#)),
+            ..support::deps(Arc::new(Fake::new(|seen| support::base(seen, DIRECTORY))))
+        },
+    );
+    h.wait_for("Fix the parser");
+    let hidden = h.tui.settings.listener_count();
+    h.tui.keymap.dispatch("session.sidebar.toggle", None);
+    h.wait_for("Getting started");
+    assert!(h.tui.settings.listener_count() >= hidden + 5, "{hidden} -> {}", h.tui.settings.listener_count());
+    h.tui.keymap.dispatch("session.sidebar.toggle", None);
+    h.wait_gone("Getting started");
+    h.app.wait_until(std::time::Duration::from_millis(100), || false);
+    assert_eq!(h.tui.settings.listener_count(), hidden);
+}
