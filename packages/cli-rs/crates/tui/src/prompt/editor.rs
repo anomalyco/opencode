@@ -421,12 +421,13 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
     inner.layers.borrow_mut().push(mentions);
     // `useCursorStyle` and the animations follow the config, as the metadata row's auto-accept mark does; the
     // footer's shortcuts follow the keybinds.
-    tui.settings.on_change(bind!(inner, |inner, tui| {
+    let settings = tui.settings.subscribe(bind!(inner, |inner, tui| {
         let cursor = crate::features::system_commands::cursor(&tui.config());
         inner.textarea.cursor_style(cursor.0, cursor.1);
         inner.staging.set_animations(opencode_ui::motion::enabled(tui.config().info.animations));
         inner.relayout(tui);
     }));
+    inner.layers.borrow_mut().push(settings);
     // The metadata row and the footer follow the terminal size (`useTerminalDimensions`).
     let weak = Rc::downgrade(&inner);
     let resize = tui.app.on_resize(move |_, _, _| {

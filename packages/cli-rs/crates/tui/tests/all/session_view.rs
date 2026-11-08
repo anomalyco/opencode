@@ -467,3 +467,18 @@ fn usage_limits_are_kept_per_location() {
     h.settle();
     assert_eq!(h.limits().len(), 2);
 }
+
+// Expected: the transcript and its scroll controls listen to the settings while the session view is mounted, so
+// mounting the view again and again leaves no listener behind.
+#[test]
+fn a_session_view_lets_go_of_its_settings_listeners() {
+    let h = mount("ses_a", json!({ "animations": false }));
+    h.wait_for("Answer 30 three.");
+    let mounted = h.tui.settings.listener_count();
+    for _ in 0..5 {
+        h.tui.navigate(opencode_tui::Route::Home);
+        h.tui.navigate(support::session_route("ses_a"));
+        h.settle();
+    }
+    assert_eq!(h.tui.settings.listener_count(), mounted);
+}
