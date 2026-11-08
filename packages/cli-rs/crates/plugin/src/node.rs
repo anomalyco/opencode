@@ -14,33 +14,42 @@ use opentui::prelude::*;
 use opentui::style::Color;
 use opentui::widget::CodeBlock;
 
-use crate::{CodeBlockRender, Host, Slotted};
+use crate::{CodeBlockRender, Host, SlotInput, SlotMount, Slotted, slot};
 
 /// A slot claim's render on either path: in process it reads the host directly, over the C ABI it asks the plugin.
 pub type SlotRender<H> = Rc<dyn Fn(&H, &abi::SlotInput, &abi::Changed) -> abi::Render>;
 
 /// A mounted slot claim of the one API: the node its render returned, rendered again with each change batch, each
-/// change the host pushes ([`Host::watch`]), and each wake. Its widgets are rebuilt only when the node differs.
+/// change the host pushes ([`Host::watch`]), and each wake. Its widgets are rebuilt only when the node differs. The
+/// slots its node nests ([`abi::Node::Slot`]) stay mounted until then, and get each change batch it gets.
 pub struct Mount<H: Host> {
     root: View,
     owner: Weak<H>,
     render: SlotRender<H>,
+    /// The slot it renders in.
+    path: String,
+    slot_input: SlotInput,
     input: abi::SlotInput,
     /// What it shows: `None` before the first render, `Some(None)` while hidden.
     shown: RefCell<Option<Option<abi::Node>>>,
+    /// The slots its node nests.
+    slots: RefCell<Vec<SlotMount<H>>>,
     /// Refilled with each change batch, so a batch like the one before costs no allocation.
     changed: RefCell<abi::Changed>,
     watch: RefCell<Option<Disposer>>,
 }
 
 impl<H: Host> Mount<H> {
-    pub fn new(host: &H, owner: Weak<H>, input: abi::SlotInput, render: SlotRender<H>) -> Rc<Self> {
+    pub fn new(host: &H, owner: Weak<H>, path: &str, input: &SlotInput, render: SlotRender<H>) -> Rc<Self> {
         let mount = Rc::new(Self {
             root: View::new(host.app()).column().shrink(0.0).visible(false),
             owner: owner.clone(),
             render,
-            input,
+            path: path.to_owned(),
+            slot_input: input.clone(),
+            input: abi::SlotInput { session_id: input.session_id.clone() },
             shown: RefCell::new(None),
+            slots: RefCell::default(),
             changed: RefCell::default(),
             watch: RefCell::new(None),
         });
@@ -65,15 +74,28 @@ impl<H: Host> Mount<H> {
             return;
         }
         self.root.clear();
+        let mut slots = Vec::new();
         if let Some(node) = &node {
             let owner = self.owner.clone();
             let act: Act = Rc::new(move |action| act(&owner, action));
-            self.root.add(&widget(host.app(), &host.theme(), node, &act));
+            add(host.app(), &host.theme(), &self.root, node, &act, &mut |parent, path| {
+                if !nests(&self.path, path) {
+                    log::warn!("a claim in slot {} cannot show slot {path}: it is not a slot inside it", self.path);
+                    return;
+                }
+                slots.extend(host.slot(parent, path, &self.slot_input));
+            });
         }
+        *self.slots.borrow_mut() = slots;
         self.root.visible(node.is_some());
         *self.shown.borrow_mut() = Some(node);
         host.app().request_redraw();
     }
+}
+
+/// Whether a claim in slot `path` may show slot `nested`: a published slot inside it.
+fn nests(path: &str, nested: &str) -> bool {
+    slot::PATHS.contains(&nested) && slot::contains(path, nested)
 }
 
 impl<H: Host> Slotted<H> for Rc<Mount<H>> {
@@ -89,6 +111,7 @@ impl<H: Host> Slotted<H> for Rc<Mount<H>> {
         H::changed(changes, &mut changed);
         self.draw(host, &changed);
         self.changed.replace(changed);
+        self.slots.borrow().iter().for_each(|slots| slots.sync(host, changes));
     }
 }
 
@@ -127,9 +150,11 @@ fn act<H: Host>(host: &Weak<H>, action: &abi::Action) {
     });
 }
 
-/// The widgets of `node`; a click runs through `act`.
-pub fn widget(app: &App, theme: &Theme, node: &abi::Node, act: &Act) -> AnyWidget {
+/// Adds the widgets of `node` to `parent`; a click runs through `act`, and `slot` mounts a nested slot straight into
+/// the parent, as TS's `<Slot>` fragment does.
+pub fn add(app: &App, theme: &Theme, parent: &View, node: &abi::Node, act: &Act, slot: &mut dyn FnMut(&View, &str)) {
     match node {
+        abi::Node::Slot { path } => slot(parent, path),
         abi::Node::Box { row, gap, padding, justify, bg, layout, on_click, children } => {
             let view = View::new(app);
             if *row {
@@ -154,10 +179,10 @@ pub fn widget(app: &App, theme: &Theme, node: &abi::Node, act: &Act) -> AnyWidge
                 view.bg(bg);
             }
             for child in children {
-                view.add(&widget(app, theme, child, act));
+                add(app, theme, &view, child, act, slot);
             }
             clickable(&view, on_click.as_ref(), act);
-            lay_out(&view, layout).as_any()
+            parent.add(&lay_out(&view, layout));
         }
         abi::Node::Text { spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click } => {
             let fg = color(theme, fg.as_ref()).unwrap_or(theme.text.base);
@@ -179,7 +204,7 @@ pub fn widget(app: &App, theme: &Theme, node: &abi::Node, act: &Act) -> AnyWidge
                 });
             }
             clickable(&text, on_click.as_ref(), act);
-            lay_out(&text, layout).as_any()
+            parent.add(&lay_out(&text, layout));
         }
     }
 }
