@@ -122,6 +122,8 @@ struct Inner {
     /// How many messages were loaded when the last group-boundary page was asked for.
     boundary: Cell<Option<usize>>,
     layer: RefCell<Option<Disposer>>,
+    /// The settings listener, until the transcript drops.
+    settings: RefCell<Option<Disposer>>,
 }
 
 impl Drop for Inner {
@@ -208,6 +210,7 @@ impl Transcript {
             loading: Cell::new(false),
             boundary: Cell::new(None),
             layer: RefCell::default(),
+            settings: RefCell::default(),
         });
         inner.install(tui);
         Self(inner)
@@ -463,7 +466,7 @@ impl Inner {
             inner.render(&tui, |_| true);
         })));
         let weak = self.this.clone();
-        tui.settings.on_change(bind!(weak, |inner, tui| {
+        *self.settings.borrow_mut() = Some(tui.settings.subscribe(bind!(weak, |inner, tui| {
             let view = RowSettings::read(&tui.config());
             let before = inner.view.replace(view);
             let groups = inner.groups.read(&tui.settings.info());
@@ -474,7 +477,7 @@ impl Inner {
             if groups || before != view {
                 inner.render(tui, |_| true);
             }
-        }));
+        })));
         // Keep the reader's row in place when rows mount above it.
         let weak = self.this.clone();
         self.scroll.content_view().on_resize(bind!(weak, |inner, cx, rect| {

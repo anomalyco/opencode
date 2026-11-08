@@ -38,6 +38,9 @@ struct Inner {
     title: Text,
     docked: View,
     overlay: View,
+    content: View,
+    footer: View,
+    /// The `sidebar.content` and `sidebar.footer` slots, mounted while the sidebar shows (TS `<Show>`).
     slots: RefCell<Vec<SlotMount<Tui>>>,
     /// `sidebarOpen`: opened with the toggle, beyond what `session.sidebar` shows by itself.
     open: Cell<bool>,
@@ -81,11 +84,6 @@ pub fn mount(tui: &Tui, row: &View, session: &SessionID) -> Sidebar {
         .child(&View::new(app).shrink(0.0).padding_edge(Edge::Right, 2).padding_edge(Edge::Bottom, 1).child(&title))
         .child(&scroll)
         .child(&footer);
-    let input = SlotInput { session_id: Some(session.0.clone()), ..SlotInput::default() };
-    let slots = vec![
-        crate::plugins::host::slot(tui, &content, slot::SIDEBAR_CONTENT, &input, |_| {}),
-        crate::plugins::host::slot(tui, &footer, slot::SIDEBAR_FOOTER, &input, |_| {}),
-    ];
     let docked =
         View::new(app).column().shrink(0.0).width(SESSION_SIDEBAR_WIDTH).min_width(0).min_height(0).visible(false);
     let overlay = View::new(app)
@@ -107,7 +105,9 @@ pub fn mount(tui: &Tui, row: &View, session: &SessionID) -> Sidebar {
         title,
         docked,
         overlay,
-        slots: RefCell::new(slots),
+        content,
+        footer,
+        slots: RefCell::default(),
         open: Cell::new(false),
         placed: Cell::new(Place::Hidden),
         panel_shown: Cell::new(false),
@@ -140,9 +140,7 @@ impl Sidebar {
             self.inner.retitle(tui);
         }
         self.inner.layout(tui);
-        if self.inner.placed.get() != Place::Hidden {
-            self.inner.slots.borrow().iter().for_each(|slot| slot.sync(tui, changes));
-        }
+        self.inner.slots.borrow().iter().for_each(|slot| slot.sync(tui, changes));
     }
 
     /// Whether the sidebar is the right pane (`sidebarVisible` of the session view).
@@ -201,10 +199,18 @@ impl Inner {
         if before == place {
             return;
         }
-        // The sections skip syncs while hidden, so they catch up as the sidebar shows.
+        // The sections mount as the sidebar shows and unmount as it hides, so a hidden sidebar renders nothing.
         if before == Place::Hidden {
-            let everything = Changes::everything();
-            self.slots.borrow().iter().for_each(|slot| slot.sync(tui, &everything));
+            let input = SlotInput { session_id: Some(self.session.0.clone()), ..SlotInput::default() };
+            *self.slots.borrow_mut() = vec![
+                crate::plugins::host::slot(tui, &self.content, slot::SIDEBAR_CONTENT, &input, |_| {}),
+                crate::plugins::host::slot(tui, &self.footer, slot::SIDEBAR_FOOTER, &input, |_| {}),
+            ];
+        }
+        if place == Place::Hidden {
+            self.slots.borrow_mut().clear();
+            self.content.clear();
+            self.footer.clear();
         }
         self.panel.detach();
         if place == Place::Docked {
