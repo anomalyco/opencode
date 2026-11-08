@@ -48,7 +48,7 @@ unless release notes are turned off in Settings.
 
 ## Startup benchmark
 
-`perf/startup.bench.ts` times a launch with [strobe](https://github.com/Hona/strobe), from process spawn to what a
+`perf/startup.bench.ts` times a launch with [strobe](https://github.com/anomalyco/strobe), from process spawn to what a
 person waits for, in pairs of launches of two builds with an interval per case. Every launch runs in a private home
 (its own `%APPDATA%`, XDG folders, database, config and service registration, the developer's `OPENCODE_*`, `OTEL_*`
 and `SENTRY_*` environment removed), so it never touches the developer's app, profile or live service.
