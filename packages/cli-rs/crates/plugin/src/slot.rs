@@ -76,6 +76,19 @@ pub struct Placement {
     pub target: String,
 }
 
+/// The placement of a plugin's slot claim.
+pub fn placement(claim: &opencode_plugin_abi::SlotClaim) -> Placement {
+    use opencode_plugin_abi::SlotKind;
+    let kind = match claim.kind {
+        SlotKind::Prepend => Kind::Prepend,
+        SlotKind::Append => Kind::Append,
+        SlotKind::Before => Kind::Before,
+        SlotKind::After => Kind::After,
+        SlotKind::Replace => Kind::Replace,
+    };
+    Placement::new(kind, claim.path.clone())
+}
+
 impl Placement {
     pub fn new(kind: Kind, target: impl Into<String>) -> Self {
         Self { kind, target: target.into() }

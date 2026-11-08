@@ -10,6 +10,7 @@ pub mod slot;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
+pub use opencode_plugin_abi as abi;
 use opencode_ui::dialog::{DialogKeymap, FocusId};
 use opencode_ui::keymap::KeymapLayer;
 use opencode_ui::markdown::CodeBlockRenderers;
@@ -57,6 +58,24 @@ pub trait Host: 'static {
     fn open_route(&self, _id: &str, _name: &str) {}
     /// Mounts the current route again, so changed slot claims and code-block renderers show.
     fn remount(&self) {}
+
+    // What the renders of the one API (O-67) read, on both paths.
+
+    /// Calls `f` with what renders read. A read only records a load it needs; the host starts the load once the
+    /// plugin callback around the read has returned. By default the theme only.
+    fn read(&self, f: &mut dyn FnMut(&dyn abi::Read)) {
+        let theme = self.theme();
+        f(&node::Reader::new(&theme, self.theme_mode()));
+    }
+    /// Sets `changed` to what `changes` changed. Reuse one `changed` across batches with [`node::refill`].
+    fn changed(_changes: &Self::Changes, changed: &mut abi::Changed) {
+        *changed = abi::Changed::everything();
+    }
+    /// Calls `push` with what changes outside change batches, the host's own state (`local`) and the terminal size
+    /// (`size`), until the disposer is dropped.
+    fn watch(&self, _push: Rc<dyn Fn(&abi::Changed)>) -> Option<Disposer> {
+        None
+    }
 }
 
 /// A toast's variant, for [`Host::toast`].
@@ -122,22 +141,34 @@ impl<H: Host> Definition<H> {
 }
 
 /// A plugin of the one API, run in process: its closures get Rust values, with no JSON step. It may register code
-/// fences so far; the rest of its surface moves here with the built-ins that need it.
-impl<H: Host> From<opencode_plugin_abi::Plugin> for Definition<H> {
-    fn from(plugin: opencode_plugin_abi::Plugin) -> Self {
+/// fences and slot claims so far; the rest of its surface moves here with the built-ins that need it.
+impl<H: Host> From<abi::Plugin> for Definition<H> {
+    fn from(plugin: abi::Plugin) -> Self {
         Definition::new(plugin.id, move |setup: &mut Setup<'_, H>| {
-            let mut api = opencode_plugin_abi::Setup::in_process(setup.id(), None);
+            let mut api = abi::Setup::in_process(setup.id(), None);
             if let Err(error) = (plugin.setup)(&mut api) {
                 log::error!("plugin {} failed: {error}", setup.id());
                 return;
             }
             let manifest = api.manifest();
-            if !(manifest.commands.is_empty() && manifest.slots.is_empty() && manifest.routes.is_empty()) {
-                log::error!("plugin {}: only code fences run in process so far", setup.id());
+            if !(manifest.commands.is_empty()
+                && manifest.routes.is_empty()
+                && manifest.slots.iter().all(|claim| claim.render))
+            {
+                log::error!("plugin {}: only code fences and slot renders run in process so far", setup.id());
             }
             for (language, render) in api.fences() {
                 let render = node::code_block(Rc::downgrade(setup.host()), render.clone());
                 setup.registration.code_blocks.push((language.clone(), render));
+            }
+            for (claim, render) in api.renders() {
+                let render = render.clone();
+                let render: node::SlotRender<H> = Rc::new(move |host: &H, input, changed| {
+                    let mut out = abi::Render::Keep;
+                    host.read(&mut |read| out = render(read, input, changed));
+                    out
+                });
+                setup.claim(slot::placement(claim), render);
             }
         })
     }
@@ -168,6 +199,15 @@ impl<H: Host> Setup<'_, H> {
     /// Claims a place in the slot tree (TS `ui.slot`).
     pub fn slot(&mut self, placement: Placement, render: impl Fn(&H, &SlotInput) -> Box<dyn Slotted<H>> + 'static) {
         self.registration.claims.push((placement, Rc::new(render)));
+    }
+
+    /// Claims a place in the slot tree with a render of the one API, on either path.
+    pub(crate) fn claim(&mut self, placement: Placement, render: node::SlotRender<H>) {
+        let owner = Rc::downgrade(self.host);
+        self.slot(placement, move |host, input| {
+            let input = abi::SlotInput { session_id: input.session_id.clone() };
+            Box::new(node::Mount::new(host, owner.clone(), input, render.clone()))
+        });
     }
 
     /// Registers a keymap layer: commands, their palette and slash entries, and keybinds (TS `keymap.layer`).

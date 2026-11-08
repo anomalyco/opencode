@@ -802,6 +802,7 @@ dependencies = [
 name = "opencode-plugin-abi"
 version = "0.1.0"
 dependencies = [
+ "opencode-api-types",
  "serde",
  "serde_json",
 ]

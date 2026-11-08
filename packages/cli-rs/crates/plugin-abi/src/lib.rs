@@ -31,13 +31,17 @@
 //! # One API (O-67)
 //!
 //! The host's built-in plugins use the same [`Setup`], closures and types, called in process with Rust values; an
-//! external plugin gets them over this ABI. A render (a code fence so far) receives a [`Read`]: it reads and returns
-//! a value, and has no effects. Every other host call waits until the outermost plugin callback has returned, so a
-//! plugin never reenters itself through the host.
+//! external plugin gets them over this ABI. A render (a code fence or a slot claim) receives a [`Read`]: it reads and
+//! returns a value, and has no effects. Reads are pure too: a read of something the host has not loaded yet (a
+//! catalog) returns `None`, and the host starts the load once the outermost plugin callback has returned. Every other
+//! host call waits until then as well, so a plugin never reenters itself through the host.
 //!
 //! Renders in this form (ABI 1.4) are opt-in on the wire: [`Setup`] sets [`Manifest::render`], and the host sends
-//! [`Request::RenderFence`] only to a plugin that sets it. A 1.3 plugin gets the old requests and answers in the old
-//! format. A plugin built with this crate sets [`PluginApi::requires_minor`] to 4, so a 1.3 host refuses it.
+//! [`Request::RenderFence`] and [`Request::Render`] only to a plugin that sets it. A 1.3 plugin gets the old requests
+//! and answers in the old format. A plugin built with this crate sets [`PluginApi::requires_minor`] to 4, so a 1.3
+//! host refuses it.
+//!
+//! Session and catalog values are the HTTP API's generated types, re-exported as [`types`].
 
 #![allow(unsafe_code)]
 
@@ -46,13 +50,15 @@ use std::ffi::c_void;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::Rc;
 
+pub use opencode_api_types as types;
 use serde::{Deserialize, Serialize};
+use types::{ModelInfo, ModelRef, ProviderInfo, SessionInfo, SessionMessageInfo, UsageLimitsInfo};
 
 /// The major version: changes only with a deliberate breaking change, and a mismatch refuses the plugin.
 pub const ABI_MAJOR: u32 = 1;
 /// The minor version: grows when entries are appended. 1.0 is the core; 1.1 adds [`PluginApi::describe`]; 1.2 adds
-/// [`HostApi::theme_mode`]; 1.3 adds [`HostApi::wake`]; 1.4 adds [`Manifest::render`], [`Request::RenderFence`] and
-/// [`HostRequest::Color`].
+/// [`HostApi::theme_mode`]; 1.3 adds [`HostApi::wake`]; 1.4 adds [`Manifest::render`], [`Request::RenderFence`],
+/// [`Request::Render`], [`HostRequest::Color`] and the session and catalog reads.
 pub const ABI_MINOR: u32 = 4;
 
 /// The symbol every plugin exports, of type [`EntryFn`].
@@ -295,6 +301,31 @@ pub struct SlotClaim {
     pub kind: SlotKind,
     /// A host slot path, such as `home.footer` or `sidebar.content`.
     pub path: String,
+    /// The claim answers [`Request::Render`] (ABI 1.4), not [`Request::Slot`]. Absent in a 1.3 plugin.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub render: bool,
+}
+
+/// Where a slot claim of [`Setup::slot`] goes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Placement {
+    pub kind: SlotKind,
+    /// A host slot path, such as `home.footer` or `sidebar.content`.
+    pub path: String,
+}
+
+impl Placement {
+    pub fn new(kind: SlotKind, path: impl Into<String>) -> Self {
+        Self { kind, path: path.into() }
+    }
+
+    pub fn append(path: impl Into<String>) -> Self {
+        Self::new(SlotKind::Append, path)
+    }
+
+    pub fn prepend(path: impl Into<String>) -> Self {
+        Self::new(SlotKind::Prepend, path)
+    }
 }
 
 /// A color: a theme token path (`text.muted`, `markdown.heading`), a scale step (`categorical.3.300`,
@@ -441,8 +472,243 @@ pub enum Fenced {
     },
 }
 
-/// From the host to the plugin. Results: `Fence` → `Option<Vec<Line>>`, `RenderFence` → [`Fenced`], `Slot` and
-/// `Route` → `Vec<Line>`, `Command` → `null`.
+/// What a slot render ([`Setup::slot`]) returns.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "node", rename_all = "kebab-case")]
+pub enum Render {
+    /// What the claim shows now stays. On a claim that has not drawn yet, it draws nothing.
+    Keep,
+    /// The claim hides, with the gap around it.
+    Hide,
+    /// The claim shows `node`. The host rebuilds its widgets only when `node` differs from the last one.
+    Show(Node),
+}
+
+/// What a plugin draws: boxes and text.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum Node {
+    /// A box that lays out its children in a column, or in a row. An empty box still takes its place.
+    Box {
+        #[serde(default, skip_serializing_if = "is_false")]
+        row: bool,
+        /// Cells between the children.
+        #[serde(default, skip_serializing_if = "is_zero_u16")]
+        gap: u16,
+        /// Cells inside the edge, left and right, then top and bottom.
+        #[serde(default, skip_serializing_if = "is_no_padding")]
+        padding: (u16, u16),
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bg: Option<Color>,
+        #[serde(default, skip_serializing_if = "Layout::is_default")]
+        layout: Layout,
+        #[serde(default)]
+        children: Vec<Node>,
+    },
+    /// Styled text. `fg` draws spans without their own; by default `text.base`.
+    Text {
+        spans: Vec<Span>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fg: Option<Color>,
+        #[serde(default, skip_serializing_if = "Wrap::is_word")]
+        wrap: Wrap,
+        /// Cuts lines that do not fit, instead of wrapping or overflowing.
+        #[serde(default, skip_serializing_if = "is_false")]
+        truncate: bool,
+        /// Whether the mouse can select it. On by default.
+        #[serde(default = "yes", skip_serializing_if = "is_true")]
+        selectable: bool,
+        #[serde(default, skip_serializing_if = "Layout::is_default")]
+        layout: Layout,
+    },
+}
+
+impl Node {
+    /// A box of `children` in a column.
+    pub fn column(children: Vec<Node>) -> Self {
+        Node::Box { row: false, gap: 0, padding: (0, 0), bg: None, layout: Layout::default(), children }
+    }
+
+    /// A box of `children` in a row.
+    pub fn row(children: Vec<Node>) -> Self {
+        Node::Box { row: true, gap: 0, padding: (0, 0), bg: None, layout: Layout::default(), children }
+    }
+
+    /// Selectable text of `spans` that wraps at words.
+    pub fn text(spans: impl Into<Vec<Span>>) -> Self {
+        Node::Text {
+            spans: spans.into(),
+            fg: None,
+            wrap: Wrap::Word,
+            truncate: false,
+            selectable: true,
+            layout: Layout::default(),
+        }
+    }
+}
+
+/// How a node takes space in its parent's row or column.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Layout {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<Width>,
+    /// Takes the room left over, from its own size up.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub grow: bool,
+    /// Whether it gives up room when its parent is too small; the host's default when `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shrink: Option<bool>,
+    /// May shrink below its content's width.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub min_width_zero: bool,
+}
+
+impl Layout {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Width {
+    Cells(u16),
+    Percent(f32),
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Wrap {
+    #[default]
+    Word,
+    Char,
+    None,
+}
+
+impl Wrap {
+    fn is_word(&self) -> bool {
+        *self == Wrap::Word
+    }
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn is_true(value: &bool) -> bool {
+    *value
+}
+
+fn is_zero_u16(value: &u16) -> bool {
+    *value == 0
+}
+
+fn is_no_padding(value: &(u16, u16)) -> bool {
+    *value == (0, 0)
+}
+
+/// What a slot passes to the claims that render in it. A path fills what it has.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SlotInput {
+    /// `prompt.footer*`, `session.composer.top`, `session.panel` and `sidebar.*`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+}
+
+/// What changed since a claim last rendered. A claim that has not rendered yet gets `all`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Changed {
+    /// Anything may have changed.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub all: bool,
+    /// Sessions whose info or status changed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sessions: Vec<String>,
+    /// Sessions whose message list changed: a message came or went, or the list was read again or paged. Such a
+    /// change names no message.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lists: Vec<String>,
+    /// Messages that changed in place, as session and message IDs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub messages: Vec<(String, String)>,
+    /// Locations whose info or catalogs changed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub locations: Vec<LocationRef>,
+    /// The host's own state changed: the selected model, the usage limits, the settings.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub local: bool,
+    /// The terminal changed size.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub size: bool,
+    /// The plugin woke the host.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub woken: bool,
+}
+
+impl Changed {
+    pub fn everything() -> Self {
+        Self { all: true, ..Self::default() }
+    }
+
+    /// Whether session `id`'s info or status may have changed.
+    pub fn session(&self, id: &str) -> bool {
+        self.all || self.sessions.iter().any(|session| session == id)
+    }
+
+    /// Whether session `id`'s message list may have changed.
+    pub fn list(&self, id: &str) -> bool {
+        self.all || self.lists.iter().any(|session| session == id)
+    }
+
+    /// Whether `location`'s info or catalogs may have changed.
+    pub fn location(&self, location: &LocationRef) -> bool {
+        self.all || self.locations.contains(location)
+    }
+}
+
+/// A location: a directory, and a workspace in it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct LocationRef {
+    pub directory: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SessionStatus {
+    #[default]
+    Idle,
+    Running,
+}
+
+/// A session, from [`Read::session`].
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Session {
+    pub info: SessionInfo,
+    pub status: SessionStatus,
+}
+
+/// A session's family, from [`Read::family`]: its root and every known descendant.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Family {
+    pub members: Vec<Member>,
+    /// A child's own cost, or a root's cost with every known descendant's.
+    pub cost: f64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Member {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
+    pub status: SessionStatus,
+    /// When it last changed, in milliseconds since the epoch.
+    pub updated: f64,
+}
+
+/// From the host to the plugin. Results: `Fence` → `Option<Vec<Line>>`, `RenderFence` → [`Fenced`], `Render` →
+/// [`Render`], `Slot` and `Route` → `Vec<Line>`, `Command` → `null`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum Request {
@@ -467,10 +733,16 @@ pub enum Request {
     },
     /// 1.4: renders a fence through [`Setup::code_block`].
     RenderFence(Fence),
+    /// 1.4: renders a slot claim of [`Setup::slot`], which [`Manifest::slots`] names by index.
+    Render {
+        claim: usize,
+        input: SlotInput,
+        changed: Changed,
+    },
 }
 
-/// From the plugin to the host. Results: `StorageGet` → `Option<String>` (JSON text), `Color` → `Option<Rgba>`,
-/// everything else `null`.
+/// From the plugin to the host. Results: `StorageGet` → `Option<String>` (JSON text), `Color` → `Option<Rgba>`, the
+/// reads what the [`Read`] method of the same name returns, everything else `null`.
 /// A host that does not know a request answers it with an error.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
@@ -503,6 +775,28 @@ pub enum HostRequest {
     Color {
         token: String,
     },
+    /// 1.4: [`Read::session`].
+    Session {
+        id: String,
+    },
+    /// 1.4: [`Read::family`].
+    Family {
+        id: String,
+    },
+    /// 1.4: [`Read::messages`], as a list.
+    Messages {
+        id: String,
+    },
+    /// 1.4: [`Read::models`].
+    Models {
+        location: Option<LocationRef>,
+    },
+    /// 1.4: [`Read::model`].
+    Model,
+    /// 1.4: [`Read::limits`].
+    Limits,
+    /// 1.4: [`Read::providers`].
+    Providers,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -523,14 +817,48 @@ pub enum Toast {
     Error,
 }
 
-/// What a render reads from the host. It has no effects, so a render may call it at any time; the host answers from
-/// what it has.
+/// What a render reads from the host. It has no effects, so a render may call it at any time, also inside
+/// [`Read::messages`]'s visitor; the host answers from what it has. A read of a catalog the host has not loaded
+/// returns `None` and asks for the load, which the host starts once the plugin's callback has returned; the claim
+/// then renders again with the location in [`Changed::locations`].
+///
+/// A host without a value answers `None` or empty.
 pub trait Read {
     /// Whether the page theme is dark or light (TS `api.themeMode`).
     fn theme_mode(&self) -> ThemeMode;
     /// A color of the page theme: a token path such as `text.muted`, or a scale step such as `categorical.3.300`
     /// or `interactive.500`. `None` when the theme has no such color.
     fn color(&self, token: &str) -> Option<Rgba>;
+    /// Session `id` and whether it runs, when the host knows it.
+    fn session(&self, _id: &str) -> Option<Session> {
+        None
+    }
+    /// The family of session `id`.
+    fn family(&self, _id: &str) -> Family {
+        Family::default()
+    }
+    /// Calls `visit` with the loaded messages of session `id`, oldest first; empty when none are loaded. In process
+    /// the host lends its own list; over the C ABI the plugin gets a copy.
+    fn messages(&self, _id: &str, visit: &mut dyn FnMut(&[SessionMessageInfo])) {
+        visit(&[]);
+    }
+    /// The models of `location`, or of the location the TUI works in for `None`; `None` while they are not loaded.
+    fn models(&self, _location: Option<&LocationRef>) -> Option<Vec<ModelInfo>> {
+        None
+    }
+    /// The model the next prompt uses.
+    fn model(&self) -> Option<ModelRef> {
+        None
+    }
+    /// What the OpenCode Console workspace's limits allow, where the TUI works; `None` while they are not loaded or
+    /// it is not signed in.
+    fn limits(&self) -> Option<UsageLimitsInfo> {
+        None
+    }
+    /// The providers where the TUI works; `None` while they are not loaded.
+    fn providers(&self) -> Option<Vec<ProviderInfo>> {
+        None
+    }
 }
 
 /// The host, as a plugin calls it. Valid while the instance lives.
@@ -619,8 +947,45 @@ impl Read for Host {
     }
 
     fn color(&self, token: &str) -> Option<Rgba> {
-        let value = self.request(&HostRequest::Color { token: token.to_owned() }).ok()?;
-        serde_json::from_value(value).ok().flatten()
+        self.read(&HostRequest::Color { token: token.to_owned() })
+    }
+
+    fn session(&self, id: &str) -> Option<Session> {
+        self.read(&HostRequest::Session { id: id.to_owned() })
+    }
+
+    fn family(&self, id: &str) -> Family {
+        self.read(&HostRequest::Family { id: id.to_owned() }).unwrap_or_default()
+    }
+
+    fn messages(&self, id: &str, visit: &mut dyn FnMut(&[SessionMessageInfo])) {
+        // The copy is the plugin's own, so `visit` may call the host again.
+        let messages: Vec<SessionMessageInfo> =
+            self.read(&HostRequest::Messages { id: id.to_owned() }).unwrap_or_default();
+        visit(&messages);
+    }
+
+    fn models(&self, location: Option<&LocationRef>) -> Option<Vec<ModelInfo>> {
+        self.read(&HostRequest::Models { location: location.cloned() })
+    }
+
+    fn model(&self) -> Option<ModelRef> {
+        self.read(&HostRequest::Model)
+    }
+
+    fn limits(&self) -> Option<UsageLimitsInfo> {
+        self.read(&HostRequest::Limits)
+    }
+
+    fn providers(&self) -> Option<Vec<ProviderInfo>> {
+        self.read(&HostRequest::Providers)
+    }
+}
+
+impl Host {
+    /// A read's answer; `None` from a host that does not know the request or has no value.
+    fn read<T: serde::de::DeserializeOwned>(&self, request: &HostRequest) -> Option<T> {
+        serde_json::from_value::<Option<T>>(self.request(request).ok()?).ok().flatten()
     }
 }
 
@@ -657,7 +1022,14 @@ impl Waker {
 
 /// A registered fence render.
 pub type FenceFn = Rc<dyn Fn(&dyn Read, &Fence) -> Fenced>;
-type SlotFn = Box<dyn Fn(Option<&str>) -> Vec<Line>>;
+/// A registered slot render.
+pub type RenderFn = Rc<dyn Fn(&dyn Read, &SlotInput, &Changed) -> Render>;
+type LinesFn = Box<dyn Fn(Option<&str>) -> Vec<Line>>;
+/// A slot claim's render: the 1.3 rows, or a [`Render`].
+enum SlotFn {
+    Lines(LinesFn),
+    Render(RenderFn),
+}
 type RouteFn = Box<dyn Fn() -> Vec<Line>>;
 type CommandFn = Box<dyn Fn(Option<&str>)>;
 
@@ -705,10 +1077,19 @@ impl Setup {
         self.fences.push((language.to_owned(), Rc::new(render)));
     }
 
-    /// Claims a place in the slot tree; `render` receives the slot's session ID, if it has one.
-    pub fn slot(&mut self, kind: SlotKind, path: &str, render: impl Fn(Option<&str>) -> Vec<Line> + 'static) {
-        self.manifest.slots.push(SlotClaim { kind, path: path.to_owned() });
-        self.slots.push(Box::new(render));
+    /// Claims a place in the slot tree. `render` reads what it shows and returns it; it gets the slot's input and
+    /// what changed since it last rendered, and runs again with each change batch, each change of the host's own
+    /// state, and each wake.
+    pub fn slot(&mut self, at: Placement, render: impl Fn(&dyn Read, &SlotInput, &Changed) -> Render + 'static) {
+        self.manifest.slots.push(SlotClaim { kind: at.kind, path: at.path, render: true });
+        self.slots.push(SlotFn::Render(Rc::new(render)));
+    }
+
+    /// Claims a place in the slot tree with rows, as ABI 1.3 did; `render` receives the slot's session ID, if it
+    /// has one.
+    pub fn slot_lines(&mut self, kind: SlotKind, path: &str, render: impl Fn(Option<&str>) -> Vec<Line> + 'static) {
+        self.manifest.slots.push(SlotClaim { kind, path: path.to_owned(), render: false });
+        self.slots.push(SlotFn::Lines(Box::new(render)));
     }
 
     /// Registers a route the host opens as `plugin/<id>/<name>`.
@@ -734,6 +1115,15 @@ impl Setup {
         &self.fences
     }
 
+    /// The slot claims of [`Setup::slot`], with their renders.
+    #[doc(hidden)]
+    pub fn renders(&self) -> impl Iterator<Item = (&SlotClaim, &RenderFn)> {
+        self.manifest.slots.iter().zip(&self.slots).filter_map(|(claim, render)| match render {
+            SlotFn::Render(render) => Some((claim, render)),
+            SlotFn::Lines(_) => None,
+        })
+    }
+
     fn new(id: &str, options: Option<String>, host: *const HostApi) -> Self {
         Self {
             manifest: Manifest { id: id.to_owned(), render: RENDER, ..Manifest::default() },
@@ -755,10 +1145,14 @@ impl Setup {
                     self.fences.iter().find(|(language, _)| *language == fence.language).map(|(_, render)| render);
                 json(serde_json::to_value(render.map_or(Fenced::Code, |render| render(&self.host, &fence))))
             }
-            Request::Slot { claim, session_id } => {
-                let render = self.slots.get(claim).ok_or("no such slot claim")?;
-                json(serde_json::to_value(render(session_id.as_deref())))
-            }
+            Request::Slot { claim, session_id } => match self.slots.get(claim).ok_or("no such slot claim")? {
+                SlotFn::Lines(render) => json(serde_json::to_value(render(session_id.as_deref()))),
+                SlotFn::Render(_) => Err("this slot claim renders through render".to_owned()),
+            },
+            Request::Render { claim, input, changed } => match self.slots.get(claim).ok_or("no such slot claim")? {
+                SlotFn::Render(render) => json(serde_json::to_value(render(&self.host, &input, &changed))),
+                SlotFn::Lines(_) => Err("this slot claim renders through slot".to_owned()),
+            },
             Request::Route { name } => {
                 let (_, render) = self.routes.iter().find(|(route, _)| *route == name).ok_or("no such route")?;
                 json(serde_json::to_value(render()))
@@ -1091,6 +1485,39 @@ mod tests {
         assert_eq!(serde_json::to_string(&request).unwrap(), r#"{"type":"color","token":"categorical.3.300"}"#);
         assert_eq!(Rgba::parse("#0a0b0c"), Some(Rgba::new(10, 11, 12, 255)));
         assert_eq!(Rgba::parse("#0a0b0"), None);
+    }
+
+    // Expected: a slot render's request and answer leave out what is unset, read back as written, and a 1.3 claim
+    // keeps its JSON; each kind of slot claim refuses the other kind's request.
+    #[test]
+    fn the_1_4_slot_render_round_trips() {
+        let changed = Changed { lists: vec!["ses_1".into()], local: true, ..Changed::default() };
+        let request = Request::Render { claim: 1, input: SlotInput { session_id: Some("ses_1".into()) }, changed };
+        let json =
+            r#"{"type":"render","claim":1,"input":{"session_id":"ses_1"},"changed":{"lists":["ses_1"],"local":true}}"#;
+        assert_eq!(serde_json::to_string(&request).unwrap(), json);
+        assert_eq!(serde_json::from_str::<Request>(json).unwrap(), request);
+        let node = Node::column(vec![Node::text([Span::new("a").bold()]), Node::row(Vec::new())]);
+        let render = Render::Show(node);
+        let json = r#"{"type":"show","node":{"type":"box","children":[{"type":"text","spans":[{"text":"a","bold":true}]},{"type":"box","row":true,"children":[]}]}}"#;
+        assert_eq!(serde_json::to_string(&render).unwrap(), json);
+        assert_eq!(serde_json::from_str::<Render>(json).unwrap(), render);
+        assert_eq!(serde_json::to_string(&Render::Keep).unwrap(), r#"{"type":"keep"}"#);
+        let old = SlotClaim { kind: SlotKind::Append, path: "home.footer".into(), render: false };
+        assert_eq!(serde_json::to_string(&old).unwrap(), r#"{"kind":"append","path":"home.footer"}"#);
+        assert_eq!(serde_json::to_string(&HostRequest::Model).unwrap(), r#"{"type":"model"}"#);
+
+        let mut setup = Setup::in_process("new", None);
+        setup.slot_lines(SlotKind::Append, "home.footer", |_| Vec::new());
+        setup.slot(Placement::append("sidebar.content"), |_, input, _| match &input.session_id {
+            Some(_) => Render::Hide,
+            None => Render::Keep,
+        });
+        assert_eq!(setup.renders().count(), 1);
+        let render = |claim| Request::Render { claim, input: SlotInput::default(), changed: Changed::everything() };
+        assert_eq!(setup.handle(render(1)).unwrap(), serde_json::json!({ "type": "keep" }));
+        assert!(setup.handle(render(0)).is_err());
+        assert!(setup.handle(Request::Slot { claim: 1, session_id: None }).is_err());
     }
 
     // Expected: the shims answer a null instance with an error, ignore a null `out` or a null `destroy`, and never

@@ -1,5 +1,5 @@
 //! What a plugin of the one API (O-67) returns, turned into widgets, on both paths: fences ([`Fenced`]) with the keys
-//! the host mints for them, and rows ([`Line`]).
+//! the host mints for them, slot claims ([`Mount`] of a [`abi::Node`]), and rows ([`Line`]).
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -9,11 +9,183 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use opencode_plugin_abi::{self as abi, Fence, Fenced, Line};
 use opencode_ui::theme::Theme;
 use opentui::input::{MouseButton, MouseEventKind};
+use opentui::keymap::Disposer;
 use opentui::prelude::*;
 use opentui::style::Color;
 use opentui::widget::CodeBlock;
 
-use crate::{CodeBlockRender, Host};
+use crate::{CodeBlockRender, Host, Slotted};
+
+/// A slot claim's render on either path: in process it reads the host directly, over the C ABI it asks the plugin.
+pub type SlotRender<H> = Rc<dyn Fn(&H, &abi::SlotInput, &abi::Changed) -> abi::Render>;
+
+/// A mounted slot claim of the one API: the node its render returned, rendered again with each change batch, each
+/// change the host pushes ([`Host::watch`]), and each wake. Its widgets are rebuilt only when the node differs.
+pub struct Mount<H: Host> {
+    root: View,
+    render: SlotRender<H>,
+    input: abi::SlotInput,
+    /// What it shows: `None` before the first render, `Some(None)` while hidden.
+    shown: RefCell<Option<Option<abi::Node>>>,
+    /// Refilled with each change batch, so a batch like the one before costs no allocation.
+    changed: RefCell<abi::Changed>,
+    watch: RefCell<Option<Disposer>>,
+}
+
+impl<H: Host> Mount<H> {
+    pub fn new(host: &H, owner: Weak<H>, input: abi::SlotInput, render: SlotRender<H>) -> Rc<Self> {
+        let mount = Rc::new(Self {
+            root: View::new(host.app()).column().shrink(0.0).visible(false),
+            render,
+            input,
+            shown: RefCell::new(None),
+            changed: RefCell::default(),
+            watch: RefCell::new(None),
+        });
+        let weak = Rc::downgrade(&mount);
+        let watch = host.watch(Rc::new(move |changed| {
+            if let (Some(mount), Some(host)) = (weak.upgrade(), owner.upgrade()) {
+                mount.draw(&host, changed);
+            }
+        }));
+        *mount.watch.borrow_mut() = watch;
+        mount.draw(host, &abi::Changed::everything());
+        mount
+    }
+
+    pub fn draw(&self, host: &H, changed: &abi::Changed) {
+        let node = match (self.render)(host, &self.input, changed) {
+            abi::Render::Keep => return,
+            abi::Render::Hide => None,
+            abi::Render::Show(node) => Some(node),
+        };
+        if self.shown.borrow().as_ref() == Some(&node) {
+            return;
+        }
+        self.root.clear();
+        if let Some(node) = &node {
+            self.root.add(&widget(host.app(), &host.theme(), node));
+        }
+        self.root.visible(node.is_some());
+        *self.shown.borrow_mut() = Some(node);
+        host.app().request_redraw();
+    }
+}
+
+impl<H: Host> Slotted<H> for Rc<Mount<H>> {
+    fn root(&self) -> View {
+        self.root.clone()
+    }
+
+    fn sync(&self, host: &H, changes: &H::Changes) {
+        if H::unchanged(changes) {
+            return;
+        }
+        let mut changed = self.changed.take();
+        H::changed(changes, &mut changed);
+        self.draw(host, &changed);
+        self.changed.replace(changed);
+    }
+}
+
+/// Sets `list` to `items` through `set`, reusing its elements, so a host that refills one [`abi::Changed`] with a
+/// batch like the last one allocates nothing.
+pub fn refill<T: Default, I>(list: &mut Vec<T>, items: impl IntoIterator<Item = I>, mut set: impl FnMut(&mut T, I)) {
+    let mut len = 0;
+    for item in items {
+        if len == list.len() {
+            list.push(T::default());
+        }
+        set(&mut list[len], item);
+        len += 1;
+    }
+    list.truncate(len);
+}
+
+/// Sets `text` to `value`, keeping its buffer.
+pub fn assign(text: &mut String, value: &str) {
+    text.clear();
+    text.push_str(value);
+}
+
+/// The widgets of `node`.
+pub fn widget(app: &App, theme: &Theme, node: &abi::Node) -> AnyWidget {
+    match node {
+        abi::Node::Box { row, gap, padding, bg, layout, children } => {
+            let view = View::new(app);
+            if *row {
+                view.row();
+            }
+            if *gap > 0 {
+                view.gap(*gap);
+            }
+            if padding.0 > 0 {
+                view.padding_x(padding.0);
+            }
+            if padding.1 > 0 {
+                view.padding_y(padding.1);
+            }
+            if let Some(bg) = color(theme, bg.as_ref()) {
+                view.bg(bg);
+            }
+            for child in children {
+                view.add(&widget(app, theme, child));
+            }
+            lay_out(&view, layout).as_any()
+        }
+        abi::Node::Text { spans, fg, wrap, truncate, selectable, layout } => {
+            let fg = color(theme, fg.as_ref()).unwrap_or(theme.text.base);
+            let text = Text::new(app, spans.iter().map(|span| styled(theme, span, fg)).collect::<Vec<_>>())
+                .fg(fg)
+                .wrap(match wrap {
+                    abi::Wrap::Word => WrapMode::Word,
+                    abi::Wrap::Char => WrapMode::Char,
+                    abi::Wrap::None => WrapMode::None,
+                })
+                .truncate(*truncate)
+                .selectable(*selectable);
+            lay_out(&text, layout).as_any()
+        }
+    }
+}
+
+fn lay_out<W: Widget>(widget: &W, layout: &abi::Layout) -> W {
+    match layout.width {
+        Some(abi::Width::Cells(cells)) => drop(widget.width(cells)),
+        Some(abi::Width::Percent(percent)) => drop(widget.width(Length::percent(percent))),
+        None => {}
+    }
+    if layout.grow {
+        widget.grow(1.0).basis(Length::Auto);
+    }
+    if let Some(shrink) = layout.shrink {
+        widget.shrink(if shrink { 1.0 } else { 0.0 });
+    }
+    if layout.min_width_zero {
+        widget.min_width(0);
+    }
+    widget.clone()
+}
+
+/// `span` styled in `theme`, in `fg` without a color of its own.
+fn styled(theme: &Theme, span: &abi::Span, fg: Color) -> Span<'static> {
+    let mut attributes = Attributes::NONE;
+    for (set, attribute) in [
+        (span.bold, Attributes::BOLD),
+        (span.italic, Attributes::ITALIC),
+        (span.underline, Attributes::UNDERLINE),
+        (span.dim, Attributes::DIM),
+    ] {
+        if set {
+            attributes |= attribute;
+        }
+    }
+    let mut style = Style::new().fg(color(theme, span.fg.as_ref()).unwrap_or(fg));
+    if let Some(bg) = color(theme, span.bg.as_ref()) {
+        style = style.bg(bg);
+    }
+    Span::styled(span.text.clone(), Style { attributes, ..style })
+}
 
 /// One fence registration's keys, by the ID of the widget that shows the block. A key moves to the widget that
 /// replaces its block's widget, so it stays the same while the block streams.
@@ -122,24 +294,7 @@ pub fn lines_widget(app: &App, theme: &Theme, lines: &[Line], fg: Option<&abi::C
         if index > 0 {
             spans.push(Span::styled("\n", Style::new().fg(base)));
         }
-        spans.extend(line.iter().map(|span| {
-            let mut attributes = Attributes::NONE;
-            for (set, attribute) in [
-                (span.bold, Attributes::BOLD),
-                (span.italic, Attributes::ITALIC),
-                (span.underline, Attributes::UNDERLINE),
-                (span.dim, Attributes::DIM),
-            ] {
-                if set {
-                    attributes |= attribute;
-                }
-            }
-            let mut style = Style::new().fg(color(theme, span.fg.as_ref()).unwrap_or(base));
-            if let Some(bg) = color(theme, span.bg.as_ref()) {
-                style = style.bg(bg);
-            }
-            Span::styled(span.text.clone(), Style { attributes, ..style })
-        }));
+        spans.extend(line.iter().map(|span| styled(theme, span, base)));
     }
     let text = Text::new(app, spans).width(Length::percent(100.0)).wrap(WrapMode::None).selectable(false);
     let text = match fg {

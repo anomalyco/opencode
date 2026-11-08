@@ -482,25 +482,45 @@ fn loopback(
     host: &Rc<TestHost>,
     create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
 ) -> Registry<TestHost> {
-    let api = PluginApi {
-        size: size_of::<PluginApi>(),
-        major: ABI_MAJOR,
-        minor: ABI_MINOR,
-        requires_minor: 4,
-        create: Some(create),
-        call: Some(abi::runtime::call),
-        destroy: Some(abi::runtime::destroy),
-        free: Some(abi::runtime::free),
-        describe: None,
-    };
-    // The shims silence the process's panic hook, as a plugin's own; this test binary keeps its own.
-    let hook = std::panic::take_hook();
-    let (definition, error) = define(host, Library::from_table(&api, HOST_MINOR).unwrap(), None).unwrap();
+    let (definition, error) = super::loopback(host, create).unwrap();
     let loopback = Registry::new(Vec::new(), []);
     loopback.load(host, definition.external("loopback.so", error));
-    std::panic::set_hook(hook);
     assert_eq!(entry(&loopback.entries(), "loopback.so").status, Status::Active);
     loopback
+}
+
+/// The sample's sidebar claim, compiled in rather than loaded.
+#[path = "../../../examples/sample/src/slot.rs"]
+mod sample_slot;
+
+/// The frames of `registry`'s `sidebar.content` claims for `ses_1`: as mounted, then after a message arrives and the
+/// host syncs them.
+fn sidebar(host: &Rc<TestHost>, registry: &Registry<TestHost>) -> Vec<Capture> {
+    host.messages.borrow_mut().clear();
+    let parent = View::new(host.app()).column();
+    let input = SlotInput { session_id: Some("ses_1".to_owned()), ..SlotInput::default() };
+    let mounted = registry.mount(&**host, &parent, slot::SIDEBAR_CONTENT, &input, |_| {});
+    host.app().root().clear();
+    host.app().root().add(&parent);
+    let first = host.app.render();
+    host.messages.borrow_mut().push(abi::types::SessionMessageInfo::Unknown(serde_json::json!({ "type": "x" })));
+    mounted.sync(host, &());
+    vec![first, host.app.render()]
+}
+
+// Expected: the sample's sidebar claim, compiled into the host and run in process, draws the same cells as the same
+// source draws from the library, where its session, message and model reads cross the C ABI as requests.
+#[test]
+fn the_sample_slot_draws_the_same_in_process_and_through_the_library() {
+    let host = host();
+    let plugin = abi::Plugin { id: "sample", setup: sample_slot::setup };
+    let in_process = Registry::new(vec![plugin.into()], []);
+    in_process.activate(&host);
+    let direct = sidebar(&host, &in_process);
+    let text: Vec<String> = direct.iter().map(Capture::text).collect();
+    assert!(text[0].contains("Sample: 0 messages") && text[0].contains("opencode/big"), "{}", text[0]);
+    assert!(text[1].contains("Sample: 1 messages"), "{}", text[1]);
+    assert_eq!(sidebar(&host, &active(&host, &build("still"))), direct);
 }
 
 // Expected: the LaTeX built-in, wired through the byte shims of the C ABI (`Loopback`), keeps its formula across
