@@ -73,24 +73,23 @@ impl<H: Host> Backend<H> for Native {
             log::info!("plugin library version {version}, ABI {ABI_MAJOR}.{}", library.minor);
         }
         let options = options.map(str::to_owned);
-        // Setup runs once now, to check the build and learn its ID; the first activation takes this instance.
-        // It has the host already, and the ID when `describe` gives it, so setup may use storage and the theme.
-        let first = Instance::create(&library, Rc::downgrade(host), metadata.id.as_deref(), options.as_deref())?;
-        let id = first.1.id.clone();
-        let hint = metadata.id;
+        // Setup runs on each activation only, so a disabled plugin starts nothing. A plugin without `describe`
+        // (ABI 1.0) tells its ID only from setup, so for it setup runs once now, and that instance is destroyed.
+        let id = match metadata.id {
+            Some(id) => id,
+            None => Instance::create(&library, Rc::downgrade(host), "", options.as_deref())?.1.id,
+        };
         let failure: Rc<RefCell<Option<String>>> = Rc::default();
-        let prepared = RefCell::new(Some(first));
         let definition = Definition::new(id, {
             let failure = failure.clone();
             move |setup: &mut Setup<'_, H>| {
                 let host = Rc::downgrade(setup.host());
-                let instance = match prepared.borrow_mut().take() {
-                    Some(first) => {
-                        first.0.ctx.borrow_mut().host = host.clone();
-                        Ok(first)
-                    }
-                    None => Instance::create(&library, host.clone(), hint.as_deref(), options.as_deref()),
-                };
+                let instance = Instance::create(&library, host.clone(), setup.id(), options.as_deref()).and_then(
+                    |(instance, manifest)| match manifest.id == setup.id() {
+                        true => Ok((instance, manifest)),
+                        false => Err(format!("setup returned plugin ID {}, not {}", manifest.id, setup.id())),
+                    },
+                );
                 let (instance, manifest) = match instance {
                     Ok(instance) => instance,
                     Err(error) => {
@@ -241,14 +240,14 @@ struct Instance<H: Host> {
 }
 
 impl<H: Host> Instance<H> {
-    /// Runs setup. `id` is the plugin's ID from its metadata, if it gave one, so setup may use storage.
+    /// Runs setup. `id` is the plugin's ID, or empty while it is not known, so setup may use storage.
     fn create(
         library: &Rc<Library>,
         host: Weak<H>,
-        id: Option<&str>,
+        id: &str,
         options: Option<&str>,
     ) -> Result<(Self, Manifest), String> {
-        let id = id.unwrap_or_default().to_owned();
+        let id = id.to_owned();
         let ctx = Box::new(RefCell::new(Ctx { host, id, keys: Vec::new(), effects: Vec::new() }));
         let api = Box::new(HostApi {
             size: size_of::<HostApi>(),

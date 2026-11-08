@@ -185,8 +185,36 @@ fn versions_follow_the_abi_rules() {
         load(&build("requires-future"), None).unwrap(),
         "plugin needs host ABI 1.99 or newer, this opencode-rs has 1.2; update opencode-rs"
     );
-    assert_eq!(load(&current, Some("{\"fail\":true}")).unwrap(), "sample setup failed");
     assert!(load(b"not a library", None).unwrap().starts_with("cannot load the library"));
+    // Setup runs on activation, so a setup that fails fails the plugin there.
+    let (definition, error) = Native.load(&host, &current, Some("{\"fail\":true}")).unwrap();
+    let registry = Registry::new(Vec::new(), []);
+    registry.load(&host, definition.external("sample.so", error));
+    assert_eq!(status(&registry), Status::Failed("sample setup failed".to_owned()));
+}
+
+// Expected: a plugin that `cli.json` disables loads without running its setup. Enabling it runs setup, and
+// disabling or unloading it destroys that instance.
+#[test]
+fn setup_runs_on_activation_and_the_instance_is_destroyed_after() {
+    let host = host();
+    let stored = |key: &str| host.storage.borrow_mut().remove(&format!("plugin.sample.{key}"));
+    let (definition, error) = Native.load(&host, &build(""), Some("{\"probe\":true}")).unwrap();
+    assert_eq!(definition.id, "sample");
+    let registry = Registry::new(Vec::new(), ["-sample"]);
+    registry.load(&host, definition.external("sample.so", error));
+    assert_eq!(status(&registry), Status::Inactive);
+    host.app.advance(Duration::from_millis(1));
+    assert!(host.toasts.borrow().is_empty() && host.storage.borrow().is_empty());
+
+    assert!(registry.set_active(&host, "sample", true));
+    assert_eq!(stored("count").as_deref(), Some("{\"count\":1}"));
+    assert!(registry.set_active(&host, "sample", false));
+    assert_eq!(stored("destroyed").as_deref(), Some("{\"destroyed\":true}"));
+    assert!(registry.set_active(&host, "sample", true));
+    assert_eq!(stored("destroyed"), None);
+    registry.unload("sample.so");
+    assert_eq!(stored("destroyed").as_deref(), Some("{\"destroyed\":true}"));
 }
 
 #[test]

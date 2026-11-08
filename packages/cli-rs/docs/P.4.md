@@ -60,7 +60,8 @@ wrapping; a fence scrolls sideways like the LaTeX and Mermaid renderers. `Setup:
 `options` of the plugin's `plugins` entry as JSON text. Other languages implement the same structs and JSON.
 
 What does not cross: arbitrary widget trees, mouse handlers, and live store access (`api.state`). A slot or
-route is drawn when it mounts, and again when the route remounts (hot reload, toggles, navigation).
+route is drawn when it mounts, asks for its rows again with each change batch of the store, and redraws when
+they differ.
 
 ## Discovery
 
@@ -77,6 +78,10 @@ target is a TypeScript plugin and is listed as skipped (F16). Server-side TUI pl
 
 ## Lifecycle
 
+- Loading a build reads its ID from `describe` and runs no setup. Setup (`create`) runs on each activation,
+  and deactivation or unloading destroys that instance, so a plugin that `cli.json` disables starts nothing. A
+  plugin without `describe` (ABI 1.0) tells its ID only from setup, so its setup runs once at load and that
+  instance is destroyed at once. A setup that fails fails the plugin on activation.
 - `Loader::reconcile` loads new and changed builds (by content digest), unloads removed ones, and remounts the
   route when anything changed. A build that fails while a previous version runs keeps the previous version
   and reports `… (previous version still active)`, as TS does.
