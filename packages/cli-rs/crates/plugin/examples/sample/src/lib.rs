@@ -15,8 +15,13 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     }
     let host = setup.host();
     setup.storage_key("count");
-    // Setup itself uses the host: storage, the theme mode, and a toast.
-    if setup.options().is_some_and(|options| options.contains("\"probe\":true")) {
+    // Setup itself uses the host: storage, the theme mode, and a toast. Destruction writes `destroyed`.
+    let probe = setup.options().is_some_and(|options| options.contains("\"probe\":true"));
+    let destroyed = probe.then(|| {
+        setup.storage_key("destroyed");
+        Destroyed(host)
+    });
+    if probe {
         let count = count(host);
         let mode = if host.theme_mode() == Some(ThemeMode::Light) { "light" } else { "dark" };
         let stored = match host.storage_set("count", &format!("{{\"count\":{}}}", count + 1)) {
@@ -60,6 +65,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         Some(vec![vec![Span::new(format!("sample mode {mode}"))]])
     });
     setup.slot(SlotKind::Append, "home.footer", move |_| {
+        let _ = &destroyed;
         let text = format!("sample plugin {VERSION}: home.footer, {} hellos", hellos.get());
         vec![vec![Span::new(text).fg("text.muted")]]
     });
@@ -80,6 +86,15 @@ fn command(name: &str, title: &str, slash: Option<&str>) -> Command {
         slash: slash.map(str::to_owned),
         keybind: None,
         palette: true,
+    }
+}
+
+/// Writes the `destroyed` key when the host destroys the instance, which drops what setup registered.
+struct Destroyed(opencode_plugin_abi::Host);
+
+impl Drop for Destroyed {
+    fn drop(&mut self) {
+        let _ = self.0.storage_set("destroyed", "{\"destroyed\":true}");
     }
 }
 

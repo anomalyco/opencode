@@ -24,8 +24,9 @@ pub fn entry_file() -> String {
 
 /// Loads native builds.
 pub trait Backend<H: Host> {
-    /// Loads the build `library` and runs its setup once with `options` (JSON text) against `host`, returning the
-    /// definition, not yet active, and its failure while it runs. An error is why the build cannot load.
+    /// Loads the build `library` against `host`, returning the definition, not yet active, and its failure while
+    /// it runs. Setup runs with `options` (JSON text) on each activation, not here. An error is why the build
+    /// cannot load.
     fn load(&self, host: &Rc<H>, library: &[u8], options: Option<&str>) -> Result<(Definition<H>, ErrorFn), String>;
 }
 
