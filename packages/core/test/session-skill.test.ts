@@ -3,6 +3,7 @@ import path from "path"
 import { describe, expect } from "bun:test"
 import { Duration, Effect, Layer, LayerMap } from "effect"
 import { Database } from "@opencode/core/database/database"
+import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -57,7 +58,7 @@ const locations = makeGlobalNode({
           ).pipe(
             Layer.provideMerge(
               LayerNode.compile(
-                LayerNode.group([PluginHooks.node, Image.node, Skill.node, Config.node]),
+                LayerNode.group([PluginHooks.node, Image.node, Skill.node, Config.node, Agent.node]),
                 {
                   replacements: [
                     Config.node.replace(

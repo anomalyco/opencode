@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { and, eq } from "drizzle-orm"
 import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
-import { Agent } from "@opencode/schema/agent"
+import { Agent } from "@opencode/core/agent"
 import { Event } from "@opencode/schema/event"
 import { Model } from "@opencode/schema/model"
 import { Money } from "@opencode/schema/money"
@@ -137,6 +137,10 @@ const setup = Effect.fnUntraced(function* (options?: {
           get: (id) => Effect.succeed(id === skillInfo.id ? skillInfo : undefined),
         }),
       options?.snapshot?.(ref) ?? Layer.mock(Snapshot.Service, {}),
+      // Prompt admission resolves the effective agent through the location services.
+      Layer.mock(Agent.Service, {
+        select: (id) => Effect.succeed({ id: id ?? Agent.ID.make("build"), info: undefined }),
+      }),
       Layer.mock(Plugin.Service, {
         awaitActivation: Effect.sync(() => {
           activationWaits.push(ref)

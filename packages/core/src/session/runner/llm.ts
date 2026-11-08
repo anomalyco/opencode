@@ -19,7 +19,7 @@ import { SessionModelTransport } from "../model-transport.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
-import { SessionMessageTable } from "../sql.js"
+import { SessionMessageTable, SessionTable } from "../sql.js"
 import { SessionTitle } from "../title.js"
 import { toSessionError } from "../to-session-error.js"
 import { DrainResult, Service, type Interface } from "./index.js"
@@ -200,7 +200,19 @@ const layer = Layer.effect(
                       onlyIfMissing: true,
                     })
                   if (promoted > 0) step = 1
-                  return { _tag: "Ready" as const, context: yield* context.load(selected) }
+                  // Promotion may apply a per-prompt agent selection; the pre-promotion
+                  // selection must not leak into the new turn's first step. Re-prepare
+                  // only when the persisted agent actually changed.
+                  const agentChanged =
+                    promoted > 0 &&
+                    ((yield* db
+                      .select({ agent: SessionTable.agent })
+                      .from(SessionTable)
+                      .where(eq(SessionTable.id, sessionID))
+                      .get()
+                      .pipe(Effect.orDie))?.agent ?? undefined) !== selected.session.agent
+                  const settled = agentChanged ? yield* prepareContext(sessionID) : selected
+                  return { _tag: "Ready" as const, context: yield* context.load(settled) }
                 }),
               )
               if (ready) return ready
