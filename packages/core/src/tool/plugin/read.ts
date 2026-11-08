@@ -1,12 +1,11 @@
 export * as ReadTool from "./read.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
-import { basename, dirname, extname, isAbsolute, join } from "path"
+import { basename, dirname, extname, isAbsolute, join, relative } from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "../../location.js"
-import { FileSystemSearch } from "../../filesystem/search.js"
 import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
 import { SessionInstructions } from "../../session/instructions.js"
@@ -41,7 +40,7 @@ export const Plugin = {
     const sessionInstructions = yield* SessionInstructions.Service
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
-    const search = yield* FileSystemSearch.Service
+    const environment = yield* Environment.Service
 
     yield* ctx.tool
       .transform((editor) =>
@@ -193,45 +192,22 @@ export const Plugin = {
         Effect.orElseSucceed(() => ({ type: "unknown" as const })),
       )
 
-    const similar = (names: readonly string[], name: string) => {
-      const base = name.toLowerCase()
-      return names
-        .filter((entry) => {
-          const candidate = entry.toLowerCase()
-          if (candidate.includes(base) || base.includes(candidate)) return true
-          // Names that only differ in look-alike characters are what alternatePath recovers or deliberately skips.
-          if (canonical(candidate) === canonical(base)) return false
-          const wanted = stem(base)
-          return editDistance(stem(candidate), wanted) <= (wanted.length < 3 ? 0 : wanted.length < 5 ? 1 : 2)
-        })
-        .slice(0, 3)
-    }
-
-    // Readable same-name files elsewhere in the repository, nearest first, from the in-memory file index.
-    const elsewhere = Effect.fn("ReadTool.elsewhere")(function* ({ input, requested, context }: Missing) {
-      if (!location.vcs || !FSUtil.contains(location.directory, requested.absolute)) return []
-      const segments = requested.resource.split("/")
-      const shared = (path: string) => path.split("/").findIndex((part, offset) => part !== segments[offset])
-      const candidates = (yield* search.byName(basename(requested.absolute)))
-        .filter((path) => path !== requested.resource)
-        .sort((a, b) => shared(b) - shared(a))
-        .slice(0, ELSEWHERE_CANDIDATES)
-      // Each permission check loads rules and runs plugin hooks, so stop once three are readable.
-      const readable: string[] = []
-      for (const path of candidates) {
-        if (readable.length === 3) break
-        if (
-          yield* permission.allows({
-            action: "read",
-            resources: [path],
-            save: ["*"],
-            ...Permission.invocation(context),
-          })
-        )
-          readable.push(path)
-      }
-      const absolute = isAbsolute(input) || input.startsWith("~/")
-      return readable.map((path) => (absolute ? join(location.directory, path) : path))
+    // A path written from the wrong root, such as /Users/me/src/a.ts for a location at /Users/me/repo,
+    // usually means <location>/src/a.ts, so check that one path and nothing else.
+    const reroot = Effect.fn("ReadTool.reroot")(function* (miss: Missing) {
+      const root = location.directory
+      if (FSUtil.contains(root, miss.requested.absolute) || !FSUtil.contains(dirname(root), miss.requested.absolute))
+        return []
+      const target = yield* access.resolve({ path: join(root, relative(dirname(root), miss.requested.absolute)) })
+      if (!(yield* Environment.exists(environment.files, target.absolute))) return []
+      const readable = yield* permission.allows({
+        action: "read",
+        resources: [target.resource],
+        save: ["*"],
+        ...Permission.invocation(miss.context),
+      })
+      if (!readable) return []
+      return [isAbsolute(miss.input) || miss.input.startsWith("~/") ? target.absolute : target.resource]
     })
 
     const didYouMean = (suggestions: string[]) =>
@@ -239,18 +215,18 @@ export const Plugin = {
 
     // A missing folder usually means a removed worktree, a moved directory, or a relative path
     // resolved from the wrong place, so name the first missing folder and its nearest existing parent.
-    const missingFolder = Effect.fn("ReadTool.missingFolder")(function* (miss: Missing) {
-      const { input } = miss
-      let child = dirname(miss.requested.absolute)
-      let parent = dirname(child)
+    const missingFolder = Effect.fn("ReadTool.missingFolder")(function* (
+      input: string,
+      folder: string,
+      moved: string[],
+    ) {
+      let child = folder
+      let parent = dirname(folder)
       while (parent !== child) {
         const found = yield* listing(parent)
         if (found.type === "unknown") break
         if (found.type === "found") {
-          const suggestions = [
-            ...(yield* elsewhere(miss)),
-            ...similar(found.names, basename(child)).map((entry) => join(parent, entry)),
-          ]
+          const suggestions = [...moved, ...similar(found.names, basename(child)).map((entry) => join(parent, entry))]
           const message = [
             `File not found: ${input}`,
             `The folder ${child} does not exist. The nearest folder that does is ${parent}.`,
@@ -261,22 +237,57 @@ export const Plugin = {
         child = parent
         parent = dirname(parent)
       }
-      return yield* new ToolFailure({ message: `File not found: ${input}` })
+      return yield* new ToolFailure({ message: [`File not found: ${input}`, ...didYouMean(moved)].join("\n\n") })
     })
 
     const missing = Effect.fn("ReadTool.missing")(function* (miss: Missing) {
-      const { input } = miss
-      const found = yield* listing(dirname(miss.requested.absolute))
-      if (found.type === "missing") return yield* missingFolder(miss)
-      const suggestions =
-        found.type === "found" ? similar(found.names, basename(input)).map((entry) => join(dirname(input), entry)) : []
-      if (suggestions.length < 3) suggestions.push(...(yield* elsewhere(miss)))
-      return yield* new ToolFailure({ message: [`File not found: ${input}`, ...didYouMean(suggestions)].join("\n\n") })
+      const moved = yield* reroot(miss).pipe(Effect.orElseSucceed(() => []))
+      const folder = dirname(miss.requested.absolute)
+      const found = yield* listing(folder)
+      if (found.type === "missing") return yield* missingFolder(miss.input, folder, moved)
+      const suggestions = [
+        ...moved,
+        ...(found.type === "found"
+          ? similar(found.names, basename(miss.input)).map((entry) => join(dirname(miss.input), entry))
+          : []),
+      ]
+      return yield* new ToolFailure({
+        message: [`File not found: ${miss.input}`, ...didYouMean(suggestions)].join("\n\n"),
+      })
     })
   }),
 }
 
-const ELSEWHERE_CANDIDATES = 50
+// Ranks a folder's entries against a missing name: same name ignoring case, then same stem with
+// another extension, then one containing the other, then a typo in the stem.
+const similar = (names: readonly string[], requested: string) => {
+  const name = requested.toLowerCase()
+  const wanted = stem(name)
+  const typos = wanted.length < 3 ? 0 : wanted.length < 5 ? 1 : 2
+  const tier = (candidate: string) => {
+    if (candidate === name) return 1
+    // Names that only differ in look-alike characters are what alternatePath recovers or deliberately skips.
+    if (canonical(candidate) === canonical(name)) return
+    const found = stem(candidate)
+    if (found === wanted) return 2
+    if (
+      Math.min(found.length, wanted.length) >= 3 &&
+      (candidate.includes(name) || name.includes(candidate) || found.includes(wanted) || wanted.includes(found))
+    )
+      return 3
+    // Folders can be huge, so skip the distance when the lengths alone rule out a typo.
+    if (typos > 0 && Math.abs(found.length - wanted.length) <= typos && editDistance(found, wanted) <= typos) return 4
+  }
+  return names
+    .filter((entry) => entry !== requested)
+    .flatMap((entry) => {
+      const rank = tier(entry.toLowerCase())
+      return rank === undefined ? [] : [{ entry, rank, distance: editDistance(entry.toLowerCase(), name) }]
+    })
+    .sort((a, b) => a.rank - b.rank || a.distance - b.distance || a.entry.localeCompare(b.entry))
+    .slice(0, 3)
+    .map((match) => match.entry)
+}
 
 const canonical = (name: string) =>
   name

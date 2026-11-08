@@ -50,7 +50,6 @@ const fakeFff = () => {
         destroy: () => void state.destroyed++,
         isScanning: () => state.scanning,
         fileSearch: search,
-        glob: search,
         directorySearch: () => ({ ok: true, value: { items: [], scores: [] } }),
         mixedSearch: () => ({ ok: true, value: { items: [], scores: [] } }),
       },
@@ -178,8 +177,6 @@ describe("FileSystemSearch", () => {
     Effect.gen(function* () {
       const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-fff-lazy-")))).path
       yield* Effect.promise(() => Bun.write(path.join(directory, "src/existing-alpha.ts"), "alpha"))
-      yield* Effect.promise(() => Bun.write(path.join(directory, "lib/existing-alpha.ts"), "alpha"))
-      yield* Effect.promise(() => Bun.write(path.join(directory, "lib/existing-alpha.ts.bak"), "alpha"))
       expect(Bun.spawnSync(["git", "init", "-q"], { cwd: directory }).exitCode).toBe(0)
 
       const ref = Location.Ref.make({ directory: AbsolutePath.make(directory) })
@@ -199,43 +196,6 @@ describe("FileSystemSearch", () => {
           .find({ query: "existing-alpha", type: "file" })
           .pipe(Effect.map((entries) => entries.map((entry) => entry.path)))
         expect(found).toContain(RelativePath.make("src/existing-alpha.ts"))
-        expect((yield* search.byName("existing-alpha.ts")).toSorted()).toEqual([
-          RelativePath.make("lib/existing-alpha.ts"),
-          RelativePath.make("src/existing-alpha.ts"),
-        ])
-      }).pipe(Effect.provide(layer))
-    }),
-  )
-
-  it.effect("looks up ripgrep-indexed files by exact name", () =>
-    Effect.gen(function* () {
-      const files = ["src/index.ts", "src/index.tsx", "lib/index.ts", "index.ts", "src/myindex.ts"]
-      const layer = AppNodeBuilder.build(FileSystemSearch.node, [
-        Location.node.replace(
-          Layer.succeed(
-            Location.Service,
-            Location.Service.of(
-              location({ directory: AbsolutePath.make(path.join(os.tmpdir(), "opencode-search-name")) }),
-            ),
-          ),
-        ),
-        Ripgrep.node.replace(
-          Layer.mock(Ripgrep.Service, {
-            find: (input) =>
-              Effect.forEach(files, (file) => {
-                const entry = FileSystem.Entry.make({ path: RelativePath.make(file), type: "file" })
-                return (input.onEntry ? input.onEntry(entry) : Effect.void).pipe(Effect.as(entry))
-              }),
-          }),
-        ),
-      ])
-
-      yield* Effect.gen(function* () {
-        const search = yield* FileSystemSearch.Service
-        expect(yield* search.byName("index.ts")).toEqual(
-          ["src/index.ts", "lib/index.ts", "index.ts"].map((file) => RelativePath.make(file)),
-        )
-        expect(yield* search.byName("missing.ts")).toEqual([])
       }).pipe(Effect.provide(layer))
     }),
   )

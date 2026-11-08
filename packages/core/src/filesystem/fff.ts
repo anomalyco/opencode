@@ -46,7 +46,6 @@ export interface Picker {
   destroy(): void
   isScanning(): boolean
   fileSearch(query: string, options?: SearchOptions): Result<Search>
-  glob(pattern: string, options?: SearchOptions): Result<Search>
   directorySearch(query: string, options?: SearchOptions): Result<DirSearch>
   mixedSearch(query: string, options?: SearchOptions): Result<MixedSearch>
 }

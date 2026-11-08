@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { Effect, Exit, Layer, Result } from "effect"
 import { Config } from "@opencode/core/config"
@@ -9,14 +10,14 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "@opencode/core/location"
 import { Image } from "@opencode/core/image"
 import { Permission } from "@opencode/core/permission"
-import { FileSystemSearch } from "@opencode/core/filesystem/search"
-import { Ripgrep } from "@opencode/core/ripgrep"
 import { Session } from "@opencode/core/session"
 import { Skill } from "@opencode/core/skill"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Global } from "@opencode/util/global"
 import { FileAccess } from "@opencode/core/file-access"
+import { hostEnvironmentLayer } from "./fixture/environment"
 import { location } from "./fixture/location"
+import { withTempDir } from "./fixture/tmpdir"
 import { Tool } from "@opencode/core/tool"
 import { ReadTool } from "@opencode/core/tool/plugin/read"
 import { ReadToolFileSystem } from "@opencode/core/tool/read-filesystem"
@@ -39,7 +40,7 @@ const readToolNode = makeLocationNode({
     SessionInstructions.node,
     Skill.node,
     FSUtil.node,
-    FileSystemSearch.node,
+    Environment.node,
     Location.node,
   ],
 })
@@ -82,15 +83,6 @@ const reader = Layer.succeed(
     },
   }),
 )
-// The real ripgrep-backed file index, fed these paths by its one scan.
-let indexedFiles: string[] = []
-const ripgrep = Layer.mock(Ripgrep.Service, {
-  find: (input) =>
-    Effect.forEach(
-      indexedFiles.map((file) => FileSystem.Entry.make({ path: RelativePath.make(file), type: "file" })),
-      (entry) => (input.onEntry ? input.onEntry(entry) : Effect.void).pipe(Effect.as(entry)),
-    ),
-})
 let allow = true
 let deniedResource: string | undefined
 const permission = permissionLayer({
@@ -110,28 +102,22 @@ const permission = permissionLayer({
             ),
       ),
     ),
-  allows: (input) => Effect.succeed(allow && !input.resources.includes(deniedResource ?? "")),
+  allows: (input) => Effect.succeed(allow && !input.resources.some((resource) => resource === deniedResource)),
 })
 const config = Config.testLayer()
 const imageLayer = AppNodeBuilder.build(Image.node)
-const vcs = { type: "git", store: AbsolutePath.make(path.join(process.cwd(), ".git")) }
 const locationLayer = Layer.succeed(
-  Location.Service,
-  Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) }, { vcs })),
-)
-const plainLocationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) })),
 )
 const unavailableImage = Layer.mock(Image.Service, {
   normalize: () => Effect.fail(new Image.ResizerUnavailableError()),
 })
-const readLayer = (imageLayer: Layer.Layer<Image.Service>, locationLayer: Layer.Layer<Location.Service>) =>
+const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
   Layer.mergeAll(
     AppNodeBuilder.build(LayerNode.group([Tool.node, readToolNode, Skill.node]), [
       ReadToolFileSystem.node.replace(reader),
-      FileSystemSearch.node.replace(FileSystemSearch.configured({ fff: false })),
-      Ripgrep.node.replace(ripgrep),
+      Environment.node.replace(hostEnvironmentLayer),
       Permission.node.replace(permission),
       Config.node.replace(config),
       Image.node.replace(imageLayer),
@@ -142,9 +128,40 @@ const readLayer = (imageLayer: Layer.Layer<Image.Service>, locationLayer: Layer.
     config,
     imageLayer,
   )
-const it = testEffect(readLayer(imageLayer, locationLayer))
-const itWithoutResizer = testEffect(readLayer(unavailableImage, locationLayer))
-const itOutsideRepo = testEffect(readLayer(imageLayer, plainLocationLayer))
+const it = testEffect(readLayer(imageLayer))
+// Real-file tests provide their own layer per temp folder.
+const live = testEffect(Layer.empty)
+// Reads through the real filesystem with the location at `directory`; returns the failure message.
+const readMissing = (directory: string, file: string) =>
+  Effect.gen(function* () {
+    const registry = yield* Tool.Service
+    const result = yield* executeTool(registry, {
+      sessionID,
+      ...toolIdentity,
+      call: { type: "tool-call", id: "call-suggest", name: "read", input: { path: file } },
+    })
+    return result.error?.message
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        AppNodeBuilder.build(LayerNode.group([Tool.node, readToolNode, Skill.node]), [
+          Environment.node.replace(hostEnvironmentLayer),
+          Permission.node.replace(permission),
+          Config.node.replace(config),
+          Image.node.replace(imageLayer),
+          Location.node.replace(
+            Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+          ),
+          Global.node.replace(Global.layerWith({ data: Global.Path.data })),
+        ]),
+        config,
+        imageLayer,
+      ),
+    ),
+  )
+const write = (file: string) =>
+  Effect.promise(() => fs.mkdir(path.dirname(file), { recursive: true }).then(() => fs.writeFile(file, "x\n")))
+const itWithoutResizer = testEffect(readLayer(unavailableImage))
 const sessionID = Session.ID.make("ses_read_tool_test")
 
 describe("ReadTool", () => {
@@ -157,7 +174,6 @@ describe("ReadTool", () => {
     readDefect = undefined
     missingDirectories = []
     directoryEntryDetails = []
-    indexedFiles = []
     readResult = {
       type: "file",
       uri: "file:///README.md",
@@ -735,7 +751,7 @@ describe("ReadTool", () => {
         status: "error",
         error: {
           type: "tool.execution",
-          message: `File not found: ${missingPath}\n\nDid you mean one of these?\n__missing_read_target__.txt.bak\ncopy___missing_read_target__.txt\nold___missing_read_target__.txt`,
+          message: `File not found: ${missingPath}\n\nDid you mean one of these?\n__missing_read_target__.txt.bak\nold___missing_read_target__.txt\ncopy___missing_read_target__.txt`,
         },
       })
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: [missingPath], save: ["*"] }])
@@ -805,73 +821,83 @@ describe("ReadTool", () => {
     }),
   )
 
-  it.effect("suggests close names nearby and readable same-name files elsewhere, nearest first", () =>
+  live.live("suggests close names from the same folder", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        for (const file of ["typo/config.ts", "typo/db.ts", "ext/config.yaml", "case/README.md"])
+          yield* write(path.join(tmp.path, file))
+        for (const file of ["short/db.ts", "short/io.ts", "short/api.ts", "short/build.ts"])
+          yield* write(path.join(tmp.path, file))
+
+        expect(yield* readMissing(tmp.path, "typo/conifg.ts")).toBe(
+          "File not found: typo/conifg.ts\n\nDid you mean one of these?\ntypo/config.ts",
+        )
+        expect(yield* readMissing(tmp.path, "ext/config.yml")).toBe(
+          "File not found: ext/config.yml\n\nDid you mean one of these?\next/config.yaml",
+        )
+        expect(yield* readMissing(tmp.path, "short/ui.ts")).toBe("File not found: short/ui.ts")
+        // Case-insensitive filesystems, such as macOS by default, simply read the file.
+        expect([undefined, "File not found: case/readme.md\n\nDid you mean one of these?\ncase/README.md"]).toContain(
+          yield* readMissing(tmp.path, "case/readme.md"),
+        )
+      }),
+    ),
+  )
+
+  it.effect("ranks same-folder suggestions and shows at most three", () =>
     Effect.gen(function* () {
-      const moved = "src/cluster/queue.rs"
-      indexedFiles = ["tests/queue.rs", "src/queue.ts", "src/land/queue.rs", "queue.rs.bak", moved, "secret/queue.rs"]
-      deniedResource = "secret/queue.rs"
-      missingDirectories = [path.join(process.cwd(), "src", "cluster")]
-      directoryEntryDetails = [{ name: "clusters", type: "directory" }]
-      readFailure = new Environment.NotFound({ path: path.join(process.cwd(), moved) })
+      readFailure = new Environment.NotFound({ path: path.join(process.cwd(), "config.ts") })
       const registry = yield* Tool.Service
-      const read = (input: string) =>
+      const read = () =>
         executeTool(registry, {
           sessionID,
           ...toolIdentity,
-          call: { type: "tool-call", id: "call-elsewhere", name: "read", input: { path: input } },
+          call: { type: "tool-call", id: "call-ranked", name: "read", input: { path: "config.ts" } },
         }).pipe(Effect.map((result) => result.error?.message))
-      const cwd = (...parts: string[]) => path.join(process.cwd(), ...parts)
 
-      expect(yield* read(moved)).toBe(
-        `File not found: ${moved}\n\nThe folder ${cwd("src", "cluster")} does not exist. The nearest folder that does is ${cwd("src")}.\n\nDid you mean one of these?\nsrc/land/queue.rs\ntests/queue.rs\n${cwd("src", "clusters")}`,
+      // Listed worst first: a typo, a containing name, the same stem, and the same name in another case.
+      directoryEntryDetails = ["confix.ts", "config.test.ts", "config.json", "Config.ts"].map((name) => ({
+        name,
+        type: "file" as const,
+      }))
+      expect(yield* read()).toBe(
+        "File not found: config.ts\n\nDid you mean one of these?\nConfig.ts\nconfig.json\nconfig.test.ts",
       )
-      missingDirectories = []
-      directoryEntryDetails = [{ name: "queue.ts", type: "file" }]
-      expect(yield* read(cwd("lib", "queue.rs"))).toBe(
-        `File not found: ${cwd("lib", "queue.rs")}\n\nDid you mean one of these?\n${cwd("lib", "queue.ts")}\n${cwd("tests", "queue.rs")}\n${cwd("src", "land", "queue.rs")}`,
-      )
-      directoryEntryDetails = ["config.ts", "db.ts"].map((name) => ({ name, type: "file" as const }))
-      expect(yield* read("conifg.ts")).toBe("File not found: conifg.ts\n\nDid you mean one of these?\nconfig.ts")
-      expect(yield* read("ui.ts")).toBe("File not found: ui.ts")
-    }),
-  )
-
-  it.effect("suggests the nearest copies of a common name and skips unreadable ones", () =>
-    Effect.gen(function* () {
-      // The nearest copies come last in scan order, after hundreds of others.
-      indexedFiles = [
-        ...Array.from({ length: 300 }, (_, index) => `pkg${index}/index.ts`),
-        "lib/a/index.ts",
-        "lib/b/index.ts",
-        "lib/c/index.ts",
-        "lib/index.ts",
-      ]
-      deniedResource = "lib/b/index.ts"
-      readFailure = new Environment.NotFound({ path: path.join(process.cwd(), "lib", "d", "index.ts") })
-      const registry = yield* Tool.Service
-      const result = yield* executeTool(registry, {
-        sessionID,
-        ...toolIdentity,
-        call: { type: "tool-call", id: "call-common", name: "read", input: { path: "lib/d/index.ts" } },
-      })
-      expect(result.error?.message).toBe(
-        "File not found: lib/d/index.ts\n\nDid you mean one of these?\nlib/a/index.ts\nlib/c/index.ts\nlib/index.ts",
+      directoryEntryDetails = directoryEntryDetails.filter((entry) => entry.name !== "Config.ts")
+      expect(yield* read()).toBe(
+        "File not found: config.ts\n\nDid you mean one of these?\nconfig.json\nconfig.test.ts\nconfix.ts",
       )
     }),
   )
 
-  itOutsideRepo.effect("does not search for same-name files outside a repository", () =>
-    Effect.gen(function* () {
-      indexedFiles = ["tests/queue.rs"]
-      readFailure = new Environment.NotFound({ path: path.join(process.cwd(), "lib", "queue.rs") })
-      const registry = yield* Tool.Service
-      const result = yield* executeTool(registry, {
-        sessionID,
-        ...toolIdentity,
-        call: { type: "tool-call", id: "call-plain", name: "read", input: { path: "lib/queue.rs" } },
-      })
-      expect(result.error?.message).toBe("File not found: lib/queue.rs")
-    }),
+  live.live("suggests a path written from the parent of the location first", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const repo = path.join(tmp.path, "repo")
+        yield* write(path.join(repo, "src", "a.ts"))
+        const requested = path.join(tmp.path, "src", "a.ts")
+
+        expect(yield* readMissing(repo, requested)).toBe(
+          `File not found: ${requested}\n\nThe folder ${path.join(tmp.path, "src")} does not exist. The nearest folder that does is ${tmp.path}.\n\nDid you mean one of these?\n${path.join(repo, "src", "a.ts")}`,
+        )
+        yield* write(path.join(tmp.path, "src", "a.tsx"))
+        expect(yield* readMissing(repo, requested)).toBe(
+          `File not found: ${requested}\n\nDid you mean one of these?\n${path.join(repo, "src", "a.ts")}\n${path.join(tmp.path, "src", "a.tsx")}`,
+        )
+      }),
+    ),
+  )
+
+  live.live("suggests close folder names from the nearest existing folder", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        yield* write(path.join(tmp.path, "lib", "x.ts"))
+
+        expect(yield* readMissing(tmp.path, "libs/x.ts")).toBe(
+          `File not found: libs/x.ts\n\nThe folder ${path.join(tmp.path, "libs")} does not exist. The nearest folder that does is ${tmp.path}.\n\nDid you mean one of these?\n${path.join(tmp.path, "lib")}`,
+        )
+      }),
+    ),
   )
 
   it.effect("recovers a unique file whose non-breaking spaces differ", () =>

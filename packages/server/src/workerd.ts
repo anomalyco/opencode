@@ -148,7 +148,6 @@ const fileSystemSearchLayer = Layer.succeed(
   FileSystemSearch.Service,
   FileSystemSearch.Service.of({
     find: () => unavailable("FileSystemSearch.find"),
-    byName: () => unavailable("FileSystemSearch.byName"),
   }),
 )
 
