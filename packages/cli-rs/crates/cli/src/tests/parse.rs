@@ -256,6 +256,14 @@ fn aliases_and_values_match() {
     assert_eq!(url.as_deref(), Some("https://example.com/base"));
     assert!(error(&["pair", "--url", "https://user:secret@example.com"]).contains("without credentials"));
     assert!(error(&["pair", "--url", "ftp://example.com"]).contains("HTTP(S)"));
+    for url in ["https://bücher.example", "https://Bücher.example", "https://%42%C3%BCcher.example"] {
+        assert_eq!(
+            error(&["pair", "--url", url]),
+            format!(
+                "Invalid value for flag --url: \"{url}\". Expected: a host name must be ASCII; write an international name in its punycode (xn--) form"
+            )
+        );
+    }
     assert!(command!(&["run", "--c"], Command::Run(args) => args.continue_), "an alias also resolves as a long flag");
 }
 

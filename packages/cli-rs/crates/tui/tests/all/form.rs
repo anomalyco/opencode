@@ -317,6 +317,21 @@ fn the_helpers_follow_util_form() {
         (string(json!({ "format": "email" })), text("a@b"), Some("Expected an email address")),
         (string(json!({ "format": "email" })), text("a@b.dev"), None),
         (string(json!({ "format": "uri" })), text("not a url"), Some("Expected a URL")),
+        (
+            string(json!({ "format": "uri" })),
+            text("https://Bücher.example"),
+            Some(
+                "https://Bücher.example: a host name must be ASCII; write an international name in its punycode (xn--) form",
+            ),
+        ),
+        (
+            string(json!({ "format": "uri" })),
+            text("https://%42%C3%BCcher.example"),
+            Some(
+                "https://%42%C3%BCcher.example: a host name must be ASCII; write an international name in its punycode (xn--) form",
+            ),
+        ),
+        (string(json!({ "format": "uri" })), text("https://xn--bcher-kva.example"), None),
         (string(json!({ "format": "date" })), text("2026-02-30"), Some("Expected a date (YYYY-MM-DD)")),
         (string(json!({ "format": "date" })), text("2026-02-28"), None),
         (string(json!({ "format": "date-time" })), text("2026-02-28T10:00:00Z"), None),

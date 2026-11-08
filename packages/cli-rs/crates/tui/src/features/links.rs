@@ -57,10 +57,13 @@ pub fn link_at(app: &App, x: u16, y: u16) -> Option<String> {
 
 /// `openUrl`: http and https links only, in the system browser.
 pub fn open_url(input: &str) -> Result<(), String> {
-    let url = url::Url::parse(input)
-        .ok()
-        .filter(|url| matches!(url.scheme(), "http" | "https"))
-        .ok_or_else(|| format!("Only http and https links can be opened in the browser: {input}"))?;
+    let url = match opencode_api::js::parse_url(input) {
+        Err(error @ opencode_api::js::UrlError::NonAsciiHost(_)) => return Err(error.to_string()),
+        url => url
+            .ok()
+            .filter(|url| matches!(url.scheme(), "http" | "https"))
+            .ok_or_else(|| format!("Only http and https links can be opened in the browser: {input}"))?,
+    };
     open(url.as_str())
 }
 
@@ -149,6 +152,14 @@ mod tests {
             Err("Only http and https links can be opened in the browser: file:///etc/passwd".into())
         );
         assert!(open_url("not a url").is_err());
+        for url in ["https://bücher.example", "https://Bücher.example", "https://%42%C3%BCcher.example"] {
+            assert_eq!(
+                open_url(url),
+                Err(format!(
+                    "{url}: a host name must be ASCII; write an international name in its punycode (xn--) form"
+                ))
+            );
+        }
         assert_eq!(open_path("/tmp/project"), Ok(()));
         assert_eq!(*capture.0.opened.borrow(), ["https://opencode.ai/v2/docs", "/tmp/project"]);
     }
