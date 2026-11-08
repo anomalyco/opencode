@@ -119,7 +119,9 @@ TLS handshake only sends it to servers that ask for one.
 - `passphrase` is only needed for an encrypted key.
 - Requests with a client certificate don't follow redirects, so the certificate isn't presented to another host.
 
-Only model requests present the certificate. Tools such as webfetch, remote MCP servers and plugin installs don't.
+Every model request of that provider presents the certificate: chat, compaction, image and decision models. A provider
+with `tls` uses HTTP instead of WebSockets. Tools such as webfetch, remote MCP servers and plugin installs don't present
+it.
 
 ## Foreground
 

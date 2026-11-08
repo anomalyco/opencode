@@ -9,7 +9,15 @@ import {
 } from "effect/http"
 import { HttpContext, HttpRateLimitDetails, AIError, TransportError } from "../schema/index.js"
 import { classifyProviderFailure, providerErrorMessage } from "../provider-error.js"
-import { headerDetails, responseHttp, Service, type HttpMiddleware, type Interface } from "./executor-service.js"
+import {
+  CurrentTls,
+  headerDetails,
+  responseHttp,
+  Service,
+  type HttpMiddleware,
+  type Interface,
+} from "./executor-service.js"
+import type { ClientTls } from "../schema/options.js"
 
 export { CurrentTls, responseHttp, Service } from "./executor-service.js"
 export type { HttpHandler, HttpMiddleware, Interface, RequestExecutorService } from "./executor-service.js"
@@ -252,6 +260,10 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
 )
 
 export const fetchLayer = layer.pipe(Layer.provide(FetchHttpClient.layer))
+
+/** Sends through `execute`, presenting `tls` on each request. The executor's HTTP client reads it from `CurrentTls`. */
+export const withTls = (execute: Interface["execute"], tls: ClientTls | undefined): Interface["execute"] =>
+  tls ? (request, middleware) => execute(request, middleware).pipe(Effect.provideService(CurrentTls, tls)) : execute
 
 /**
  * Per-call middleware that sends through `fetch` instead of the executor's HTTP client. Executor middleware and

@@ -31,6 +31,7 @@ export const make = <Self, Req extends RoutedRequest<Req, Event, Response>, Even
     service,
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
+      const execute = (model: Req["model"]) => RequestExecutor.withTls(executor.execute, model.http?.tls)
       const notQueued = (route: MediaRoute.AnyRoute<Req, Event, Response>, operation: string) =>
         new AIError({
           reason: new UnsupportedOperationError({
@@ -43,27 +44,29 @@ export const make = <Self, Req extends RoutedRequest<Req, Event, Response>, Even
       const start = (request: Req) => {
         const route = request.model.route
         if (route.kind !== "queued") return Effect.fail(notQueued(route, "start"))
-        return route.start(request, executor.execute)
+        return route.start(request, execute(request.model))
       }
       return service.of({
         start,
         resume: (model, token) => {
           if (model.route.kind !== "queued") return Effect.fail(notQueued(model.route, "resume"))
-          return model.route.resume(model, token, executor.execute)
+          return model.route.resume(model, token, execute(model))
         },
         generate: (request, options) => {
           const route = request.model.route
-          if (route.kind !== "queued") return route.generate(request, executor.execute)
+          if (route.kind !== "queued") return route.generate(request, execute(request.model))
           return start(request).pipe(Effect.flatMap((generation) => generation.await(options)))
         },
         stream: (request, options) => {
           const route = request.model.route
-          if (route.kind === "stream") return route.stream(request, executor.execute)
+          if (route.kind === "stream") return route.stream(request, execute(request.model))
           if (route.kind === "queued")
             return Stream.unwrap(
               start(request).pipe(Effect.map((generation) => resultEvents(generation, input.responseEvents, options))),
             )
-          return Stream.fromIterableEffect(Effect.map(route.generate(request, executor.execute), input.responseEvents))
+          return Stream.fromIterableEffect(
+            Effect.map(route.generate(request, execute(request.model)), input.responseEvents),
+          )
         },
       })
     }),
