@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LanguageModel, LLM, LLMClient, LLMEvent, LLMRequest, ToolDefinition } from "../../src/effect.js"
+import { ai, LanguageModel, LLMClient, LLMEvent, ToolDefinition } from "../../src/effect.js"
 import * as DeepSeek from "../../src/providers/deepseek.js"
 import * as OpenAICompatible from "../../src/providers/openai-compatible.js"
 import { it } from "../lib/effect.js"
@@ -16,10 +16,10 @@ const lane = OpenAICompatible.configure({ baseURL: "https://api.lane.test/v1", a
 )
 const other = OpenAICompatible.configure({ baseURL: "https://api.lane.test/v1", apiKey: "test" }).model("other-model")
 
-const request = (model: Parameters<typeof LLM.request>[0]["model"]) =>
-  LLM.request({ model, prompt: "Run it.", tools: [tool] })
+const request = (model: Parameters<typeof ai.request>[0]["model"]) =>
+  ai.request({ model, prompt: "Run it.", tools: [tool] })
 
-const generate = (model: Parameters<typeof LLM.request>[0]["model"], ...contents: ReadonlyArray<object>) =>
+const generate = (model: Parameters<typeof ai.request>[0]["model"], ...contents: ReadonlyArray<object>) =>
   LLMClient.generate(request(model)).pipe(Effect.provide(fixedResponse(sseEvents(...contents))))
 
 const toolCalls = (events: ReadonlyArray<LLMEvent>) => events.filter(LLMEvent.is.toolCall)
@@ -255,7 +255,7 @@ describe("OpenAI Chat DSML recovery", () => {
 
   it.effect("leaves requests without tools untouched even for DeepSeek", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(LLM.request({ model: deepseek, prompt: "Explain." })).pipe(
+      const response = yield* LLMClient.generate(ai.request({ model: deepseek, prompt: "Explain." })).pipe(
         Effect.provide(fixedResponse(sseEvents(deltaChunk({ content: V41_BLOCK }), deltaChunk({}, "stop")))),
       )
 
