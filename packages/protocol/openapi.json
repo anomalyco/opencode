@@ -16666,6 +16666,9 @@
               "codemode_vm": {
                 "type": "boolean"
               },
+              "mcp_resilience": {
+                "type": "boolean"
+              },
               "part_rows": {
                 "type": "boolean"
               },
