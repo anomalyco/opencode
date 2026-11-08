@@ -3,9 +3,9 @@
 export const legalHistory = {
   "/legal/privacy-policy": [
     {
-      sha: "70e24b503b04c739db04778e45d2cc54d3a1321c",
-      date: "2026-11-07",
-      subject: "docs(legal): cover integrations with third-party services",
+      sha: "9c7212c99a69b9d1c644fc30ad79068124aab1a7",
+      date: "2026-11-08",
+      subject: "docs(legal): cover integrations with third-party services (#62700)",
       effective: "Nov 8, 2026",
       first: false,
       added: [
@@ -26,8 +26,8 @@ export const legalHistory = {
       addedCount: 36,
       removedCount: 2,
       source:
-        "https://github.com/anomalyco/opencode/blob/70e24b503b04c739db04778e45d2cc54d3a1321c/services/site/src/lib/legal/privacy-policy.ts",
-      diff: "https://github.com/anomalyco/opencode/commit/70e24b503b04c739db04778e45d2cc54d3a1321c#diff-13f1bdb3583f198406200946a0d6bde1bc1f9271e4e629272db2023a211e2819",
+        "https://github.com/anomalyco/opencode/blob/9c7212c99a69b9d1c644fc30ad79068124aab1a7/services/site/src/lib/legal/privacy-policy.ts",
+      diff: "https://github.com/anomalyco/opencode/commit/9c7212c99a69b9d1c644fc30ad79068124aab1a7#diff-13f1bdb3583f198406200946a0d6bde1bc1f9271e4e629272db2023a211e2819",
     },
     {
       sha: "76ff9a6ab25fca4b8f0f5c43e4ef12bd0c10cc3e",
@@ -199,9 +199,9 @@ export const legalHistory = {
   ],
   "/legal/terms-of-service": [
     {
-      sha: "70e24b503b04c739db04778e45d2cc54d3a1321c",
-      date: "2026-11-07",
-      subject: "docs(legal): cover integrations with third-party services",
+      sha: "9c7212c99a69b9d1c644fc30ad79068124aab1a7",
+      date: "2026-11-08",
+      subject: "docs(legal): cover integrations with third-party services (#62700)",
       effective: "Nov 8, 2026",
       first: false,
       added: [
@@ -215,8 +215,8 @@ export const legalHistory = {
       addedCount: 2,
       removedCount: 2,
       source:
-        "https://github.com/anomalyco/opencode/blob/70e24b503b04c739db04778e45d2cc54d3a1321c/services/site/src/lib/legal/terms-of-service.ts",
-      diff: "https://github.com/anomalyco/opencode/commit/70e24b503b04c739db04778e45d2cc54d3a1321c#diff-209b8f3fa7d4510762a9da362f1ccd8ea7c8754348118dec83377de38a818b32",
+        "https://github.com/anomalyco/opencode/blob/9c7212c99a69b9d1c644fc30ad79068124aab1a7/services/site/src/lib/legal/terms-of-service.ts",
+      diff: "https://github.com/anomalyco/opencode/commit/9c7212c99a69b9d1c644fc30ad79068124aab1a7#diff-209b8f3fa7d4510762a9da362f1ccd8ea7c8754348118dec83377de38a818b32",
     },
     {
       sha: "24008abeb3df6d2bf7c9d39f69803558499062b2",
