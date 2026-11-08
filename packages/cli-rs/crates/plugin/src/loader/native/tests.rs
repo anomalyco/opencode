@@ -242,6 +242,35 @@ fn the_loader_reloads_a_rebuilt_library() {
     assert_eq!(registry.entries().len(), 1);
 }
 
+// Expected: a rebuild whose setup fails, while the old build is active, is destroyed; the old build keeps running and
+// the plugin reads as failed with "(previous version still active)", as in TS.
+#[test]
+fn a_rebuild_whose_setup_fails_keeps_the_running_version() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let config = root.path().join("config");
+    let dir = config.join("plugins/sample");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join(entry_file()), build("")).unwrap();
+    let host = host();
+    let registry = Registry::<TestHost>::new(Vec::new(), []);
+    let loader = Loader::new(
+        Rc::new(Native) as Rc<dyn Backend<TestHost>>,
+        config,
+        root.path().to_path_buf(),
+        Vec::<Configured>::new(),
+    );
+    assert!(loader.reconcile(&host, &registry));
+    fs::write(dir.join(entry_file()), build("setup-fails")).unwrap();
+    assert!(loader.reconcile(&host, &registry));
+    let target = dir.to_string_lossy().into_owned();
+    let entry = entry(&registry.entries(), &target).clone();
+    assert!(entry.active);
+    assert_eq!(entry.status, Status::Failed("sample setup failed (previous version still active)".to_owned()));
+    let screen = markdown(&host, &registry, "```sample\nstill\n```\n");
+    assert!(screen.contains("SAMPLE v1 STILL"), "{screen}");
+    assert!(matches!(host.keymap().dispatch("sample.hello", None), RunResult::Ok));
+}
+
 // Expected: a table from a C plugin is refused, without reading past its declared size or through a null or
 // misaligned pointer, when it is too short for its header, misaligned, or leaves a required callback null. A null
 // `destroy` is allowed.

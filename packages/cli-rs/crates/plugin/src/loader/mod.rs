@@ -232,8 +232,10 @@ impl<H: Host> Loader<H> {
             }),
             ..definition
         };
+        if let Some(error) = registry.load(host, definition.external(name, failure)) {
+            return self.fail(registry, name, digest, error);
+        }
         self.seen.borrow_mut().insert(name.to_owned(), Seen { digest, reload });
-        registry.load(host, definition.external(name, failure));
         true
     }
 

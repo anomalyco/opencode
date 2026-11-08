@@ -15,7 +15,7 @@ use opencode_plugin_abi::{Command, Line, Setup, SlotKind, Span, ThemeMode, Toast
 const VERSION: &str = if cfg!(feature = "v2") { "v2" } else { "v1" };
 
 fn setup(setup: &mut Setup) -> Result<(), String> {
-    if setup.options().is_some_and(|options| options.contains("\"fail\":true")) {
+    if cfg!(feature = "setup-fails") || setup.options().is_some_and(|options| options.contains("\"fail\":true")) {
         return Err("sample setup failed".to_owned());
     }
     let host = setup.host();
@@ -76,7 +76,10 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         .and_then(|rest| rest.chars().take_while(char::is_ascii_digit).collect::<String>().parse().ok())
         .unwrap_or(1000);
     let ticks = Arc::new(AtomicU64::new(0));
-    let ticker = host.waker().map(|waker| Ticker::start(waker, Duration::from_millis(tick), ticks.clone()));
+    let ticker = host
+        .waker()
+        .filter(|_| !cfg!(feature = "still"))
+        .map(|waker| Ticker::start(waker, Duration::from_millis(tick), ticks.clone()));
     setup.slot(SlotKind::Append, "home.footer", move |_| {
         let _ = (&destroyed, &ticker);
         let (hellos, ticks) = (hellos.get(), ticks.load(Ordering::Relaxed));
