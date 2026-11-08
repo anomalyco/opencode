@@ -169,7 +169,10 @@ it.live("reports a capture failure instead of empty output when the output file 
       const { capture } = yield* shell.result(info)
       expect(capture?.output).toContain("output capture failed")
       expect(capture?.output).not.toBe("(no output)")
-      expect((yield* shell.output(info.id)).output).toContain("output capture failed")
+      const first = yield* shell.output(info.id)
+      expect(first.output).toContain("output capture failed")
+      expect(first.cursor).toBeGreaterThan(0)
+      expect((yield* shell.output(info.id, { cursor: first.cursor })).output).toBe("")
       expect((yield* shell.output(info.id, { cursor: 1 })).output).toBe("")
     }).pipe(
       Effect.provide(

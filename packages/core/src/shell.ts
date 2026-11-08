@@ -236,7 +236,8 @@ const layer = () =>
           return {
             // Report once, on the first page, so pollers that append each page do not repeat the notice.
             output: (input?.cursor ?? 0) <= 0 ? captureFailure(command.captureError) : "",
-            cursor: command.size,
+            // At least 1, so a poller that resumes from this cursor does not ask for the first page again.
+            cursor: Math.max(command.size, 1),
             size: command.size,
             truncated: false,
           }
