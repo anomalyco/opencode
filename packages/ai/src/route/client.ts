@@ -608,8 +608,7 @@ const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest, o
   Stream.unwrap(
     Effect.gen(function* () {
       const compiled = yield* compile(request, options)
-      const http = { execute: RequestExecutor.withTls(runtime.http.execute, compiled.request.http?.tls) }
-      return compiled.route.streamPrepared(compiled.prepared, compiled.request, { http }, options)
+      return compiled.route.streamPrepared(compiled.prepared, compiled.request, runtime, options)
     }),
   )
 
@@ -671,12 +670,10 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
     ): Effect.Effect<CompactionResponse, AIError>
     function compact(request: LLMRequest, options?: EndpointCompactOptions | TriggerCompactOptions) {
       return Effect.suspend((): Effect.Effect<CompactionResponse | CompactionCheckpointResponse, AIError> => {
-        const prepared = prepareRequest(request)
-        const http = { execute: RequestExecutor.withTls(executor.execute, prepared.http?.tls) }
         if (options?.mechanism === "trigger" && canCompact(request, options))
-          return request.model.route.compact.trigger(prepared, http, options)
+          return request.model.route.compact.trigger(prepareRequest(request), executor, options)
         if ((options?.mechanism === undefined || options.mechanism === "endpoint") && canCompact(request))
-          return request.model.route.compact.endpoint(prepared, http, options)
+          return request.model.route.compact.endpoint(prepareRequest(request), executor, options)
         return unsupportedCompaction(request.model, options?.mechanism)
       })
     }

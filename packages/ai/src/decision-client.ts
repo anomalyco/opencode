@@ -33,10 +33,7 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
     return Service.of({
       generate: Effect.fnUntraced(function* (request) {
         const route = request.model.route
-        const response = yield* route.generate(
-          request,
-          RequestExecutor.withTls(executor.execute, request.model.http?.tls),
-        )
+        const response = yield* route.generate(request, executor.execute)
         if (answersMatch(request.questions, response.answers))
           return response as DecisionResponseFor<typeof request.questions>
         return yield* new AIError({

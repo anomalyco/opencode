@@ -261,7 +261,10 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
 
 export const fetchLayer = layer.pipe(Layer.provide(FetchHttpClient.layer))
 
-/** Sends through `execute`, presenting `tls` on each request. The executor's HTTP client reads it from `CurrentTls`. */
+/**
+ * Sends through `execute`, presenting `tls` on each request. Apply it only where a provider request is sent, so
+ * downloads made through the plain executor never carry the certificate. The executor's HTTP client reads `CurrentTls`.
+ */
 export const withTls = (execute: Interface["execute"], tls: ClientTls | undefined): Interface["execute"] =>
   tls ? (request, middleware) => execute(request, middleware).pipe(Effect.provideService(CurrentTls, tls)) : execute
 
