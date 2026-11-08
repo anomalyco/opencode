@@ -308,3 +308,44 @@ fn placement_constructors_name_their_kind() {
     assert_eq!(Placement::after("app").kind, Kind::After);
     assert_eq!(Placement::replace("app").kind, Kind::Replace);
 }
+
+/// A plugin whose one claim at `placement` renders what `render` returns.
+fn rendering(id: &str, placement: Placement, render: impl Fn() -> abi::Render + 'static) -> Definition<TestHost> {
+    let render: node::SlotRender<TestHost> = Rc::new(move |_, _, _| render());
+    Definition::new(id, move |cx: &mut Setup<'_, TestHost>| cx.claim(placement.clone(), render.clone()))
+}
+
+/// The rows the app draws, without trailing blanks.
+fn rows(host: &TestHost) -> Vec<String> {
+    host.app.render().text().lines().map(|line| line.trim_end().to_owned()).collect()
+}
+
+// Expected: a replaced node frees its widgets, a hoverable, clickable text among them, so the click action, which
+// holds the host weakly, is dropped each time (bigboi's probe: ten replacements leave the count where it was).
+#[test]
+fn a_replaced_hover_text_drops_its_handlers() {
+    use abi::{Click, Node, Render, Span};
+    let host = host();
+    let count = Rc::new(Cell::new(0));
+    let counter = count.clone();
+    let text = rendering("hover", Placement::append(slot::SIDEBAR_CONTENT), move || {
+        counter.set(counter.get() + 1);
+        Render::Show(
+            Node::text([Span::new(format!("hover {}", counter.get()))])
+                .hover_fg("text.muted")
+                .on_click(Click::command("test.run", None)),
+        )
+    });
+    let registry = Registry::new(vec![text], []);
+    registry.activate(&host);
+    let parent = View::new(host.app()).column();
+    let mount = registry.mount(&*host, &parent, slot::SIDEBAR_CONTENT, &SlotInput::default(), |_| {});
+    host.app().root().add(&parent);
+    host.app.render();
+    let weak = Rc::weak_count(&host);
+    for _ in 0..10 {
+        mount.sync(&host, &());
+    }
+    assert_eq!(rows(&host)[0], "hover 11");
+    assert_eq!(Rc::weak_count(&host), weak);
+}

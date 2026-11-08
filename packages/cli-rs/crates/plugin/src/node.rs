@@ -34,6 +34,8 @@ pub struct Mount<H: Host> {
     shown: RefCell<Option<Option<abi::Node>>>,
     /// The slots its node nests.
     slots: RefCell<Vec<SlotMount<H>>>,
+    /// The texts its node's hover handlers change, which hold them weakly so the texts drop with the node.
+    hovers: RefCell<Vec<Rc<Text>>>,
     /// Refilled with each change batch, so a batch like the one before costs no allocation.
     changed: RefCell<abi::Changed>,
     watch: RefCell<Option<Disposer>>,
@@ -50,6 +52,7 @@ impl<H: Host> Mount<H> {
             input: abi::SlotInput { session_id: input.session_id.clone() },
             shown: RefCell::new(None),
             slots: RefCell::default(),
+            hovers: RefCell::default(),
             changed: RefCell::default(),
             watch: RefCell::new(None),
         });
@@ -75,10 +78,11 @@ impl<H: Host> Mount<H> {
         }
         self.root.clear();
         let mut slots = Vec::new();
+        let mut hovers = Vec::new();
         if let Some(node) = &node {
             let owner = self.owner.clone();
             let act: Act = Rc::new(move |action| act(&owner, action));
-            add(host.app(), &host.theme(), &self.root, node, &act, &mut |parent, path| {
+            add(host.app(), &host.theme(), &self.root, node, &act, &mut hovers, &mut |parent, path| {
                 if !nests(&self.path, path) {
                     log::warn!("a claim in slot {} cannot show slot {path}: it is not a slot inside it", self.path);
                     return;
@@ -87,6 +91,7 @@ impl<H: Host> Mount<H> {
             });
         }
         *self.slots.borrow_mut() = slots;
+        *self.hovers.borrow_mut() = hovers;
         self.root.visible(node.is_some());
         *self.shown.borrow_mut() = Some(node);
         host.app().request_redraw();
@@ -151,8 +156,17 @@ fn act<H: Host>(host: &Weak<H>, action: &abi::Action) {
 }
 
 /// Adds the widgets of `node` to `parent`; a click runs through `act`, and `slot` mounts a nested slot straight into
-/// the parent, as TS's `<Slot>` fragment does.
-pub fn add(app: &App, theme: &Theme, parent: &View, node: &abi::Node, act: &Act, slot: &mut dyn FnMut(&View, &str)) {
+/// the parent, as TS's `<Slot>` fragment does. A text that changes on hover goes into `hovers`, whose owner keeps it
+/// for its hover handler until the widgets are replaced.
+pub fn add(
+    app: &App,
+    theme: &Theme,
+    parent: &View,
+    node: &abi::Node,
+    act: &Act,
+    hovers: &mut Vec<Rc<Text>>,
+    slot: &mut dyn FnMut(&View, &str),
+) {
     match node {
         abi::Node::Slot { path } => slot(parent, path),
         abi::Node::Box { row, gap, padding, justify, bg, layout, on_click, children } => {
@@ -179,7 +193,7 @@ pub fn add(app: &App, theme: &Theme, parent: &View, node: &abi::Node, act: &Act,
                 view.bg(bg);
             }
             for child in children {
-                add(app, theme, &view, child, act, slot);
+                add(app, theme, &view, child, act, hovers, slot);
             }
             clickable(&view, on_click.as_ref(), act);
             parent.add(&lay_out(&view, layout));
@@ -197,10 +211,15 @@ pub fn add(app: &App, theme: &Theme, parent: &View, node: &abi::Node, act: &Act,
                 .truncate(*truncate)
                 .selectable(*selectable);
             if let Some(hover) = color(theme, hover_fg.as_ref()) {
-                let this = text.clone();
+                // The text owns its handler, so the handler holding the text would keep both alive once replaced.
+                let held = Rc::new(text.clone());
+                let this = Rc::downgrade(&held);
+                hovers.push(held);
                 text.on_hover(move |cx, hovered| {
-                    this.fg(if hovered { hover } else { fg });
-                    cx.app().request_redraw();
+                    if let Some(this) = this.upgrade() {
+                        this.fg(if hovered { hover } else { fg });
+                        cx.app().request_redraw();
+                    }
                 });
             }
             clickable(&text, on_click.as_ref(), act);
@@ -383,7 +402,7 @@ pub fn lines_widget(app: &App, theme: &Theme, lines: &[Line], fg: Option<&abi::C
     };
     // A diagram may have no rows; a fence of the other kinds keeps one.
     if scroll == Scroll::Drag {
-        return drag(text.height(lines.len() as f32), width as f64).as_any();
+        return drag(app, text.height(lines.len() as f32), lines.len() as f32, width as f64).as_any();
     }
     let height = lines.len().max(1) as f32;
     let text = text.min_width(width as f32).height(height).shrink(0.0);
@@ -400,12 +419,14 @@ pub fn lines_widget(app: &App, theme: &Theme, lines: &[Line], fg: Option<&abi::C
         .as_any()
 }
 
-/// `text`, `content_width` columns wide, scrolled sideways by a left drag.
-fn drag(text: Text, content_width: f64) -> Text {
+/// `text`, `height` rows high and `content_width` columns wide, scrolled sideways by a left drag. A view of its size
+/// around it owns the handler, since a handler the text owned would keep the text alive once its block is replaced.
+fn drag(app: &App, text: Text, height: f32, content_width: f64) -> View {
     let start: Rc<Cell<Option<u16>>> = Rc::default();
     let scroll = Rc::new(Cell::new(0.0));
     let this = text.clone();
-    text.on_mouse(move |cx, event| match event.kind {
+    let view = View::new(app).width(Length::percent(100.0)).height(height).child(&text);
+    view.on_mouse(move |cx, event| match event.kind {
         MouseEventKind::Down(MouseButton::Left) => {
             cx.app().clear_selection();
             start.set(Some(event.x));
