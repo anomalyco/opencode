@@ -337,11 +337,27 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       void serverSDK.api.experimental.file.watch({ path: file, location: { directory: scope() } }).catch(() => {})
     }
 
+    // A tab close that runs after another workspace is routed still unwatches in the one it closed in (`within`).
+    let pinned: string | undefined
+
     const unwatch = (input: string) => {
       const file = path.normalize(input)
 
       if (!file || path.absolute(file)) return
-      void serverSDK.api.experimental.file.unwatch({ path: file, location: { directory: scope() } }).catch(() => {})
+      void serverSDK.api.experimental.file
+        .unwatch({ path: file, location: { directory: pinned ?? scope() } })
+        .catch(() => {})
+    }
+
+    const within = (directory: string, run: () => void) => {
+      const previous = pinned
+      pinned = directory
+
+      try {
+        run()
+      } finally {
+        pinned = previous
+      }
     }
 
     createEffect(() => {
@@ -395,6 +411,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       load,
       watch,
       unwatch,
+      within,
       exists,
       scrollTop,
       scrollLeft,

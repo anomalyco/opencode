@@ -68,8 +68,9 @@ export function SideRegion(props: {
   onCleanup(() => props.region.syncSideOpen(false))
 
   // The split pane shows while it holds tabs; when the side pane has none, New tabs included, the split pane takes the
-  // whole height.
-  const panes = createMemo(() => {
+  // whole height. The region slides shut with the panes it had, so a closed split pane's last tab stays where it was.
+  const panes = createMemo<readonly ("side" | "split")[]>((previous) => {
+    if (previous && !tabsOpen() && tabsVisible()) return previous
     const split = props.region.pane("split").keys().length > 0
 
     if (!split) return ["side"] as const
@@ -228,7 +229,14 @@ export function PaneTabs(props: {
     if (previous?.view === props.view && !props.shown() && props.present()) return previous
   })
 
-  const held = () => (props.pane.selected() ? undefined : leaving()?.entry)
+  const held = createMemo(() => (props.pane.selected() ? undefined : leaving()?.entry))
+
+  // The tab's panel stays as it was until the pane lets go of it (`Region.close`).
+  createRenderEffect(() => {
+    const entry = held()
+
+    if (entry) onCleanup(props.region.hold(entry.key))
+  })
 
   const entryOf = (key: string) => props.region.entry(key) ?? (held()?.key === key ? held() : undefined)
 
@@ -255,7 +263,12 @@ export function PaneTabs(props: {
     ),
     active: () => held()?.key ?? props.pane.active(),
     selected: () => held() ?? props.pane.selected(),
-    openFor: (plugin) => props.pane.openFor(plugin),
+    openFor: (plugin) => {
+      const open = props.pane.openFor(plugin)
+      const entry = held()
+
+      return entry?.plugin === plugin && !open.includes(entry.tab.id) ? [...open, entry.tab.id] : open
+    },
     lead: () => props.pane.lead(),
   }
 

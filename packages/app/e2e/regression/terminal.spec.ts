@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
 import { SERVER, holdRoute } from "../utils/app"
+import { probeClose } from "../utils/side-panel"
 import { installSseTransport } from "../utils/sse-transport"
 import { terminalScreen, terminalText } from "../utils/terminal"
 import { openSession } from "../utils/workspace"
@@ -77,6 +78,30 @@ test("after a reload, the close shortcut closes the restored terminal", async ({
   await expect(side(page).getByRole("tab", { name: "Shell", exact: true })).toHaveCount(0)
   await expect(side(page).getByRole("tab", { name: "Build", exact: true })).toBeVisible()
   expect(persistentPty.removed).toEqual(["pty_shell"])
+})
+
+test("the close shortcut on the last terminal slides the panel shut showing it, then ends it", async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, "platform", { get: () => "MacIntel" }))
+  await page.emulateMedia({ reducedMotion: "no-preference" })
+
+  const { persistentPty } = await openSession(page, {
+    name: "Terminals",
+    persistentPty: { initial: [{ id: "pty_shell", sessionID: SESSION, title: "Shell" }] },
+  })
+
+  await openSide(page)
+  await showTerminal(page, "Shell", "pty_shell")
+  await expect.poll(() => persistentPty.sockets.map((socket) => socket.id)).toEqual(["pty_shell"])
+
+  // The terminal keeps running, and showing, until the panel lands closed.
+  const frames = await probeClose(page, { selector: '#terminal-wrapper-pty_shell [data-component="terminal"]' })
+  await page.keyboard.press("Meta+W")
+  await expect(page.getByRole("button", { name: "Toggle review", exact: true })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  )
+  expect(await frames()).toEqual(["terminal:pty_shell* | content"])
+  await expect.poll(() => persistentPty.removed).toEqual(["pty_shell"])
 })
 
 test("a terminal another client creates joins the strip without taking it over", async ({ page }) => {
