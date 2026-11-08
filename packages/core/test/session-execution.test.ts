@@ -66,9 +66,43 @@ describe("SessionExecution lifecycle", () => {
 
       expect(yield* store.listSuspended()).toEqual([parent])
 
-      // The sweep clears orphaned child claims outright; parents keep theirs.
-      yield* store.releaseChildClaims([])
-      expect(yield* claims(database)).toEqual({ [parent]: true, [child]: false, [idle]: false })
+      // Orphaned child claims are surfaced for terminalization, excluding
+      // recoverable children; the claim stays until a terminal releases it.
+      expect(yield* store.orphanedChildClaims([])).toEqual([child])
+      expect(yield* store.orphanedChildClaims([child])).toEqual([])
+      expect(yield* claims(database)).toEqual({ [parent]: true, [child]: true, [idle]: false })
+    }),
+  )
+
+  it.effect("terminalizes orphaned child Sessions so a suspended subagent goes idle", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const parent = Session.ID.make("ses_orphaned_claim_parent")
+      const child = Session.ID.make("ses_orphaned_claim_child")
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [child], { parent_id: parent, time_suspended: Date.now() })
+
+      const failed: (typeof SessionEvent.Execution.Failed.Type)[] = []
+      yield* bus.project(SessionEvent.Execution.Failed, (event) => Effect.sync(() => void failed.push(event)))
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () => Effect.never)
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+
+      expect(failed.map((event) => event.data)).toEqual([
+        {
+          sessionID: child,
+          error: {
+            type: "aborted",
+            message: "Execution was orphaned by a server restart and cannot be resumed.",
+          },
+        },
+      ])
+      // The terminal released the claim, so the next boot does not sweep it again.
+      expect(yield* claims(database)).toEqual({ [parent]: false, [child]: false })
+      expect(yield* attempts(database, child)).toBe(0)
     }),
   )
 
@@ -1300,23 +1334,34 @@ function seedInbox(
     SessionInbox.Delivery | { readonly delivery: SessionInbox.Delivery; readonly type: "compaction" }
   >,
 ) {
-  return database.db
-    .insert(SessionInboxTable)
-    .values(
-      items.map((item, index) => {
-        const entry = typeof item === "string" ? { delivery: item, type: "user" as const } : item
-        return {
-          id: SessionMessage.ID.create(),
-          session_id: sessionID,
-          type: entry.type,
-          payload: entry.type === "user" ? { text: "queued prompt" } : {},
-          delivery: entry.delivery,
-          enqueued_seq: index + 1,
-        }
-      }),
-    )
-    .run()
-    .pipe(Effect.orDie)
+  return Effect.gen(function* () {
+    // Raw inserts must allocate above whatever the bus already admitted for this
+    // session (restart recovery posts notices through the real path).
+    const existing = yield* database.db
+      .select({ seq: SessionInboxTable.enqueued_seq })
+      .from(SessionInboxTable)
+      .where(eq(SessionInboxTable.session_id, sessionID))
+      .all()
+      .pipe(Effect.orDie)
+    const base = existing.reduce((max, row) => Math.max(max, row.seq), 0)
+    yield* database.db
+      .insert(SessionInboxTable)
+      .values(
+        items.map((item, index) => {
+          const entry = typeof item === "string" ? { delivery: item, type: "user" as const } : item
+          return {
+            id: SessionMessage.ID.create(),
+            session_id: sessionID,
+            type: entry.type,
+            payload: entry.type === "user" ? { text: "queued prompt" } : {},
+            delivery: entry.delivery,
+            enqueued_seq: base + index + 1,
+          }
+        }),
+      )
+      .run()
+      .pipe(Effect.orDie)
+  })
 }
 
 function seedSessions(
