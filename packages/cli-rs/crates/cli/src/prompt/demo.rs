@@ -33,7 +33,9 @@ fn many() -> Vec<Choice<String>> {
 }
 
 fn main() {
-    let name = std::env::args().nth(1).unwrap_or_default();
+    let args: Vec<String> = std::env::args_os().skip(1).map(|arg| arg.to_string_lossy().into_owned()).collect();
+    prompt::init(&args);
+    let name = args.first().cloned().unwrap_or_default();
     match name.as_str() {
         "text" => {
             prompt::intro("Text");

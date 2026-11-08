@@ -30,7 +30,10 @@ fn main() -> ExitCode {
         return ExitCode::from(askpass::run(&port));
     }
     let raw: Vec<_> = std::env::args_os().collect();
+    // Bun decodes the arguments the same way, with U+FFFD for bytes that are not UTF-8. Nothing reads the raw
+    // arguments again.
     let args: Vec<String> = raw.iter().skip(1).map(|arg| arg.to_string_lossy().into_owned()).collect();
+    prompt::init(&args);
     let invocation = match parse::parse(&args, &help::name()) {
         Outcome::Help(path) => return exit(help::show(&path)),
         Outcome::Version => return exit(help::version()),
@@ -56,18 +59,18 @@ fn main() -> ExitCode {
     telemetry::install(telemetry::Options::from_env(cli.global.log_level));
     signals::install();
     let _terminal = signals::on_shutdown("restore the terminal", prompt::restore_terminal);
-    let args = serde_json::to_string(&args).unwrap_or_default();
+    let logged = serde_json::to_string(&args).unwrap_or_default();
     log::info!(
         version = help::VERSION,
         channel = telemetry::CHANNEL,
         local = telemetry::CHANNEL == "local",
         client = env::client().as_str(),
-        args = args.as_str();
+        args = logged.as_str();
         "cli starting"
     );
-    let result = commands::run(&commands::Context { server: invocation.server.clone() }, cli);
+    let result = commands::run(&commands::Context { server: invocation.server.clone(), args }, cli);
     if let Some(error) = result.as_ref().err().filter(|error| error.downcast_ref::<output::Exit>().is_none()) {
-        log::error!(cause = format!("{error:#}").as_str(), args = args.as_str(); "cli process failed");
+        log::error!(cause = format!("{error:#}").as_str(), args = logged.as_str(); "cli process failed");
     }
     exit(result)
 }
