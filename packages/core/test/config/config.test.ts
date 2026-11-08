@@ -574,7 +574,15 @@ describe("Config", () => {
         const credentialNode = makeGlobalNode({
           service: Credential.Service,
           layer: Layer.mock(Credential.Service)({
-            list: () => Effect.succeed([]),
+            list: (integrationID) =>
+              Effect.succeed([
+                new Credential.Info({
+                  id: Credential.ID.create(),
+                  integrationID,
+                  label: "default",
+                  value: Credential.Key.make({ type: "key", key: "secret" }),
+                }),
+              ]),
             get: (id) =>
               Effect.succeed(
                 new Credential.Info({
@@ -587,13 +595,17 @@ describe("Config", () => {
           }),
           deps: [],
         })
-        const entry: WellKnown.Entry = { origin, integrationID: Integration.ID.make(origin), manifest: {} }
+        const entry: WellKnown.Entry = {
+          origin,
+          integrationID: Integration.ID.make(origin),
+          manifest: { auth: { command: ["login"], env: "TOKEN" } },
+        }
         const wellknownNode = makeGlobalNode({
           service: WellKnown.Service,
           layer: Layer.mock(WellKnown.Service)({
             entries: () => Effect.succeed([entry]),
             snapshot: () => [entry],
-            cached: () =>
+            resolve: () =>
               Effect.succeed([
                 {
                   mcp: { servers: { wiki: { type: "remote", url: "https://wiki.acme.com/mcp" } } },
@@ -971,7 +983,7 @@ describe("Config", () => {
     ),
   )
 
-  it.live("keeps the last resolved wellknown config across failures and restarts until its source is removed", () =>
+  it.live("keeps the last resolved wellknown config across failures and restarts while a credential exists", () =>
     withTempDir((tmp) => {
       let manifestStatus = 200
       let configStatus = 200
@@ -1079,7 +1091,11 @@ describe("Config", () => {
           expect(requests).toBeGreaterThan(before)
 
           key = undefined
-          expect(yield* warm.reload("logged-out", warm.switched)).toEqual(loaded)
+          expect(yield* warm.reload("logged-out", warm.switched)).toEqual(removed)
+
+          // Logging back in while the remote config is still unavailable restores the last resolved config.
+          key = "secret"
+          expect(yield* warm.reload("logged-in", warm.switched)).toEqual(loaded)
 
           manifestStatus = 503
           const updated = yield* warm.bus
@@ -1090,7 +1106,6 @@ describe("Config", () => {
           expect(updated.pollUnsafe()).toBeUndefined()
         }).pipe(Effect.scoped, Effect.provide(instance()))
 
-        key = "secret"
         yield* Effect.gen(function* () {
           const cold = yield* services
           expect(remote(yield* cold.config.entries())).toEqual(loaded)
