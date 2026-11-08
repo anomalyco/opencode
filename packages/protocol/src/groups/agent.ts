@@ -26,7 +26,7 @@ export const AgentGroup = HttpApiGroup.make("server.agent")
       params: { agentID: Agent.ID },
       query: LocationQuery,
       success: Location.response(Agent.Info),
-      error: AgentNotFoundError,
+      error: [AgentNotFoundError, ServiceUnavailableError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
