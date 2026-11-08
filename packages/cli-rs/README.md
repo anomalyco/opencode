@@ -1,23 +1,26 @@
 # opencode-rs
 
-A Rust client for OpenCode, built on opentui-rust. It talks to an OpenCode server over HTTP and
+A Rust client for OpenCode, built on OpenTUI's Rust crates. It talks to an OpenCode server over HTTP and
 lives next to the TypeScript CLI in `packages/cli` and TUI in `packages/tui`; it does not replace them.
 
 ## Build
 
-opentui-rust links OpenTUI's native library, and its bindings accept only the `opentui.h` they were
-generated from. Copy a matching set of artifacts once, then build:
+The client takes OpenTUI's Rust crates from `packages/rust` of
+[`anomalyco/opentui`](https://github.com/anomalyco/opentui), pinned by git `rev` in `Cargo.toml`. Cargo fetches that
+commit, but the checkout has no native library, and the bindings accept only the `opentui.h` they were generated
+from. `.cargo/config.toml` points `OPENTUI_LIB_DIR` at `~/.cache/opentui-native/x86_64-linux`, which
+native-hardening's `abi-artifacts.py` fills with artifacts built at the matching OpenTUI commit. Fill it once, then
+build:
 
 ```sh
-bun run --cwd packages/cli-rs opentui-lib
+python3 /home/simon/src/opendocs/native-hardening/tools/abi-artifacts.py
 bun run --cwd packages/cli-rs cargo build --bin opencode-rs
 ```
 
-`opentui-lib` searches `$OPENTUI_ROOT`, `~/src/opentui`, and `~/src/wt/ot-*` for a
-`packages/native/lib/<platform>` directory whose header matches, or takes directories as arguments.
-It copies into `~/.cache/opencode-rs/opentui/<platform>`, where `.cargo/config.toml` points
-`OPENTUI_LIB_DIR`. The library is linked statically, so the binary needs no `libopentui` at run
-time; it does need libc++ and libc++abi.
+The library is linked statically, so the binary needs no `libopentui` at run time; it does need libc++ and libc++abi.
+
+Changes to OpenTUI's Rust crates are pull requests into `packages/rust` of `anomalyco/opentui`. To move the client
+to another commit, run `abi-artifacts.py` for it, then change the `rev` and commit it with `Cargo.lock`.
 
 Cargo finds `.cargo/config.toml` only when it runs inside `packages/cli-rs`, which is why the
 commands go through `bun run --cwd packages/cli-rs cargo`.

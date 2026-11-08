@@ -13,7 +13,6 @@
     "parity:pty": "bun run parity/pty/run.ts",
     "parity:sim": "bun run parity/sim/run.ts",
     "live": "sh script/live.sh",
-    "opentui-lib": "sh script/opentui-lib.sh",
     "typecheck": "bun check --no-script",
     "typecheck:tsc": "tsc --noEmit"
   },
