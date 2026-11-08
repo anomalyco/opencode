@@ -30,6 +30,19 @@ describe("Form", () => {
     }),
   )
 
+  it.effect("lists available fields for an unknown answer", () =>
+    Effect.sync(() => {
+      const fields = [
+        { key: "name", type: "string" },
+        { key: "token", type: "string" },
+      ] satisfies ReadonlyArray<Form.Field>
+
+      expect(Form.validateAnswer(fields, { unknown: "value" })).toBe(
+        "Unknown form field: unknown. Available fields: name, token",
+      )
+    }),
+  )
+
   it.effect("returns a terminal cancelled state from ask", () =>
     Effect.gen(function* () {
       const service = yield* Form.Service

@@ -66,7 +66,15 @@ const invalidAnswers: { fields: FormFields | undefined; supplied: string[]; erro
   {
     fields: [{ type: "string", key: "known" }],
     supplied: ["unknown=value"],
-    error: "Unknown form field: unknown",
+    error: "Unknown form field: unknown. Available fields: known",
+  },
+  {
+    fields: [
+      { type: "string", key: "server" },
+      { type: "string", key: "token" },
+    ],
+    supplied: ["unknown=value"],
+    error: "Unknown form field: unknown. Available fields: server, token",
   },
   {
     fields: [
