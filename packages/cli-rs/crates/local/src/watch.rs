@@ -91,8 +91,11 @@ fn start(dir: &Path, filter: impl Fn(&OsStr) -> bool + Send + 'static, tx: mpsc:
 #[cfg(target_os = "linux")]
 const MASK: rustix::fs::inotify::WatchFlags = {
     use rustix::fs::inotify::WatchFlags;
+    // libuv's `fs.watch` mask, which TS `safeWatch` uses, plus CLOSE_WRITE. Not OPEN: `notify` had it, but
+    // reading a watched file would then reload it again.
     WatchFlags::CREATE
         .union(WatchFlags::MODIFY)
+        .union(WatchFlags::ATTRIB)
         .union(WatchFlags::CLOSE_WRITE)
         .union(WatchFlags::MOVED_TO)
         .union(WatchFlags::MOVED_FROM)
@@ -221,6 +224,20 @@ mod tests {
         std::fs::rename(dir.path().join("a.json.tmp"), dir.path().join("a.json")).unwrap();
         rx.recv_timeout(Duration::from_secs(5)).unwrap();
         assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_permission_change_calls_back() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let file = dir.path().join("a.json");
+        std::fs::write(&file, "{}").unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let (tx, rx) = mpsc::channel();
+        let _watch = watch(dir.path(), |name| name == "a.json", DEBOUNCE, move || tx.send(()).unwrap()).unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).unwrap();
+        rx.recv_timeout(Duration::from_secs(5)).unwrap();
     }
 
     #[test]
