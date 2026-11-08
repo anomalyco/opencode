@@ -7,7 +7,8 @@
 //! - a panic fails the plugin: it is not called again, its fences fall back to the code view, its slots and routes
 //!   draw empty, the plugin manager lists it as `failed` with the message, and a toast says so. Enabling it again
 //!   in the plugin manager starts a fresh instance;
-//! - host effects (toasts, routes) wait until the plugin returns, so it never reenters itself through the host.
+//! - host effects (toasts, routes, dispatches) wait until the plugin returns, so it never reenters itself through the
+//!   host.
 //!
 //! Every call into a plugin runs on the UI thread. A plugin that works on its own thread calls `wake` (ABI 1.3),
 //! which posts through the app's proxy; the host then asks that plugin's mounted claims for their rows again. A wake
@@ -34,7 +35,7 @@ use opencode_plugin_abi::{
     self as abi, ABI_MAJOR, ABI_MINOR, Bytes, Fenced, HostApi, HostRequest, Line, Manifest, Owned, PluginApi,
     PluginApiV1_0, Request,
 };
-use opencode_ui::keymap::{Bind, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_util::dl;
 use opentui::app::ProxyError;
 use opentui::keymap::Disposer;
@@ -44,7 +45,7 @@ use serde::de::DeserializeOwned;
 use super::Backend;
 use crate::node::{Fences, Mount, Scroll, SlotRender, lines_widget, theme_color};
 use crate::slot::placement;
-use crate::{Definition, ErrorFn, Host, Setup, Slotted, Toast};
+use crate::{Definition, ErrorFn, Host, Setup, Slotted, Toast, tui_command};
 
 /// The host's minor version: it serves every entry and request up to it.
 pub const HOST_MINOR: u32 = ABI_MINOR;
@@ -266,6 +267,7 @@ struct Woken(u64);
 enum Effect {
     Toast(Toast, String),
     Route(String),
+    Dispatch(String, Option<String>),
 }
 
 /// One plugin instance; dropping it destroys the instance in the plugin.
@@ -502,6 +504,15 @@ fn handle<H: Host>(ctx: &mut Ctx<H>, request: HostRequest) -> Result<serde_json:
         HostRequest::Model => return read(ctx, |read| serde_json::to_value(read.model())),
         HostRequest::Limits => return read(ctx, |read| serde_json::to_value(read.limits())),
         HostRequest::Providers => return read(ctx, |read| serde_json::to_value(read.providers())),
+        HostRequest::Info => return read(ctx, |read| serde_json::to_value(read.info())),
+        HostRequest::McpServers { location } => {
+            return read(ctx, |read| serde_json::to_value(read.mcp_servers(location.as_ref())));
+        }
+        HostRequest::Integrations { location } => {
+            return read(ctx, |read| serde_json::to_value(read.integrations(location.as_ref())));
+        }
+        HostRequest::Vcs { location } => return read(ctx, |read| serde_json::to_value(read.vcs(location.as_ref()))),
+        HostRequest::Dispatch { name, input } => ctx.effects.push(Effect::Dispatch(name, input)),
     }
     Ok(serde_json::Value::Null)
 }
@@ -606,6 +617,7 @@ impl<H: Host> Guest<H> {
                 match effect {
                     Effect::Toast(variant, message) => host.toast(variant, None, &message),
                     Effect::Route(name) => host.open_route(&id, &name),
+                    Effect::Dispatch(name, input) => host.dispatch(&name, input.as_deref()),
                 }
             }
         });
@@ -632,22 +644,10 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
         .map(|command| {
             let guest = guest.clone();
             let name = command.name.clone();
-            let mut entry = TuiCommand::new(command.name.clone(), move |input, _| {
+            tui_command(command, move |input| {
                 let request = Request::Command { name: name.clone(), input: input.map(str::to_owned) };
                 guest.request::<serde_json::Value>("run-command", &request);
             })
-            .title(command.title.clone())
-            .bind(command.keybind.clone().map_or(Bind::Default, Bind::Key));
-            if command.palette {
-                entry = entry.palette();
-            }
-            if let Some(group) = &command.group {
-                entry = entry.group(group.clone());
-            }
-            if let Some(slash) = &command.slash {
-                entry = entry.slash(Slash { name: slash.clone(), aliases: Vec::new(), arguments: false });
-            }
-            entry
         })
         .collect();
     if !commands.is_empty() {

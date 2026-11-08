@@ -33,8 +33,9 @@
 //! The host's built-in plugins use the same [`Setup`], closures and types, called in process with Rust values; an
 //! external plugin gets them over this ABI. A render (a code fence or a slot claim) receives a [`Read`]: it reads and
 //! returns a value, and has no effects. Reads are pure too: a read of something the host has not loaded yet (a
-//! catalog) returns `None`, and the host starts the load once the outermost plugin callback has returned. Every other
-//! host call waits until then as well, so a plugin never reenters itself through the host.
+//! catalog) returns `None`, and the host starts the load once the outermost plugin callback has returned. A command
+//! receives a [`Host`], which also has effects; they wait until then as well, so a plugin never reenters itself
+//! through the host.
 //!
 //! Renders in this form (ABI 1.4) are opt-in on the wire: [`Setup`] sets [`Manifest::render`], and the host sends
 //! [`Request::RenderFence`] and [`Request::Render`] only to a plugin that sets it. A 1.3 plugin gets the old requests
@@ -52,13 +53,17 @@ use std::rc::Rc;
 
 pub use opencode_api_types as types;
 use serde::{Deserialize, Serialize};
-use types::{ModelInfo, ModelRef, ProviderInfo, SessionInfo, SessionMessageInfo, UsageLimitsInfo};
+use types::{
+    IntegrationInfo, McpServer, ModelInfo, ModelRef, ProviderInfo, SessionInfo, SessionMessageInfo, UsageLimitsInfo,
+    VcsInfo,
+};
 
 /// The major version: changes only with a deliberate breaking change, and a mismatch refuses the plugin.
 pub const ABI_MAJOR: u32 = 1;
 /// The minor version: grows when entries are appended. 1.0 is the core; 1.1 adds [`PluginApi::describe`]; 1.2 adds
 /// [`HostApi::theme_mode`]; 1.3 adds [`HostApi::wake`]; 1.4 adds [`Manifest::render`], [`Request::RenderFence`],
-/// [`Request::Render`], [`HostRequest::Color`] and the session and catalog reads.
+/// [`Request::Render`], [`HostRequest::Color`], the session and catalog reads, [`HostRequest::Info`] and
+/// [`HostRequest::Dispatch`].
 pub const ABI_MINOR: u32 = 4;
 
 /// The symbol every plugin exports, of type [`EntryFn`].
@@ -154,7 +159,7 @@ pub struct HostApi {
     /// reads all of them when the host asks for rows. Wakes that arrive before the host handles one count once, and
     /// the host never drops the last one. Callable from any thread, but `ctx` is valid only until `destroy` returns,
     /// so a plugin stops and joins every thread that may call it before `destroy` returns. A plugin reads it as
-    /// [`Host::waker`].
+    /// [`HostHandle::waker`].
     pub wake: Option<unsafe extern "C" fn(ctx: *mut c_void)>,
 }
 
@@ -189,7 +194,7 @@ pub struct HostApiV1_2 {
     pub theme_mode: Option<unsafe extern "C" fn(*mut c_void) -> u32>,
 }
 
-/// Dark or light, from [`Host::theme_mode`] and [`Read::theme_mode`].
+/// Dark or light, from [`HostHandle::theme_mode`] and [`Read::theme_mode`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ThemeMode {
     Dark,
@@ -410,6 +415,8 @@ pub struct Span {
     pub underline: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub dim: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub strikethrough: bool,
 }
 
 impl Span {
@@ -498,10 +505,15 @@ pub enum Node {
         /// Cells inside the edge, left and right, then top and bottom.
         #[serde(default, skip_serializing_if = "is_no_padding")]
         padding: (u16, u16),
+        /// How the children share the room left along the row or column.
+        #[serde(default, skip_serializing_if = "Justify::is_start")]
+        justify: Justify,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         bg: Option<Color>,
         #[serde(default, skip_serializing_if = "Layout::is_default")]
         layout: Layout,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_click: Option<Click>,
         #[serde(default)]
         children: Vec<Node>,
     },
@@ -518,20 +530,38 @@ pub enum Node {
         /// Whether the mouse can select it. On by default.
         #[serde(default = "yes", skip_serializing_if = "is_true")]
         selectable: bool,
+        /// What `fg` becomes while the pointer is over it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        hover_fg: Option<Color>,
         #[serde(default, skip_serializing_if = "Layout::is_default")]
         layout: Layout,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_click: Option<Click>,
     },
 }
 
 impl Node {
     /// A box of `children` in a column.
     pub fn column(children: Vec<Node>) -> Self {
-        Node::Box { row: false, gap: 0, padding: (0, 0), bg: None, layout: Layout::default(), children }
+        Node::Box {
+            row: false,
+            gap: 0,
+            padding: (0, 0),
+            justify: Justify::Start,
+            bg: None,
+            layout: Layout::default(),
+            on_click: None,
+            children,
+        }
     }
 
     /// A box of `children` in a row.
     pub fn row(children: Vec<Node>) -> Self {
-        Node::Box { row: true, gap: 0, padding: (0, 0), bg: None, layout: Layout::default(), children }
+        let mut node = Self::column(children);
+        if let Node::Box { row, .. } = &mut node {
+            *row = true;
+        }
+        node
     }
 
     /// Selectable text of `spans` that wraps at words.
@@ -542,8 +572,145 @@ impl Node {
             wrap: Wrap::Word,
             truncate: false,
             selectable: true,
+            hover_fg: None,
             layout: Layout::default(),
+            on_click: None,
         }
+    }
+
+    /// The node with `click`.
+    pub fn on_click(mut self, click: Click) -> Self {
+        match &mut self {
+            Node::Box { on_click, .. } | Node::Text { on_click, .. } => *on_click = Some(click),
+        }
+        self
+    }
+
+    /// The node laid out with `layout`.
+    pub fn layout(mut self, value: Layout) -> Self {
+        match &mut self {
+            Node::Box { layout, .. } | Node::Text { layout, .. } => *layout = value,
+        }
+        self
+    }
+
+    /// A box with `cells` between its children; text is unchanged.
+    pub fn gap(mut self, cells: u16) -> Self {
+        if let Node::Box { gap, .. } = &mut self {
+            *gap = cells;
+        }
+        self
+    }
+
+    /// A box with `x` cells inside its left and right edges and `y` inside its top and bottom; text is unchanged.
+    pub fn padding(mut self, x: u16, y: u16) -> Self {
+        if let Node::Box { padding, .. } = &mut self {
+            *padding = (x, y);
+        }
+        self
+    }
+
+    /// A box whose children share the room left as `value` says; text is unchanged.
+    pub fn justify(mut self, value: Justify) -> Self {
+        if let Node::Box { justify, .. } = &mut self {
+            *justify = value;
+        }
+        self
+    }
+
+    /// A box on `color`; text is unchanged.
+    pub fn bg(mut self, color: impl Into<Color>) -> Self {
+        if let Node::Box { bg, .. } = &mut self {
+            *bg = Some(color.into());
+        }
+        self
+    }
+
+    /// Text in `color` where its spans have none; a box is unchanged.
+    pub fn fg(mut self, color: impl Into<Color>) -> Self {
+        if let Node::Text { fg, .. } = &mut self {
+            *fg = Some(color.into());
+        }
+        self
+    }
+
+    /// Text in `color` while the pointer is over it; a box is unchanged.
+    pub fn hover_fg(mut self, color: impl Into<Color>) -> Self {
+        if let Node::Text { hover_fg, .. } = &mut self {
+            *hover_fg = Some(color.into());
+        }
+        self
+    }
+
+    /// Text that wraps as `value` says; a box is unchanged.
+    pub fn wrap(mut self, value: Wrap) -> Self {
+        if let Node::Text { wrap, .. } = &mut self {
+            *wrap = value;
+        }
+        self
+    }
+
+    /// Text that cuts lines that do not fit; a box is unchanged.
+    pub fn truncate(mut self) -> Self {
+        if let Node::Text { truncate, .. } = &mut self {
+            *truncate = true;
+        }
+        self
+    }
+}
+
+/// What a click on a node runs.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Click {
+    pub action: Action,
+    /// On the press of the left button, or on its release.
+    pub on: Press,
+}
+
+impl Click {
+    /// Runs command `name` with `input` on the release of the left button.
+    pub fn command(name: impl Into<String>, input: Option<String>) -> Self {
+        Self { action: Action::Command { name: name.into(), input }, on: Press::Up }
+    }
+
+    /// The click on the press of the left button instead.
+    pub fn on_down(self) -> Self {
+        Self { on: Press::Down, ..self }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Press {
+    Down,
+    Up,
+}
+
+/// What a click asks the host to do, after the event that caused it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum Action {
+    /// Runs a registered command, the plugin's or the host's, palette or not, as [`Host::dispatch`] does.
+    Command {
+        name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        input: Option<String>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Justify {
+    #[default]
+    Start,
+    End,
+    Center,
+    SpaceBetween,
+}
+
+impl Justify {
+    fn is_start(&self) -> bool {
+        *self == Justify::Start
     }
 }
 
@@ -566,6 +733,21 @@ pub struct Layout {
 impl Layout {
     fn is_default(&self) -> bool {
         *self == Self::default()
+    }
+
+    /// The layout that grows into the room left over.
+    pub fn grow(self) -> Self {
+        Self { grow: true, ..self }
+    }
+
+    /// The layout that gives up room, or not, when its parent is too small.
+    pub fn shrink(self, shrink: bool) -> Self {
+        Self { shrink: Some(shrink), ..self }
+    }
+
+    /// The layout that may shrink below its content's width.
+    pub fn min_width_zero(self) -> Self {
+        Self { min_width_zero: true, ..self }
     }
 }
 
@@ -634,7 +816,7 @@ pub struct Changed {
     /// Locations whose info or catalogs changed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub locations: Vec<LocationRef>,
-    /// The host's own state changed: the selected model, the usage limits, the settings.
+    /// The host's own state changed: the selected model, the usage limits, the settings, the plugins' storage.
     #[serde(default, skip_serializing_if = "is_false")]
     pub local: bool,
     /// The terminal changed size.
@@ -695,6 +877,16 @@ pub struct Family {
     pub members: Vec<Member>,
     /// A child's own cost, or a root's cost with every known descendant's.
     pub cost: f64,
+}
+
+/// The host, from [`Read::info`].
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Info {
+    pub version: String,
+    /// The terminal's columns and rows.
+    pub size: (u16, u16),
+    /// Where the TUI works: the location a catalog read of `None` reads.
+    pub location: LocationRef,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -797,6 +989,26 @@ pub enum HostRequest {
     Limits,
     /// 1.4: [`Read::providers`].
     Providers,
+    /// 1.4: [`Read::info`].
+    Info,
+    /// 1.4: [`Read::mcp_servers`].
+    McpServers {
+        location: Option<LocationRef>,
+    },
+    /// 1.4: [`Read::integrations`].
+    Integrations {
+        location: Option<LocationRef>,
+    },
+    /// 1.4: [`Read::vcs`].
+    Vcs {
+        location: Option<LocationRef>,
+    },
+    /// 1.4: [`Host::dispatch`], once the current call returns.
+    Dispatch {
+        name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        input: Option<String>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -859,15 +1071,46 @@ pub trait Read {
     fn providers(&self) -> Option<Vec<ProviderInfo>> {
         None
     }
+    /// The value stored under one of the plugin's declared storage keys ([`Setup::storage_key`]). It shows a
+    /// [`Host::storage_set`] at once, before the host has written it to disk.
+    fn storage_get(&self, _key: &str) -> Option<serde_json::Value> {
+        None
+    }
+    /// The host's version, the terminal's size, and where the TUI works.
+    fn info(&self) -> Info {
+        Info::default()
+    }
+    /// The MCP servers of `location` (where the TUI works for `None`); `None` while they are not loaded.
+    fn mcp_servers(&self, _location: Option<&LocationRef>) -> Option<Vec<McpServer>> {
+        None
+    }
+    /// The integrations of `location` (where the TUI works for `None`); `None` while they are not loaded.
+    fn integrations(&self, _location: Option<&LocationRef>) -> Option<Vec<IntegrationInfo>> {
+        None
+    }
+    /// The version control state of `location` (where the TUI works for `None`); `None` while it is not loaded.
+    fn vcs(&self, _location: Option<&LocationRef>) -> Option<VcsInfo> {
+        None
+    }
+}
+
+/// What a command reads and asks of the host. An effect waits until the outermost plugin callback has returned, and
+/// effects run in the order they were asked for.
+pub trait Host: Read {
+    /// Stores `value`, an object, under one of the plugin's declared storage keys. [`Read::storage_get`] reads it back
+    /// at once; the host writes it to disk later, and claims render again with [`Changed::local`].
+    fn storage_set(&self, key: &str, value: serde_json::Value);
+    /// Runs the registered command `name` with `input`, the plugin's or the host's, palette or not.
+    fn dispatch(&self, name: &str, input: Option<&str>);
 }
 
 /// The host, as a plugin calls it. Valid while the instance lives.
 #[derive(Clone, Copy)]
-pub struct Host {
+pub struct HostHandle {
     api: *const HostApi,
 }
 
-impl Host {
+impl HostHandle {
     fn request(&self, request: &HostRequest) -> Result<serde_json::Value, String> {
         let json = serde_json::to_vec(request).map_err(|error| error.to_string())?;
         let mut out = Owned::EMPTY;
@@ -941,9 +1184,9 @@ impl Host {
     }
 }
 
-impl Read for Host {
+impl Read for HostHandle {
     fn theme_mode(&self) -> ThemeMode {
-        Host::theme_mode(self).unwrap_or(ThemeMode::Dark)
+        HostHandle::theme_mode(self).unwrap_or(ThemeMode::Dark)
     }
 
     fn color(&self, token: &str) -> Option<Rgba> {
@@ -980,16 +1223,48 @@ impl Read for Host {
     fn providers(&self) -> Option<Vec<ProviderInfo>> {
         self.read(&HostRequest::Providers)
     }
+
+    fn storage_get(&self, key: &str) -> Option<serde_json::Value> {
+        HostHandle::storage_get(self, key).and_then(|json| serde_json::from_str(&json).ok())
+    }
+
+    fn info(&self) -> Info {
+        self.read(&HostRequest::Info).unwrap_or_default()
+    }
+
+    fn mcp_servers(&self, location: Option<&LocationRef>) -> Option<Vec<McpServer>> {
+        self.read(&HostRequest::McpServers { location: location.cloned() })
+    }
+
+    fn integrations(&self, location: Option<&LocationRef>) -> Option<Vec<IntegrationInfo>> {
+        self.read(&HostRequest::Integrations { location: location.cloned() })
+    }
+
+    fn vcs(&self, location: Option<&LocationRef>) -> Option<VcsInfo> {
+        self.read(&HostRequest::Vcs { location: location.cloned() })
+    }
 }
 
-impl Host {
+impl Host for HostHandle {
+    fn storage_set(&self, key: &str, value: serde_json::Value) {
+        if let Err(error) = HostHandle::storage_set(self, key, &value.to_string()) {
+            self.log(Level::Warn, &format!("storage {key}: {error}"));
+        }
+    }
+
+    fn dispatch(&self, name: &str, input: Option<&str>) {
+        let _ = self.request(&HostRequest::Dispatch { name: name.to_owned(), input: input.map(str::to_owned) });
+    }
+}
+
+impl HostHandle {
     /// A read's answer; `None` from a host that does not know the request or has no value.
     fn read<T: serde::de::DeserializeOwned>(&self, request: &HostRequest) -> Option<T> {
         serde_json::from_value::<Option<T>>(self.request(request).ok()?).ok().flatten()
     }
 }
 
-/// Wakes the host from any thread (ABI 1.3), from [`Host::waker`]: the host then asks the plugin's mounted slot
+/// Wakes the host from any thread (ABI 1.3), from [`HostHandle::waker`]: the host then asks the plugin's mounted slot
 /// claims and routes for their rows again, so a plugin that works on its own thread can show the result.
 ///
 /// A wake is a redraw hint, not a message: it delivers nothing and drains nothing. Many wakes may become one redraw,
@@ -1031,17 +1306,18 @@ enum SlotFn {
     Render(RenderFn),
 }
 type RouteFn = Box<dyn Fn() -> Vec<Line>>;
-type CommandFn = Box<dyn Fn(Option<&str>)>;
+/// A registered command.
+pub type CommandFn = Rc<dyn Fn(&dyn Host, Option<&str>)>;
 
 /// What a plugin registers (the C-ABI form of P.1's `Setup`). The instance keeps it until the host destroys it.
 pub struct Setup {
     manifest: Manifest,
     options: Option<String>,
-    host: Host,
+    host: HostHandle,
     fences: Vec<(String, FenceFn)>,
     slots: Vec<SlotFn>,
     routes: Vec<(String, RouteFn)>,
-    commands: Vec<(String, CommandFn)>,
+    commands: Vec<CommandFn>,
 }
 
 impl Setup {
@@ -1055,19 +1331,20 @@ impl Setup {
     }
 
     /// The host, for renderers and commands to keep.
-    pub fn host(&self) -> Host {
+    pub fn host(&self) -> HostHandle {
         self.host
     }
 
-    /// Declares storage key `key`; [`Host::storage_get`] and [`Host::storage_set`] accept declared keys only.
+    /// Declares storage key `key`; [`Read::storage_get`] and [`Host::storage_set`] accept declared keys only.
     pub fn storage_key(&mut self, key: &str) {
         let _ = self.host.request(&HostRequest::StorageKey { key: key.to_owned() });
         self.manifest.storage.push(key.to_owned());
     }
 
-    /// Registers a command; `run` receives the slash command's text after its name.
-    pub fn command(&mut self, command: Command, run: impl Fn(Option<&str>) + 'static) {
-        self.commands.push((command.name.clone(), Box::new(run)));
+    /// Registers a command; `run` receives the input it was dispatched with, such as the slash command's text after
+    /// its name. A command without `palette` and `slash` is hidden: a click or [`Host::dispatch`] runs it.
+    pub fn command(&mut self, command: Command, run: impl Fn(&dyn Host, Option<&str>) + 'static) {
+        self.commands.push(Rc::new(run));
         self.manifest.commands.push(command);
     }
 
@@ -1124,11 +1401,17 @@ impl Setup {
         })
     }
 
+    /// The commands, with their runs.
+    #[doc(hidden)]
+    pub fn commands(&self) -> impl Iterator<Item = (&Command, &CommandFn)> {
+        self.manifest.commands.iter().zip(&self.commands)
+    }
+
     fn new(id: &str, options: Option<String>, host: *const HostApi) -> Self {
         Self {
             manifest: Manifest { id: id.to_owned(), render: RENDER, ..Manifest::default() },
             options,
-            host: Host { api: host },
+            host: HostHandle { api: host },
             fences: Vec::new(),
             slots: Vec::new(),
             routes: Vec::new(),
@@ -1158,8 +1441,8 @@ impl Setup {
                 json(serde_json::to_value(render()))
             }
             Request::Command { name, input } => {
-                let (_, run) = self.commands.iter().find(|(command, _)| *command == name).ok_or("no such command")?;
-                run(input.as_deref());
+                let (_, run) = self.commands().find(|(command, _)| command.name == name).ok_or("no such command")?;
+                run(&self.host, input.as_deref());
                 Ok(serde_json::Value::Null)
             }
         }
@@ -1365,11 +1648,11 @@ mod tests {
             theme_mode: Some(light),
             wake: None,
         };
-        assert_eq!(Host { api: &current }.theme_mode(), Some(ThemeMode::Light));
+        assert_eq!(HostHandle { api: &current }.theme_mode(), Some(ThemeMode::Light));
         let null = HostApi { theme_mode: None, ..current };
-        assert_eq!(Host { api: &null }.theme_mode(), None);
+        assert_eq!(HostHandle { api: &null }.theme_mode(), None);
         let old = HostApiV1_1 { size: size_of::<HostApiV1_1>(), major: 1, minor: 1, ctx, call, free };
-        assert_eq!(Host { api: std::ptr::from_ref(&old).cast() }.theme_mode(), None);
+        assert_eq!(HostHandle { api: std::ptr::from_ref(&old).cast() }.theme_mode(), None);
     }
 
     unsafe extern "C" fn wake(ctx: *mut c_void) {
@@ -1394,18 +1677,18 @@ mod tests {
             theme_mode: None,
             wake: Some(wake),
         };
-        let waker = Host { api: &api }.waker().unwrap();
+        let waker = HostHandle { api: &api }.waker().unwrap();
         std::thread::spawn(move || waker.wake()).join().unwrap();
         assert_eq!(wakes.load(std::sync::atomic::Ordering::SeqCst), 1);
-        assert!(Host { api: &HostApi { wake: None, ..api } }.waker().is_none());
+        assert!(HostHandle { api: &HostApi { wake: None, ..api } }.waker().is_none());
         let old = HostApiV1_2 { size: size_of::<HostApiV1_2>(), major: 1, minor: 2, ctx, call, free, theme_mode: None };
-        assert!(Host { api: std::ptr::from_ref(&old).cast() }.waker().is_none());
+        assert!(HostHandle { api: std::ptr::from_ref(&old).cast() }.waker().is_none());
     }
 
     // Expected: a C host that passes no table, or leaves `call` or `free` null, gets errors, not a jump to address 0.
     #[test]
     fn a_null_host_or_host_callback_is_an_error() {
-        let host = Host { api: std::ptr::null() };
+        let host = HostHandle { api: std::ptr::null() };
         assert_eq!(host.storage_get("count"), None);
         assert_eq!(host.storage_set("count", "{}"), Err("no host".to_owned()));
         assert_eq!(host.theme_mode(), None);
@@ -1421,9 +1704,9 @@ mod tests {
             theme_mode: None,
             wake: None,
         };
-        assert_eq!(Host { api: &api }.storage_set("count", "{}"), Err("the host takes no requests".to_owned()));
+        assert_eq!(HostHandle { api: &api }.storage_set("count", "{}"), Err("the host takes no requests".to_owned()));
         let api = HostApi { call: Some(call), ..api };
-        assert_eq!(Host { api: &api }.storage_set("count", "{}"), Err("the host takes no requests".to_owned()));
+        assert_eq!(HostHandle { api: &api }.storage_set("count", "{}"), Err("the host takes no requests".to_owned()));
     }
 
     // Expected: the 1.3 requests, rows and manifest keep their JSON byte for byte; only a plugin of this crate sets
@@ -1518,6 +1801,31 @@ mod tests {
         assert_eq!(setup.handle(render(1)).unwrap(), serde_json::json!({ "type": "keep" }));
         assert!(setup.handle(render(0)).is_err());
         assert!(setup.handle(Request::Slot { claim: 1, session_id: None }).is_err());
+    }
+
+    // Expected: a click, a hover color and a struck-through span cross the wire and read back as written, a
+    // dispatch leaves out a missing input, and a command answers through the host it gets, with its input.
+    #[test]
+    fn clicks_hovers_and_dispatches_round_trip() {
+        let text = Node::text([Span { strikethrough: true, ..Span::new("a") }])
+            .hover_fg("text.base")
+            .on_click(Click::command("x.open", Some("b".into())).on_down());
+        let node = Node::row(vec![text]).justify(Justify::SpaceBetween);
+        let json = r#"{"type":"box","row":true,"justify":"space-between","children":[{"type":"text","spans":[{"text":"a","strikethrough":true}],"hover_fg":"text.base","on_click":{"action":{"type":"command","name":"x.open","input":"b"},"on":"down"}}]}"#;
+        assert_eq!(serde_json::to_string(&node).unwrap(), json);
+        assert_eq!(serde_json::from_str::<Node>(json).unwrap(), node);
+        let dispatch = HostRequest::Dispatch { name: "x.open".into(), input: None };
+        assert_eq!(serde_json::to_string(&dispatch).unwrap(), r#"{"type":"dispatch","name":"x.open"}"#);
+
+        let mut setup = Setup::in_process("new", None);
+        let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
+        let into = seen.clone();
+        setup.command(Command { name: "x.hidden".into(), ..Command::default() }, move |host, input| {
+            into.borrow_mut().push((input.map(str::to_owned), host.storage_get("view")));
+        });
+        let request = Request::Command { name: "x.hidden".into(), input: Some("b".into()) };
+        assert_eq!(setup.handle(request).unwrap(), serde_json::Value::Null);
+        assert_eq!(*seen.borrow(), [(Some("b".to_owned()), None)]);
     }
 
     // Expected: the shims answer a null instance with an error, ignore a null `out` or a null `destroy`, and never
