@@ -1165,6 +1165,49 @@ describe("ReadTool", () => {
     }),
   )
 
+  it.effect("forwards a negative offset and shows the real line numbers", () =>
+    Effect.gen(function* () {
+      readResult = new ReadToolFileSystem.TextPage({
+        type: "text-page",
+        content: "nine\nten",
+        mime: "text/plain",
+        offset: 9,
+        truncated: false,
+      })
+      const registry = yield* Tool.Service
+
+      const result = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-tail", name: "read", input: { path: "log.txt", offset: -2 } },
+      })
+      expect(result.status).toBe("completed")
+      if (result.status !== "completed") return
+      expect(result.content).toEqual([{ type: "text", text: "Read file log.txt, lines 9-10\n9: nine\n10: ten" }])
+      expect(readCalls).toEqual([
+        { input: AbsolutePath.make(path.join(process.cwd(), "log.txt")), page: { offset: -2, limit: undefined } },
+      ])
+    }),
+  )
+
+  it.effect("returns the negative directory offset error to the model", () =>
+    Effect.gen(function* () {
+      readFailure = new ReadToolFileSystem.DirectoryOffsetError({ resource: "src" })
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-dir-tail", name: "read", input: { path: "src", offset: -5 } },
+        }),
+      ).toEqual({
+        status: "error",
+        error: { type: "unknown", message: "A negative offset only works for files, and src is a directory" },
+      })
+    }),
+  )
+
   it.effect("reads virtual skill:// files and directories from Skill.Service without external_directory approval", () =>
     Effect.gen(function* () {
       const skills = yield* Skill.Service

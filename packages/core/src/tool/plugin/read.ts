@@ -20,7 +20,7 @@ const FILENAME = "AGENTS.md"
 const LocationInput = Schema.Struct({
   path: Schema.String.annotate({ description: "File or directory to read" }),
   offset: ReadToolFileSystem.PageInput.fields.offset.annotate({
-    description: "The line or directory entry to start reading from (1-based)",
+    description: "The line or directory entry to start reading from (1-based). A negative offset reads from the end of a file: -50 is the last 50 lines.",
   }),
   limit: ReadToolFileSystem.PageInput.fields.limit.annotate({
     description: "The maximum number of lines or directory entries to read (defaults to and capped at 2000)",
@@ -164,7 +164,8 @@ export const Plugin = {
                 const message =
                   error instanceof ReadToolFileSystem.BinaryFileError ||
                   error instanceof ReadToolFileSystem.MediaIngestLimitError ||
-                  error instanceof ReadToolFileSystem.PathKindError
+                  error instanceof ReadToolFileSystem.PathKindError ||
+                  error instanceof ReadToolFileSystem.DirectoryOffsetError
                     ? error.message
                     : `Unable to read ${input.path}`
                 return new ToolFailure({ message, error })

@@ -300,6 +300,100 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
+  it.effect("reads the last lines for a negative offset", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const read = (name: string, content: string, page: ReadToolFileSystem.PageInput) =>
+        files.writeFileString(path.join(directory, name), content).pipe(
+          Effect.andThen(ReadToolFileSystem.read(environment, absolute(path.join(directory, name)), name, page)),
+          Effect.map((result) => String(ReadTool.toModelContent(name, page.offset, result)).split("\n")),
+        )
+      const small = "one\ntwo\nthree\nfour\nfive\n"
+
+      expect(yield* read("small.txt", small, { offset: -3 })).toEqual([
+        "Read file small.txt, lines 3-5",
+        "3: three",
+        "4: four",
+        "5: five",
+      ])
+      expect(yield* read("all.txt", small, { offset: -50 })).toEqual([
+        "Read file all.txt, lines 1-5",
+        "1: one",
+        "2: two",
+        "3: three",
+        "4: four",
+        "5: five",
+      ])
+      expect(yield* read("limited.txt", small, { offset: -4, limit: 2 })).toEqual([
+        "Read file limited.txt, lines 4-5",
+        "4: four",
+        "5: five",
+      ])
+      expect(yield* read("crlf.txt", "one\r\ntwo\r\nthree\r\n", { offset: -2 })).toEqual([
+        "Read file crlf.txt, lines 2-3",
+        "2: two",
+        "3: three",
+      ])
+      expect(yield* read("unterminated.txt", "one\ntwo\nthree", { offset: -1 })).toEqual([
+        "Read file unterminated.txt, lines 3-3",
+        "3: three",
+      ])
+      expect(yield* read("empty.txt", "", { offset: -5 })).toEqual(["Read file empty.txt, 0 lines"])
+      // Each clamped line is 2041 bytes, so 25 of them fit in the 50 KB cap.
+      const wide = Array.from({ length: 200 }, (_, index) => `${index + 1}`.padEnd(3_000, "w"))
+      expect((yield* read("wide.txt", wide.join("\n") + "\n", { offset: -100 }))[0]).toBe(
+        "Read file wide.txt, lines 176-200",
+      )
+    }),
+  )
+
+  it.effect("reads the last lines of a file larger than the first chunk for a negative offset", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const read = (name: string, content: string, page: ReadToolFileSystem.PageInput) =>
+        files.writeFileString(path.join(directory, name), content).pipe(
+          Effect.andThen(ReadToolFileSystem.read(environment, absolute(path.join(directory, name)), name, page)),
+          Effect.map((result) => String(ReadTool.toModelContent(name, page.offset, result)).split("\n")),
+        )
+      const lines = Array.from({ length: 3_000 }, (_, index) => `${index + 1}`.padEnd(100, "x"))
+      const expected = (from: number, to = 3_000) =>
+        lines.slice(from - 1, to).map((line, index) => `${from + index}: ${line}`)
+
+      expect(yield* read("lf.txt", lines.join("\n") + "\n", { offset: -50 })).toEqual([
+        "Read file lf.txt, lines 2951-3000",
+        ...expected(2_951),
+      ])
+      expect(yield* read("crlf.txt", lines.join("\r\n"), { offset: -50, limit: 3 })).toEqual([
+        "Read file crlf.txt, lines 2998-3000",
+        ...expected(2_998),
+      ])
+      // 3000 lines of 101 bytes exceed the 50 KB cap, so the whole-file request keeps the last 506.
+      expect((yield* read("whole.txt", lines.join("\n") + "\n", { offset: -5_000 }))[0]).toBe(
+        "Read file whole.txt, lines 2495-3000",
+      )
+      const short = lines.slice(0, 10)
+      const huge = yield* read("huge.txt", `${short.join("\n")}\n${"z".repeat(300 * 1024)}`, { offset: -20 })
+      expect(huge).toEqual([
+        "Read file huge.txt, lines 1-11",
+        ...expected(1, 10),
+        `11: ${"z".repeat(2_000)}... (line truncated to 2000 chars)`,
+      ])
+    }),
+  )
+
+  it.effect("rejects a negative offset for a directory", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      yield* files.writeFileString(path.join(directory, "a.txt"), "a\n")
+
+      const error = yield* ReadToolFileSystem.read(environment, absolute(directory), "src", { offset: -1 }).pipe(
+        Effect.flip,
+      )
+      expect(error).toBeInstanceOf(ReadToolFileSystem.DirectoryOffsetError)
+      expect(error.message).toBe("A negative offset only works for files, and src is a directory")
+    }),
+  )
+
   it.effect("pages text with one-based offsets", () =>
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture

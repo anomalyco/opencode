@@ -50,15 +50,24 @@ export class PathKindError extends Schema.TaggedError<PathKindError>()("ReadTool
   }
 }
 
+export class DirectoryOffsetError extends Schema.TaggedError<DirectoryOffsetError>()("ReadTool.DirectoryOffsetError", {
+  resource: Schema.String,
+}) {
+  override get message() {
+    return `A negative offset only works for files, and ${this.resource} is a directory`
+  }
+}
+
 export type ReadError =
   | Environment.NotFound
   | Environment.Failed
   | BinaryFileError
   | MediaIngestLimitError
   | PathKindError
+  | DirectoryOffsetError
 
 export const PageInput = Schema.Struct({
-  offset: Schema.optionalKey(NonNegativeInt),
+  offset: Schema.optionalKey(Schema.Int),
   limit: Schema.optionalKey(NonNegativeInt),
 })
 export type PageInput = typeof PageInput.Type
@@ -112,16 +121,19 @@ export const read = Effect.fn("ReadTool.read")(function* (
 ) {
   const virtual = resource.startsWith("skill://")
   const first = yield* files.read(input, { offset: 0, length: FIRST_CHUNK }).pipe(
-    Effect.catchTag("Environment.WrongKind", (error) => {
-      if (error.actual !== "directory")
-        return Effect.fail(new PathKindError({ resource, expected: "a file or directory" }))
-      return files.list(input).pipe(
-        Effect.map((entries) => list(entries, page, virtual ? "/" : path.sep)),
-        Effect.catchTag("Environment.WrongKind", () =>
-          Effect.fail(new PathKindError({ resource, expected: "a file or directory" })),
-        ),
-      )
-    }),
+    Effect.catchTag("Environment.WrongKind", (error) =>
+      Effect.gen(function* () {
+        if (error.actual !== "directory")
+          return yield* new PathKindError({ resource, expected: "a file or directory" })
+        if (page.offset !== undefined && page.offset < 0) return yield* new DirectoryOffsetError({ resource })
+        return yield* files.list(input).pipe(
+          Effect.map((entries) => list(entries, page, virtual ? "/" : path.sep)),
+          Effect.catchTag("Environment.WrongKind", () =>
+            Effect.fail(new PathKindError({ resource, expected: "a file or directory" })),
+          ),
+        )
+      }),
+    ),
   )
   if (first instanceof ListPage) return first
 
@@ -164,8 +176,8 @@ export const read = Effect.fn("ReadTool.read")(function* (
   while (true) {
     const eof = ended || bytes >= first.info.size
     const total = lineCount(lines, leaves.at(-1)?.bytes.at(-1))
-    if (eof && offset > total) {
-      const skipped = Math.max(0, total - Math.min(page.limit || TAIL_LINES, TAIL_LINES))
+    if (eof && (offset < 0 || offset > total)) {
+      const skipped = Math.max(0, total - tailLines(page))
       // Decode from the newline ending the last skipped line, so a byte order mark
       // starting the tail stays content. That empty first line is never in the tail.
       const tail = textPage(textSuffix(leaves, Math.max(0, textOffset(textTree(leaves), skipped) - 1)), true, page)
@@ -177,7 +189,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
         leaves.some((leaf) => leaf.bytes.includes(0)),
       )
     }
-    if (lines >= offset - 1 || eof) {
+    if (eof || (offset > 0 && lines >= offset - 1)) {
       const start = textOffset(textTree(leaves), offset - 1)
       const result = textPage(textSuffix(leaves, start), eof, { limit })
       if (result !== undefined) {
@@ -292,9 +304,9 @@ const textPage = (bytes: Uint8Array, eof: boolean, page: PageInput) => {
 
   const entries: string[] = []
   let size = 0
-  // An offset past the end returns the file's last lines that fit, ending at the last line.
-  if (eof && offset > Math.max(1, available.length)) {
-    for (const value of available.slice(-Math.min(page.limit || TAIL_LINES, TAIL_LINES)).toReversed()) {
+  // A negative offset or one past the end returns the file's last lines that fit, ending at the last line.
+  if (eof && (offset < 0 || offset > Math.max(1, available.length))) {
+    for (const value of available.slice(-tailLines(page)).toReversed()) {
       const text = clampLine(value)
       size += Buffer.byteLength(text, "utf-8") + (entries.length > 0 ? 1 : 0)
       if (size > MAX_READ_BYTES) break
@@ -326,6 +338,12 @@ const textPage = (bytes: Uint8Array, eof: boolean, page: PageInput) => {
   const consumed = consumedLines === 0 ? 0 : (nthNewline(bytes, consumedLines) ?? bytes.length)
   return { entries, offset, next, consumed }
 }
+
+// offset -N asks for the last N lines; an offset past the end falls back to the last 100.
+const tailLines = (page: PageInput) =>
+  page.offset !== undefined && page.offset < 0
+    ? Math.min(-page.offset, page.limit || MAX_READ_LINES, MAX_READ_LINES)
+    : Math.min(page.limit || TAIL_LINES, TAIL_LINES)
 
 const clampLine = (line: string) =>
   line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : line
