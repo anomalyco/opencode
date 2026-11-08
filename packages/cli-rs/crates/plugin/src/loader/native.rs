@@ -39,7 +39,7 @@ use opentui::style::Color;
 use serde::de::DeserializeOwned;
 
 use super::Backend;
-use crate::{Definition, ErrorFn, Host, Kind, Placement, Setup, Toast};
+use crate::{Definition, ErrorFn, Host, Kind, Placement, Setup, Slotted, Toast};
 
 /// The host's minor version: it serves every entry and request up to it.
 pub const HOST_MINOR: u32 = ABI_MINOR;
@@ -551,17 +551,57 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
         };
         setup.slot(Placement::new(kind, slot.path.clone()), move |host, input| {
             let request = Request::Slot { claim, session_id: input.session_id.clone() };
-            let lines = guest.request::<Vec<Line>>("render-slot", &request).unwrap_or_default();
-            Box::new(lines_view(host.app(), &host.theme(), &lines))
+            Box::new(Claim::mount(host, &guest, "render-slot", request))
         });
     }
     for name in &manifest.routes {
         let guest = guest.clone();
         let request = Request::Route { name: name.clone() };
-        setup.route(name.clone(), move |host| {
-            let lines = guest.request::<Vec<Line>>("render-route", &request).unwrap_or_default();
-            Box::new(lines_view(host.app(), &host.theme(), &lines))
-        });
+        setup.route(name.clone(), move |host| Box::new(Claim::mount(host, &guest, "render-route", request.clone())));
+    }
+}
+
+/// A mounted slot claim or route: the plugin's rows in a view, empty when it drew nothing or failed. It asks for
+/// them again with each change batch and rebuilds the view only when they differ.
+struct Claim<H: Host> {
+    guest: Rc<Guest<H>>,
+    export: &'static str,
+    request: Request,
+    view: View,
+    lines: RefCell<Vec<Line>>,
+}
+
+impl<H: Host> Claim<H> {
+    fn mount(host: &H, guest: &Rc<Guest<H>>, export: &'static str, request: Request) -> Rc<Self> {
+        let view = View::new(host.app()).shrink(0.0);
+        let claim = Rc::new(Self { guest: guest.clone(), export, request, view, lines: RefCell::default() });
+        claim.draw(host);
+        claim
+    }
+
+    fn draw(&self, host: &H) {
+        let lines = self.guest.request::<Vec<Line>>(self.export, &self.request).unwrap_or_default();
+        if *self.lines.borrow() == lines {
+            return;
+        }
+        self.view.clear();
+        if !lines.is_empty() {
+            self.view.add(&lines_widget(host.app(), &host.theme(), &lines, false));
+        }
+        self.lines.replace(lines);
+        host.app().request_redraw();
+    }
+}
+
+impl<H: Host> Slotted<H> for Rc<Claim<H>> {
+    fn root(&self) -> View {
+        self.view.clone()
+    }
+
+    fn sync(&self, host: &H, changes: &H::Changes) {
+        if !H::unchanged(changes) {
+            self.draw(host);
+        }
     }
 }
 
@@ -616,15 +656,6 @@ fn lines_widget(app: &App, theme: &Theme, lines: &[Line], scroll: bool) -> AnyWi
         .scrollbars(false)
         .child(&text)
         .as_any()
-}
-
-/// A slot claim or route: the rows in a view, empty when the plugin drew nothing or failed.
-fn lines_view(app: &App, theme: &Theme, lines: &[Line]) -> View {
-    let view = View::new(app).shrink(0.0);
-    if !lines.is_empty() {
-        view.add(&lines_widget(app, theme, lines, false));
-    }
-    view
 }
 
 /// A theme token path, or `#rrggbb`.

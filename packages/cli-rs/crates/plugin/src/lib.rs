@@ -36,6 +36,10 @@ pub trait Host: 'static {
     }
     /// The keymap plugin layers register on.
     fn keymap(&self) -> &DialogKeymap;
+    /// Whether a change batch changed nothing, so external plugins' slot claims and routes need not draw again.
+    fn unchanged(_changes: &Self::Changes) -> bool {
+        false
+    }
 
     // What external plugins reach across the component boundary (P.4). Built-ins use the host directly.
 
