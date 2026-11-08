@@ -6,15 +6,21 @@ import { Instructions } from "../instructions/index.js"
 import { CodeModeCatalog } from "./catalog.js"
 
 // prettier-ignore
-const prompt = `# Code Mode
+const prompt = (hasMoreTools: boolean) => `# Code Mode
 
-The tools listed below, and \`search\`, cannot be called directly: they only work as JavaScript inside the \`execute\` tool. Every other tool you have is a normal tool call: call it directly, never inside \`execute\`.
+The tools listed below${hasMoreTools ? ", and \`search\`," : ""} cannot be called directly: they only work as JavaScript inside the \`execute\` tool. Every other tool you have is a normal tool call: call it directly, never inside \`execute\`.
 
-The catalog may be partial. Before calling a tool that is not listed below, find it with the global \`search(...)\` function. Do not guess tool names. Each result's \`path\` is the complete call expression: write it out as code, for example \`await tools.ns.tool_name({ ... })\`. Do not use it as a key such as \`tools[path]\`.
+${hasMoreTools ? `The catalog is partial. Before calling a tool that is not listed below, find it with the global \`search(...)\` function. Do not guess tool names. Each result's \`path\` is the complete call expression: write it out as code, for example \`await tools.ns.tool_name({ ... })\`. Do not use it as a key such as \`tools[path]\`.
 
-- ${searchSignature}
+- ${searchSignature}` : "The catalog is complete. Do not guess tool names."}
 
 ## Code Mode tools (call only inside \`execute\`)`
+
+// Sent once, when tools arrive that the catalog cannot list in full, so the model learns about `search`.
+// prettier-ignore
+const searchNote = `You can also look up tools that aren't listed with the global \`search(...)\` function inside \`execute\`. Before calling a tool that is not listed, find it this way. Do not guess tool names. Each result's \`path\` is the complete call expression: write it out as code, for example \`await tools.ns.tool_name({ ... })\`. Do not use it as a key such as \`tools[path]\`.
+
+- ${searchSignature}`
 
 const UPDATE_BUDGET = 1_000
 
@@ -26,7 +32,7 @@ export function render(catalog: CodeModeCatalog.Summary) {
     return [CodeModeCatalog.namespaceLine(namespace), ...namespace.entries.map((entry) => entry.line)]
   })
 
-  return `${prompt}
+  return `${prompt(!complete(catalog))}
 
 ${tools.join("\n")}`
 }
@@ -102,6 +108,7 @@ ${render(current)}`
     ]
   })
   if (fresh.length > 0) parts.push(["New:", ...fresh].join("\n"))
+  if (complete(previous) && !complete(current)) parts.push(searchNote)
   const changed = kept.flatMap((namespace) => namespace.changed.map((entry) => entry.line))
   if (changed.length > 0) parts.push(["Changed:", ...changed].join("\n"))
   const gone = kept.flatMap((namespace) => namespace.removed.map(toolExpression))
@@ -112,6 +119,10 @@ ${render(current)}`
   const delta = parts.join("\n\n")
   if (delta.length < replacement.length) return delta
   return replacement
+}
+
+function complete(catalog: CodeModeCatalog.Summary) {
+  return catalog.namespaces.every((namespace) => namespace.entries.length === namespace.tools.length)
 }
 
 /** The leading listings whose cost fits `budget`. */

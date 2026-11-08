@@ -149,13 +149,16 @@ describe("CodeModeCatalog.summarize", () => {
 })
 
 describe("CodeModeInstructions.render", () => {
-  test("keeps search guidance when every tool is shown", () => {
+  test("inlines complete catalogs without search guidance", () => {
     const instructions = render([lookup])
     expect(instructions).toContain("## Code Mode tools (call only inside `execute`)")
     expect(instructions).toContain("- orders (1 tool)")
     expect(instructions).toContain(`  - ${lookup.signature} // Look up an order by ID`)
-    expect(instructions).toContain("The catalog may be partial.")
-    expect(instructions).toContain("- search({")
+    expect(instructions).not.toContain("search")
+    expect(instructions).toContain(
+      "The tools listed below cannot be called directly: they only work as JavaScript inside the `execute` tool. Every other tool you have is a normal tool call: call it directly, never inside `execute`.",
+    )
+    expect(instructions).toContain("The catalog is complete. Do not guess tool names.")
   })
 
   test("adds search guidance when the catalog exceeds the budget", () => {
@@ -166,7 +169,7 @@ describe("CodeModeInstructions.render", () => {
       "The tools listed below, and `search`, cannot be called directly: they only work as JavaScript inside the `execute` tool.",
     )
     expect(partial).toContain(
-      "The catalog may be partial. Before calling a tool that is not listed below, find it with the global `search(...)` function. Do not guess tool names.",
+      "The catalog is partial. Before calling a tool that is not listed below, find it with the global `search(...)` function. Do not guess tool names.",
     )
     expect(partial).toContain("- search({")
     expect(partial).toContain("  /** @integer @exclusiveMinimum 0 */\n  limit?: number,")
@@ -189,6 +192,7 @@ describe("CodeModeInstructions.render", () => {
       { name: "beta", tools: ["beta.cheap"], entries: [] },
     ].reduce((total, namespace) => total + Math.round(CodeModeCatalog.namespaceLine(namespace).length / 4), 0)
     const instructions = render([cheapAlpha, expensive, cheapBeta], 40 + namespaceCost)
+    expect(instructions).toContain("The catalog is partial.")
     expect(instructions).toContain("- alpha (2 tools, 1 shown)")
     expect(instructions).toContain(`  - ${cheapAlpha.signature} // Cheap`)
     expect(instructions).not.toContain("tools.alpha.expensive(")
@@ -264,7 +268,7 @@ describe("CodeModeInstructions.update", () => {
 
   test("counts new tools past the update budget", () => {
     const bulk = Array.from({ length: 300 }, (_, index) => entry(`bulk.tool${index}`, `Tool ${index}`))
-    expect(update([bulk[0]!], bulk)).toMatch(/ {2}- \d+ more in `bulk`; search for them$/)
+    expect(update([bulk[0]!], bulk)).toMatch(/ {2}- \d+ more in `bulk`; search for them\n/)
   })
 
   test("shows a changed signature the model was shown even when the tool is no longer shown", () => {
@@ -277,6 +281,16 @@ describe("CodeModeInstructions.update", () => {
     const current = CodeModeCatalog.summarize({ tools: after }).namespaces.find((namespace) => namespace.name === "ns")
     expect(current?.entries.map((item) => item.path)).not.toContain(last)
     expect(update(before, after)).toContain(`Changed:\n  - ${signature} // Tool`)
+  })
+
+  test("introduces search once, when the catalog stops listing every tool", () => {
+    const wide = Array.from({ length: 200 }, (_, index) => entry(`bulk.tool${index}`, `Tool ${index}`))
+    const text = update([echo], [echo, ...wide])
+    expect(text).toStartWith("The Code Mode tool catalog has changed.\n\nNew tools are available:\n- bulk (200 tools")
+    expect(text).toContain("You can also look up tools that aren't listed with the global `search(...)` function")
+    expect(text).toContain("- search({")
+    expect(update([echo, ...wide], [echo, ...wide, entry("bulk.more", "More")])).not.toContain("search(")
+    expect(update([echo, ...wide], [echo])).not.toContain("search(")
   })
 
   test("falls back to full replacement when the delta is larger than the catalog", () => {
