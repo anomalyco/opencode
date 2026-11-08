@@ -29,7 +29,13 @@ and `clippy.toml` forbids calling `url`'s parsers anywhere else:
   keeps the `<url>/auth/connect/<code>` fallback;
 - an ACP resource or link whose URI has a non-ASCII host is treated as an unparsable URI: its
   name comes from the last path segment, and an embedded text resource is labelled with the URI;
-- an OTLP endpoint (`OTEL_EXPORTER_OTLP_ENDPOINT`) with a non-ASCII host exports nothing.
+- an OTLP endpoint (`OTEL_EXPORTER_OTLP_ENDPOINT`) with a non-ASCII host exports nothing;
+- a redirect whose `Location` has a non-ASCII host fails the request with the message above,
+  where Bun's `fetch` follows it to the punycode host. Requests follow redirects in
+  `opencode_api::transport::fetch`, which resolves `Location` with `join_url`; `clippy.toml`
+  forbids reqwest's own `send` and `execute`. reqwest still resolves `Location` itself before it
+  consults its redirect policy, so the root `Cargo.toml` turns off debug assertions in `idna` and
+  `idna_adapter`; the result of that parse is discarded.
 
 The stub also stops `url` from checking UTS 46 rules on punycode labels, so a malformed `xn--`
 label parses where TypeScript rejects it; the server or DNS rejects it later.
