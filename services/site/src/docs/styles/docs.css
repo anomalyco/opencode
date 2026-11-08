@@ -208,13 +208,6 @@
         }
       }
 
-      /* The marker's hyphen (1.5ch in: "[" and half its cell) sits on the logo mark's centre, 12px in
-         from the content edge (the 20px mark starts 2px in); the label follows. The open list moves
-         with it, so its markers stay under the row's. */
-      :is([data-slot="current"], [data-slot="section-body"] > [data-component="docs-nav"]) {
-        margin-inline-start: calc(12px - 1.5ch);
-      }
-
       [data-slot="current"] {
         display: flex;
         align-items: center;
@@ -222,18 +215,10 @@
         min-width: 0;
         -webkit-text-stroke: var(--title-stroke);
 
+        /* Just the page's title, on the content edge like the Contents bar's label below it; the
+           open list keeps the nav's "[-]" markers. */
         [data-slot="box"] {
-          flex-shrink: 0;
-          display: inline-flex;
-          align-items: center;
-          -webkit-text-stroke: 0;
-        }
-
-        /* Its width comes from the nav's marker rule, so the row's "[-]" is the list's. */
-        [data-slot="fill"] {
-          display: grid;
-          place-items: center;
-          height: 1lh;
+          display: none;
         }
 
         [data-slot="label"] {
