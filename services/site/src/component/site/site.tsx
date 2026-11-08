@@ -290,19 +290,27 @@ export function Site(props: {
   // area from) and the browser bar colour take the bar's blue as painted, and a fixed strip under the
   // home indicator (site.css) gives Safari a blue element touching the bottom edge.
   const lettersBottom = () => lettersBarShown() && lettersBarAtEnd()
-  // The tint comes on as the bar starts to open, so the toolbar area and the opening bar are blue
-  // together; once the bar closes it stays until the bar has finished closing (its transition, none
-  // under reduced motion), so the bottom never turns back while the bar is still on screen.
+  // The tint comes on as the bar starts to open, with the bar pinned to the bottom edge at full height
+  // (site.css), so the toolbar area and the whole bar are blue in the same frame. It holds while the
+  // bar opens (the page catching up with its growth can leave it short of the end for a frame) and,
+  // once the bar closes, until it has finished closing, so the bottom never turns back while the bar
+  // is still on screen. The bar's transition is none under reduced motion.
   const [lettersTint, setLettersTint] = createSignal(false)
+  let lettersOpened = 0
   createEffect(
     on(lettersBottom, (bottom) => {
-      if (bottom || lettersBarShown()) return setLettersTint(bottom)
+      if (bottom) return setLettersTint(true)
       const bar = document.querySelector<HTMLElement>('[data-component="letters-bar"]')
-      const timer = setTimeout(
-        () => setLettersTint(false),
-        bar ? parseFloat(getComputedStyle(bar).transitionDuration) * 1000 : 0,
-      )
+      const duration = bar ? parseFloat(getComputedStyle(bar).transitionDuration) * 1000 : 0
+      const wait = lettersBarShown() ? lettersOpened + duration - performance.now() : duration
+      if (wait <= 0) return setLettersTint(false)
+      const timer = setTimeout(() => setLettersTint(lettersBottom()), wait)
       onCleanup(() => clearTimeout(timer))
+    }),
+  )
+  createEffect(
+    on(lettersBarShown, (shown) => {
+      if (shown) lettersOpened = performance.now()
     }),
   )
   // Development only: Like letters?'s bar appears at once instead of sliding open, to compare
