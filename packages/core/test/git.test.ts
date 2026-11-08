@@ -643,6 +643,27 @@ describe("Git capture recovery", () => {
     }),
   )
 
+  it.live("captures an untracked embedded repository whose own status fails", () =>
+    Effect.gen(function* () {
+      const { project, repository, capture } = yield* setup
+      const nested = path.join(project, "nested")
+      const head = () => Effect.promise(async () => (await $`git rev-parse HEAD`.cwd(nested).text()).trim())
+      const entry = (tree: string) =>
+        Effect.promise(() => $`git --git-dir ${repository.gitDirectory} ls-tree ${tree} nested`.text())
+      yield* Effect.promise(async () => {
+        await Bun.write(path.join(nested, "inner.txt"), "inner\n")
+        await initRepo(nested)
+        await $`git add . && git commit -q -m inner`.cwd(nested).quiet()
+      })
+      expect(yield* entry(yield* capture())).toContain(yield* head())
+      yield* Effect.promise(() => $`git commit -q --allow-empty -m next`.cwd(nested).quiet())
+      const moved = yield* capture()
+      expect(yield* entry(moved)).toContain(yield* head())
+      yield* Effect.promise(() => Bun.write(path.join(nested, ".git", "index"), "broken"))
+      expect(yield* capture()).toBe(moved)
+    }),
+  )
+
   it.live("keeps the index when Git cannot even start", () =>
     Effect.gen(function* () {
       const { root, project, repository, capture } = yield* setup
