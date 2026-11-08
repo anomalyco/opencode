@@ -94,12 +94,12 @@ export const testLayer = (
   entries: Entry[] = [],
   options?: { readonly app?: Partial<App.Info>; readonly overrides?: string },
 ) =>
-  layer.pipe(
+  Layer.fresh(layer).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
         App.layer(options?.app),
         Config.testLayer(entries),
-        ...(options && "overrides" in options ? [Layer.succeed(Overrides, options.overrides)] : []),
+        Layer.succeed(Overrides, options?.overrides),
       ),
     ),
   )

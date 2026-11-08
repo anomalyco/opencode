@@ -500,7 +500,7 @@ test("runtime cache is keyed per engine when experimental.codemode_vm toggles", 
       // Reading the catalog reuses the cached runtime without rebuilding
       expect(CodeModeTool.catalog(inventory).tools).toHaveLength(1)
       expect(conversions).toBe(2)
-    }).pipe(Effect.provide(Flag.testLayer([document(false)], { overrides: undefined }))),
+    }).pipe(Effect.provide(Flag.testLayer([document(false)]))),
   )
 })
 

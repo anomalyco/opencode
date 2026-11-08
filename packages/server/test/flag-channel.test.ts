@@ -16,11 +16,13 @@ import { Tool } from "@opencode/core/tool"
 import { McpTool } from "@opencode/core/tool/mcp"
 import { Location } from "@opencode/schema/location"
 import { AbsolutePath } from "@opencode/schema/schema"
+import { Global } from "@opencode/util/global"
 import { Context, Effect, Layer } from "effect"
 import { HttpServer } from "effect/http"
 import { LanguageModel, LLMClient } from "../../ai/src/effect"
 import { OpenAIChat } from "../../ai/src/protocols/openai-chat"
 import { TestLLM } from "../../ai/src/testing"
+import { tempGlobalLayer } from "../../core/test/fixture/global"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { imagePassthrough } from "../../core/test/lib/image"
@@ -32,7 +34,6 @@ const pngHash = SessionBlob.hashBytes(Buffer.from(pngBase64, "base64"))
 const runChannel = (channel: "dev" | "latest") =>
   Effect.gen(function* () {
     const dir = yield* tmpdirScoped(`opencode-flag-channel-${channel}-`)
-    const globalDir = yield* tmpdirScoped(`opencode-flag-global-${channel}-`)
     const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
     const llm = yield* TestLLM.Test.pipe(Effect.provide(TestLLM.testLayer()))
     const model = SessionRunnerModel.resolved(
@@ -50,11 +51,12 @@ const runChannel = (channel: "dev" | "latest") =>
         {
           app: { channel, version: "test" },
           database: { path: ":memory:" },
-          config: { directory: globalDir.path, project: false, claude: false },
+          config: { project: false, claude: false },
           models: { fetch: false, snapshot: false },
           fs: { filewatcher: false, fff: false },
         },
         [
+          Global.node.replace(tempGlobalLayer),
           llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
           SessionRunnerModel.node.replace(
             Layer.succeed(SessionRunnerModel.Service, { resolve: () => Effect.succeed(model) }),
@@ -80,9 +82,11 @@ const runChannel = (channel: "dev" | "latest") =>
     // a conversion during the session step's execute call then happens if and only if the VM runtime is built and run.
     yield* Effect.gen(function* () {
       expect(yield* App.Service).toEqual({ name: "opencode", version: "test", channel })
-      yield* (yield* Plugin.Service).awaitActivation
-      yield* (yield* McpTool.Service).flush
-      yield* (yield* Agent.Service).transform((editor) =>
+      yield* Plugin.awaitActivation
+      const mcp = yield* McpTool.Service
+      yield* mcp.flush
+      const agents = yield* Agent.Service
+      yield* agents.transform((editor) =>
         editor.update(Agent.ID.make("build"), (agent) => {
           agent.permissions = [{ action: "*", resource: "*", effect: "allow" }]
         }),
@@ -143,17 +147,19 @@ const runChannel = (channel: "dev" | "latest") =>
     }
   }).pipe(Effect.provideService(Flag.Overrides, undefined), Effect.scoped)
 
-it.live("enables codemode_vm and media_blob by default on dev builds and keeps them off on latest builds", () =>
+it.live("enables codemode_vm and media_blob by default on dev builds", () =>
   Effect.gen(function* () {
-    const dev = yield* runChannel("dev")
-    expect(dev).toEqual({
+    expect(yield* runChannel("dev")).toEqual({
       engine: "vm",
       blobs: [{ hash: pngHash }],
       userFiles: [{ uri: SessionStored.ref(pngHash), mime: "image/png", name: "shot.png", source: { type: "inline" } }],
     })
+  }),
+)
 
-    const latest = yield* runChannel("latest")
-    expect(latest).toEqual({
+it.live("keeps codemode_vm and media_blob off by default on latest builds", () =>
+  Effect.gen(function* () {
+    expect(yield* runChannel("latest")).toEqual({
       engine: "legacy",
       blobs: [],
       userFiles: [{ data: pngBase64, mime: "image/png", name: "shot.png", source: { type: "inline" } }],
