@@ -212,16 +212,6 @@
       width: 2px;
       background: var(--bar);
     }
-
-    [role="menuitem"][aria-current="page"]:is(:focus-visible, :active)::before {
-      background: var(--link);
-    }
-
-    @media (hover: hover) and (pointer: fine) {
-      [role="menuitem"][aria-current="page"]:hover::before {
-        background: var(--link);
-      }
-    }
   }
 
   [data-slot="meta"] {
@@ -328,6 +318,21 @@
   --nav-chevron-ink: light-dark(hsl(0 0% 8%), hsl(0 0% 95%));
   --nav-chevron-hover: var(--nav-name-hover);
   --nav-chevron-press: light-dark(#d2d2d2, #4b4b4b);
+  /* The product name after the mark (and the docs' DOCS): its size, and the padding under it that puts OpenTUI Mono's
+     caps (0.69 of the size) where they belong in the 25px row. */
+  --nav-name-size: 15px;
+  --nav-name-pad: 0.65px;
+
+  /* Phones: the docs sticky rows' 16px chevron, in an 18px box close to the name, its target reaching 26px past it so
+     it stays 44px wide. The name grows to 20px, its caps centred in the 25px row (5.5px above and below), within half
+     a pixel of the mark's inner rectangle. */
+  @media (max-width: 60rem) {
+    --nav-chevron-width: 18px;
+    --nav-chevron-glyph: 16px;
+    --nav-chevron-reach: 26px;
+    --nav-name-size: 20px;
+    --nav-name-pad: 1px;
+  }
   --nav-logo-box-w: calc(15px * 1.492);
   --nav-logo-box-h: 25px;
 
@@ -392,11 +397,10 @@
     height: 25px;
     margin: var(--nav-lockup-inset) 0 0;
     margin-inline-start: 6px;
-    /* OpenTUI Mono's caps sit 0.325px below its line box's centre; this puts them on the mark's centre. */
-    padding: 0 6px 0.65px;
+    padding: 0 6px var(--nav-name-pad);
     background: none;
     color: var(--nav-lockup-ink);
-    font: 700 15px/1 var(--nav-menu-mono, "OpenTUI Mono", ui-monospace, monospace);
+    font: 700 var(--nav-name-size) / 1 var(--nav-menu-mono, "OpenTUI Mono", ui-monospace, monospace);
     letter-spacing: 0;
     text-decoration: none;
     text-transform: uppercase;

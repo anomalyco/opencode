@@ -215,18 +215,10 @@
         min-width: 0;
         -webkit-text-stroke: var(--title-stroke);
 
+        /* Just the page's title, on the content edge like the Contents bar's label below it; the
+           open list keeps the nav's "[-]" markers. */
         [data-slot="box"] {
-          flex-shrink: 0;
-          display: inline-flex;
-          align-items: center;
-          -webkit-text-stroke: 0;
-        }
-
-        /* Its width comes from the nav's marker rule, so the row's "[-]" is the list's. */
-        [data-slot="fill"] {
-          display: grid;
-          place-items: center;
-          height: 1lh;
+          display: none;
         }
 
         [data-slot="label"] {
@@ -273,6 +265,12 @@
       mask-image: linear-gradient(to bottom, transparent, black var(--fade) calc(100% - var(--fade)), transparent);
     }
   }
+}
+
+/* The line above Previous / Next is a divider like the docs' others (tables, code frames, the bars),
+   not ink (Pagination 4 in docs-variants.css draws it in --text-strong; doubled to outrank it). */
+[data-site][data-page="docs"] [data-component="docs-article"] [data-component="pagination"][data-component] {
+  border-top-color: var(--border);
 }
 
 /* ───────────── Right rail: search over Contents ───────────── */

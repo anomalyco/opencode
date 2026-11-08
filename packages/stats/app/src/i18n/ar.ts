@@ -23,6 +23,7 @@ export const dict = {
   "header.githubAria": "ضع نجمة لـ OpenCode على GitHub",
   "header.github": "GitHub",
   "header.tryOpenCode": "جرّب OpenCode",
+  "header.tryOpenCodeShort": "جرّب OpenCode",
   "header.openNav": "فتح التنقل",
   "header.closeNav": "إغلاق التنقل",
   "theme.groupLabel": "السمة",
