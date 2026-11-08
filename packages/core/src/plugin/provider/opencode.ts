@@ -595,8 +595,10 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
                   }),
                 ),
               )
-          const instructions = yield* list("/api/v2/instructions", ConsoleInstructions)
-          const skills = yield* list("/api/v2/skills", ConsoleSkills)
+          const [instructions, skills] = yield* Effect.all(
+            [list("/api/v2/instructions", ConsoleInstructions), list("/api/v2/skills", ConsoleSkills)],
+            { concurrency: 2 },
+          )
           return { ...remote, instructions: instructions?.instructions ?? [], skills: skills?.skills ?? [], watches }
         }),
       ),
