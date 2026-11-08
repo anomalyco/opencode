@@ -5,33 +5,35 @@ import { Effect, Schema } from "effect"
 import { Instructions } from "../instructions/index.js"
 import { CodeModeCatalog } from "./catalog.js"
 
-const UPDATE_BUDGET = 1_000
-
-const EMPTY =
-  "No Code Mode tools are currently available. Later Code Mode catalog updates may add or remove tools. Do not call `execute` unless there is at least one available Code Mode tool."
-
 // prettier-ignore
 const prompt = `# Code Mode
 
 The tools listed below, and \`search\`, cannot be called directly: they only work as JavaScript inside the \`execute\` tool. Every other tool you have is a normal tool call: call it directly, never inside \`execute\`.
 
-A group may show only some of its tools. Before calling a tool whose signature is not shown, get it with the global \`search(...)\` function, for example \`search({ query: "tools.ns.tool_name" })\`, and return the result; one \`execute\` can search for several tools. Do not guess tool names or arguments. Each result's \`path\` is the complete call expression: write it out as code, for example \`await tools.ns.tool_name({ ... })\`, and call a name that is not a JavaScript identifier with brackets, as in \`tools.ns["tool-name"]({ ... })\`. Do not use a path as a key such as \`tools[path]\`.
+The catalog may be partial. Before calling a tool that is not listed below, find it with the global \`search(...)\` function. Do not guess tool names. Each result's \`path\` is the complete call expression: write it out as code, for example \`await tools.ns.tool_name({ ... })\`. Do not use it as a key such as \`tools[path]\`.
 
 - ${searchSignature}
 
 ## Code Mode tools (call only inside \`execute\`)`
 
+const UPDATE_BUDGET = 1_000
+
 export function render(catalog: CodeModeCatalog.Summary) {
-  if (catalog.total === 0) return EMPTY
+  if (catalog.total === 0)
+    return "No Code Mode tools are currently available. Later Code Mode catalog updates may add or remove tools. Do not call `execute` unless there is at least one available Code Mode tool."
+
+  const tools = catalog.namespaces.flatMap((namespace) => {
+    return [CodeModeCatalog.namespaceLine(namespace), ...namespace.entries.map((entry) => entry.line)]
+  })
+
   return `${prompt}
 
-${catalog.namespaces.map(CodeModeCatalog.renderSection).join("\n")}`
+${tools.join("\n")}`
 }
 
-// An update tells the model about tools it does not know of: groups and tools that came, signatures it was shown
-// that changed, and tools that went. Shown tools shifting because other groups came or went, and pinning, change
-// nothing the model relies on and are left out. New signatures share a fixed budget; the whole catalog is restated
-// only around an empty one or when that is shorter.
+// An update names the namespaces and tools that came or went and the signatures the model was shown that changed.
+// It leaves out shown tools shifting because other namespaces came or went, which changes nothing the model relies
+// on. New signatures share a fixed budget, and past it are counted.
 export function update(
   previous: CodeModeCatalog.Summary,
   current: CodeModeCatalog.Summary,
@@ -41,78 +43,81 @@ export function update(
 
 ${render(current)}`
   if (current.total === 0 || previous.total === 0) return replacement
-  const sections = Instructions.diffByKey(
+
+  const namespaces = Instructions.diffByKey(
     previous.namespaces,
     current.namespaces,
-    (section) => section.name,
-    () => true,
+    (namespace) => namespace.name,
+    (before, after) => before.description !== after.description,
   )
-  const kept = sections.changed.map((change) => changes(change.previous, change.current, lookup))
-  const blocks = sections.added.length + kept.filter((change) => change.added.length > 0).length
-  const share = blocks === 0 ? 0 : UPDATE_BUDGET / blocks
-  const added = kept.flatMap((change) => {
-    if (change.added.length === 0) return []
-    const shown = fit(listings(change.added, lookup), share)
-    const rest = change.added.length - shown.length
+  // A namespace whose description changed is restated as if new.
+  const added = [...namespaces.added, ...namespaces.changed.map((change) => change.current)]
+  const kept = current.namespaces.flatMap((namespace) => {
+    const before = previous.namespaces.find((item) => item.name === namespace.name)
+    if (!before || before.description !== namespace.description) return []
+    const known = new Set(before.tools)
+    const present = new Set(namespace.tools)
     return [
-      ...shown.map((entry) => entry.line),
-      ...(rest === 0 ? [] : [`  - ${rest} more in \`${change.name}\`; search for them`]),
+      {
+        name: namespace.name,
+        added: namespace.tools.filter((path) => !known.has(path)),
+        // Every signature the model was shown, whether or not it is still shown.
+        changed: before.entries.flatMap((entry) => {
+          const after = present.has(entry.path) ? lookup(entry.path) : undefined
+          return after === undefined || after.line === entry.line ? [] : [after]
+        }),
+        removed: before.tools.filter((path) => !present.has(path)),
+      },
     ]
   })
-  const changed = kept.flatMap((change) => change.changed.map((entry) => entry.line))
-  const gone = kept.flatMap((change) => change.removed.map(toolExpression))
-  const parts = [
-    ...(sections.added.length === 0
-      ? []
-      : [
-          [
-            "New tools are available:",
-            ...sections.added.map((section) => {
-              const shown = fit(listings(section.tools, lookup), share)
-              return [CodeModeCatalog.namespaceLine(section, shown.length), ...shown.map((entry) => entry.line)].join(
-                "\n",
-              )
-            }),
-          ].join("\n"),
-        ]),
-    ...(added.length === 0 ? [] : [["New:", ...added].join("\n")]),
-    ...(changed.length === 0 ? [] : [["Changed:", ...changed].join("\n")]),
-    ...(gone.length === 0 ? [] : [`No longer available: ${gone.join(", ")}`]),
-    ...sections.removed.map((section) => `The \`${section.name}\` tools are no longer available and must not be used.`),
-  ]
-  if (parts.length === 0) return undefined
-  const delta = ["The Code Mode tool catalog has changed.", ...parts].join("\n\n")
-  return delta.length < replacement.length ? delta : replacement
-}
-
-// What changed in a group the model already knew: its new tools, the signatures it was shown that differ now, whether
-// or not they are still shown, and the tools that went.
-function changes(
-  previous: CodeModeCatalog.Section,
-  current: CodeModeCatalog.Section,
-  lookup: (path: string) => CodeModeCatalog.Listing | undefined,
-) {
-  const known = new Set(previous.tools)
-  const present = new Set(current.tools)
-  return {
-    name: current.name,
-    added: current.tools.filter((path) => !known.has(path)),
-    changed: previous.listings.flatMap((before) => {
-      const after = present.has(before.path) ? lookup(before.path) : undefined
-      return after === undefined || after.line === before.line ? [] : [after]
-    }),
-    removed: previous.tools.filter((path) => !present.has(path)),
+  const blocks = added.length + kept.filter((namespace) => namespace.added.length > 0).length
+  const share = blocks === 0 ? 0 : UPDATE_BUDGET / blocks
+  const parts = ["The Code Mode tool catalog has changed."]
+  if (added.length > 0) {
+    parts.push(
+      [
+        "New tools are available:",
+        ...added.map((namespace) => {
+          const shown = fit(
+            namespace.tools.flatMap((path) => lookup(path) ?? []),
+            share,
+          )
+          return [CodeModeCatalog.namespaceLine(namespace, shown.length), ...shown.map((entry) => entry.line)].join(
+            "\n",
+          )
+        }),
+      ].join("\n"),
+    )
   }
-}
-
-function listings(paths: ReadonlyArray<string>, lookup: (path: string) => CodeModeCatalog.Listing | undefined) {
-  return paths.flatMap((path) => lookup(path) ?? [])
+  const fresh = kept.flatMap((namespace) => {
+    if (namespace.added.length === 0) return []
+    const shown = fit(
+      namespace.added.flatMap((path) => lookup(path) ?? []),
+      share,
+    )
+    const rest = namespace.added.length - shown.length
+    return [
+      ...shown.map((entry) => entry.line),
+      ...(rest === 0 ? [] : [`  - ${rest} more in \`${namespace.name}\`; search for them`]),
+    ]
+  })
+  if (fresh.length > 0) parts.push(["New:", ...fresh].join("\n"))
+  const changed = kept.flatMap((namespace) => namespace.changed.map((entry) => entry.line))
+  if (changed.length > 0) parts.push(["Changed:", ...changed].join("\n"))
+  const gone = kept.flatMap((namespace) => namespace.removed.map(toolExpression))
+  if (gone.length > 0) parts.push(`No longer available: ${gone.join(", ")}`)
+  for (const namespace of namespaces.removed)
+    parts.push(`The \`${namespace.name}\` tools are no longer available and must not be used.`)
+  if (parts.length === 1) return undefined
+  const delta = parts.join("\n\n")
+  if (delta.length < replacement.length) return delta
+  return replacement
 }
 
 /** The leading listings whose cost fits `budget`. */
 function fit(listings: ReadonlyArray<CodeModeCatalog.Listing>, budget: number) {
   const totals: number[] = []
-  for (const entry of listings) totals.push((totals.at(-1) ?? 0) + CodeModeCatalog.cost(entry.line.length))
+  for (const entry of listings) totals.push((totals.at(-1) ?? 0) + CodeModeCatalog.cost(entry.line))
   const end = totals.findIndex((total) => total > budget)
   return end === -1 ? listings : listings.slice(0, end)
 }
@@ -128,7 +133,7 @@ export const make = (inventory?: CodeModeCatalog.Inventory): Instructions.List =
     read: Effect.succeed(catalog),
     render: {
       initial: render,
-      // Update text is rendered once, against the inventory that produced `current`, and stored.
+      // Rendered once, against the inventory that produced `current`, and stored with the update.
       changed: (previous, current) =>
         update(previous, current, inventory === undefined ? () => undefined : CodeModeCatalog.lookup(inventory)),
       removed: () => "Code Mode tools are no longer available. Do not use any previously listed Code Mode tools.",

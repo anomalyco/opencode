@@ -28,110 +28,118 @@ const Listing = Schema.Struct({
 })
 export type Listing = typeof Listing.Type
 
-/** One group's part of the catalog. */
-const Section = Schema.Struct({
+const NamespaceSummary = Schema.Struct({
   name: Schema.String,
   description: Schema.optionalKey(Schema.String),
   /** Every tool's path, so an update can tell a new tool from one that was not shown. */
   tools: Schema.Array(Schema.String),
-  /** The tools shown with a signature: pinned tools first, then the others in path order. */
-  listings: Schema.Array(Listing),
+  entries: Schema.Array(Listing),
 })
-export type Section = typeof Section.Type
+export type NamespaceSummary = typeof NamespaceSummary.Type
 
 export const Summary = Schema.Struct({
   total: Schema.Number,
-  namespaces: Schema.Array(Section),
+  namespaces: Schema.Array(NamespaceSummary),
 })
 export type Summary = typeof Summary.Type
 
 export type Options = {
-  /** Tokens the catalog may spend on signatures. */
   readonly budget?: number
 }
 
 const DESCRIPTION_LIMIT = 120
 const CHARACTERS_PER_TOKEN = 4
-const BUDGET = 2_000
-const LISTING_PREFIX = "  - "
+const INLINE_BUDGET = 2_000
 
-type Entry = { readonly path: string; readonly tool: Tool }
-type Group = { readonly name: string; readonly entries: ReadonlyArray<Entry> }
-
-// Pinned tools always show. The groups then take turns showing their next tool by path while it fits, so space one
-// group cannot use goes to the others. It depends only on the tools, so the catalog changes only when they do, and
-// only the signatures it shows are rendered.
+// Keep every namespace visible, then select full listings one per namespace per round, in path order, until the
+// inline budget is exhausted. The selection depends only on the tools, and only selected signatures are rendered.
 export function summarize(inventory: Inventory, options: Options = {}): Summary {
+  const budget = options.budget ?? INLINE_BUDGET
   const flattened = flatten(inventory.tools)
-  const groups = [...Map.groupBy(flattened.tools, (tool) => tool.path.split(".", 1)[0] ?? tool.path)]
-    .toSorted(([left], [right]) => compare(left, right))
-    .map(([name, tools]) => ({ name, entries: tools.toSorted((left, right) => compare(left.path, right.path)) }))
-  const pinned = new Map(
-    groups.map((group) => [group.name, group.entries.filter((entry) => entry.tool.pinned).map(listing)]),
-  )
-  const room =
-    (options.budget ?? BUDGET) - [...pinned.values()].flat().reduce((total, item) => total + cost(item.line.length), 0)
-  const shown = share(
-    groups.map((group) => ({ name: group.name, entries: group.entries.filter((entry) => !entry.tool.pinned) })),
-    room,
-  )
-  return {
-    total: flattened.tools.length,
-    namespaces: groups.map((group) => {
-      const description = flattened.namespaces.get(group.name)?.description
+  const namespaces = [...Map.groupBy(flattened.tools, (tool) => tool.path.split(".", 1)[0] ?? tool.path)]
+    .sort(([left], [right]) => {
+      if (left < right) return -1
+      if (left > right) return 1
+      return 0
+    })
+    .map(([name, namespaceEntries]) => {
+      const description = flattened.namespaces.get(name)?.description
+      const sorted = namespaceEntries.toSorted((left, right) => {
+        if (left.path < right.path) return -1
+        if (left.path > right.path) return 1
+        return 0
+      })
       return {
-        name: group.name,
+        name,
         ...(description === undefined ? {} : { description }),
-        tools: group.entries.map((entry) => entry.path),
-        listings: [...(pinned.get(group.name) ?? []), ...(shown.get(group.name) ?? [])],
+        tools: sorted.map((entry) => entry.path),
+        selectionOrder: sorted.filter((entry) => !entry.tool.pinned),
+        selectedListings: sorted.filter((entry) => entry.tool.pinned).map(listing),
+        selectionIndex: 0,
       }
-    }),
-  }
-}
+    })
 
-function share(groups: ReadonlyArray<Group>, room: number) {
-  const shown = new Map(groups.map((group) => [group.name, [] as Listing[]]))
-  const open = new Set(groups)
-  let left = room
-  while (open.size > 0)
-    for (const group of open) {
-      const listings = shown.get(group.name) ?? []
-      const entry = group.entries[listings.length]
-      const next = entry === undefined ? undefined : listing(entry)
-      if (next === undefined || cost(next.line.length) > left) {
-        open.delete(group)
+  const active = new Set(namespaces)
+  // TODO: Bound namespace discovery once large namespace inventories and descriptions can no longer stay inline.
+  let remaining =
+    budget -
+    namespaces.reduce(
+      (total, namespace) =>
+        total +
+        cost(
+          namespaceLine({
+            name: namespace.name,
+            ...(namespace.description === undefined ? {} : { description: namespace.description }),
+            tools: namespace.tools,
+            entries: [],
+          }),
+        ),
+      0,
+    ) -
+    namespaces
+      .flatMap((namespace) => namespace.selectedListings)
+      .reduce((total, listing) => total + cost(listing.line), 0)
+  while (active.size > 0) {
+    for (const namespace of active) {
+      const entry = namespace.selectionOrder[namespace.selectionIndex]
+      const candidate = entry && listing(entry)
+      if (!candidate || cost(candidate.line) > remaining) {
+        active.delete(namespace)
         continue
       }
-      left -= cost(next.line.length)
-      listings.push(next)
+      namespace.selectedListings.push(candidate)
+      namespace.selectionIndex += 1
+      remaining -= cost(candidate.line)
+      if (namespace.selectionIndex === namespace.selectionOrder.length) active.delete(namespace)
     }
-  return shown
+  }
+
+  return {
+    total: flattened.tools.length,
+    namespaces: namespaces.map((namespace) => ({
+      name: namespace.name,
+      ...(namespace.description === undefined ? {} : { description: namespace.description }),
+      tools: namespace.tools,
+      entries: namespace.selectedListings,
+    })),
+  }
 }
 
 /** Looks up any tool's listing as the catalog would show it. */
 export function lookup(inventory: Inventory) {
-  const entries = new Map(flatten(inventory.tools).tools.map((entry) => [entry.path, entry]))
+  const tools = new Map(flatten(inventory.tools).tools.map((entry) => [entry.path, entry]))
   return (path: string) => {
-    const entry = entries.get(path)
+    const entry = tools.get(path)
     return entry === undefined ? undefined : listing(entry)
   }
 }
 
-function listing(entry: Entry): Listing {
-  return { path: entry.path, line: `${LISTING_PREFIX}${entry.tool.signature}${suffix(entry.tool)}` }
-}
-
-function suffix(tool: Tool) {
-  const firstLine = tool.description.split("\n", 1)[0]?.trim() ?? ""
+function listing(entry: { readonly path: string; readonly tool: Tool }) {
+  const firstLine = entry.tool.description.split("\n", 1)[0]?.trim() ?? ""
   const description =
     firstLine.length > DESCRIPTION_LIMIT ? firstLine.slice(0, DESCRIPTION_LIMIT - 3) + "..." : firstLine
-  return description.length === 0 ? "" : ` // ${description}`
-}
-
-function compare(left: string, right: string) {
-  if (left < right) return -1
-  if (left > right) return 1
-  return 0
+  const suffix = description.length === 0 ? "" : ` // ${description}`
+  return { path: entry.path, line: `  - ${entry.tool.signature}${suffix}` }
 }
 
 function flatten(entries: ReadonlyArray<Tool | Namespace>, path: ReadonlyArray<string> = []) {
@@ -151,18 +159,13 @@ function flatten(entries: ReadonlyArray<Tool | Namespace>, path: ReadonlyArray<s
   return { tools, namespaces }
 }
 
-/** A section's header: its name, how many tools it has and how many it shows, and its description. */
-export function namespaceLine(section: Section, shown = section.listings.length) {
-  const count = section.tools.length === 1 ? "1 tool" : `${section.tools.length} tools`
-  const label = shown === section.tools.length ? count : `${count}, ${shown} shown`
-  return `- ${section.name} (${label})${section.description === undefined ? "" : ` // ${section.description}`}`
+export function namespaceLine(namespace: NamespaceSummary, shown = namespace.entries.length) {
+  const count = namespace.tools.length === 1 ? "1 tool" : `${namespace.tools.length} tools`
+  const label =
+    shown === namespace.tools.length ? count : shown === 0 ? `${count}, none shown` : `${count}, ${shown} shown`
+  return `- ${namespace.name} (${label})${namespace.description === undefined ? "" : ` // ${namespace.description}`}`
 }
 
-/** A section as the model reads it: its header, then the tools it shows. */
-export function renderSection(section: Section) {
-  return [namespaceLine(section), ...section.listings.map((entry) => entry.line)].join("\n")
-}
-
-export function cost(length: number) {
-  return Math.round(length / CHARACTERS_PER_TOKEN)
+export function cost(text: string) {
+  return Math.round(text.length / CHARACTERS_PER_TOKEN)
 }
