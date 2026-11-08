@@ -97,6 +97,65 @@ pub fn parse_number(text: &str) -> Option<f64> {
     text.parse().ok()
 }
 
+/// Why a URL with a non-ASCII host does not parse (deviation A10-ascii-hosts).
+pub const ASCII_HOST: &str = "a host name must be ASCII; write an international name in its punycode (xn--) form";
+
+/// Why a URL a user typed does not parse.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum UrlError {
+    /// The host is not ASCII after percent-decoding; the message names the input.
+    NonAsciiHost(String),
+    Invalid(url::ParseError),
+}
+
+impl std::fmt::Display for UrlError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UrlError::NonAsciiHost(input) => write!(f, "{input}: {ASCII_HOST}"),
+            UrlError::Invalid(error) => error.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for UrlError {}
+
+/// `new URL(input)` for a URL a user typed. `url` is built without IDNA (deviation
+/// A10-ascii-hosts), and its stub asserts on some non-ASCII hosts, so they are rejected here first.
+pub fn parse_url(input: &str) -> Result<url::Url, UrlError> {
+    if special_host(input).is_some_and(|host| !decodes_to_ascii(&host)) {
+        return Err(UrlError::NonAsciiHost(input.to_owned()));
+    }
+    url::Url::parse(input).map_err(UrlError::Invalid)
+}
+
+// The host and port of a URL whose scheme maps its host through IDNA, found as the WHATWG parser
+// finds them: surrounding C0 controls and spaces trimmed, tabs and newlines dropped, `\` as `/`.
+fn special_host(input: &str) -> Option<String> {
+    let input: String =
+        input.trim_matches(|c: char| c <= ' ').chars().filter(|c| !matches!(c, '\t' | '\n' | '\r')).collect();
+    let (scheme, rest) = input.split_once(':')?;
+    let slash = |c: char| matches!(c, '/' | '\\');
+    let rest = match scheme.to_ascii_lowercase().as_str() {
+        "http" | "https" | "ws" | "wss" | "ftp" => rest.trim_start_matches(slash),
+        "file" if rest.starts_with(slash) && rest[1..].starts_with(slash) => &rest[2..],
+        _ => return None,
+    };
+    let authority = rest.split(|c: char| slash(c) || matches!(c, '?' | '#')).next().unwrap_or_default();
+    Some(authority.rsplit('@').next().unwrap_or_default().to_owned())
+}
+
+fn decodes_to_ascii(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    bytes.iter().enumerate().all(|(index, byte)| {
+        let encoded = (*byte == b'%')
+            .then(|| bytes.get(index + 1..index + 3))
+            .flatten()
+            .and_then(|hex| std::str::from_utf8(hex).ok())
+            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
+        byte.is_ascii() && encoded.is_none_or(|byte| byte.is_ascii())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -204,5 +263,37 @@ mod tests {
         for (text, number) in cases {
             assert_eq!(parse_number(text), number, "{text:?}");
         }
+    }
+
+    #[test]
+    fn parse_url_rejects_non_ascii_hosts_without_panicking() {
+        let rejected = [
+            "https://bücher.example",
+            "https://Bücher.example",
+            "https://%42%C3%BCcher.example",
+            "HTTP:\\\\Bücher.example/x",
+            "http:Bücher.example",
+            " wss://user:pässword@Bücher.example:443/",
+            "file://Bücher.example/share",
+        ];
+        for input in rejected {
+            let error = parse_url(input).unwrap_err();
+            assert_eq!(error, UrlError::NonAsciiHost(input.to_owned()), "{input:?}");
+            assert_eq!(
+                error.to_string(),
+                format!("{input}: a host name must be ASCII; write an international name in its punycode (xn--) form")
+            );
+        }
+        let parsed = [
+            ("https://xn--bcher-kva.example", "https://xn--bcher-kva.example/"),
+            ("https://Example.com/Bücher?q=ü#ü", "https://example.com/B%C3%BCcher?q=%C3%BC#%C3%BC"),
+            ("https://ü@example.com", "https://%C3%BC@example.com/"),
+            ("file:///Bücher/x", "file:///B%C3%BCcher/x"),
+            ("mailto:ü@Bücher.example", "mailto:%C3%BC@B%C3%BCcher.example"),
+        ];
+        for (input, url) in parsed {
+            assert_eq!(parse_url(input).map(String::from), Ok(url.to_owned()), "{input:?}");
+        }
+        assert_eq!(parse_url("bücher.example"), Err(UrlError::Invalid(url::ParseError::RelativeUrlWithoutBase)));
     }
 }

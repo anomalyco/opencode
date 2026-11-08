@@ -264,7 +264,7 @@ fn decode_file_url(value: &str, windows: bool) -> Option<String> {
     if !value.starts_with("file://") {
         return None;
     }
-    let url = url::Url::parse(value).ok()?;
+    let url = opencode_api_types::js::parse_url(value).ok()?;
     let encoded = url.path();
     let lower = encoded.to_ascii_lowercase();
     if lower.contains("%2f") || lower.contains("%5c") {
@@ -385,6 +385,7 @@ mod tests {
             ("file://localhost/tmp/c.png", "/tmp/c.png"),
             // Another host is not a local path; the text stays as typed.
             ("file://server/tmp/c.png", "file://server/tmp/c.png"),
+            ("file://Bücher/tmp/c.png", "file://Bücher/tmp/c.png"),
             ("file:///tmp/a%2Fb.png", "file:///tmp/a%2Fb.png"),
         ];
         for (input, expected) in cases {

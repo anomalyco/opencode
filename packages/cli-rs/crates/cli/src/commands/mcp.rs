@@ -70,10 +70,12 @@ fn add(args: &McpAddArgs) -> error::Result<()> {
     if url.is_none() && !has_command {
         bail!("Provide either --url <url> or a command after --");
     }
-    if let Some(url) = url
-        && url::Url::parse(url).is_err()
-    {
-        bail!("Invalid URL: {url}");
+    if let Some(url) = url {
+        match opencode_api::js::parse_url(url) {
+            Err(error @ opencode_api::js::UrlError::NonAsciiHost(_)) => bail!("{error}"),
+            Err(_) => bail!("Invalid URL: {url}"),
+            Ok(_) => {}
+        }
     }
     if url.is_some() && !args.env.is_empty() {
         bail!("--env is only valid for local MCP servers");
@@ -285,6 +287,24 @@ fn logout(context: &Context, args: &McpLogoutArgs) -> error::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn add_rejects_a_non_ascii_host_before_writing() {
+        for url in ["https://Bücher.example/mcp", "https://%42%C3%BCcher.example/mcp"] {
+            let args = McpAddArgs {
+                name: "remote".into(),
+                command: Vec::new(),
+                url: Some(url.into()),
+                header: Vec::new(),
+                env: Vec::new(),
+                global: false,
+            };
+            assert_eq!(
+                add(&args).unwrap_err().to_string(),
+                format!("{url}: a host name must be ASCII; write an international name in its punycode (xn--) form")
+            );
+        }
+    }
 
     #[test]
     fn config_path_prefers_existing_files_in_order() {

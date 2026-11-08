@@ -51,13 +51,15 @@ fn hosts_must_be_ascii_or_punycode() {
         let client = Client::with_transport(url, script.clone()).unwrap();
         assert_eq!(client.base_url().as_str(), format!("{url}/"));
     }
-    let Err(Error::Transport(message)) = Client::with_transport("https://bücher.example", script) else {
-        panic!("a Unicode host parsed");
-    };
-    assert_eq!(
-        message,
-        "https://bücher.example: a host name must be ASCII; write an international name in its punycode (xn--) form"
-    );
+    for url in ["https://bücher.example", "https://Bücher.example", "https://%42%C3%BCcher.example"] {
+        let Err(Error::Transport(message)) = Client::with_transport(url, script.clone()) else {
+            panic!("a Unicode host parsed: {url}");
+        };
+        assert_eq!(
+            message,
+            format!("{url}: a host name must be ASCII; write an international name in its punycode (xn--) form")
+        );
+    }
 }
 
 #[test]
