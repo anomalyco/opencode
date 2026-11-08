@@ -1285,7 +1285,9 @@ describe("ShellTool", () => {
             Effect.sync(() => {
               expect(settled.metadata).toMatchObject({ exit: 3, truncated: true })
               expect(settled.content).toEqual([
-                Expected.text(expect.stringMatching(/output-end[^]*\[showing lines [^]*full output saved to [^\]]+\]$/)),
+                Expected.text(
+                  expect.stringMatching(/output-end[^]*\[showing lines [^]*full output saved to [^\]]+\]$/),
+                ),
                 { type: "text", text: "Exit code: 3" },
               ])
             }),
@@ -1312,7 +1314,9 @@ describe("ShellTool", () => {
                 { type: "text", text: "server starting" },
                 Expected.text(
                   expect.stringMatching(
-                    new RegExp(`^Command timed out after ${timeout / 1_000} seconds\\nExit code: ${timedOutExit}$`),
+                    new RegExp(
+                      `^Command timed out after ${timeout / 1_000} seconds\\. If it needs longer and isn't waiting for input, rerun with a larger timeout\\.\\nExit code: ${timedOutExit}$`,
+                    ),
                   ),
                 ),
               ])
@@ -1457,7 +1461,9 @@ describe("ShellTool", () => {
           if (!isWindows) expect(timedOut).toMatchObject({ signal: "SIGTERM" })
           expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
             text: expect.stringMatching(
-              new RegExp(`\\nCommand timed out after 0\\.05 seconds\\nExit code: ${timedOutExit}\\n</shell>$`),
+              new RegExp(
+                `\\nCommand timed out after 0\\.05 seconds\\. If it needs longer and isn't waiting for input, rerun with a larger timeout\\.\\nExit code: ${timedOutExit}\\n</shell>$`,
+              ),
             ),
             description: idleCommand,
             metadata: {
@@ -1643,9 +1649,11 @@ describe("ShellTool", () => {
       expect(ShellResult.notice({ signal: "SIGKILL" })).toBe("Exit code: 137 (SIGKILL)")
       expect(ShellResult.notice({ signal: "SIGNOPE" })).toBe("Exit code: unknown")
       expect(ShellResult.notice({ signal: "SIGTERM", timeout: true }, 120_000)).toBe(
-        "Command timed out after 120 seconds\nExit code: 143 (SIGTERM)",
+        "Command timed out after 120 seconds. If it needs longer and isn't waiting for input, rerun with a larger timeout.\nExit code: 143 (SIGTERM)",
       )
-      expect(ShellResult.notice({ timeout: true })).toBe("Command timed out\nExit code: unknown")
+      expect(ShellResult.notice({ timeout: true })).toBe(
+        "Command timed out. If it needs longer and isn't waiting for input, rerun with a larger timeout.\nExit code: unknown",
+      )
     }),
   )
 

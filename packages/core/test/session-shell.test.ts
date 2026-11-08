@@ -285,7 +285,12 @@ describe("Session.shell", () => {
       text: "Cancelled",
       output: "Shell command output is no longer available.",
     },
-    { status: "timeout", state: "completed", text: "\n\nCommand timed out\nExit code: ", output: "timeout started" },
+    {
+      status: "timeout",
+      state: "completed",
+      text: "\n\nCommand timed out. If it needs longer and isn't waiting for input, rerun with a larger timeout.\nExit code: ",
+      output: "timeout started",
+    },
   ]) {
     it.live(`records a ${outcome.status} shell and admits its completion without waking the model`, () =>
       Effect.gen(function* () {

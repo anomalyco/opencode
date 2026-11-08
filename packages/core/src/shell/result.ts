@@ -30,7 +30,7 @@ export function output(result: Result): Output {
 
 export function notice(output: Pick<Output, "exit" | "signal" | "timeout">, timeout?: number) {
   if (output.timeout)
-    return `Command timed out${timeout ? ` after ${timeout / 1_000} seconds` : ""}\nExit code: ${exitCode(output)}`
+    return `Command timed out${timeout ? ` after ${timeout / 1_000} seconds` : ""}. If it needs longer and isn't waiting for input, rerun with a larger timeout.\nExit code: ${exitCode(output)}`
   if (output.signal !== undefined || (output.exit !== undefined && output.exit !== 0))
     return `Exit code: ${exitCode(output)}`
 }
