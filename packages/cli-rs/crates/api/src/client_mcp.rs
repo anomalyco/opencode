@@ -431,7 +431,7 @@ mod tests {
 
     async fn listen() -> (TcpListener, Url) {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let url = Url::parse(&format!("http://{}/", listener.local_addr().unwrap())).unwrap();
+        let url = crate::js::parse_url(&format!("http://{}/", listener.local_addr().unwrap())).unwrap();
         (listener, url)
     }
 
@@ -464,7 +464,7 @@ mod tests {
             Arc::new(Tungstenite),
         );
         let mut peer = Peer::accept(&listener).await;
-        let uri = Url::parse(&format!("http://host{}", peer.uri)).unwrap();
+        let uri = crate::js::parse_url(&format!("http://host{}", peer.uri)).unwrap();
         assert_eq!(uri.path(), "/api/experimental/client-mcp");
         let query: Vec<(String, String)> = uri.query_pairs().into_owned().collect();
         assert_eq!(
@@ -574,7 +574,7 @@ mod tests {
 
     fn quiet() -> Options {
         Options {
-            url: Url::parse("http://opencode.local").unwrap(),
+            url: crate::js::parse_url("http://opencode.local").unwrap(),
             name: "tui".into(),
             directory: None,
             headers: Vec::new(),

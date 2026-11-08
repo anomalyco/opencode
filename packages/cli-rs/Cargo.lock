@@ -696,12 +696,12 @@ dependencies = [
 name = "opencode-drive"
 version = "0.1.0"
 dependencies = [
+ "opencode-api-types",
  "opencode-util",
  "opentui",
  "serde",
  "serde_json",
  "tokio-tungstenite",
- "url",
 ]
 
 [[package]]
@@ -724,6 +724,7 @@ dependencies = [
  "indexmap",
  "log",
  "notify",
+ "opencode-api-types",
  "opencode-util",
  "rand",
  "rustix",
@@ -731,7 +732,6 @@ dependencies = [
  "serde_json",
  "sha1",
  "thiserror",
- "url",
 ]
 
 [[package]]

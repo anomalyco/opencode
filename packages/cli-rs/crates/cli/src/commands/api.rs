@@ -39,7 +39,7 @@ pub fn run(context: &Context, args: &ApiArgs) -> error::Result<()> {
                 let response = transport
                     .send(Request {
                         method: "GET",
-                        url: url::Url::parse(&endpoint.url)?.join("/openapi.json")?,
+                        url: opencode_api::js::join_url(&opencode_api::js::parse_url(&endpoint.url)?, "/openapi.json")?,
                         headers: auth.clone(),
                         body: None,
                     })
@@ -65,7 +65,7 @@ pub fn run(context: &Context, args: &ApiArgs) -> error::Result<()> {
         let response = transport
             .send(Request {
                 method,
-                url: url::Url::parse(&endpoint.url)?.join(&path)?,
+                url: opencode_api::js::join_url(&opencode_api::js::parse_url(&endpoint.url)?, &path)?,
                 headers,
                 body: args.data.clone().map(Into::into),
             })

@@ -128,7 +128,7 @@ struct Answer {
 
 async fn answer(transport: &dyn Transport, endpoint: &Endpoint) -> Option<Answer> {
     // `new URL("/api/info", url)`: the absolute path replaces any path on the registered URL.
-    let url = url::Url::parse(&endpoint.url).ok()?.join("/api/info").ok()?;
+    let url = opencode_api::js::join_url(&opencode_api::js::parse_url(&endpoint.url).ok()?, "/api/info").ok()?;
     let headers =
         endpoint.auth.iter().map(|auth| ("authorization".to_owned(), format!("Basic {}", auth.token()))).collect();
     let response = transport.send(Request { method: "GET", url, headers, body: None }).await.ok()?;

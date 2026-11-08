@@ -119,9 +119,7 @@ impl Client {
 
     /// The URL of `path` (which starts with `/`) on this server, with `query` and no credentials.
     pub fn url(&self, path: &str, query: &[(String, String)]) -> Result<url::Url, Error> {
-        let mut url = self
-            .base_url
-            .join(path.trim_start_matches('/'))
+        let mut url = crate::js::join_url(&self.base_url, path.trim_start_matches('/'))
             .map_err(|error| Error::Transport(format!("{path}: {error}")))?;
         if !query.is_empty() {
             url.set_query(Some(&query::encode(query)));
