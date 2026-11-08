@@ -189,12 +189,14 @@ const make = Effect.gen(function* () {
 
   // Homebrew's exit code is not proof of an install: when the local tap is behind the release,
   // `brew upgrade` prints "already installed", exits 0 and leaves the old version in place.
-  const brewInstalledVersion = Effect.fnUntraced(function* (formula: string) {
+  // `brew list --versions` prints every keg in filesystem order, not by version, so the newest
+  // entry is not necessarily the last one. Return them all and let the caller match.
+  const brewInstalledVersions = Effect.fnUntraced(function* (formula: string) {
     const result = yield* exec(["brew", "list", "--versions", formula]).pipe(Effect.orElseSucceed(() => undefined))
     if (!result || result.code !== 0) return undefined
     // The output lists the formula first, then every installed version.
     const versions = result.stdout.trim().split(/\s+/).slice(1)
-    return versions[versions.length - 1]
+    return versions.length === 0 ? undefined : versions
   })
 
   const curlPath = path.resolve(
@@ -510,12 +512,14 @@ const make = Effect.gen(function* () {
           // Never report an update that Homebrew did not install. Homebrew Core is skipped: its
           // formula and index share one source, so a mismatch there is not a stale tap.
           if (installedFormula && installedFormula !== "opencode") {
-            const installed = yield* brewInstalledVersion(installedFormula)
-            if (installed !== undefined && installed.replace(/^v/, "") !== version)
+            const installed = yield* brewInstalledVersions(installedFormula)
+            // Homebrew appends `_N` when a formula revision changes, so compare the version part.
+            const match = (entry: string) => entry.replace(/^v/, "").replace(/_\d+$/, "") === version
+            if (installed !== undefined && !installed.some(match))
               return yield* Effect.fail(
                 new UpgradeError({
                   title: "Homebrew did not install the OpenCode update",
-                  detail: `Homebrew reported success, but ${installedFormula} is still at ${installed} instead of ${version}. The tap is probably behind the release, so brew upgraded nothing.`,
+                  detail: `Homebrew reported success, but ${installedFormula} is still at ${installed.join(", ")} instead of ${version}. The tap is probably behind the release, so brew upgraded nothing.`,
                   command: `brew upgrade ${packageName}`,
                   retry: "Run brew update to refresh the tap, then run opencode upgrade again.",
                 }),

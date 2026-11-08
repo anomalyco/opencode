@@ -26,7 +26,10 @@ function fixture(
   failCleanup = false,
   releasePackage = name,
   formula?: string,
-  executableOverride?: (root: string, home: string) => Effect.Effect<string, PlatformError.PlatformError, FileSystem.FileSystem>,
+  executableOverride?: (
+    root: string,
+    home: string,
+  ) => Effect.Effect<string, PlatformError.PlatformError, FileSystem.FileSystem>,
 ) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
@@ -355,9 +358,7 @@ it.live("Homebrew tap upgrades fail when brew leaves the installed version behin
   Effect.gen(function* () {
     const test = yield* fixture(
       (command) =>
-        command.command === "brew" && command.args[0] === "list"
-          ? { stdout: Buffer.from("opencode-v2 2.1.3\n") }
-          : {},
+        command.command === "brew" && command.args[0] === "list" ? { stdout: Buffer.from("opencode-v2 2.1.3\n") } : {},
       "@opencode/cli",
       false,
       "anomalyco/tap/opencode-v2",
@@ -367,6 +368,28 @@ it.live("Homebrew tap upgrades fail when brew leaves the installed version behin
     expect(error).toBeInstanceOf(Updater.UpgradeError)
     expect((error as Updater.UpgradeError).title).toBe("Homebrew did not install the OpenCode update")
     expect(error.message).toContain("still at 2.1.3 instead of 2.3.4")
+    expect(test.commands).toEqual([
+      ["brew", "upgrade", "anomalyco/tap/opencode-v2"],
+      ["brew", "list", "--versions", "opencode-v2"],
+    ])
+  }),
+)
+
+it.live("Homebrew tap upgrades accept the new keg when it is not listed last", () =>
+  Effect.gen(function* () {
+    // Homebrew prints kegs in filesystem order and appends `_N` when the formula revision changed,
+    // so the target can sit in front of a kept old keg and still be a successful upgrade.
+    const test = yield* fixture(
+      (command) =>
+        command.command === "brew" && command.args[0] === "list"
+          ? { stdout: Buffer.from("opencode-v2 2.3.4_1 2.1.3\n") }
+          : {},
+      "@opencode/cli",
+      false,
+      "anomalyco/tap/opencode-v2",
+      "opencode-v2",
+    )
+    yield* test.updater.upgrade("brew", "2.3.4")
     expect(test.commands).toEqual([
       ["brew", "upgrade", "anomalyco/tap/opencode-v2"],
       ["brew", "list", "--versions", "opencode-v2"],
