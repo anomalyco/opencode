@@ -122,8 +122,14 @@ export function Header(props: { githubStars: string; links?: readonly HeaderLink
           </ul>
         </nav>
         <div data-slot="header-actions">
-          <a data-slot="header-button" data-variant="contrast" href="https://opencode.ai/">
-            <strong>{i18n.t("header.tryOpenCode")}</strong>
+          <a
+            data-slot="header-button"
+            data-variant="contrast"
+            href="https://opencode.ai/"
+            aria-label={i18n.t("header.tryOpenCode")}
+          >
+            <strong data-slot="label">{i18n.t("header.tryOpenCode")}</strong>
+            <strong data-slot="label-short">{i18n.t("header.tryOpenCodeShort")}</strong>
           </a>
           <a
             data-slot="github-mark"

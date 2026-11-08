@@ -331,6 +331,33 @@ body {
   text-transform: uppercase;
 }
 
+/* Phones show the short label (header.tryOpenCodeShort: "Try now" where "Try OpenCode" doesn't fit beside the 20px
+   product name), on a button 4px shorter, 28px, with a 44px tall target. The link's aria-label keeps the full name. */
+[data-page="stats"] [data-slot="header-actions"] [data-slot="header-button"] [data-slot="label-short"] {
+  display: none;
+}
+
+@media (max-width: 60rem) {
+  [data-page="stats"] [data-slot="header-actions"] [data-slot="header-button"] {
+    height: 28px;
+    overflow: visible;
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: -8px 0;
+    }
+
+    [data-slot="label"] {
+      display: none;
+    }
+
+    [data-slot="label-short"] {
+      display: inline;
+    }
+  }
+}
+
 [data-page="stats"] [data-slot="header-button"] {
   position: relative;
   flex-shrink: 0;
