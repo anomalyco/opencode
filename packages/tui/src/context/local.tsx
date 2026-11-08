@@ -7,7 +7,7 @@ import path from "path"
 import { useTuiPaths } from "./runtime"
 import { useArgs } from "./args"
 import { RGBA } from "@opentui/core"
-import { readJson, writeJsonAtomic } from "../util/persistence"
+import { readJson, writeJsonAtomicDetached } from "../util/persistence"
 import {
   createModelPreferenceRepository,
   cycleModelVariant,
@@ -519,14 +519,27 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         pending: false,
       }
 
+      let saving: Promise<void> | undefined
+      let saveQueued = false
+
       function save() {
         if (!sessionStore.ready) {
           state.pending = true
           return
         }
         state.pending = false
-        void writeJsonAtomic(filePath, {
-          pinned: sessionStore.pinned,
+        if (saving) {
+          saveQueued = true
+          return
+        }
+        saving = writeJsonAtomicDetached(filePath, { pinned: sessionStore.pinned }, (error) =>
+          console.error("Failed to persist pinned sessions", error),
+        ).then(() => {
+          saving = undefined
+          if (saveQueued) {
+            saveQueued = false
+            save()
+          }
         })
       }
 
