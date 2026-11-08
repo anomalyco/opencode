@@ -14,7 +14,7 @@ import {
   UnknownProviderError,
   type Usage,
 } from "@opencode/ai/effect"
-import type { StreamOptions } from "@opencode/ai/route"
+import { Route, type StreamOptions } from "@opencode/ai/route"
 import type { SessionCompactionResult } from "@opencode/plugin/effect/session"
 import type { SessionError } from "@opencode/schema/session-error"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -593,7 +593,9 @@ export const layer = Layer.effect(
             .compact(request, { mechanism: "endpoint", http: prepared.options.http })
             .pipe(Effect.flatMap((response) => toResult(response.replacement, response.usage)))
         }
-        return unsupported(`Native compaction is not supported for ${request.model.provider}/${request.model.route.id}`)
+        return unsupported(
+          `Native compaction is not supported for ${request.model.provider}/${Route.of(request.model)?.id ?? request.model.api}`,
+        )
       }
 
       return yield* deliver(trigger, prepared, budget, send)

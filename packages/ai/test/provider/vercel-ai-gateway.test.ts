@@ -7,6 +7,7 @@ import { it } from "../lib/effect.js"
 import { dynamicResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 import { isRetryable } from "../../src/provider-error.js"
+import { Route } from "../../src/route.js"
 
 it.effect("Gateway defaults preserve full model IDs and select the requested families", () =>
   Effect.gen(function* () {
@@ -25,7 +26,7 @@ it.effect("Gateway defaults preserve full model IDs and select the requested fam
       const model = gateway.model(id)
       expect(model.id).toBe(id)
       expect(model.provider).toBe("vercel-ai-gateway")
-      expect(model.route.endpoint.path).toBe(path)
+      expect(Route.of(model)?.endpoint.path).toBe(path)
       const compiled = yield* compileRequest(ai.request({ model, prompt: "Hello" }))
       expect(compiled.body.model).toBe(id)
       expect(compiled.body.providerOptions).toBeUndefined()

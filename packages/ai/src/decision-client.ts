@@ -1,7 +1,6 @@
 import { Context, Effect, Layer } from "effect"
 import type {
   DecisionAnswer,
-  DecisionModel,
   DecisionOptions,
   DecisionQuestion,
   DecisionQuestions,
@@ -9,20 +8,20 @@ import type {
   DecisionResponseFor,
 } from "./decision.js"
 import { RequestExecutor } from "./route/executor.js"
-import { AIError, InvalidProviderOutputError } from "./schema/index.js"
+import { AIError, InvalidProviderOutputError, type Model, routeOf } from "./schema/index.js"
 
 export type Execute = RequestExecutor.Interface["execute"]
 
 export interface Interface {
   readonly generate: <Options extends DecisionOptions, const Questions extends DecisionQuestions>(
-    request: DecisionRequest<DecisionModel<Options>, Questions>,
+    request: DecisionRequest<Model<"decision", Options>, Questions>,
   ) => Effect.Effect<DecisionResponseFor<Questions>, AIError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/AI/DecisionClient") {}
 
 export const generate = <Options extends DecisionOptions, const Questions extends DecisionQuestions>(
-  request: DecisionRequest<DecisionModel<Options>, Questions>,
+  request: DecisionRequest<Model<"decision", Options>, Questions>,
 ): Effect.Effect<DecisionResponseFor<Questions>, AIError, Service> =>
   Effect.flatMap(Service, (client) => client.generate(request))
 
@@ -32,7 +31,7 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
     const executor = yield* RequestExecutor.Service
     return Service.of({
       generate: Effect.fnUntraced(function* (request) {
-        const route = request.model.route
+        const route = routeOf(request.model)
         const response = yield* route.generate(request, executor.execute)
         if (answersMatch(request.questions, response.answers))
           return response as DecisionResponseFor<typeof request.questions>

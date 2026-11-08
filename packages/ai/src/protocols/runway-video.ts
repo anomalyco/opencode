@@ -4,8 +4,8 @@ import type { Status } from "../generation.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { mergeJsonRecords, type OpenString } from "../schema/index.js"
-import { VideoModel, VideoResponse, type VideoRequest } from "../video.js"
+import { mergeJsonRecords, type OpenString, type Model } from "../schema/index.js"
+import { VideoResponse, type VideoRequest, videoModel } from "../video.js"
 import { ProviderShared, optionalArray, optionalNull } from "./shared.js"
 
 const route = MediaProtocol.identity({ id: "runway-video", name: "Runway", provider: "runway" })
@@ -33,7 +33,7 @@ export type RunwayVideoOptions = {
   readonly outputFormat?: OpenString<"mp4" | "prores" | "png_sequence">
 } & Record<string, unknown>
 
-export type Request = VideoRequest<VideoModel<RunwayVideoOptions>>
+export type Request = VideoRequest<Model<"video", RunwayVideoOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Token and response schemas
@@ -185,7 +185,7 @@ const startPath = (request: Request) => {
 }
 
 export const model = (input: MediaRoute.ModelInput) =>
-  VideoModel.fromRoute<RunwayVideoOptions, Token>(
+  videoModel<RunwayVideoOptions, Token>(
     {
       protocol,
       baseURL: DEFAULT_BASE_URL,

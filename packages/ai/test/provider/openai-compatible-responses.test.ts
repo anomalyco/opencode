@@ -6,7 +6,7 @@ import { OpenAI } from "../../src/providers.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { OpenAICompatibleResponses } from "../../src/protocols/openai-compatible-responses.js"
 import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
-import { LLMClient } from "../../src/route.js"
+import { LLMClient, Route } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
@@ -37,13 +37,11 @@ describe("Open Responses-compatible route", () => {
       expect(prepared.model).toMatchObject({
         id: "example-model",
         provider: "example",
-        route: {
-          id: "openai-compatible-responses",
-          endpoint: {
-            baseURL: "https://responses.example.test/v1",
-            path: "/responses",
-          },
-        },
+        api: "responses",
+      })
+      expect(Route.of(prepared.model)?.endpoint).toMatchObject({
+        baseURL: "https://responses.example.test/v1",
+        path: "/responses",
       })
       expect(prepared.body).toEqual({
         model: "example-model",

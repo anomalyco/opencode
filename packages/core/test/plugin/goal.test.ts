@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Layer, Option, Schedule, Schema, Stream } from "effect"
-import { AIError, InvalidRequestError, LanguageModel, type LLMRequest } from "@opencode/ai/effect"
+import { AIError, InvalidRequestError, type LLMRequest } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { TestLLM } from "@opencode/ai/testing"
 import { Agent } from "@opencode/core/agent"
@@ -24,6 +24,7 @@ import { tempGlobalLayer } from "../fixture/global"
 import { offlineModels } from "../fixture/models"
 import { tmpdirScoped } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
+import { Route } from "@opencode/ai/route"
 
 const llmLayer = TestLLM.testLayer({ fallback: TestLLM.text("Working on it", "work") })
 const it = testEffect(
@@ -38,14 +39,11 @@ const it = testEffect(
         Layer.succeed(SessionRunnerModel.Service, {
           resolve: () =>
             Effect.succeed(
-              SessionRunnerModel.resolved(
-                LanguageModel.make({ id: "goal", provider: "test", route: OpenAIChat.route }),
-                {
-                  capabilities: { tools: true, input: ["text"], output: ["text"] },
-                  cost: [],
-                  limit: { context: 200_000, output: 32_000 },
-                },
-              ),
+              SessionRunnerModel.resolved(Route.model(OpenAIChat.route, { id: "goal", provider: "test" }), {
+                capabilities: { tools: true, input: ["text"], output: ["text"] },
+                cost: [],
+                limit: { context: 200_000, output: 32_000 },
+              }),
             ),
         }),
       ),

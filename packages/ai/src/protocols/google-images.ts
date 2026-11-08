@@ -1,9 +1,9 @@
 import { Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
-import { ImageModel, ImageResponse, type ImageRequest } from "../image.js"
+import { ImageResponse, type ImageRequest, imageModel } from "../image.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { mergeJsonRecords, tokenUsage, type OpenString } from "../schema/index.js"
+import { mergeJsonRecords, tokenUsage, type OpenString, type Model } from "../schema/index.js"
 import { ProviderShared } from "./shared.js"
 import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
 import { MediaInput } from "./utils/media-input.js"
@@ -22,7 +22,7 @@ export type GoogleImageOptions = {
   readonly includeThoughts?: boolean
 } & Record<string, unknown>
 
-export type Request = ImageRequest<ImageModel<GoogleImageOptions>>
+export type Request = ImageRequest<Model<"image", GoogleImageOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Response schema
@@ -240,7 +240,7 @@ export const protocol = MediaProtocol.inline<Request, ImageResponse>(route, {
 })
 
 export const model = (input: MediaRoute.ModelInput) =>
-  ImageModel.fromRoute<GoogleImageOptions>(
+  imageModel<GoogleImageOptions>(
     {
       protocol,
       baseURL: DEFAULT_BASE_URL,

@@ -6,7 +6,7 @@ import { DigitalOcean } from "../../src/providers/digitalocean.js"
 import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
-import { LLMClient } from "../../src/route.js"
+import { LLMClient, Route } from "../../src/route.js"
 
 describe("DigitalOcean", () => {
   test("preserves package entrypoint headers and body overrides", () => {
@@ -28,9 +28,10 @@ describe("DigitalOcean", () => {
       expect(model).toMatchObject({
         id: "anthropic-claude-fable-5.1",
         provider: "digitalocean",
-        route: { id: "digitalocean" },
+        api: "chat-completions",
       })
-      expect(model.route.endpoint.baseURL).toBe("https://inference.do-ai.run/v1")
+      expect(Route.of(model)?.id).toBe("digitalocean")
+      expect(model.baseURL).toBe("https://inference.do-ai.run/v1")
 
       const prepared = yield* compileRequest(ai.request({ model, prompt: "Say hello.", cache: "none" }))
 

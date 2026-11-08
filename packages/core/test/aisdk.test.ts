@@ -22,7 +22,7 @@ import {
   TransportError,
   UnknownProviderError,
 } from "@opencode/ai/effect"
-import { LLMClient, RequestExecutor } from "@opencode/ai/route"
+import { LLMClient, RequestExecutor, Route } from "@opencode/ai/route"
 import { compileRequest } from "@opencode/ai/testing"
 import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
@@ -151,8 +151,8 @@ it.effect("uses canonical names and metadata without merging connection cache pa
 
     const resolved = yield* aisdk.model(input)
     expect(resolved).toMatchObject({ id: "api-model", provider: "openai" })
-    expect(resolved.route).toMatchObject({ provider: "openai", providerMetadataKey: "openai" })
-    expect(resolved.route.model({ id: "another-model" })).toMatchObject({ provider: "openai" })
+    expect(Route.of(resolved)).toMatchObject({ provider: "openai", providerMetadataKey: "openai" })
+    expect(Route.of(resolved)?.model({ id: "another-model" })).toMatchObject({ provider: "openai" })
     const prepared = yield* compileRequest(ai.request({ model: resolved, prompt: "Hello" }))
     expect(prepared.body.providerOptions).toEqual({ openai: { reasoningEffort: "high" } })
   }),
@@ -498,7 +498,7 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
     })
 
     const resolved = yield* aisdk.model(model("@ai-sdk/anthropic"))
-    expect(resolved.route.providerMetadataKey).toBe("anthropic")
+    expect(Route.of(resolved)?.providerMetadataKey).toBe("anthropic")
     const prepared = yield* compileRequest(
       ai.request({
         model: resolved,

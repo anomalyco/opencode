@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { ai, LanguageModel, LLMEvent, Media, Message, SystemPart, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, Media, Message, SystemPart, ToolDefinition, Model } from "../../src/effect.js"
 import { Mistral } from "../../src/providers/index.js"
 import { MistralChat } from "../../src/protocols/index.js"
 import { LLMClient } from "../../src/route.js"
@@ -203,7 +203,7 @@ describe("Mistral Chat", () => {
 
       const unsupported = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { capabilities: { promptCacheKey: false } }),
+          model: { ...model, capabilities: { promptCacheKey: false } },
           prompt: "Hello",
           promptCacheKey: "common-key",
           providerOptions: { promptCacheKey: "native-key" },

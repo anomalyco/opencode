@@ -1,11 +1,9 @@
 import { Effect } from "effect"
-import { Generation, Media } from "../src/effect.js"
+import { Generation, Media, Model, type ModelProviderOptions } from "../src/effect.js"
 import {
   Video,
   VideoClient,
-  VideoModel,
   VideoResponse,
-  type VideoModelOptions,
   type VideoOptions,
   type VideoRequest,
 } from "../src/experimental.js"
@@ -21,9 +19,9 @@ type VeoLikeOptions = {
   readonly personGeneration?: "allow_all" | "allow_adult"
 } & Record<string, unknown>
 
-declare const veo: VideoModel<VeoLikeOptions>
+declare const veo: Model<"video", VeoLikeOptions>
 // @ts-expect-error Extracted model options retain known provider fields.
-const invalidVeoOptions: VideoModelOptions<typeof veo> = { personGeneration: "everyone" }
+const invalidVeoOptions: ModelProviderOptions<typeof veo> = { personGeneration: "everyone" }
 void invalidVeoOptions
 
 Video.generate(
@@ -89,13 +87,13 @@ Video.generate({ model: google, prompt: "A kitten", durationSeconds: "8s" })
 // @ts-expect-error Provider-native controls live under `providerOptions`.
 Video.generate({ model: google, prompt: "A kitten", options: { personGeneration: "allow_all" } })
 
-declare const generic: VideoModel<VideoOptions>
-const widenVideo = <Options extends VideoOptions>(model: VideoModel<Options>): VideoModel => model
+declare const generic: Model<"video", VideoOptions>
+const widenVideo = <Options extends VideoOptions>(model: Model<"video", Options>): Model<"video"> => model
 void widenVideo
 Video.generate({ model: generic, prompt: "A kitten", providerOptions: { arbitrary: true } })
 
 const request = Video.request({ model: veo, prompt: "A kitten", providerOptions: { personGeneration: "allow_all" } })
-const typedRequest: VideoRequest<VideoModel<VeoLikeOptions>> = request
+const typedRequest: VideoRequest<Model<"video", VeoLikeOptions>> = request
 void typedRequest
 const started = VideoClient.start(request)
 type StartRequirements = Assert<Equal<Requirements<typeof started>, Service>>

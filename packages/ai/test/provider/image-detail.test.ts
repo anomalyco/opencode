@@ -4,6 +4,7 @@ import { ai, Media, Message } from "../../src/effect.js"
 import { OpenAI, Azure, XAI } from "../../src/providers.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
+import { Route } from "../../src/route.js"
 
 for (const model of [
   OpenAI.configure({ apiKey: "test" }).responses("fixture"),
@@ -18,7 +19,7 @@ for (const model of [
           type: "media",
           media: Media.url("https://example.com/image.png", { mediaType: "image/png" }),
           providerMetadata:
-            detail === undefined ? undefined : { [model.route.providerMetadataKey ?? model.provider]: { detail } },
+            detail === undefined ? undefined : { [Route.of(model)?.providerMetadataKey ?? model.provider]: { detail } },
         })),
       )
       const codec = Schema.fromJsonString(Message)

@@ -2,8 +2,8 @@ import { Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { mergeJsonRecords, type OpenString } from "../schema/index.js"
-import { TranscriptionModel, TranscriptionResponse, type TranscriptionRequest } from "../transcription.js"
+import { mergeJsonRecords, type OpenString, type Model } from "../schema/index.js"
+import { TranscriptionResponse, type TranscriptionRequest, transcriptionModel } from "../transcription.js"
 import { ProviderShared } from "./shared.js"
 import { MediaInput } from "./utils/media-input.js"
 import { SpeakerTurns } from "./utils/speaker-turns.js"
@@ -30,7 +30,7 @@ export type DeepgramTranscriptionOptions = {
   readonly tag?: string | ReadonlyArray<string>
 } & Record<string, unknown>
 
-export type Request = TranscriptionRequest<TranscriptionModel<DeepgramTranscriptionOptions>>
+export type Request = TranscriptionRequest<Model<"transcription", DeepgramTranscriptionOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Response schema
@@ -171,7 +171,7 @@ export const protocol = MediaProtocol.inline<Request, TranscriptionResponse>(rou
 })
 
 export const model = (input: MediaRoute.ModelInput) =>
-  TranscriptionModel.fromRoute<DeepgramTranscriptionOptions>({ protocol, baseURL: DEFAULT_BASE_URL, path: PATH }, input)
+  transcriptionModel<DeepgramTranscriptionOptions>({ protocol, baseURL: DEFAULT_BASE_URL, path: PATH }, input)
 
 export const DeepgramTranscription = {
   protocol,

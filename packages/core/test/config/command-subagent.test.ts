@@ -1,7 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
 import { Effect, Layer } from "effect"
-import { LanguageModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { TestLLM } from "@opencode/ai/testing"
 import { Agent } from "@opencode/core/agent"
@@ -20,6 +19,7 @@ import { tempGlobalLayer } from "../fixture/global"
 import { offlineModels } from "../fixture/models"
 import { tmpdirScoped } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
+import { Route } from "@opencode/ai/route"
 
 const llmLayer = TestLLM.testLayer({ fallback: TestLLM.text("Review complete", "review") })
 const it = testEffect(
@@ -35,7 +35,7 @@ const it = testEffect(
           resolve: (session) =>
             Effect.succeed(
               SessionRunnerModel.resolved(
-                LanguageModel.make({ id: session.model?.id ?? "parent", provider: "test", route: OpenAIChat.route }),
+                Route.model(OpenAIChat.route, { id: session.model?.id ?? "parent", provider: "test" }),
                 {
                   capabilities: { tools: true, input: ["text"], output: ["text"] },
                   cost: [],

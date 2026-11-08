@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LanguageModel, Message } from "../../src/effect.js"
+import { ai, Message, Model } from "../../src/effect.js"
 import { OpenAIChat } from "../../src/protocols/openai-chat.js"
 import { Groq } from "../../src/providers/groq.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -11,7 +11,7 @@ it.effect("Groq reuses Chat streaming and defaults to parsed reasoning", () =>
   Effect.gen(function* () {
     expect(Groq.protocol.stream).toBe(OpenAIChat.protocol.stream)
     const model = Groq.configure({ apiKey: "fixture" }).model("llama-3.3-70b-versatile")
-    expect(model.route.endpoint.baseURL).toBe("https://api.groq.com/openai/v1")
+    expect(model.baseURL).toBe("https://api.groq.com/openai/v1")
     const compiled = yield* compileRequest(ai.request({ model, prompt: "Hello", tools: [weatherTool], maxTokens: 64 }))
     expect(compiled.body).toMatchObject({
       max_completion_tokens: 64,
@@ -26,8 +26,8 @@ it.effect("Groq reuses Chat streaming and defaults to parsed reasoning", () =>
 
 it.effect("Groq lowers its own options for custom catalog identities and endpoints", () =>
   Effect.gen(function* () {
-    const model = LanguageModel.update(
-      Groq.model("qwen/qwen3.6-27b", {
+    const model = {
+      ...Groq.model("qwen/qwen3.6-27b", {
         apiKey: "fixture",
         baseURL: "https://gateway.example/v1",
         headers: { "x-client": "test" },
@@ -37,8 +37,8 @@ it.effect("Groq lowers its own options for custom catalog identities and endpoin
         serviceTier: "flex",
         user: "test-user",
       }),
-      { provider: "custom-groq" },
-    )
+      provider: "custom-groq",
+    }
     const compiled = yield* compileRequest(
       ai.request({
         model,
@@ -47,7 +47,7 @@ it.effect("Groq lowers its own options for custom catalog identities and endpoin
         providerOptions: { parallelToolCalls: false, includeReasoning: false },
       }),
     )
-    expect(model.route.endpoint.baseURL).toBe("https://gateway.example/v1")
+    expect(model.baseURL).toBe("https://gateway.example/v1")
     expect(model.options?.headers).toEqual({ "x-client": "test" })
     expect(model.options?.http?.body).toEqual({ custom: "value" })
     expect(compiled.body).toMatchObject({

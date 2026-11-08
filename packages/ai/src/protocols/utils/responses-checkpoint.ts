@@ -2,6 +2,7 @@ import { Effect, Schema, Stream } from "effect"
 import { Route, type RouteBody, type TriggerCompactOperation } from "../../route/client.js"
 import { Protocol } from "../../route/protocol.js"
 import { CompactionCheckpointResponse, LLMEvent, type LLMRequest } from "../../schema/index.js"
+import { routeOf } from "../../schema/model.js"
 import { OpenResponses } from "../open-responses.js"
 import { ProviderShared } from "../shared.js"
 
@@ -46,12 +47,13 @@ const onOutputItem = Effect.fnUntraced(function* (state: State, input: OpenRespo
 /** Collect a trigger response before acknowledging transport completion. No generation output escapes. */
 export const make = <Body>(body: RouteBody<Body>): TriggerCompactOperation =>
   Effect.fn("ResponsesCheckpoint.execute")(function* (request, executor, options) {
-    const source = request.model.route
+    const source = routeOf(request.model)
     let result: CompactionCheckpointResponse | undefined
     // Route registries erase the frame type. The codec validates that boundary before parsing.
     const event: Schema.Codec<OpenResponses.Event, unknown> = OpenResponses.protocol.stream.event
     const protocol = Protocol.make({
       id: source.protocol,
+      api: source.api ?? source.protocol,
       body,
       stream: {
         event,

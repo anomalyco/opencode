@@ -1,7 +1,7 @@
 import { Effect, Schema, Stream } from "effect"
 import { ProgressEvent, QueuedEvent } from "./generation.js"
 import { Media } from "./media.js"
-import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
+import { type MediaModel, composeRoute, mediaOptions, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
 import {
   AIError,
@@ -10,57 +10,55 @@ import {
   ProviderOptions,
   type OpenString,
   type BaseRequest,
+  mediaApi,
+  implementation,
+  Model,
+  modelSchema,
+  type ModelProviderOptions,
 } from "./schema/index.js"
 import { SpeechClient, Service } from "./speech-client.js"
 
 // ---------------------------------------------------------------------------
-// Model
+// SelectedModel
 // ---------------------------------------------------------------------------
 
 export type SpeechOptions = MediaModel.Options
 
 export type SpeechRoute = MediaRoute.AnyRoute<SpeechRequest, SpeechEvent, SpeechResponse>
 
-export class SpeechModel<Options extends SpeechOptions = SpeechOptions> extends MediaModel<SpeechRoute, Options> {
-  declare protected readonly _SpeechModel: void
-
-  /** The number of type arguments selects the kind: `<Options>`, `<Options, Frame, State>`, or `<Options, Token>`. */
-  static fromRoute<Options extends SpeechOptions>(
-    route: MediaModel.InlineRouteInput<SpeechRequest<SpeechModel<Options>>, SpeechResponse>,
-    input: MediaRoute.ModelInput,
-  ): SpeechModel<Options>
-  static fromRoute<Options extends SpeechOptions, Frame, State>(
-    route: MediaModel.StreamRouteInput<SpeechRequest<SpeechModel<Options>>, SpeechEvent, Frame, State>,
-    input: MediaRoute.ModelInput,
-  ): SpeechModel<Options>
-  static fromRoute<Options extends SpeechOptions, Token>(
-    route: MediaModel.QueuedRouteInput<SpeechRequest<SpeechModel<Options>>, SpeechResponse, Token>,
-    input: MediaRoute.ModelInput,
-  ): SpeechModel<Options>
-  static fromRoute<Options extends SpeechOptions, Frame, State, Token>(
-    route: MediaModel.AnyRouteInput<
-      SpeechRequest<SpeechModel<Options>>,
-      SpeechEvent,
-      SpeechResponse,
-      Frame,
-      State,
-      Token
-    >,
-    input: MediaRoute.ModelInput,
-  ) {
-    return new SpeechModel<Options>({
-      id: input.id,
-      provider: route.protocol.provider,
-      http: input.http,
-      providerOptions: input.providerOptions,
-      route: composeRoute(route, input, collectResponse) as SpeechRoute,
-    })
-  }
+/** The number of type arguments selects the kind: `<Options>`, `<Options, Frame, State>`, or `<Options, Token>`. */
+export function speechModel<Options extends SpeechOptions>(
+  route: MediaModel.InlineRouteInput<SpeechRequest<Model<"speech", Options>>, SpeechResponse>,
+  input: MediaRoute.ModelInput,
+): Model<"speech", Options>
+export function speechModel<Options extends SpeechOptions, Frame, State>(
+  route: MediaModel.StreamRouteInput<SpeechRequest<Model<"speech", Options>>, SpeechEvent, Frame, State>,
+  input: MediaRoute.ModelInput,
+): Model<"speech", Options>
+export function speechModel<Options extends SpeechOptions, Token>(
+  route: MediaModel.QueuedRouteInput<SpeechRequest<Model<"speech", Options>>, SpeechResponse, Token>,
+  input: MediaRoute.ModelInput,
+): Model<"speech", Options>
+export function speechModel<Options extends SpeechOptions, Frame, State, Token>(
+  route: MediaModel.AnyRouteInput<
+    SpeechRequest<Model<"speech", Options>>,
+    SpeechEvent,
+    SpeechResponse,
+    Frame,
+    State,
+    Token
+  >,
+  input: MediaRoute.ModelInput,
+) {
+  return Model.make<"speech", Options>({
+    type: "speech",
+    id: input.id,
+    provider: route.protocol.provider,
+    options: mediaOptions(input),
+    api: mediaApi(route.protocol.id),
+    [implementation]: composeRoute(route, input, collectResponse) as SpeechRoute,
+  })
 }
-
-export const SpeechModelSchema = Schema.declare((value): value is SpeechModel => value instanceof SpeechModel, {
-  expected: "Speech.Model",
-})
 
 // ---------------------------------------------------------------------------
 // Request
@@ -83,7 +81,7 @@ export const SpeechTimestamp = Schema.Struct({
 export type SpeechTimestamp = Schema.Schema.Type<typeof SpeechTimestamp>
 
 const SpeechRequestSchema = Schema.Struct({
-  model: SpeechModelSchema,
+  model: modelSchema("speech"),
   text: Schema.String,
   voice: Schema.optional(SpeechVoice),
   format: Schema.optional(Schema.String),
@@ -95,20 +93,18 @@ const SpeechRequestSchema = Schema.Struct({
 })
 
 /** A normalized speech request, the plain object `Speech.request(...)` returns. */
-export type SpeechRequest<Model extends SpeechModel = SpeechModel> = Omit<
+export type SpeechRequest<SelectedModel extends Model<"speech"> = Model<"speech">> = Omit<
   typeof SpeechRequestSchema.Type,
   "model" | "providerOptions" | "format"
 > &
-  BaseRequest<Model, SpeechModelOptions<Model>> & { readonly format?: SpeechFormat }
-
-export type SpeechModelOptions<Model> = Model extends SpeechModel<infer Options> ? Options : never
+  BaseRequest<SelectedModel, ModelProviderOptions<SelectedModel>> & { readonly format?: SpeechFormat }
 
 /** Input accepted by `Speech.request` and the calls; a `SpeechRequest` is also a valid input. */
-export type SpeechRequestInput<Model extends SpeechModel = SpeechModel> = Omit<
-  SpeechRequest<Model>,
+export type SpeechRequestInput<SelectedModel extends Model<"speech"> = Model<"speech">> = Omit<
+  SpeechRequest<SelectedModel>,
   "providerOptions"
 > & {
-  readonly providerOptions?: NoInfer<SpeechModelOptions<Model>>
+  readonly providerOptions?: NoInfer<ModelProviderOptions<SelectedModel>>
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +175,9 @@ const collectResponse = (events: ReadonlyArray<SpeechEvent>): Effect.Effect<Spee
 // ---------------------------------------------------------------------------
 
 /** Normalize speech request input into a plain `SpeechRequest`. */
-export const request = <const Model extends SpeechModel>(input: SpeechRequestInput<Model>): SpeechRequest<Model> => ({
+export const request = <const SelectedModel extends Model<"speech">>(
+  input: SpeechRequestInput<SelectedModel>,
+): SpeechRequest<SelectedModel> => ({
   ...input,
 })
 
@@ -192,15 +190,15 @@ const requestEffect = (input: SpeechRequestInput) =>
     return normalized
   })
 
-export function generate<const Model extends SpeechModel>(
-  input: SpeechRequestInput<Model>,
+export function generate<const SelectedModel extends Model<"speech">>(
+  input: SpeechRequestInput<SelectedModel>,
 ): Effect.Effect<SpeechResponse, AIError, Service>
 export function generate(input: SpeechRequestInput) {
   return requestEffect(input).pipe(Effect.flatMap((request) => SpeechClient.generate(request)))
 }
 
-export function stream<const Model extends SpeechModel>(
-  input: SpeechRequestInput<Model>,
+export function stream<const SelectedModel extends Model<"speech">>(
+  input: SpeechRequestInput<SelectedModel>,
 ): Stream.Stream<SpeechEvent, AIError, Service>
 export function stream(input: SpeechRequestInput) {
   return Stream.unwrap(requestEffect(input).pipe(Effect.map((request) => SpeechClient.stream(request))))

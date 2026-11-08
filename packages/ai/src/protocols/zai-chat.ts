@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
 import { Protocol } from "../route/protocol.js"
-import type { LanguageModelCompatibility, LLMRequest, Capabilities } from "../schema/index.js"
+import type { Compatibility, LLMRequest, Capabilities } from "../schema/index.js"
 import { OpenAIChat } from "./openai-chat.js"
 import { ProviderShared } from "./shared.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
@@ -58,12 +58,13 @@ export const compatibility = {
   maxTokensField: "max_tokens",
   reasoningField: "reasoning_content",
   zaiToolStream: false,
-} satisfies LanguageModelCompatibility
+} satisfies Compatibility
 
 export const capabilities = { tools: { strict: false } } satisfies Capabilities
 
 export const protocol = Protocol.make({
   id: "zai-chat",
+  api: "chat-completions",
   body: { schema: Body, from: fromRequest },
   stream: OpenAIChat.protocol.stream,
 })

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LanguageModel, type GenerationOptionsFields } from "../../src/effect.js"
+import { ai, type GenerationOptionsFields, Model } from "../../src/effect.js"
 import { compileRequest } from "../../src/route/client.js"
 import { AmazonBedrock } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
@@ -11,7 +11,7 @@ const beta = ["thinking-binding-controls-2026-08-01"]
 const bedrock = (id: string, settings: Parameters<typeof AmazonBedrock.model>[1] = {}) =>
   AmazonBedrock.model(id, { baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer", ...settings })
 
-const fields = (model: LanguageModel, generation?: GenerationOptionsFields) =>
+const fields = (model: Model<"chat">, generation?: GenerationOptionsFields) =>
   compileRequest(
     ai.request({
       id: "req_1",
@@ -92,15 +92,15 @@ describe("Bedrock Converse thinking block binding", () => {
     Effect.gen(function* () {
       const arn = "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc123"
       expect(yield* fields(bedrock(arn))).toBeUndefined()
+      expect(yield* fields({ ...bedrock(arn), compatibility: { thinkingBlockBinding: true } })).toEqual({
+        thinking: { type: "adaptive", block_binding: binding },
+        anthropic_beta: beta,
+      })
       expect(
-        yield* fields(LanguageModel.update(bedrock(arn), { compatibility: { supportsThinkingBlockBinding: true } })),
-      ).toEqual({ thinking: { type: "adaptive", block_binding: binding }, anthropic_beta: beta })
-      expect(
-        yield* fields(
-          LanguageModel.update(bedrock("global.anthropic.claude-fable-5-1"), {
-            compatibility: { supportsThinkingBlockBinding: false },
-          }),
-        ),
+        yield* fields({
+          ...bedrock("global.anthropic.claude-fable-5-1"),
+          compatibility: { thinkingBlockBinding: false },
+        }),
       ).toBeUndefined()
     }),
   )

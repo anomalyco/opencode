@@ -23,6 +23,7 @@ import {
   type ToolEntry,
 } from "./schema/messages.js"
 import { effortUpdate } from "./effort-updates.js"
+import { routeOf } from "./schema/model.js"
 
 const AUTO: CachePolicyObject = {
   tools: true,
@@ -235,7 +236,7 @@ export const placesMarkers = (request: LLMRequest) => {
 // A declared cache format overrides the route allowlist and its model-ID heuristics.
 const selectPolicy = (request: LLMRequest): CachePolicyObject => {
   const format = request.model.compatibility?.cacheFormat
-  const route = request.model.route.id
+  const route = routeOf(request.model).id
   const auto = isAuto(request.cache)
   if (format === "alibaba") return auto ? QWEN : { ...resolve(request.cache), tools: false }
   if (format === "anthropic") return resolve(request.cache)

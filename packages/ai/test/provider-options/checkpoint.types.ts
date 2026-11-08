@@ -3,9 +3,9 @@ import {
   ai,
   CompactionCheckpointResponse,
   CompactionResponse,
-  LanguageModel,
   LLMClient,
   type LLMRequest,
+  Model,
 } from "../../src/effect.js"
 import {
   Anthropic,
@@ -19,7 +19,7 @@ import {
 import { AI } from "../../src/index.js"
 import type { WebSocketChannelExecutor } from "../../src/route.js"
 import type { RoutePatch } from "../../src/route/client.js"
-import type { OpenAIResponsesBody } from "../../src/protocols/openai-responses.js"
+import { OpenAIResponses, type OpenAIResponsesBody } from "../../src/protocols/openai-responses.js"
 import type { Prepared } from "../../src/protocols/open-responses-channel.js"
 
 declare const webSocket: WebSocketChannelExecutor
@@ -45,9 +45,9 @@ ai.compact(request, { mechanism: "other" })
 for (const selected of [
   model,
   OpenAI.model("fixture", {}),
-  model.route.with({ headers: { fixture: "test" } }).model({ id: "fixture" }),
-  LanguageModel.make(LanguageModel.input(model)),
-  LanguageModel.update(model, { options: { maxTokens: 100 } }),
+  OpenAIResponses.route.with({ headers: { fixture: "test" } }).model({ id: "fixture" }),
+  Model.make(model),
+  { ...model, options: { maxTokens: 100 } },
 ]) {
   ai.compact(ai.request({ model: selected, prompt: "Hello" }), { mechanism: "trigger" })
 }
@@ -95,13 +95,11 @@ ai.compact(unsupported.xai, { mechanism: "trigger" })
 ai.compact(unsupported.compatible, { mechanism: "trigger" })
 // @ts-expect-error Changing the model replaces its capability.
 ai.compact({ ...request, model: azure }, { mechanism: "trigger" })
-ai.compact(ai.request({ model: LanguageModel.update(model, { route: azure.route }), prompt: "Hello" }), {
-  // @ts-expect-error Changing the route replaces its capability.
-  mechanism: "trigger",
-})
 ai.compact(
   ai.request({
-    model: model.route.with({ compact: { endpoint: model.route.compact.endpoint } }).model({ id: "fixture" }),
+    model: OpenAIResponses.route
+      .with({ compact: { endpoint: OpenAIResponses.route.compact.endpoint } })
+      .model({ id: "fixture" }),
     prompt: "Hello",
   }),
   // @ts-expect-error Replacing route operations does not retain the old trigger capability.
@@ -112,13 +110,12 @@ declare const dynamic: LLMRequest
 declare const patch: Partial<LLMRequest>
 declare const routePatch: RoutePatch<OpenAIResponsesBody, Prepared>
 // @ts-expect-error A dynamic operation override cannot preserve trigger support.
-ai.compact(ai.request({ model: model.route.with(routePatch).model({ id: "fixture" }), prompt: "Hello" }), {
+ai.compact(ai.request({ model: OpenAIResponses.route.with(routePatch).model({ id: "fixture" }), prompt: "Hello" }), {
   mechanism: "trigger",
 })
+const removed = OpenAIResponses.route.with({ compact: undefined }).model({ id: "fixture" })
 // @ts-expect-error Explicitly removing operations removes trigger support.
-ai.compact(ai.request({ model: model.route.with({ compact: undefined }).model({ id: "fixture" }), prompt: "Hello" }), {
-  mechanism: "trigger",
-})
+ai.compact(ai.request({ model: removed, prompt: "Hello" }), { mechanism: "trigger" })
 // @ts-expect-error Dynamic models must be narrowed.
 ai.compact(dynamic, { mechanism: "trigger" })
 if (ai.canCompact(dynamic, { mechanism: "trigger" })) {

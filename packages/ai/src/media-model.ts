@@ -5,47 +5,13 @@ import type { MediaProtocol } from "./route/media-protocol.js"
 import {
   AIError,
   InvalidRequestError,
-  ModelID,
-  ProviderID,
+  mergeRequestOptions,
   type HttpOptions,
   type ProviderOptions,
 } from "./schema/index.js"
 
-/**
- * What every media model carries: ids, the configured route, and deployment `http` overlays. Modality classes
- * (`ImageModel`, `VideoModel`, `SpeechModel`, `TranscriptionModel`) extend it with their route type and a nominal
- * marker so one cannot stand in for the other in requests.
- */
-export class MediaModel<Route, Options> {
-  // As with `LanguageModel`, the route type is erased over `Options`; `fromRoute` and the constructor trust that the
-  // route accepts every request this model's `Options` admit.
-  declare protected readonly _Options: Options
-  readonly id: ModelID
-  readonly provider: ProviderID
-  readonly route: Route
-  readonly http?: HttpOptions
-  /** Defaults under each request's `providerOptions`, such as options a provider package reads from its settings. */
-  readonly providerOptions?: ProviderOptions
-
-  constructor(input: MediaModel.Input<Route>) {
-    this.id = ModelID.make(input.id)
-    this.provider = ProviderID.make(input.provider)
-    this.route = input.route
-    this.http = input.http
-    this.providerOptions = input.providerOptions
-  }
-}
-
 export namespace MediaModel {
   export type Options = ProviderOptions
-
-  export interface Input<Route> {
-    readonly id: string | ModelID
-    readonly provider: string | ProviderID
-    readonly route: Route
-    readonly http?: HttpOptions
-    readonly providerOptions?: ProviderOptions
-  }
 
   /** A protocol plus its canonical start path; `ModelInput.baseURL` overrides `baseURL` per deployment. */
   export interface RouteInput<Request extends MediaRoute.MediaRequest, Protocol> {
@@ -76,6 +42,10 @@ export namespace MediaModel {
     | StreamRouteInput<Request, Event, Frame, State>
     | QueuedRouteInput<Request, Response, Token>
 }
+
+/** A media deployment's `http` overlays and `providerOptions` defaults as model options. */
+export const mediaOptions = (input: { readonly http?: HttpOptions; readonly providerOptions?: ProviderOptions }) =>
+  mergeRequestOptions({ http: input.http, providerOptions: input.providerOptions })
 
 /** Compose a protocol route input with one deployment through `MediaRoute.inline`, `queued`, or `stream`. */
 export const composeRoute = <Request extends MediaRoute.MediaRequest, Event, Response, Frame, State, Token>(

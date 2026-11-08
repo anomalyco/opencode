@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { CompactionPart, LanguageModel, Message, ToolCallPart, Media } from "@opencode/ai/effect"
+import { CompactionPart, Message, ToolCallPart, Media } from "@opencode/ai/effect"
 import { OpenAIResponses } from "@opencode/ai/protocols"
 import { Bus } from "@opencode/core/bus"
 import { Event } from "@opencode/schema/event"
@@ -29,6 +29,7 @@ import { asc, eq, sql } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import { testEffect } from "./lib/effect"
 import legacyMedia from "./fixture/native/2.0.14-media.json"
+import { Route } from "@opencode/ai/route"
 
 // A window as compaction stores it, and as history and replay read it back.
 const stored = (messages: ReadonlyArray<Message>) => ({ messages: JSON.parse(JSON.stringify(messages)) })
@@ -36,7 +37,7 @@ const decode = (checkpoint: { readonly native: { readonly messages: unknown } })
   Schema.decodeUnknownSync(SessionHistory.NativeWindow)(checkpoint.native.messages)
 
 const model = SessionRunnerModel.resolved(
-  LanguageModel.make({ id: "deployment", provider: "openai", route: OpenAIResponses.route }),
+  Route.model(OpenAIResponses.route, { id: "deployment", provider: "openai" }),
   {
     capabilities: { tools: true, input: ["text"], output: ["text"] },
     cost: [],

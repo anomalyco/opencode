@@ -13,6 +13,7 @@ import { AIError, UnsupportedOperationError, mergeJsonRecords, type ProviderOpti
 import { encodeJson } from "../utils/json.js"
 import { OpenResponses } from "./open-responses.js"
 import { ProviderShared } from "./shared.js"
+import { routeOf } from "../schema/model.js"
 
 const ID = "openai-decisions"
 const NAME = "OpenAI Decisions"
@@ -91,7 +92,7 @@ const inputPart = (request: DecisionRequest, part: DecisionPart): Effect.Effect<
         reason: new UnsupportedOperationError({
           operation: "decision.media",
           provider: request.model.provider,
-          route: request.model.route.id,
+          route: routeOf(request.model).id,
           message: `${NAME} takes images only; got ${part.media.kind} media`,
         }),
       }),

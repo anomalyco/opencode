@@ -27,6 +27,7 @@ const fromRequest = Effect.fn("ZAIMessages.fromRequest")(function* (request: LLM
 
 export const protocol = Protocol.make({
   id: "zai-messages",
+  api: "messages",
   body: { schema: Body, from: fromRequest },
   stream: AnthropicMessages.protocol.stream,
 })

@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { LanguageModel, LLMEvent, LLMResponse, Message, Usage } from "../src/effect.js"
+import { LLMEvent, LLMResponse, Message, Usage, Model } from "../src/effect.js"
 import { addUsage, nextRequest, pendingCalls } from "../src/loop.js"
 import { OpenAIChat } from "../src/protocols/openai-chat.js"
 import { LLM } from "../src/llm.js"
+import { Route } from "../src/route.js"
 
-const model = LanguageModel.make({ id: "fictional-model", provider: "fixture", route: OpenAIChat.route })
+const model = Route.model(OpenAIChat.route, { id: "fictional-model", provider: "fixture" })
 
 const step = (...events: ReadonlyArray<LLMEvent>) =>
   LLMResponse.fromEvents([...events, LLMEvent.finish({ reason: { normalized: "tool-calls" } })])!

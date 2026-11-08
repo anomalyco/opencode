@@ -1,10 +1,10 @@
 import { Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
-import { ImageModel, ImageResponse, type ImageRequest } from "../image.js"
+import { ImageResponse, type ImageRequest, imageModel } from "../image.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { mergeJsonRecords, type OpenString } from "../schema/index.js"
+import { mergeJsonRecords, type OpenString, type Model } from "../schema/index.js"
 import { JsonObject, ProviderShared, lenient, optionalNull } from "./shared.js"
 import { ImageSizing } from "./utils/image-sizing.js"
 import { MediaInput } from "./utils/media-input.js"
@@ -25,7 +25,7 @@ export type XAIImageOptions = {
   readonly response_format?: OpenString<"url" | "b64_json">
 } & Record<string, unknown>
 
-export type Request = ImageRequest<ImageModel<XAIImageOptions>>
+export type Request = ImageRequest<Model<"image", XAIImageOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Response schema
@@ -125,7 +125,7 @@ export const protocol = MediaProtocol.inline<Request, ImageResponse>(route, {
 })
 
 export const model = (input: MediaRoute.ModelInput) =>
-  ImageModel.fromRoute<XAIImageOptions>(
+  imageModel<XAIImageOptions>(
     { protocol, baseURL: DEFAULT_BASE_URL, path: ({ request }) => (isEdit(request) ? EDIT_PATH : PATH) },
     input,
   )

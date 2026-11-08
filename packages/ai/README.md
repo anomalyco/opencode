@@ -949,7 +949,7 @@ Everything below is exported from `@opencode/ai/effect` unless noted.
 - **`ai.loop`** — stream model calls, running `tool(...)` tools between them until the model stops calling tools.
 - **`ai.collect`** — fold a stream from `ai.stream` or `ai.loop` into its final result (`text`, `steps`, `messages`, `usage`).
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
-- **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
+- **`Model.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
 - **`ai.image.request` / `generate` / `stream` / `start` / `resume`** — images over inline, streaming (partial previews), and queued routes through a provider-neutral request and response model.
 - **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.
@@ -1552,6 +1552,38 @@ const fireworks = Fireworks.configure({ apiKey }).model("accounts/fireworks/mode
 ```
 
 The former `OpenAICompatible.baseten`, `.cerebras`, `.deepinfra`, `.deepseek`, `.fireworks`, `.groq`, and `.togetherai` presets are replaced by the top-level `Baseten`, `Cerebras`, `DeepInfra`, `DeepSeek`, `Fireworks`, `Groq`, and `TogetherAI` exports. Use `CloudflareAIGateway` and `CloudflareWorkersAI` directly; each has its own module. `OpenAICompatible` configures generic endpoints with an explicit `baseURL`.
+
+### Describing a model by hand
+
+A model is a plain readonly object. `OpenAI.configure(...).chat(id)` returns one with its fields filled in; describe one yourself by naming the models.dev v2 API it speaks:
+
+```ts
+import { Model } from "@opencode/ai"
+import { Auth } from "@opencode/ai/route"
+
+const local = Model.make({
+  type: "chat",
+  id: "qwen3-coder",
+  provider: "lmstudio",
+  api: "chat-completions",
+  baseURL: "http://localhost:1234/v1",
+  auth: Auth.none,
+  capabilities: { tools: { strict: false } },
+  options: { temperature: 0.7 },
+  compatibility: { maxTokensField: "max_tokens" },
+})
+
+// Edit a model with a spread: requests go to the new host, with the same auth.
+const proxied = { ...local, baseURL: "http://gpu-box:1234/v1" }
+const precise = { ...local, options: { ...local.options, temperature: 0 } }
+
+// `type` narrows a model of any kind.
+const describe = (model: Model) => (model.type === "chat" ? model.baseURL : model.api)
+```
+
+`api` is one of `"chat-completions"`, `"responses"`, `"messages"`, `"converse"`, `"generate-content"`, `"interactions"` or `"cohere-chat"` for a hand-described text model; the package loads its standard implementation of that API on the first request. Provider models carry their provider's own implementation (a vendor dialect such as Z.ai's or OpenRouter's chat), and keep it through spreads as long as `api` is unchanged. Fields a hand-described model leaves out (`baseURL`, `auth`, options) fall back to the API's defaults when the request is sent.
+
+`Model.make` fills OpenCode's defaults for an unknown model: `capabilities.tools.supported`, text and image input with text output, a 200k context and 32k output. It never sets flags such as `capabilities.store` or `capabilities.streamUsage`; unset flags keep each protocol's own detection. Media and decision models run only on a provider's implementation.
 
 ### Provider entrypoints
 
