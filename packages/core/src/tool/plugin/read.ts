@@ -23,7 +23,7 @@ const LocationInput = Schema.Struct({
     description: "The line or directory entry to start reading from (1-based)",
   }),
   limit: ReadToolFileSystem.PageInput.fields.limit.annotate({
-    description: "Maximum lines or directory entries to read (up to 2000)",
+    description: "The maximum number of lines or directory entries to read (defaults to and capped at 2000)",
   }),
 })
 export const Input = LocationInput
