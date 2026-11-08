@@ -7,15 +7,15 @@
 export * as EditTool from "./edit.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import { FileDiff } from "@opencode/schema/file-diff"
-import { Bom } from "@opencode/util/bom"
 import { Effect, Schema } from "effect"
+import { toolFailure } from "../runtime.js"
 import { Environment } from "../../environment/index.js"
 import { FileMutation } from "../../file-mutation.js"
-import { Formatter } from "../../formatter.js"
 import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
+import { FileWrite } from "../../file-write.js"
 import { Permission } from "../../permission.js"
 import { fileDiff } from "./file-diff.js"
 
@@ -101,6 +101,157 @@ const findLineOccurrences = (content: string, search: string) => {
   }, [])
 }
 
+/** The dominant line ending in text, or fallback when there is none. */
+const lineEnding = (text: string, fallback: string) => {
+  const crlfCount = text.split(crlf).length - 1
+  const lfCount = text.split("\n").length - 1 - crlfCount
+  if (crlfCount === lfCount) return fallback
+  return crlfCount > lfCount ? crlf : "\n"
+}
+
+/**
+ * Joins the replacement's lines with line endings taken from the matched source region. A replacement line that
+ * keeps a region line (longest common subsequence, compared like the trailing-whitespace tier) reuses that line's
+ * ending; a line that changes in place reuses the ending of the line it replaces; only lines beyond those take
+ * `fallback`. Unchanged context inside a match therefore keeps its bytes even in a mixed-ending file.
+ */
+const withRegionEndings = (region: string, replacement: string, fallback: string) => {
+  const before = region.split(/\r?\n/)
+  const endings = [...region.matchAll(/\r?\n/g)].map((match) => match[0])
+  const after = replacement.split("\n")
+  const key = (line: string) => normalizeForMatch(line.trimEnd())
+  const source = alignLines(before.map(key), after.map(key))
+  return after.map((line, index) => (index === after.length - 1 ? line : line + (endings[source[index]!] ?? fallback))).join("")
+}
+
+/**
+ * For each line of `after`, the index of the `before` line it keeps (longest common subsequence) or, between kept
+ * lines, the line it takes the place of; undefined for lines with no counterpart.
+ */
+const alignLines = (before: string[], after: string[]) => {
+  const width = after.length + 1
+  const table = new Uint32Array((before.length + 1) * width)
+  for (let i = before.length - 1; i >= 0; i--)
+    for (let j = after.length - 1; j >= 0; j--)
+      table[i * width + j] =
+        before[i] === after[j]
+          ? table[(i + 1) * width + j + 1] + 1
+          : Math.max(table[(i + 1) * width + j], table[i * width + j + 1])
+  const result: (number | undefined)[] = []
+  const gap = { before: [] as number[], after: [] as number[] }
+  const flush = () => {
+    gap.after.forEach((j, k) => (result[j] = gap.before[k]))
+    gap.before = []
+    gap.after = []
+  }
+  let i = 0
+  let j = 0
+  while (i < before.length && j < after.length) {
+    if (before[i] === after[j]) {
+      flush()
+      result[j++] = i++
+      continue
+    }
+    if (table[(i + 1) * width + j] >= table[i * width + j + 1]) gap.before.push(i++)
+    else gap.after.push(j++)
+  }
+  while (i < before.length) gap.before.push(i++)
+  while (j < after.length) gap.after.push(j++)
+  flush()
+  return result
+}
+
+/**
+ * Matches against the LF view Read shows the model, then maps offsets back to the source, so CRLF and mixed line
+ * endings neither block matches nor leak into untouched regions.
+ */
+const matchView = (source: string, oldString: string, newString: string) => {
+  const view = source.replaceAll(crlf, "\n")
+  const removed = [...source.matchAll(/\r\n/g)].map((match, index) => match.index - index)
+  const fileEnding = lineEnding(source, "\n")
+  const search = oldString.replaceAll(crlf, "\n")
+  const replacement = newString.replaceAll(crlf, "\n")
+  const exact = findOccurrences(view, search)
+  // These one-to-one mappings preserve offsets into the LF view.
+  const unicode = exact.length > 0 ? [] : findOccurrences(normalizeForMatch(view), normalizeForMatch(search))
+  const trailing = exact.length > 0 || unicode.length > 0 ? [] : findLineOccurrences(view, search)
+  return {
+    matches: (exact.length > 0 ? exact : unicode.length > 0 ? unicode : trailing).map((match) => ({
+      start: match.start + countBefore(removed, match.start),
+      end: match.end + countBefore(removed, match.end),
+    })),
+    replace: (match: Match) => {
+      const region = source.slice(match.start, match.end)
+      return withRegionEndings(region, replacement, lineEnding(region, fileEnding))
+    },
+  }
+}
+
+const hintLines = 12
+const hintLineLength = 200
+
+/**
+ * A short hint for an oldString miss, so the next attempt can succeed without rereading the file: newString is
+ * already there (often an edit that already applied), or the lines closest to oldString, numbered like Read output.
+ * Lines vote for where oldString starts when they match ignoring all whitespace; at least half must agree. Only the
+ * span from the first to the last line that matched is shown, so padding oldString cannot reveal the lines after it.
+ */
+const missHint = (source: string, oldString: string, newString: string) => {
+  const view = source.replaceAll(crlf, "\n")
+  const replacement = newString.replaceAll(crlf, "\n")
+  if (replacement.trim().length >= 20 && normalizeForMatch(view).includes(normalizeForMatch(replacement)))
+    return "newString is already in the file, so this edit may already be applied."
+  const key = (line: string) => normalizeForMatch(line).replace(/\s+/g, " ").trim()
+  const distinct = (line: string) => /[\p{L}\p{N}]/u.test(line)
+  const lines = view.split("\n")
+  const search = oldString.replaceAll(crlf, "\n").split("\n")
+  const positions = new Map<string, number[]>()
+  lines.forEach((line, index) => {
+    const value = key(line)
+    if (!distinct(value)) return
+    const found = positions.get(value)
+    if (found) found.push(index)
+    else positions.set(value, [index])
+  })
+  const votes = new Map<number, number>()
+  const wanted = search.filter((line, offset) => {
+    const value = key(line)
+    if (!distinct(value)) return false
+    for (const index of positions.get(value) ?? []) votes.set(index - offset, (votes.get(index - offset) ?? 0) + 1)
+    return true
+  }).length
+  const [start, count] = [...votes].reduce((best, vote) => (vote[1] > best[1] ? vote : best), [0, 0])
+  if (count === 0 || count * 2 < wanted) return
+  const matched = search.flatMap((line, offset) => {
+    const value = key(line)
+    const index = start + offset
+    return value !== "" && index >= 0 && index < lines.length && key(lines[index]) === value ? [index] : []
+  })
+  const from = matched[0]
+  const to = Math.min(matched.at(-1)! + 1, from + hintLines)
+  return [
+    "The closest lines in the file:",
+    ...lines
+      .slice(from, to)
+      .map(
+        (line, index) =>
+          `${from + index + 1}: ${line.length > hintLineLength ? `${line.slice(0, hintLineLength)}…` : line}`,
+      ),
+  ].join("\n")
+}
+
+/** Number of sorted positions strictly before offset. */
+const countBefore = (positions: number[], offset: number) => {
+  let low = 0
+  let high = positions.length
+  while (low < high) {
+    const middle = (low + high) >> 1
+    if (positions[middle] < offset) low = middle + 1
+    else high = middle
+  }
+  return low
+}
+
 /** Deferred edit behavior and UX integrations remain visible at the model-facing seam. */
 // TODO: Publish watcher/file-edit events after watcher integration exists.
 // TODO: Add snapshots / undo after design exists.
@@ -109,10 +260,9 @@ const findLineOccurrences = (content: string, search: string) => {
 export const Plugin = {
   id: "opencode.tool.edit",
   effect: Effect.fn("EditTool.Plugin")(function* (ctx: Context) {
-    const access = yield* FileAccess.Service
     const fileMutation = yield* FileMutation.Service
+    const fileWrite = yield* FileWrite.Service
     const environment = yield* Environment.Service
-    const formatter = yield* Formatter.Service
     const location = yield* Location.Service
     const permission = yield* Permission.Service
 
@@ -122,16 +272,11 @@ export const Plugin = {
           name,
           options: { codemode: false, permission: "edit" },
           description:
-            "Edit the contents of a file by finding and replacing exact text. When editing text from Read output, preserve the exact indentation (tabs or spaces) and omit the line-number prefix, such as `1: `. Never include the prefix in oldString or newString. The edit fails if oldString is not found. By default, oldString must identify a UNIQUE location. Multiple matches FAIL unless replaceAll is true. Add more surrounding context to disambiguate, or set replaceAll to true to replace every occurrence. Use replaceAll when the change should apply to every occurrence, such as renaming a variable.",
+            "Edit the contents of a file by finding and replacing exact text. When editing text from Read output, preserve the exact indentation (tabs or spaces) and omit the line-number prefix, such as `1: `. Never include the prefix in oldString or newString. Write line breaks as \\n; the file's existing CRLF or LF line endings are matched and preserved. To change line endings themselves, make oldString and newString differ only in \\r; that edit applies to the exact bytes. If there is no exact match, the edit retries while ignoring typographic quote, dash, and space variants, then trailing whitespace on each line. The edit fails if oldString is not found. By default, oldString must identify a UNIQUE location. Multiple matches FAIL unless replaceAll is true. Add more surrounding context to disambiguate, or set replaceAll to true to replace every occurrence. Use replaceAll when the change should apply to every occurrence, such as renaming a variable.",
           input: Input,
           output: Output,
           execute: (input, context) => {
             return Effect.gen(function* () {
-              const permissionSource = {
-                type: "tool" as const,
-                messageID: context.messageID,
-                id: context.id,
-              }
               if (input.oldString === input.newString) {
                 return yield* new ToolFailure({
                   message: "No changes to apply: oldString and newString are identical.",
@@ -143,8 +288,7 @@ export const Plugin = {
                 })
               }
 
-              const target = yield* access.resolve({ path: input.path, kind: "file" })
-              yield* access.authorizeExternal([target], context)
+              const target = yield* fileWrite.target(input.path, context)
 
               const original = yield* FileMutation.readText(environment.files, target.absolute).pipe(
                 Effect.catchTag("Environment.NotFound", () =>
@@ -157,38 +301,35 @@ export const Plugin = {
                 ),
               )
               const source = original.text
-              const ending = source.includes(crlf) ? crlf : "\n"
-              const oldString = input.oldString.replaceAll(crlf, "\n").replaceAll("\n", ending)
-              const newString = input.newString.replaceAll(crlf, "\n").replaceAll("\n", ending)
-              const exact = findOccurrences(source, oldString)
-              // These one-to-one mappings preserve offsets into the original source.
-              const unicode =
-                exact.length > 0 ? [] : findOccurrences(normalizeForMatch(source), normalizeForMatch(oldString))
-              const trailing = exact.length > 0 || unicode.length > 0 ? [] : findLineOccurrences(source, oldString)
-              const matches = exact.length > 0 ? exact : unicode.length > 0 ? unicode : trailing
+              // Strings that differ only in \r ask to change line endings themselves, so they apply to the exact
+              // bytes. Every other edit matches the LF view Read shows the model and keeps the file's endings.
+              const endingsOnly = input.oldString.replaceAll("\r", "") === input.newString.replaceAll("\r", "")
+              const { matches, replace } = endingsOnly
+                ? { matches: findOccurrences(source, input.oldString), replace: () => input.newString }
+                : matchView(source, input.oldString, input.newString)
               const replacements = matches.length
               const replaced = (input.replaceAll === true ? matches : matches.slice(0, 1))
                 .toReversed()
                 .reduce(
-                  (content, match) => `${content.slice(0, match.start)}${newString}${content.slice(match.end)}`,
+                  (content, match) => `${content.slice(0, match.start)}${replace(match)}${content.slice(match.end)}`,
                   source,
                 )
               const preview =
                 replacements > 0 && (replacements === 1 || input.replaceAll === true)
                   ? fileDiff(target.resource, source, replaced)
                   : undefined
-              yield* permission.assert({
-                action: "edit",
-                resources: [target.resource],
-                save: ["*"],
-                metadata: preview ? { files: [preview] } : undefined,
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source: permissionSource,
-              })
+              yield* fileWrite.authorize(target, context, preview)
               if (replacements === 0) {
+                // The hint shows file contents, so only when reading this file is already allowed.
+                const readable = yield* permission.allows({
+                  action: "read",
+                  resources: [target.resource],
+                  save: ["*"],
+                  ...Permission.invocation(context),
+                })
+                const hint = readable ? missHint(source, input.oldString, input.newString) : undefined
                 return yield* new ToolFailure({
-                  message: `Could not find oldString in ${input.path}. It must match exactly, including whitespace and indentation.`,
+                  message: `Could not find oldString in ${input.path}. It must match exactly, including whitespace and indentation.${hint ? `\n\n${hint}` : ""}`,
                 })
               }
               if (replacements > 1 && input.replaceAll !== true) {
@@ -196,15 +337,16 @@ export const Plugin = {
                   message: `Found ${replacements} matches for oldString, but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.`,
                 })
               }
-              const replacementBom = replaced.startsWith("\uFEFF")
-              const result = yield* fileMutation.write({
-                target,
-                content: Bom.join(replaced, original.bom || replacementBom),
-              })
-              const bom = original.bom || replacementBom
-              const formatted = (yield* formatter.file(target.absolute))
-                ? yield* FileMutation.syncTextBom(environment.files, target.absolute, bom)
-                : (yield* FileMutation.readText(environment.files, target.absolute)).text
+              if (replaced === source) {
+                return yield* new ToolFailure({
+                  message: endingsOnly
+                    ? `No changes to apply: ${input.path} already has those line endings.`
+                    : `No changes to apply: the edit leaves ${input.path} unchanged. Line endings follow the file; to change them, write \\r explicitly in oldString or newString.`,
+                })
+              }
+              const result = yield* fileWrite.commit(target, replaced)
+              const formatted =
+                result.formatted ?? (yield* FileMutation.readText(environment.files, target.absolute)).text
               return {
                 files: [fileDiff(result.resource, source, formatted)],
                 replacements,
@@ -216,11 +358,7 @@ export const Plugin = {
                 content: `Edited ${output.files[0]?.file} (${output.replacements} replacement${output.replacements === 1 ? "" : "s"})`,
                 metadata: { files: output.files },
               })),
-              Effect.mapError((error) =>
-                error instanceof ToolFailure
-                  ? error
-                  : new ToolFailure({ message: `Unable to edit ${input.path}`, error }),
-              ),
+              Effect.mapError(toolFailure(`Unable to edit ${input.path}`)),
             )
           },
         }),

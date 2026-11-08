@@ -569,7 +569,7 @@ function rankModelRows(rows: ModelStatRow[]) {
   return Object.values(
     rows.reduce<Record<string, ModelStatRow[]>>((result, row) => {
       const key = statPeriodKey(row)
-      result[key] = [...(result[key] ?? []), row]
+      ;(result[key] ??= []).push(row)
       return result
     }, {}),
   ).flatMap((group) => {

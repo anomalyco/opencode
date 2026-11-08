@@ -33,7 +33,7 @@ class ShimmerTextRenderable extends MaskedTextRenderable {
     this.requestRender()
   }
 
-  override render(buffer: OptimizedBuffer, deltaTime: number) {
+  protected override renderSelf(buffer: OptimizedBuffer, deltaTime = 0) {
     if (!this.visible || this.isDestroyed || !Number.isFinite(this.width) || this.width <= 0 || this.height <= 0) return
     this.elapsed = (this.elapsed + deltaTime) % DURATION
     this.renderMasked(buffer, 0, (end) => {

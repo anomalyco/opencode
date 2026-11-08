@@ -41,9 +41,9 @@ export const Model = Schema.Struct({
   ),
   limit: Schema.optional(
     Schema.Struct({
-      context: Schema.Finite,
+      context: Schema.optional(Schema.Finite),
       input: Schema.optional(Schema.Finite),
-      output: Schema.Finite,
+      output: Schema.optional(Schema.Finite),
     }),
   ),
   modalities: Schema.optional(
@@ -93,19 +93,10 @@ export const Info = Schema.Struct({
         setCacheKey: Schema.optional(Schema.Boolean).annotate({
           description: "Enable promptCacheKey for this provider (default false)",
         }),
-        timeout: Schema.optional(
-          Schema.Union([PositiveInt, Schema.Literal(false)]).annotate({
-            description: "Timeout in milliseconds for full requests to this provider. Set to false to disable timeout.",
-          }),
-        ).annotate({
+        timeout: Schema.optional(Schema.Union([PositiveInt, Schema.Literal(false)])).annotate({
           description: "Timeout in milliseconds for full requests to this provider. Set to false to disable timeout.",
         }),
-        headerTimeout: Schema.optional(
-          Schema.Union([PositiveInt, Schema.Literal(false)]).annotate({
-            description:
-              "Timeout in milliseconds to wait for response headers. Provider integrations may set defaults. Set to false to disable timeout.",
-          }),
-        ).annotate({
+        headerTimeout: Schema.optional(Schema.Union([PositiveInt, Schema.Literal(false)])).annotate({
           description:
             "Timeout in milliseconds to wait for response headers. Provider integrations may set defaults. Set to false to disable timeout.",
         }),

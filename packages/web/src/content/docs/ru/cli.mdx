@@ -48,16 +48,6 @@ CLI opencode также имеет следующие команды.
 
 ---
 
-### agent
-
-Управляйте агентами для opencode.
-
-```bash
-opencode agent [command]
-```
-
----
-
 ### attach
 
 Подключите терминал к уже работающему внутреннему серверу opencode, запущенному с помощью команд `serve` или `web`.
@@ -86,28 +76,6 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--fork"}</code></nobr>     |          | Создать ответвление сеанса при продолжении (используйте с `--continue` или `--session`)          |
 | <nobr><code>{"--password"}</code></nobr> | `-p`     | Пароль базовой аутентификации (по умолчанию `OPENCODE_SERVER_PASSWORD`)                          |
 | <nobr><code>{"--username"}</code></nobr> | `-u`     | Имя пользователя базовой аутентификации (по умолчанию `OPENCODE_SERVER_USERNAME` или `opencode`) |
-
----
-
-#### create
-
-Создайте нового агента с пользовательской конфигурацией.
-
-```bash
-opencode agent create
-```
-
-Эта команда поможет вам создать новый агент с настраиваемой системной подсказкой и настройкой инструмента.
-
----
-
-#### list
-
-Перечислите всех доступных агентов.
-
-```bash
-opencode agent list
-```
 
 ---
 
@@ -345,7 +313,6 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--continue"}</code></nobr> | `-c`     | Продолжить последний сеанс                                                                       |
 | <nobr><code>{"--session"}</code></nobr>  | `-s`     | Идентификатор сеанса для продолжения                                                             |
 | <nobr><code>{"--fork"}</code></nobr>     |          | Разветвить сеанс при продолжении (используйте с `--continue` или `--session`)                    |
-| <nobr><code>{"--share"}</code></nobr>    |          | Поделиться сеансом                                                                               |
 | <nobr><code>{"--model"}</code></nobr>    | `-m`     | Модель для использования в виде поставщика/модели.                                               |
 | <nobr><code>{"--agent"}</code></nobr>    |          | Агент для использования                                                                          |
 | <nobr><code>{"--file"}</code></nobr>     | `-f`     | Файл(ы) для прикрепления к сообщению                                                             |
@@ -442,17 +409,14 @@ opencode export [sessionID]
 
 ### import
 
-Импортируйте данные сеанса из файла JSON или URL-адреса общего ресурса opencode.
+Импортируйте данные сеанса из файла JSON.
 
 ```bash
 opencode import <file>
 ```
 
-Вы можете импортировать из локального файла или URL-адреса общего ресурса opencode.
-
 ```bash
 opencode import session.json
-opencode import https://opncd.ai/s/abc123
 ```
 
 ---
@@ -564,7 +528,6 @@ opencode можно настроить с помощью переменных с
 
 | Переменная                            | Тип                 | Описание                                                                         |
 | ------------------------------------- | ------------------- | -------------------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | логическое значение | Автоматически делиться сеансами                                                  |
 | `OPENCODE_GIT_BASH_PATH`              | строка              | Путь к исполняемому файлу Git Bash в Windows                                     |
 | `OPENCODE_CONFIG`                     | строка              | Путь к файлу конфигурации                                                        |
 | `OPENCODE_TUI_CONFIG`                 | строка              | Путь к файлу конфигурации TUI                                                    |

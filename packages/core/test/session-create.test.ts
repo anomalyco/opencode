@@ -36,10 +36,14 @@ import { Workspace } from "@opencode/core/workspace"
 import { Expected } from "./lib/session-message"
 import { testEffect } from "./lib/effect"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { initGit } from "./fixture/git"
+import { countingSpawner } from "./fixture/spawn"
 import { offlineModels } from "./fixture/models"
 import { promptLocationNode } from "./fixture/prompt-location"
 import { globalProjectNode } from "./lib/project"
 import { tmpdirScoped } from "./fixture/tmpdir"
+import { makeDurableObjectStorage } from "./fixture/durable-object-storage"
+import { sqliteLayer } from "@opencode/core/database/sqlite.workerd"
 
 const it = testEffect(
   AppNodeBuilder.build(
@@ -57,6 +61,29 @@ const it = testEffect(
       Project.node.replace(globalProjectNode),
       LocationServiceMap.node.replace(promptLocationNode),
       SessionExecution.node.replace(SessionExecution.noopLayer),
+    ],
+  ),
+)
+// Durable Object SQLite, which rejects statements that bind more than 100 parameters.
+const durableIt = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionProjector.node,
+      SessionStore.node,
+      Session.node,
+      SessionTransfer.node,
+      InstructionEntry.node,
+    ]),
+    [
+      Bus.node.replace(Bus.configured({ persist: true })),
+      Project.node.replace(globalProjectNode),
+      LocationServiceMap.node.replace(promptLocationNode),
+      SessionExecution.node.replace(SessionExecution.noopLayer),
+      Database.node.replace(
+        Database.configuredClient(Layer.suspend(() => sqliteLayer({ storage: makeDurableObjectStorage() }))),
+      ),
     ],
   ),
 )
@@ -130,6 +157,40 @@ describe("Session.create", () => {
     ),
   )
 
+  testEffect(Layer.empty).live("repeat Session.create on the same location spawns no git", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => initGit(directory))
+        const counter = countingSpawner()
+        const layer = AppNodeBuilder.build(
+          LayerNode.group([
+            Database.node,
+            Bus.node,
+            Project.node,
+            LocationServiceMap.node,
+            SessionProjector.node,
+            SessionStore.node,
+            Session.node,
+          ]),
+          [
+            Bus.node.replace(Bus.configured({ persist: true })),
+            SessionExecution.node.replace(SessionExecution.noopLayer),
+            offlineModels,
+            counter.node,
+          ],
+        )
+        yield* Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const ref = Location.Ref.make({ directory: AbsolutePath.make(directory) })
+          yield* sessions.create({ location: ref })
+          const before = counter.spawns()
+          yield* sessions.create({ location: ref })
+          expect(counter.spawns()).toBe(before)
+        }).pipe(Effect.provide(layer))
+      }),
+    ),
+  )
+
   projectIt.live("follows the directory's project identity established after creation", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
@@ -158,11 +219,7 @@ describe("Session.create", () => {
           .pipe(Effect.orDie)
         if (!before) return yield* Effect.die(new Error("created session not found"))
 
-        yield* Effect.promise(async () => {
-          await $`git init -q`.cwd(directory)
-          await $`git config user.email test@example.com`.cwd(directory)
-          await $`git config user.name Test`.cwd(directory)
-        })
+        yield* Effect.promise(() => initGit(directory))
         const unborn = yield* projects.resolve(ref.directory)
         const unbornRoot = yield* session.get(created.id)
         const unbornNested = yield* session.get(child.id)
@@ -214,7 +271,7 @@ describe("Session.create", () => {
         })
         expect(aliasAdopted).toMatchObject({
           projectID: project.id,
-          location: aliased,
+          location: nested,
           subpath: RelativePath.make("packages/app"),
         })
         // Adoption is a project-domain fact; the session log records nothing new.
@@ -269,9 +326,7 @@ describe("Session.create", () => {
 
         yield* Effect.promise(async () => {
           for (const root of [nested, outer]) {
-            await $`git init -q`.cwd(root)
-            await $`git config user.email test@example.com`.cwd(root)
-            await $`git config user.name Test`.cwd(root)
+            await initGit(root)
             await $`git commit --allow-empty -qm initial`.cwd(root)
           }
         })
@@ -318,6 +373,17 @@ describe("Session.create", () => {
 
       expect(second.id).not.toBe(first.id)
       expect((yield* session.list()).data).toHaveLength(2)
+    }),
+  )
+
+  it.effect("stores a trailing-slash directory in the same session list", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+
+      const created = yield* session.create({ location: { directory: AbsolutePath.make("/project/") } })
+
+      expect(created.location.directory).toBe(location.directory)
+      expect((yield* session.list({ directory: location.directory })).data.map((item) => item.id)).toEqual([created.id])
     }),
   )
 
@@ -809,9 +875,10 @@ describe("Session.create", () => {
       const session = yield* Session.Service
       const parent = yield* session.create({ location })
 
-      expect(
-        yield* session.fork({ sessionID: parent.id }).pipe(Effect.flip),
-      ).toMatchObject({ _tag: "Session.ForkEmptyError", sessionID: parent.id })
+      expect(yield* session.fork({ sessionID: parent.id }).pipe(Effect.flip)).toMatchObject({
+        _tag: "Session.ForkEmptyError",
+        sessionID: parent.id,
+      })
     }),
   )
 
@@ -926,7 +993,12 @@ describe("Session.create", () => {
       const input = { id, location }
       const created = yield* session.create(input)
 
-      yield* db.update(SessionTable).set({ agent: "build" }).where(eq(SessionTable.id, id)).run().pipe(Effect.orDie)
+      yield* db
+        .update(SessionTable)
+        .set({ agent: Agent.defaultID })
+        .where(eq(SessionTable.id, id))
+        .run()
+        .pipe(Effect.orDie)
 
       expect(yield* session.create(input)).toMatchObject({ id: created.id, agent: "build" })
     }),
@@ -1270,7 +1342,6 @@ describe("SessionTransfer", () => {
       yield* bus.publish(SessionEvent.Compaction.Started, {
         sessionID: source.id,
         reason: "manual",
-        recent: "pending",
       })
 
       expect((yield* transfer.export({ sessionID: source.id })).messages).toMatchObject([Expected.user("Settled")])
@@ -1292,7 +1363,7 @@ describe("SessionTransfer", () => {
       const runningCompactionID = SessionMessage.ID.create()
       const completedCompactionID = SessionMessage.ID.create()
       const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
-      const providerState = { responseId: "summary-response" }
+      const native = { responseId: "summary-response" }
 
       yield* transfer.import({
         data: {
@@ -1339,7 +1410,6 @@ describe("SessionTransfer", () => {
               status: "running",
               reason: "manual",
               summary: "pending",
-              recent: "pending",
               time: { created: DateTime.makeUnsafe(8) },
             },
             {
@@ -1348,9 +1418,8 @@ describe("SessionTransfer", () => {
               status: "completed",
               reason: "manual",
               model,
-              providerState,
+              native,
               summary: "summary",
-              recent: "recent",
               time: { created: DateTime.makeUnsafe(9) },
             },
           ],
@@ -1365,10 +1434,10 @@ describe("SessionTransfer", () => {
         completedCompactionID,
       ])
       expect(yield* Bus.latestSequence(db, sessionID)).toBe(4)
-      expect((yield* transfer.export({ sessionID })).messages.at(-1)).toMatchObject({ model, providerState })
+      expect((yield* transfer.export({ sessionID })).messages.at(-1)).toMatchObject({ model, native })
       expect((yield* transfer.export({ sessionID, sanitize: true })).messages.at(-1)).toMatchObject({
         model,
-        providerState: { redacted: `compaction-provider-state:${completedCompactionID}` },
+        native: { redacted: `compaction-native:${completedCompactionID}` },
       })
     }),
   )
@@ -1398,6 +1467,7 @@ describe("SessionTransfer", () => {
             time: {
               ...template.time,
               updated: DateTime.makeUnsafe(100),
+              busy: DateTime.makeUnsafe(120),
               idle: DateTime.makeUnsafe(200),
               viewed: DateTime.makeUnsafe(150),
             },
@@ -1439,6 +1509,7 @@ describe("SessionTransfer", () => {
       })
       expect(imported.time).toMatchObject({
         updated: DateTime.makeUnsafe(1_000),
+        busy: DateTime.makeUnsafe(120),
         idle: DateTime.makeUnsafe(200),
         viewed: DateTime.makeUnsafe(150),
       })
@@ -1448,7 +1519,11 @@ describe("SessionTransfer", () => {
       ])
       expect(yield* Bus.latestSequence(db, sessionID)).toBe(2)
       const exported = yield* transfer.export({ sessionID })
-      expect(exported.info.time).toMatchObject({ idle: DateTime.makeUnsafe(200), viewed: DateTime.makeUnsafe(150) })
+      expect(exported.info.time).toMatchObject({
+        busy: DateTime.makeUnsafe(120),
+        idle: DateTime.makeUnsafe(200),
+        viewed: DateTime.makeUnsafe(150),
+      })
       expect(exported.messages).toEqual(messages)
       const sanitized = yield* transfer.export({ sessionID, sanitize: true })
       expect(sanitized.info.time).toMatchObject({ idle: DateTime.makeUnsafe(200), viewed: DateTime.makeUnsafe(150) })
@@ -1487,7 +1562,7 @@ describe("SessionTransfer", () => {
     }),
   )
 
-  it.effect("clamps an imported viewed watermark to its idle transition", () =>
+  it.effect("clamps imported busy and viewed watermarks to their idle transition", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
       const transfer = yield* SessionTransfer.Service
@@ -1500,6 +1575,7 @@ describe("SessionTransfer", () => {
             outcome: "succeeded",
             time: {
               ...template.time,
+              busy: DateTime.makeUnsafe(300),
               idle: DateTime.makeUnsafe(200),
               viewed: DateTime.makeUnsafe(250),
             },
@@ -1509,8 +1585,36 @@ describe("SessionTransfer", () => {
         location,
       })
 
-      expect(imported.time).toMatchObject({ idle: DateTime.makeUnsafe(200), viewed: DateTime.makeUnsafe(200) })
+      expect(imported.time).toMatchObject({
+        busy: DateTime.makeUnsafe(200),
+        idle: DateTime.makeUnsafe(200),
+        viewed: DateTime.makeUnsafe(200),
+      })
       expect(imported.outcome).toBe("succeeded")
+    }),
+  )
+
+  durableIt.effect("imports a long transcript in statements under 100 bound parameters", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const transfer = yield* SessionTransfer.Service
+      const template = yield* session.create({ location })
+      const sessionID = Session.ID.create()
+      const messages = Array.from({ length: 30 }, (_, index) =>
+        SessionMessage.Assistant.make({
+          id: SessionMessage.ID.create(),
+          type: "assistant",
+          agent: Agent.defaultID,
+          model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
+          content: Array.from({ length: 30 }, (_, ordinal) => ({ type: "text" as const, text: `${index}:${ordinal}` })),
+          time: { created: DateTime.makeUnsafe(index), completed: DateTime.makeUnsafe(index) },
+        }),
+      )
+
+      yield* transfer.import({ data: { info: { ...template, id: sessionID }, messages }, location })
+      expect(yield* session.messages({ sessionID, order: "asc" })).toMatchObject(
+        messages.map((message) => ({ id: message.id, content: message.content })),
+      )
     }),
   )
 })

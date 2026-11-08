@@ -1,6 +1,6 @@
 import type { HttpRecorder } from "@opencode/http-recorder"
 import { Effect } from "effect"
-import { Media } from "../../src/index.js"
+import { Media } from "../../src/effect.js"
 
 const fixture = (name: string) =>
   Effect.promise(() => Bun.file(new URL(`../fixtures/audio/${name}`, import.meta.url)).bytes()).pipe(

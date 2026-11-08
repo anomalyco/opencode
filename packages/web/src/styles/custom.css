@@ -309,8 +309,27 @@ ol {
   padding-inline-start: 1.5rem !important;
 }
 
+/* Starlight 0.41 lays tabs out with flexbox and draws the underline as a box shadow. Keep the earlier border layout so tab heights, underline colors and focus rings stay the same. */
+.sl-markdown-content .tab {
+  display: list-item;
+  margin-bottom: -2px;
+}
+
+.sl-markdown-content .tab > [role="tab"] {
+  padding-top: 0;
+  line-height: var(--sl-line-height);
+  box-shadow: none;
+  border-bottom-width: 2px;
+  border-bottom-style: solid;
+}
+
 .sl-markdown-content .tab > [role="tab"][aria-selected="true"] {
   border-color: var(--color-text-strong);
+}
+
+/* Starlight 0.41 also spaces a nested list that ends a list item; earlier versions didn't. */
+.sl-markdown-content li > :is(ul, ol):last-child {
+  margin-bottom: 0;
 }
 
 .social-icons a svg {
@@ -438,4 +457,76 @@ nav.sidebar ul.top-level > li > details > summary .group-label > span {
     font-weight: var(--shiki-dark-font-weight) !important;
     text-decoration: var(--shiki-dark-text-decoration) !important;
   }
+}
+
+/* Starlight 0.41 relaxed this to `break-word`, so long inline code no longer shrinks: tables reflow and asides overflow on phones. Keep the earlier wrapping. */
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+:not(pre) > code {
+  overflow-wrap: anywhere;
+}
+
+/* Starlight 0.41 adds automatic spacing between CJK and Latin characters. */
+[lang] {
+  text-autospace: no-autospace;
+}
+
+/* Starlight 0.41 dims the language and theme picker labels. */
+:is(starlight-lang-select, starlight-theme-select) label {
+  color: var(--sl-color-gray-1);
+}
+
+:is(starlight-lang-select, starlight-theme-select) label:hover {
+  color: var(--sl-color-gray-2);
+}
+
+/* Starlight 0.41 replaced the fade on mobile menu social links with a color change. */
+.mobile-preferences .social-icons a:hover {
+  opacity: 0.66;
+}
+
+/* The theme styles the search dialog through `aria-label="Search"`, which only matches English pages. Apply the same styles in every language.
+   The CSS minifier keeps only the last of a duplicated prefixed/unprefixed pair, so the unprefixed one goes last. */
+site-search dialog {
+  border: 1px solid var(--sl-color-border);
+  border-radius: 0;
+  background-color: var(--sl-color-bg);
+  box-shadow: var(--sl-shadow-md);
+}
+
+site-search dialog[open] {
+  animation: fadeInScaleUp 0.2s ease forwards;
+}
+
+site-search dialog::backdrop {
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  animation: fadeInBackdrop 0.2s ease forwards;
+}
+
+mobile-starlight-toc nav {
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+/* Starlight 0.41 keeps the "On this page" column at least a sidebar wide, which narrows the content between 1160px and 1320px. Keep the earlier proportional widths. */
+@media (min-width: 72rem) {
+  .right-sidebar-container {
+    width: calc(var(--sl-sidebar-width) + (100% - var(--sl-content-width) - var(--sl-sidebar-width)) / 2);
+  }
+
+  [data-has-sidebar][data-has-toc] .main-pane {
+    width: calc(var(--sl-content-width) + (100% - var(--sl-content-width) - var(--sl-sidebar-width)) / 2);
+  }
+}
+
+/* Starlight 0.41 turns off iOS text inflation in landscape; keep the browser default. */
+html {
+  -webkit-text-size-adjust: auto;
+  text-size-adjust: auto;
 }

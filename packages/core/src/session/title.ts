@@ -1,7 +1,7 @@
 export * as SessionTitle from "./title.js"
 
 import { isDeepStrictEqual } from "node:util"
-import { LLMClient, LLMEvent, Message, SystemPart } from "@opencode/ai"
+import { LLMClient, LLMEvent, Message, SystemPart } from "@opencode/ai/effect"
 import type { Agent } from "@opencode/schema/agent"
 import { Context, DateTime, Effect, Layer, Stream } from "effect"
 import { Database } from "../database/database.js"
@@ -30,6 +30,11 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionTitle") {}
 
 const truncate = (value: string) => (value.length <= MAX_LENGTH ? value : `${value.slice(0, MAX_LENGTH - 3)}...`)
+// Framing the input as text to name keeps models from answering or carrying out the request instead.
+const messagePrompt = (text: string) =>
+  `Here is the first message of the conversation:\n\n<message>\n${text}\n</message>\n\nReply with only the title.`
+const conversationPrompt = (text: string) =>
+  `Here is the conversation so far:\n\n<conversation>\n${text}\n</conversation>\n\nReply with only the title.`
 export const isUntitled = (session: SessionSchema.Info) =>
   isExactRootFallback({
     title: session.title,
@@ -51,7 +56,8 @@ export const layer = Layer.effect(
       readonly text: string
       readonly model: SessionRunnerModel.Resolved
     }) {
-      const chunks: string[] = []
+      const chunks: Array<{ id: string; text: string }> = []
+      const commentary = new Set<string>()
       let failed = false
       let usage: SessionUsage.Recorded | undefined
       const recordUsage = Effect.suspend(() =>
@@ -71,10 +77,16 @@ export const layer = Layer.effect(
         messages: [Message.user(input.text)],
       })
       if (prepared.event.result !== undefined) return prepared.event.result
+      const metadataKey = prepared.request.model.route.providerMetadataKey ?? prepared.request.model.provider
       yield* llm.stream(prepared.request, prepared.options).pipe(
         Stream.runForEach((event) => {
-          if (LLMEvent.is.providerError(event)) failed = true
-          if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
+          // Responses can classify a text block only when it ends; filter after the stream completes.
+          if (LLMEvent.is.textStart(event) || LLMEvent.is.textDelta(event) || LLMEvent.is.textEnd(event)) {
+            const phase = event.providerMetadata?.[metadataKey]?.phase
+            if (phase === "commentary") commentary.add(event.id)
+            if (phase === "final_answer" || phase === null) commentary.delete(event.id)
+          }
+          if (LLMEvent.is.textDelta(event)) chunks.push({ id: event.id, text: event.text })
           if (LLMEvent.is.stepFinish(event)) {
             const step = SessionUsage.record(event.usage, input.model.cost)
             usage = usage ? SessionUsage.add(usage, step) : step
@@ -91,6 +103,8 @@ export const layer = Layer.effect(
       yield* recordUsage
       if (failed) return
       return chunks
+        .filter((chunk) => !commentary.has(chunk.id))
+        .map((chunk) => chunk.text)
         .join("")
         .split("\n")
         .map((line) => line.trim())
@@ -117,13 +131,14 @@ export const layer = Layer.effect(
                   return text ? [`Assistant: ${text}`] : []
                 })
                 .join("\n\n")
-              if (!recent) return original
+              if (!recent) return conversationPrompt(original)
               const prefix = `${original}\n\nRecent conversation:\n`
-              return `${prefix}${recent.slice(-(MAX_CONTEXT_LENGTH - prefix.length))}`
+              const budget = MAX_CONTEXT_LENGTH - conversationPrompt("").length - prefix.length
+              return conversationPrompt(`${prefix}${recent.slice(-budget)}`)
             }),
-            Effect.orElseSucceed(() => firstUser.text),
+            Effect.orElseSucceed(() => messagePrompt(firstUser.text)),
           )
-        : firstUser.text
+        : messagePrompt(firstUser.text)
       const selection = yield* context.selectTitle(session)
       if (!selection) return
       const title =

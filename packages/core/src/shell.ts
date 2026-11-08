@@ -44,11 +44,20 @@ type Active = {
   file: string
   size: number
   newlines: number
+  // Byte offsets where the last two lines start, so a truncation notice can size a cut-off line.
+  lineStarts: [number, number]
   // Resolves with the terminal Info once the command exits, times out, or is killed. A wait
   // started after termination resolves immediately from the already-completed deferred.
   done: Deferred.Deferred<Info, NotFoundError>
   timeoutFiber?: Fiber.Fiber<void>
   timeout?: (duration: number) => Effect.Effect<void>
+}
+
+type Ended = {
+  status: "exited" | "timeout"
+  exit?: number
+  signal?: string
+  completed: number
 }
 
 /**
@@ -72,7 +81,8 @@ export interface Interface {
   readonly wait: (id: Shell.ID) => Effect.Effect<Shell.Info, NotFoundError>
   // A known shell's terminal state and bounded tail. Missing capture remains distinct from its exit status.
   readonly result: (started: Shell.Info) => Effect.Effect<ShellResult.Result>
-  // Replaces the running command's timeout from now; zero clears it.
+  // Replaces the running command's timeout from now; zero clears it. Ignored once the command has
+  // ended or timed out, even while its process is still being killed or its output captured.
   readonly timeout: (id: Shell.ID, duration: number) => Effect.Effect<Shell.Info, NotFoundError>
   readonly output: (id: Shell.ID, input?: Shell.OutputInput) => Effect.Effect<Shell.Output, NotFoundError>
   readonly remove: (id: Shell.ID) => Effect.Effect<void, NotFoundError>
@@ -85,7 +95,7 @@ export const cleanup = Effect.fn("Shell.cleanup")(function* () {
   const global = yield* Global.Service
   const directory = path.join(global.data, DIRECTORY)
   const projects = yield* fs.readDirectoryEntries(directory).pipe(
-    Effect.map((entries) => entries.filter((entry) => entry.type === "directory")),
+    Effect.map((entries) => entries.filter((entry) => entry.type === "Directory")),
     Effect.orElseSucceed(() => []),
   )
   const files = yield* Effect.forEach(
@@ -94,7 +104,7 @@ export const cleanup = Effect.fn("Shell.cleanup")(function* () {
       fs.readDirectoryEntries(path.join(directory, project.name)).pipe(
         Effect.map((entries) =>
           entries.flatMap((entry) =>
-            entry.type === "file" && /^sh_[0-9a-f]{12}.*\.out$/.test(entry.name)
+            entry.type === "File" && /^sh_[0-9a-f]{12}.*\.out$/.test(entry.name)
               ? [path.join(directory, project.name, entry.name)]
               : [],
           ),
@@ -166,6 +176,8 @@ const layer = () =>
         // Unblock any wait still pending when the command is removed before it terminated.
         yield* Deferred.fail(command.done, new NotFoundError({ id }))
         yield* Effect.promise(() => unlink(command.file).catch(() => {}))
+        // Every shell reports exactly one exit; removing a running one ends it as killed.
+        if (command.info.status === "running") yield* bus.publish(Shell.Event.Exited, { id, status: "killed" })
         yield* bus.publish(Shell.Event.Deleted, { id })
       })
 
@@ -195,31 +207,35 @@ const layer = () =>
         return command.info
       })
 
+      const readRange = (file: string, start: number, length: number) =>
+        length <= 0
+          ? Effect.succeed(Buffer.alloc(0))
+          : Effect.promise(
+              () =>
+                new Promise<Buffer>((resolve) => {
+                  const buffer = Buffer.alloc(length)
+                  const stream = createReadStream(file, { start, end: start + length - 1 })
+                  let offset = 0
+                  stream.on("data", (chunk: string | Buffer) => {
+                    const bytes = Buffer.from(chunk)
+                    bytes.copy(buffer, offset)
+                    offset += bytes.length
+                  })
+                  stream.on("end", () => resolve(buffer.subarray(0, offset)))
+                  stream.on("error", () => resolve(buffer.subarray(0, 0)))
+                }),
+            )
+
       const output = Effect.fnUntraced(function* (id: Shell.ID, input?: Shell.OutputInput) {
         const command = yield* require(id)
         const cursor = input?.cursor ?? 0
         const limit = input?.limit ?? 65536
         if (cursor >= command.size) return { output: "", cursor: command.size, size: command.size, truncated: false }
         const start = Math.max(0, cursor)
-        const length = Math.min(limit, command.size - start)
-        const buffer = Buffer.alloc(length)
-        const bytesRead = yield* Effect.promise(
-          () =>
-            new Promise<number>((resolve) => {
-              const stream = createReadStream(command.file, { start, end: start + length - 1 })
-              let offset = 0
-              stream.on("data", (chunk: string | Buffer) => {
-                const bytes = Buffer.from(chunk)
-                bytes.copy(buffer, offset)
-                offset += bytes.length
-              })
-              stream.on("end", () => resolve(offset))
-              stream.on("error", () => resolve(0))
-            }),
-        )
+        const bytes = yield* readRange(command.file, start, Math.min(limit, command.size - start))
         return {
-          output: buffer.subarray(0, bytesRead).toString("utf8"),
-          cursor: start + bytesRead,
+          output: bytes.toString("utf8"),
+          cursor: start + bytes.length,
           size: command.size,
           truncated: false,
         }
@@ -235,18 +251,36 @@ const layer = () =>
           const limits = Config.latest(yield* config.entries(), "tool_output")
           const maxLines = limits?.max_lines ?? ToolOutput.MAX_LINES
           const maxBytes = limits?.max_bytes ?? ToolOutput.MAX_BYTES
-          const latest = yield* output(info.id, { cursor: Number.MAX_SAFE_INTEGER })
-          const page = yield* output(info.id, { cursor: Math.max(0, latest.size - maxBytes), limit: maxBytes })
-          const lines = page.output.split("\n")
-          if (page.output.endsWith("\n")) lines.pop()
-          const truncated = latest.size > maxBytes || lines.length > maxLines
-          const text = lines.length > maxLines ? lines.slice(-maxLines).join("\n") : page.output
-          const total = (yield* require(info.id)).newlines + (page.output.endsWith("\n") ? 0 : 1)
-          const shown = Math.min(lines.length, maxLines)
-          const notice = truncated
-            ? `\n\n[showing lines ${total - shown + 1}-${total} of ${total}; full output saved to ${info.file}]`
-            : ""
-          return { output: `${text || "(no output)"}${notice}`, truncated }
+          const command = yield* require(info.id)
+          const start = Math.max(0, command.size - maxBytes)
+          // Read the byte before the window too, to tell whether the window starts on a line boundary.
+          const before = Math.max(0, start - 1)
+          const window = yield* readRange(command.file, before, command.size - before)
+          const page = window.subarray(charBoundary(window, start - before)).toString("utf8")
+          const partial = start > 0 && window[0] !== 10
+          const endsWithNewline = page.endsWith("\n")
+          const lines = page.split("\n")
+          if (endsWithNewline) lines.pop()
+          const total = command.newlines + (endsWithNewline ? 0 : 1)
+          const suffix = `full output saved to ${info.file}]`
+          if (partial && lines.length === 1) {
+            const lineStart = endsWithNewline ? command.lineStarts[0] : command.lineStarts[1]
+            const lineSize = command.size - (endsWithNewline ? 1 : 0) - lineStart
+            const shownSize = Buffer.byteLength(lines[0])
+            return {
+              output: `${lines[0]}\n\n[showing the last ${formatSize(shownSize)} of line ${total} (${formatSize(lineSize)}); ${suffix}`,
+              truncated: true,
+            }
+          }
+          if (start > 0 || lines.length > maxLines) {
+            // A window that starts mid-line drops that partial line so the line numbers stay exact.
+            const kept = lines.slice(-Math.min(maxLines, lines.length - (partial ? 1 : 0)))
+            return {
+              output: `${kept.join("\n")}\n\n[showing lines ${total - kept.length + 1}-${total} of ${total}; ${suffix}`,
+              truncated: true,
+            }
+          }
+          return { output: page || "(no output)", truncated: false }
         }).pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(undefined)))
         return { info, capture }
       })
@@ -316,6 +350,7 @@ const layer = () =>
                 file,
                 size: 0,
                 newlines: 0,
+                lineStarts: [0, 0],
                 done: Deferred.makeUnsafe<Info, NotFoundError>(),
               }
               commands.set(id, command)
@@ -326,10 +361,13 @@ const layer = () =>
                 Stream.runForEach((chunk: Uint8Array) =>
                   Effect.sync(() => {
                     stream.write(chunk)
-                    command.size += chunk.length
                     // Count while streaming so truncation notices never rescan the output file.
-                    for (let index = chunk.indexOf(10); index !== -1; index = chunk.indexOf(10, index + 1))
+                    for (let index = chunk.indexOf(10); index !== -1; index = chunk.indexOf(10, index + 1)) {
                       command.newlines++
+                      command.lineStarts[0] = command.lineStarts[1]
+                      command.lineStarts[1] = command.size + index + 1
+                    }
+                    command.size += chunk.length
                   }),
                 ),
               )
@@ -353,53 +391,28 @@ const layer = () =>
                   }),
               )
 
-              const finish = (status: Info["status"], exit?: number, beforeWait = Effect.void, signal?: string) =>
-                Effect.gen(function* () {
-                  if (command.info.status !== "running") return
-                  command.info = produce(command.info, (draft) => {
-                    draft.status = status
-                    if (exit !== undefined) draft.exit = exit
-                    if (signal !== undefined) draft.signal = signal
-                    draft.time.completed = Date.now()
-                  })
-                  yield* beforeWait
-                  yield* outputDone.await
-                  // Resolve waiters with the terminal Info before any retention eviction, so an evicted
-                  // command still reports success rather than the removal NotFoundError. This runs before
-                  // the timeout-fiber interrupt below, which on the timeout path would otherwise cancel
-                  // this very fiber (finish is invoked by the timeout fiber) before waiters are resolved.
-                  yield* Deferred.succeed(command.done, command.info)
-                  yield* bus.publish(Shell.Event.Exited, {
-                    id,
-                    ...(exit !== undefined ? { exit } : {}),
-                    status,
-                  })
-                  exitOrder.push(id)
-                  while (exitOrder.length > EXITED_LIMIT) {
-                    const oldest = exitOrder[0]
-                    if (!oldest) break
-                    yield* removeCommand(oldest)
-                  }
-                  // Keep exited history data-only. Interrupt last because finish may run on the timeout fiber.
-                  const timeoutFiber = command.timeoutFiber
-                  command.timeout = undefined
-                  command.timeoutFiber = undefined
-                  if (timeoutFiber) yield* Fiber.interrupt(timeoutFiber)
-                })
+              // The process exit and the timeout race to record how the command ended; the first wins.
+              const ended = Deferred.makeUnsafe<Ended>()
+              const end = (outcome: Omit<Ended, "completed">) =>
+                Effect.suspend(() => Deferred.succeed(ended, { ...outcome, completed: Date.now() }))
 
               command.timeout = (duration) =>
                 Effect.gen(function* () {
+                  if (Deferred.isDoneUnsafe(ended)) return
                   if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
                   command.timeoutFiber = undefined
-                  if (duration === 0 || command.info.status !== "running") return
+                  if (duration === 0) return
                   command.timeoutFiber = runFork(
                     Effect.sleep(Duration.millis(duration)).pipe(
-                      Effect.flatMap(() =>
-                        finish(
-                          "timeout",
-                          undefined,
-                          handle.kill({ forceKillAfter: Duration.seconds(3) }).pipe(Effect.catch(() => Effect.void)),
-                        ),
+                      // A recorded timeout must always kill. The kill runs detached, so interrupting this
+                      // timer (retime, remove, teardown) neither cancels it nor waits for the process to die.
+                      Effect.andThen(
+                        Effect.gen(function* () {
+                          if (!(yield* end({ status: "timeout" }))) return
+                          runFork(
+                            handle.kill({ forceKillAfter: Duration.seconds(3) }).pipe(Effect.catch(() => Effect.void)),
+                          )
+                        }).pipe(Effect.uninterruptible),
                       ),
                     ),
                   )
@@ -407,18 +420,53 @@ const layer = () =>
 
               yield* command.timeout(invocation.timeout)
 
+              // The process exits even after a timeout kill, so this fiber always publishes the outcome.
               runFork(
-                handle.exitCode.pipe(
-                  Effect.flatMap((code) => finish("exited", code)),
-                  Effect.catch((error) =>
-                    finish(
-                      "exited",
-                      undefined,
-                      Effect.void,
-                      error.cause instanceof CrossSpawnSpawner.KilledBySignal ? error.cause.signal : undefined,
+                Effect.gen(function* () {
+                  const exited = yield* handle.exitCode.pipe(
+                    Effect.map((code) => ({ exit: code, signal: undefined })),
+                    Effect.catch((error) =>
+                      Effect.succeed({
+                        exit: undefined,
+                        signal:
+                          error.cause instanceof CrossSpawnSpawner.KilledBySignal ? error.cause.signal : undefined,
+                      }),
                     ),
-                  ),
-                ),
+                  )
+                  yield* end({ status: "exited", ...exited })
+                  // A timeout keeps its status but still records how the killed process exited.
+                  const outcome = { ...(yield* Deferred.await(ended)), ...exited }
+                  // Report the terminal status only once captured output is complete, so a reader that
+                  // sees it never reads a partial file.
+                  yield* outputDone.await
+                  // A removed command already failed its waiters and published its exit and deletion.
+                  if (commands.get(id) !== command) return
+                  command.info = produce(command.info, (draft) => {
+                    draft.status = outcome.status
+                    if (outcome.exit !== undefined) draft.exit = outcome.exit
+                    if (outcome.signal !== undefined) draft.signal = outcome.signal
+                    draft.time.completed = outcome.completed
+                  })
+                  // Resolve waiters before retention eviction, so an evicted command still reports its
+                  // terminal Info rather than the removal NotFoundError.
+                  yield* Deferred.succeed(command.done, command.info)
+                  yield* bus.publish(Shell.Event.Exited, {
+                    id,
+                    ...(outcome.exit !== undefined ? { exit: outcome.exit } : {}),
+                    status: outcome.status,
+                  })
+                  exitOrder.push(id)
+                  while (exitOrder.length > EXITED_LIMIT) {
+                    const oldest = exitOrder[0]
+                    if (!oldest) break
+                    yield* removeCommand(oldest)
+                  }
+                  // Keep exited history data-only.
+                  const timeoutFiber = command.timeoutFiber
+                  command.timeout = undefined
+                  command.timeoutFiber = undefined
+                  if (timeoutFiber) yield* Fiber.interrupt(timeoutFiber)
+                }),
               )
 
               yield* bus.publish(Shell.Event.Created, { info })
@@ -437,6 +485,18 @@ const layer = () =>
       return Service.of({ create, list, get, wait, result, timeout, output, remove })
     }),
   )
+
+// Moves past UTF-8 continuation bytes (at most 3) so a byte cut never splits a character.
+function charBoundary(bytes: Buffer, offset: number) {
+  const limit = Math.min(bytes.length, offset + 3)
+  for (let index = offset; index < limit; index++) if ((bytes[index] & 0xc0) !== 0x80) return index
+  return limit
+}
+
+function formatSize(bytes: number) {
+  const kb = bytes / 1024
+  return kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${Math.round(kb)} KB`
+}
 
 export const node = makeLocationNode({
   service: Service,

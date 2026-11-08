@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import path from "path"
 import { Cause, Clock, Duration, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Credential } from "@opencode/core/credential"
@@ -8,6 +9,9 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { Integration } from "@opencode/core/integration"
 import { State } from "@opencode/core/state"
+import { withEnv } from "./fixture/env"
+import { tmpdirScoped } from "./fixture/tmpdir"
+import { eventually } from "./lib/eventually"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Integration.node, Credential.node, Bus.node])))
@@ -16,6 +20,7 @@ const failingCredentialNode = makeGlobalNode({
   layer: Layer.succeed(
     Credential.Service,
     Credential.Service.of({
+      lock: () => Effect.die("unused Credential.lock"),
       all: () => Effect.succeed([]),
       list: () => Effect.succeed([]),
       get: () => Effect.undefined,
@@ -30,20 +35,6 @@ const failingCredentialNode = makeGlobalNode({
 const failingIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([Integration.node, Bus.node]), [Credential.node.replace(failingCredentialNode)]),
 )
-
-function eventually<A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-  predicate: (value: A) => boolean,
-  remaining = 1000,
-): Effect.Effect<A, E | Error, R> {
-  return Effect.gen(function* () {
-    const value = yield* effect
-    if (predicate(value)) return value
-    if (remaining === 0) return yield* Effect.fail(new Error("Timed out waiting for value"))
-    yield* Effect.promise(() => Bun.sleep(1))
-    return yield* eventually(effect, predicate, remaining - 1)
-  })
-}
 
 describe("Integration", () => {
   it.effect("registers integrations through the editor", () =>
@@ -184,7 +175,7 @@ describe("Integration", () => {
         expect.objectContaining({
           integrationID,
           label: "Work",
-          value: Credential.Key.make({ type: "key", key: "secret", configuration: { accountId: "account" } }),
+          value: Credential.Key.make({ type: "key", key: "secret", metadata: { accountId: "account" } }),
         }),
       ])
       expect((yield* Fiber.join(created)).map((event) => ({ type: event.type, data: event.data }))).toEqual([
@@ -224,6 +215,8 @@ describe("Integration", () => {
       const credentials = yield* Credential.Service
       const integrationID = Integration.ID.make("company")
       const methodID = Integration.MethodID.make("login")
+      // The command prints its secret only after the test has seen it pending, however slow the machine is.
+      const release = path.join((yield* tmpdirScoped()).path, "release")
       yield* integrations.transform((editor) =>
         editor.method.update({
           integrationID,
@@ -234,7 +227,7 @@ describe("Integration", () => {
             command: [
               process.execPath,
               "-e",
-              'console.error("https://example.com/login"); await Bun.sleep(50); console.log("secret")',
+              `console.error("https://example.com/login"); while (!(await Bun.file(${JSON.stringify(release)}).exists())) await Bun.sleep(10); console.log("secret")`,
             ],
           },
         }),
@@ -246,6 +239,7 @@ describe("Integration", () => {
         (status) => status.status === "pending" && status.message?.includes("https://example.com/login") === true,
       )
       expect(pending).toMatchObject({ status: "pending", message: "https://example.com/login\n" })
+      yield* Effect.promise(() => Bun.write(release, ""))
 
       expect(
         yield* eventually(
@@ -559,124 +553,112 @@ describe("Integration", () => {
 
   it.effect("projects credential and env connections", () => {
     const integrationID = Integration.ID.make("acme")
-    return Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const previous = process.env.INTEGRATION_TEST_ACME_KEY
-        process.env.INTEGRATION_TEST_ACME_KEY = "secret"
-        delete process.env.INTEGRATION_TEST_ACME_MISSING
-        return previous
-      }),
-      () =>
-        Effect.gen(function* () {
-          const integrations = yield* Integration.Service
-          const credentials = yield* Credential.Service
-          yield* integrations.transform((editor) =>
-            editor.method.update({
-              integrationID,
-              method: {
-                type: "env",
-                names: ["INTEGRATION_TEST_ACME_KEY", "INTEGRATION_TEST_ACME_MISSING"],
-              },
-            }),
-          )
-          const archived = yield* credentials.create({
+    return withEnv({ INTEGRATION_TEST_ACME_KEY: "secret", INTEGRATION_TEST_ACME_MISSING: undefined }, () =>
+      Effect.gen(function* () {
+        const integrations = yield* Integration.Service
+        const credentials = yield* Credential.Service
+        yield* integrations.transform((editor) =>
+          editor.method.update({
             integrationID,
-            label: "Archived",
-            value: Credential.Key.make({ type: "key", key: "c" }),
-          })
-          const work = yield* credentials.create({
-            integrationID,
-            label: "Work",
-            value: Credential.Key.make({ type: "key", key: "a" }),
-          })
-          const personal = yield* credentials.create({
-            integrationID,
-            label: "Personal",
-            value: Credential.Key.make({ type: "key", key: "b" }),
-          })
+            method: {
+              type: "env",
+              names: ["INTEGRATION_TEST_ACME_KEY", "INTEGRATION_TEST_ACME_MISSING"],
+            },
+          }),
+        )
+        const archived = yield* credentials.create({
+          integrationID,
+          label: "Archived",
+          value: Credential.Key.make({ type: "key", key: "c" }),
+        })
+        const work = yield* credentials.create({
+          integrationID,
+          label: "Work",
+          value: Credential.Key.make({ type: "key", key: "a" }),
+        })
+        const personal = yield* credentials.create({
+          integrationID,
+          label: "Personal",
+          value: Credential.Key.make({ type: "key", key: "b" }),
+        })
 
-          // Stored credentials and detected env vars appear as connections.
-          expect((yield* integrations.get(integrationID))?.connections).toEqual([
-            {
-              type: "credential",
-              method: "key",
-              id: personal.id,
-              label: "Personal",
-            },
-            {
-              type: "credential",
-              method: "key",
-              id: work.id,
-              label: "Work",
-            },
-            {
-              type: "credential",
-              method: "key",
-              id: archived.id,
-              label: "Archived",
-            },
-            { type: "env", name: "INTEGRATION_TEST_ACME_KEY" },
-          ])
-          expect(yield* integrations.connection.active(integrationID)).toEqual({
+        // Stored credentials and detected env vars appear as connections.
+        expect((yield* integrations.get(integrationID))?.connections).toEqual([
+          {
             type: "credential",
             method: "key",
             id: personal.id,
             label: "Personal",
-          })
-
-          const bus = yield* Bus.Service
-          const events = new Array<{ type: string; data: unknown }>()
-          yield* bus.listen((event) => Effect.sync(() => events.push({ type: event.type, data: event.data })))
-          yield* integrations.connection.activate(work.id)
-
-          expect(yield* integrations.connection.active(integrationID)).toEqual({
+          },
+          {
             type: "credential",
             method: "key",
             id: work.id,
             label: "Work",
-          })
-          expect((yield* integrations.get(integrationID))?.connections.map((connection) => connection.type)).toEqual([
-            "credential",
-            "credential",
-            "credential",
-            "env",
-          ])
-          expect(events).toEqual([
-            { type: Credential.Event.Switched.type, data: { credentialID: work.id, integrationID } },
-          ])
-
-          yield* integrations.connection.remove(archived.id)
-          expect(events).toEqual([
-            { type: Credential.Event.Switched.type, data: { credentialID: work.id, integrationID } },
-            { type: Credential.Event.Updated.type, data: {} },
-          ])
-
-          yield* integrations.connection.remove(work.id)
-          expect(yield* integrations.connection.active(integrationID)).toEqual({
+          },
+          {
             type: "credential",
             method: "key",
-            id: personal.id,
-            label: "Personal",
-          })
-          yield* integrations.connection.remove(personal.id)
-          expect(yield* integrations.connection.active(integrationID)).toEqual({
-            type: "env",
-            name: "INTEGRATION_TEST_ACME_KEY",
-          })
-          expect(events).toEqual([
-            { type: Credential.Event.Switched.type, data: { credentialID: work.id, integrationID } },
-            { type: Credential.Event.Updated.type, data: {} },
-            { type: Credential.Event.Updated.type, data: {} },
-            { type: Credential.Event.Switched.type, data: { credentialID: personal.id, integrationID } },
-            { type: Credential.Event.Updated.type, data: {} },
-            { type: Credential.Event.Switched.type, data: { credentialID: null, integrationID } },
-          ])
-        }),
-      (previous) =>
-        Effect.sync(() => {
-          if (previous === undefined) delete process.env.INTEGRATION_TEST_ACME_KEY
-          else process.env.INTEGRATION_TEST_ACME_KEY = previous
-        }),
+            id: archived.id,
+            label: "Archived",
+          },
+          { type: "env", name: "INTEGRATION_TEST_ACME_KEY" },
+        ])
+        expect(yield* integrations.connection.active(integrationID)).toEqual({
+          type: "credential",
+          method: "key",
+          id: personal.id,
+          label: "Personal",
+        })
+
+        const bus = yield* Bus.Service
+        const events = new Array<{ type: string; data: unknown }>()
+        yield* bus.listen((event) => Effect.sync(() => events.push({ type: event.type, data: event.data })))
+        yield* integrations.connection.activate(work.id)
+
+        expect(yield* integrations.connection.active(integrationID)).toEqual({
+          type: "credential",
+          method: "key",
+          id: work.id,
+          label: "Work",
+        })
+        expect((yield* integrations.get(integrationID))?.connections.map((connection) => connection.type)).toEqual([
+          "credential",
+          "credential",
+          "credential",
+          "env",
+        ])
+        expect(events).toEqual([
+          { type: Credential.Event.Switched.type, data: { credentialID: work.id, integrationID } },
+        ])
+
+        yield* integrations.connection.remove(archived.id)
+        expect(events).toEqual([
+          { type: Credential.Event.Switched.type, data: { credentialID: work.id, integrationID } },
+          { type: Credential.Event.Updated.type, data: {} },
+        ])
+
+        yield* integrations.connection.remove(work.id)
+        expect(yield* integrations.connection.active(integrationID)).toEqual({
+          type: "credential",
+          method: "key",
+          id: personal.id,
+          label: "Personal",
+        })
+        yield* integrations.connection.remove(personal.id)
+        expect(yield* integrations.connection.active(integrationID)).toEqual({
+          type: "env",
+          name: "INTEGRATION_TEST_ACME_KEY",
+        })
+        expect(events).toEqual([
+          { type: Credential.Event.Switched.type, data: { credentialID: work.id, integrationID } },
+          { type: Credential.Event.Updated.type, data: {} },
+          { type: Credential.Event.Updated.type, data: {} },
+          { type: Credential.Event.Switched.type, data: { credentialID: personal.id, integrationID } },
+          { type: Credential.Event.Updated.type, data: {} },
+          { type: Credential.Event.Switched.type, data: { credentialID: null, integrationID } },
+        ])
+      }),
     )
   })
 })

@@ -277,7 +277,7 @@ export class SQLiteEffectPreparedQuery<
       }
 
       assertUnreachable(cacheStrat)
-    }).pipe(Effect.mapError((e) => new EffectDrizzleQueryError({ query: queryString, params, cause: Cause.fail(e) })))
+    }).pipe(Effect.mapError((e) => new EffectDrizzleQueryError({ query: queryString, params: params.map(() => "[redacted]"), cause: Cause.fail(e) })))
   }
 
   getQuery(): Query {

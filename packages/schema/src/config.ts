@@ -14,6 +14,7 @@ import { ConfigLSP } from "./config/lsp.js"
 import { ConfigMCP } from "./config/mcp.js"
 import { ConfigModel } from "./config/model.js"
 import { ConfigPlugin } from "./config/plugin.js"
+import { ConfigPolicy } from "./config/policy.js"
 import { ConfigProvider } from "./config/provider.js"
 import { ConfigReference } from "./config/reference.js"
 import { ConfigWebSearch } from "./config/websearch.js"
@@ -51,8 +52,14 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   username: Schema.String.pipe(optional).annotate({
     description: "Username displayed in conversations and used for telemetry identity",
   }),
+  timezone: Schema.String.pipe(optional).annotate({
+    description: "IANA time zone for schedules, e.g. America/Los_Angeles. Defaults to the server's local zone",
+  }),
   permissions: Permission.Ruleset.pipe(optional).annotate({
     description: "Ordered tool permission rules applied to agent tool use",
+  }),
+  policies: ConfigPolicy.Info.pipe(Schema.Array, optional).annotate({
+    description: "Ordered policies controlling access to providers, tools, and integrations",
   }),
   agents: Schema.Record(Schema.String, ConfigAgent.Info).pipe(optional).annotate({
     description: "Named built-in agent overrides and custom agent definitions",

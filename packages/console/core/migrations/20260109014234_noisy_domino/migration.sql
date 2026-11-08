@@ -1,1 +1,0 @@
-ALTER TABLE `billing` ADD `subscription_coupon_id` varchar(28);

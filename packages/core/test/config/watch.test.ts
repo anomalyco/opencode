@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test"
 import type { ConfigDiscovery } from "@opencode/core/config/discovery"
 import { ConfigWatch } from "@opencode/core/config/watch"
 import { AbsolutePath } from "@opencode/core/schema"
+import { FSUtil } from "@opencode/util/fs-util"
 
 const project = path.resolve("watch-plan-project")
 const root = AbsolutePath.make(path.join(project, ".opencode"))
@@ -19,10 +20,20 @@ describe("ConfigWatch.plan", () => {
     expect(Array.from(missing.values())).toEqual([
       { path: project, type: "entries", names: [".agents", ".claude", ".opencode", "opencode.json", "opencode.jsonc"] },
     ])
-    const present = ConfigWatch.plan({ ...sources, project: [{ path: root, present: true }] })
+    const system = AbsolutePath.make(path.join(project, "system-opencode"))
+    const present = ConfigWatch.plan({
+      ...sources,
+      system: { path: system, present: true },
+      project: [{ path: root, present: true }],
+    })
     expect(Array.from(present.values())).toEqual([
-      { path: root, type: "directory", ignore: ["node_modules", ".git", "**/{node_modules,.git}/**"] },
-      ...missing.values(),
+      { path: system, type: "directory", ignore: FSUtil.ignoreGlobs },
+      { path: root, type: "directory", ignore: FSUtil.ignoreGlobs },
+      {
+        path: project,
+        type: "entries",
+        names: [".agents", ".claude", ".opencode", "opencode.json", "opencode.jsonc", "system-opencode"],
+      },
     ])
   })
 

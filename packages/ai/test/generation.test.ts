@@ -8,7 +8,7 @@ import {
   type GenerationRoute,
   type GenerationSnapshot,
   type GenerationStatus,
-} from "../src/index.js"
+} from "../src/effect.js"
 import { it } from "./lib/effect.js"
 
 /** In-memory generation route whose status advances through `statuses` on every poll. */
@@ -74,8 +74,17 @@ describe("Generation", () => {
 
       expect(error).toBeInstanceOf(AIError)
       expect(error.reason._tag).toBe("Timeout")
+      if (error.reason._tag === "Timeout") expect(error.reason.timeoutMs).toBe(5000)
       expect(error.message).toContain("gen_1")
       expect(yield* Ref.get(scripted.polls)).toBeGreaterThan(1)
+
+      const subMilliFiber = yield* Effect.forkChild(
+        generation.await({ poll: { interval: "1 second", timeout: "500 micros" } }).pipe(Effect.flip),
+      )
+      yield* TestClock.adjust("1 milli")
+      const subMilliError = yield* Fiber.join(subMilliFiber)
+
+      expect(subMilliError.reason).toMatchObject({ _tag: "Timeout", timeoutMs: 1 })
     }),
   )
 

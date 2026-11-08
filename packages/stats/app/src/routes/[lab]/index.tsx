@@ -15,9 +15,12 @@ import { LocaleLinks } from "../../component/locale-links"
 import { NotFoundMeta } from "../../component/not-found-meta"
 import { useI18n } from "../../context/i18n"
 import { useLanguage } from "../../context/language"
+import { dismissChartTooltipOnExit } from "../../lib/chart-tooltip"
 import { fromFirstUsage } from "../../lib/format"
+import { providerIconId } from "../../lib/provider-icon"
 import { localizedUrl } from "../../lib/language"
 import { loadLabPage, type LabPageData } from "../../lib/page-data"
+import { labOgCard, ogImageAlt, ogImageUrl } from "../../og/card-data"
 import { labSummary } from "../../lib/summaries"
 import {
   catalogModelPath,
@@ -41,8 +44,6 @@ import {
   type HeaderLink,
   type ThemePreference,
 } from "../stats-shell"
-
-const statsUnfurlPath = "banner.png"
 
 type RelatedCatalogLab = LabPageData["labs"][number]
 
@@ -81,7 +82,10 @@ export default function StatsLab() {
   })
   const labPath = createMemo(() => `/data/${lab()?.id ?? labParam()}`)
   const labUrl = createMemo(() => localizedUrl(language.locale(), labPath()))
-  const statsUnfurlUrl = new URL(statsUnfurlPath, localizedUrl("en", "/data/")).toString()
+  const ogCard = createMemo(() => {
+    const data = page()
+    return data && labOgCard(data)
+  })
   const labHeaderLinks = createMemo<readonly HeaderLink[]>(() => [
     { href: "#overview", label: i18n.t("nav.overview") },
     { href: "#usage", label: i18n.t("nav.usage") },
@@ -126,16 +130,22 @@ export default function StatsLab() {
               <Meta property="og:title" content={labTitle()} />
               <Meta property="og:description" content={labDescription()} />
               <Meta property="og:url" content={labUrl()} />
-              <Meta property="og:image" content={statsUnfurlUrl} />
+              <Show when={ogCard()}>
+                {(card) => (
+                  <>
+                    <Meta property="og:image" content={ogImageUrl(card())} />
+                    <Meta property="og:image:alt" content={ogImageAlt(card())} />
+                    <Meta name="twitter:image" content={ogImageUrl(card())} />
+                    <Meta name="twitter:image:alt" content={ogImageAlt(card())} />
+                  </>
+                )}
+              </Show>
               <Meta property="og:image:type" content="image/png" />
               <Meta property="og:image:width" content="1200" />
               <Meta property="og:image:height" content="630" />
-              <Meta property="og:image:alt" content={i18n.t("app.unfurlAlt")} />
               <Meta name="twitter:card" content="summary_large_image" />
               <Meta name="twitter:title" content={labTitle()} />
               <Meta name="twitter:description" content={labDescription()} />
-              <Meta name="twitter:image" content={statsUnfurlUrl} />
-              <Meta name="twitter:image:alt" content={i18n.t("app.unfurlAlt")} />
               <JsonLd
                 data={{
                   "@context": "https://schema.org",
@@ -278,7 +288,7 @@ function LabHeroTitleRow(props: { icon?: string; label: string }) {
   return (
     <div data-slot="lab-hero-title-row">
       <span data-slot="lab-hero-avatar" data-empty={props.icon ? undefined : "true"}>
-        <Show when={props.icon}>{(icon) => <ProviderIcon aria-hidden="true" id={getProviderIconId(icon())} />}</Show>
+        <Show when={props.icon}>{(icon) => <ProviderIcon aria-hidden="true" id={providerIconId(icon())} />}</Show>
       </span>
       <h1>{props.label}</h1>
       <div data-slot="lab-hero-pattern" aria-hidden="true" />
@@ -293,7 +303,7 @@ function LabOverview(props: { lab: ModelCatalogLab; data: StatsLabData | null })
   return (
     <section data-section="lab-overview">
       <div data-slot="lab-overview-copy">
-        <ProviderIcon data-slot="lab-overview-watermark" aria-hidden="true" id={getProviderIconId(props.lab.id)} />
+        <ProviderIcon data-slot="lab-overview-watermark" aria-hidden="true" id={providerIconId(props.lab.id)} />
         <p>
           {i18n.t("lab.heroPrefix", { count: props.lab.models.length, lab: props.lab.name })}
           <Show when={featuredModels().length > 0}>
@@ -329,6 +339,12 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
   const activeLineClipId = createUniqueId()
   const activeLineMaskId = createUniqueId()
   const [activeIndex, setActiveIndex] = createSignal<number>()
+  let chartRef: HTMLDivElement | undefined
+  dismissChartTooltipOnExit({
+    chart: () => chartRef,
+    open: () => activeIndex() !== undefined,
+    dismiss: () => setActiveIndex(undefined),
+  })
   const usage = createMemo(() => props.data?.usage ?? [])
   const tokenMax = createMemo(() => Math.max(0, ...usage().map((item) => item.tokens)) || 1)
   const userMax = createMemo(() => Math.max(0, ...usage().map((item) => item.users)) || 1)
@@ -381,6 +397,7 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
         fallback={<LabEmptyState title={i18n.t("lab.noUsageTitle")} description={i18n.t("lab.noUsageDescription")} />}
       >
         <div
+          ref={chartRef}
           data-component="model-usage-chart"
           data-variant="lab-usage"
           data-dense-labels={isLabUsageDense(usage().length) ? "true" : undefined}
@@ -655,7 +672,7 @@ function LabModelRow(props: {
     >
       <th data-slot="lab-model-cell" data-column="model" role="rowheader" scope="row">
         <span data-slot="lab-model-avatar" aria-hidden="true">
-          <ProviderIcon id={getProviderIconId(props.model.lab)} />
+          <ProviderIcon id={providerIconId(props.model.lab)} />
         </span>
         <a
           data-slot="lab-model-link"
@@ -701,7 +718,7 @@ function LabModelTooltip(props: { state: LabModelTooltipState }) {
       <div data-slot="lab-model-tooltip-summary">
         <div data-slot="lab-model-tooltip-head">
           <span data-slot="lab-model-tooltip-avatar" aria-hidden="true">
-            <ProviderIcon id={getProviderIconId(props.state.model.lab)} />
+            <ProviderIcon id={providerIconId(props.state.model.lab)} />
           </span>
           <strong>{props.state.model.name}</strong>
         </div>
@@ -763,10 +780,10 @@ function LabRelatedCard(props: { entry: RelatedLabEntry }) {
       data-tone={relatedTone(props.entry.share)}
       href={language.route(`${import.meta.env.BASE_URL}${props.entry.lab.id}`)}
     >
-      <ProviderIcon data-slot="lab-related-watermark" aria-hidden="true" id={getProviderIconId(props.entry.lab.id)} />
+      <ProviderIcon data-slot="lab-related-watermark" aria-hidden="true" id={providerIconId(props.entry.lab.id)} />
       <div data-slot="lab-related-heading">
         <span data-slot="lab-related-avatar" aria-hidden="true">
-          <ProviderIcon id={getProviderIconId(props.entry.lab.id)} />
+          <ProviderIcon id={providerIconId(props.entry.lab.id)} />
         </span>
         <strong>{props.entry.lab.name}</strong>
       </div>
@@ -1018,11 +1035,4 @@ function labUsageMonthTicks(points: ModelUsagePoint[]) {
 
 function isLabUsageDense(count: number) {
   return count > 20
-}
-
-function getProviderIconId(provider: string) {
-  const id = provider.toLowerCase().replace(/[^a-z0-9]+/g, "")
-  if (id === "moonshot") return "moonshotai"
-  if (id === "zhipu") return "zhipuai"
-  return id
 }

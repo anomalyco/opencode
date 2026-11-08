@@ -1,7 +1,8 @@
 export * as V1Migration from "./v1-migration.js"
 
-import { Cause, Effect, Layer, Option, Schema, Semaphore } from "effect"
+import { Cause, Effect, Fiber, Layer, Option, Schema, Semaphore } from "effect"
 import { Database } from "./database.js"
+import { storedAbsolutePath } from "./path.js"
 import { SessionMessageTable, SessionTable } from "../session/sql.js"
 import { SessionV1 } from "@opencode/schema/session-v1"
 import { SessionMessage } from "../session/message.js"
@@ -10,10 +11,14 @@ import { KVTable } from "../kv/sql.js"
 import { EventSequenceTable } from "../event/sql.js"
 import { eq, sql } from "drizzle-orm"
 import { Global } from "@opencode/util/global"
+import { FSUtil } from "@opencode/util/fs-util"
 import { existsSync } from "node:fs"
 import path from "node:path"
 import type { Database as SQLiteDatabase } from "bun:sqlite"
-import { Project } from "@opencode/schema/project"
+import { Agent } from "@opencode/schema/agent"
+import { Project } from "../project.js"
+import { AbsolutePath } from "../schema.js"
+import { ProjectTable } from "../project/sql.js"
 
 export type SourceMessage = {
   readonly id: string
@@ -297,6 +302,8 @@ export function transformSession(input: TransformInput): TransformResult {
             : -1
           const compactionIndex = messages.findIndex((candidate) => candidate.row.id === item.row.id)
           const tail = tailIndex < 0 ? [] : messages.slice(tailIndex, compactionIndex)
+          // V1 kept these messages beside the summary; they replay as text, like compactions before v2.1.
+          const recent = serializeRecent(tail, byMessage)
           return [
             row(
               { ...item.row, time_updated: Math.max(item.row.time_updated, summary.row.time_updated) },
@@ -306,7 +313,7 @@ export function transformSession(input: TransformInput): TransformResult {
                 status: "completed",
                 reason: compaction.auto ? "auto" : "manual",
                 summary: summaryText,
-                recent: serializeRecent(tail, byMessage),
+                ...(recent ? { metadata: { recent } } : {}),
                 time: { created: item.row.time_created },
               },
             ),
@@ -379,13 +386,13 @@ export function transformSession(input: TransformInput): TransformResult {
         return []
       const content = owned.flatMap((part): Array<Record<string, unknown>> => {
         if (part.type === "text")
-          return [{ type: "text", text: part.text, ...(part.metadata ? { state: part.metadata } : {}) }]
+          return [{ type: "text", text: part.text, ...(part.metadata ? { native: part.metadata } : {}) }]
         if (part.type === "reasoning")
           return [
             {
               type: "reasoning",
               text: part.text,
-              ...(part.metadata ? { state: part.metadata } : {}),
+              ...(part.metadata ? { native: part.metadata } : {}),
               time: { created: part.time.start, ...(part.time.end === undefined ? {} : { completed: part.time.end }) },
             },
           ]
@@ -466,7 +473,7 @@ export function transformSession(input: TransformInput): TransformResult {
   return {
     messages: migrated,
     session: {
-      agent: input.session.agent ?? (latestUser?.value.role === "user" ? latestUser.value.agent : null),
+      agent: input.session.agent ?? (latestUser?.value.role === "user" ? Agent.ID.make(latestUser.value.agent) : null),
       model:
         input.session.model ??
         (latestUser?.value.role === "user"
@@ -531,7 +538,9 @@ function updateProgress(progress: Progress) {
   if (runtimeState.status === "running") runtimeState = { status: "running", progress }
 }
 
-export function run(options: Options = {}): Effect.Effect<RunResult, never, Database.Service | Global.Service> {
+export function run(
+  options: Options = {},
+): Effect.Effect<RunResult, never, Database.Service | Global.Service | Project.Service | FSUtil.Service> {
   return lock.withPermit(
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
@@ -578,18 +587,55 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
         updateProgress({ label: "Migrating sessions", numerator: migrated + completed, denominator })
       })
       updateProgress({ label: "Migrating sessions", numerator: migrated + sourceTotal, denominator })
-      const projects = new Set(
-        (yield* db.all<{ id: string }>(sql`SELECT id FROM project`)).map((project) => project.id),
+      const projects = new Map(
+        (yield* db.all<{ id: string; worktree: string }>(sql`SELECT id, worktree FROM project`)).map((project) => [
+          project.id,
+          project.worktree,
+        ]),
       )
+      const directories = new Map<string, { project: Project.Resolved; path: string } | undefined>()
+      let lookupTimedOut = false
       while (true) {
         const state = yield* readState(db)
         const cursorValue = state?.phase === "sessions" ? state.cursor : undefined
-        const nextID = yield* db.get<{ id: string; project_id: string }>(
-          cursorValue === undefined
-            ? sql`SELECT id, project_id FROM session ORDER BY id DESC LIMIT 1`
-            : sql`SELECT id, project_id FROM session WHERE id < ${cursorValue} ORDER BY id DESC LIMIT 1`,
-        )
+        const nextID = yield* db.get<{
+          id: string
+          project_id: string
+          workspace_id: string | null
+          directory: string
+          path: string | null
+          time_updated: number
+          imported: number
+        }>(sql`
+          SELECT id, project_id, workspace_id, directory, path, time_updated,
+            EXISTS (SELECT 1 FROM session_v2 WHERE session_v2.id = session.id) AS imported
+          FROM session
+          ${cursorValue === undefined ? sql`` : sql`WHERE id < ${cursorValue}`}
+          ORDER BY id DESC LIMIT 1
+        `)
         if (!nextID) break
+        const projectID = projects.has(nextID.project_id) ? nextID.project_id : Project.ID.global
+        // Legacy ACP sessions can store a cwd relative to an unknown process directory.
+        // Use the project worktree instead, and leave the original V1 row intact.
+        const directory =
+          !nextID.directory || storedAbsolutePath(nextID.directory)
+            ? nextID.directory
+            : (storedAbsolutePath(projects.get(projectID) ?? path.parse(global.data).root) ?? "")
+        const unowned =
+          projectID === Project.ID.global &&
+          nextID.workspace_id === null &&
+          !nextID.imported &&
+          directory === nextID.directory
+        if (unowned && !lookupTimedOut && !directories.has(directory)) {
+          const resolved = yield* resolveDirectory(directory)
+          // One hung directory (e.g. a dead network mount) usually means more; leave the rest under global.
+          if (Option.isNone(resolved)) {
+            lookupTimedOut = true
+            yield* Effect.logWarning("Stopped resolving V1 session directories after a timeout", { directory })
+          }
+          directories.set(directory, Option.getOrUndefined(resolved))
+        }
+        const owner = unowned ? directories.get(directory) : undefined
         yield* db
           .transaction((tx) =>
             Effect.gen(function* () {
@@ -601,12 +647,29 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
                   set: { value: { phase: "sessions", cursor: nextID.id }, time_updated: Date.now() },
                 })
                 .run()
-              const projectID = projects.has(nextID.project_id) ? nextID.project_id : Project.ID.global
               if (projectID !== nextID.project_id)
                 yield* Effect.logWarning("Reassigned V1 session with missing project", {
                   sessionID: nextID.id,
                   projectID: nextID.project_id,
                 })
+              if (directory !== nextID.directory)
+                yield* Effect.logWarning("Replaced relative V1 session directory", {
+                  sessionID: nextID.id,
+                  directory: nextID.directory,
+                  resolved: directory,
+                })
+              if (owner && !projects.has(owner.project.id))
+                yield* tx
+                  .insert(ProjectTable)
+                  .values({
+                    id: owner.project.id,
+                    worktree: owner.project.canonical,
+                    vcs: owner.project.vcs?.type,
+                    sandboxes: [],
+                    time_active: nextID.time_updated,
+                  })
+                  .onConflictDoNothing()
+                  .run()
               yield* tx.run(sql`
                   INSERT OR IGNORE INTO session_v2 (
                     id, project_id, workspace_id, parent_id, slug, directory, path, title, version, share_url,
@@ -615,7 +678,7 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
                     revert, permission, agent, model, time_created, time_updated, time_compacting, time_archived
                   )
                   SELECT
-                    id, ${projectID}, workspace_id, parent_id, slug, directory, path, title, version, share_url,
+                    id, ${owner?.project.id ?? projectID}, workspace_id, parent_id, slug, ${directory}, ${owner?.path ?? nextID.path}, title, version, share_url,
                     summary_additions, summary_deletions, summary_files, summary_diffs, metadata, cost,
                     tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write,
                     revert, NULL, agent, model, time_created, time_updated, time_compacting, time_archived
@@ -669,6 +732,7 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
             }),
           )
           .pipe(Effect.orDie)
+        if (owner && !projects.has(owner.project.id)) projects.set(owner.project.id, owner.project.canonical)
         if (runtimeState.status === "running")
           runtimeState = {
             status: "running",
@@ -697,6 +761,39 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
       return { status: "completed" as const }
     }).pipe(Effect.orDie),
   )
+}
+
+// V1 grouped non-git sessions under global; V2 resolves an owner for each directory.
+// Discovery must not publish adoption events for sessions already stored in V2.
+// Any failure keeps the session under global. The lookup runs detached so a filesystem or git call
+// that ignores interruption cannot stall the migration; Option.none means it timed out.
+function resolveDirectory(directory: string) {
+  return Effect.gen(function* () {
+    const fiber = yield* Effect.forkDetach(
+      Effect.gen(function* () {
+        if (!directory) return
+        const fs = yield* FSUtil.Service
+        const normalized = yield* fs
+          .realPath(path.resolve(FSUtil.windowsPath(directory)))
+          .pipe(Effect.orElseSucceed(() => undefined))
+        if (!normalized || !(yield* fs.isDir(normalized))) return
+        const projects = yield* Project.Service
+        const project = yield* projects.resolve(AbsolutePath.make(normalized), { persist: false })
+        return {
+          project,
+          path: path.relative(project.directory, normalized).replaceAll("\\", "/"),
+        }
+      }),
+    )
+    const result = yield* Fiber.join(fiber).pipe(
+      Effect.catchDefect((defect) =>
+        Effect.logWarning("Failed to resolve V1 session directory", { directory, defect }).pipe(Effect.as(undefined)),
+      ),
+      Effect.timeoutOption("5 seconds"),
+    )
+    if (Option.isNone(result)) yield* Effect.forkDetach(Fiber.interrupt(fiber))
+    return result
+  })
 }
 
 function nextPath(options: Options, data: string) {
@@ -939,9 +1036,11 @@ function legacyToolNotice(messages: ReadonlyArray<TransformResult["messages"][nu
         : []),
     ...(called.has("skill") ? ["The `skill` tool now takes `id` instead of `name`."] : []),
     ...(removed.length === 1
-      ? [`The \`${removed[0]}\` tool is no longer available and must not be called.`]
+      ? [`The \`${removed[0]}\` tool is no longer available by default. Only call it if it is in your tool list.`]
       : removed.length > 1
-        ? [`The following tools are no longer available and must not be called: ${list(removed)}.`]
+        ? [
+            `The following tools are no longer available by default. Only call them if they are in your tool list: ${list(removed)}.`,
+          ]
         : []),
   ]
   if (parts.length === 0) return undefined
@@ -953,7 +1052,7 @@ function migrateTool(part: typeof SessionV1.ToolPart.Type, fallback: number) {
     type: "tool" as const,
     id: part.callID,
     name: part.tool,
-    ...(part.metadata ? { providerState: part.metadata } : {}),
+    ...(part.metadata ? { native: part.metadata } : {}),
   }
   if (part.state.status === "completed")
     return {

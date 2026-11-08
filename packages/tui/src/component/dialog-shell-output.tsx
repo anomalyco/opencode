@@ -6,7 +6,7 @@ import stripAnsi from "strip-ansi"
 import { useClient } from "../context/client"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
-import { useDialog } from "../ui/dialog"
+import { DialogFooter, DialogHeader, DialogLayout, useDialog } from "../ui/dialog"
 
 const PAGE_BYTES = 64 * 1024
 
@@ -100,45 +100,57 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
   }))
 
   return (
-    <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
-      <box flexDirection="row" gap={2}>
-        <text fg={theme.text.base} attributes={TextAttributes.BOLD} flexGrow={1}>
-          Shell output
+    <DialogLayout
+      header={
+        <DialogHeader
+          gap={dimensions().width < 60 ? 1 : 2}
+          titleView={
+            <text fg={theme.text.base} attributes={TextAttributes.BOLD} flexGrow={1}>
+              Shell output
+            </text>
+          }
+        >
+          <text fg={theme.text.muted}>{status()}</text>
+        </DialogHeader>
+      }
+      legacyFooter={
+        <DialogFooter
+          actions={{
+            secondary: [
+              { title: "scroll", key: "↑/↓" },
+              { title: "follow", key: "end" },
+              { title: "back", key: "esc" },
+            ],
+          }}
+        />
+      }
+    >
+      <box gap={1}>
+        <text fg={theme.text.muted} maxHeight={3} wrapMode="word">
+          {props.shell.command}
         </text>
-        <text fg={theme.text.muted}>{status()}</text>
-        <text fg={theme.text.muted} onMouseUp={() => dialog.clear()}>
-          esc
-        </text>
+        <Show when={omitted()}>
+          <text fg={theme.text.muted}>Earlier output omitted · showing recent output</text>
+        </Show>
+        <scrollbox
+          id="shell-output-scroll"
+          ref={(value: ScrollBoxRenderable) => (scroll = value)}
+          height={height()}
+          stickyScroll
+          stickyStart="bottom"
+          scrollbarOptions={{ visible: false }}
+        >
+          <text fg={theme.text.base} wrapMode="word">
+            {text() ||
+              (output() === undefined
+                ? "Loading output…"
+                : "No captured output. Output redirected to files is not shown here.")}
+          </text>
+        </scrollbox>
+        <Show when={error()}>
+          <text fg={theme.text.feedback.error.base}>{error()}</text>
+        </Show>
       </box>
-      <text fg={theme.text.muted} maxHeight={3} wrapMode="word">
-        {props.shell.command}
-      </text>
-      <Show when={omitted()}>
-        <text fg={theme.text.muted}>Earlier output omitted · showing recent output</text>
-      </Show>
-      <scrollbox
-        id="shell-output-scroll"
-        ref={(value: ScrollBoxRenderable) => (scroll = value)}
-        height={height()}
-        stickyScroll
-        stickyStart="bottom"
-        scrollbarOptions={{ visible: false }}
-      >
-        <text fg={theme.text.base} wrapMode="word">
-          {text() ||
-            (output() === undefined
-              ? "Loading output…"
-              : "No captured output. Output redirected to files is not shown here.")}
-        </text>
-      </scrollbox>
-      <Show when={error()}>
-        <text fg={theme.text.feedback.error.base}>{error()}</text>
-      </Show>
-      <box flexDirection="row" gap={2} flexWrap="wrap">
-        <text fg={theme.text.muted}>↑/↓ scroll</text>
-        <text fg={theme.text.muted}>end follow</text>
-        <text fg={theme.text.muted}>esc back</text>
-      </box>
-    </box>
+    </DialogLayout>
   )
 }

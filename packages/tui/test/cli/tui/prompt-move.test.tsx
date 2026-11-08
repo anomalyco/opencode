@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import { InputRenderable } from "@opentui/core"
+import { InputRenderable, TextareaRenderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { usePromptMove } from "../../../src/component/prompt/move"
 import { ConfigProvider } from "../../../src/config"
@@ -204,7 +204,7 @@ test("creating a worktree recovers the session without reading its removed locat
     await fixture.app.waitForFrame((frame) => frame.includes("Worktrees") && frame.includes(linked))
     fixture.app.mockInput.pressKey("a", { ctrl: true })
     await fixture.app.waitForFrame((frame) => frame.includes("Name worktree"))
-    await fixture.app.waitFor(() => fixture.app.renderer.currentFocusedEditor instanceof InputRenderable)
+    await fixture.app.waitFor(() => fixture.app.renderer.currentFocusedEditor instanceof TextareaRenderable)
     await fixture.app.mockInput.typeText("fresh")
     fixture.app.mockInput.pressEnter()
     await fixture.app.waitFor(() => fixture.moves.length === 1)
@@ -431,7 +431,7 @@ async function renderMove(input: {
       )
       app.mockInput.pressKey("a", { ctrl: true })
       await app.waitForFrame((frame) => frame.includes("Name worktree"))
-      await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
+      await app.waitFor(() => app.renderer.currentFocusedEditor instanceof TextareaRenderable)
       await app.mockInput.typeText("fresh")
       app.mockInput.pressEnter()
       if (input.home) {

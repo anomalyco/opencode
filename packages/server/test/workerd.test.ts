@@ -1,5 +1,7 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Npm } from "@opencode/util/npm"
 import { makeDurableObjectStorage } from "../../core/test/fixture/durable-object-storage"
 import { it } from "../../core/test/lib/effect"
 import { ServerWorkerd } from "../src/workerd"
@@ -30,4 +32,13 @@ it.live("boots the workerd profile over durable object storage", () =>
     const body: unknown = yield* Effect.promise(() => status.json())
     expect(body).toMatchObject({ version: "workerd-test" })
   }),
+)
+
+it.effect("fails Npm.add with a clear workerd error instead of running the installer", () =>
+  Effect.gen(function* () {
+    const npm = yield* Npm.Service
+    const error = yield* npm.add("some-package").pipe(Effect.flip)
+    expect(error).toBeInstanceOf(Npm.InstallFailedError)
+    expect(String(error.cause)).toContain("Npm.add is unavailable in the workerd profile")
+  }).pipe(Effect.provide(AppNodeBuilder.build(Npm.node, ServerWorkerd.replacements({ storage: makeDurableObjectStorage() })))),
 )

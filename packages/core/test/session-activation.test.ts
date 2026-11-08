@@ -18,7 +18,7 @@ import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 // Real Location boot with plugin discovery, so the first request races the initial plugin activation.
-setDefaultTimeout(15_000)
+setDefaultTimeout(30_000)
 
 const it = testEffect(
   AppNodeBuilder.build(

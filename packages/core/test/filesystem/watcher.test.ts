@@ -2,7 +2,7 @@ import { $ } from "bun"
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Deferred, Duration, Effect, Fiber, Layer, Option, Schedule, Stream } from "effect"
+import { Deferred, Duration, Effect, Fiber, Layer, Logger, Option, Schedule, Stream } from "effect"
 import { Config } from "@opencode/core/config"
 import { ConfigLocationWatcherPlugin } from "@opencode/core/config/plugin/location-watcher"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -19,6 +19,7 @@ import { Location } from "@opencode/core/location"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { AbsolutePath } from "@opencode/core/schema"
+import { initRepo } from "../fixture/git"
 import { location } from "../fixture/location"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
@@ -53,6 +54,39 @@ function countingNative() {
 }
 
 describe("Watcher lifecycle", () => {
+  it.live("ends the stream without logging an error when the watched directory is missing", () => {
+    const errors: unknown[] = []
+    const logger = Logger.make(({ logLevel, message }) => {
+      if (logLevel === "Error") errors.push(message)
+    })
+    return withTmp((directory) =>
+      Effect.gen(function* () {
+        const watcher = yield* Watcher.Service
+        const updates = yield* watcher.subscribe({ path: path.join(directory, "missing", "a.ts"), type: "file" })
+        expect(Option.isNone(yield* Stream.runHead(updates))).toBe(true)
+        expect(errors).toEqual([])
+      }).pipe(Effect.provide(AppNodeBuilder.build(Watcher.node)), Effect.provide(Logger.layer([logger]))),
+    )
+  })
+
+  it.live("still logs an error when watching fails for a reason other than ENOENT", () => {
+    const errors: unknown[] = []
+    const logger = Logger.make(({ logLevel, message }) => {
+      if (logLevel === "Error") errors.push(message)
+    })
+    return withTmp((directory) =>
+      Effect.gen(function* () {
+        const watcher = yield* Watcher.Service
+        const updates = yield* watcher.subscribe({
+          path: path.join(directory, "bad\0dir", "a.ts"),
+          type: "file",
+        })
+        expect(Option.isNone(yield* Stream.runHead(updates))).toBe(true)
+        expect(errors).toHaveLength(1)
+      }).pipe(Effect.provide(AppNodeBuilder.build(Watcher.node)), Effect.provide(Logger.layer([logger]))),
+    )
+  })
+
   it.effect("signals readiness after acquisition and buffers updates published by the ready callback", () =>
     Effect.gen(function* () {
       const publish = yield* Deferred.make<(update: Watcher.Update) => void>()
@@ -267,12 +301,7 @@ function withTmp<A, E, R>(
         return { tmp, vcs: { type: "hg" as const, store: AbsolutePath.make(path.join(tmp.path, ".hg")) } }
       }
       if (options?.vcs !== "git") return { tmp, vcs: undefined }
-      await $`git init`.cwd(tmp.path).quiet()
-      await $`git config core.fsmonitor false`.cwd(tmp.path).quiet()
-      await $`git config commit.gpgsign false`.cwd(tmp.path).quiet()
-      await $`git config user.email test@opencode.test`.cwd(tmp.path).quiet()
-      await $`git config user.name Test`.cwd(tmp.path).quiet()
-      await $`git commit --allow-empty -m root`.cwd(tmp.path).quiet()
+      await initRepo(tmp.path)
       await options.init?.(tmp.path)
       return { tmp, vcs: { type: "git" as const, store: AbsolutePath.make(path.join(tmp.path, ".git")) } }
     }),

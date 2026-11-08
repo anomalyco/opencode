@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.sessionReview.title": "የክፍለ ጊዜ ለውጦች",
   "ui.sessionReview.title.git": "Gitይለውጣል",
   "ui.sessionReview.title.branch": "ቅርንጫፍ ለውጦች",
@@ -70,10 +70,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.title": "ነፃ ገደብ ላይ ደርሷል",
   "dialog.usageExceeded.freeTier.description": "ለምርጥ ክፍት ምንጭ ሞዴሎች ታማኝ መዳረሻ ለማግኘት በወር $10 ለOpenCode Go ይመዝገቡ።",
   "dialog.usageExceeded.freeTier.actionLabel": "ለደንበኝነት ይመዝገቡ",
-  "dialog.usageExceeded.accountRateLimit.title": "የሂድ ገደብ ላይ ደርሷል",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "የአጠቃቀም ገደብ ላይ ደርሷል። ይህን ሞዴል አሁን መጠቀሙን ለመቀጠል ካለው ቀሪ ሒሳብ መጠቀምን ያንቁ",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "ክፍት ቅንብሮች",
   "ui.sessionTurn.status.delegating": "ሥራን በውክልና መስጠት",
   "ui.sessionTurn.status.planning": "ቀጣዮቹን ደረጃዎች ማቀድ",
   "ui.sessionTurn.status.gatheringContext": "ማሰስ",
@@ -189,7 +185,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(መልስ የለም)",
   "ui.question.review.notAnswered": "(አልተመለሰም)",
   "ui.question.multiHint": "የሚመለከተውን ሁሉንም መልሶች ይምረጡ",
-  "ui.question.singleHint": "አንድ መልስ ምረጥ",
   "ui.question.custom.placeholder": "መልስዎን ይተይቡ…",
   "ui.messagePart.context.match.one": "({{count}} ተዛማጅ)",
   "ui.messagePart.context.match.other": "({{count}} ተዛማጆች)",

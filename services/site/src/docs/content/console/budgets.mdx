@@ -1,0 +1,88 @@
+---
+title: "Budgets"
+description: "Cap monthly spend for a workspace, its members, and its service accounts."
+---
+
+Budgets cap monthly spend through policies. Owners and admins manage them in **Controls**.
+
+## Budget levels
+
+| Policy audience        | Applies to                                           |
+| ---------------------- | ---------------------------------------------------- |
+| Entire workspace       | Combined spend of all members and service accounts   |
+| All members            | Each member, or one shared allowance for all members |
+| Members tagged with    | Members with the chosen tags                         |
+| These members          | Specific members                                     |
+| All service accounts   | Each service account, or one shared allowance        |
+| These service accounts | Specific service accounts                            |
+
+A request must fit under every applicable budget. A larger allowance never overrides a smaller one. Without any
+budget, spend is unlimited.
+
+## Workspace budget
+
+The workspace budget blocks requests for everyone once the workspace reaches it.
+
+1. Open **Controls** and click **Add policy**.
+2. Choose **Entire workspace** and add a **Budget** rule.
+3. Enter the monthly limit in USD and click **Save**.
+
+## Member budgets
+
+Choose **All members** in a policy to give each member a monthly allowance, or share one amount across the group.
+Choose specific members or tags to cover a smaller group.
+
+To budget for one person:
+
+1. Open the member in **Settings › Members**.
+2. Click **Create budget policy** to open the builder with that person selected.
+3. Enter the amount and click **Save**.
+
+Their member page lists the policies that apply. If an all-member budget also covers them, both limits apply.
+
+## Service account budgets
+
+In **Controls**, choose **All service accounts** or **These service accounts**, add a **Budget** rule, and set an
+individual or shared monthly allowance. The policy covers every key belonging to those accounts.
+
+## Amounts and resets
+
+- Amounts are in US dollars with up to two decimal places.
+- Budgets reset on the 1st of each month at 00:00 UTC.
+- A `$0` budget blocks all spend that counts toward budgets.
+- Adding or changing a budget includes spend already recorded that month; it does not reset the allowance.
+
+## What counts
+
+By default, a budget covers **All spend**. You can narrow it to selected models; then only those models count,
+with either one allowance for the set or a separate allowance for each model.
+
+| Spend                                                               | Counts toward budgets        |
+| ------------------------------------------------------------------- | ---------------------------- |
+| Paid Console models                                                 | Yes                          |
+| Models on [your own providers](/console/providers) with a price set | Yes, at the configured price |
+| [Web search](/console/websearch)                                    | Yes, for all-spend budgets   |
+| Free models                                                         | No                           |
+| [Go](/console/go) usage within the plan                             | No                           |
+| Go extra usage paid from credits                                    | Yes                          |
+
+## When a budget is reached
+
+New requests fail with HTTP `429` until the budget resets or an owner or admin raises it. The response identifies
+a policy budget failure but does not name the budget. Open the request in **Activity › Logs** to see the policy
+that blocked it.
+
+```text
+Upstream request failed: Policy budget exceeded
+```
+
+Budgets are checked when a request starts. Requests already in progress finish, so spend can end slightly above the
+limit.
+
+## Track spend
+
+Each member sees their own spending and limit on **Activity**. Open **My usage** for **Activity › Overview**,
+including budget details and reset dates.
+
+Owners and admins can open **Activity › Usage** from the spending chart. It breaks down cost by day, model, and
+person, and the **Export usage** button downloads daily totals for the last 7, 30, or 90 days as CSV.

@@ -94,6 +94,43 @@
   background: var(--v2-state-fg-warning);
 }
 
+.project-settings-folder-missing {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background-color: var(--v2-background-bg-layer-01);
+  box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-base);
+}
+
+.project-settings-folder-missing-icon {
+  flex-shrink: 0;
+  color: var(--v2-state-fg-warning);
+}
+
+.project-settings-folder-missing-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.project-settings-folder-missing-title {
+  color: var(--v2-text-text-base);
+  font-weight: 530;
+}
+
+.project-settings-folder-missing-path {
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .project-settings-shared {
   display: flex;
   flex-direction: column;
@@ -206,8 +243,56 @@
   transition: opacity 120ms ease;
 }
 
-.project-settings-icon-overlay.visible {
+.project-settings-icon:focus-visible .project-settings-icon-overlay {
   opacity: 1;
+}
+
+@media (hover: hover) {
+  .project-settings-icon:hover .project-settings-icon-overlay {
+    opacity: 1;
+  }
+}
+
+.project-settings-icon[aria-invalid="true"] {
+  outline-color: var(--v2-state-fg-danger);
+}
+
+.project-settings-icon-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.project-settings-save-failed {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--v2-state-fg-danger);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+}
+
+.project-settings-icon-field .project-settings-save-failed {
+  margin-top: 0;
+}
+
+.project-settings-save-retry {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--v2-text-text-base);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.project-settings-save-retry:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: 2px;
 }
 
 .project-settings-colors {
@@ -290,7 +375,7 @@
   unicode-bidi: isolate;
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   .project-settings-icon-overlay,
   .project-settings-color,
   .project-settings-shared-chevron {

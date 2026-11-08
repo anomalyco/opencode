@@ -4,11 +4,11 @@ import {
   SpeechTimestampsEvent,
   SpeechFinishEvent,
   type SpeechEvent,
-  type SpeechRequestFor,
+  type SpeechRequest,
   type SpeechResponse,
 } from "./speech.js"
 
-export type Interface = MediaClient.Interface<SpeechRequestFor, SpeechEvent, SpeechResponse>
+export type Interface = MediaClient.Interface<SpeechRequest, SpeechEvent, SpeechResponse>
 
 export class SpeechClientService extends Context.Service<SpeechClientService, Interface>()("@opencode/SpeechClient") {}
 export const Service = SpeechClientService
@@ -23,7 +23,6 @@ export const SpeechClient = {
       SpeechFinishEvent.make({
         audio: response.audio,
         usage: response.usage,
-        notices: response.notices,
         providerMetadata: response.providerMetadata,
       }),
     ],

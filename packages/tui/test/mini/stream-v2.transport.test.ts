@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "node:url"
 import {
+  ClientError,
   OpenCode,
   type EventSubscribeOutput,
   type FormInfo,
@@ -116,7 +117,6 @@ function compaction(status: "running" | "completed", summary: string): SessionMe
     type: "compaction" as const,
     reason: "auto" as const,
     summary,
-    recent: "",
     time: { created: 1 },
   }
   if (status === "running") return { ...message, status }
@@ -157,7 +157,9 @@ function sdk(input: {
 }) {
   const client = OpenCode.make({ baseUrl: "https://opencode.test" })
   let subscription = 0
-  spyOn(client.event, "subscribe").mockImplementation(() => input.streams[subscription++]?.stream ?? feed().stream)
+  spyOn(client.event, "subscribe").mockImplementation(
+    (() => input.streams[subscription++]?.stream ?? feed().stream) as OpenCodeClient["event"]["subscribe"],
+  )
   spyOn(client.message, "list").mockImplementation((request) =>
     ok({
       data: input.messages?.[request.sessionID] ?? [
@@ -191,7 +193,7 @@ function sdk(input: {
   )
   spyOn(client.session, "active").mockImplementation(() => ok(input.active?.() ?? {}))
   spyOn(client.session.inbox, "list").mockImplementation((request) => ok(input.pending?.[request.sessionID] ?? []))
-  spyOn(client.session, "wait").mockImplementation(() => input.wait?.() ?? ok(undefined))
+  spyOn(client.experimental.session, "wait").mockImplementation(() => input.wait?.() ?? ok(undefined))
   spyOn(client.session.message, "get").mockImplementation((request) => {
     const message = input.messages?.[request.sessionID]?.find((item) => item.id === request.messageID)
     return message ? (ok(message) as never) : Promise.reject(new Error(`message not found: ${request.messageID}`))
@@ -536,7 +538,7 @@ describe("V2 mini transport", () => {
       created: 3,
       type: "session.compaction.ended",
       durable: durable("ses_1", 3),
-      data: { sessionID: "ses_1", reason: "auto", text: "Transport", recent: "" },
+      data: { sessionID: "ses_1", reason: "auto", text: "Transport" },
     })
 
     while (!ui.commits.some((commit) => commit.phase === "final")) await Bun.sleep(0)
@@ -713,9 +715,9 @@ describe("V2 mini transport", () => {
     })
 
     while (!ui.commits.some((commit) => commit.text === "Done.")) await Bun.sleep(0)
-    expect(ui.commits.filter((commit) => commit.kind === "assistant" || commit.kind === "tool").map((commit) => commit.text)).toEqual([
-      "Done.",
-    ])
+    expect(
+      ui.commits.filter((commit) => commit.kind === "assistant" || commit.kind === "tool").map((commit) => commit.text),
+    ).toEqual(["Done."])
     await transport.close()
   })
 
@@ -743,7 +745,11 @@ describe("V2 mini transport", () => {
               model: { providerID: "test", id: "model" },
               content: [
                 { type: "text", text: "I'll check." },
-                canonicalToolPart("read", { status: "completed", input: {}, content: [{ type: "text", text: "file" }] }),
+                canonicalToolPart("read", {
+                  status: "completed",
+                  input: {},
+                  content: [{ type: "text", text: "file" }],
+                }),
               ],
               time: { created: 2, completed: 3 },
             },
@@ -760,7 +766,9 @@ describe("V2 mini transport", () => {
 
     while (!ui.commits.some((commit) => commit.text === "Done.")) await Bun.sleep(0)
     expect(
-      ui.commits.filter((commit) => commit.kind === "user" || commit.kind === "assistant" || commit.kind === "tool").map((commit) => commit.text),
+      ui.commits
+        .filter((commit) => commit.kind === "user" || commit.kind === "assistant" || commit.kind === "tool")
+        .map((commit) => commit.text),
     ).toEqual(["what happened", "Done."])
     await transport.close()
   })
@@ -1617,6 +1625,39 @@ describe("V2 mini transport", () => {
         },
       },
     })
+    await transport.close()
+  })
+
+  test("waits again when session.wait loses its transport before the session settles", async () => {
+    const events = feed()
+    events.push(connected())
+    const messages: SessionMessages = []
+    let waits = 0
+    const client = sdk({
+      streams: [events],
+      messages: { ses_1: messages },
+      wait: () => {
+        waits++
+        if (waits > 1) return ok(undefined)
+        messages.push({ id: "msg_settled", type: "user", text: "settled", time: { created: 1 } })
+        return Promise.reject(
+          new ClientError("Transport", { cause: new DOMException("The operation timed out.", "TimeoutError") }),
+        )
+      },
+    })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      replay: false,
+      footer: ui.api,
+    })
+
+    await transport.waitForIdle()
+
+    expect(waits).toBe(2)
+    expect(ui.commits.map((item) => item.text)).toEqual(["settled"])
     await transport.close()
   })
 
@@ -2930,10 +2971,7 @@ describe("V2 mini transport", () => {
       { sessionID: "ses_1", model: { providerID: "openai", id: "gpt-5", variant: "high" } },
       { signal: undefined },
     )
-    expect(defaultModel).toHaveBeenCalledWith(
-      { location: { directory: "/project" } },
-      { signal: undefined },
-    )
+    expect(defaultModel).toHaveBeenCalledWith({ location: { directory: "/project" } }, { signal: undefined })
     await transport.close()
   })
 

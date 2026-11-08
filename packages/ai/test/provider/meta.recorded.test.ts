@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMRequest, LLMResponse, Message, ToolDefinition } from "../../src/index.js"
+import { ai, LLMEvent, LLMResponse, Message, ToolDefinition } from "../../src/effect.js"
 import { Meta } from "../../src/providers/meta.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -35,10 +35,10 @@ for (const api of ["responses", "chat"] as const) {
         { tags: ["text", "reasoning", "usage", `effort:${effort ?? "default"}`] },
         () =>
           Effect.gen(function* () {
-            const request = LLM.request({
+            const request = ai.request({
               model: meta[api](modelID),
               prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
-              generation: { maxTokens: 1024 },
+              maxTokens: 1024,
               providerOptions: {
                 reasoningEffort: effort,
                 ...(api === "responses" && effort === "high" ? { reasoningSummary: "auto" } : {}),
@@ -85,14 +85,14 @@ for (const api of ["responses", "chat"] as const) {
       { tags: ["tool", "tool-loop", "reasoning", "usage", "effort:low"] },
       () =>
         Effect.gen(function* () {
-          const request = LLM.request({
+          const request = ai.request({
             model: meta[api](modelID),
             prompt:
               "Look up the current weather in Paris using lookup_weather before answering. After receiving the result, report Paris's weather in one short sentence.",
             tools: [weather],
             toolChoice: "auto",
             providerOptions: { reasoningEffort: "low" },
-            generation: { maxTokens: 1024 },
+            maxTokens: 1024,
           })
           const compiled = yield* compileRequest(request)
           expect(compiled.body.tool_choice).toBe("auto")
@@ -104,7 +104,8 @@ for (const api of ["responses", "chat"] as const) {
           expect(first.events.some(LLMEvent.is.toolInputDelta)).toBe(true)
           expectUsage(first)
 
-          const followUp = LLMRequest.update(request, {
+          const followUp = {
+            ...request,
             messages: [
               ...request.messages,
               first.message,
@@ -112,7 +113,7 @@ for (const api of ["responses", "chat"] as const) {
                 Message.tool({ id: call.id, name: call.name, result: { condition: "sunny", temperature: "18C" } }),
               ),
             ],
-          })
+          }
           const replay = yield* compileRequest(followUp)
           if (api === "responses") {
             const reasoning = first.message.content.find((part) => part.type === "reasoning")

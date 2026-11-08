@@ -31,27 +31,6 @@ OpenCode je otvorenog koda i ne pohranjuje vaš kod niti kontekstualne podatke, 
 
 To znači da, sve dok koristite provajdera kojem vjerujete ili interni AI gateway, OpenCode možete koristiti sigurno.
 
-Jedina iznimka je opcionalna funkcija `/share`.
-
----
-
-#### Dijeljenje razgovora
-
-Ako korisnik uključi funkciju `/share`, razgovor i povezani podaci šalju se servisu koji koristimo za hosting ovih share stranica na opencode.ai.
-
-Podaci se trenutno serviraju kroz edge mrežu našeg CDN-a i keširaju se blizu korisnika.
-
-Preporučujemo da ovo onemogućite tokom probe.
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "share": "disabled"
-}
-```
-
-[Saznajte više o dijeljenju](/docs/share).
-
 ---
 
 ### Vlasništvo koda

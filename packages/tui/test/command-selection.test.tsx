@@ -71,7 +71,13 @@ test("custom commands commit the captured agent, model and variant before execut
     await setup.mockInput.typeText("second")
     await setup.renderOnce()
     setup.mockInput.pressEnter()
-    await setup.waitForFrame((frame) => frame.includes("Select variant") && frame.includes("low"))
+    // DialogSelect focuses its filter on a timer; typing earlier is dropped and Enter picks "Default".
+    await setup.waitForFrame(
+      (frame) =>
+        frame.includes("Select variant") &&
+        frame.includes("low") &&
+        setup.renderer.currentFocusedRenderable instanceof InputRenderable,
+    )
     await setup.mockInput.typeText("low")
     await setup.renderOnce()
     setup.mockInput.pressEnter()

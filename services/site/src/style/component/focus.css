@@ -1,0 +1,9 @@
+/* Several controls reset their outline; give keyboard users a visible focus ring back. */
+[data-component="nav-mobile-toggle"]:focus-visible,
+[data-slot="command"]:focus-visible,
+[data-component="email"] [data-slot="form"] button:focus-visible,
+[data-component="cli-row"]:focus-visible,
+[data-component="brand-grid"] button:focus-visible {
+  outline: 2px solid var(--color-text-strong) !important;
+  outline-offset: 2px;
+}

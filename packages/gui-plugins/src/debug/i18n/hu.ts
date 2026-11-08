@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "Hibakeresési sáv be- vagy kikapcsolása",
+  providerAriaLabel: "Szolgáltatói teljesítménydiagnosztika",
+  na: "n/a",
+  "duration.label": "TIME",
+  "duration.tip": "A legutóbbi kört indító kéréstől a válasz befejezéséig eltelt idő.",
+  "tps.label": "TPS",
+  "tps.tip": "Kimeneti és gondolkodási tokenek másodpercenként a legutóbbi kör modellkérésein, az eszközidő nélkül.",
+  "focus.label": "FOCUS",
+  "focus.tip": "A fókuszstílusok kényszerítése az összes interaktív elemre",
+  "focus.on": "ON",
+  "focus.off": "OFF",
+  "direction.label": "DIR",
+  "direction.tip": "A teljes alkalmazáselrendezési irány kényszerítése a kiválasztott nyelv megváltoztatása nélkül",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

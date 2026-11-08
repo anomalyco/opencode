@@ -9,7 +9,7 @@ description: 為重複任務建立自訂指令。
 /my-command
 ```
 
-自訂指令是 `/init`、`/undo`、`/redo`、`/share`、`/help` 等內建指令之外的補充。[了解更多](/docs/tui#commands)。
+自訂指令是 `/init`、`/undo`、`/redo`、`/help` 等內建指令之外的補充。[了解更多](/docs/tui#commands)。
 
 ---
 
@@ -23,7 +23,7 @@ description: 為重複任務建立自訂指令。
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -61,7 +61,7 @@ frontmatter 定義指令屬性，內容則成為範本。
       // This is shown as the description in the TUI
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }
@@ -86,7 +86,7 @@ frontmatter 定義指令屬性，內容則成為範本。
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -162,7 +162,7 @@ with the following content: $3
 
 ### Shell 輸出
 
-使用 _!`command`_ 將 [bash 指令](/docs/tui#bash-commands)輸出注入到提示詞中。
+使用 _!`command`_ 將 [shell 指令](/docs/tui#shell-commands)輸出注入到提示詞中。
 
 例如，建立一個分析測試覆蓋率的自訂指令：
 
@@ -301,7 +301,7 @@ Check for performance issues and suggest improvements.
 {
   "command": {
     "analyze": {
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }
@@ -313,7 +313,7 @@ Check for performance issues and suggest improvements.
 
 ## 內建指令
 
-OpenCode 包含多個內建指令，如 `/init`、`/undo`、`/redo`、`/share`、`/help`；[了解更多](/docs/tui#commands)。
+OpenCode 包含多個內建指令，如 `/init`、`/undo`、`/redo`、`/help`；[了解更多](/docs/tui#commands)。
 
 :::note
 自訂指令可以覆寫內建指令。

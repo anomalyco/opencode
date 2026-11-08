@@ -16,6 +16,7 @@ export type SessionTimelineProps = {
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
   timelineDetail?: TimelineDetail
+  turnDiffs?: boolean
   class?: string
 }
 
@@ -27,6 +28,7 @@ export function SessionTimeline(props: SessionTimelineProps) {
     shellToolDefaultOpen: () => props.shellToolDefaultOpen ?? false,
     editToolDefaultOpen: () => props.editToolDefaultOpen ?? false,
     timelineDetail: props.timelineDetail && (() => props.timelineDetail!),
+    turnDiffs: () => props.turnDiffs ?? false,
   })
 
   const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>({})

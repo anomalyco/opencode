@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "डिबग बार टगल गर्नुहोस्",
+  providerAriaLabel: "प्रदायकको कार्यसम्पादन निदान",
+  na: "n/a",
+  "duration.label": "TIME",
+  "duration.tip": "पछिल्लो पालो सुरु गर्ने प्रम्प्टदेखि त्यसको जवाफ पूरा हुँदासम्मको समय।",
+  "tps.label": "TPS",
+  "tps.tip": "पछिल्लो पालोका मोडेल अनुरोधहरूमा प्रति सेकेन्ड आउटपुट र तर्क टोकन, उपकरणको समय बाहेक।",
+  "focus.label": "FOCUS",
+  "focus.tip": "सबै अन्तरक्रियात्मक तत्वहरूमा फोकस शैलीहरू बल गर्नुहोस्",
+  "focus.on": "ON",
+  "focus.off": "बन्द",
+  "direction.label": "DIR",
+  "direction.tip": "चयन गरिएको भाषा परिवर्तन नगरी पूर्ण एप लेआउट दिशा बल गर्नुहोस्",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}
