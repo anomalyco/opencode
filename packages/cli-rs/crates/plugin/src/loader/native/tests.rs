@@ -6,6 +6,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use opentui::keymap::RunResult;
+use opentui::testing::Capture;
 
 use super::*;
 use crate::loader::tests::{TestHost, entry, host};
@@ -420,8 +421,8 @@ const VERSION: &str = "v1";
 #[path = "../../../examples/sample/src/fence.rs"]
 mod sample_fence;
 
-// Expected: the sample's fences, compiled into the host and run in process, draw what the same source draws from the
-// library through the C ABI.
+// Expected: the sample's fences, compiled into the host and run in process, draw the same cells, colors included, as
+// the same source draws from the library through the C ABI.
 #[test]
 fn the_sample_fence_draws_the_same_in_process_and_through_the_library() {
     let host = host();
@@ -429,14 +430,17 @@ fn the_sample_fence_draws_the_same_in_process_and_through_the_library() {
     let in_process = Registry::new(vec![plugin.into()], []);
     in_process.activate(&host);
     let library = active(&host, &build(""));
-    let text = "```sample\nhello\n```\n\n```sample-mode\nx\n```\n";
+    let text = "```sample\nhello\n```\n\n```sample-mode\nx\n```\n\n```sample-color\nlabel\n```\n";
     let direct = markdown(&host, &in_process, text);
     assert!(direct.contains("SAMPLE v1 HELLO") && direct.contains("sample mode dark"), "{direct}");
+    assert!(direct.contains("accent label"), "{direct}");
+    let cells = host.app.render();
     assert_eq!(markdown(&host, &library, text), direct);
+    assert_eq!(host.app.render(), cells);
 }
 
-/// Streams `chunks` into one Markdown view with the registry's renderers, returning the screen after each.
-fn stream(host: &Rc<TestHost>, registry: &Registry<TestHost>, chunks: &[&str]) -> Vec<String> {
+/// Streams `chunks` into one Markdown view with the registry's renderers, returning the frame after each.
+fn stream(host: &Rc<TestHost>, registry: &Registry<TestHost>, chunks: &[&str]) -> Vec<Capture> {
     let theme = host.theme();
     let syntax = opencode_ui::code::syntax_theme(&theme);
     let view = opencode_ui::markdown::view(host.app(), &theme, &syntax, &registry.code_blocks(&theme), true, true);
@@ -446,8 +450,7 @@ fn stream(host: &Rc<TestHost>, registry: &Registry<TestHost>, chunks: &[&str]) -
         .iter()
         .map(|chunk| {
             view.append(chunk);
-            host.app.render();
-            host.app.text()
+            host.app.render()
         })
         .collect()
 }
@@ -463,19 +466,28 @@ unsafe extern "C" fn latex_create(
     unsafe { abi::runtime::create(plugin.id, plugin.setup, host, options, instance, out) }
 }
 
-// Expected: the LaTeX built-in, wired through the byte shims of the C ABI (`Loopback`), keeps its formula across
-// a chunk that does not parse, as it does in process, with the host's fence keys crossing the wire.
-#[test]
-fn latex_streams_the_same_through_the_c_abi_loopback() {
-    let host = host();
-    let in_process = Registry::new(vec![opencode_latex::plugin().into()], []);
-    in_process.activate(&host);
+unsafe extern "C" fn mermaid_create(
+    host: *const HostApi,
+    options: Bytes,
+    instance: *mut *mut c_void,
+    out: *mut Owned,
+) -> i32 {
+    let plugin = opencode_mermaid::plugin();
+    // SAFETY: the loader passes what `PluginApi::create` documents.
+    unsafe { abi::runtime::create(plugin.id, plugin.setup, host, options, instance, out) }
+}
+
+/// A built-in whose `create` is `create`, wired through the byte shims of the C ABI (`Loopback`) and active.
+fn loopback(
+    host: &Rc<TestHost>,
+    create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
+) -> Registry<TestHost> {
     let api = PluginApi {
         size: size_of::<PluginApi>(),
         major: ABI_MAJOR,
         minor: ABI_MINOR,
         requires_minor: 4,
-        create: Some(latex_create),
+        create: Some(create),
         call: Some(abi::runtime::call),
         destroy: Some(abi::runtime::destroy),
         free: Some(abi::runtime::free),
@@ -483,16 +495,47 @@ fn latex_streams_the_same_through_the_c_abi_loopback() {
     };
     // The shims silence the process's panic hook, as a plugin's own; this test binary keeps its own.
     let hook = std::panic::take_hook();
-    let (definition, error) = define(&host, Library::from_table(&api, HOST_MINOR).unwrap(), None).unwrap();
+    let (definition, error) = define(host, Library::from_table(&api, HOST_MINOR).unwrap(), None).unwrap();
     let loopback = Registry::new(Vec::new(), []);
-    loopback.load(&host, definition.external("latex.so", error));
+    loopback.load(host, definition.external("loopback.so", error));
     std::panic::set_hook(hook);
-    assert_eq!(entry(&loopback.entries(), "latex.so").status, Status::Active);
+    assert_eq!(entry(&loopback.entries(), "loopback.so").status, Status::Active);
+    loopback
+}
+
+// Expected: the LaTeX built-in, wired through the byte shims of the C ABI (`Loopback`), keeps its formula across
+// a chunk that does not parse, as it does in process, with the host's fence keys crossing the wire.
+#[test]
+fn latex_streams_the_same_through_the_c_abi_loopback() {
+    let host = host();
+    let in_process = Registry::new(vec![opencode_latex::plugin().into()], []);
+    in_process.activate(&host);
+    let loopback = loopback(&host, latex_create);
 
     let chunks = ["```latex\n\\frac{a_1+b_1}{c_1+d_1}", "+\\frac{a_", "2+b_2}{c_2+d_2}"];
     let direct = stream(&host, &in_process, &chunks);
+    let text: Vec<String> = direct.iter().map(Capture::text).collect();
     assert_eq!(direct[1], direct[0]);
-    assert!(direct[0].contains("───") && !direct[0].contains("\\frac"), "{}", direct[0]);
-    assert!(direct[2] != direct[0] && !direct[2].contains("\\frac"), "{}", direct[2]);
+    assert!(text[0].contains("───") && !text[0].contains("\\frac"), "{}", text[0]);
+    assert!(direct[2] != direct[0] && !text[2].contains("\\frac"), "{}", text[2]);
+    assert_eq!(stream(&host, &loopback, &chunks), direct);
+}
+
+// Expected: the Mermaid built-in through the C ABI loopback draws the same cells as in process, colors included:
+// its theme colors, translucent label backgrounds and white default fg, and the diagram it keeps by fence key while
+// a statement it does not support streams in.
+#[test]
+fn mermaid_streams_the_same_through_the_c_abi_loopback() {
+    let host = host();
+    let in_process = Registry::new(vec![opencode_mermaid::plugin().into()], []);
+    in_process.activate(&host);
+    let loopback = loopback(&host, mermaid_create);
+
+    let chunks = ["```mermaid\nflowchart LR\n  A -->|go| B", "\n  B --> C", "\n  C((cir"];
+    let direct = stream(&host, &in_process, &chunks);
+    let text: Vec<String> = direct.iter().map(Capture::text).collect();
+    assert!(text[0].contains("go") && !text[0].contains("flowchart"), "{}", text[0]);
+    assert!(direct[1] != direct[0] && !text[1].contains("flowchart"), "{}", text[1]);
+    assert_eq!(direct[2], direct[1]);
     assert_eq!(stream(&host, &loopback, &chunks), direct);
 }
