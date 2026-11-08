@@ -23,7 +23,7 @@ pub fn url(base: &Url, path: &str, query: &[(&str, &str)]) -> Url {
         let path = format!("{}/", base.path());
         base.set_path(&path);
     }
-    let mut url = base.join(path).unwrap_or_else(|_| base.clone());
+    let mut url = crate::js::join_url(&base, path).unwrap_or_else(|_| base.clone());
     // `URLSearchParams.set`: replace the first pair with the key in place and drop the others, or append.
     let mut pairs = base.query_pairs().map(|(key, value)| (key.into_owned(), value.into_owned())).collect::<Vec<_>>();
     for (key, value) in query {
@@ -74,7 +74,7 @@ mod tests {
     use futures_util::{SinkExt, StreamExt};
 
     fn base(text: &str) -> Url {
-        Url::parse(text).unwrap()
+        crate::js::parse_url(text).unwrap()
     }
 
     #[test]

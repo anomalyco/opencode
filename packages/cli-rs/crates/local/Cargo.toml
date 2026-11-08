@@ -13,13 +13,13 @@ workspace = true
 base64.workspace = true
 indexmap.workspace = true
 log.workspace = true
+opencode-api-types.workspace = true
 opencode-util.workspace = true
 rand.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha1.workspace = true
 thiserror.workspace = true
-url.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["system"] }

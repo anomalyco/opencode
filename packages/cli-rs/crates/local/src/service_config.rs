@@ -257,7 +257,7 @@ impl Edit {
 
 // `URL.parse(origin)` is an http or https URL whose origin is exactly the input.
 fn is_origin(origin: &str) -> bool {
-    url::Url::parse(origin)
+    opencode_api_types::js::parse_url(origin)
         .is_ok_and(|url| matches!(url.scheme(), "http" | "https") && url.origin().ascii_serialization() == origin)
 }
 

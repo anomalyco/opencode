@@ -450,6 +450,20 @@ fn pair_links_follow_the_server_urls() {
     assert!(value.loopback);
 }
 
+#[test]
+fn pair_links_skip_server_urls_with_non_ascii_hosts() {
+    let url = "https://Bücher.example";
+    assert!(matches!(opencode_api::js::parse_url(url), Err(opencode_api::js::UrlError::NonAsciiHost(_))));
+    let server = serde_json::from_value(json!({
+        "version": "1", "pid": 1, "urls": [url, "https://box.example/"], "paths": { "tmp": "/tmp" },
+    }))
+    .unwrap();
+    let code = serde_json::from_value(json!({ "code": "AB", "expires_in": 90 })).unwrap();
+    let value = pair::pairing(&server, &code);
+    assert_eq!(value.links, ["https://box.example/auth/connect/AB"]);
+    assert_eq!(value.localhost, None);
+}
+
 // Highlights --------------------------------------------------------------------------------------------------
 
 fn release_highlights() -> Vec<Highlight> {
