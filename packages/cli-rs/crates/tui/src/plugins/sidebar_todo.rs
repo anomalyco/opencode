@@ -1,41 +1,88 @@
 //! The sidebar's todo section (E.14, row F07, `feature-plugins/sidebar/todo.tsx`): the list of the latest
 //! completed `todowrite` call before the revert boundary. Above two items the header folds the list, and the
-//! folded header counts what remains.
+//! folded header counts what remains. It is a plugin of the one API (O-67).
 
-use std::rc::Rc;
+use std::cell::RefCell;
 
 use opencode_api::generated::{
-    SessionID, SessionMessageAssistantContentItem, SessionMessageAssistantToolState, SessionMessageInfo,
+    SessionMessageAssistantContentItem, SessionMessageAssistantToolState, SessionMessageInfo,
 };
-use opencode_plugin::{Definition, Placement, slot};
+use opencode_plugin::abi::{self, Changed, Click, Command, Layout, Node, Placement, Render, Span};
+use opencode_plugin::slot;
 use opencode_store::MessageExt;
-use opencode_ui::theme::Theme;
-use opentui::prelude::*;
-use serde_json::Value;
+use serde_json::{Value, json};
 
-use crate::app::Tui;
-use crate::routes::session::sidebar::{Fold, Section, on_click};
+pub fn plugin() -> abi::Plugin {
+    abi::Plugin { id: "opencode.sidebar.todo", setup }
+}
 
-pub fn plugin() -> Definition<Tui> {
-    Definition::new("opencode.sidebar.todo", |cx| {
-        let fold = Fold::load(cx.host(), cx.storage_key("view"));
-        cx.slot(Placement::append(slot::SIDEBAR_CONTENT), move |tui, input| {
-            let session = SessionID(input.session_id.clone().unwrap_or_default());
-            let (model, render) = (fold.clone(), fold.clone());
-            Box::new(Section::new(
-                tui,
-                Some(session.clone()),
-                move |tui, _| {
-                    let list = tui.data.read(|state| {
-                        let boundary = state.session(&session).and_then(|info| info.revert.as_ref());
-                        todos(state.messages(&session), boundary.map(|revert| revert.message_id.0.as_str()))
-                    });
-                    (!list.is_empty()).then(|| (list, model.open()))
-                },
-                move |tui, (list, _)| view(tui, list, &render),
-            ))
+/// The hidden command a click on the header runs.
+const FOLD: &str = "sidebar.todo.fold";
+
+fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.storage_key("view");
+    setup.command(Command { name: FOLD.to_owned(), ..Command::default() }, |host, _| {
+        host.storage_set("view", json!({ "open": !open(host) }));
+    });
+    let last: RefCell<Option<Last>> = RefCell::default();
+    setup.slot(Placement::append(slot::SIDEBAR_CONTENT), move |read, input, changed| {
+        let Some(session) = input.session_id.as_deref() else {
+            return Render::Hide;
+        };
+        let mut last = last.borrow_mut();
+        let fresh = changed.all || changed.local || last.as_ref().is_none_or(|last| last.session != session);
+        let last = match &mut *last {
+            Some(last) if !fresh => last,
+            last => last.insert(Last { session: session.to_owned(), boundary: None, input: None }),
+        };
+        if !last.update(read, changed, fresh) && !fresh {
+            return Render::Keep;
+        }
+        let list = parse(last.input.as_ref());
+        if list.is_empty() {
+            return Render::Hide;
+        }
+        Render::Show(view(&list, open(read)))
+    });
+    Ok(())
+}
+
+/// The stored `{ open: true }` (`storage.store("view")`).
+fn open(read: &dyn abi::Read) -> bool {
+    read.storage_get("view").and_then(|value| value.get("open")?.as_bool()).unwrap_or(true)
+}
+
+/// What the section last read for its session: the revert boundary and the input of the `todowrite` call it found.
+struct Last {
+    session: String,
+    boundary: Option<String>,
+    input: Option<Value>,
+}
+
+impl Last {
+    /// Reads what `changed` may have changed; whether the list it shows changed. A streamed delta that leaves the
+    /// latest `todowrite` call as it was allocates nothing.
+    fn update(&mut self, read: &dyn abi::Read, changed: &Changed, fresh: bool) -> bool {
+        let info = fresh || changed.session(&self.session);
+        if info {
+            self.boundary =
+                read.session(&self.session).and_then(|session| session.info.revert).map(|revert| revert.message_id.0);
+        }
+        let messages =
+            info || changed.list(&self.session) || changed.messages.iter().any(|(session, _)| *session == self.session);
+        if !messages {
+            return false;
+        }
+        let mut same = true;
+        read.messages(&self.session, &mut |messages| {
+            let input = todo_input(messages, self.boundary.as_deref());
+            if input != self.input.as_ref() {
+                self.input = input.cloned();
+                same = false;
+            }
         });
-    })
+        !same
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -52,53 +99,41 @@ pub struct Todo {
     pub status: Status,
 }
 
-fn view(tui: &Tui, list: &[Todo], fold: &Rc<Fold>) -> View {
-    let theme = tui.page();
-    let app = &tui.app;
+fn view(list: &[Todo], open: bool) -> Node {
     let foldable = list.len() > 2;
-    let header = View::new(app).row().gap(1);
+    let mut header = Vec::new();
     if foldable {
-        header.add(&Text::new(app, if fold.open() { "▼" } else { "▶" }).fg(theme.text.base));
+        header.push(Node::text([Span::new(if open { "▼" } else { "▶" }).fg("text.base")]));
     }
-    let mut title = vec!["Todo".fg(theme.text.base).bold()];
-    if foldable && !fold.open() {
+    let mut title = vec![Span::new("Todo").fg("text.base").bold()];
+    if foldable && !open {
         let remaining = list.iter().filter(|item| matches!(item.status, Status::Pending | Status::InProgress)).count();
-        title.push(format!(" ({remaining} remaining)").fg(theme.text.muted));
+        title.push(Span::new(format!(" ({remaining} remaining)")).fg("text.muted"));
     }
-    header.add(&Text::new(app, title));
-    let weak = tui.weak();
-    let toggle = fold.clone();
-    on_click(&header, true, move || {
-        if let Some(tui) = weak.upgrade()
-            && foldable
-        {
-            toggle.toggle(&tui);
-        }
-    });
-    let root = View::new(app).child(&header);
-    if !foldable || fold.open() {
-        for item in list {
-            root.add(&item_view(app, &theme, item));
-        }
+    header.push(Node::text(title));
+    let mut header = Node::row(header).gap(1);
+    if foldable {
+        header = header.on_click(Click::command(FOLD, None).on_down());
     }
-    root
+    let mut children = vec![header];
+    if !foldable || open {
+        children.extend(list.iter().map(item));
+    }
+    Node::column(children)
 }
 
 /// `TodoItem`: the marker and the wrapped content, colored by status.
-fn item_view(app: &App, theme: &Theme, todo: &Todo) -> View {
+fn item(todo: &Todo) -> Node {
     let color = match todo.status {
-        Status::InProgress => theme.text.feedback.warning.base,
-        Status::Cancelled => theme.text.faint,
-        _ => theme.text.muted,
+        Status::InProgress => "text.feedback.warning.base",
+        Status::Cancelled => "text.faint",
+        _ => "text.muted",
     };
-    let content = Text::new(app, todo.content.clone()).fg(color).wrap(WrapMode::Word).grow(1.0);
-    if todo.status == Status::Cancelled {
-        content.strikethrough();
-    }
-    View::new(app)
-        .row()
-        .child(&Text::new(app, format!("{} ", marker(todo.status))).fg(color).shrink(0.0))
-        .child(&content)
+    let content = Span { strikethrough: todo.status == Status::Cancelled, ..Span::new(todo.content.clone()) };
+    Node::row(vec![
+        Node::text([Span::new(format!("{} ", marker(todo.status)))]).fg(color).layout(Layout::default().shrink(false)),
+        Node::text([content]).fg(color).layout(Layout::default().grow()),
+    ])
 }
 
 /// `todoMarker`.
@@ -112,11 +147,11 @@ pub fn marker(status: Status) -> &'static str {
 }
 
 /// `sessionTodos`: the input of the latest completed `todowrite` call before `boundary`.
-pub fn todos(messages: &[SessionMessageInfo], boundary: Option<&str>) -> Vec<Todo> {
+fn todo_input<'a>(messages: &'a [SessionMessageInfo], boundary: Option<&str>) -> Option<&'a Value> {
     let end = boundary
         .and_then(|boundary| messages.iter().position(|message| message.id() == boundary))
         .unwrap_or(messages.len());
-    let input = messages[..end]
+    messages[..end]
         .iter()
         .flat_map(|message| match message {
             SessionMessageInfo::Assistant(message) => message.content.as_slice(),
@@ -129,8 +164,7 @@ pub fn todos(messages: &[SessionMessageInfo], boundary: Option<&str>) -> Vec<Tod
                 _ => None,
             },
             _ => None,
-        });
-    parse(input)
+        })
 }
 
 /// `parseTodos`: entries with non-empty content; an unknown status reads as pending.
