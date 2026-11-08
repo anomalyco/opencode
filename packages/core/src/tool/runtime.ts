@@ -169,6 +169,7 @@ const outputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema 
 const standardJsonSchema = (schema: StandardSchemaV1<any, any>, io: "input" | "output"): JsonSchema.JsonSchema => {
   if (isStandardJSONSchema(schema)) return schema["~standard"].jsonSchema[io]({ target: "draft-2020-12" })
   if (schema instanceof $ZodType) return toJSONSchema(schema, { target: "draft-2020-12", io })
+  if (Schema.isSchema(schema)) return toJsonSchema(schema)
   throw new Error(`Schema vendor "${schema["~standard"].vendor}" does not support JSON Schema conversion`)
 }
 

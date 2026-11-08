@@ -276,12 +276,14 @@ describe("Tool", () => {
         }),
       )
 
-      expect((yield* service.snapshot()).definitions.find((tool) => tool.name === "search")?.inputSchema).toMatchObject({
-        type: "object",
-        properties: { keyword: { type: "string" } },
-        required: ["keyword"],
-        additionalProperties: false,
-      })
+      expect((yield* service.snapshot()).definitions.find((tool) => tool.name === "search")?.inputSchema).toMatchObject(
+        {
+          type: "object",
+          properties: { keyword: { type: "string" } },
+          required: ["keyword"],
+          additionalProperties: false,
+        },
+      )
       expect(
         yield* executeTool(service, {
           sessionID,
