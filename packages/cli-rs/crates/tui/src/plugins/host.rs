@@ -42,6 +42,10 @@ impl opencode_plugin::Host for Tui {
         &self.keymap
     }
 
+    fn unchanged(changes: &Changes) -> bool {
+        changes.is_empty()
+    }
+
     fn storage_read(&self, key: &str) -> Option<String> {
         let value = self.storage()?.load(key, &serde_json::Value::Null).ok()?;
         (!value.is_null()).then(|| value.to_string())
