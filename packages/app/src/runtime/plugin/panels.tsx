@@ -359,7 +359,9 @@ export function createRegion(input: {
   }
 
   // Feeds the machine the region's tabs each time they change: a tab that selects itself replaces the New tab its pane
-  // shows, a split or bottom pane takes its New tabs when it closes, and an open, empty side region opens one.
+  // shows, a split or bottom pane takes its New tabs when it closes, and an open, empty side region opens one. The side
+  // region reports itself open after this runs, so a close that empties the strip reads the layout too: the region is
+  // closing, and opens no New tab on its way out.
   createRenderEffect(() =>
     dispatchNewTabs({
       type: "sync",
@@ -367,7 +369,7 @@ export function createRegion(input: {
         session: input.view().key,
         empty: empty(),
         regionActive: active(),
-        sideOpen: sideOpen(),
+        sideOpen: sideOpen() && input.side().opened(),
         panes: {
           side: { active: panes.side.active(), keys: panes.side.keys() },
           split: { active: panes.split.active(), keys: panes.split.keys() },

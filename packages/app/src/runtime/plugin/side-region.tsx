@@ -26,7 +26,7 @@ import { useSessionLayout } from "@/session/session-layout"
 import type { Sizing } from "@/session/helpers"
 import { PanelTrigger } from "./panel-trigger"
 import { createSessionPanelMenuEntries, type SessionPanelMenuEntry } from "./panel-menu"
-import { RegionContent, type Region, type RegionPane } from "./panels"
+import { RegionContent, type Region, type RegionEntry, type RegionPane } from "./panels"
 import { PluginSlot } from "./render"
 import { createTabStripScroll } from "./tab-strip-scroll"
 import { closedTabsModifier, type ClosedSideTab } from "./closed-tabs"
@@ -217,6 +217,48 @@ export function PaneTabs(props: {
 
   const modifier = closedTabsModifier()
 
+  // Closing the last tab closes the region at once, and the region slides shut showing that tab rather than an empty
+  // pane: the pane keeps drawing the tab it last showed until the close lands, the region opens again or another
+  // session routes in.
+  const leaving = createMemo<{ view: MountedSession; entry: RegionEntry } | undefined>((previous) => {
+    const entry = props.pane.selected()
+
+    if (entry) return { view: props.view, entry }
+
+    if (previous?.view === props.view && !props.shown() && props.present()) return previous
+  })
+
+  const held = () => (props.pane.selected() ? undefined : leaving()?.entry)
+
+  const entryOf = (key: string) => props.region.entry(key) ?? (held()?.key === key ? held() : undefined)
+
+  // The pane as drawn, with the tab it keeps while the region slides shut.
+  const pane: RegionPane = {
+    get id() {
+      return props.pane.id
+    },
+    entries: createMemo(() => {
+      const entry = held()
+      const entries = props.pane.entries()
+
+      return entry && !entries.some((item) => item.key === entry.key) ? [...entries, entry] : entries
+    }),
+    keys: createMemo(
+      () => {
+        const key = held()?.key
+        const keys = props.pane.keys()
+
+        return key && !keys.includes(key) ? [...keys, key] : keys
+      },
+      [],
+      { equals: same },
+    ),
+    active: () => held()?.key ?? props.pane.active(),
+    selected: () => held() ?? props.pane.selected(),
+    openFor: (plugin) => props.pane.openFor(plugin),
+    lead: () => props.pane.lead(),
+  }
+
   // The tab a right click opened the tab menu on, and where. One menu serves the strip: a menu around each trigger
   // would register the tab in the menu's item collection instead of the strip's.
   const [tabMenu, setTabMenu] = createStore({ open: false, key: "", x: 0, y: 0 })
@@ -238,7 +280,7 @@ export function PaneTabs(props: {
   return (
     <Tabs
       data-pane-content={props.pane.id}
-      value={current() ?? props.pane.active() ?? "empty"}
+      value={current() ?? pane.active() ?? "empty"}
       onChange={(value) => {
         // Kobalte selects the first tab while triggers register, including while the "+" click is still dispatching.
         // Only input on a tab selects one; the region owns fallback selection.
@@ -275,16 +317,16 @@ export function PaneTabs(props: {
             setTabMenu({ open: true, key, x: event.clientX, y: event.clientY })
           }}
         >
-          <For each={props.pane.keys()}>
+          <For each={pane.keys()}>
             {(key) => (
-              <Show when={props.region.entry(key)}>
+              <Show when={entryOf(key)}>
                 {(entry) => (
                   <PanelTrigger
                     value={key}
                     plugin={entry().plugin}
                     tab={entry().tab}
                     session={props.view}
-                    active={props.pane.active() === key}
+                    active={pane.active() === key}
                     preview={tabs().preview() === key}
                     dragging={props.drag.dragging() === key}
                     onDragStart={(event) => props.drag.start(event, key, entry().tab.title)}
@@ -425,7 +467,7 @@ export function PaneTabs(props: {
           </Tabs.Content>
         )}
       </Show>
-      <Show when={props.placeholder && !current() && props.pane.active() === undefined}>
+      <Show when={props.placeholder && !current() && pane.active() === undefined}>
         <Tabs.Content value="empty" class="flex flex-col h-full overflow-hidden contain-strict">
           {/* After + runs a primary item, its tab owns the empty pane until it arrives. The launchers list only in a
               New tab, not in a pane with no tabs. */}
@@ -442,7 +484,7 @@ export function PaneTabs(props: {
       {/* Kept mounted under the new tab view, so terminals and editors keep their state. */}
       <div class="contents" classList={{ hidden: !!current() }} inert={!!current() || undefined}>
         <RegionContent
-          pane={props.pane}
+          pane={pane}
           view={props.view}
           screen={props.screen}
           frame={{
@@ -499,7 +541,8 @@ function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: (ke
   const menu = createDeferredMenu<SessionPanelMenuEntry>({
     onChoose: (entry) => {
       props.onChoose(entry.key)
-      entry.item.run()    },
+      entry.item.run()
+    },
   })
 
   return (
