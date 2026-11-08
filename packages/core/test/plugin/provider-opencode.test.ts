@@ -1682,6 +1682,46 @@ describe("OpencodePlugin", () => {
     }),
   )
 
+  it.effect("requests Console instructions and skills together", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const discovery = yield* InstructionDiscovery.Service
+      const requests: string[] = []
+      // Instructions answer only once skills were requested, so fetching the lists one after the other never finishes.
+      const skillsRequested = Promise.withResolvers<void>()
+      const server = {
+        fetch: async (request: Request) => {
+          const path = new URL(request.url).pathname
+          requests.push(path)
+          if (path === "/api/v2/config") return Response.json({ providers: {} })
+          if (path === "/api/v2/instructions") {
+            await skillsRequested.promise
+            return Response.json({ instructions: [{ id: "style", content: "Use tabs." }] })
+          }
+          if (path === "/api/v2/skills") {
+            skillsRequested.resolve()
+            return Response.json({ skills: [] })
+          }
+          return new Response(null, { status: 404 })
+        },
+      }
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+      })
+      const activation = yield* addPlugin().pipe(inProcess(server), Effect.forkChild({ startImmediately: true }))
+      yield* drain
+      expect(requests.toSorted()).toEqual(["/api/v2/config", "/api/v2/instructions", "/api/v2/skills"])
+      yield* Fiber.join(activation)
+      const files = yield* discovery.list()
+      expect(
+        Array.isArray(files)
+          ? files.filter((file) => file.path.startsWith("OpenCode Console")).map((file) => file.content)
+          : [],
+      ).toEqual(["Use tabs."])
+    }),
+  )
+
   it.live("keeps credentials on a same-origin skill redirect", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
