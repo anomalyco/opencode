@@ -900,6 +900,13 @@ pub struct Info {
     pub size: (u16, u16),
     /// Where the TUI works: the location a catalog read of `None` reads.
     pub location: LocationRef,
+    /// The TUI plugins and the server plugins that failed. Claims render again with [`Changed::local`] when it changes.
+    #[serde(default, skip_serializing_if = "is_zero_usize")]
+    pub failed_plugins: usize,
+}
+
+fn is_zero_usize(value: &usize) -> bool {
+    *value == 0
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1231,6 +1238,17 @@ pub trait Host: Read {
     /// Stores `value`, an object, under one of the plugin's declared storage keys. [`Read::storage_get`] reads it back
     /// at once; the host writes it to disk later, and claims render again with [`Changed::local`].
     fn storage_set(&self, key: &str, value: serde_json::Value);
+    /// Sets `fields` in the object stored under one of the plugin's declared storage keys and keeps its other fields
+    /// (TS `update((draft) => { draft.open = … })`). A host with storage sets them in the latest stored object under
+    /// the storage lock, so fields another client wrote stay.
+    fn storage_merge(&self, key: &str, fields: serde_json::Map<String, serde_json::Value>) {
+        let mut object = match self.storage_get(key) {
+            Some(serde_json::Value::Object(object)) => object,
+            _ => serde_json::Map::new(),
+        };
+        object.extend(fields);
+        self.storage_set(key, serde_json::Value::Object(object));
+    }
     /// Runs the registered command `name` with `input`, the plugin's or the host's, palette or not.
     fn dispatch(&self, name: &str, input: Option<&str>);
     /// Shows `toast`.

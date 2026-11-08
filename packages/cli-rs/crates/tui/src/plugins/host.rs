@@ -6,18 +6,22 @@ use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::{Rc, Weak};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use opencode_api::generated::{
-    IntegrationInfo, McpServer, ModelInfo, ModelRef, ProviderID, ProviderInfo, SessionID, SessionMessageInfo,
-    UsageLimitsInfo, V2Event, VcsInfo,
+    IntegrationInfo, LocationQueryInput, McpServer, ModelInfo, ModelRef, PluginInfo, PluginListInput, PluginSource,
+    PluginState, ProviderID, ProviderInfo, SessionID, SessionMessageInfo, UsageLimitsInfo, V2Event, VcsInfo,
 };
 use opencode_local::cli_config::AttentionSoundName;
+use opencode_local::serial::Serial;
+use opencode_local::storage::Storage;
 use opencode_plugin::abi;
 use opencode_plugin::loader::native::Native;
 use opencode_plugin::loader::{Backend, Configured, Loader};
 use opencode_plugin::node::{assign, refill, theme_color};
-use opencode_plugin::{Definition, Registry, SlotInput, SlotMount, Slotted};
+use opencode_plugin::{Definition, Registry, SlotInput, SlotMount, Slotted, Status};
 use opencode_store::location::{Catalog, Location, LocationData};
 use opencode_store::{Changes, State};
 use opencode_ui::bind;
@@ -27,6 +31,7 @@ use opencode_ui::theme::Theme;
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
+use serde_json::Value;
 
 use crate::app::Tui;
 use crate::features::attention::focus::When;
@@ -62,26 +67,30 @@ impl opencode_plugin::Host for Tui {
         if let Some(json) = self.reads.stored.borrow().get(key) {
             return json.clone();
         }
-        let value = self.storage().and_then(|storage| storage.load(key, &serde_json::Value::Null).ok());
-        let json = value.filter(|value| !value.is_null()).map(|value| value.to_string());
+        let json = self.storage().and_then(|storage| load(&storage, key));
         self.reads.stored.borrow_mut().insert(key.to_owned(), json.clone());
         json
     }
 
     fn storage_write(&self, key: &str, json: &str) -> Result<(), String> {
         let value: serde_json::Value = serde_json::from_str(json).map_err(|error| error.to_string())?;
-        if !value.is_object() {
-            return Err("a stored value is an object".to_owned());
+        // The frozen 1.3 SDK stores arrays too (`typeof value === "object"`).
+        if !(value.is_object() || value.is_array()) {
+            return Err("a stored value is an object or an array".to_owned());
         }
-        self.reads.stored.borrow_mut().insert(key.to_owned(), Some(json.to_owned()));
-        if let Some(storage) = self.storage() {
-            let key = key.to_owned();
-            self.app.runtime().spawn_blocking(move || {
-                if let Err(error) = storage.update(&key, &serde_json::json!({}), |stored| *stored = value) {
-                    log::error!("Failed to store {key}: {error}");
-                }
-            });
-        }
+        store(self, key, value.clone(), move |stored| *stored = value);
+        Ok(())
+    }
+
+    fn storage_merge(&self, key: &str, fields: serde_json::Map<String, serde_json::Value>) -> Result<(), String> {
+        let shown = match self.storage_read(key).and_then(|json| serde_json::from_str(&json).ok()) {
+            Some(serde_json::Value::Object(object)) => object.into_iter().chain(fields.clone()).collect(),
+            _ => fields.clone(),
+        };
+        store(self, key, serde_json::Value::Object(shown), move |stored| match stored.as_object_mut() {
+            Some(object) => object.extend(fields),
+            None => *stored = serde_json::Value::Object(fields),
+        });
         Ok(())
     }
 
@@ -107,6 +116,9 @@ impl opencode_plugin::Host for Tui {
             _ => false,
         };
         if !here {
+            if options.title.is_none() {
+                options.title = self.data.read(|state| state.session(&session).and_then(|info| info.title.clone()));
+            }
             let route = Route::Session { id: session };
             options = options.action("Open", bind!(self, |tui| tui.navigate(route.clone())));
         }
@@ -114,14 +126,9 @@ impl opencode_plugin::Host for Tui {
     }
 
     fn failed(&self, id: &str) {
-        let toast =
-            ToastOptions::new(Variant::Error, "Run /plugins to view details.").title(format!("Plugin failed: {id}"));
-        self.toasts.show(toast.action(
-            "Open plugins",
-            bind!(self, |tui| {
-                tui.keymap.dispatch("plugins.list", None);
-            }),
-        ));
+        failed_toast(self, format!("Plugin failed: {id}"), String::new());
+        // The home footer counts the failed plugins.
+        self.reads.changed(self);
     }
 
     fn attention(&self, attention: &abi::Attention) {
@@ -224,6 +231,57 @@ impl opencode_plugin::Host for Tui {
     }
 }
 
+/// Shows `shown` under storage key `key` at once, and queues `change` of the latest stored value under the storage
+/// lock after every write made before it. The plugin queues [`opencode_plugin::Host::storage_changed`] after it.
+fn store(tui: &Tui, key: &str, shown: Value, change: impl FnOnce(&mut Value) + Send + 'static) {
+    tui.reads.stored.borrow_mut().insert(key.to_owned(), Some(shown.to_string()));
+    if let Some(storage) = tui.storage() {
+        let pending = tui.reads.pending.clone();
+        pending.fetch_add(1, Ordering::SeqCst);
+        let key = key.to_owned();
+        tui.reads.writer.get_or_init(|| Serial::new("plugin-storage")).run(move || {
+            if let Err(error) = storage.update(&key, &serde_json::json!({}), change) {
+                log::error!("Failed to store {key}: {error}");
+            }
+            pending.fetch_sub(1, Ordering::SeqCst);
+        });
+    }
+}
+
+fn load(storage: &Storage, key: &str) -> Option<String> {
+    storage.load(key, &Value::Null).ok().filter(|value| !value.is_null()).map(|value| value.to_string())
+}
+
+/// Reads the plugins' stored keys again after the storage directory changed, so another client's writes show. While a
+/// write of this TUI is queued the keys stay; its own change of the directory reads them again after it.
+pub fn reload_storage(tui: &Tui) {
+    let Some(storage) = tui.storage().filter(|_| tui.reads.pending.load(Ordering::SeqCst) == 0) else {
+        return;
+    };
+    let mut changed = false;
+    for (key, json) in tui.reads.stored.borrow_mut().iter_mut() {
+        let fresh = load(&storage, key);
+        changed |= *json != fresh;
+        *json = fresh;
+    }
+    if changed {
+        tui.reads.changed(tui);
+    }
+}
+
+/// TS's error toast for a failed plugin, which offers to open the plugin manager.
+fn failed_toast(tui: &Tui, title: String, names: String) {
+    let mut options = ToastOptions::new(Variant::Error, format!("{names}Run /plugins to view details."));
+    options.title = Some(title);
+    let options = options.action(
+        "Open plugins",
+        bind!(tui, |tui| {
+            tui.keymap.dispatch("plugins.list", None);
+        }),
+    );
+    tui.toasts.show(options);
+}
+
 /// What a mounted claim's [`opencode_plugin::Host::watch`] calls.
 type Push = dyn Fn(&abi::Changed);
 
@@ -235,9 +293,15 @@ pub struct Reads {
     key: Cell<SessionID>,
     /// The JSON text of each storage key read or written, so a write shows at once and storage works without disk.
     stored: RefCell<HashMap<String, Option<String>>>,
+    /// The one worker that writes the plugins' storage, so writes land in the order they were made.
+    writer: OnceCell<Serial>,
+    /// The writes queued and not yet on disk.
+    pending: Arc<AtomicUsize>,
     /// The mounted claims' pushes, which a storage write calls with `local` from the effect queue.
     watchers: RefCell<Vec<Weak<Push>>>,
     telling: Cell<bool>,
+    /// The server plugins of the default location (TS `plugins.server()`), and that location.
+    server: RefCell<(Option<Location>, Vec<PluginInfo>)>,
 }
 
 impl Reads {
@@ -380,16 +444,18 @@ impl abi::Read for Reader<'_> {
     }
 
     fn providers(&self) -> Option<Vec<ProviderInfo>> {
-        let location = self.location(None);
-        self.tui.data.read(|state| state.location(Some(&location)).and_then(|data| data.provider.clone()))
+        self.catalog(None, Catalog::Provider, |data| data.provider.clone())
     }
 
     fn info(&self) -> abi::Info {
         let location = self.location(None);
+        let failed =
+            self.tui.plugins.entries().iter().filter(|entry| matches!(entry.status, Status::Failed(_))).count();
         abi::Info {
             version: self.tui.startup.args.version.clone(),
             size: self.tui.app.size(),
             location: abi::LocationRef { directory: location.directory, workspace: location.workspace_id },
+            failed_plugins: failed + server_failed(&self.tui.reads.server.borrow().1),
         }
     }
 
@@ -457,6 +523,76 @@ pub fn install(tui: &Rc<Tui>) {
         log::warn!("plugin {target} skipped: {}", opencode_plugin::SKIPPED);
     }
     tui.plugins.activate(tui);
+    crate::features::events::subscribe(tui, |tui, event| {
+        if matches!(event, V2Event::PluginUpdated(_) | V2Event::ServerConnected(_)) {
+            sync_server_plugins(tui);
+        }
+    })
+    .forget();
+    sync_server_plugins(tui);
+}
+
+/// Reads the server plugins again once the default location changed.
+pub fn sync(tui: &Tui) {
+    let default = tui.data.read(|state| state.default_location().clone());
+    if tui.reads.server.borrow().0.as_ref() != Some(&default) {
+        sync_server_plugins(tui);
+    }
+}
+
+/// `syncServerPlugins`: reads the server plugins of the default location, and shows the plugins that newly failed in
+/// one error toast.
+fn sync_server_plugins(tui: &Tui) {
+    let location = tui.data.read(|state| state.default_location().clone());
+    let input = PluginListInput { location: Some(LocationQueryInput { directory: Some(location.directory.clone()) }) };
+    tui.reads.server.borrow_mut().0 = Some(location);
+    let client = tui.data.client().clone();
+    tui.app.spawn(
+        async move { client.plugin_list(&input).await },
+        bind!(tui, |tui, _, result| {
+            let Ok(output) = result else { return };
+            let before = std::mem::replace(&mut tui.reads.server.borrow_mut().1, output.data.clone());
+            let failed: Vec<String> = output
+                .data
+                .iter()
+                .filter(|plugin| matches!(plugin.state, PluginState::Failed(_)))
+                .filter(|plugin| {
+                    !before
+                        .iter()
+                        .any(|previous| server_name(previous) == server_name(plugin) && previous.state == plugin.state)
+                })
+                .map(server_name)
+                .collect();
+            if server_failed(&before) != server_failed(&output.data) {
+                tui.reads.changed(&tui);
+            }
+            match failed.as_slice() {
+                [] => {}
+                [name] => failed_toast(&tui, format!("Plugin failed: {name}"), String::new()),
+                names => {
+                    failed_toast(&tui, format!("{} plugins failed", names.len()), format!("{}\n", names.join(", ")))
+                }
+            }
+        }),
+    );
+}
+
+fn server_failed(plugins: &[PluginInfo]) -> usize {
+    plugins.iter().filter(|plugin| matches!(plugin.state, PluginState::Failed(_))).count()
+}
+
+/// `serverPluginName`.
+fn server_name(plugin: &PluginInfo) -> String {
+    if let Some(id) = &plugin.id {
+        return id.0.clone();
+    }
+    match &plugin.source {
+        PluginSource::Package(package) => package.target.clone(),
+        PluginSource::Local(local) => local.path.clone(),
+        PluginSource::Builtin(source) => source.r#type.clone(),
+        PluginSource::Sdk(source) => source.r#type.clone(),
+        PluginSource::Unknown(value) => value.get("type").and_then(Value::as_str).unwrap_or_default().to_owned(),
+    }
 }
 
 /// What [`external`] needs: the global config directory and the working directory.

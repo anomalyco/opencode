@@ -1,6 +1,7 @@
 //! The home footer plugin (E.14, row F01, `feature-plugins/home/footer.tsx`), appended to `home.footer`: the
 //! MCP servers of the default location (`⊙ 2 MCP`, or `⊙ 1 MCP failed`, with `/mcps` from 64 columns; a click
-//! opens the list), the failed plugins, the `home.footer.status` slot, and the version on the right from 64
+//! opens the list), the failed TUI and server plugins (`⊙ 1 plugin failed`, with `/plugins` from 80 columns; a
+//! click opens the plugin manager), the `home.footer.status` slot, and the version on the right from 64
 //! columns. Hidden below 44x14. It is a plugin of the one API (O-67).
 
 use opencode_plugin::abi::{self, Click, Layout, Node, Placement, Render, Span, Width};
@@ -13,12 +14,13 @@ pub fn plugin() -> abi::Plugin {
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     // Append keeps the path open to additive plugin claims; an external replace still takes it over.
     setup.slot(Placement::append(slot::HOME_FOOTER), |read, _, changed| {
-        // It reads the MCP servers where the TUI works and the terminal size.
-        if !(changed.all || changed.size || !changed.locations.is_empty()) {
+        // It reads the MCP servers where the TUI works, the terminal size, and the failed plugins, which change with
+        // where the TUI works as `local`.
+        if !(changed.all || changed.size || changed.local || !changed.locations.is_empty()) {
             return Render::Keep;
         }
         let info = read.info();
-        if !(changed.all || changed.size || changed.location(&info.location)) {
+        if !(changed.all || changed.size || changed.local || changed.location(&info.location)) {
             return Render::Keep;
         }
         let (width, height) = info.size;
@@ -43,7 +45,20 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             let fixed = Layout::default().shrink(false);
             row.push(Node::row(mcp).gap(1).layout(fixed).on_click(Click::command("mcp.list", None)));
         }
-        // Failed plugins: built-ins do not fail, and server plugins are read from P.4 on.
+        if info.failed_plugins > 0 {
+            let failed = info.failed_plugins;
+            let plural = if failed == 1 { "" } else { "s" };
+            let spans = vec![
+                Span::new("⊙ ").fg("text.feedback.error.base"),
+                Span::new(format!("{failed} plugin{plural} failed")),
+            ];
+            let mut plugins = vec![Node::text(spans)];
+            if width >= 80 {
+                plugins.push(Node::text([Span::new("/plugins")]).fg("text.muted"));
+            }
+            let fixed = Layout::default().shrink(false);
+            row.push(Node::row(plugins).gap(1).layout(fixed).on_click(Click::command("plugins.list", None)));
+        }
         row.push(Node::slot(slot::HOME_FOOTER_STATUS));
         row.push(Node::column(Vec::new()).layout(Layout::default().grow()));
         if width >= 64 {

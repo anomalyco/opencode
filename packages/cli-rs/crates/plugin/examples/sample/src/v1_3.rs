@@ -20,6 +20,28 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
             host.toast(Toast::Success, "Hello from sample 1.3");
         },
     );
+    // The 1.3 SDK stores arrays too: the command shows what it read, then what it stored.
+    setup.storage_key("list");
+    setup.command(
+        Command {
+            name: "sample.list".to_owned(),
+            title: "Store a list".to_owned(),
+            group: Some("Sample".to_owned()),
+            slash: None,
+            keybind: None,
+            palette: false,
+        },
+        move |_| {
+            let before = host.storage_get("list").unwrap_or_default();
+            match host.storage_set("list", "[1,2]") {
+                Ok(()) => {
+                    let after = host.storage_get("list").unwrap_or_default();
+                    host.toast(Toast::Success, &format!("list {before} then {after}"));
+                }
+                Err(error) => host.toast(Toast::Error, &format!("list failed: {error}")),
+            }
+        },
+    );
     setup.code_block("sample", |fence| {
         if fence.code.trim().is_empty() {
             return None;
