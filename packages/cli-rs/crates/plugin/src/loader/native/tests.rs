@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 use std::rc::Rc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use opentui::keymap::RunResult;
@@ -188,6 +188,20 @@ fn versions_follow_the_abi_rules() {
     assert!(matches!(host.keymap().dispatch("sample.hello", None), RunResult::Ok));
     host.app.advance(Duration::from_millis(1));
     assert_eq!(*host.toasts.borrow(), [abi::Toast::new(abi::Variant::Success, "Hello from sample 1.3")]);
+
+    // The same 1.3 plugin behind the 1.0 table, which has no `describe`, draws the same.
+    let legacy = build("abi-1-0-wire");
+    assert_eq!(Native.inspect(&legacy).unwrap(), Inspected { major: 1, minor: 0, version: None });
+    let host = crate::loader::tests::host();
+    let registry = active(&host, &legacy);
+    let screen = markdown(&host, &registry, "```sample\nold\n```\n");
+    assert!(screen.contains("SAMPLE 1.3 OLD"), "{screen}");
+    let parent = View::new(host.app());
+    let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+    host.app().root().clear();
+    host.app().root().add(&parent);
+    host.app.render();
+    assert!(host.app.text().contains("sample plugin 1.3: home.footer"), "{}", host.app.text());
 
     // A 1.3 host refuses a plugin of this crate, which needs the 1.4 render requests.
     assert_eq!(
@@ -592,8 +606,8 @@ fn succeeded(session: &str) -> abi::types::V2Event {
     .unwrap()
 }
 
-/// The sample's home row as `registry` mounts `home.footer`, before and after a session's run succeeds and the host
-/// syncs the slot, with the toasts the event showed.
+/// The sample's home row as `registry` mounts `home.footer`, before and after a session's run succeeds, with the
+/// toasts the event showed.
 fn home(host: &Rc<TestHost>, registry: &Rc<Registry<TestHost>>) -> (Vec<String>, Vec<abi::Toast>) {
     host.toasts.borrow_mut().clear();
     *host.registry.borrow_mut() = Rc::downgrade(registry);
@@ -606,17 +620,18 @@ fn home(host: &Rc<TestHost>, registry: &Rc<Registry<TestHost>>) -> (Vec<String>,
         host.app.text().lines().find(|line| line.contains("sample home:")).unwrap_or_default().trim_end().to_owned()
     };
     let mut rows = vec![row(host)];
+    // Signals only: no change batch reaches the slot, but the handler changed what the status claim shows.
     host.emit(&succeeded("ses_1"));
     host.emit(&succeeded("ses_2"));
     host.app.advance(Duration::from_millis(1));
-    mounted.sync(host, &());
     rows.push(row(host));
+    drop(mounted);
     (rows, host.toasts.borrow().clone())
 }
 
 // Expected: the sample's event handler gets the event it asked for and shows a toast about its session, and its home
-// claim's nested `home.footer.status` slot keeps the sample's status claim mounted and renders it again on a sync,
-// the same in process and from the library, where the event crosses the C ABI as JSON.
+// claim's nested `home.footer.status` slot keeps the sample's status claim mounted, which renders again after the
+// handler without a change batch, the same in process and from the library, where the event crosses the C ABI as JSON.
 #[test]
 fn the_sample_home_and_event_act_the_same_in_process_and_through_the_library() {
     let host = host();
@@ -661,4 +676,172 @@ fn a_nested_slot_must_be_a_published_slot_inside_the_claims_own() {
     assert!(screen.contains("[home.footer.status]"), "{screen}");
     assert!(!screen.contains("[sidebar.content]"), "{screen}");
     assert_eq!(screen.matches('[').count(), 1, "{screen}");
+}
+
+fn first(setup: &mut abi::Setup) -> Result<(), String> {
+    setup
+        .on_event(&["session.execution.succeeded"], |host, _| host.toast(abi::Toast::new(abi::Variant::Info, "first")));
+    Ok(())
+}
+
+fn second(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.on_event(&["session.execution.succeeded"], |host, _| {
+        host.toast(abi::Toast::new(abi::Variant::Info, "second"))
+    });
+    Ok(())
+}
+
+unsafe extern "C" fn first_create(
+    host: *const HostApi,
+    options: Bytes,
+    instance: *mut *mut c_void,
+    out: *mut Owned,
+) -> i32 {
+    // SAFETY: the loader passes what `PluginApi::create` documents.
+    unsafe { abi::runtime::create("first", first, host, options, instance, out) }
+}
+
+// Expected: the effects of a plugin over the C ABI and of one in process share one queue, so they run in the order the
+// handlers ran, which is the order the plugins subscribed in.
+#[test]
+fn effects_of_both_paths_run_in_call_order() {
+    let host = host();
+    let _native = loopback(&host, first_create);
+    let direct = Registry::new(vec![abi::Plugin { id: "second", setup: second }.into()], []);
+    direct.activate(&host);
+    host.emit(&succeeded("ses_1"));
+    host.app.advance(Duration::from_millis(1));
+    let toasts: Vec<String> = host.toasts.borrow().iter().map(|toast| toast.message.clone()).collect();
+    assert_eq!(toasts, ["first", "second"]);
+}
+
+// Expected: deactivating, reloading or unloading a plugin destroys its instance at once, also while a route of it is
+// mounted, which then draws nothing; the replacement's setup ran before, and the old instance runs no more.
+#[test]
+fn the_instance_is_destroyed_at_once_while_its_route_is_mounted() {
+    let host = host();
+    let destroyed = || host.storage.borrow_mut().remove("plugin.sample.destroyed");
+    let load = |build: &[u8]| {
+        let (definition, error) = Native.load(&host, build, Some("{\"probe\":true}")).unwrap();
+        definition.external("sample.so", error)
+    };
+    let registry = Registry::new(Vec::new(), []);
+    registry.load(&host, load(&build("")));
+    let route = registry.route(&*host, "sample", "hello").unwrap();
+    assert!(registry.set_active(&host, "sample", false));
+    assert_eq!(destroyed().as_deref(), Some("{\"destroyed\":true}"));
+
+    assert!(registry.set_active(&host, "sample", true));
+    let route = (route, registry.route(&*host, "sample", "hello").unwrap());
+    host.storage.borrow_mut().remove("plugin.sample.count");
+    registry.load(&host, load(&build("v2")));
+    // The rebuild's setup stored its count, then the old instance was destroyed.
+    assert_eq!(destroyed().as_deref(), Some("{\"destroyed\":true}"));
+    assert_eq!(host.storage.borrow().get("plugin.sample.count").map(String::as_str), Some("{\"count\":1}"));
+    route.1.sync(&*host, &());
+    host.app().root().clear();
+    host.app().root().add(&route.1.root());
+    host.app.render();
+    assert!(!host.app.text().contains("Sample route hello"), "{}", host.app.text());
+
+    let _route = registry.route(&*host, "sample", "hello").unwrap();
+    registry.unload("sample.so");
+    assert_eq!(destroyed().as_deref(), Some("{\"destroyed\":true}"));
+}
+
+// Expected: a command that panics fails the plugin, and its slot claims, of 1.3 rows and of the one API, draw empty
+// once the key is handled, with a toast that says so.
+#[test]
+fn a_panic_clears_the_plugins_claims() {
+    let host = host();
+    let registry = Rc::new(active(&host, &build("still")));
+    *host.registry.borrow_mut() = Rc::downgrade(&registry);
+    let parent = View::new(host.app()).column();
+    let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+    host.app().root().add(&parent);
+    host.app.render();
+    let screen = host.app.text();
+    assert!(screen.contains("sample plugin v1: home.footer") && screen.contains("sample home: 0 done"), "{screen}");
+    host.keymap().dispatch("sample.panic", None);
+    host.app.advance(Duration::from_millis(1));
+    host.app.render();
+    let screen = host.app.text();
+    assert!(!screen.contains("sample plugin") && !screen.contains("sample home"), "{screen}");
+    let failed = abi::Toast::new(abi::Variant::Error, "Run /plugins to view details.").title("Plugin failed: sample");
+    assert_eq!(*host.toasts.borrow(), [failed]);
+}
+
+/// A `ts` fence that shows the language it gets and the model it reads.
+fn fenced(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.code_block("ts", |read, fence| {
+        let model = read.model().map_or("missing".to_owned(), |model| model.id);
+        let text = format!("custom {} {model}", fence.language);
+        abi::Fenced::Lines { lines: vec![vec![abi::Span::new(text)]], fg: None, drag: false }
+    });
+    Ok(())
+}
+
+unsafe extern "C" fn fenced_create(
+    host: *const HostApi,
+    options: Bytes,
+    instance: *mut *mut c_void,
+    out: *mut Owned,
+) -> i32 {
+    // SAFETY: the loader passes what `PluginApi::create` documents.
+    unsafe { abi::runtime::create("fenced", fenced, host, options, instance, out) }
+}
+
+// Expected: a fence registered as `ts`, which the host knows as `typescript`, reaches its render through the C ABI as
+// in process, sees the same language, and reads the same host.
+#[test]
+fn a_fence_reads_and_renders_the_same_in_process_and_through_the_c_abi() {
+    let host = host();
+    let in_process = Registry::new(vec![abi::Plugin { id: "fenced", setup: fenced }.into()], []);
+    in_process.activate(&host);
+    let direct = markdown(&host, &in_process, "```ts\nlet a = 1\n```\n");
+    assert!(direct.contains("custom typescript big"), "{direct}");
+    let loopback = loopback(&host, fenced_create);
+    assert_eq!(markdown(&host, &loopback, "```ts\nlet a = 1\n```\n"), direct);
+}
+
+/// A claim that shows the ticks of a thread of its own, which wakes the host after each; disposal stops the thread.
+fn ticking(setup: &mut abi::Setup) -> Result<(), String> {
+    use std::sync::atomic::{AtomicBool, AtomicU64};
+    let waker = setup.waker().ok_or("no waker")?;
+    let (ticks, stop) = (Arc::new(AtomicU64::new(0)), Arc::new(AtomicBool::new(false)));
+    let thread = {
+        let (ticks, stop) = (ticks.clone(), stop.clone());
+        std::thread::spawn(move || {
+            while ticks.load(Ordering::Relaxed) < 3 && !stop.load(Ordering::Relaxed) {
+                std::thread::sleep(Duration::from_millis(5));
+                ticks.fetch_add(1, Ordering::Relaxed);
+                waker.wake();
+            }
+        })
+    };
+    setup.on_dispose(move |_| {
+        stop.store(true, Ordering::Relaxed);
+        let _ = thread.join();
+    });
+    setup.slot(abi::Placement::append("home.footer"), move |_, _, _| {
+        abi::Render::Show(abi::Node::text([abi::Span::new(format!("ticks {}", ticks.load(Ordering::Relaxed)))]))
+    });
+    Ok(())
+}
+
+// Expected: a plugin in process gets a waker too; a wake from its thread renders its claim again.
+#[test]
+fn a_wake_from_an_in_process_plugin_thread_draws_its_claims_again() {
+    let host = host();
+    let registry = Registry::new(vec![abi::Plugin { id: "ticking", setup: ticking }.into()], []);
+    registry.activate(&host);
+    let parent = View::new(host.app());
+    let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+    host.app().root().add(&parent);
+    let ticked = host.app.wait_until(Duration::from_secs(10), || {
+        host.app.render();
+        host.app.text().contains("ticks 3")
+    });
+    assert!(ticked, "{}", host.app.text());
+    assert!(registry.set_active(&host, "ticking", false));
 }

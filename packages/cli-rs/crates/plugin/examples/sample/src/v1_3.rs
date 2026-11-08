@@ -45,4 +45,8 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(feature = "abi-1-0-wire"))]
 export_plugin!("sample", setup);
+
+#[cfg(feature = "abi-1-0-wire")]
+export_plugin!(@v1_0 "sample", setup);

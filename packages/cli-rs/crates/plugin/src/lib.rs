@@ -3,13 +3,16 @@
 //! through [`Setup`]; the host mounts them through [`Registry`]. [`loader`] finds and loads external plugins
 //! (P.4). A plugin of the one API (O-67, `opencode-plugin-abi`) becomes a [`Definition`] too, with [`From`].
 
+mod activation;
 pub mod loader;
 pub mod node;
 pub mod slot;
 
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
+use std::sync::Arc;
 
+use activation::{Activation, Drawn};
 pub use opencode_plugin_abi as abi;
 use opencode_ui::dialog::{DialogKeymap, FocusId};
 use opencode_ui::keymap::{Bind, KeymapLayer, Slash, TuiCommand};
@@ -50,12 +53,24 @@ pub trait Host: 'static {
         None
     }
     /// Stores JSON text (an object or an array) under storage key `key`. [`Host::storage_read`] shows it at once; a
-    /// host that writes it to disk or tells the claims does that after the current plugin callback.
+    /// host that writes it to disk does that after the current plugin callback. The plugin queues
+    /// [`Host::storage_changed`] after it.
     fn storage_write(&self, _key: &str, _json: &str) -> Result<(), String> {
         Err("no storage".to_owned())
     }
+    /// Tells the mounted claims that the plugins' storage changed ([`abi::Changed::local`]). Called from the effect
+    /// queue, in order with the plugin's other effects.
+    fn storage_changed(&self) {}
     /// Shows `toast`; with a session, it offers to open the session unless the session's family is on screen.
     fn toast(&self, _toast: &abi::Toast) {}
+    /// Says that external plugin `id` failed while it ran, after its claims drew empty. Called outside every plugin
+    /// callback.
+    fn failed(&self, id: &str) {
+        self.toast(
+            &abi::Toast::new(abi::Variant::Error, "Run /plugins to view details.")
+                .title(format!("Plugin failed: {id}")),
+        );
+    }
     /// Asks for the user's attention. Called outside every plugin callback.
     fn attention(&self, _attention: &abi::Attention) {}
     /// Calls `run` with each server event, after the host has applied it, until the disposer is dropped.
@@ -151,11 +166,15 @@ impl<H: Host> Definition<H> {
 }
 
 /// A plugin of the one API, run in process: its closures get Rust values, with no JSON step. It may register code
-/// fences, slot claims, commands and event handlers so far; the rest of its surface moves here with the built-ins that need it.
+/// fences, slot claims, commands, event handlers and dispose callbacks so far; the rest of its surface moves here with
+/// the built-ins that need it.
 impl<H: Host> From<abi::Plugin> for Definition<H> {
     fn from(plugin: abi::Plugin) -> Self {
         Definition::new(plugin.id, move |setup: &mut Setup<'_, H>| {
+            let proxy = setup.host().app().proxy();
+            let activation = Activation::new(setup.host(), Arc::new(activation::Wake::new(Some(proxy))));
             let mut api = abi::Setup::in_process(setup.id(), None);
+            api.set_waker(activation.waker());
             if let Err(error) = (plugin.setup)(&mut api) {
                 log::error!("plugin {} failed: {error}", setup.id());
                 return;
@@ -166,11 +185,20 @@ impl<H: Host> From<abi::Plugin> for Definition<H> {
             }
             let scope = Rc::new(Scope {
                 host: Rc::downgrade(setup.host()),
-                prefix: format!("plugin.{}.", setup.id()),
+                id: setup.id().to_owned(),
                 keys: manifest.storage.clone(),
+                activation: activation.clone(),
             });
             for (language, render) in api.fences() {
-                let render = node::code_block(Rc::downgrade(setup.host()), render.clone());
+                let (render, scope, fences) = (render.clone(), scope.clone(), node::Fences::default());
+                let render: CodeBlockRender = Rc::new(move |block, theme| {
+                    let host = scope.host.upgrade()?;
+                    fences.render(block, theme, |fence| {
+                        let mut out = abi::Fenced::Code;
+                        host.read(&mut |read| out = render(&Scoped { read, host: &*host, scope: &scope }, &fence));
+                        out
+                    })
+                });
                 setup.registration.code_blocks.push((language.clone(), render));
             }
             for (claim, render) in api.renders() {
@@ -180,16 +208,14 @@ impl<H: Host> From<abi::Plugin> for Definition<H> {
                     host.read(&mut |read| out = render(&Scoped { read, host, scope: &scope }, input, changed));
                     out
                 });
-                setup.claim(slot::placement(claim), render);
+                setup.claim(slot::placement(claim), render, &activation);
             }
             for (types, run) in api.events() {
                 let (types, run, scope) = (types.to_vec(), run.clone(), scope.clone());
                 let subscription = setup.host().on_event(Rc::new(move |event| {
-                    if !types.iter().any(|kind| kind == event.tag()) {
-                        return;
+                    if types.iter().any(|kind| kind == event.tag()) {
+                        scope.run(|host| run(host, event));
                     }
-                    let Some(host) = scope.host.upgrade() else { return };
-                    host.read(&mut |read| run(&Scoped { read, host: &*host, scope: &scope }, event));
                 }));
                 setup.registration.disposers.extend(subscription);
             }
@@ -197,14 +223,22 @@ impl<H: Host> From<abi::Plugin> for Definition<H> {
                 .commands()
                 .map(|(command, run)| {
                     let (run, scope) = (run.clone(), scope.clone());
-                    tui_command(command, move |input| {
-                        let Some(host) = scope.host.upgrade() else { return };
-                        host.read(&mut |read| run(&Scoped { read, host: &*host, scope: &scope }, input));
-                    })
+                    tui_command(command, move |input| scope.run(|host| run(host, input)))
                 })
                 .collect();
             if !commands.is_empty() {
                 setup.layer(KeymapLayer::global(commands));
+            }
+            for run in api.take_disposers() {
+                let (scope, mut run) = (scope.clone(), Some(run));
+                setup.on_dispose(move || {
+                    let Some(host) = scope.host.upgrade() else { return };
+                    host.read(&mut |read| {
+                        if let Some(run) = run.take() {
+                            run(&Scoped { read, host: &*host, scope: &scope });
+                        }
+                    });
+                });
             }
         })
     }
@@ -230,22 +264,35 @@ pub(crate) fn tui_command(command: &abi::Command, run: impl Fn(Option<&str>) + '
     entry
 }
 
-/// What an in-process plugin's reads and effects are scoped to: its host and its declared storage keys.
+/// What an in-process plugin's reads and effects are scoped to: its host, its ID and declared storage keys, and its
+/// activation.
 struct Scope<H: Host> {
     host: Weak<H>,
-    /// `plugin.<id>.`, which the host's storage keys start with.
-    prefix: String,
+    id: String,
     keys: Vec<String>,
+    activation: Rc<Activation<H>>,
 }
 
 impl<H: Host> Scope<H> {
     /// The host's storage key of `key`, when the plugin declared it.
     fn stored(&self, key: &str) -> Option<String> {
         if self.keys.iter().any(|known| known == key) {
-            return Some(format!("{}{key}", self.prefix));
+            return Some(format!("plugin.{}.{key}", self.id));
         }
-        log::warn!("plugin {}: storage key {key} was not declared", self.prefix);
+        log::warn!("plugin {}: storage key {key} was not declared", self.id);
         None
+    }
+
+    /// Runs a handler of the plugin with the host, then invalidates its claims, whose state it may have changed.
+    fn run(&self, handler: impl FnOnce(&dyn abi::Host)) {
+        let Some(host) = self.host.upgrade() else { return };
+        let mut handler = Some(handler);
+        host.read(&mut |read| {
+            if let Some(handler) = handler.take() {
+                handler(&Scoped { read, host: &*host, scope: self });
+            }
+        });
+        self.activation.invalidate();
     }
 }
 
@@ -323,9 +370,10 @@ impl<H: Host> abi::Read for Scoped<'_, H> {
 impl<H: Host> abi::Host for Scoped<'_, H> {
     fn storage_set(&self, key: &str, value: serde_json::Value) {
         let Some(stored) = self.scope.stored(key) else { return };
-        // The host shows it to reads at once and defers the rest.
-        if let Err(error) = self.host.storage_write(&stored, &value.to_string()) {
-            log::warn!("storage {stored}: {error}");
+        // The host shows it to reads at once; the claims hear of it in queue order.
+        match self.host.storage_write(&stored, &value.to_string()) {
+            Ok(()) => self.defer(|host| host.storage_changed()),
+            Err(error) => log::warn!("storage {stored}: {error}"),
         }
     }
 
@@ -341,18 +389,29 @@ impl<H: Host> abi::Host for Scoped<'_, H> {
     fn attention(&self, attention: abi::Attention) {
         self.defer(move |host| host.attention(&attention));
     }
+
+    fn open_route(&self, name: &str) {
+        let (id, name) = (self.scope.id.clone(), name.to_owned());
+        self.defer(move |host| host.open_route(&id, &name));
+    }
 }
 
 impl<H: Host> Scoped<'_, H> {
-    /// Runs `effect` once the current event is handled, outside every plugin callback.
     fn defer(&self, effect: impl FnOnce(&H) + 'static) {
-        let host = self.scope.host.clone();
-        self.host.app().defer(move |_| {
-            if let Some(host) = host.upgrade() {
-                effect(&host);
-            }
-        });
+        defer(&self.scope.host, effect);
     }
+}
+
+/// Queues `effect` on the host's one effect queue, which both paths share: it runs in order with every other plugin
+/// effect, once the outermost plugin callback has returned and every UI and store borrow has ended.
+pub(crate) fn defer<H: Host>(host: &Weak<H>, effect: impl FnOnce(&H) + 'static) {
+    let Some(strong) = host.upgrade() else { return };
+    let host = host.clone();
+    strong.app().defer(move |_| {
+        if let Some(host) = host.upgrade() {
+            effect(&host);
+        }
+    });
 }
 
 /// What a plugin registers while it is active.
@@ -382,12 +441,16 @@ impl<H: Host> Setup<'_, H> {
         self.registration.claims.push((placement, Rc::new(render)));
     }
 
-    /// Claims a place in the slot tree with a render of the one API, on either path.
-    pub(crate) fn claim(&mut self, placement: Placement, render: node::SlotRender<H>) {
+    /// Claims a place in the slot tree with a render of the one API, on either path; `activation` renders its mounts
+    /// again.
+    pub(crate) fn claim(&mut self, placement: Placement, render: node::SlotRender<H>, activation: &Rc<Activation<H>>) {
         let owner = Rc::downgrade(self.host);
         let path = placement.target.clone();
+        let activation = activation.clone();
         self.slot(placement, move |host, input| {
-            Box::new(node::Mount::new(host, owner.clone(), &path, input, render.clone()))
+            let mount = node::Mount::new(host, owner.clone(), &path, input, render.clone());
+            activation.track(Rc::downgrade(&mount) as Weak<dyn Drawn<H>>);
+            Box::new(mount)
         });
     }
 

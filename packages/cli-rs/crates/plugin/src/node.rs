@@ -14,7 +14,7 @@ use opentui::prelude::*;
 use opentui::style::Color;
 use opentui::widget::CodeBlock;
 
-use crate::{CodeBlockRender, Host, SlotInput, SlotMount, Slotted, slot};
+use crate::{Host, SlotInput, SlotMount, Slotted, slot};
 
 /// A slot claim's render on either path: in process it reads the host directly, over the C ABI it asks the plugin.
 pub type SlotRender<H> = Rc<dyn Fn(&H, &abi::SlotInput, &abi::Changed) -> abi::Render>;
@@ -336,15 +336,6 @@ impl Fences {
         self.keys.borrow_mut().insert(widget.id(), key);
         Some(widget)
     }
-}
-
-/// The code-block render of fence render `render` run in process, reading through `host`.
-pub fn code_block<H: Host>(host: Weak<H>, render: abi::FenceFn) -> CodeBlockRender {
-    let fences = Fences::default();
-    Rc::new(move |block, theme| {
-        let mode = host.upgrade().map_or(ThemeMode::Dark, |host| host.theme_mode());
-        fences.render(block, theme, |fence| render(&Reader::new(theme, mode), &fence))
-    })
 }
 
 /// The host as a render reads it in process: the theme it draws in, and the theme's mode.

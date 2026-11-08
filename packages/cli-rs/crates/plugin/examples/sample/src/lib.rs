@@ -4,9 +4,9 @@
 //! what it draws, so a rebuild proves hot reload. Each variant is its own feature, so cargo keeps every build.
 //!
 //! The fences ([`fence`]), the sidebar claim ([`slot`]) and the home claims with their event handler ([`home`]) are on
-//! the one API of ABI 1.4; the rest is still the 1.3
-//! surface, with commands that take the 1.4 host and ignore it. The `abi-1-3` feature builds [`v1_3`] instead: a plugin written against ABI 1.3, on a frozen copy of
-//! that crate.
+//! the one API of ABI 1.4; the slot rows and the route are still the 1.3 surface. Callbacks reach the host only
+//! through the host they are called with. The `abi-1-3` feature builds [`v1_3`] instead: a plugin written against ABI
+//! 1.3, on a frozen copy of that crate; `abi-1-0-wire` exports it with the 1.0 table.
 
 #![cfg_attr(feature = "abi-1-3", allow(dead_code, unused_imports))]
 
@@ -23,7 +23,10 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use opencode_plugin_abi::{Command, Line, Setup, SlotKind, Span, ThemeMode, Variant, Waker, export_plugin};
+use opencode_plugin_abi::{
+    Command, Line, Read, Setup, SlotKind, Span, ThemeMode, Toast, Variant, Waker, export_plugin,
+};
+use serde_json::json;
 
 const VERSION: &str = if cfg!(feature = "v2") { "v2" } else { "v1" };
 
@@ -31,36 +34,27 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     if cfg!(feature = "setup-fails") || setup.options().is_some_and(|options| options.contains("\"fail\":true")) {
         return Err("sample setup failed".to_owned());
     }
-    let host = setup.host();
     setup.storage_key("count");
-    // Setup itself uses the host: storage, the theme mode, and a toast. Destruction writes `destroyed`.
-    let probe = setup.options().is_some_and(|options| options.contains("\"probe\":true"));
-    let destroyed = probe.then(|| {
+    // Setup itself uses the host: storage, the theme mode, and a toast. Disposal writes `destroyed`.
+    if setup.options().is_some_and(|options| options.contains("\"probe\":true")) {
         setup.storage_key("destroyed");
-        Destroyed(host)
-    });
-    if probe {
+        setup.on_dispose(|host| host.storage_set("destroyed", json!({ "destroyed": true })));
+        let host = setup.host();
         let count = count(host);
-        let mode = if host.theme_mode() == Some(ThemeMode::Light) { "light" } else { "dark" };
-        let stored = match host.storage_set("count", &format!("{{\"count\":{}}}", count + 1)) {
-            Ok(()) => "stored".to_owned(),
-            Err(error) => error,
-        };
-        host.toast(Variant::Info, &format!("sample setup: count {count}, {mode}, {stored}"));
+        let mode = if host.theme_mode() == ThemeMode::Light { "light" } else { "dark" };
+        host.storage_set("count", json!({ "count": count + 1 }));
+        host.toast(Toast::new(Variant::Info, format!("sample setup: count {count}, {mode}, stored")));
     }
-    // Hellos said by this instance, which the slot shows once the host draws it again.
+    // Hellos said by this instance, which the slot and the route show once the host draws them again.
     let hellos = Rc::new(Cell::new(0u64));
     let said = hellos.clone();
-    setup.command(command("sample.hello", "Say hello", Some("hello")), move |_, _| {
+    setup.command(command("sample.hello", "Say hello", Some("hello")), move |host, _| {
         said.set(said.get() + 1);
         let count = count(host) + 1;
-        if let Err(error) = host.storage_set("count", &format!("{{\"count\":{count}}}")) {
-            host.log(opencode_plugin_abi::Level::Warn, &error);
-        }
-        host.toast(Variant::Success, &format!("Hello from sample {VERSION} ({count})"));
+        host.storage_set("count", json!({ "count": count }));
+        host.toast(Toast::new(Variant::Success, format!("Hello from sample {VERSION} ({count})")));
     });
-    setup
-        .command(command("sample.open", "Open the sample route", Some("sample")), move |_, _| host.open_route("hello"));
+    setup.command(command("sample.open", "Open the sample route", Some("sample")), |host, _| host.open_route("hello"));
     setup
         .command(command("sample.panic", "Panic in the sample plugin", None), |_, _| panic!("sample command panicked"));
     fence::setup(setup)?;
@@ -76,20 +70,21 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     };
     let (tick, limit) = (option("tick_ms").unwrap_or(1000), option("ticks").unwrap_or(u64::MAX));
     let ticks = Arc::new(AtomicU64::new(0));
-    let ticker = host
+    let ticker = setup
         .waker()
         .filter(|_| !cfg!(feature = "still"))
         .map(|waker| Ticker::start(waker, Duration::from_millis(tick), limit, ticks.clone()));
+    let shown = hellos.clone();
     setup.slot_lines(SlotKind::Append, "home.footer", move |_| {
-        let _ = (&destroyed, &ticker);
-        let (hellos, ticks) = (hellos.get(), ticks.load(Ordering::Relaxed));
+        let _ = &ticker;
+        let (hellos, ticks) = (shown.get(), ticks.load(Ordering::Relaxed));
         let text = format!("sample plugin {VERSION}: home.footer, {hellos} hellos, {ticks} ticks");
         vec![vec![Span::new(text).fg("text.muted")]]
     });
     setup.route("hello", move || -> Vec<Line> {
         vec![
             vec![Span::new("Sample route hello").bold()],
-            vec![Span::new(format!("said hello {} times", count(host))).fg("text.muted")],
+            vec![Span::new(format!("said hello {} times", hellos.get())).fg("text.muted")],
         ]
     });
     Ok(())
@@ -141,20 +136,9 @@ impl Drop for Ticker {
     }
 }
 
-/// Writes the `destroyed` key when the host destroys the instance, which drops what setup registered.
-struct Destroyed(opencode_plugin_abi::HostHandle);
-
-impl Drop for Destroyed {
-    fn drop(&mut self) {
-        let _ = self.0.storage_set("destroyed", "{\"destroyed\":true}");
-    }
-}
-
 /// The stored `{"count":N}`, else 0.
-fn count(host: opencode_plugin_abi::HostHandle) -> u64 {
-    host.storage_get("count")
-        .and_then(|json| json.chars().filter(char::is_ascii_digit).collect::<String>().parse().ok())
-        .unwrap_or(0)
+fn count(host: &dyn Read) -> u64 {
+    host.storage_get("count").and_then(|value| value.get("count")?.as_u64()).unwrap_or(0)
 }
 
 #[cfg(not(any(
