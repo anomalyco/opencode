@@ -239,6 +239,67 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
+  it.effect("returns the last lines of a file larger than the first chunk when the offset is past the end", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const read = (name: string, content: string | Uint8Array, page: ReadToolFileSystem.PageInput) =>
+        (typeof content === "string"
+          ? files.writeFileString(path.join(directory, name), content)
+          : files.writeFile(path.join(directory, name), content)
+        ).pipe(
+          Effect.andThen(ReadToolFileSystem.read(environment, absolute(path.join(directory, name)), name, page)),
+          Effect.map((result) => String(ReadTool.toModelContent(name, page.offset, result)).split("\n")),
+        )
+      const lines = Array.from({ length: 3_000 }, (_, index) => `${index + 1}`.padEnd(100, "x"))
+      const expected = (from: number) =>
+        lines.slice(from - 1).map((line, index) => `${from + index}: ${line}`)
+
+      expect(yield* read("lf.txt", lines.join("\n") + "\n", { offset: 5_000 })).toEqual([
+        "Read file lf.txt, lines 2901-3000 (offset 5000 is past the end; the file has 3000 lines)",
+        ...expected(2_901),
+      ])
+      expect(yield* read("unterminated.txt", lines.join("\n"), { offset: 3_001 })).toEqual([
+        "Read file unterminated.txt, lines 2901-3000 (offset 3001 is past the end; the file has 3000 lines)",
+        ...expected(2_901),
+      ])
+      expect(yield* read("crlf.txt", lines.join("\r\n") + "\r\n", { offset: 3_001, limit: 5 })).toEqual([
+        "Read file crlf.txt, lines 2996-3000 (offset 3001 is past the end; the file has 3000 lines)",
+        ...expected(2_996),
+      ])
+      expect(yield* read("crlf-unterminated.txt", lines.join("\r\n"), { offset: 4_000, limit: 1 })).toEqual([
+        "Read file crlf-unterminated.txt, lines 3000-3000 (offset 4000 is past the end; the file has 3000 lines)",
+        ...expected(3_000),
+      ])
+
+      // A mid-file byte order mark is line content, not a decoder signature.
+      const marked = lines.map((line, index) => (index === 2_900 ? `\uFEFF${line}` : line))
+      expect((yield* read("bom.txt", marked.join("\n"), { offset: 3_001 }))[1]).toBe(`2901: \uFEFF${lines[2_900]}`)
+
+      const huge = yield* read("huge-last.txt", `${lines.slice(0, 10).join("\n")}\n${"z".repeat(300 * 1024)}`, {
+        offset: 12,
+      })
+      expect(huge).toEqual([
+        "Read file huge-last.txt, lines 1-11 (offset 12 is past the end; the file has 11 lines)",
+        ...expected(1).slice(0, 10),
+        `11: ${"z".repeat(2_000)}... (line truncated to 2000 chars)`,
+      ])
+
+      // Each clamped line is 2041 bytes, so 25 of them fit in the 50 KB cap.
+      const wide = Array.from({ length: 200 }, (_, index) => `${index + 1}`.padEnd(3_000, "w"))
+      const capped = yield* read("wide.txt", wide.join("\n") + "\n", { offset: 201 })
+      expect(capped[0]).toBe("Read file wide.txt, lines 176-200 (offset 201 is past the end; the file has 200 lines)")
+      expect(capped.slice(1)).toEqual(
+        wide.slice(175).map((line, index) => `${176 + index}: ${line.slice(0, 2_000)}... (line truncated to 2000 chars)`),
+      )
+
+      // Matches whole-file reads: a null byte anywhere in the file rejects a past-end read.
+      const early = new TextEncoder().encode(lines.join("\n"))
+      early[10] = 0
+      const binary = yield* read("early-nul.txt", early, { offset: 3_001 }).pipe(Effect.flip)
+      expect(binary).toBeInstanceOf(ReadToolFileSystem.BinaryFileError)
+    }),
+  )
+
   it.effect("pages text with one-based offsets", () =>
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture

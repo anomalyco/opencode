@@ -163,21 +163,23 @@ export const read = Effect.fn("ReadTool.read")(function* (
   let ended = false
   while (true) {
     const eof = ended || bytes >= first.info.size
-    if (eof && offset > lineCount(lines, leaves.at(-1)?.bytes.at(-1)))
-      return yield* completePage(input, resource, Buffer.concat(leaves.map((leaf) => leaf.bytes)), page)
-    if (lines >= offset - 1 || eof) {
-      const tree = textTree(leaves)
-      const start = textOffset(tree, offset - 1)
-      let position = 0
-      const selected = Buffer.concat(
-        leaves.flatMap((leaf) => {
-          const leafStart = position
-          position += leaf.summary.bytes
-          if (position <= start) return []
-          return [leaf.bytes.subarray(Math.max(0, start - leafStart))]
-        }),
+    const total = lineCount(lines, leaves.at(-1)?.bytes.at(-1))
+    if (eof && offset > total) {
+      const skipped = Math.max(0, total - Math.min(page.limit || TAIL_LINES, TAIL_LINES))
+      // Decode from the newline ending the last skipped line, so a byte order mark
+      // starting the tail stays content. That empty first line is never in the tail.
+      const tail = textPage(textSuffix(leaves, Math.max(0, textOffset(textTree(leaves), skipped) - 1)), true, page)
+      if (tail === undefined) return yield* Effect.die("Read page did not settle for a complete file")
+      return yield* makeTextPage(
+        input,
+        resource,
+        { ...tail, offset: Math.max(0, skipped - 1) + tail.offset },
+        leaves.some((leaf) => leaf.bytes.includes(0)),
       )
-      const result = textPage(selected, eof, { limit })
+    }
+    if (lines >= offset - 1 || eof) {
+      const start = textOffset(textTree(leaves), offset - 1)
+      const result = textPage(textSuffix(leaves, start), eof, { limit })
       if (result !== undefined) {
         const translated = {
           ...result,
@@ -379,6 +381,18 @@ const textOffset = (tree: TextNode, newline: number) => {
   }
   const end = nthNewline(node.bytes, remaining)
   return end === undefined ? tree.summary.bytes : offset + end
+}
+
+const textSuffix = (leaves: ReadonlyArray<Extract<TextNode, { readonly type: "leaf" }>>, start: number) => {
+  let position = 0
+  return Buffer.concat(
+    leaves.flatMap((leaf) => {
+      const leafStart = position
+      position += leaf.summary.bytes
+      if (position <= start) return []
+      return [leaf.bytes.subarray(Math.max(0, start - leafStart))]
+    }),
+  )
 }
 
 const nthNewline = (bytes: Uint8Array, count: number) => {
