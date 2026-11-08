@@ -232,14 +232,18 @@ pub fn validate(field: &FormField, value: Option<&FormValue>) -> Option<String> 
             }
             use opencode_api_types::FormStringFieldFormat as Format;
             let format = match &field.format {
-                Some(Format::Email) if !email(text) => Some("Expected an email address"),
-                Some(Format::Uri) if url::Url::parse(text).is_err() => Some("Expected a URL"),
-                Some(Format::Date) if !date(text) => Some("Expected a date (YYYY-MM-DD)"),
-                Some(Format::DateTime) if !date_time(text) => Some("Expected a date and time"),
+                Some(Format::Email) if !email(text) => Some("Expected an email address".to_owned()),
+                Some(Format::Uri) => match opencode_api_types::js::parse_url(text) {
+                    Err(error @ opencode_api_types::js::UrlError::NonAsciiHost(_)) => Some(error.to_string()),
+                    Err(_) => Some("Expected a URL".to_owned()),
+                    Ok(_) => None,
+                },
+                Some(Format::Date) if !date(text) => Some("Expected a date (YYYY-MM-DD)".to_owned()),
+                Some(Format::DateTime) if !date_time(text) => Some("Expected a date and time".to_owned()),
                 _ => None,
             };
-            if let Some(message) = format {
-                return Some(message.to_owned());
+            if format.is_some() {
+                return format;
             }
             let known = |options: &[FormOption]| options.iter().any(|option| option.value == *text);
             if let Some(options) = &field.options

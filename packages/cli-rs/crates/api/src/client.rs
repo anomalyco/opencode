@@ -77,11 +77,8 @@ impl Client {
     }
 
     pub fn with_transport(base_url: &str, transport: Arc<dyn Transport>) -> Result<Self, Error> {
-        let mut base_url = url::Url::parse(base_url).map_err(|error| match error {
-            // `url` is built without IDNA (deviation A10-ascii-hosts).
-            url::ParseError::IdnaError => Error::Transport(format!(
-                "{base_url}: a host name must be ASCII; write an international name in its punycode (xn--) form"
-            )),
+        let mut base_url = crate::js::parse_url(base_url).map_err(|error| match error {
+            crate::js::UrlError::NonAsciiHost(_) => Error::Transport(error.to_string()),
             error => Error::Transport(format!("{base_url}: {error}")),
         })?;
         // A leading slash would replace any path prefix on the base URL, so paths join relative to it.

@@ -244,6 +244,10 @@ async fn read(file: &str) -> error::Result<String> {
             _ => error.into(),
         });
     }
+    // reqwest parses the URL too; other parse errors keep its wording.
+    if let Err(error @ opencode_api::js::UrlError::NonAsciiHost(_)) = opencode_api::js::parse_url(file) {
+        return Err(error.into());
+    }
     let response = opencode_api::transport::http_client().get(file).send().await?;
     if !response.status().is_success() {
         bail!("Failed to fetch session data: {}", response.status().canonical_reason().unwrap_or_default());
@@ -301,6 +305,16 @@ fn locale_string(value: &Value) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn import_rejects_a_non_ascii_host_before_fetching() {
+        for url in ["https://Bücher.example/s.json", "https://%42%C3%BCcher.example/s.json"] {
+            assert_eq!(
+                block_on(read(url)).unwrap().unwrap_err().to_string(),
+                format!("{url}: a host name must be ASCII; write an international name in its punycode (xn--) form")
+            );
+        }
+    }
 
     #[test]
     fn table_rows_follow_format_list() {
