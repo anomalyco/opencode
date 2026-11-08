@@ -1,6 +1,7 @@
 import { expect } from "bun:test"
 import { secp256k1 } from "@noble/curves/secp256k1.js"
-import { Effect } from "effect"
+import { Effect, Fiber } from "effect"
+import * as TestClock from "effect/testing/TestClock"
 import { ai, LLMClient } from "../../src/effect.js"
 import { Venice } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
@@ -121,6 +122,18 @@ it.effect("Venice E2EE refuses to send when attestation fails", () =>
       expect(error.message).toMatch(/attestation/i)
       expect(server.calls.map((call) => new URL(call.url).pathname)).toEqual(["/api/v1/tee/attestation"])
     }
+  }),
+)
+
+it.effect("Venice E2EE times out a stalled attestation with the request header timeout", () =>
+  Effect.gen(function* () {
+    const fiber = yield* LLMClient.generate(ai.request({ model, prompt: "secret", timeout: { headers: 1_000 } })).pipe(
+      Effect.provide(dynamicResponse(() => Effect.never)),
+      Effect.flip,
+      Effect.forkChild({ startImmediately: true }),
+    )
+    yield* TestClock.adjust("1 second")
+    expect((yield* Fiber.join(fiber)).message).toMatch(/Timed out waiting for the Venice TEE attestation/)
   }),
 )
 

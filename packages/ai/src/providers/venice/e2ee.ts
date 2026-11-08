@@ -1,11 +1,20 @@
 import { secp256k1 } from "@noble/curves/secp256k1.js"
-import { Effect, Schema, Stream } from "effect"
+import { bytesToHex, hexToBytes } from "@noble/curves/utils.js"
+import { Duration, Effect, Schema, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/http"
 import { OpenAIChat } from "../../protocols/openai-chat.js"
 import * as ProviderShared from "../../protocols/shared.js"
 import type { VeniceChat } from "../../protocols/venice-chat.js"
 import { HttpTransport, type HttpMiddleware, type Transport } from "../../route/transport/index.js"
-import { AIError, InvalidProviderOutputError, type RequestEncoding } from "../../schema/index.js"
+import {
+  AIError,
+  DEFAULT_HTTP_TIMEOUT_MS,
+  InvalidProviderOutputError,
+  timeoutConfig,
+  TransportError,
+  type LLMRequest,
+  type RequestEncoding,
+} from "../../schema/index.js"
 
 /**
  * Venice end-to-end encryption (https://docs.venice.ai/guides/features/tee-e2ee-models).
@@ -48,12 +57,10 @@ export const transport: Transport<VeniceChat.Body, Prepared, string> = {
   execute: (prepared, request, runtime) =>
     Effect.gen(function* () {
       const session = secp256k1.utils.randomSecretKey()
-      const modelKey = yield* attest(prepared, runtime)
+      const modelKey = yield* attest(prepared, request, runtime)
       const messages = yield* Effect.forEach(prepared.messages, (message) =>
         (message.role === "user" || message.role === "system") && typeof message.content === "string"
-          ? encrypt(message.content, Uint8Array.fromHex(modelKey)).pipe(
-              Effect.map((content) => ({ ...message, content })),
-            )
+          ? encrypt(message.content, hexToBytes(modelKey)).pipe(Effect.map((content) => ({ ...message, content })))
           : Effect.succeed(message),
       )
       const execution = yield* http.execute(
@@ -62,7 +69,7 @@ export const transport: Transport<VeniceChat.Body, Prepared, string> = {
             url: prepared.url,
             body: ProviderShared.encodeJson({ ...prepared.jsonBody, messages }),
             headers: Headers.setAll(prepared.headers, {
-              "x-venice-tee-client-pub-key": secp256k1.getPublicKey(session, false).toHex(),
+              "x-venice-tee-client-pub-key": bytesToHex(secp256k1.getPublicKey(session, false)),
               "x-venice-tee-model-pub-key": modelKey,
               "x-venice-tee-signing-algo": "ecdsa",
             }),
@@ -99,21 +106,47 @@ const Attestation = Schema.Struct({
 // describes. Client-side TDX quote, debug-flag, and REPORTDATA key-binding checks would go here.
 const attest = Effect.fn("VeniceE2EE.attest")(function* (
   prepared: Prepared,
+  request: LLMRequest,
   runtime: Parameters<typeof http.execute>[2],
 ) {
-  const nonce = crypto.getRandomValues(new Uint8Array(32)).toHex()
+  const nonce = bytesToHex(crypto.getRandomValues(new Uint8Array(32)))
   const url = new URL(prepared.url)
   url.pathname = url.pathname.replace(/\/chat\/completions$/, "/tee/attestation")
   url.searchParams.set("model", prepared.model)
   url.searchParams.set("nonce", nonce)
-  const response = yield* runtime.http.execute(
-    HttpClientRequest.get(url.toString()).pipe(HttpClientRequest.setHeaders(prepared.headers)),
-    prepared.middleware,
-  )
-  const attestation = yield* response.json.pipe(
-    Effect.flatMap(Schema.decodeUnknownEffect(Attestation)),
-    Effect.mapError((cause) => attestationError("Venice returned an unreadable TEE attestation", cause)),
-  )
+  // Bound by the chat call's header timeout so a stalled attestation cannot hang the request.
+  const limits = timeoutConfig(request.timeout)
+  const attestation = yield* runtime.http
+    .execute(
+      HttpClientRequest.get(url.toString()).pipe(HttpClientRequest.setHeaders(prepared.headers)),
+      prepared.middleware,
+    )
+    .pipe(
+      Effect.flatMap((response) =>
+        response.json.pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(Attestation)),
+          Effect.mapError((cause) => attestationError("Venice returned an unreadable TEE attestation", cause)),
+        ),
+      ),
+      Effect.timeoutOrElse({
+        duration: Duration.min(
+          limits.headers === false ? Duration.infinity : Duration.millis(limits.headers ?? DEFAULT_HTTP_TIMEOUT_MS),
+          limits.total ? Duration.millis(limits.total) : Duration.infinity,
+        ),
+        orElse: () =>
+          Effect.fail(
+            new AIError({
+              reason: new TransportError({
+                message: "Timed out waiting for the Venice TEE attestation",
+                transport: "http",
+                operation: "request",
+                code: "Timeout",
+                url: url.toString(),
+              }),
+            }),
+          ),
+      }),
+    )
   if (!attestation.verified) return yield* attestationError("Venice TEE attestation verification failed")
   if (attestation.nonce !== nonce) return yield* attestationError("Venice TEE attestation nonce mismatch")
   const key = attestation.signing_key ?? attestation.signing_public_key
@@ -155,7 +188,7 @@ const encrypt = (text: string, modelKey: Uint8Array) =>
       out.set(publicKey)
       out.set(iv, publicKey.length)
       out.set(new Uint8Array(sealed), publicKey.length + iv.length)
-      return out.toHex()
+      return bytesToHex(out)
     },
     catch: (cause) => ProviderShared.invalidRequest("Venice E2EE encryption failed", cause),
   })
@@ -163,7 +196,8 @@ const encrypt = (text: string, modelKey: Uint8Array) =>
 const decrypt = (hex: string, session: Uint8Array) =>
   Effect.tryPromise({
     try: async () => {
-      const bytes = Uint8Array.fromHex(hex)
+      // Copy onto an ArrayBuffer: the BufferSource type rejects views over a possibly shared buffer.
+      const bytes = new Uint8Array(hexToBytes(hex))
       const plain = await crypto.subtle.decrypt(
         { name: "AES-GCM", iv: bytes.subarray(65, 77) },
         await aesKey(session, bytes.subarray(0, 65)),
