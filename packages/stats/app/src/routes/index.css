@@ -247,7 +247,7 @@ body {
   gap: 16px;
   box-sizing: border-box;
   height: var(--nav-bar-height);
-  padding: 0 var(--nav-end) 0 var(--nav-edge);
+  padding-inline: var(--nav-edge) var(--nav-end);
   border-bottom: 1px solid var(--nav-rule);
 }
 
@@ -265,7 +265,9 @@ body {
    before it sit where the Console's and opencode.ai's do: the button's centre where the site's 44px button has it
    (its 32px box 6px further in), the mark's 16px before it. */
 @media (max-width: 60rem) {
+  /* 12px at least between the lockup's chevron and TRY OPENCODE, so the 20px name still fits at 375px. */
   [data-page="stats"] [data-slot="header-bar"] {
+    gap: 12px;
     border-bottom: 0;
     box-shadow: inset 0 -1px 0 var(--nav-rule);
   }
