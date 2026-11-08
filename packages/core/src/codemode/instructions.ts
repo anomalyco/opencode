@@ -47,7 +47,7 @@ ${render(current)}`
     (section) => section.name,
     () => true,
   )
-  const kept = sections.changed.map((change) => changes(change.previous, change.current))
+  const kept = sections.changed.map((change) => changes(change.previous, change.current, lookup))
   const blocks = sections.added.length + kept.filter((change) => change.added.length > 0).length
   const share = blocks === 0 ? 0 : UPDATE_BUDGET / blocks
   const added = kept.flatMap((change) => {
@@ -85,18 +85,21 @@ ${render(current)}`
   return delta.length < replacement.length ? delta : replacement
 }
 
-// What changed in a group the model already knew: its new tools, the shown
-// signatures that differ from the ones shown before, and the tools that went.
-function changes(previous: CodeModeCatalog.Section, current: CodeModeCatalog.Section) {
+// What changed in a group the model already knew: its new tools, the signatures it was shown that differ now, whether
+// or not they are still shown, and the tools that went.
+function changes(
+  previous: CodeModeCatalog.Section,
+  current: CodeModeCatalog.Section,
+  lookup: (path: string) => CodeModeCatalog.Listing | undefined,
+) {
   const known = new Set(previous.tools)
   const present = new Set(current.tools)
-  const shown = new Map(previous.listings.map((entry) => [entry.path, entry]))
   return {
     name: current.name,
     added: current.tools.filter((path) => !known.has(path)),
-    changed: current.listings.filter((entry) => {
-      const before = shown.get(entry.path)
-      return before !== undefined && before.line !== entry.line
+    changed: previous.listings.flatMap((before) => {
+      const after = present.has(before.path) ? lookup(before.path) : undefined
+      return after === undefined || after.line === before.line ? [] : [after]
     }),
     removed: previous.tools.filter((path) => !present.has(path)),
   }

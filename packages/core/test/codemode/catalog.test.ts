@@ -180,6 +180,19 @@ describe("CodeModeInstructions.update", () => {
     )
   })
 
+  test("shows a changed signature the model was shown even when the tool is no longer shown", () => {
+    const before = tools("ns", 200)
+    const last = shown(summarize(before), "ns").at(-1)!
+    const signature = `tools.${last}({\n  key: string,\n}): Promise<string>`
+    // An arriving group takes the room the tool was shown in, in the same step its signature changes.
+    const after = [
+      ...tools("aa", 40),
+      ...before.map((tool) => (tool.name === last ? entry(last, last, { signature }) : tool)),
+    ]
+    expect(shown(summarize(after), "ns")).not.toContain(last)
+    expect(update(before, after)).toContain(`Changed:\n  - ${signature} // ${last}`)
+  })
+
   test("names removed tools", () => {
     expect(update(tools("alpha", 3), tools("alpha", 3).slice(1))).toBe(
       `${CHANGED}\n\nNo longer available: tools.alpha.tool000`,
