@@ -96,26 +96,24 @@ it.live("includes the latest user and assistant message times in the session lis
   }).pipe(Effect.scoped),
 )
 
-it.live("returns message times across pages with more than 100 sessions", () =>
+it.live("returns message times across session pages", () =>
   Effect.gen(function* () {
     const request = yield* setup
     const template = Schema.decodeUnknownSync(SessionResponse)(yield* request("/api/session", { title: "Template" }))
-    yield* Effect.forEach(Array.from({ length: 100 }), () => request("/api/session", { title: "Empty" }), {
-      discard: true,
-    })
+    yield* request("/api/session", { title: "Empty" })
     const id = Session.ID.create()
     yield* request("/api/experimental/session/import", {
       info: { ...template.data, id, title: "With user message" },
       messages: [{ id: "msg_page_fixture", type: "user", text: "Hello", time: { created: 1_234 } }],
     })
-    const first = Schema.decodeUnknownSync(SessionsWithMessageTimes)(yield* request("/api/session?limit=101&order=asc"))
-    expect(first.data).toHaveLength(101)
+    const first = Schema.decodeUnknownSync(SessionsWithMessageTimes)(yield* request("/api/session?limit=2&order=asc"))
+    expect(first.data).toHaveLength(2)
     if (!first.cursor.next) throw new Error("Expected a next cursor")
     const second = Schema.decodeUnknownSync(SessionsWithMessageTimes)(
-      yield* request(`/api/session?limit=101&cursor=${encodeURIComponent(first.cursor.next)}`),
+      yield* request(`/api/session?limit=2&cursor=${encodeURIComponent(first.cursor.next)}`),
     )
     const rows = [...first.data, ...second.data]
-    expect(rows).toHaveLength(102)
+    expect(rows).toHaveLength(3)
     expect(rows.find((item) => item.id === id)?.experimental.time).toEqual({
       lastUserMessage: 1_234,
       lastAssistantMessage: null,

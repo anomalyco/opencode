@@ -2312,7 +2312,7 @@ export type ModelInfo = {
   limit: { context: number; input?: number; output: number }
 }
 
-export type SessionInfo = {
+export type SessionListInfo = {
   id: SessionID
   parentID?: SessionID
   fork?: { sessionID: SessionID; boundary: SessionForkBoundary }
@@ -2329,6 +2329,25 @@ export type SessionInfo = {
   permissions?: PermissionRuleset
   revert?: SessionRevert
   experimental?: { time: { lastUserMessage?: number | null; lastAssistantMessage?: number | null } }
+  location: LocationPublicRef
+}
+
+export type SessionInfo = {
+  id: SessionID
+  parentID?: SessionID
+  fork?: { sessionID: SessionID; boundary: SessionForkBoundary }
+  projectID: ProjectID
+  agent?: AgentID
+  model?: ModelRef
+  cost: MoneyUSD
+  tokens: TokenUsageInfo
+  outcome?: "succeeded" | "failed" | "interrupted"
+  time: { created: number; updated: number; busy?: number; idle?: number; viewed?: number; archived?: number }
+  title?: string
+  subpath?: RelativePath
+  metadata?: SessionMetadata
+  permissions?: PermissionRuleset
+  revert?: SessionRevert
   location: LocationPublicRef
 }
 
@@ -2680,7 +2699,7 @@ export type AgentInfo = {
 }
 
 export type SessionsResponse = {
-  data: Array<SessionInfo>
+  data: Array<SessionListInfo>
   cursor: { previous?: SessionsCursor | null; next?: SessionsCursor | null }
 }
 
@@ -3846,9 +3865,6 @@ export type ExperimentalSessionImportInput = {
         readonly status: "added" | "deleted" | "modified"
         readonly more?: true
       }>
-    }
-    readonly experimental?: {
-      readonly time: { readonly lastUserMessage?: number | null; readonly lastAssistantMessage?: number | null }
     }
     readonly location: { readonly directory: string }
   }

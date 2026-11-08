@@ -60,6 +60,11 @@ export const Info = Schema.Struct({
   /** Evaluated after the agent's rules; the last matching rule wins. */
   permissions: Permission.Ruleset.pipe(optional),
   revert: Revert.pipe(optional),
+}).annotate({ identifier: "Session.Info" })
+
+export interface ListInfo extends Schema.Schema.Type<typeof ListInfo> {}
+export const ListInfo = Schema.Struct({
+  ...Info.fields,
   experimental: Schema.Struct({
     time: Schema.Struct({
       lastUserMessage: optional(
@@ -76,7 +81,7 @@ export const Info = Schema.Struct({
       ),
     }),
   }).pipe(optional),
-}).annotate({ identifier: "Session.Info" })
+}).annotate({ identifier: "Session.ListInfo" })
 
 export const ListAnchor = Schema.Struct({
   id: ID,

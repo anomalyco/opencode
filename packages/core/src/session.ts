@@ -128,7 +128,7 @@ export interface Interface {
     options?: { readonly messageTimes?: boolean },
   ) => Effect.Effect<
     {
-      readonly data: SessionSchema.Info[]
+      readonly data: SessionSchema.ListInfo[]
       readonly cursor: { readonly previous?: ListCursor; readonly next?: ListCursor }
     },
     InvalidListCursorError

@@ -53,7 +53,7 @@ export type MessagesInput = {
 
 export interface Interface {
   readonly get: (sessionID: Session.ID) => Effect.Effect<Session.Info | undefined>
-  readonly list: (input?: ListInput, options?: { readonly messageTimes?: boolean }) => Effect.Effect<Session.Info[]>
+  readonly list: (input?: ListInput, options?: { readonly messageTimes?: boolean }) => Effect.Effect<Session.ListInfo[]>
   readonly messages: (input: MessagesInput) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
   readonly context: (sessionID: Session.ID) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
   readonly message: (
