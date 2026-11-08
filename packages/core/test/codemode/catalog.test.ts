@@ -263,7 +263,9 @@ describe("CodeModeInstructions.update", () => {
 
   test("shows a new tool's signature even when the catalog would not", () => {
     const alpha = Array.from({ length: 10 }, (_, index) => entry(`alpha.tool${index}`, `Tool ${index}`))
-    expect(update(alpha, [...alpha, entry("alpha.tool10", "Tool 10")], 0)).toContain("New tools are available in addition to those previously listed:\n  - tools.alpha.tool10({")
+    expect(update(alpha, [...alpha, entry("alpha.tool10", "Tool 10")], 0)).toContain(
+      "New tools are available in addition to those previously listed:\n  - tools.alpha.tool10({",
+    )
   })
 
   test("counts new tools past the update budget", () => {
@@ -280,7 +282,9 @@ describe("CodeModeInstructions.update", () => {
     const after = [...arriving, ...before.map((tool) => (tool.name === last ? { ...tool, signature } : tool))]
     const current = CodeModeCatalog.summarize({ tools: after }).namespaces.find((namespace) => namespace.name === "ns")
     expect(current?.entries.map((item) => item.path)).not.toContain(last)
-    expect(update(before, after)).toContain(`Changed tool listings supersede the previously listed ones:\n  - ${signature} // Tool`)
+    expect(update(before, after)).toContain(
+      `Changed tool listings supersede the previously listed ones:\n  - ${signature} // Tool`,
+    )
   })
 
   test("shows every new tool, without pointing to search, while the catalog lists every tool", () => {
