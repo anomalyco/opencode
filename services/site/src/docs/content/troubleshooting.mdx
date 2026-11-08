@@ -76,6 +76,31 @@ opencode serve --cors http://192.168.1.10:3001 --cors https://app.example.com
 With `serve --service`, supplied `--cors` flags override the persisted list for that process. Without those flags, service
 mode uses the persisted list. CORS does not change the listening address or bypass server authentication.
 
+## Change the service port
+
+The service's default port is the same for every user account on the machine, while the service configuration is per user. When two
+accounts run OpenCode at the same time — shared Windows machines are the common case — the second account's service cannot bind the
+default port and its clients fail with "port is in use by another process". Give the account its own port:
+
+```bash
+opencode service set port 28895
+opencode service get port
+```
+
+The setting is stored per user and applies the next time the service starts. Remove it with:
+
+```bash
+opencode service unset port
+```
+
+A custom bind hostname works the same way with `opencode service set hostname`.
+
+Alternatively, disable the shared service for that account so every `opencode` start runs its own embedded server with no port at all:
+
+```bash
+opencode service set disabled true
+```
+
 ## Inspect the API
 
 The `api` command uses the local service discovery and authentication flow. It accepts either an HTTP method and path or an
