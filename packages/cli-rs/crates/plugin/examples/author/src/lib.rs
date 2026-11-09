@@ -22,7 +22,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         |host, _| count(host),
     );
     setup.slot(Placement::append("sidebar.content"), |read, _, changed| sidebar(read, changed));
-    setup.on_event(&["session.execution.finished"], |host, _| {
+    setup.on_event(&["session.execution.succeeded"], |host, _| {
         host.toast(Toast::new(Variant::Info, "A session finished").title("Author"));
     });
     setup.code_block("shout", |_, fence| shout(fence));
