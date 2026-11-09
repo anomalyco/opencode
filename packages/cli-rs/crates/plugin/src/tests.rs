@@ -324,7 +324,7 @@ fn rendering(id: &str, placement: Placement, render: impl Fn() -> abi::Render + 
     let render: node::SlotRender<TestHost> = Rc::new(move |_, _, _| render());
     Definition::new(id, move |cx: &mut Setup<'_, TestHost>| {
         let activation = crate::activation::Activation::new(cx.host(), Arc::new(crate::activation::Wake::new(None)));
-        cx.claim(placement.clone(), render.clone(), &activation);
+        cx.claim(placement.clone(), render.clone(), None, &activation);
     })
 }
 
@@ -475,7 +475,7 @@ fn a_claim_on_a_child_slot_moves_when_a_wake_or_an_invalidation_redraws_its_pare
         Definition::new("footer", move |cx: &mut Setup<'_, TestHost>| {
             let wake = Arc::new(crate::activation::Wake::new(None));
             let created = crate::activation::Activation::new(cx.host(), wake);
-            cx.claim(Placement::append(slot::HOME_FOOTER), render.clone(), &created);
+            cx.claim(Placement::append(slot::HOME_FOOTER), render.clone(), None, &created);
             *activation.borrow_mut() = Some(created);
         })
     };

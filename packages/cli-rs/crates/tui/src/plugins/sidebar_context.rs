@@ -1,15 +1,13 @@
 //! The sidebar's context section (E.14, row F04, `feature-plugins/sidebar/context.tsx`): the tokens of the last
 //! reply, the share of the model's context they use, and the session's cost. It is a plugin of the one API (O-67).
-//! [`SessionUsage`] and [`money`] also serve the prompt footer.
+//! [`Last`] and [`money`] also serve the prompt footer.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 
-use opencode_api::generated::{ModelInfo, SessionID, SessionMessageCompaction, SessionMessageInfo};
+use opencode_api::generated::{ModelInfo, SessionMessageCompaction, SessionMessageInfo};
 use opencode_plugin::abi::{self, Changed, Node, Placement, Render, Span};
 use opencode_plugin::slot;
-use opencode_store::{Changes, Location, MessageExt, State};
-
-use crate::routes::session::sidebar::location_changed;
+use opencode_store::MessageExt;
 
 pub fn plugin() -> abi::Plugin {
     abi::Plugin { id: "opencode.sidebar.context", setup }
@@ -25,7 +23,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         let fresh = changed.all || last.as_ref().is_none_or(|last| last.session != session);
         let last = match &mut *last {
             Some(last) if !fresh => last,
-            last => last.insert(Last { session: session.to_owned(), ..Last::default() }),
+            last => last.insert(Last::new(session)),
         };
         let model = last.update(read, changed, fresh);
         if !fresh && last.shown == Some(model) {
@@ -38,13 +36,14 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 /// What the section shows: the usage and the cost, or nothing.
-type Model = Option<(Option<Usage>, f64)>;
+pub type Model = Option<(Option<Usage>, f64)>;
 
 /// What the section last read for its session. It reads the session again only when its info or status changed,
 /// the models when its location changed, and the messages when their list changed or a message changed in place from
-/// the one the last usage came from on.
+/// the one the last usage came from on. Its family also counts the running subagents and the shells, which it reads
+/// again when a location changed.
 #[derive(Default)]
-struct Last {
+pub struct Last {
     session: String,
     location: Option<abi::LocationRef>,
     boundary: Option<String>,
@@ -54,11 +53,23 @@ struct Last {
     cost: f64,
     /// The IDs of the session's family at the last cost read.
     family: Vec<String>,
-    shown: Option<Model>,
+    /// The family's running members besides the session.
+    pub running: usize,
+    pub shells: usize,
+    pub shown: Option<Model>,
 }
 
 impl Last {
-    fn update(&mut self, read: &dyn abi::Read, changed: &Changed, fresh: bool) -> Model {
+    pub fn new(session: &str) -> Self {
+        Self { session: session.to_owned(), ..Self::default() }
+    }
+
+    pub fn session(&self) -> &str {
+        &self.session
+    }
+
+    /// Reads what changed; `fresh` reads everything.
+    pub fn update(&mut self, read: &dyn abi::Read, changed: &Changed, fresh: bool) -> Model {
         let info = fresh || changed.session(&self.session);
         if info {
             let session = read.session(&self.session).map(|session| session.info);
@@ -70,6 +81,7 @@ impl Last {
         // The cost of a root counts its family's: its members, and a session whose parent is one of them.
         let family = |id: &String| *id == self.session || self.family.contains(id);
         if fresh
+            || !changed.locations.is_empty()
             || changed.sessions.iter().any(|id| {
                 family(id)
                     || read
@@ -79,6 +91,10 @@ impl Last {
             })
         {
             let family = read.family(&self.session);
+            let running =
+                |member: &&abi::Member| member.id != self.session && member.status == abi::SessionStatus::Running;
+            self.running = family.members.iter().filter(running).count();
+            self.shells = family.shells;
             self.family = family.members.into_iter().map(|member| member.id).collect();
             self.cost = family.cost;
         }
@@ -130,38 +146,6 @@ fn view((usage, cost): (Option<Usage>, f64)) -> Node {
 pub struct Usage {
     pub tokens: f64,
     pub percent: Option<i64>,
-}
-
-/// [`usage`] of a session's messages against the models of its location, before its revert boundary. It reads
-/// the messages again only when the session, its status, its message list or its location changed, or a message
-/// changed in place from the one the last usage came from on.
-#[derive(Default)]
-pub struct SessionUsage(Cell<Option<(Option<Usage>, usize)>>);
-
-impl SessionUsage {
-    pub fn read(&self, state: &State, changes: &Changes, session: &SessionID) -> Option<Usage> {
-        let info = state.session(session)?;
-        let messages = state.messages(session);
-        let stale = |from: usize| {
-            changes.session(session)
-                || changes.status(session)
-                || changes.messages(session)
-                || location_changed(changes, &info.location)
-                || changes.message.get(session).is_some_and(|changed| {
-                    messages.get(from..).unwrap_or_default().iter().any(|message| changed.contains(message.id()))
-                })
-        };
-        if let Some((usage, from)) = self.0.get()
-            && !stale(from)
-        {
-            return usage;
-        }
-        let models = state.location(Some(&Location::from(&info.location))).and_then(|data| data.model.as_deref());
-        let boundary = info.revert.as_ref().map(|revert| revert.message_id.0.as_str());
-        let (usage, from) = usage(messages, models, boundary);
-        self.0.set(Some((usage, from)));
-        usage
-    }
 }
 
 /// `contextUsage`: the last assistant message with tokens after the last completed compaction and before
@@ -227,6 +211,7 @@ pub fn grouped(value: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
 
     #[test]
     fn formats_like_intl() {
@@ -276,7 +261,7 @@ mod tests {
                 status: abi::SessionStatus::Idle,
                 updated: 1.0,
             };
-            abi::Family { members: vec![member("ses_a"), member("ses_b")], cost: 1.0 }
+            abi::Family { members: vec![member("ses_a"), member("ses_b")], cost: 1.0, shells: 0 }
         }
     }
 
@@ -285,7 +270,7 @@ mod tests {
     #[test]
     fn the_cost_skips_sessions_outside_the_family() {
         let store = Store { families: Cell::new(0) };
-        let mut last = Last { session: "ses_a".to_owned(), ..Last::default() };
+        let mut last = Last::new("ses_a");
         last.update(&store, &Changed::everything(), true);
         assert_eq!(store.families.get(), 1);
         let changed = |id: &str| Changed { sessions: vec![id.to_owned()], ..Changed::default() };

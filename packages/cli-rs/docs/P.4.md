@@ -51,6 +51,7 @@ the boundary:
 | `layer` (commands, palette, slash, keybinds) | `command(Command, run(&dyn Host, input))`; the host builds the keymap layer. A command without `palette` and `slash` is hidden: a click or `Host::dispatch` runs it |
 | `code_block(language, render)` | `code_block(language, render(&dyn Read, &Fence) -> Fenced)` (1.4) |
 | `slot(placement, render)` | `slot(Placement, render(&dyn Read, &SlotInput, &Changed) -> Render)` (1.4); the 1.3 form is `slot_lines(SlotKind, path, render(session_id) -> Vec<Line>)` |
+| a slot component's lifetime | `on_mount(Placement, run(&dyn Host, &SlotInput, mounted))` (1.4) for the claim registered last there: `true` before a mount's first render, `false` as it unmounts (`Request::Mount`) |
 | `route(name, render)` | `route(name, render(&dyn Read, &Changed) -> Render)` (1.4), drawn centered in a scroll box on the page background; the 1.3 form is `route_lines(name, render() -> Vec<Line>)` |
 | `storage_key(key)` | `storage_key(key)`; `Read::storage_get` and `Host::storage_set` on `plugin.<id>.<key>` |
 | event subscriptions (`api.event.on`) | `on_event(types, run(&dyn Host, &V2Event))` (1.4); the host sends `Request::Event` with the HTTP API's own event JSON |
@@ -81,7 +82,10 @@ catalogs changed, from the store's batch; the host also renders with `local` whe
 model, the usage limits, the settings, the plugins' storage) changes, with `size` on a resize, and with `woken` on a wake. A claim's first
 render gets `all`. The render reads through `Read`: `session`, `family`, `messages` (a visitor), `models`,
 `mcp_servers`, `integrations` and `vcs` per location, `model`, `limits`, `providers`, `info` (the version, the
-terminal size, where the TUI works), `route` (what the TUI shows) and `storage_get`. Reads are pure, also inside the `messages` visitor: a catalog
+terminal size, where the TUI works), `route` (what the TUI shows), `interactive` (whether the session pane owns the
+input, TS `useInteractivity`; a change renders with `all` and keeps the claim mounted), `shortcut(name)` (a command's
+first key), `dialog_open(key)` and `storage_get`. `SlotInput` carries the session and, in `prompt.footer*`, the
+prompt's `shell` mode and `show_details`; a slot mounts its claims again when its input changes. Reads are pure, also inside the `messages` visitor: a catalog
 that is not loaded reads as `None`, and the host starts its load after the render returns. Over the ABI each read is
 one `HostRequest`, and `messages` hands the visitor the plugin's own copy.
 
@@ -92,8 +96,9 @@ order. `storage_set` shows to `storage_get` at once; the host writes the disk la
 session's family is on screen. `attention(Attention { title, message, notify, sound })` sends a notification and plays
 a sound as the user's `attention` settings allow (`HostRequest::Attention`). `navigate(Route)` shows home, a session or
 a plugin's route. `dialog(Dialog)` shows a `Prompt`, whose text goes to its action as the input, or a `Panel { key,
-size, title, subtitle, body, actions, binds, bleed }`, which changes in place while its key is open and keeps where its
-body is scrolled. `copy(text, then)` copies and runs `then` once copied. `fetch` sends a request through the host's own
+size, title, subtitle, body, actions, binds, bleed, centered }`, which changes in place while its key is open and keeps
+where its body is scrolled, or `Close { key }`, which closes that panel. A fetch's reply is any 2xx status's JSON body,
+or `null` without one. `copy(text, then)` copies and runs `then` once copied. `fetch` sends a request through the host's own
 client, to the server the TUI talks to now (a managed service it follows across restarts); the reply comes back to
 the `on_reply` handlers on the UI thread, in order with the other effects, unless the plugin was disposed first. A
 command of `Scope::Route(name)` runs while that route shows (`/stats`' escape); `description` and `arguments` (the

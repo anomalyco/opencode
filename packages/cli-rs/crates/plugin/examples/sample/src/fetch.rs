@@ -51,6 +51,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
             }],
             binds: vec![PanelBind { key: "a".to_owned(), title: "Show again".to_owned(), action: again }],
             bleed: false,
+            centered: true,
         }));
     });
     Ok(())
