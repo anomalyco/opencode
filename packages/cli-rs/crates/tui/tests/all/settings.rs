@@ -15,6 +15,7 @@ use opencode_parity::{Fixture, compare, fixtures_dir};
 use opencode_tui::app::Roots;
 use opencode_tui::dialogs::{debug, experiments, settings};
 
+use opentui::prelude::{MouseButton, MouseEventKind};
 use opentui::testing::TestApp;
 use serde_json::json;
 
@@ -249,6 +250,8 @@ fn the_devtools_bar_follows_the_setting_and_opens_panels() {
     assert_eq!(tui.settings.info().debug.and_then(|debug| debug.timing), Some(true));
     assert!(app.text().contains("Time to first draw: "));
     app.press("escape");
+    // A click hits what the last frame drew.
+    app.render();
 
     // Experiments opens the dialog; turning the setting off hides the bar.
     app.click(column(bar, "Experiments"), row);
@@ -274,12 +277,35 @@ fn the_devtools_bar_frees_what_it_draws_again() {
     wait_for(&app, "[ ] Time to first draw");
     support::mark_at(&app, "[ ] Time to first draw", 2, &marker);
     app.press("escape");
-    // The bar keeps one render's widgets for a release that arrives after a redraw.
+    // A click hits what the last frame drew.
+    app.render();
     app.click(column(&bar, "Theme"), app.size().1 - 1);
     wait_for(&app, "Switch to light");
     app.press("escape");
     app.render();
     assert_eq!(Rc::strong_count(&marker), 1);
+}
+
+// Expected (bigboi-5): config changes that redraw the bar between a press and its release do not lose the click.
+#[test]
+fn a_devtools_click_survives_redraws_between_press_and_release() {
+    for (redraws, frames) in [(2, false), (5, false), (2, true), (5, true)] {
+        let app = TestApp::new(100, 30);
+        let tui = support::mount_empty(&app, support::component_info(json!({ "debug": { "devtools": true } })), None);
+        let bar = wait_for(&app, "Experiments").lines().last().unwrap().to_owned();
+        let (x, y) = (column(&bar, "Experiments"), app.size().1 - 1);
+        app.mouse(MouseEventKind::Down(MouseButton::Left), x, y);
+        for redraw in 0..redraws {
+            settings::update(&tui, move |draft| {
+                settings::set_path(draft, &["debug", "timing"], json!(redraw % 2 == 0))
+            });
+            if frames {
+                app.render();
+            }
+        }
+        app.mouse(MouseEventKind::Up(MouseButton::Left), x, y);
+        wait_for(&app, "TUI tools");
+    }
 }
 
 // P-FILE ------------------------------------------------------------------------------------------------------
