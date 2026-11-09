@@ -1,5 +1,5 @@
 # What a plugin author writes: a native plugin on the public SDK, `opencode-plugin-abi`, alone. The SDK's
-# `sdk` test builds it and checks its dependency tree. Not a workspace member.
+# `sdk` test builds it and checks its dependency tree, and the TUI's `ports` tests load it. Not a workspace member.
 [package]
 name = "opencode-author-plugin"
 version = "0.1.0"
@@ -8,6 +8,7 @@ license = "MIT"
 publish = false
 
 [lib]
+name = "opencode_author"
 crate-type = ["cdylib"]
 
 [dependencies]
