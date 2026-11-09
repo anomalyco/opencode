@@ -505,6 +505,8 @@ pub fn run_on(app: App, launch: Launch, started: impl FnOnce(&Rc<Tui>) -> opentu
     let epilogue = crate::features::epilogue::text(&tui);
     // As TS's plugin context on exit: every active plugin is disposed while the TUI is still alive.
     tui.plugins.deactivate_all();
+    // Their storage writes reach the disk before the process can exit; UI effects and replies are not waited for.
+    crate::plugins::host::flush_storage(&tui);
     drop(tui);
     drop(launch.keep);
     result?;

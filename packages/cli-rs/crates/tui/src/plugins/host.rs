@@ -321,6 +321,13 @@ fn store(tui: &Tui, key: &str, shown: Value, change: impl FnOnce(&mut Value) + S
     }
 }
 
+/// Waits until every plugin storage write queued so far is on disk.
+pub fn flush_storage(tui: &Tui) {
+    if let Some(writer) = tui.reads.writer.get() {
+        writer.flush();
+    }
+}
+
 fn load(storage: &Storage, key: &str) -> Option<String> {
     storage.load(key, &Value::Null).ok().filter(|value| !value.is_null()).map(|value| value.to_string())
 }
