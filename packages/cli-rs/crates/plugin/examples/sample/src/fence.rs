@@ -17,7 +17,8 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         drag: false,
     });
     setup.code_block("sample", |_, fence| {
-        if fence.code.trim().is_empty() {
+        // `~` falls back to the code view, for the test of a fence that streams on in it.
+        if fence.code.trim().is_empty() || fence.code.contains('~') {
             return Fenced::Code;
         }
         let lines = fence.code.lines().map(|line| {

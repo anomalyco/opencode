@@ -341,7 +341,7 @@ pub type Gone = Rc<dyn Fn(u64)>;
 
 /// One fence registration's keys, by the ID of the widget that shows the block. A key moves to the widget that
 /// replaces its block's widget, so it stays the same while the block streams, and goes when that widget is freed or
-/// the block falls back to the code view.
+/// the block falls back to the code view. Only a key whose output was shown goes, once.
 #[derive(Default)]
 pub struct Fences {
     keys: Rc<RefCell<HashMap<u32, u64>>>,
@@ -380,9 +380,9 @@ impl Fences {
         // Keys are unique across registrations, so a plugin that renders several languages keeps one map.
         static NEXT: AtomicU64 = AtomicU64::new(1);
         let previous = block.previous.map(Widget::id);
-        let key = previous
-            .and_then(|id| self.keys.borrow_mut().remove(&id))
-            .unwrap_or_else(|| NEXT.fetch_add(1, Ordering::Relaxed));
+        // The key of plugin output the block shows now, which goes if this render shows none.
+        let shown = previous.and_then(|id| self.keys.borrow_mut().remove(&id));
+        let key = shown.unwrap_or_else(|| NEXT.fetch_add(1, Ordering::Relaxed));
         let fence = Fence {
             language: block.language.to_owned(),
             info: block.info.to_owned(),
@@ -407,7 +407,8 @@ impl Fences {
             }
         };
         let Some(widget) = widget else {
-            if let Some(gone) = &self.gone {
+            // Once per key: a block that stays in the code view gets a fresh key each render, which nothing showed.
+            if let (Some(key), Some(gone)) = (shown, &self.gone) {
                 gone(key);
             }
             return None;
@@ -625,6 +626,11 @@ mod tests {
         assert_eq!(*gone.borrow().last().unwrap(), key.get(), "the code view kept the key");
         assert_eq!(gone.borrow().len(), 2);
         drop(shown);
+        assert_eq!(gone.borrow().len(), 2);
+        // A block that stays in the code view showed no output, so no key of it goes.
+        for _ in 0..3 {
+            assert!(fences.render(&block(&app, None), &theme, |_| Fenced::Code).is_none());
+        }
         assert_eq!(gone.borrow().len(), 2);
     }
 }
