@@ -10,8 +10,8 @@
 pub mod native;
 
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hasher};
 use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
@@ -82,6 +82,8 @@ pub struct Loader {
     listed: RefCell<Vec<String>>,
     /// The last failure of each target since it last loaded, so a reconcile tells only of a new one.
     failed: RefCell<HashMap<String, String>>,
+    /// The targets logged as skipped.
+    skipped: RefCell<HashSet<String>>,
 }
 
 impl Loader {
@@ -94,6 +96,7 @@ impl Loader {
             seen: RefCell::default(),
             listed: RefCell::default(),
             failed: RefCell::default(),
+            skipped: RefCell::default(),
         }
     }
 
@@ -201,6 +204,10 @@ impl Loader {
                 .entries()
                 .iter()
                 .all(|entry| entry.target.as_deref() != Some(name) || Some(&entry.status) != status.as_ref());
+            // Only now is it known that the target has no native build.
+            if self.skipped.borrow_mut().insert(name.to_owned()) {
+                log::warn!("plugin {name} skipped: {reason}");
+            }
             registry.set_unloaded(name, status);
             changed
         };
