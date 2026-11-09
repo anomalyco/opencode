@@ -739,12 +739,15 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
         });
     }
     for (handler, types) in manifest.events.iter().enumerate() {
-        let (guest, types) = (guest.clone(), types.clone());
-        let subscription = setup.host().on_event(Rc::new(move |event| {
-            if types.iter().any(|kind| kind == event.tag()) {
-                guest.handle("on-event", &Request::Event { handler, event: Box::new(event.clone()) });
-            }
-        }));
+        let (guest, kinds) = (guest.clone(), types.clone());
+        let subscription = setup.host().on_event(
+            types,
+            Rc::new(move |event| {
+                if kinds.iter().any(|kind| kind == event.tag()) {
+                    guest.handle("on-event", &Request::Event { handler, event: Box::new(event.clone()) });
+                }
+            }),
+        );
         if let Some(subscription) = subscription {
             setup.on_dispose(move || drop(subscription));
         }

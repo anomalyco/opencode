@@ -167,8 +167,8 @@ impl Host for Tui {
         notify::notify(self, &request);
     }
 
-    fn on_event(&self, run: Rc<dyn Fn(&V2Event)>) -> Option<Disposer> {
-        Some(crate::features::events::subscribe(self, move |_, event| run(event)))
+    fn on_event(&self, types: &[String], run: Rc<dyn Fn(&V2Event)>) -> Option<Disposer> {
+        Some(crate::features::events::subscribe(self, types.iter().cloned(), move |_, event| run(event)))
     }
 
     fn slot(&self, parent: &View, path: &str, input: &SlotInput) -> Option<SlotMount> {
@@ -630,7 +630,7 @@ pub fn host(tui: &Rc<Tui>) -> Rc<dyn Host> {
 pub fn install(tui: &Rc<Tui>) {
     let _ = tui.plugins.tui.set(tui.weak());
     tui.plugins.activate(&host(tui));
-    crate::features::events::subscribe(tui, |tui, event| {
+    crate::features::events::subscribe(tui, ["plugin.updated", "server.connected"], |tui, event| {
         if matches!(event, V2Event::PluginUpdated(_) | V2Event::ServerConnected(_)) {
             sync_server_plugins(tui);
         }
