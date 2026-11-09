@@ -1,7 +1,7 @@
 //! Shutdown deadline and SIGHUP (`packages/cli/src/shutdown-deadline.ts`, `index.ts:102`).
 //!
 //! On SIGTERM or SIGINT the CLI runs its registered teardown steps (`on_shutdown`), newest first, and exits
-//! with 130, as Effect's `runMain` does after an interrupt. Teardown gets 10 s; after that, or on a second
+//! with 130 after SIGINT and 143 after SIGTERM, as the TS `runMain` teardown does. Teardown gets 10 s; after that, or on a second
 //! signal, it prints what is still pending to stderr and exits with 1. With a terminal on stdin or stdout,
 //! SIGHUP counts as SIGTERM; without one (nohup, the background service) SIGHUP keeps its default, so nohup's
 //! ignore still holds. While the TUI runs, opentui owns these signals and quits the app itself.
@@ -75,11 +75,16 @@ pub fn wait_child(
     *lock(&exited.0) = true;
     exited.1.notify_all();
     drop(registration);
-    // Teardown owns the exit once it started; returning would race it with the command's own exit code.
+    park_during_shutdown();
+    status
+}
+
+/// Teardown owns the exit once it started; a command that returns would race it with its own exit code, so
+/// this parks the thread instead.
+pub fn park_during_shutdown() {
     while SHUTDOWN.get().is_some_and(|shutdown| shutdown.started.load(Ordering::SeqCst)) {
         std::thread::park();
     }
-    status
 }
 
 #[cfg(unix)]
@@ -197,6 +202,8 @@ impl Shutdown {
             std::mem::take(&mut *lock(&self.steps)).into_iter().rev().map(|(_, label, step)| (label, step)).collect();
         *lock(&self.queue) = steps.iter().map(|(label, _)| (label.clone(), None)).collect();
         let teardown = self.clone();
+        // `runMain` reports every signal interruption as 130; the CLI turns a SIGTERM into 143.
+        let code = if name == "SIGTERM" { 143 } else { 130 };
         let _ = std::thread::Builder::new().name("opencode-shutdown".into()).spawn(move || {
             for (_, step) in steps {
                 if let Some(first) = lock(&teardown.queue).first_mut() {
@@ -206,7 +213,7 @@ impl Shutdown {
                 lock(&teardown.queue).remove(0);
             }
             if !teardown.done.swap(true, Ordering::SeqCst) {
-                (teardown.exit)(130);
+                (teardown.exit)(code);
             }
         });
         let timer = self.clone();
@@ -304,7 +311,7 @@ mod tests {
     }
 
     #[test]
-    fn a_signal_runs_the_steps_newest_first_and_exits_130() {
+    fn a_signal_runs_the_steps_newest_first_and_exits_143_after_sigterm() {
         let probe = probe(Duration::from_secs(10));
         let order = Arc::new(Mutex::new(Vec::new()));
         let step = |name: &'static str| {
@@ -316,9 +323,16 @@ mod tests {
         probe.shutdown.register("last".into(), step("last"));
         probe.shutdown.unregister(removed);
         probe.shutdown.signal("SIGTERM");
-        assert_eq!(probe.exits.recv_timeout(Duration::from_secs(5)), Ok(130));
+        assert_eq!(probe.exits.recv_timeout(Duration::from_secs(5)), Ok(143));
         assert_eq!(*order.lock().unwrap(), ["last", "first"]);
         assert_eq!(text(&probe), "");
+    }
+
+    #[test]
+    fn sigint_exits_130() {
+        let probe = probe(Duration::from_secs(10));
+        probe.shutdown.signal("SIGINT");
+        assert_eq!(probe.exits.recv_timeout(Duration::from_secs(5)), Ok(130));
     }
 
     #[test]
