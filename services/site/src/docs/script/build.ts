@@ -55,7 +55,9 @@ await build({
   },
 })
 await cp(path.join(cache, "client/_build"), path.join(output, base, "_build"), { recursive: true })
-const manifest: Record<string, { file: string }> = await Bun.file(path.join(cache, "client/.vite/manifest.json")).json()
+const manifest: Record<string, { file: string; dynamicImports?: string[] }> = await Bun.file(
+  path.join(cache, "client/.vite/manifest.json"),
+).json()
 const assets = {
   stylesheet: base + manifest[inputs.stylesheet].file,
   script: base + manifest[inputs.script].file,
@@ -133,12 +135,13 @@ console.log(`docs: built ${render.docsSlugs.length} pages`)
  * page loads both, and nothing else is render-blocking.
  */
 async function checkBudget() {
-  // The script carries the shared nav menus (packages/nav-menus: the logo menu with its inlined brand files, and the
-  // product menu), about 4 kB of it.
+  // The shared nav menus (packages/nav-menus) are the script's one file of its own, loaded on first use (nav-intent.ts).
   // The stylesheet carries the phone bars (the sticky section row and the Contents bar under it), about 0.3 kB.
-  const budgets = { [inputs.script]: 11 * 1024, [inputs.stylesheet]: 29 * 1024 }
+  const budgets = { [inputs.script]: 8 * 1024, [inputs.stylesheet]: 29 * 1024 }
   const files = await Array.fromAsync(new Bun.Glob("_build/*.js").scan({ cwd: path.join(cache, "client") }))
-  if (files.length !== 1) throw new Error(`docs: the script split into ${files.length} files: ${files.join(", ")}`)
+  const lazy = manifest[inputs.script].dynamicImports?.length ?? 0
+  if (files.length !== 1 + lazy)
+    throw new Error(`docs: the script split into ${files.length} files: ${files.join(", ")}`)
   for (const [input, budget] of Object.entries(budgets)) {
     const file = manifest[input].file
     const size = Bun.gzipSync(await Bun.file(path.join(cache, "client", file)).bytes(), { level: 9 }).length

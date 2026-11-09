@@ -5,9 +5,9 @@
 import { Funnel } from "../lib/funnel"
 import { downloadOf, surfaceOf, targetOf } from "../lib/funnel-config"
 import { base } from "./config"
-import { closeNavMenus, installNavMenus } from "@opencode/nav-menus"
 import { fanMotion } from "../component/site/fan-motion"
 import { holdOpenMenu } from "../component/site/menu-hold"
+import { navMenusOnIntent } from "../component/site/nav-intent"
 
 // The page reports to the Console's funnel like the site's (lib/funnel.ts). The docs are English, at the host's root
 // like the site; their config is built in, as a chunk would bring Vite's preload helper with it.
@@ -160,9 +160,9 @@ phone.addEventListener("change", () => {
   closeLockup()
 })
 
-// The logo menu and the product menu (on DOCS), shared with the site and the other OpenCode sites (packages/nav-menus).
-// Opening one closes the lockup's own menus.
-installNavMenus({ link: (path) => path })
+// The logo menu and the product menu (on DOCS), shared with the site and the other OpenCode sites (packages/nav-menus),
+// loaded on first use (nav-intent.ts). Opening one closes the lockup's own menus.
+const navMenus = navMenusOnIntent({ link: (path) => path })
 on("opencode-nav-menu-open" as keyof DocumentEventMap, () => closeLockup())
 
 // The sections menu and its V2/V1 flyout come in as one panel with the nav menus' motion (packages/nav-menus).
@@ -191,7 +191,7 @@ const rows = (root: HTMLElement) =>
 
 function openLockup(root: HTMLElement, focus?: "first" | "last" | "current") {
   closeLockup()
-  closeNavMenus()
+  navMenus.close()
   lockup = root
   const menu = menuOf(root)
   // Phones: the labels start at the bar's logo mark and the "›" centres on the bar's last mark (the

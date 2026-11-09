@@ -839,8 +839,8 @@ function createSchema() {
     // A multiplier on the entrance's timing: 2 plays it in half the time.
     footerWordmarkSpeed: z.number().min(0.5).max(2).catch(1),
     footerWordmarkPlay: z.enum(footerWordmarkPlays).catch("drag"),
-    // window.opencode, its DevTools greeting and OpenCode Lite starting when DevTools opens
-    // (lib/console-api.ts), loaded once the page is idle.
+    // window.opencode, its one-line DevTools hint and OpenCode Lite starting when DevTools opens
+    // (lib/console-stub.ts, lib/console-api.ts).
     consoleApi: z.enum(toggles).catch("on"),
     // The light, dark and system switch at the bottom of the footer.
     themeSwitcher: z.enum(toggles).catch("on"),

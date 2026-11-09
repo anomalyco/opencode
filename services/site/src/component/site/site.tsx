@@ -34,6 +34,7 @@ import type { Key } from "~/i18n"
 import { useLanguage } from "~/context/language"
 import { strip } from "~/lib/language"
 import { brandAssets } from "~/lib/media"
+import { installConsoleStub } from "~/lib/console-stub"
 import { status, type ServiceStatus } from "~/lib/status"
 import { useViewportCover } from "~/lib/viewport"
 import { loadMarkdownPages, markdownKey, markdownPagesLoaded } from "./use-markdown"
@@ -65,7 +66,8 @@ import { designCopy, designMode } from "./design-copy"
 import { bannerDismissScript, bannerThemeColorScript, bannerTopColor, bannerVisible } from "./site-banner-script"
 import { Tooltips } from "./tooltip"
 import { SiteSearch } from "./search"
-import { preloadVisibleLinks } from "./preload-visible"
+import { navMenusOnIntent } from "./nav-intent"
+import { preloadTouchedLinks } from "./preload-touched"
 import { adoptVoice, dropVoice } from "./voice/host"
 // The logo menu's other styles (Settings › Logo menu: list, cards) and the shared nav menus in the site's colours.
 import "./logo-fan.css"
@@ -240,8 +242,8 @@ export function Site(props: {
   const [logoMenu, setLogoMenu] = createSignal<{ owner: "sidebar" | "topbar"; x: number; y: number; origin?: number }>()
   const [menu, setMenu] = createSignal(false)
   const [sectionNav, setSectionNav] = createSignal(false)
-  // The shared nav menus (packages/nav-menus), once their code has loaded (onMount).
-  let navMenus: { close: () => void; stop: () => void } | undefined
+  // The shared nav menus (packages/nav-menus), started on mount.
+  let navMenus: ReturnType<typeof navMenusOnIntent> | undefined
   onCloseMenus(() => {
     setMenu(false)
     setSectionNav(false)
@@ -677,8 +679,8 @@ export function Site(props: {
     // The app's router only handles links marked with a `link` attribute (explicitLinks), so the
     // older console pages and proxied paths like /docs keep full page loads. Links between pages
     // of this site get the attribute as soon as a pointer, focus or click reaches them, so the
-    // router swaps the page in place and preloads it on intent: hover, focus or touch. Touch screens,
-    // which have no hover, also preload the pages their links lead to as the links come into view.
+    // router swaps the page in place and preloads it on intent: hover or focus, and on touch screens,
+    // which have no hover, a finger landing on the link.
     const markLink = (event: Event) => {
       const anchor = (event.target as Element | null)?.closest?.("a[href]")
       if (!(anchor instanceof HTMLAnchorElement) || anchor.hasAttribute("link") || anchor.target) return
@@ -687,17 +689,17 @@ export function Site(props: {
     }
     for (const type of ["pointerover", "focusin", "touchstart", "click"])
       document.addEventListener(type, markLink, true)
-    const stopPreloads = preloadVisibleLinks(
+    const stopPreloads = preloadTouchedLinks(
       (link) => link.hasAttribute("link") || clientPage(new URL(link.href).pathname),
       (path) => preloadRoute(path, { preloadData: false }),
     )
 
     const idle = window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 1500))
-    // window.opencode and its greeting for developers who open DevTools (Settings › Other › Console API).
+    // window.opencode and its hint for developers who open DevTools (Settings › Other › Console API).
     createEffect(() => {
       if (siteSettings.consoleApi === "off") return void delete (window as { opencode?: unknown }).opencode
       // Checked again when idle: saved settings load in a microtask after this first run.
-      idle(() => siteSettings.consoleApi === "on" && void import("~/lib/console-api").then((api) => api.install()))
+      idle(() => siteSettings.consoleApi === "on" && installConsoleStub())
     })
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return
@@ -788,15 +790,10 @@ export function Site(props: {
     const stopMenuLinks = closeMenusOnLinks()
     // Settings › Logo menu › fan (the default) is the shared nav menus' logo menu (packages/nav-menus), as on the
     // docs, Data, the Console and the status page; the home, Brand and Press links stay in the visitor's language.
-    // Opening it closes the site's own menus. Its code (with the inlined brand files) loads after the page, so it stays
-    // out of every page's first JavaScript (script/check-client-bundle.ts).
-    let unmounted = false
-    void import("@opencode/nav-menus").then((module) => {
-      if (unmounted) return
-      const stop = module.installNavMenus({
-        link: (path) => (["/", "/brand", "/press"].includes(path) ? language.route(path) : path),
-      })
-      navMenus = { close: () => module.closeNavMenus(), stop }
+    // Opening it closes the site's own menus. Its code (with the inlined brand files) loads on first use (nav-intent.ts),
+    // so it stays out of every page's JavaScript until then.
+    navMenus = navMenusOnIntent({
+      link: (path) => (["/", "/brand", "/press"].includes(path) ? language.route(path) : path),
     })
     const closeSiteMenus = () => {
       setMenu(false)
@@ -806,7 +803,6 @@ export function Site(props: {
     document.addEventListener("opencode-nav-menu-open", closeSiteMenus)
 
     onCleanup(() => {
-      unmounted = true
       navMenus?.stop()
       navMenus = undefined
       document.removeEventListener("opencode-nav-menu-open", closeSiteMenus)
