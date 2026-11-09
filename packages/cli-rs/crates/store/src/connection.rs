@@ -53,7 +53,9 @@ impl Data {
         for follow in follows {
             self.follow(follow);
         }
-        for event in events.iter().filter(|event| is_signal(event)) {
+        // Every event but a streaming delta, so a plugin's `on_event` gets each type it subscribes to; a delta, the hot
+        // path, is neither cloned nor sent.
+        for event in events.iter().filter(|event| !is_delta(event)) {
             // No receiver is not an error: views subscribe when they need to.
             let _ = self.inner.signals.send(event.clone());
         }
@@ -323,43 +325,13 @@ pub async fn run(data: Data, mut state: watch::Receiver<events::State>, mut batc
     }
 }
 
-fn is_signal(event: &V2Event) -> bool {
+fn is_delta(event: &V2Event) -> bool {
     matches!(
         event,
-        V2Event::TuiCommandExecute(_)
-            | V2Event::TuiToastShow(_)
-            | V2Event::TuiSessionSelect(_)
-            | V2Event::TuiPromptAppend(_)
-            | V2Event::SessionDeleted(_)
-            | V2Event::SessionMoved(_)
-            // Forwarded to plugins' `on_event` (`opencode-session-usage`).
-            | V2Event::SessionCreated(_)
-            | V2Event::SessionUsageUpdated(_)
-            // The tab strip's prompt pulse (E.12).
-            | V2Event::SessionInboxEnqueued(_)
-            // The notifications plugin (E.19a).
-            | V2Event::FormCreated(_)
-            | V2Event::FormReplied(_)
-            | V2Event::FormCancelled(_)
-            | V2Event::PermissionAsked(_)
-            | V2Event::PermissionReplied(_)
-            | V2Event::SessionExecutionStarted(_)
-            | V2Event::SessionExecutionSucceeded(_)
-            | V2Event::SessionExecutionInterrupted(_)
-            | V2Event::SessionExecutionFailed(_)
-            // Terminal support and lists (E.13a).
-            | V2Event::ServerConnected(_)
-            | V2Event::PersistentPtyAdded(_)
-            | V2Event::PersistentPtyRemoved(_)
-            | V2Event::PersistentPtyUpdated(_)
-            // Plugin RPC events, which the goal footer follows (E.14); it reads again on `server.connected`.
-            | V2Event::Rpc(_)
-            // The worktrees dialog reads its list again (E.11b).
-            | V2Event::WorktreeUpdated(_)
-            // The plugin manager and the update notification (E.18b).
-            | V2Event::PluginUpdated(_)
-            | V2Event::InstallationUpdateAvailable(_)
-            | V2Event::InstallationUpdated(_)
+        V2Event::SessionTextDelta(_)
+            | V2Event::SessionReasoningDelta(_)
+            | V2Event::SessionToolInputDelta(_)
+            | V2Event::SessionCompactionDelta(_)
     )
 }
 
