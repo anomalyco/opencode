@@ -1,5 +1,6 @@
 //! A route of the one API (O-67), on either path: what its render returns, centered in a scroll box on the page
-//! background (TS `StatsPage`'s container), and the plugin's commands of [`abi::Scope::Route`] while it shows.
+//! background (TS `StatsPage`'s container), the plugin's commands of [`abi::Scope::Route`] while it shows, and its
+//! mount handlers as it mounts and unmounts.
 
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
@@ -9,7 +10,7 @@ use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
 
-use crate::node::{Mount, SlotRender};
+use crate::node::{Mount, MountFn, SlotRender};
 use crate::{Claimed, Host, SlotInput, abi};
 
 /// A plugin's commands: the global ones, and the ones of each route.
@@ -40,12 +41,18 @@ pub(crate) struct View {
 }
 
 impl View {
-    pub fn new(host: &dyn Host, owner: Weak<dyn Host>, render: SlotRender, commands: Vec<TuiCommand>) -> Self {
+    pub fn new(
+        host: &dyn Host,
+        owner: Weak<dyn Host>,
+        render: SlotRender,
+        commands: Vec<TuiCommand>,
+        on_mount: Option<MountFn>,
+    ) -> Self {
         let app = host.app();
         let theme = host.theme();
         let scroll = ScrollBox::new(app).scrollbars(false).grow(1.0);
         scroll.content_view().align_items(Align::Center).justify(Justify::Center).padding_y(1);
-        let mount = Mount::new(host, owner, "", &SlotInput::default(), render, None);
+        let mount = Mount::new(host, owner, "", &SlotInput::default(), render, on_mount);
         scroll.add(&mount.root());
         let root = opentui::prelude::View::new(app)
             .width(Length::percent(100.0))

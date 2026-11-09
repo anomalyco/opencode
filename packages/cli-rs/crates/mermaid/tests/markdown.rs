@@ -16,8 +16,8 @@ use opentui::widget::CodeBlock;
 /// The plugin's `mermaid` render from a fresh setup, through the host's fence adapter in dark `theme`, as the
 /// plugin host registers it.
 fn renderer(theme: &Theme) -> impl Fn(&CodeBlock<'_>) -> Option<AnyWidget> + use<> {
-    let mut setup = opencode_plugin_abi::Setup::in_process(opencode_mermaid::ID, None);
-    (opencode_mermaid::plugin().setup)(&mut setup).unwrap();
+    let mut setup = opencode_plugin_abi::Registered::new(opencode_mermaid::ID, None);
+    (opencode_mermaid::plugin().setup)(&mut setup.setup()).unwrap();
     let (language, render) = setup.fences()[0].clone();
     assert_eq!(language, "mermaid");
     let (theme, fences) = (theme.clone(), Fences::default());

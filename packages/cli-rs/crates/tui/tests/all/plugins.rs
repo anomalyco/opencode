@@ -381,3 +381,52 @@ fn an_event_handler_renders_its_plugins_claims_again() {
         h.wait_for("updates 1");
     }
 }
+
+// Expected (carbon-2): an external plugin whose setup fails shows the "Plugin failed" toast with "Open plugins", and
+// the plugin manager lists it failed and offers to enable it; a fixed build loaded by hot reload refreshes the open
+// manager, which then lists it active and offers to disable it.
+#[test]
+fn a_failed_setup_is_offered_to_enable_and_the_open_manager_follows_a_reload() {
+    let h = open(Route::Home, "", &build("setup-fails"));
+    let screen = h.wait_for("Plugin failed:");
+    assert!(screen.contains("Open plugins"), "{screen}");
+    assert_eq!(h.status(), opencode_plugin::Status::Failed("sample setup failed".to_owned()));
+    h.tui.keymap.dispatch("plugins.list", None);
+    let screen = h.wait_for("enable enter");
+    assert!(screen.contains("failed, local") && !screen.contains("disable"), "{screen}");
+    write_atomic(&h.plugin.join(entry_file()), &build(""));
+    let screen = h.wait_for("disable enter");
+    assert!(!screen.contains("failed, local"), "{screen}");
+}
+
+thread_local! {
+    /// The version the `exiting` plugin's dispose callback read from the host.
+    static DISPOSED_WITH: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+/// Records, as it is disposed, the version the host reports.
+fn exiting(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.on_dispose(|host| DISPOSED_WITH.set(Some(host.info().version)));
+    Ok(())
+}
+
+// Expected (carbon-1): as the TUI exits, every active plugin is disposed while the TUI is still alive, as TS's plugin
+// context does on exit.
+#[test]
+fn the_tui_disposes_its_plugins_as_it_exits() {
+    let options = opentui::AppOptions { exit_on_ctrl_c: false, ..opentui::AppOptions::default() };
+    let app = opentui::App::headless(opentui::app::HeadlessOptions { width: 80, height: 24, app: options }).unwrap();
+    let launch = opencode_tui::app::Launch {
+        deps: Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) },
+        args: opencode_tui::Args { version: "9.9.9".to_owned(), ..opencode_tui::Args::default() },
+        keep: Box::new(()),
+        plugins: None,
+    };
+    opencode_tui::app::run_on(app, launch, |tui| {
+        opencode_tui::plugins::host::add(tui, abi::Plugin { id: "exiting", setup: exiting }.into());
+        tui.app.quit();
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(DISPOSED_WITH.take().as_deref(), Some("9.9.9"));
+}

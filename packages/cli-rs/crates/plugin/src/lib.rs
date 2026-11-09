@@ -11,6 +11,7 @@ pub mod slot;
 
 use std::any::Any;
 use std::cell::{Cell, RefCell};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
@@ -151,7 +152,7 @@ impl Claimed for View {
 type ClaimRender = Rc<dyn Fn(&dyn Host, &SlotInput) -> Box<dyn Claimed>>;
 type Claim = Box<dyn Claimed>;
 type RouteRender = Rc<dyn Fn(&dyn Host) -> Box<dyn Claimed>>;
-type SetupFn = Rc<dyn Fn(&mut Setup<'_>)>;
+type SetupFn = Rc<dyn Fn(&mut Setup<'_>) -> Result<(), String>>;
 /// The current failure of an external plugin, if any.
 pub type ErrorFn = Rc<dyn Fn() -> Option<String>>;
 /// Renders a fenced code block in the theme, or returns `None` to keep the default code view.
@@ -184,6 +185,17 @@ pub struct Definition {
 
 impl Definition {
     pub(crate) fn new(id: impl Into<String>, setup: impl Fn(&mut Setup<'_>) + 'static) -> Self {
+        Self::fallible(id, move |registering| {
+            setup(registering);
+            Ok(())
+        })
+    }
+
+    /// A definition whose setup may fail: then what it registered is disposed, and the plugin is not active.
+    pub(crate) fn fallible(
+        id: impl Into<String>,
+        setup: impl Fn(&mut Setup<'_>) -> Result<(), String> + 'static,
+    ) -> Self {
         Self { id: id.into(), setup: Rc::new(setup), external: None }
     }
 
@@ -220,29 +232,32 @@ impl From<abi::Plugin> for Definition {
 
 /// A plugin of the one API, run in process: its closures get Rust values, with no JSON step.
 fn in_process(plugin: abi::Plugin) -> Definition {
-    Definition::new(plugin.id, move |setup: &mut Setup<'_>| {
+    Definition::fallible(plugin.id, move |setup: &mut Setup<'_>| {
         let proxy = setup.host().app().proxy();
         let activation = Activation::new(setup.host(), Arc::new(activation::Wake::new(Some(proxy))));
-        let mut api = abi::Setup::in_process(setup.id(), None);
+        let scope = Rc::new(Scope {
+            host: Rc::downgrade(setup.host()),
+            id: setup.id().to_owned(),
+            keys: RefCell::default(),
+            activation: activation.clone(),
+            replies: RefCell::default(),
+        });
+        let mut api = abi::Registered::new(setup.id(), None);
         api.set_waker(activation.waker());
-        if let Err(error) = (plugin.setup)(&mut api) {
-            log::error!("plugin {} failed: {error}", setup.id());
-            return;
+        // Setup reaches the host as a command does: its effects wait on the one queue.
+        let set_up = scope.with(|host| {
+            catch_unwind(AssertUnwindSafe(|| (plugin.setup)(&mut api.setup_with(host))))
+                .unwrap_or_else(|panic| Err(format!("setup panicked: {}", abi::panic_message(&*panic))))
+        });
+        if let Err(error) = set_up.unwrap_or_else(|| Err("the host is gone".to_owned())) {
+            scope.dispose(&mut api);
+            return Err(error);
         }
         let manifest = api.manifest();
         if manifest.routes.len() != manifest.render_routes.len() || !manifest.slots.iter().all(|claim| claim.render) {
             log::error!("plugin {}: 1.3 routes and slot claims do not run in process", setup.id());
         }
-        let scope = Rc::new(Scope {
-            host: Rc::downgrade(setup.host()),
-            id: setup.id().to_owned(),
-            keys: manifest.storage.clone(),
-            activation: activation.clone(),
-            replies: api.replies().to_vec(),
-        });
-        // Registered first, so it runs last: no reply or wake reaches the plugin once it is disposed.
-        let disposed = activation.clone();
-        setup.on_dispose(move || disposed.dispose());
+        *scope.replies.borrow_mut() = api.replies().to_vec();
         if !api.wakes().is_empty() {
             let (wakes, scope) = (api.wakes().to_vec(), scope.clone());
             activation.on_wake(Rc::new(move || scope.run(|host| wakes.iter().for_each(|run| run(host)))));
@@ -265,11 +280,8 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                 api.mounts().iter().filter(|(claim, _)| *claim == index).map(|(_, run)| run.clone()).collect();
             let mount = (!mounts.is_empty()).then(|| {
                 let scope = scope.clone();
-                // A claim may unmount after its plugin was disposed; the plugin hears of it no more.
                 Rc::new(move |_: &dyn Host, input: &abi::SlotInput, mounted: bool| {
-                    if !scope.activation.disposed() {
-                        scope.run(|host| mounts.iter().for_each(|run| run(host, input, mounted)));
-                    }
+                    scope.mounted(|host| mounts.iter().for_each(|run| run(host, input, mounted)));
                 }) as node::MountFn
             });
             let render: node::SlotRender = Rc::new(move |host: &dyn Host, input, changed| {
@@ -300,25 +312,25 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             setup.layer(KeymapLayer::global(global));
         }
         for (name, render) in api.routes() {
+            let mounts: Vec<abi::RouteMountFn> =
+                api.route_mounts().iter().filter(|(route, _)| route == name).map(|(_, run)| run.clone()).collect();
+            let mount = (!mounts.is_empty()).then(|| {
+                let scope = scope.clone();
+                Rc::new(move |_: &dyn Host, _: &abi::SlotInput, mounted: bool| {
+                    scope.mounted(|host| mounts.iter().for_each(|run| run(host, mounted)));
+                }) as node::MountFn
+            });
             let (render, scope) = (render.clone(), scope.clone());
             let render: node::SlotRender = Rc::new(move |host: &dyn Host, _, changed| {
                 let mut out = abi::Render::Keep;
                 host.read(&mut |read| out = render(&Scoped { read, host, scope: &scope }, changed));
                 out
             });
-            setup.view_route(name, render, route::commands(&scoped, name), &activation);
+            setup.view_route(name, render, route::commands(&scoped, name), mount, &activation);
         }
-        for run in api.take_disposers() {
-            let (scope, mut run) = (scope.clone(), Some(run));
-            setup.on_dispose(move || {
-                let Some(host) = scope.host.upgrade() else { return };
-                host.read(&mut |read| {
-                    if let Some(run) = run.take() {
-                        run(&Scoped { read, host: &*host, scope: &scope });
-                    }
-                });
-            });
-        }
+        // Disposal runs the plugin's dispose callbacks, then drops its replies and wakes.
+        setup.on_dispose(move || scope.dispose(&mut api));
+        Ok(())
     })
 }
 
@@ -350,31 +362,55 @@ pub(crate) fn tui_command(command: &abi::Command, run: impl Fn(Option<&str>) + '
 struct Scope {
     host: Weak<dyn Host>,
     id: String,
-    keys: Vec<String>,
+    keys: RefCell<Vec<String>>,
     activation: Rc<Activation>,
-    replies: Vec<abi::ReplyFn>,
+    replies: RefCell<Vec<abi::ReplyFn>>,
 }
 
 impl Scope {
     /// The host's storage key of `key`, when the plugin declared it.
     fn stored(&self, key: &str) -> Option<String> {
-        if self.keys.iter().any(|known| known == key) {
+        if self.keys.borrow().iter().any(|known| known == key) {
             return Some(format!("plugin.{}.{key}", self.id));
         }
         log::warn!("plugin {}: storage key {key} was not declared", self.id);
         None
     }
 
-    /// Runs a handler of the plugin with the host, then invalidates its claims, whose state it may have changed.
-    fn run(self: &Rc<Self>, handler: impl FnOnce(&dyn abi::Host)) {
-        let Some(host) = self.host.upgrade() else { return };
-        let mut handler = Some(handler);
+    /// Calls `f` with the host as the plugin reads and calls it, unless the host is gone.
+    fn with<R>(self: &Rc<Self>, f: impl FnOnce(&dyn abi::Host) -> R) -> Option<R> {
+        let host = self.host.upgrade()?;
+        let (mut f, mut out) = (Some(f), None);
         host.read(&mut |read| {
-            if let Some(handler) = handler.take() {
-                handler(&Scoped { read, host: &*host, scope: self });
+            if let Some(f) = f.take() {
+                out = Some(f(&Scoped { read, host: &*host, scope: self }));
             }
         });
-        self.activation.invalidate();
+        out
+    }
+
+    /// Runs a handler of the plugin with the host, then invalidates its claims, whose state it may have changed.
+    fn run(self: &Rc<Self>, handler: impl FnOnce(&dyn abi::Host)) {
+        if self.with(handler).is_some() {
+            self.activation.invalidate();
+        }
+    }
+
+    /// Runs a mount handler: a claim or route may mount and unmount after its plugin was disposed, which hears of it
+    /// no more.
+    fn mounted(self: &Rc<Self>, handler: impl FnOnce(&dyn abi::Host)) {
+        if !self.activation.disposed() {
+            self.run(handler);
+        }
+    }
+
+    /// Disposes the plugin's registrations `api` with the host, or without it once it is gone, then the activation,
+    /// so no reply or wake reaches the plugin after.
+    fn dispose(self: &Rc<Self>, api: &mut abi::Registered) {
+        if self.with(|host| api.dispose(Some(host))).is_none() {
+            api.dispose(None);
+        }
+        self.activation.dispose();
     }
 }
 
@@ -518,7 +554,7 @@ impl abi::Host for Scoped<'_> {
                         let Some(scope) = scope.upgrade().filter(|scope| !scope.activation.disposed()) else {
                             return;
                         };
-                        let replies = scope.replies.clone();
+                        let replies = scope.replies.borrow().clone();
                         scope.run(|host| replies.iter().for_each(|run| run(host, id, result.clone())));
                     });
                 }),
@@ -535,6 +571,13 @@ impl abi::Host for Scoped<'_> {
     fn copy(&self, text: &str, then: Option<abi::Action>) {
         let text = text.to_owned();
         self.defer(move |host| copy(host, &text, then));
+    }
+
+    fn declare_storage_key(&self, key: &str) {
+        let mut keys = self.scope.keys.borrow_mut();
+        if !keys.iter().any(|known| known == key) {
+            keys.push(key.to_owned());
+        }
     }
 }
 
@@ -621,11 +664,12 @@ impl Setup<'_> {
         name: &str,
         render: node::SlotRender,
         commands: Vec<TuiCommand>,
+        mount: Option<node::MountFn>,
         activation: &Rc<Activation>,
     ) {
         let (owner, activation) = (Rc::downgrade(self.host), activation.clone());
         self.route(name, move |host| {
-            let view = route::View::new(host, owner.clone(), render.clone(), commands.clone());
+            let view = route::View::new(host, owner.clone(), render.clone(), commands.clone(), mount.clone());
             activation.track(Rc::downgrade(&view.mount) as Weak<dyn Drawn>);
             Box::new(view)
         });
@@ -724,12 +768,23 @@ struct Plugin {
     shadowed: Option<(Definition, bool)>,
     /// The activation order a replacement of a built-in keeps, so its claims take the built-in's place.
     place: Option<u64>,
+    /// Why it is not active although it was started: its setup failed, or its build did not load.
+    failed: Option<String>,
 }
 
 impl Plugin {
     fn new(definition: Definition, source: Source, enabled: bool) -> Self {
-        Self { definition, source, enabled, active: None, shadowed: None, place: None }
+        Self { definition, source, enabled, active: None, shadowed: None, place: None, failed: None }
     }
+}
+
+/// A setup that failed in [`Registry::load`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SetupFailed {
+    pub error: String,
+    /// It would have replaced an active plugin, which keeps running; else the plugin is listed as failed and is not
+    /// active.
+    pub kept: bool,
 }
 
 /// The host's plugins in enable order, and the configured entries it did not load.
@@ -817,8 +872,9 @@ impl Registry {
     /// Adds external plugin `definition`, or replaces the one loaded from the same target, and activates it
     /// unless a `plugins` entry or the plugin manager disabled it. A replacement keeps its place, so slot
     /// order holds across a reload. A replacement of an active plugin starts before the active one stops: when its
-    /// setup fails, it is disposed, the active one keeps running, and the error is returned (TS `context.tsx`).
-    pub fn load(&self, host: &Rc<dyn Host>, definition: Definition) -> Option<String> {
+    /// setup fails, it is disposed and the active one keeps running (TS `context.tsx`). Any other setup that fails
+    /// leaves the plugin listed as failed and not active.
+    pub fn load(&self, host: &Rc<dyn Host>, definition: Definition) -> Option<SetupFailed> {
         let target = definition.target()?.to_owned();
         self.set_unloaded(&target, None);
         // A `plugins` entry that names the plugin enables it; it is not a plugin of its own.
@@ -826,11 +882,10 @@ impl Registry {
             .borrow_mut()
             .retain(|(known, status)| !(matches!(status, Status::Skipped(_)) && matches(known, &definition.id)));
         if let Some(Some(place)) = self.with_target(&target, |plugin| plugin.active.is_some().then_some(plugin.place)) {
-            let (order, registration) = self.setup(host, &definition, place);
-            if let Some(error) = definition.external.as_ref().and_then(|(_, error)| error()) {
-                registration.dispose();
-                return Some(error);
-            }
+            let (order, registration) = match self.setup(host, &definition, place) {
+                Ok(active) => active,
+                Err(error) => return Some(SetupFailed { error, kept: true }),
+            };
             let previous = self.with_target(&target, |plugin| {
                 plugin.definition = definition;
                 plugin.active.replace((order, registration))
@@ -844,7 +899,7 @@ impl Registry {
             let mut plugins = self.plugins.borrow_mut();
             match plugins.iter_mut().find(|plugin| plugin.definition.target() == Some(target.as_str())) {
                 Some(plugin) => {
-                    plugin.definition = definition;
+                    (plugin.definition, plugin.failed) = (definition, None);
                     Some(plugin.active.take())
                 }
                 None => {
@@ -868,7 +923,7 @@ impl Registry {
                             builtin.place = builtin.active.as_ref().map(|(order, _)| *order);
                             let original = std::mem::replace(&mut builtin.definition, definition);
                             builtin.shadowed = Some((original, builtin.enabled));
-                            (builtin.source, builtin.enabled) = (Source::External, enabled);
+                            (builtin.source, builtin.enabled, builtin.failed) = (Source::External, enabled, None);
                             Some(builtin.active.take())
                         }
                         None => {
@@ -883,10 +938,36 @@ impl Registry {
             registration.dispose();
         }
         let started = self.with_target(&target, |plugin| plugin.enabled.then(|| plugin.definition.id.clone()));
-        if let Some(Some(id)) = started {
-            self.start(host, &id);
-        }
-        None
+        let error = self.start(host, &started.flatten()?)?;
+        Some(SetupFailed { error, kept: false })
+    }
+
+    /// Records that the build of `target` did not load, and returns whether an active plugin of it keeps running. An
+    /// inactive one is listed as failed with `error`, and enabling it fails the same rather than start the build it
+    /// had; without a plugin, the target is listed as failed.
+    pub fn failed_load(&self, target: &str, error: &str) -> bool {
+        let kept = self.with_target(target, |plugin| {
+            if plugin.active.is_some() {
+                return true;
+            }
+            let broken = error.to_owned();
+            plugin.failed = Some(broken.clone());
+            plugin.definition.setup = Rc::new(move |_| Err(broken.clone()));
+            false
+        });
+        kept.unwrap_or_else(|| {
+            self.set_unloaded(target, Some(Status::Failed(error.to_owned())));
+            false
+        })
+    }
+
+    /// Deactivates every active plugin, the last activated first, while the host is still alive: the host exits (TS
+    /// `context.tsx` dispose).
+    pub fn deactivate_all(&self) {
+        let mut active: Vec<(u64, Registration)> =
+            self.plugins.borrow_mut().iter_mut().filter_map(|plugin| plugin.active.take()).collect();
+        active.sort_by_key(|(order, _)| std::cmp::Reverse(*order));
+        active.into_iter().for_each(|(_, registration)| registration.dispose());
     }
 
     /// Whether `target` is a selector of a plugin, rather than a plugin to load.
@@ -966,7 +1047,11 @@ impl Registry {
         if let Some((_, registration)) = failed.flatten() {
             registration.dispose();
         }
-        self.start(host, id);
+        if self.start(host, id).is_some() {
+            // Like a failed load, a setup that fails as the plugin manager enables it says so (TS `plugins.tsx`).
+            let target = self.with_plugin(id, |plugin| plugin.definition.target().map(str::to_owned)).flatten();
+            host.failed(target.as_deref().unwrap_or(id));
+        }
         true
     }
 
@@ -980,7 +1065,7 @@ impl Registry {
             status: match (&plugin.active, &plugin.definition.external) {
                 (Some(_), Some((_, error))) => error().map_or(Status::Active, Status::Failed),
                 (Some(_), None) => Status::Active,
-                (None, _) => Status::Inactive,
+                (None, _) => plugin.failed.clone().map_or(Status::Inactive, Status::Failed),
             },
             active: plugin.active.is_some(),
         });
@@ -1079,29 +1164,46 @@ impl Registry {
         renderers
     }
 
-    /// Runs `setup` for plugin `id` unless it is active.
-    fn start(&self, host: &Rc<dyn Host>, id: &str) {
+    /// Runs `setup` for plugin `id` unless it is active; returns why it failed.
+    fn start(&self, host: &Rc<dyn Host>, id: &str) -> Option<String> {
         let Some(Some(definition)) =
             self.with_plugin(id, |plugin| plugin.active.is_none().then(|| plugin.definition.clone()))
         else {
-            return;
+            return None;
         };
         let place = self.with_plugin(id, |plugin| plugin.place).flatten();
-        let active = self.setup(host, &definition, place);
-        self.with_plugin(id, move |plugin| plugin.active = Some(active));
+        let started = self.setup(host, &definition, place);
+        let error = started.as_ref().err().cloned();
+        if let Some(error) = &error {
+            log::error!("plugin {id} failed: {error}");
+        }
+        self.with_plugin(id, move |plugin| match started {
+            Ok(active) => (plugin.active, plugin.failed) = (Some(active), None),
+            Err(error) => plugin.failed = Some(error),
+        });
+        error
     }
 
     /// Runs the setup of `definition` and numbers the activation, unless it keeps the order `place`. Setup runs without
-    /// the registry borrowed, so it may read the registry through the host.
-    fn setup(&self, host: &Rc<dyn Host>, definition: &Definition, place: Option<u64>) -> (u64, Registration) {
+    /// the registry borrowed, so it may read the registry through the host. A setup that fails leaves nothing
+    /// registered.
+    fn setup(
+        &self,
+        host: &Rc<dyn Host>,
+        definition: &Definition,
+        place: Option<u64>,
+    ) -> Result<(u64, Registration), String> {
         let mut setup = Setup { host, id: &definition.id, registration: Registration::default() };
-        (definition.setup)(&mut setup);
+        if let Err(error) = (definition.setup)(&mut setup) {
+            setup.registration.dispose();
+            return Err(error);
+        }
         let order = place.unwrap_or_else(|| {
             let order = self.activations.get();
             self.activations.set(order + 1);
             order
         });
-        (order, setup.registration)
+        Ok((order, setup.registration))
     }
 
     fn with_target<T>(&self, target: &str, f: impl FnOnce(&mut Plugin) -> T) -> Option<T> {

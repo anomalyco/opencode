@@ -82,6 +82,16 @@ deref_harness!(Port);
 
 /// The TUI on session `ses_p`, `width` wide, with the port `name` in `<config>/plugins/<name>`, over `handler`.
 fn open(name: &str, width: u16, handler: impl Fn(&Seen) -> Option<Reply> + Send + Sync + 'static) -> Port {
+    open_in(name, width, handler, false)
+}
+
+/// [`open`], with real TUI storage in the temp directory when `stored`.
+fn open_in(
+    name: &str,
+    width: u16,
+    handler: impl Fn(&Seen) -> Option<Reply> + Send + Sync + 'static,
+    stored: bool,
+) -> Port {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
     let plugin = config.join("plugins").join(name);
@@ -92,6 +102,7 @@ fn open(name: &str, width: u16, handler: impl Fn(&Seen) -> Option<Reply> + Send 
         config: support::config(support::still()),
         route: support::session_route("ses_p"),
         events: true,
+        roots: stored.then(|| support::roots(support::home_paths(&root.path().join("home")), "test")).flatten(),
         ..support::deps(Arc::new(server.clone()))
     };
     let harness = support::mount(width, 40, deps);
@@ -251,6 +262,21 @@ fn subagents_lists_ten_children_newest_first_and_opens_them() {
     h.app.click(x + 2, y);
     h.wait("the click opens the child", || h.tui.route() == session(first));
     h.wait_gone("▼ Subagents");
+}
+
+// Expected (carbon-3, bigboi-3): the fold, a field merge the `cdylib` asks for over the C ABI, sets only its field in
+// the latest stored object, so a field another client wrote before this TUI read it again stays.
+#[test]
+fn a_fold_over_the_c_abi_keeps_a_field_another_client_stored() {
+    let h = open_in("subagents-sidebar", 170, subagents, true);
+    h.wait_for("+2 more");
+    let storage = h.tui.storage().unwrap();
+    let file = storage.file("plugin.subagents-sidebar.view").unwrap();
+    opencode_local::storage::write_json_atomic(&file, &json!({ "open": true, "sibling": 99 })).unwrap();
+    h.tui.keymap.dispatch("subagents-sidebar.toggle", None);
+    let stored = || storage.load("plugin.subagents-sidebar.view", &Value::Null).unwrap();
+    h.wait("the fold reaches the disk", || stored()["open"] == json!(false));
+    assert_eq!(stored(), json!({ "open": false, "sibling": 99 }));
 }
 
 // --- @mynameistito/opencode-force-input

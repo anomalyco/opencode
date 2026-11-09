@@ -482,6 +482,8 @@ pub fn run_on(app: App, launch: Launch, started: impl FnOnce(&Rc<Tui>) -> opentu
     crate::prompt::editor_context::start(&tui, crate::prompt::editor_context::Source::from_env());
     let result = app.run();
     let epilogue = crate::features::epilogue::text(&tui);
+    // As TS's plugin context on exit: every active plugin is disposed while the TUI is still alive.
+    tui.plugins.deactivate_all();
     drop(tui);
     drop(launch.keep);
     result?;

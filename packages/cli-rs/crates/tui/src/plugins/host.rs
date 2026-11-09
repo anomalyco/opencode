@@ -182,6 +182,7 @@ impl Host for Tui {
 
     fn remount(&self) {
         self.navigate(self.route());
+        crate::dialogs::plugins::refresh(self);
     }
 
     fn dispatch(&self, name: &str, input: Option<&str>) {

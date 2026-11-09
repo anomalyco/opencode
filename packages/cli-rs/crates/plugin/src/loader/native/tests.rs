@@ -11,7 +11,7 @@ use opentui::testing::Capture;
 use super::*;
 use crate::loader::tests::{TestHost, dynamic, entry, host};
 use crate::loader::{Configured, Loader, entry_file};
-use crate::{Registry, SlotInput, Status, slot};
+use crate::{Entry, Registry, SlotInput, Status, slot};
 
 /// The sample plugin built with `features`, built once per test run. Builds share one target directory, so the
 /// lock keeps a build and its read together.
@@ -1084,4 +1084,255 @@ fn a_wake_runs_the_wake_handlers_then_renders_on_both_paths() {
         drop(_mounted);
         registry.set_active(&dynamic(&host), "waking", false);
     }
+}
+
+thread_local! {
+    /// The waker the `guarded` plugin got, and the wakes freed on this thread as its guard dropped.
+    static GUARDED: std::cell::RefCell<Option<abi::Waker>> = const { std::cell::RefCell::new(None) };
+    static FREED_AT_GUARD: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+    static GUARDED_RENDERS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// What `guarded`'s dispose callback holds: a waker, as a plugin thread's join guard does.
+struct Guard(#[allow(dead_code)] abi::Waker);
+
+impl Drop for Guard {
+    fn drop(&mut self) {
+        FREED_AT_GUARD.set(Some(crate::activation::FREED.get()));
+    }
+}
+
+/// Keeps its waker in a dispose callback and in [`GUARDED`], and counts the renders of its claim.
+fn guarded(setup: &mut abi::Setup) -> Result<(), String> {
+    let waker = setup.waker().ok_or("no waker")?;
+    GUARDED.set(Some(waker.clone()));
+    let guard = Guard(waker);
+    setup.on_dispose(move |_| drop(guard));
+    setup.slot(abi::Placement::append("home.footer"), |_, _, _| {
+        GUARDED_RENDERS.set(GUARDED_RENDERS.get() + 1);
+        abi::Render::Show(abi::Node::text([abi::Span::new("guarded")]))
+    });
+    Ok(())
+}
+
+// Expected (carbon-1): a waker that a plugin keeps past its registry, here in a dispose callback that never runs, keeps
+// its target alive, and a wake after the plugin was disabled does nothing, also while a claim of it is still mounted.
+#[test]
+fn a_waker_never_outlives_its_target_and_a_late_wake_does_nothing() {
+    let host = host();
+    let registry = Registry::define(vec![abi::Plugin { id: "guarded", setup: guarded }.into()], []);
+    registry.activate(&dynamic(&host));
+    let freed = crate::activation::FREED.get();
+    drop(registry);
+    assert_eq!(FREED_AT_GUARD.take(), Some(freed), "the wake was freed before the guard that holds the waker");
+    GUARDED.take().unwrap().wake();
+
+    let registry = Registry::define(vec![abi::Plugin { id: "guarded", setup: guarded }.into()], []);
+    registry.activate(&dynamic(&host));
+    let parent = View::new(host.app());
+    let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+    let renders = GUARDED_RENDERS.get();
+    assert!(registry.set_active(&dynamic(&host), "guarded", false));
+    GUARDED.take().unwrap().wake();
+    host.app.wait_until(Duration::from_millis(50), || false);
+    assert_eq!(GUARDED_RENDERS.get(), renders, "a wake after the plugin was disposed rendered it again");
+}
+
+/// Toasts as it sets up and as it is disposed, when it also asks for a reply that must not come.
+fn lifecycle(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.host().toast(abi::Toast::new(abi::Variant::Info, "setup"));
+    setup.on_dispose(|host| {
+        host.toast(abi::Toast::new(abi::Variant::Info, "dispose"));
+        host.fetch(abi::Fetch { method: "GET".into(), path: "/disposed".into(), ..abi::Fetch::default() });
+    });
+    setup.on_reply(|host, _, _| host.toast(abi::Toast::new(abi::Variant::Info, "reply")));
+    Ok(())
+}
+
+/// [`lifecycle`], then fails.
+fn lifecycle_failing(setup: &mut abi::Setup) -> Result<(), String> {
+    lifecycle(setup)?;
+    Err("lifecycle failed".to_owned())
+}
+
+unsafe extern "C" fn lifecycle_create(
+    host: *const HostApi,
+    options: Bytes,
+    instance: *mut *mut c_void,
+    out: *mut Owned,
+) -> i32 {
+    // SAFETY: the loader passes what `PluginApi::create` documents.
+    unsafe { abi::runtime::create("lifecycle", lifecycle, host, options, instance, out) }
+}
+
+unsafe extern "C" fn lifecycle_failing_create(
+    host: *const HostApi,
+    options: Bytes,
+    instance: *mut *mut c_void,
+    out: *mut Owned,
+) -> i32 {
+    // SAFETY: the loader passes what `PluginApi::create` documents.
+    unsafe { abi::runtime::create("lifecycle", lifecycle_failing, host, options, instance, out) }
+}
+
+/// `setup` in process, or `create` through the C ABI's byte shims, set up, then disabled: its status after setup, and
+/// the toasts and fetches of the whole run.
+fn lifecycled(
+    setup: fn(&mut abi::Setup) -> Result<(), String>,
+    create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
+    loopback: bool,
+) -> (Entry, Vec<String>, usize) {
+    let host = host();
+    let registry = Registry::define(Vec::new(), []);
+    match loopback {
+        true => {
+            // As a library of this crate, which tells its ID, so its setup runs on activation only.
+            unsafe extern "C" fn describe(out: *mut Owned) -> i32 {
+                // SAFETY: the loader passes what `PluginApi::describe` documents.
+                unsafe { abi::runtime::describe("lifecycle", "0.1.0", out) }
+            }
+            let api = PluginApi {
+                size: size_of::<PluginApi>(),
+                major: ABI_MAJOR,
+                minor: ABI_MINOR,
+                requires_minor: 4,
+                create: Some(create),
+                call: Some(abi::runtime::call),
+                destroy: Some(abi::runtime::destroy),
+                free: Some(abi::runtime::free),
+                describe: Some(describe),
+            };
+            let library = Library::from_table(&api, HOST_MINOR).unwrap();
+            let (definition, error) = define(&dynamic(&host), library, None).unwrap();
+            registry.load(&dynamic(&host), definition.external("lifecycle.so", error));
+        }
+        false => {
+            registry.add(abi::Plugin { id: "lifecycle", setup });
+            registry.activate(&dynamic(&host));
+        }
+    }
+    let entry = registry.entries().into_iter().find(|entry| entry.id == "lifecycle").unwrap();
+    registry.set_active(&dynamic(&host), "lifecycle", false);
+    host.app.advance(Duration::from_millis(1));
+    host.reply();
+    host.app.advance(Duration::from_millis(1));
+    let toasts = host.toasts.borrow().iter().map(|toast| toast.message.clone()).collect();
+    (entry, toasts, host.fetches.borrow().len())
+}
+
+// Expected (bigboi-5): a toast in setup and one in a dispose callback both show, in that order, the same in process and
+// through the C ABI; the dispose callback's fetch is never sent. A setup that fails after it registered the callback
+// runs it as it fails, leaves the plugin failed and not active, and acts the same on both paths.
+#[test]
+fn setup_and_dispose_effects_are_the_same_on_both_paths() {
+    let direct = lifecycled(lifecycle, lifecycle_create, false);
+    assert_eq!((direct.0.status.clone(), direct.0.active), (Status::Active, true));
+    assert_eq!((direct.1.as_slice(), direct.2), (["setup", "dispose"].map(String::from).as_slice(), 0));
+    let through = lifecycled(lifecycle, lifecycle_create, true);
+    assert_eq!((through.1, through.2), (direct.1, direct.2));
+
+    let direct = lifecycled(lifecycle_failing, lifecycle_failing_create, false);
+    assert_eq!((direct.0.status.clone(), direct.0.active), (Status::Failed("lifecycle failed".to_owned()), false));
+    assert_eq!((direct.1.as_slice(), direct.2), (["setup", "dispose"].map(String::from).as_slice(), 0));
+    let through = lifecycled(lifecycle_failing, lifecycle_failing_create, true);
+    assert_eq!(
+        (through.0.status, through.0.active, through.1, through.2),
+        (direct.0.status, false, direct.1, direct.2)
+    );
+}
+
+// Expected (bigboi-1): a setup that fails or panics after it registered a dispose callback runs it while the host is
+// still valid, so the sample's `destroyed` is stored, and the plugin is failed and not active.
+#[test]
+fn a_failed_setup_runs_the_dispose_callbacks_it_registered() {
+    for (options, error) in [
+        ("{\"probe\":true,\"fail\":true}", "sample setup failed"),
+        ("{\"probe\":true,\"panic\":true}", "setup panicked: sample setup panicked"),
+    ] {
+        let host = host();
+        let (definition, failure) = Native.load(&dynamic(&host), &build(""), Some(options)).unwrap();
+        let registry = Registry::define(Vec::new(), []);
+        let failed = registry.load(&dynamic(&host), definition.external("sample.so", failure));
+        assert_eq!(failed, Some(crate::SetupFailed { error: error.to_owned(), kept: false }));
+        assert_eq!(status(&registry), Status::Failed(error.to_owned()));
+        assert!(!entry(&registry.entries(), "sample.so").active);
+        let stored = host.storage.borrow().get("plugin.sample.destroyed").cloned();
+        assert_eq!(stored.as_deref(), Some("{\"destroyed\":true}"), "{options}");
+    }
+}
+
+/// A loader of the sample at `<config>/sample.so` with `options`, under `directives`.
+fn configured(options: &str, directives: &[&str]) -> (opencode_util::temp::TempDir, String, Registry, Loader) {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let config = root.path().join("config");
+    fs::create_dir_all(&config).unwrap();
+    let file = config.join(format!("sample.{}", std::env::consts::DLL_EXTENSION));
+    fs::write(&file, build("")).unwrap();
+    let target = file.to_string_lossy().into_owned();
+    let registry = Registry::define(Vec::new(), [target.as_str()].into_iter().chain(directives.iter().copied()));
+    let entry = Configured { target: target.clone(), options: Some(options.to_owned()) };
+    let loader = Loader::new(Rc::new(Native) as Rc<dyn Backend>, config, root.path().to_path_buf(), vec![entry]);
+    (root, target, registry, loader)
+}
+
+const MAJOR_2: &str = "plugin ABI 2.0 is not supported: this opencode-rs loads ABI 1.x plugins (up to 1.4); rebuild \
+                       the plugin against opencode-plugin-abi 1";
+
+// Expected (carbon-2): an external plugin whose setup fails says so in a toast that opens the plugin manager, as a
+// load failure does, and is failed and not active, so the manager offers to enable it; a broken rebuild then replaces
+// the error, and enabling it fails again rather than start the old build.
+#[test]
+fn a_failed_external_setup_is_failed_and_inactive_and_a_reload_error_replaces_it() {
+    let host = host();
+    let (_root, target, registry, loader) = configured("{\"fail\":true}", &[]);
+    assert!(loader.reconcile(&dynamic(&host), &registry));
+    let failed = abi::Toast::new(abi::Variant::Error, "Run /plugins to view details.");
+    assert_eq!(*host.toasts.borrow(), [failed.clone().title(format!("Plugin failed: {target}"))]);
+    let sample = entry(&registry.entries(), &target).clone();
+    assert_eq!((sample.status, sample.active), (Status::Failed("sample setup failed".to_owned()), false));
+
+    fs::write(&target, build("major-2")).unwrap();
+    assert!(loader.reconcile(&dynamic(&host), &registry));
+    let sample = entry(&registry.entries(), &target).clone();
+    assert_eq!((sample.status, sample.active), (Status::Failed(MAJOR_2.to_owned()), false));
+    assert_eq!(host.toasts.borrow().len(), 2);
+    assert!(registry.set_active(&dynamic(&host), "sample", true));
+    let sample = entry(&registry.entries(), &target).clone();
+    assert_eq!((sample.status, sample.active), (Status::Failed(MAJOR_2.to_owned()), false));
+}
+
+// Expected (carbon-2): a broken build of a plugin that `cli.json` disabled is listed as failed with its error, not as
+// inactive, with a toast; enabling it in the plugin manager fails too and starts nothing of the build it replaced.
+#[test]
+fn a_broken_build_of_an_inactive_plugin_is_failed_and_enabling_it_starts_nothing() {
+    let host = host();
+    let (_root, target, registry, loader) = configured("{}", &["-sample"]);
+    assert!(loader.reconcile(&dynamic(&host), &registry));
+    assert_eq!(entry(&registry.entries(), &target).status, Status::Inactive);
+    fs::write(&target, build("major-2")).unwrap();
+    assert!(loader.reconcile(&dynamic(&host), &registry));
+    let failed = abi::Toast::new(abi::Variant::Error, "Run /plugins to view details.");
+    assert_eq!(*host.toasts.borrow(), [failed.title(format!("Plugin failed: {target}"))]);
+    assert_eq!(entry(&registry.entries(), &target).status, Status::Failed(MAJOR_2.to_owned()));
+    assert!(registry.set_active(&dynamic(&host), "sample", true));
+    let sample = entry(&registry.entries(), &target).clone();
+    assert_eq!((sample.status, sample.active), (Status::Failed(MAJOR_2.to_owned()), false));
+    let screen = markdown(&host, &registry, "```sample\nstale\n```\n");
+    assert!(!screen.contains("SAMPLE"), "{screen}");
+}
+
+// Expected: deactivating every plugin, as the host exits, runs each one's dispose callbacks while the host is alive,
+// in process and through the C ABI.
+#[test]
+fn deactivating_all_disposes_every_active_plugin() {
+    let host = host();
+    let registry = Registry::define(vec![abi::Plugin { id: "lifecycle", setup: lifecycle }.into()], []);
+    registry.activate(&dynamic(&host));
+    let (definition, error) = super::loopback(&dynamic(&host), first_create).unwrap();
+    registry.load(&dynamic(&host), definition.external("first.so", error));
+    registry.deactivate_all();
+    host.app.advance(Duration::from_millis(1));
+    let toasts: Vec<String> = host.toasts.borrow().iter().map(|toast| toast.message.clone()).collect();
+    assert_eq!(toasts, ["setup", "dispose"]);
+    assert!(registry.entries().iter().all(|entry| !entry.active), "{:?}", registry.entries());
 }
