@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageInfo } from "@opencode/client/promise"
-import { timelinePresets } from "./detail"
+import { defaultTimelineDetail, timelinePresets } from "./detail"
 import { Timeline } from "./projection"
 import { userMessageRuns, type UserRunMember } from "./user-runs"
 
@@ -32,18 +32,9 @@ function runs(
   preset?: (typeof timelinePresets)[number]["id"],
 ) {
   const pending = new Set(Object.keys(members).filter((id) => members[id]?.kind === "pending"))
-  const detail = timelinePresets.find((item) => item.id === preset)?.value
+  const detail = timelinePresets.find((item) => item.id === preset)?.value ?? defaultTimelineDetail
 
-  const rows = Timeline.constructSessionMessageRows(
-    messages,
-    true,
-    { type: "busy" },
-    pending,
-    false,
-    false,
-    undefined,
-    detail,
-  ).rows
+  const rows = Timeline.constructSessionMessageRows(messages, { type: "busy" }, detail, pending).rows
 
   return Object.fromEntries(userMessageRuns(rows, messages, (id) => ({ ...sent, ...members[id] })))
 }

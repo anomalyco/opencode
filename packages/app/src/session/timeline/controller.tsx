@@ -36,7 +36,6 @@ import {
 } from "./header-actions-machine"
 import { createTimelineProjection } from "./projection"
 import { useServer } from "@/runtime/server/current"
-import type { ReasoningMode } from "@opencode/session-ui/timeline/projection"
 
 const emptyMessages: SessionMessageInfo[] = []
 
@@ -190,22 +189,9 @@ export function createTimelineController(input: { session: TimelineSessionSource
     }
   })
 
-  const reasoningMode = (): ReasoningMode =>
-    timelineDetail().thinking.placement === "hidden"
-      ? "hidden"
-      : timelineDetail().thinking.details === "expanded"
-        ? "full"
-        : "compact"
-
-  const shellToolPartsExpanded = () => timelineDetail().shell.details === "expanded"
-  const editToolPartsExpanded = () => timelineDetail().edit.details === "expanded"
-
   const projection = createTimelineProjection({
     sessionMessages: projectedMessages,
     status: input.session.data.status,
-    reasoningMode,
-    shellToolDefaultOpen: shellToolPartsExpanded,
-    editToolDefaultOpen: editToolPartsExpanded,
     timelineDetail,
     pendingInputIDs,
     queuedCompactionIDs,
@@ -416,9 +402,6 @@ export function createTimelineController(input: { session: TimelineSessionSource
       showHeader,
       projection,
       timelineDetail,
-      reasoningMode,
-      shellToolPartsExpanded,
-      editToolPartsExpanded,
     },
     title: {
       view: createMemo(() => selectSessionHeaderTitleView(titleState())),

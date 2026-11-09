@@ -1,3 +1,4 @@
+import { timelinePresets } from "./detail"
 import type { SessionMessageAssistant, SessionMessageShell } from "@opencode/client/promise"
 import { Match } from "effect"
 import { createMemo, createSignal } from "solid-js"
@@ -18,6 +19,8 @@ import {
 } from "../storybook/current-session-fixtures"
 import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
 import { SessionTimeline } from "./session-timeline"
+
+const detailed = timelinePresets.find((preset) => preset.id === "detailed")!.value
 
 export default {
   title: "OpenCode/Work/Terminal",
@@ -41,7 +44,7 @@ export const RunningTests = {
       description="The active shell message keeps its progress treatment and can be opened while running."
       document={terminalRunningDocument}
       width="720px"
-      shellToolDefaultOpen
+      timelineDetail={detailed}
     />
   ),
 }
@@ -53,7 +56,7 @@ export const RunningAUserCommand = {
       description="A command entered directly in shell mode remains active and streams its captured output."
       document={standaloneShellRunningDocument}
       width="720px"
-      shellToolDefaultOpen
+      timelineDetail={detailed}
     />
   ),
 }
@@ -65,7 +68,7 @@ export const UserCommandCompleted = {
       description="A direct shell command keeps its final output and successful exit status in the transcript."
       document={standaloneShellCompletedDocument}
       width="720px"
-      shellToolDefaultOpen
+      timelineDetail={detailed}
     />
   ),
 }
@@ -163,7 +166,7 @@ export const TestsPassed = {
       description="A completed focused check shows its command, output, and successful tool state."
       document={terminalPassedDocument}
       width="720px"
-      shellToolDefaultOpen
+      timelineDetail={detailed}
     />
   ),
 }
@@ -175,7 +178,7 @@ export const ExpandedShell = {
       description="The expanded shell separates the command from its output in a full-width card without a detail rail."
       document={expandedShellDocument}
       width="786px"
-      shellToolDefaultOpen
+      timelineDetail={detailed}
     />
   ),
 }
@@ -187,7 +190,7 @@ export const ExecuteCode = {
       description="Each Code Mode execution lists the tools its script called."
       document={executeCodeDocument}
       width="786px"
-      shellToolDefaultOpen
+      timelineDetail={detailed}
     />
   ),
 }
@@ -301,7 +304,7 @@ export const TestFailed = {
       description="A normal non-zero test result keeps the command and actionable failure message together."
       document={terminalFailedDocument}
       width="720px"
-      shellToolDefaultOpen
+      timelineDetail={detailed}
     />
   ),
 }
@@ -395,7 +398,7 @@ function InteractiveCommandStory(props: {
         </button>
       </div>
       <CurrentSessionProviders document={document()}>
-        <SessionTimeline document={document()} shellToolDefaultOpen={props.expanded} />
+        <SessionTimeline document={document()} timelineDetail={props.expanded ? detailed : undefined} />
       </CurrentSessionProviders>
     </section>
   )
@@ -423,8 +426,7 @@ export const FixedAndPassed = {
       description="The agent reproduces a failure, makes one correction, and reruns the package checks successfully."
       document={recoveryDocument}
       width="860px"
-      editToolDefaultOpen
-      shellToolDefaultOpen
+      timelineDetail={detailed}
     />
   ),
 }

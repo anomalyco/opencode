@@ -15,7 +15,7 @@ import { SubagentBar } from "@/session/composer/subagent-bar"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import type { FormInfo, PermissionRequest, SessionStatus } from "@opencode/client/promise"
 import type { SessionDocument } from "@opencode/session-ui/document"
-import type { TimelineDetail } from "@opencode/session-ui/timeline/detail"
+import { timelinePresets, type TimelineDetail } from "@opencode/session-ui/timeline/detail"
 import { CurrentSessionProviders, STORY_MODEL } from "@opencode/session-ui/storybook"
 import { SessionTimeline } from "@opencode/session-ui/timeline"
 import { createComposerEditor } from "@/composer/editor/interaction"
@@ -27,6 +27,8 @@ import { children, Show, type ComponentProps, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { WebSearchRequestModel } from "./requests/websearch"
+
+const detailed = timelinePresets.find((preset) => preset.id === "detailed")!.value
 
 const modelReady = Object.assign(() => true, { promise: undefined }) satisfies ModelSelection["ready"]
 
@@ -291,9 +293,7 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
                     <div class="py-6">
                       <SessionTimeline
                         document={props.document}
-                        timelineDetail={props.timelineDetail}
-                        editToolDefaultOpen
-                        shellToolDefaultOpen
+                        timelineDetail={props.timelineDetail ?? detailed}
                         class="mx-auto w-full max-w-[840px]"
                       />
                     </div>

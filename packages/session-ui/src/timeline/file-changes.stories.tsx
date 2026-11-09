@@ -1,3 +1,4 @@
+import { timelinePresets } from "./detail"
 import { createTwoFilesPatch } from "diff"
 import { createMemo, createSignal, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -14,6 +15,8 @@ import { storyDocument, storyPatchFile, storyTool } from "../storybook/current-s
 import type { SessionDocument } from "../document"
 import { SessionTimeline } from "./session-timeline"
 import { ToolDisplay } from "../tools/tool-renderer"
+
+const detailed = timelinePresets.find((preset) => preset.id === "detailed")!.value
 
 export default {
   title: "OpenCode/Work/File changes",
@@ -59,8 +62,7 @@ export const EditedAndVerified = {
       description="A completed one-file edit shows its real diff before the focused test and result."
       document={editThenTestDocument}
       width="860px"
-      editToolDefaultOpen
-      shellToolDefaultOpen
+      timelineDetail={detailed}
     />
   ),
 }
@@ -72,7 +74,7 @@ export const PatchedTwoFiles = {
       description="A common implementation step updates one component and adds its focused test."
       document={multiFilePatchDocument}
       width="860px"
-      editToolDefaultOpen
+      timelineDetail={detailed}
     />
   ),
 }
@@ -102,7 +104,7 @@ const RepeatedEdits = {
           },
         ),
       ])}
-      editToolDefaultOpen
+      timelineDetail={detailed}
     />
   ),
 }
@@ -135,7 +137,7 @@ function EditSiblingUpdateStory() {
         Stream sibling content
       </button>
       <CurrentSessionProviders document={document()}>
-        <SessionTimeline document={document()} editToolDefaultOpen />
+        <SessionTimeline document={document()} timelineDetail={detailed} />
       </CurrentSessionProviders>
     </section>
   )
@@ -178,7 +180,7 @@ const ThreeFilePatch = {
             { metadata: { files } },
           ),
         ])}
-        editToolDefaultOpen
+        timelineDetail={detailed}
       />
     )
   },
@@ -195,7 +197,7 @@ const WrittenSource = {
           content: "export const written = true\n",
         }),
       ])}
-      editToolDefaultOpen
+      timelineDetail={detailed}
     />
   ),
 }
@@ -378,7 +380,7 @@ export const CreatedANewFile = {
       description="A completed write renders the generated Markdown file through the production file viewer."
       document={writeFileDocument}
       width="760px"
-      editToolDefaultOpen
+      timelineDetail={detailed}
     />
   ),
 }

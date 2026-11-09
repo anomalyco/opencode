@@ -17,6 +17,7 @@ import { useSettings } from "@/settings/model"
 import { useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { Timeline } from "@opencode/session-ui/timeline/projection"
+import { timelineThinkingOpen } from "@opencode/session-ui/timeline/policy"
 import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/row"
 import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
@@ -232,7 +233,7 @@ function MessageTimelineView(
       const content = Timeline.resolveContent(message, row.group.ref.partID)
 
       if (content?.type === "reasoning")
-        return !(disclosure[row.group.ref.partID] ?? props.data.reasoningMode() === "full")
+        return !(disclosure[row.group.ref.partID] ?? timelineThinkingOpen(props.data.timelineDetail()))
 
       return (
         content?.type === "text" &&
@@ -298,9 +299,6 @@ function MessageTimelineView(
       }
     },
     actions: props.actions,
-    reasoningMode: props.data.reasoningMode,
-    shellToolDefaultOpen: props.data.shellToolPartsExpanded,
-    editToolDefaultOpen: props.data.editToolPartsExpanded,
     timelineDetail: props.data.timelineDetail,
     disclosure: virtualized.disclosure,
     centered: () => props.centered,

@@ -62,9 +62,6 @@ describe("visibleTimelineMessages", () => {
       const projection = createTimelineProjection({
         sessionMessages: () => visible,
         status: () => ({ type: "busy" }),
-        reasoningMode: () => "compact",
-        shellToolDefaultOpen: () => false,
-        editToolDefaultOpen: () => false,
         timelineDetail: () => timelinePresets[2].value,
         pendingInputIDs: () => new Set([steer.id]),
       })

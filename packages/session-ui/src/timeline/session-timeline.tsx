@@ -2,8 +2,8 @@ import { For, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"
 import type { SessionUserActions } from "../actions"
-import type { TimelineDetail } from "./detail"
-import { createReactiveTimelineProjection, TimelineRow, type ReasoningMode } from "./projection"
+import { defaultTimelineDetail, type TimelineDetail } from "./detail"
+import { createReactiveTimelineProjection, TimelineRow } from "./projection"
 import { createSessionTimelineRowRenderer, type SessionUserPresentation } from "./session-timeline-row"
 
 export type { SessionUserPresentation } from "./session-timeline-row"
@@ -12,9 +12,7 @@ export type SessionTimelineProps = {
   document: SessionDocument
   presentation?: Record<string, SessionUserPresentation | undefined>
   actions?: SessionUserActions
-  reasoningMode?: ReasoningMode
-  shellToolDefaultOpen?: boolean
-  editToolDefaultOpen?: boolean
+  /** Defaults to the Compact preset. */
   timelineDetail?: TimelineDetail
   turnDiffs?: boolean
   class?: string
@@ -24,10 +22,7 @@ export function SessionTimeline(props: SessionTimelineProps) {
   const projection = createReactiveTimelineProjection({
     sessionMessages: () => props.document.messages,
     status: () => props.document.status,
-    reasoningMode: () => props.reasoningMode ?? "compact",
-    shellToolDefaultOpen: () => props.shellToolDefaultOpen ?? false,
-    editToolDefaultOpen: () => props.editToolDefaultOpen ?? false,
-    timelineDetail: props.timelineDetail && (() => props.timelineDetail!),
+    timelineDetail: () => props.timelineDetail ?? defaultTimelineDetail,
     turnDiffs: () => props.turnDiffs ?? false,
   })
 
@@ -39,10 +34,7 @@ export function SessionTimeline(props: SessionTimelineProps) {
     projection,
     presentation: (message) => props.presentation?.[message.id],
     actions: props.actions,
-    reasoningMode: () => props.reasoningMode ?? "compact",
-    shellToolDefaultOpen: () => props.shellToolDefaultOpen ?? false,
-    editToolDefaultOpen: () => props.editToolDefaultOpen ?? false,
-    timelineDetail: props.timelineDetail && (() => props.timelineDetail!),
+    timelineDetail: () => props.timelineDetail ?? defaultTimelineDetail,
     disclosure: {
       value: (key) => toolOpen[key],
       set: (key, open) => setToolOpen(key, open),

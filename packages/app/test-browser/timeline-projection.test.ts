@@ -7,8 +7,8 @@ import {
   reuseTimelineRows,
   Timeline,
   TimelineRow,
-  type ReasoningMode,
 } from "@opencode/session-ui/timeline/projection"
+import { defaultTimelineDetail, type TimelineDetail } from "@opencode/session-ui/timeline/detail"
 import { createTimelineProjection } from "../src/session/timeline/projection"
 
 const assistant = (id: string, content: SessionMessageAssistant["content"]): SessionMessageAssistant => ({
@@ -47,9 +47,6 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
         const projection = factory({
           sessionMessages: () => state.messages,
           status: () => ({ type: "busy" }),
-          reasoningMode: () => "compact",
-          shellToolDefaultOpen: () => false,
-          editToolDefaultOpen: () => false,
           pendingInputIDs: () => new Set(),
         })
 
@@ -90,9 +87,7 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
         const [state, setState] = createStore<{
           messages: SessionMessageInfo[]
           status: SessionStatus
-          reasoning: ReasoningMode
-          shell: boolean
-          edit: boolean
+          detail: TimelineDetail
           pending: Set<string>
         }>({
           messages: [
@@ -123,32 +118,21 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
             ]),
           ],
           status: { type: "busy" },
-          reasoning: "compact",
-          shell: false,
-          edit: false,
+          detail: defaultTimelineDetail,
           pending: new Set<string>(),
         })
 
         const projection = factory({
           sessionMessages: () => state.messages,
           status: () => state.status,
-          reasoningMode: () => state.reasoning,
-          shellToolDefaultOpen: () => state.shell,
-          editToolDefaultOpen: () => state.edit,
+          timelineDetail: () => state.detail,
           pendingInputIDs: () => state.pending,
         })
 
         let previous: TimelineRow.TimelineRow[] | undefined
 
         const verify = () => {
-          const full = Timeline.constructSessionMessageRows(
-            state.messages,
-            state.reasoning !== "hidden",
-            state.status,
-            state.pending,
-            state.shell,
-            state.edit,
-          )
+          const full = Timeline.constructSessionMessageRows(state.messages, state.status, state.detail, state.pending)
 
           previous = reuseTimelineRows(previous, full.rows)
           expect(projection.rows()).toEqual(previous)
@@ -187,9 +171,9 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
         change((message) => {
           if (message.content[0].type === "reasoning") message.content[0].text += " and its callers"
         })
-        setState("reasoning", "hidden")
+        setState("detail", { ...state.detail, thinking: { placement: "hidden", details: "collapsed" } })
         verify()
-        setState("reasoning", "full")
+        setState("detail", { ...state.detail, thinking: { placement: "separate", details: "expanded" } })
         verify()
         change((message) => {
           if (message.content[1].type === "tool" && message.content[1].state.status === "completed")
@@ -204,7 +188,7 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
               content: [{ type: "text", text: "ok" }],
             }
         })
-        setState("shell", true)
+        setState("detail", { ...state.detail, shell: { placement: "separate", details: "expanded" } })
         verify()
         change((message) => {
           if (message.content[4].type === "tool")
@@ -229,7 +213,7 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
             time: { created: 1 },
           })
         })
-        setState("edit", true)
+        setState("detail", { ...state.detail, edit: { placement: "separate", details: "expanded" } })
         verify()
         change((message) => {
           const tool = message.content.at(-1)

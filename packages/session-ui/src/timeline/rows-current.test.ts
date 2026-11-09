@@ -1,9 +1,22 @@
+import { defaultTimelineDetail, type TimelineDetail } from "./detail"
 import { describe, expect, test } from "bun:test"
 import { Predicate } from "effect"
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
 import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
 import { timelinePresets } from "./detail"
 import { createTimelineProjection, Timeline, TimelineRow } from "./projection"
+
+// The flags these tests were written against, as the Compact preset with the same thinking, shell and edit settings.
+function detailWith(showReasoning: boolean, shell = false, edit = false): TimelineDetail {
+  return {
+    ...defaultTimelineDetail,
+    thinking: showReasoning
+      ? { placement: "separate", details: "collapsed" }
+      : { placement: "hidden", details: "collapsed" },
+    shell: shell ? { placement: "separate", details: "expanded" } : defaultTimelineDetail.shell,
+    edit: edit ? { placement: "separate", details: "expanded" } : defaultTimelineDetail.edit,
+  }
+}
 
 describe("current session timeline rows", () => {
   test("derives turns and tagged rows from chronological current messages", () => {
@@ -28,7 +41,7 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" })
+    const result = Timeline.constructSessionMessageRows(source, { type: "busy" }, detailWith(true))
 
     expect(result.activeMessageID).toBe("msg_3")
     expect(result.rows.map(TimelineRow.key)).toEqual([
@@ -61,7 +74,7 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    const result = Timeline.constructSessionMessageRows(source, true, { type: "idle" })
+    const result = Timeline.constructSessionMessageRows(source, { type: "idle" }, detailWith(true))
 
     expect(result.activeMessageID).toBe("msg_shell")
     expect(result.rows.map(TimelineRow.key)).toEqual(["shell:msg_shell"])
@@ -86,7 +99,7 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    const result = Timeline.constructSessionMessageRows(source, true, { type: "idle" })
+    const result = Timeline.constructSessionMessageRows(source, { type: "idle" }, detailWith(true))
 
     expect(result.activeMessageID).toBe("msg_assistant")
     expect(result.rows.map(TimelineRow.key)).toEqual([
@@ -148,7 +161,7 @@ describe("current session timeline rows", () => {
       },
     ]
 
-    const result = Timeline.constructSessionMessageRows(source, true, { type: "idle" })
+    const result = Timeline.constructSessionMessageRows(source, { type: "idle" }, detailWith(true))
 
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_user",
@@ -169,7 +182,7 @@ describe("current session timeline rows", () => {
       { id: "msg_a", type: "user", text: "pending", time: { created: 2 } },
     ] satisfies SessionMessageInfo[]
 
-    const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" })
+    const result = Timeline.constructSessionMessageRows(source, { type: "busy" }, detailWith(true))
 
     expect(result.activeMessageID).toBe("msg_a")
     expect(result.rows.map(TimelineRow.key)).toEqual(["user-message:msg_z", "turn-gap:msg_a", "user-message:msg_a"])
@@ -181,7 +194,12 @@ describe("current session timeline rows", () => {
       { id: "msg_queued", type: "user", text: "queued", time: { created: 2 } },
     ] satisfies SessionMessageInfo[]
 
-    const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" }, new Set(["msg_queued"]))
+    const result = Timeline.constructSessionMessageRows(
+      source,
+      { type: "busy" },
+      detailWith(true),
+      new Set(["msg_queued"]),
+    )
 
     expect(result.activeMessageID).toBe("msg_active")
     expect(result.rows.map(TimelineRow.key)).toEqual([
@@ -219,10 +237,9 @@ describe("current session timeline rows", () => {
         },
       ] satisfies SessionMessageInfo[]
 
-      expect(Timeline.constructSessionMessageRows(source, true, { type: "busy" }).rows.map((row) => row._tag)).toEqual([
-        "UserMessage",
-        "AssistantPart",
-      ])
+      expect(
+        Timeline.constructSessionMessageRows(source, { type: "busy" }, detailWith(true)).rows.map((row) => row._tag),
+      ).toEqual(["UserMessage", "AssistantPart"])
     })
   })
 
@@ -240,7 +257,7 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" })
+    const result = Timeline.constructSessionMessageRows(source, { type: "busy" }, detailWith(true))
 
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "Retry"])
   })
@@ -268,7 +285,13 @@ describe("current session timeline rows", () => {
       const result = createTimelineProjection({
         sessionMessages: document.messages,
         status: document.status,
-        reasoningMode,
+        timelineDetail: {
+          ...detailWith(reasoningMode !== "hidden"),
+          thinking: {
+            placement: reasoningMode === "hidden" ? "hidden" : "separate",
+            details: reasoningMode === "full" ? "expanded" : "collapsed",
+          },
+        },
       })
 
       expect(result.rows.some((row) => Predicate.isTagged(row, "Thinking"))).toBe(
@@ -284,7 +307,6 @@ describe("current session timeline rows", () => {
       createTimelineProjection({
         sessionMessages: storyDocument(content, busy).messages,
         status: { type: busy ? "busy" : "idle" },
-        reasoningMode: "compact",
         timelineDetail: timelinePresets[2].value,
       }).rows
 
@@ -317,7 +339,6 @@ describe("current session timeline rows", () => {
       createTimelineProjection({
         sessionMessages: messages,
         status: failed.status,
-        reasoningMode: "compact",
         timelineDetail: timelinePresets[2].value,
       }).rows.map((row) => row._tag),
     ).toEqual(["UserMessage", "AssistantPart", "Error"])
@@ -328,7 +349,6 @@ describe("current session timeline rows", () => {
           message.type === "assistant" ? { ...message, error: { type: "Interrupted", message: "Stopped" } } : message,
         ),
         status: failed.status,
-        reasoningMode: "compact",
         timelineDetail: { ...timelinePresets[2].value, notices: { placement: "hidden" } },
       }).rows.map((row) => row._tag),
     ).toEqual(["UserMessage", "AssistantPart"])
@@ -337,7 +357,9 @@ describe("current session timeline rows", () => {
   test("stops thinking on idle, message completion, errors and retries", () => {
     const document = storyDocument([{ type: "reasoning", text: "Current thought" }], true)
     expect(
-      Timeline.constructSessionMessageRows(document.messages, true, { type: "idle" }).rows.map((row) => row._tag),
+      Timeline.constructSessionMessageRows(document.messages, { type: "idle" }, detailWith(true)).rows.map(
+        (row) => row._tag,
+      ),
     ).toEqual(["UserMessage", "AssistantPart"])
 
     const endings = [
@@ -352,7 +374,7 @@ describe("current session timeline rows", () => {
       )
 
       expect(
-        Timeline.constructSessionMessageRows(messages, true, { type: "busy" }).rows.some((row) =>
+        Timeline.constructSessionMessageRows(messages, { type: "busy" }, detailWith(true)).rows.some((row) =>
           Predicate.isTagged(row, "Thinking"),
         ),
       ).toBe(false)
@@ -369,7 +391,7 @@ describe("current session timeline rows", () => {
       true,
     )
 
-    const result = Timeline.constructSessionMessageRows(document.messages, true, { type: "busy" })
+    const result = Timeline.constructSessionMessageRows(document.messages, { type: "busy" }, detailWith(true))
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart", "Thinking"])
     expect(result.rows[1]).toMatchObject({
       group: { type: "context", refs: [{ partID: "msg_tool_projection_assistant:reasoning:0" }, { partID: "read" }] },
@@ -382,8 +404,8 @@ describe("current session timeline rows", () => {
 
     const result = Timeline.constructSessionMessageRows(
       [...document.messages, { type: "user", id: "queued", text: "Next task", time: { created: 10 } }],
-      true,
       document.status,
+      detailWith(true),
       new Set(["queued"]),
     )
 
@@ -402,13 +424,9 @@ describe("current session timeline rows", () => {
 
     const result = Timeline.constructSessionMessageRows(
       [...document.messages, { type: "user", id: "queued", text: "Next task", time: { created: 10 } }],
-      true,
       document.status,
+      detailWith(true, false, false),
       new Set(["queued"]),
-      false,
-      false,
-      undefined,
-      undefined,
       ["inb_compact"],
     )
 
@@ -436,13 +454,9 @@ describe("current session timeline rows", () => {
 
     const result = Timeline.constructSessionMessageRows(
       [...document.messages, notice],
-      true,
       document.status,
+      detailWith(true, false, false),
       new Set(["notice"]),
-      false,
-      false,
-      undefined,
-      undefined,
       ["inb_compact"],
     )
 
@@ -468,13 +482,9 @@ describe("current session timeline rows", () => {
 
     const result = Timeline.constructSessionMessageRows(
       [...document.messages, notice],
-      true,
       document.status,
-      new Set(["notice"]),
-      false,
-      false,
-      undefined,
       timelinePresets[2].value,
+      new Set(["notice"]),
     )
 
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart", "Activity", "AssistantPart"])
@@ -497,12 +507,7 @@ describe("current session timeline rows", () => {
 
     const result = Timeline.constructSessionMessageRows(
       [...document.messages, notice],
-      true,
       document.status,
-      undefined,
-      false,
-      false,
-      undefined,
       timelinePresets[0].value,
     )
 
@@ -518,7 +523,7 @@ describe("current session timeline rows", () => {
       true,
     )
 
-    const result = Timeline.constructSessionMessageRows(document.messages, true, document.status)
+    const result = Timeline.constructSessionMessageRows(document.messages, document.status, detailWith(true))
     expect(result.rows.flatMap((row) => (Predicate.isTagged(row, "AssistantPart") ? [row.group.type] : []))).toEqual([
       "part",
       "part",
@@ -542,12 +547,7 @@ describe("current session timeline rows", () => {
 
     const rows = Timeline.constructSessionMessageRows(
       source,
-      false,
       { type: "idle" },
-      undefined,
-      false,
-      false,
-      undefined,
       timelinePresets.find((preset) => preset.id === "compact")!.value,
     ).rows
 
@@ -600,12 +600,7 @@ describe("current session timeline rows", () => {
 
     const rows = Timeline.constructSessionMessageRows(
       source,
-      false,
       { type: "idle" },
-      undefined,
-      false,
-      false,
-      undefined,
       timelinePresets.find((preset) => preset.id === id)!.value,
     ).rows
 
@@ -649,12 +644,7 @@ describe("current session timeline rows", () => {
 
     const rows = Timeline.constructSessionMessageRows(
       source,
-      false,
       { type: "idle" },
-      undefined,
-      false,
-      false,
-      undefined,
       { ...timelinePresets[2].value, commentary: { placement } },
     ).rows
 
@@ -690,8 +680,8 @@ describe("current session timeline rows", () => {
           time: { created: 4 },
         },
       ],
-      true,
       { type: "idle" },
+      detailWith(true),
     )
 
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart", "Error", "Notice"])
@@ -716,8 +706,8 @@ describe("current session timeline rows", () => {
           time: { created: 3 },
         },
       ],
-      true,
       { type: "retry", attempt: 2, next: 10, message: "rate limited" },
+      detailWith(true),
     )
 
     expect(retry.rows.map((row) => row._tag)).toEqual(["UserMessage", "Retry", "Notice"])
@@ -751,11 +741,9 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    expect(Timeline.constructSessionMessageRows(source, true, { type: "idle" }).rows.map((row) => row._tag)).toEqual([
-      "UserMessage",
-      "Notice",
-      "AssistantPart",
-    ])
+    expect(
+      Timeline.constructSessionMessageRows(source, { type: "idle" }, detailWith(true)).rows.map((row) => row._tag),
+    ).toEqual(["UserMessage", "Notice", "AssistantPart"])
   })
 
   test("does not render the retry error twice", () => {
@@ -777,12 +765,16 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    const result = Timeline.constructSessionMessageRows(source, true, {
-      type: "retry",
-      attempt: 2,
-      next: 10,
-      message: "The provider response ended unexpectedly.",
-    })
+    const result = Timeline.constructSessionMessageRows(
+      source,
+      {
+        type: "retry",
+        attempt: 2,
+        next: 10,
+        message: "The provider response ended unexpectedly.",
+      },
+      detailWith(true),
+    )
 
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "Retry"])
   })
@@ -809,7 +801,7 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" })
+    const result = Timeline.constructSessionMessageRows(source, { type: "busy" }, detailWith(true))
 
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart"])
   })
@@ -859,7 +851,7 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    const result = Timeline.constructSessionMessageRows(source, false, { type: "idle" })
+    const result = Timeline.constructSessionMessageRows(source, { type: "idle" }, detailWith(false))
     const groups = result.rows.flatMap((row) => (Predicate.isTagged(row, "AssistantPart") ? [row.group] : []))
 
     expect(groups).toEqual([
@@ -913,8 +905,8 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    const groups = Timeline.constructSessionMessageRows(source, false, { type: "idle" }).rows.flatMap((row) =>
-      Predicate.isTagged(row, "AssistantPart") ? [row.group] : [],
+    const groups = Timeline.constructSessionMessageRows(source, { type: "idle" }, detailWith(false)).rows.flatMap(
+      (row) => (Predicate.isTagged(row, "AssistantPart") ? [row.group] : []),
     )
 
     expect(groups).toEqual([
@@ -956,7 +948,7 @@ describe("current session timeline rows", () => {
       assistant("msg_assistant_3", "grep"),
     ] satisfies SessionMessageInfo[]
 
-    const keys = Timeline.constructSessionMessageRows(source, false, { type: "idle" }, undefined, true).rows.map(
+    const keys = Timeline.constructSessionMessageRows(source, { type: "idle" }, detailWith(false, true)).rows.map(
       TimelineRow.key,
     )
 
@@ -1046,7 +1038,7 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    const result = Timeline.constructSessionMessageRows(source, false, { type: "idle" }, undefined, false, true)
+    const result = Timeline.constructSessionMessageRows(source, { type: "idle" }, detailWith(false, false, true))
     const groups = result.rows.flatMap((row) => (Predicate.isTagged(row, "AssistantPart") ? [row.group] : []))
 
     expect(groups).toEqual([
@@ -1117,8 +1109,8 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    const groups = Timeline.constructSessionMessageRows(source, false, { type: "idle" }).rows.flatMap((row) =>
-      Predicate.isTagged(row, "AssistantPart") ? [row.group] : [],
+    const groups = Timeline.constructSessionMessageRows(source, { type: "idle" }, detailWith(false)).rows.flatMap(
+      (row) => (Predicate.isTagged(row, "AssistantPart") ? [row.group] : []),
     )
 
     expect(groups.map((group) => group.type)).toEqual(["context", "part", "context"])
@@ -1165,7 +1157,7 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    const rows = Timeline.constructSessionMessageRows(source, false, { type: "idle" }, undefined, shell, edit).rows
+    const rows = Timeline.constructSessionMessageRows(source, { type: "idle" }, detailWith(false, shell, edit)).rows
 
     expect(rows.flatMap((row) => (Predicate.isTagged(row, "AssistantPart") ? [row.group.type] : []))).toEqual([
       ...types,
@@ -1176,7 +1168,12 @@ describe("current session timeline rows", () => {
     {
       name: "default",
       grouped: false,
-      groups: [["context", "read", "grep"], ["part", "agent_1"], ["part", "agent_2"], ["context", "glob", "read_2"]],
+      groups: [
+        ["context", "read", "grep"],
+        ["part", "agent_1"],
+        ["part", "agent_2"],
+        ["context", "glob", "read_2"],
+      ],
     },
     { name: "opted in", grouped: true, groups: [["context", "read", "grep", "agent_1", "agent_2", "glob", "read_2"]] },
   ])("gives each subagent its own row unless subagent grouping is enabled ($name)", (input) => {
@@ -1191,12 +1188,7 @@ describe("current session timeline rows", () => {
         storyTool("glob", "glob", "completed", { pattern: "*.ts" }),
         storyTool("read_2", "read", "completed", { path: "src/b.ts" }),
       ]).messages,
-      true,
       { type: "idle" },
-      undefined,
-      false,
-      false,
-      undefined,
       input.grouped ? { ...compact, subagents: { placement: "grouped" } } : compact,
     ).rows
 
@@ -1228,12 +1220,7 @@ describe("current session timeline rows", () => {
         storyTool("glob", "glob", "completed", { pattern: "*.ts" }),
         storyTool("read_6", "read", "completed", { path: "src/f.ts" }),
       ]).messages,
-      true,
       { type: "idle" },
-      undefined,
-      false,
-      false,
-      undefined,
       timelinePresets[0].value,
     ).rows
 
@@ -1264,7 +1251,7 @@ describe("current session timeline rows", () => {
     const initial = createTimelineProjection({
       sessionMessages: storyDocument([storyTool("earlier", "read", "completed", {})]).messages,
       status: { type: "busy" },
-      reasoningMode: "hidden",
+      timelineDetail: detailWith(false),
     })
 
     const phases = [
@@ -1286,7 +1273,7 @@ describe("current session timeline rows", () => {
             .map((message) => ({ ...message, id: "next-step" })),
         ],
         status: { type: "busy" },
-        reasoningMode: "hidden",
+        timelineDetail: detailWith(false),
         previousRows,
       })
 
@@ -1323,10 +1310,8 @@ describe("current session timeline rows", () => {
 
     const rows = Timeline.constructSessionMessageRows(
       storyDocument(content).messages,
-      profile.showReasoning ?? false,
       { type: "busy" },
-      undefined,
-      profile.expanded ?? false,
+      detailWith(profile.showReasoning ?? false, profile.expanded ?? false),
     ).rows
 
     expect(rows.flatMap((row) => (Predicate.isTagged(row, "AssistantPart") ? [row.group.type] : []))).toEqual([
@@ -1380,7 +1365,7 @@ describe("current session timeline rows", () => {
     ]
 
     expect(
-      Timeline.constructSessionMessageRows(source, false, { type: "busy" }).rows.flatMap((row) =>
+      Timeline.constructSessionMessageRows(source, { type: "busy" }, detailWith(false)).rows.flatMap((row) =>
         Predicate.isTagged(row, "AssistantPart") ? [row.group.type] : [],
       ),
     ).toEqual(["part", "part", "context"])
@@ -1436,8 +1421,8 @@ describe("current session timeline rows", () => {
       },
     ]
 
-    const groups = Timeline.constructSessionMessageRows(source, false, { type: "idle" }).rows.flatMap((row) =>
-      Predicate.isTagged(row, "AssistantPart") ? [row.group] : [],
+    const groups = Timeline.constructSessionMessageRows(source, { type: "idle" }, detailWith(false)).rows.flatMap(
+      (row) => (Predicate.isTagged(row, "AssistantPart") ? [row.group] : []),
     )
 
     expect(groups).toEqual([
@@ -1452,7 +1437,7 @@ describe("current session timeline rows", () => {
       },
     ])
     expect(
-      Timeline.constructSessionMessageRows(source, false, { type: "idle" }, undefined, true).rows.flatMap((row) =>
+      Timeline.constructSessionMessageRows(source, { type: "idle" }, detailWith(false, true)).rows.flatMap((row) =>
         Predicate.isTagged(row, "AssistantPart") ? [row.group.type] : [],
       ),
     ).toEqual(["context", "part"])
@@ -1480,12 +1465,9 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    expect(Timeline.constructSessionMessageRows(messages, true, { type: "idle" }).rows.map((row) => row._tag)).toEqual([
-      "UserMessage",
-      "AssistantPart",
-      "TurnDivider",
-      "AssistantPart",
-    ])
+    expect(
+      Timeline.constructSessionMessageRows(messages, { type: "idle" }, detailWith(true)).rows.map((row) => row._tag),
+    ).toEqual(["UserMessage", "AssistantPart", "TurnDivider", "AssistantPart"])
 
     const compacted = [
       messages[0],
@@ -1501,9 +1483,9 @@ describe("current session timeline rows", () => {
       messages[2],
     ] satisfies SessionMessageInfo[]
 
-    expect(Timeline.constructSessionMessageRows(compacted, true, { type: "idle" }).rows.map((row) => row._tag)).toEqual(
-      ["UserMessage", "AssistantPart", "Notice", "AssistantPart"],
-    )
+    expect(
+      Timeline.constructSessionMessageRows(compacted, { type: "idle" }, detailWith(true)).rows.map((row) => row._tag),
+    ).toEqual(["UserMessage", "AssistantPart", "Notice", "AssistantPart"])
   })
 
   test("surfaces failed idle errors when no assistant step owns the failure", () => {
@@ -1524,7 +1506,7 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    const preStepRows = Timeline.constructSessionMessageRows(preStep, true, { type: "idle" }).rows
+    const preStepRows = Timeline.constructSessionMessageRows(preStep, { type: "idle" }, detailWith(true)).rows
     expect(preStepRows.map((row) => row._tag)).toEqual(["UserMessage", "Error", "Notice"])
     expect(preStepRows[1]).toEqual(
       new TimelineRow.Error({ userMessageID: "msg_user", text: "Model unavailable: opencode/gpt-5.2" }),
@@ -1551,7 +1533,9 @@ describe("current session timeline rows", () => {
     ] satisfies SessionMessageInfo[]
 
     expect(
-      Timeline.constructSessionMessageRows(betweenSteps, true, { type: "idle" }).rows.map((row) => row._tag),
+      Timeline.constructSessionMessageRows(betweenSteps, { type: "idle" }, detailWith(true)).rows.map(
+        (row) => row._tag,
+      ),
     ).toEqual(["UserMessage", "AssistantPart", "Error"])
 
     const duplicate = [
@@ -1575,9 +1559,9 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    expect(Timeline.constructSessionMessageRows(duplicate, true, { type: "idle" }).rows.map((row) => row._tag)).toEqual(
-      ["UserMessage", "Error"],
-    )
+    expect(
+      Timeline.constructSessionMessageRows(duplicate, { type: "idle" }, detailWith(true)).rows.map((row) => row._tag),
+    ).toEqual(["UserMessage", "Error"])
 
     const exhausted = [
       { id: "msg_user", type: "user", text: "prompt", time: { created: 1 } },
@@ -1602,7 +1586,7 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    expect(Timeline.constructSessionMessageRows(exhausted, true, { type: "idle" }).rows.at(-1)).toEqual(
+    expect(Timeline.constructSessionMessageRows(exhausted, { type: "idle" }, detailWith(true)).rows.at(-1)).toEqual(
       new TimelineRow.Error({
         userMessageID: "msg_user",
         text: "Execution was interrupted repeatedly and will not be resumed automatically.",
@@ -1645,7 +1629,7 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    expect(Timeline.constructSessionMessageRows(step, true, { type: "idle" }).rows.at(-1)).toEqual(
+    expect(Timeline.constructSessionMessageRows(step, { type: "idle" }, detailWith(true)).rows.at(-1)).toEqual(
       new TimelineRow.Error({
         userMessageID: "msg_user",
         text: "Free usage limit reached.",
@@ -1653,15 +1637,15 @@ describe("current session timeline rows", () => {
         resetAt: 61_000,
       }),
     )
-    expect(Timeline.constructSessionMessageRows(idle, true, { type: "idle" }).rows.at(-1)).toMatchObject({
+    expect(Timeline.constructSessionMessageRows(idle, { type: "idle" }, detailWith(true)).rows.at(-1)).toMatchObject({
       kind: "free-limit",
       resetAt: 62_000,
     })
     expect(
       Timeline.constructSessionMessageRows(
         [user, { ...assistant, error: { ...error, retryAfterMs: 9_000_000_000_000_000 } }],
-        true,
         { type: "idle" },
+        detailWith(true),
       ).rows.at(-1),
     ).toEqual(
       new TimelineRow.Error({
@@ -1670,7 +1654,7 @@ describe("current session timeline rows", () => {
         kind: "free-limit",
       }),
     )
-    expect(Timeline.constructSessionMessageRows(go, true, { type: "idle" }).rows.at(-1)).toEqual(
+    expect(Timeline.constructSessionMessageRows(go, { type: "idle" }, detailWith(true)).rows.at(-1)).toEqual(
       new TimelineRow.Error({
         userMessageID: "msg_user",
         text: "Go usage limit reached.",
@@ -1678,7 +1662,7 @@ describe("current session timeline rows", () => {
         resetAt: 1_000 + 25 * 86_400_000,
       }),
     )
-    expect(Timeline.constructSessionMessageRows(quota, true, { type: "idle" }).rows.at(-1)).toEqual(
+    expect(Timeline.constructSessionMessageRows(quota, { type: "idle" }, detailWith(true)).rows.at(-1)).toEqual(
       new TimelineRow.Error({ userMessageID: "msg_user", text: "Credit limit exceeded." }),
     )
   })
@@ -1703,8 +1687,8 @@ describe("current session timeline rows", () => {
             time: { created: 2, completed: 3 },
           },
         ],
-        true,
         { type: "idle" },
+        detailWith(true),
       ).rows.at(-1)
     }
 
@@ -1768,7 +1752,7 @@ describe("current session timeline rows", () => {
     const rows = createTimelineProjection({
       sessionMessages: source,
       status: { type: "busy" },
-      reasoningMode: "compact",
+      timelineDetail: detailWith(true),
       turnDiffs: true,
     }).rows
 
@@ -1790,7 +1774,7 @@ describe("current session timeline rows", () => {
     ])
     // Hosts opt in, so a timeline without the setting lists no summaries.
     expect(
-      Timeline.constructSessionMessageRows(source, true, { type: "busy" }).rows.some((row) =>
+      Timeline.constructSessionMessageRows(source, { type: "busy" }, detailWith(true)).rows.some((row) =>
         Predicate.isTagged(row, "TurnDiff"),
       ),
     ).toBe(false)

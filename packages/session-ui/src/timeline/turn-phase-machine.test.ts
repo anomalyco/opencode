@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo, SessionStatus } from "@opencode/client/promise"
-import { timelinePresets, type TimelineDetail } from "./detail"
+import { defaultTimelineDetail, timelinePresets, type TimelineDetail } from "./detail"
 import { Timeline } from "./projection"
 import {
   IDLE_TURN_PHASE,
@@ -10,6 +10,18 @@ import {
   WORKING_TURN_PHASE,
   type TurnPhaseEvent,
 } from "./turn-phase-machine"
+
+// The flags these tests were written against, as the Compact preset with the same thinking, shell and edit settings.
+function detailWith(showReasoning: boolean, shell = false, edit = false): TimelineDetail {
+  return {
+    ...defaultTimelineDetail,
+    thinking: showReasoning
+      ? { placement: "separate", details: "collapsed" }
+      : { placement: "hidden", details: "collapsed" },
+    shell: shell ? { placement: "separate", details: "expanded" } : defaultTimelineDetail.shell,
+    edit: edit ? { placement: "separate", details: "expanded" } : defaultTimelineDetail.edit,
+  }
+}
 
 const user = { id: "msg_user", type: "user", text: "go", time: { created: 1 } } satisfies SessionMessageInfo
 
@@ -32,18 +44,9 @@ function assistant(id: string, fields: Partial<SessionMessageAssistant> = {}): S
 function phase(
   messages: SessionMessageInfo[],
   status: SessionStatus = { type: "busy" },
-  detail: TimelineDetail | undefined = grouped,
+  detail: TimelineDetail = grouped,
 ) {
-  return Timeline.constructSessionMessageRows(
-    messages,
-    true,
-    status,
-    undefined,
-    false,
-    false,
-    undefined,
-    detail,
-  ).turnPhaseByID.get(user.id)!
+  return Timeline.constructSessionMessageRows(messages, status, detail).turnPhaseByID.get(user.id)!
 }
 
 describe("turn phase", () => {
@@ -121,8 +124,8 @@ describe("turn phase", () => {
 
     const projection = Timeline.constructSessionMessageRows(
       [...messages, { id: "msg_next", type: "user", text: "next", time: { created: 5 } }],
-      true,
       { type: "busy" },
+      detailWith(true),
     )
 
     expect(projection.turnPhaseByID.get(user.id)).toBe(IDLE_TURN_PHASE)

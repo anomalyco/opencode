@@ -10,6 +10,7 @@
     "./message": "./src/message/current-message.tsx",
     "./timeline/projection": "./src/timeline/projection.ts",
     "./timeline/detail": "./src/timeline/detail.ts",
+    "./timeline/policy": "./src/timeline/policy.ts",
     "./timeline/row": "./src/timeline/session-timeline-row.tsx",
     "./timeline": "./src/timeline/session-timeline.tsx",
     "./basic-tool": "./src/components/basic-tool.tsx",

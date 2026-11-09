@@ -6,7 +6,7 @@ import type {
 } from "@opencode/client/promise"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { SessionTurn } from "@opencode/util/session-turn"
-import { Option, Predicate, Schema } from "effect"
+import { Predicate } from "effect"
 import {
   For,
   Match,
@@ -38,7 +38,6 @@ import {
   SessionReadToolGroup,
   SessionShellMessage,
   SessionUserMessage,
-  currentContentDefaultOpen,
 } from "../message/current-message"
 import {
   AssistantReasoningContent,
@@ -49,18 +48,11 @@ import { taskAgentName, ToolRegistry, type ContextGroupPart } from "../tools/too
 import { GenericTool } from "../components/basic-tool"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
-import { timelineCategory, type TimelineDetail } from "./detail"
-import { currentToolFailed } from "../message/current-tool-state"
+import type { TimelineDetail } from "./detail"
+import { timelineDefaultOpen, timelineDiffOpen, timelineThinkingOpen } from "./policy"
 import { userMessageRuns, userRunSpring } from "./user-runs"
 import { attached } from "../components/message-file"
-import {
-  createReactiveTimelineProjection,
-  Timeline,
-  TimelineRow,
-  unwrapErrorMessage,
-  type PartRef,
-  type ReasoningMode,
-} from "./projection"
+import { createReactiveTimelineProjection, Timeline, TimelineRow, unwrapErrorMessage, type PartRef } from "./projection"
 import { IDLE_TURN_PHASE, sameRef, viewTurnPhase } from "./turn-phase-machine"
 import {
   DISPOSED_STEER_ARRIVAL_EVENT,
@@ -74,8 +66,6 @@ const emptyAssistantMessages: SessionMessageAssistant[] = []
 
 // Past this many files, the rest of a turn's changes wait behind "Show all".
 const turnDiffFileLimit = 5
-
-const decodeMetadataFile = Schema.decodeUnknownOption(Schema.Struct({ file: Schema.String }))
 
 type Projection = ReturnType<typeof createReactiveTimelineProjection>
 
@@ -97,10 +87,7 @@ export function createSessionTimelineRowRenderer(input: {
   projection: Projection
   presentation: (message: SessionMessageUser) => SessionUserPresentation | undefined
   actions?: SessionUserActions
-  reasoningMode: Accessor<ReasoningMode>
-  shellToolDefaultOpen: Accessor<boolean>
-  editToolDefaultOpen: Accessor<boolean>
-  timelineDetail?: Accessor<TimelineDetail>
+  timelineDetail: Accessor<TimelineDetail>
   foldUserMessages?: Accessor<boolean>
   disclosure: {
     value: (key: string) => boolean | undefined
@@ -412,21 +399,13 @@ export function createSessionTimelineRowRenderer(input: {
 
               return key
             }}
-            reasoningDefaultOpen={
-              input.timelineDetail
-                ? input.timelineDetail().thinking.details === "expanded"
-                : input.reasoningMode() === "full"
-            }
+            reasoningDefaultOpen={timelineThinkingOpen(input.timelineDetail())}
             reasoningOpen={(id) => input.disclosure.value(id)}
             onReasoningOpenChange={(id, open) => input.disclosure.set(id, open)}
-            toolDefaultOpen={(tool) =>
-              input.timelineDetail || tool.name === "execute" ? contentDefaultOpen(tool) : false
-            }
+            toolDefaultOpen={(tool) => timelineDefaultOpen(input.timelineDetail(), tool)}
             toolOpen={(id) => input.disclosure.value(`${row().group.key}:tool:${id}`)}
             onToolOpenChange={(id, open) => input.disclosure.set(`${row().group.key}:tool:${id}`, open)}
-            fileOpen={(path) =>
-              input.disclosure.value(`patch:${path}`) ?? input.timelineDetail?.().edit.details === "expanded"
-            }
+            fileOpen={(path) => input.disclosure.value(`patch:${path}`) ?? timelineDiffOpen(input.timelineDetail())}
             onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
             open={input.disclosure.value(key()) === true}
             busy={
@@ -478,30 +457,13 @@ export function createSessionTimelineRowRenderer(input: {
         })
       })
 
-      const firstPath = createMemo(() => {
-        const tool = tools()[0]
-
-        if (!tool || !("metadata" in tool.state)) return undefined
-        const files = tool.state.metadata?.files
-
-        if (!Array.isArray(files)) return undefined
-
-        return Option.getOrUndefined(decodeMetadataFile(files[0]))?.file
-      })
-
       return (
         <SessionFileToolGroup
           tools={tools()}
           fileOpen={(path) => {
             const open = input.disclosure.value(`${row().group.key}:file:${path}`)
 
-            if (open !== undefined) return open
-
-            if (input.timelineDetail) return input.timelineDetail().edit.details === "expanded"
-
-            if (tools()[0]?.name !== "edit" || path !== firstPath()) return false
-
-            return input.disclosure.value(row().group.key) ?? input.editToolDefaultOpen()
+            return open ?? timelineDiffOpen(input.timelineDetail())
           }}
           onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
           onSizeChange={onSizeChange}
@@ -531,7 +493,7 @@ export function createSessionTimelineRowRenderer(input: {
     const defaultOpen = createMemo(() => {
       const item = content()
 
-      return item ? contentDefaultOpen(item) : undefined
+      return item ? timelineDefaultOpen(input.timelineDetail(), item) : undefined
     })
 
     // Only the finished turn's footer part derives them, and only while the host shows sources.
@@ -590,29 +552,6 @@ export function createSessionTimelineRowRenderer(input: {
         )}
       </Show>
     )
-  }
-
-  function contentDefaultOpen(item: SessionMessageAssistant["content"][number]) {
-    if (item.type === "tool" && item.name === "execute") return true
-
-    if (input.timelineDetail) {
-      const category = timelineCategory(item)
-
-      if (
-        category &&
-        input.timelineDetail()[category].placement === "hidden" &&
-        item.type === "tool" &&
-        currentToolFailed(item)
-      )
-        return true
-
-      if (category === "shell" || category === "edit" || category === "thinking")
-        return input.timelineDetail()[category].details === "expanded"
-    }
-
-    if (item.type === "reasoning") return input.reasoningMode() === "full"
-
-    return currentContentDefaultOpen(item, input.shellToolDefaultOpen(), input.editToolDefaultOpen())
   }
 
   const notice = (message: SessionMessageInfo) => {
@@ -926,14 +865,9 @@ export function createSessionTimelineRowRenderer(input: {
     })
 
     const defaultOpen = createMemo(() => {
-      if (!input.timelineDetail) return input.shellToolDefaultOpen()
       const value = message()
 
-      return (
-        input.timelineDetail().shell.details === "expanded" ||
-        (input.timelineDetail().shell.placement === "hidden" &&
-          (value?.status === "timeout" || (value?.status === "exited" && value.exit !== undefined && value.exit !== 0)))
-      )
+      return !!value && timelineDefaultOpen(input.timelineDetail(), value)
     })
 
     return (
@@ -943,7 +877,7 @@ export function createSessionTimelineRowRenderer(input: {
             <SessionShellMessage
               message={message()}
               defaultOpen={defaultOpen()}
-              open={input.disclosure.value(message().id) ?? (input.timelineDetail ? defaultOpen() : undefined)}
+              open={input.disclosure.value(message().id) ?? defaultOpen()}
               onOpenChange={(open) => input.disclosure.set(message().id, open)}
             />
           </div>
@@ -1250,15 +1184,8 @@ export function createSessionTimelineRowRenderer(input: {
                     id={current().ref.partID}
                     content={content()}
                     streaming
-                    defaultOpen={
-                      input.timelineDetail
-                        ? input.timelineDetail().thinking.details === "expanded"
-                        : input.reasoningMode() === "full"
-                    }
-                    open={
-                      input.disclosure.value(current().ref.partID) ??
-                      (input.timelineDetail ? input.timelineDetail().thinking.details === "expanded" : undefined)
-                    }
+                    defaultOpen={timelineThinkingOpen(input.timelineDetail())}
+                    open={input.disclosure.value(current().ref.partID) ?? timelineThinkingOpen(input.timelineDetail())}
                     onOpenChange={(open) => input.disclosure.set(current().ref.partID, open)}
                     onContentRendered={onSizeChange}
                   />

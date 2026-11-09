@@ -1,4 +1,4 @@
-import type { SessionMessageAssistant, SessionMessageAssistantTool } from "@opencode/client/promise"
+import type { SessionMessageAssistantTool } from "@opencode/client/promise"
 import { Option, Schema } from "effect"
 
 const decodeInput = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))
@@ -110,28 +110,4 @@ export function currentToolGroupedRead(tool: SessionMessageAssistantTool) {
     !readImagePath(currentToolInput(tool)) &&
     !currentToolHasLoadedFiles(tool)
   )
-}
-
-export function currentContentDefaultOpen(
-  content: SessionMessageAssistant["content"][number],
-  shellExpanded: boolean,
-  editExpanded: boolean,
-) {
-  if (content.type !== "tool") return undefined
-
-  // Errored tools render the error card, which starts collapsed.
-  if (content.state.status === "error") return false
-
-  if (content.name === "shell" || content.name === "execute") return shellExpanded
-
-  if (content.name === "patch") return editExpanded
-
-  if (content.name !== "edit" && content.name !== "write") return undefined
-
-  if (!editExpanded) return false
-  const files = currentToolMetadata(content).files
-
-  if (!Array.isArray(files) || files.length === 0) return true
-
-  return !files.every((file) => !!file && typeof file === "object" && "status" in file && file.status === "deleted")
 }

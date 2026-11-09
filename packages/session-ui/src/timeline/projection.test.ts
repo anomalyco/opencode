@@ -1,3 +1,4 @@
+import { defaultTimelineDetail, type TimelineDetail } from "./detail"
 import { describe, expect, test } from "bun:test"
 import type {
   ModelRef,
@@ -14,6 +15,18 @@ import {
   TimelineRow,
   type PartGroup,
 } from "./projection"
+
+// The flags these tests were written against, as the Compact preset with the same thinking, shell and edit settings.
+function detailWith(showReasoning: boolean, shell = false, edit = false): TimelineDetail {
+  return {
+    ...defaultTimelineDetail,
+    thinking: showReasoning
+      ? { placement: "separate", details: "collapsed" }
+      : { placement: "hidden", details: "collapsed" },
+    shell: shell ? { placement: "separate", details: "expanded" } : defaultTimelineDetail.shell,
+    edit: edit ? { placement: "separate", details: "expanded" } : defaultTimelineDetail.edit,
+  }
+}
 
 const context = (key: string, partIDs: string[], identity: { userMessageID?: string; messageID?: string } = {}) =>
   new TimelineRow.AssistantPart({
@@ -285,7 +298,7 @@ describe("createTimelineProjection", () => {
     const result = createTimelineProjection({
       sessionMessages: messages,
       status: { type: "busy" },
-      reasoningMode: "full",
+      timelineDetail: detailWith(true),
     })
 
     expect(result.activeMessageID).toBe("user-2")
@@ -320,13 +333,13 @@ describe("createTimelineProjection", () => {
     const first = createTimelineProjection({
       sessionMessages: messages,
       status: { type: "idle" },
-      reasoningMode: "full",
+      timelineDetail: detailWith(true),
     })
 
     const second = createTimelineProjection({
       sessionMessages: messages,
       status: { type: "idle" },
-      reasoningMode: "full",
+      timelineDetail: detailWith(true),
       previousRows: first.rows,
     })
 
@@ -358,7 +371,7 @@ describe("createTimelineProjection", () => {
     const result = createTimelineProjection({
       sessionMessages: messages,
       status: { type: "idle" },
-      reasoningMode: "full",
+      timelineDetail: detailWith(true),
     })
 
     expect(result.assistantMessagesByParent.get("assistant-1")?.map((message) => message.id)).toEqual([
@@ -394,8 +407,8 @@ describe("reasoningHeading", () => {
     expect(reasoningHeading("## First step\n\nDetails.\n\n## Second step\n\nMore details.")).toBe("Second step")
     expect(reasoningHeading("<h2>First step</h2>\n<p>Body</p>\n<h3>Second step</h3>")).toBe("Second step")
     expect(reasoningHeading("First step\n===\n\nSecond step\n---")).toBe("Second step")
-    expect(
-      reasoningHeading("**Designing Interactive Experience**\n\n**Note** that this line ends with **bold**"),
-    ).toBe("Designing Interactive Experience")
+    expect(reasoningHeading("**Designing Interactive Experience**\n\n**Note** that this line ends with **bold**")).toBe(
+      "Designing Interactive Experience",
+    )
   })
 })

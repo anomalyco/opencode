@@ -17,6 +17,8 @@ import { storyDocument, storyPatchFile, storyTool } from "../storybook/current-s
 import { timelinePresets } from "./detail"
 import { SessionTimeline } from "./session-timeline"
 
+const detailed = timelinePresets.find((preset) => preset.id === "detailed")!.value
+
 export default {
   title: "OpenCode/Work/Research and agents",
   id: "current-session-research-agents",
@@ -103,7 +105,10 @@ const delegationDocument = storyDocument([
     { agent: "general", description: "Run the focused timeline tests", prompt: "Run the timeline tests." },
     { output: "All timeline tests pass.", metadata: { sessionID: "session_child_general" } },
   ),
-  { type: "text", text: "Each delegated task keeps its own row while the reads and searches between them stay grouped." },
+  {
+    type: "text",
+    text: "Each delegated task keeps its own row while the reads and searches between them stay grouped.",
+  },
 ])
 
 export const DelegateBetweenTools = {
@@ -394,7 +399,7 @@ function FailedCommandAndQuestionStory() {
         Fail running tools
       </button>
       <CurrentSessionProviders document={document()}>
-        <SessionTimeline document={document()} shellToolDefaultOpen />
+        <SessionTimeline document={document()} timelineDetail={detailed} />
       </CurrentSessionProviders>
     </section>
   )

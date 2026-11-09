@@ -1,3 +1,4 @@
+import { defaultTimelineDetail, timelinePresets, type TimelineDetail } from "./detail"
 import type {
   PromptAttachment,
   SessionMessageAssistant,
@@ -9,7 +10,6 @@ import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"
 import { SessionTimeline } from "./session-timeline"
 import { CommentCard, commentCardTarget } from "../message/comment-card"
-import type { ReasoningMode } from "./projection"
 import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
 import {
   CURRENT_SESSION_ID,
@@ -32,6 +32,8 @@ import {
   voiceDocument,
   voicePresentation,
 } from "../storybook/current-session-fixtures"
+
+const detailed = timelinePresets.find((preset) => preset.id === "detailed")!.value
 
 export default {
   title: "OpenCode/Conversation/Message states",
@@ -124,6 +126,19 @@ export const ResponseSpeed = {
   ),
 }
 
+type ReasoningMode = "hidden" | "compact" | "full"
+
+// The story's three thinking modes, as the thinking setting of the Compact preset.
+function thinkingDetail(mode: ReasoningMode): TimelineDetail {
+  return {
+    ...defaultTimelineDetail,
+    thinking: {
+      placement: mode === "hidden" ? "hidden" : "separate",
+      details: mode === "full" ? "expanded" : "collapsed",
+    },
+  }
+}
+
 function AgentReasoningStory(props: { mode: ReasoningMode; reasoning: string; tool: boolean; text: string }) {
   const content = [
     ...(props.reasoning === "none"
@@ -172,7 +187,7 @@ function AgentReasoningStory(props: { mode: ReasoningMode; reasoning: string; to
   return (
     <section class="mx-auto w-full max-w-[720px] p-6">
       <CurrentSessionProviders document={document}>
-        <SessionTimeline document={document} reasoningMode={props.mode} />
+        <SessionTimeline document={document} timelineDetail={thinkingDetail(props.mode)} />
       </CurrentSessionProviders>
     </section>
   )
@@ -246,7 +261,7 @@ function HiddenReasoningStory() {
         </button>
       </div>
       <CurrentSessionProviders document={document()}>
-        <SessionTimeline document={document()} reasoningMode="compact" />
+        <SessionTimeline document={document()} />
       </CurrentSessionProviders>
     </section>
   )
@@ -583,7 +598,7 @@ export const AnsweredQuestionAndDeclinedCommand = {
       description="The chosen answer remains in history, and the declined command keeps its user-visible result."
       document={requestHistoryDocument}
       width="620px"
-      shellToolDefaultOpen
+      timelineDetail={detailed}
     />
   ),
 }

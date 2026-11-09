@@ -4,6 +4,7 @@ import { DataProvider, type ReadMediaUrlFn, type TurnDiffSource } from "../conte
 import type { SessionUserActions } from "../message/current-message"
 import type { SessionUserPresentation } from "../timeline/session-timeline"
 import { SessionTimeline } from "../timeline/session-timeline"
+import type { TimelineDetail } from "../timeline/detail"
 import { FileComponentProvider } from "@opencode/ui/context/file"
 import { Button } from "@opencode/ui/button"
 import { Show, createMemo, createSignal, type JSX } from "solid-js"
@@ -91,8 +92,7 @@ export function CurrentSessionTimelineStory(props: {
   document: SessionDocument
   presentation?: Record<string, SessionUserPresentation | undefined>
   width?: string
-  shellToolDefaultOpen?: boolean
-  editToolDefaultOpen?: boolean
+  timelineDetail?: TimelineDetail
   turnDiffs?: boolean
   turnDiff?: TurnDiffSource
   backgroundCompaction?: boolean
@@ -145,8 +145,7 @@ export function CurrentSessionTimelineStory(props: {
                   document={document()}
                   presentation={props.presentation}
                   actions={actions}
-                  shellToolDefaultOpen={props.shellToolDefaultOpen}
-                  editToolDefaultOpen={props.editToolDefaultOpen}
+                  timelineDetail={props.timelineDetail}
                   turnDiffs={props.turnDiffs}
                 />
               </CurrentSessionProviders>

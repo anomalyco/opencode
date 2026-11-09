@@ -9,29 +9,31 @@ import type {
 } from "@opencode/client/promise"
 import { Effect, Option, Predicate, Schema } from "effect"
 import { createComputed, createMemo, createSignal, mapArray, type Accessor } from "solid-js"
-import {
-  currentContentDefaultOpen,
-  currentToolFailed,
-  currentToolGroupedRead,
-  currentToolHasLoadedFiles,
-} from "../message/current-tool-state"
+import { currentToolFailed, currentToolGroupedRead } from "../message/current-tool-state"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
-import { timelineCategory, timelineNoticePlacement, timelineNoticeRequired, type TimelineDetail } from "./detail"
+import { defaultTimelineDetail, type TimelineDetail } from "./detail"
+import {
+  shellFailed,
+  timelineCategory,
+  timelineNoticePlacement,
+  timelineNoticeRequired,
+  timelineRenders,
+} from "./policy"
+import { errorInfo } from "./errors"
 import {
   IDLE_TURN_PHASE,
   isInterruptedError,
   sameTurnPhase,
   transitionTurnPhase,
   viewTurnPhase,
-  type TurnErrorInfo,
   type TurnPhase,
   type TurnPhaseEvent,
   type TurnThinkingPlacement,
 } from "./turn-phase-machine"
 
 export { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap, type TurnPhase }
-
-export type ReasoningMode = "hidden" | "compact" | "full"
+export { reasoningHeading } from "./heading"
+export { unwrapErrorMessage } from "./errors"
 
 type Notice = Exclude<SessionMessageInfo, { type: "user" | "assistant" | "shell" | "idle" }>
 
@@ -52,10 +54,6 @@ type GroupRow = Extract<TimelineRow.TimelineRow, { _tag: "AssistantPart" }>
 
 type PriorGroup = { index: number; row: GroupRow }
 
-const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
-
-const decodeString = Schema.decodeUnknownOption(Schema.String)
-
 // A field of the wrong type decodes as absent, so one bad field does not discard its neighbours.
 function lenient<S extends Schema.Top>(schema: S) {
   return Schema.optionalKey(schema.pipe(Schema.catchDecoding(() => Effect.succeedNone)))
@@ -74,20 +72,10 @@ const decodeLocalModel = Schema.decodeUnknownOption(
   }),
 )
 
-const decodeErrorEnvelope = Schema.decodeUnknownOption(
-  Schema.Struct({ error: Schema.optionalKey(Schema.Unknown), message: lenient(Schema.String) }),
-)
-
-const decodeErrorDetails = Schema.decodeUnknownOption(
-  Schema.Struct({ type: lenient(Schema.String), message: lenient(Schema.String), code: lenient(Schema.String) }),
-)
-
 export type TimelineProjectionInput = {
   sessionMessages: SessionMessageInfo[]
   status: SessionStatus
-  reasoningMode: ReasoningMode
-  shellToolDefaultOpen?: boolean
-  editToolDefaultOpen?: boolean
+  /** Defaults to the Compact preset. */
   timelineDetail?: TimelineDetail
   pendingInputIDs?: ReadonlySet<string>
   queuedCompactionIDs?: readonly string[]
@@ -100,13 +88,9 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
 
   const projection = Timeline.constructSessionMessageRows(
     input.sessionMessages,
-    input.reasoningMode !== "hidden",
     input.status,
+    input.timelineDetail ?? defaultTimelineDetail,
     input.pendingInputIDs,
-    input.shellToolDefaultOpen ?? false,
-    input.editToolDefaultOpen ?? false,
-    undefined,
-    input.timelineDetail,
     input.queuedCompactionIDs,
     input.turnDiffs,
   )
@@ -142,9 +126,7 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
 export function createReactiveTimelineProjection(input: {
   sessionMessages: Accessor<SessionMessageInfo[]>
   status: Accessor<SessionStatus>
-  reasoningMode: Accessor<ReasoningMode>
-  shellToolDefaultOpen?: Accessor<boolean>
-  editToolDefaultOpen?: Accessor<boolean>
+  /** Defaults to the Compact preset. */
   timelineDetail?: Accessor<TimelineDetail>
   pendingInputIDs?: Accessor<ReadonlySet<string>>
   queuedCompactionIDs?: Accessor<readonly string[]>
@@ -183,19 +165,15 @@ export function createReactiveTimelineProjection(input: {
   const projection = createMemo(() =>
     Timeline.constructSessionMessageRows(
       input.sessionMessages(),
-      input.reasoningMode() !== "hidden",
       input.status(),
+      input.timelineDetail?.() ?? defaultTimelineDetail,
       input.pendingInputIDs?.(),
-      input.shellToolDefaultOpen?.() ?? false,
-      input.editToolDefaultOpen?.() ?? false,
-      (content, showReasoning, detail) =>
-        content.type === "tool"
-          ? renderable(content, showReasoning, detail)
-          : (content.type === "text" || (detail ? detail.thinking.placement !== "hidden" : showReasoning)) &&
-            textVisible().get(content)!(),
-      input.timelineDetail?.(),
       input.queuedCompactionIDs?.(),
       input.turnDiffs?.(),
+      (detail, content) =>
+        content.type === "tool"
+          ? timelineRenders(detail, content)
+          : (content.type === "text" || detail.thinking.placement !== "hidden") && textVisible().get(content)!(),
     ),
   )
 
@@ -262,15 +240,12 @@ export function createReactiveTimelineProjection(input: {
 export namespace Timeline {
   export function constructSessionMessageRows(
     messages: SessionMessageInfo[],
-    showReasoning: boolean,
     status: SessionStatus,
+    detail: TimelineDetail,
     pendingInputIDs?: ReadonlySet<string>,
-    shellToolDefaultOpen = false,
-    editToolDefaultOpen = false,
-    isRenderable = renderable,
-    detail?: TimelineDetail,
     queuedCompactionIDs: readonly string[] = [],
     turnDiffs = false,
+    isRenderable = timelineRenders,
   ) {
     type Turn = {
       id: string
@@ -389,47 +364,45 @@ export namespace Timeline {
       turns.findLast((turn) => !pendingInputIDs?.has(turn.id) || turn.entries.some((entry) => entry.type === "idle"))
         ?.id ?? turns.at(-1)?.id
 
-    const placement = detail ? detail.thinking.placement : showReasoning ? "separate" : "hidden"
-
     const turnPhaseByID = new Map(
-      turns.map((turn) => [turn.id, turnPhase(turn.entries, turn.id === activeMessageID, status, placement)] as const),
+      turns.map(
+        (turn) =>
+          [turn.id, turnPhase(turn.entries, turn.id === activeMessageID, status, detail.thinking.placement)] as const,
+      ),
     )
 
     const phaseOf = (turn: Turn) => turnPhaseByID.get(turn.id) ?? IDLE_TURN_PHASE
 
     const commentary = new Set(
-      detail && detail.commentary.placement !== "separate"
+      detail.commentary.placement !== "separate"
         ? turns.flatMap((turn) =>
             turnCommentary(turn.entries, viewTurnPhase(phaseOf(turn)).settled, (content) =>
-              isRenderable(content, showReasoning, detail),
+              isRenderable(detail, content),
             ),
           )
         : [],
     )
 
-    const visible = (content: Content, showReasoning: boolean, detail?: TimelineDetail) =>
-      !(detail?.commentary.placement === "hidden" && commentary.has(content)) &&
-      isRenderable(content, showReasoning, detail)
+    const visible = (content: Content) =>
+      !(detail.commentary.placement === "hidden" && commentary.has(content)) && isRenderable(detail, content)
 
-    const visibleNotice = (message: Notice) => !detail || timelineNoticePlacement(message, detail) !== "hidden"
+    const visibleNotice = (message: Notice) => timelineNoticePlacement(detail, message) !== "hidden"
 
-    const visibleTurns = detail
-      ? turns.filter((turn) => {
-          if (turn.user) return true
+    const visibleTurns = turns.filter((turn) => {
+      if (turn.user) return true
 
-          if (turn.shell && (detail.shell.placement !== "hidden" || shellFailed(turn.shell))) return true
+      if (turn.shell && (detail.shell.placement !== "hidden" || shellFailed(turn.shell))) return true
 
-          return turn.entries.some((entry) =>
-            entry.type === "notice"
-              ? visibleNotice(entry.message)
-              : entry.type === "idle" ||
-                entry.type === "diff" ||
-                !!entry.message.error ||
-                !!entry.message.retry ||
-                entry.message.content.some((content) => visible(content, showReasoning, detail)),
-          )
-        })
-      : turns
+      return turn.entries.some((entry) =>
+        entry.type === "notice"
+          ? visibleNotice(entry.message)
+          : entry.type === "idle" ||
+            entry.type === "diff" ||
+            !!entry.message.error ||
+            !!entry.message.retry ||
+            entry.message.content.some(visible),
+      )
+    })
 
     const rows: TimelineRow.TimelineRow[] = [
       ...leading.flatMap((message) =>
@@ -441,7 +414,7 @@ export namespace Timeline {
         if (turn.shell)
           return [
             ...(index > 0 ? [new TimelineRow.TurnGap({ userMessageID: turn.id })] : []),
-            ...(!detail || detail.shell.placement !== "hidden" || shellFailed(turn.shell)
+            ...(detail.shell.placement !== "hidden" || shellFailed(turn.shell)
               ? [new TimelineRow.Shell({ userMessageID: turn.id, messageID: turn.shell.id })]
               : []),
             ...turn.entries.flatMap((entry) =>
@@ -451,19 +424,7 @@ export namespace Timeline {
             ),
           ]
 
-        return constructMessageRows(
-          turn.user,
-          turn.id,
-          turn.entries,
-          index,
-          showReasoning,
-          phaseOf(turn),
-          shellToolDefaultOpen,
-          editToolDefaultOpen,
-          visible,
-          detail,
-          commentary,
-        )
+        return constructMessageRows(turn.user, turn.id, turn.entries, index, phaseOf(turn), detail, visible, commentary)
       }),
     ]
 
@@ -490,22 +451,20 @@ export namespace Timeline {
     return {
       activeMessageID,
       turnPhaseByID,
-      rows: detail
-        ? groupMessages(
-            rows,
-            detail,
-            new Set(
-              messages.flatMap((message) =>
-                message.type === "compaction" ||
-                message.type === "model-switched" ||
-                message.type === "location-switched" ||
-                (message.type === "synthetic" && timelineNoticePlacement(message, detail) === "separate")
-                  ? [message.id]
-                  : [],
-              ),
-            ),
-          )
-        : rows,
+      rows: groupMessages(
+        rows,
+        detail,
+        new Set(
+          messages.flatMap((message) =>
+            message.type === "compaction" ||
+            message.type === "model-switched" ||
+            message.type === "location-switched" ||
+            (message.type === "synthetic" && timelineNoticePlacement(detail, message) === "separate")
+              ? [message.id]
+              : [],
+          ),
+        ),
+      ),
     }
   }
 
@@ -514,12 +473,9 @@ export namespace Timeline {
     turnID: string,
     entries: Entry[],
     index: number,
-    showReasoning: boolean,
     phase: TurnPhase,
-    shellToolDefaultOpen = false,
-    editToolDefaultOpen = false,
-    isRenderable = renderable,
-    detail?: TimelineDetail,
+    detail: TimelineDetail,
+    isVisible: (content: Content) => boolean,
     commentary: ReadonlySet<Content> = new Set(),
   ) {
     const rows: TimelineRow.TimelineRow[] = []
@@ -545,8 +501,7 @@ export namespace Timeline {
         contentEntries(message)
           .filter(
             (entry) =>
-              isRenderable(entry.content, showReasoning, detail) &&
-              !(thinking?.messageID === message.id && thinking.partID === entry.id),
+              isVisible(entry.content) && !(thinking?.messageID === message.id && thinking.partID === entry.id),
           )
           .map((entry) => ({ messageID: message.id, messageIndex, partID: entry.id, content: entry.content })),
       )
@@ -557,7 +512,7 @@ export namespace Timeline {
 
       const appendGroups = (items: typeof refs) => {
         let offset = 0
-        groupContent(items, shellToolDefaultOpen, editToolDefaultOpen, commentary, detail).forEach((group) => {
+        groupContent(items, commentary, detail).forEach((group) => {
           const tool = group.type !== "part" || items[offset]?.content.type !== "text"
           offset += group.type === "part" ? 1 : group.refs.length
           rows.push(
@@ -576,7 +531,7 @@ export namespace Timeline {
       appendGroups(before)
 
       if (interruptedAt >= 0) {
-        if (!compaction && detail?.notices.placement !== "hidden")
+        if (!compaction && detail.notices.placement !== "hidden")
           rows.push(new TimelineRow.TurnDivider({ userMessageID: turnID }))
         appendGroups(after)
       }
@@ -630,7 +585,7 @@ export namespace Timeline {
 
           return
         case "notice":
-          if (detail && timelineNoticePlacement(entry.message, detail) === "hidden") return
+          if (timelineNoticePlacement(detail, entry.message) === "hidden") return
           appendAssistantSegment(assistantSegment)
           assistantSegment = []
           rows.push(new TimelineRow.Notice({ userMessageID: turnID, messageID: entry.message.id }))
@@ -660,45 +615,6 @@ export namespace Timeline {
       content,
     }))
   }
-}
-
-const MAX_RETRY_AFTER_MS = 45 * 86_400_000
-
-function usageLimit(
-  message: Pick<SessionMessageAssistant, "error"> & { time: { created: number; completed?: number } },
-) {
-  const type = message.error?.type
-
-  if (type !== "provider.free-limit" && type !== "provider.go-limit") return {}
-
-  const kind = type === "provider.go-limit" ? ("go-limit" as const) : ("free-limit" as const)
-  const delay = message.error?.retryAfterMs
-  const base = message.time.completed ?? message.time.created
-
-  if (
-    delay === undefined ||
-    !Number.isFinite(delay) ||
-    delay < 0 ||
-    delay > MAX_RETRY_AFTER_MS ||
-    !Number.isFinite(base) ||
-    Number.isNaN(new Date(base + delay).getTime())
-  )
-    return { kind }
-
-  return { kind, resetAt: base + delay }
-}
-
-// OpenCode Console says when the budget resets in its refusal's metadata, which every protocol's envelope names `resetsAt`.
-function budgetLimit(message: Pick<SessionMessageAssistant, "error">) {
-  const type = message.error?.type
-
-  if (type !== "provider.budget-limit" && type !== "provider.model-budget-limit") return {}
-  const kind = type === "provider.budget-limit" ? ("budget-limit" as const) : ("model-budget-limit" as const)
-  const at = Date.parse(/"resetsAt"\s*:\s*"([^"]+)"/.exec(message.error?.response?.body ?? "")?.[1] ?? "")
-
-  if (Number.isNaN(at)) return { kind }
-
-  return { kind, resetAt: at }
 }
 
 // Each step replaces the phase the steps before it left, so the turn ends in the phase of its last step.
@@ -745,22 +661,8 @@ function stepEvent(
   }
 }
 
-function errorInfo(message: Parameters<typeof usageLimit>[0]): TurnErrorInfo {
-  return {
-    text: unwrapErrorMessage(message.error?.message ?? ""),
-    ...usageLimit(message),
-    ...budgetLimit(message),
-  }
-}
-
 function isFailedIdle(message: SessionMessageInfo): message is FailedIdle {
   return message.type === "idle" && message.outcome === "failed" && !!message.error
-}
-
-function shellFailed(message: SessionMessageShell) {
-  return (
-    message.status === "timeout" || (message.status === "exited" && message.exit !== undefined && message.exit !== 0)
-  )
 }
 
 // Text that a tool call follows in the same turn is commentary; text after the last tool call is the answer.
@@ -972,47 +874,19 @@ function groupPartKey(ref: PartRef) {
   return `${ref.messageID}:${ref.partID}`
 }
 
-function renderable(content: Content, showReasoning: boolean, detail?: TimelineDetail) {
-  if (content.type === "text") return !!content.text.trim()
-
-  if (content.type === "reasoning")
-    return (detail ? detail.thinking.placement !== "hidden" : showReasoning) && !!content.text.trim()
-
-  if (detail && currentToolFailed(content)) return true
-
-  if (content.name === "todowrite") return false
-
-  if (content.name === "question") return content.state.status !== "streaming" && content.state.status !== "running"
-
-  if (detail && detail[timelineCategory(content)!].placement === "hidden") return false
-
-  return true
-}
-
 function groupContent(
   items: { messageID: string; partID: string; content: Content }[],
-  shellToolDefaultOpen: boolean,
-  editToolDefaultOpen: boolean,
   commentary: ReadonlySet<Content>,
-  detail?: TimelineDetail,
+  detail: TimelineDetail,
 ): PartGroup[] {
   const groups: PartGroup[] = []
-  let adjacent: { type: "context" | "file" | "read"; refs: PartRef[]; tools: boolean } | undefined
+  let adjacent: { type: "context" | "file" | "read"; refs: PartRef[] } | undefined
 
   const flush = () => {
     const current = adjacent
     const first = current?.refs[0]
 
     if (!first) return
-
-    if (!current.tools && !detail) {
-      groups.push(
-        ...current.refs.map((ref) => ({ type: "part" as const, key: `part:${ref.messageID}:${ref.partID}`, ref })),
-      )
-      adjacent = undefined
-
-      return
-    }
 
     groups.push({
       type: current.type,
@@ -1026,19 +900,11 @@ function groupContent(
   }
 
   items.forEach((item) => {
-    const type = contentGroupType(
-      item.content,
-      shellToolDefaultOpen,
-      editToolDefaultOpen,
-      adjacent?.type === "context" && adjacent.tools,
-      commentary,
-      detail,
-    )
+    const type = contentGroupType(item.content, commentary, detail)
 
     if (type) {
       if (adjacent?.type !== type) flush()
-      adjacent ??= { type, refs: [], tools: false }
-      adjacent.tools ||= item.content.type === "tool"
+      adjacent ??= { type, refs: [] }
       adjacent.refs.push({ messageID: item.messageID, partID: item.partID })
 
       return
@@ -1056,138 +922,26 @@ function groupContent(
   return groups
 }
 
-function contentGroupType(
-  content: Content,
-  shellExpanded: boolean,
-  editExpanded: boolean,
-  hasContextGroup: boolean,
-  commentary: ReadonlySet<Content>,
-  detail?: TimelineDetail,
-) {
-  if (content.type === "tool") return toolGroupType(content, shellExpanded, editExpanded, hasContextGroup, detail)
+function contentGroupType(content: Content, commentary: ReadonlySet<Content>, detail: TimelineDetail) {
+  if (content.type === "tool") return toolGroupType(content, detail)
 
   if (content.type === "text") return commentary.has(content) ? "context" : undefined
 
-  return detail && detail.thinking.placement !== "grouped" ? undefined : "context"
+  return detail.thinking.placement !== "grouped" ? undefined : "context"
 }
 
-function toolGroupType(
-  content: Extract<Content, { type: "tool" }>,
-  shellExpanded: boolean,
-  editExpanded: boolean,
-  hasContextGroup: boolean,
-  detail?: TimelineDetail,
-) {
-  if (detail) {
-    if (content.name === "question" && !currentToolFailed(content)) return undefined
-    const category = timelineCategory(content)!
+function toolGroupType(content: Extract<Content, { type: "tool" }>, detail: TimelineDetail) {
+  if (content.name === "question" && !currentToolFailed(content)) return undefined
 
-    if (detail[category].placement === "grouped") return "context"
+  if (detail[timelineCategory(content)!].placement === "grouped") return "context"
 
-    if (currentToolGroupedRead(content)) return "read"
+  if (currentToolGroupedRead(content)) return "read"
 
-    if (currentToolFailed(content)) return undefined
-
-    if (content.name === "patch" || content.name === "edit" || content.name === "write") return "file"
-
-    return undefined
-  }
-
-  if (content.name === "question" || currentToolHasLoadedFiles(content)) return undefined
-
-  if (content.state.status === "error") {
-    if ((content.name === "shell" || content.name === "execute") && shellExpanded) return undefined
-
-    if ((content.name === "edit" || content.name === "write" || content.name === "patch") && editExpanded)
-      return undefined
-
-    return "context"
-  }
-
-  if (
-    !hasContextGroup &&
-    (content.state.status !== "completed" ||
-      ("metadata" in content.state && content.state.metadata?.status === "running")) &&
-    (content.name === "shell" || content.name === "execute" || content.name === "subagent")
-  )
-    return undefined
-
-  if (currentContentDefaultOpen(content, shellExpanded, editExpanded) !== true) return "context"
+  if (currentToolFailed(content)) return undefined
 
   if (content.name === "patch" || content.name === "edit" || content.name === "write") return "file"
 
   return undefined
-}
-
-export function reasoningHeading(text: string): string | undefined {
-  const markdown = text.replace(/\r\n?/g, "\n")
-  const html = lastHeading(markdown, /<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi, (value) => value.replace(/<[^>]+>/g, " "))
-  const atx = lastHeading(markdown, /^\s{0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+[ \t]*)?$/gm)
-  const setext = lastHeading(markdown, /^([^\n]+)\n(?:=+|-+)\s*$/gm)
-  const strong = lastHeading(markdown, /^\s*(?:\*\*((?:(?!\*\*).)+)\*\*|__((?:(?!__).)+)__)\s*$/gm)
-
-  const latest = [html, atx, strong].reduce<HeadingMatch | undefined>(
-    (best, current) => (!best || (current && current.index >= best.index) ? current : best),
-    undefined,
-  )
-
-  return (latest ?? setext)?.value
-}
-
-type HeadingMatch = { index: number; value: string }
-
-function lastHeading(
-  markdown: string,
-  pattern: RegExp,
-  transform?: (value: string) => string,
-): HeadingMatch | undefined {
-  return Array.from(markdown.matchAll(pattern)).reduce<HeadingMatch | undefined>((best, match) => {
-    const raw = match[1] ?? match[2] ?? ""
-    const value = cleanHeading(transform ? transform(raw) : raw)
-
-    return value ? { index: match.index, value } : best
-  }, undefined)
-}
-
-function cleanHeading(value: string) {
-  return value
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/[*_~]+/g, "")
-    .trim()
-}
-
-export function unwrapErrorMessage(message: string) {
-  const text = message.replace(/^Error:\s*/, "").trim()
-  const parse = (value: string) => Option.getOrUndefined(decodeJson(value))
-
-  // A JSON string that itself holds JSON is unwrapped once.
-  const read = (value: string) => {
-    const first = parse(value)
-
-    return Option.match(decodeString(first), { onNone: () => first, onSome: (inner) => parse(inner.trim()) })
-  }
-
-  const whole = read(text)
-  const start = text.indexOf("{")
-  const end = text.lastIndexOf("}")
-  const json = whole === undefined && start !== -1 && end > start ? read(text.slice(start, end + 1)) : whole
-  const envelope = Option.getOrUndefined(decodeErrorEnvelope(json))
-
-  if (!envelope) return message
-  const error = Option.getOrUndefined(decodeErrorDetails(envelope.error))
-
-  if (error?.type && error.message) return `${error.type}: ${error.message}`
-
-  if (error?.message) return error.message
-
-  if (error?.type) return error.type
-
-  if (error?.code) return error.code
-
-  if (envelope.message) return envelope.message
-
-  return Option.getOrUndefined(decodeString(envelope.error)) || message
 }
 
 function isNotice(message: SessionMessageInfo): message is Notice {

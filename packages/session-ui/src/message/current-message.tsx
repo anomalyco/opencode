@@ -16,8 +16,6 @@ export type { SessionUserActions, SessionUserAttachmentReference, SessionUserCom
 
 export { SessionShellMessage } from "../tools/tool-renderer"
 
-export { currentContentDefaultOpen } from "./current-tool-state"
-
 export function SessionUserMessage(props: {
   sessionID: string
   message: SessionMessageUser
