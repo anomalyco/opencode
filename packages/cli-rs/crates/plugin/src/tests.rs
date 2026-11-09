@@ -274,6 +274,35 @@ fn an_external_plugin_replaces_a_built_in_of_its_id_in_place() {
     assert_eq!((registry.entries()[1].source, registry.entries()[1].status.clone()), (Source::Builtin, Status::Active));
 }
 
+// Expected (D3): an external plugin keeps its place among the claims when it is rebuilt and when it is disabled and
+// enabled again, as `docs/P.4.md` and TS have it; so does a built-in that is enabled again.
+#[test]
+fn a_plugin_keeps_its_place_across_a_reload_and_a_toggle() {
+    let host = host();
+    let footer = || vec![Placement::append("home.footer")];
+    let registry = Registry::define(vec![claiming("a", footer())], []);
+    registry.activate(&dynamic(&host));
+    let external = |id: &str, target: &str| claiming(id, footer()).external(target, Rc::new(|| None));
+    registry.load(&dynamic(&host), external("b", "b.so"));
+    registry.load(&dynamic(&host), external("c", "c.so"));
+    let rows = || {
+        let parent = View::new(host.app()).column();
+        let _mount = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+        host.app().root().clear();
+        host.app().root().add(&parent);
+        let text = host.app.render().text();
+        text.lines().map(str::trim_end).filter(|line| !line.is_empty()).map(str::to_owned).collect::<Vec<_>>()
+    };
+    assert_eq!(rows(), ["a0", "b0", "c0"]);
+    registry.load(&dynamic(&host), external("b", "b.so"));
+    assert_eq!(rows(), ["a0", "b0", "c0"], "a rebuild moved its claims");
+    for id in ["b", "a"] {
+        registry.set_active(&dynamic(&host), id, false);
+        registry.set_active(&dynamic(&host), id, true);
+        assert_eq!(rows(), ["a0", "b0", "c0"], "toggling {id} moved its claims");
+    }
+}
+
 #[test]
 fn deactivation_undoes_every_registration() {
     let host = host();
@@ -339,7 +368,7 @@ fn code_blocks_follow_activation_order() {
     };
     let registry = Registry::define(vec![renderer("first"), renderer("second")], []);
     registry.activate(&dynamic(&host));
-    // Toggling `first` makes it the last enabled, so it wins.
+    // The plugin later in order wins; toggling `first` keeps its place, as TS's registrations keep theirs.
     registry.set_active(&dynamic(&host), "first", false);
     registry.set_active(&dynamic(&host), "first", true);
     let markdown = opencode_ui::markdown::view(
@@ -353,7 +382,7 @@ fn code_blocks_follow_activation_order() {
     markdown.set_markdown("```math\nx^2\n```\n");
     host.app().root().add(&markdown);
     host.app.render();
-    assert_eq!(languages.borrow().first(), Some(&("first", "x^2".to_owned())));
+    assert_eq!(languages.borrow().first(), Some(&("second", "x^2".to_owned())));
 }
 
 #[test]
