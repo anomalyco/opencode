@@ -2400,10 +2400,10 @@ impl Footers {
         self.0.open_route(Route::Settings);
     }
 
-    /// The provider catalog, the model, or its variants changed: an open model, variant, or command panel follows.
+    /// The catalog, the model, or its variants changed: an open model, variant, command, or agent panel follows.
     pub fn models_changed(&self) {
         let route = self.0.state.borrow().route;
-        if matches!(route, Some(Route::Model | Route::Variant | Route::Command)) {
+        if matches!(route, Some(Route::Model | Route::Variant | Route::Command | Route::Agent)) {
             self.0.paint();
             self.0.layout();
         }
