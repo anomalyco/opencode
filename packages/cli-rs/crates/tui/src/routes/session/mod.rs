@@ -151,6 +151,14 @@ impl RouteView for Session {
     }
 
     fn sync(&self, tui: &Tui, changes: &Changes) {
+        // A full sync (a reconnect) reads again what the store invalidated, as TS does when the connection
+        // turns connected (`routes/session/index.tsx:339-347`, `routes/session/rows.ts:123-129`): events
+        // lost with the old stream would otherwise stay missing. Reads still valid return at once.
+        if changes.all {
+            form::quiet(tui, tui.data.session_sync(&self.id, true));
+            form::quiet(tui, tui.data.message_sync(&self.id));
+            form::quiet(tui, tui.data.pending_sync(&self.id));
+        }
         if changes.session(&self.id) {
             crate::features::location::session(tui, &self.id);
         }
