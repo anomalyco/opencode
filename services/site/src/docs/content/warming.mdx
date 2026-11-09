@@ -130,9 +130,10 @@ warming request does not extend the active window.
 00:30  warming stops
 ```
 
-Any new non-warming model activity resets both timers. If the interval is as
-long as or longer than the duration, the active window expires before a warming
-request is sent.
+Any new non-warming model activity, including a compaction, resets both timers.
+An explicit interval as long as or longer than the duration is rejected with a
+warning, and an `"auto"` interval that long skips warming because the cache
+outlives the window.
 
 ```text
 00:00  normal model request
@@ -141,10 +142,11 @@ request is sent.
 00:50  warming stops
 ```
 
-OpenCode never sends a warming request while a model request is running. If one
-is still running when the interval comes due, warming waits for it to finish and
-then sends right away, as long as the cache from that request hasn't expired.
-If it has, warming stops until the next normal request.
+OpenCode never sends a warming request while a model request, including a
+compaction, is running. If one is still running when the interval comes due,
+warming waits for it to finish and then sends right away, as long as the cache
+from that request hasn't expired. If it has, warming stops until the next
+normal request.
 
 ```text
 00:00  normal model request sent
