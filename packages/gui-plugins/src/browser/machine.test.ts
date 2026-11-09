@@ -659,6 +659,25 @@ describe("browser pane machine", () => {
     expect(types(restarted.effects)).toEqual(["cancel-retry", "open-registration", "schedule-register-timeout"])
   })
 
+  test("an Ipc restart while locked clears embeds without registering", () => {
+    const start = ready()
+
+    const embedded = transition(start, {
+      type: "pane.embed",
+      sessionKey: key,
+      attempt: attempt(start),
+      tabID: tabA,
+      embed: "e1",
+    }).state
+
+    const held = transition(embedded, { type: "screen.locked" }).state
+
+    const restarted = transition(held, { type: "ipc.changed", ipc: { status: "active", generation: 2 } })
+    expect(phase(restarted.state)).toEqual({ status: "suspended", reason: "locked" })
+    expect(attachment(restarted.state)?.embeds).toEqual({})
+    expect(restarted.effects).toEqual([])
+  })
+
   test("an Ipc loss drops the stale embeds of a lock-suspended binding", () => {
     const start = ready()
 
@@ -826,6 +845,74 @@ describe("browser pane machine", () => {
       expect.objectContaining({ type: "open-registration", restore: inventory(tab(tabA)) }),
     )
     expect(attachment(unlocked.state)?.embeds).toEqual({ [tabA]: "e1" })
+  })
+
+  test("a wake while locked holds the session for unlock", () => {
+    const idle = transition(createInitialState(active), {
+      type: "session.attached",
+      sessionKey: key,
+      serverID: server,
+      located: true,
+    }).state
+
+    const locked = transition(idle, { type: "screen.locked" }).state
+    expect(phase(locked)).toEqual({ status: "idle" })
+
+    const woken = transition(locked, { type: "session.wake", sessionKey: key })
+    expect(phase(woken.state)).toEqual({ status: "suspended", reason: "locked" })
+    expect(woken.effects).toEqual([])
+
+    const unlocked = transition(woken.state, { type: "screen.unlocked" })
+    expect(phase(unlocked.state)).toMatchObject({ status: "registering" })
+    expect(unlocked.effects).toContainEqual(expect.objectContaining({ type: "open-registration" }))
+  })
+
+  test("a session created while locked is held for unlock", () => {
+    const idle = transition(createInitialState(active), {
+      type: "session.attached",
+      sessionKey: key,
+      serverID: server,
+      located: true,
+    }).state
+
+    const locked = transition(idle, { type: "screen.locked" }).state
+
+    const created = transition(locked, { type: "session.created", sessionKey: key })
+    expect(phase(created.state)).toEqual({ status: "suspended", reason: "locked" })
+    expect(created.effects).toEqual([])
+
+    const unlocked = transition(created.state, { type: "screen.unlocked" })
+    expect(phase(unlocked.state)).toMatchObject({ status: "registering" })
+  })
+
+  test("an idle session that was not woken stays idle through lock and unlock", () => {
+    const idle = transition(createInitialState(active), {
+      type: "session.attached",
+      sessionKey: key,
+      serverID: server,
+      located: true,
+    }).state
+
+    const locked = transition(idle, { type: "screen.locked" })
+    const unlocked = transition(locked.state, { type: "screen.unlocked" })
+
+    expect(phase(locked.state)).toEqual({ status: "idle" })
+    expect(phase(unlocked.state)).toEqual({ status: "idle" })
+    expect(unlocked.effects).toEqual([])
+  })
+
+  test("a wake while locked leaves a replaced binding blocked", () => {
+    const start = ready()
+    const blocked = transition(start, paneState(start, null, "browser.pane.replaced")).state
+    const held = transition(blocked, { type: "screen.locked" }).state
+
+    const woken = transition(held, { type: "session.wake", sessionKey: key })
+    expect(phase(woken.state)).toEqual({ status: "blocked", reason: "replaced" })
+    expect(woken.effects).toEqual([])
+
+    const unlocked = transition(woken.state, { type: "screen.unlocked" })
+    expect(phase(unlocked.state)).toEqual({ status: "blocked", reason: "replaced" })
+    expect(unlocked.effects).toEqual([])
   })
 
   test("a stale locked rejection retries when the authoritative state is unlocked", () => {

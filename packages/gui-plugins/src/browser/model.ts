@@ -662,6 +662,12 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       return code === undefined ? undefined : describe(code)
     },
     suspended: (session: Session) => sessionSuspended(machine(), session.key),
+    /** The screen lock currently holds every attachment; its notice replaces the reconnect one. */
+    locked() {
+      const current = machine()
+
+      return current.status === "open" && current.locked
+    },
     connection: (session: Session) => sessionConnection(machine(), session.key),
     /** The host embed of a tab's page, once main created the page. */
     embed: (session: Session, tabID: string) => sessionEmbed(machine(), session.key, tabID),

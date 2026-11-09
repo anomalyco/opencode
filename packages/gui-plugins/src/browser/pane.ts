@@ -99,6 +99,8 @@ export function createBrowserPane(input: {
   readonly embeds: Embeds
   /** The screen is locked: no attachment may start. */
   readonly locked: () => boolean
+  /** The translated "Disconnected" label for the floating status pill. */
+  readonly disconnectedLabel: () => string
   readonly emit: (window: number, value: { readonly binding: string; readonly event: PaneEvent }) => void
 }) {
   const machine: PaneMachine = { state: createPaneState() }
@@ -507,7 +509,7 @@ export function createBrowserPane(input: {
 
     if (effect.type === "remove-restore") return restore.remove(effect.storageKey)
 
-    if (effect.type === "release-record") return void releaseLater(effect.storageKey)
+    if (effect.type === "release-record") return void releaseLater(effect.liveKey)
 
     if (effect.type === "warn") return void runtime.runFork(Effect.logWarning(effect.message, effect.detail))
     const handle = handles.get(effect.binding)
@@ -864,6 +866,7 @@ export function createBrowserPane(input: {
       restore: options.restore,
       popupOptions: options.popupOptions,
       fileRoots: () => selectFileRoots(machine.state, owner.binding),
+      disconnectedLabel: input.disconnectedLabel,
       shared,
       embeds: input.embeds,
       fail,

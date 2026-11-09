@@ -20,6 +20,8 @@ export type TabSlot =
 type Inventory = {
   readonly binding: string
   readonly window: number
+  /** The live record key: window + server + session. Saved tabs keep the window-independent `storageKey`. */
+  readonly liveKey: string
   readonly storageKey: string
   readonly tabs: ReadonlyMap<Browser.TabID, TabSlot>
   /** Null or a key of `tabs`. */
@@ -152,7 +154,7 @@ export type PaneEffect =
   | { readonly type: "abort-requests"; readonly binding: string; readonly requestIDs: readonly string[] }
   | { readonly type: "release-pages"; readonly binding: string; readonly attempts: readonly number[] }
   /** The session's live pages, proxy and partition are going away with its last binding. */
-  | { readonly type: "release-record"; readonly storageKey: string }
+  | { readonly type: "release-record"; readonly liveKey: string }
   /** Rejects a pending `register` call, stops the timer and listeners, and ends the attachment. Always last. */
   | { readonly type: "teardown"; readonly binding: string }
   | { readonly type: "warn"; readonly message: string; readonly detail: string | undefined }
@@ -331,7 +333,7 @@ function close(state: ActiveBinding, reason: PaneCloseReason, forget: boolean): 
 
   if (attempts.length && !keep) effects.push({ type: "release-pages", binding: state.binding, attempts })
 
-  if (!keep) effects.push({ type: "release-record", storageKey: state.storageKey })
+  if (!keep) effects.push({ type: "release-record", liveKey: state.liveKey })
   effects.push({ type: "teardown", binding: state.binding })
 
   return { state: { status: "closed", binding: state.binding, reason }, effects }
@@ -504,6 +506,8 @@ function publish(state: AttachedBinding, error?: string): AttachedTransition {
 }
 
 function createConnecting(event: Extract<PaneMachineEvent, { readonly type: "registered" }>): ActiveBinding {
+  const liveKey = `${event.window}\n${event.storageKey}`
+
   const restore = event.restore ?? {
     tabs: event.saved.tabs.map((tab) => ({
       id: tab.id,
@@ -532,6 +536,7 @@ function createConnecting(event: Extract<PaneMachineEvent, { readonly type: "reg
     status: "connecting",
     binding: event.binding,
     window: event.window,
+    liveKey,
     storageKey: event.storageKey,
     tabs,
     focusedTabID:

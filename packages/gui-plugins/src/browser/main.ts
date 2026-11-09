@@ -41,6 +41,7 @@ const setup: Plugin.MainSetup = (ctx) => {
                   refs,
                   embeds: ctx.embeds,
                   locked: () => screenLock.locked(),
+                  disconnectedLabel: () => ctx.t("disconnected"),
                   emit: (window, value) => provider.emit("event", value, window),
                 }),
               })

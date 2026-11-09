@@ -66,6 +66,31 @@ describe("screen lock machine", () => {
     ])
   })
 
+  test("a Linux bus unlock cannot clear an idle-probed or explicit lock", () => {
+    expect(replay([{ type: "probed", idle: "locked" }, { type: "bus", locked: false }])).toEqual([true, true])
+    expect(replay([{ type: "screen", locked: true }, { type: "bus", locked: false }])).toEqual([true, true])
+  })
+
+  test("a Linux bus lock is cleared when its watcher stops", () => {
+    expect(
+      replay([
+        { type: "probed", idle: "active" },
+        { type: "bus", locked: true },
+        { type: "bus", locked: undefined },
+      ]),
+    ).toEqual([false, true, false])
+  })
+
+  test("a Linux bus lock stays until the bus reports unlocked", () => {
+    expect(
+      replay([
+        { type: "bus", locked: true },
+        { type: "screen", locked: false },
+        { type: "probed", idle: "active" },
+      ]),
+    ).toEqual([true, true, true])
+  })
+
   test("an explicit unlock clears a stale probe", () => {
     expect(
       replay([

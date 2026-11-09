@@ -5,14 +5,16 @@ export type IdleState = "active" | "idle" | "locked" | "unknown"
  * Whether the user is away from this desktop.
  *
  * `screen` is an explicit lock-screen event, `sleeping` is a suspend not yet followed by resume, `away` is a macOS switch
- * to another login session, and `probed` is the idle-state fallback (the only signal on Linux). An explicit lock or
- * sleep is authoritative: a probe can never clear it.
+ * to another login session, `probed` is the idle-state fallback, and `bus` is the Linux login1/elogind or screensaver
+ * hint. Each source stays separate so one source going quiet or reporting unlocked cannot clear another's lock.
  */
 export type ScreenLockState = {
   readonly screen: boolean
   readonly away: boolean
   readonly sleeping: boolean
   readonly probed: boolean
+  /** Linux login1/elogind or screensaver: undefined while no watcher is available. */
+  readonly bus: boolean | undefined
 }
 
 export type ScreenLockEvent =
@@ -24,20 +26,25 @@ export type ScreenLockEvent =
   | { readonly type: "suspended" }
   /** The system woke; the idle state decides unless an explicit lock event is still in force. */
   | { readonly type: "resumed"; readonly idle: IdleState }
-  /** A periodic read of the idle state, the only lock signal on Linux. `unknown` changes nothing. */
+  /** A periodic read of the idle state, the fallback when no Linux bus watcher is available. `unknown` changes nothing. */
   | { readonly type: "probed"; readonly idle: IdleState }
+  /** A Linux bus hint; undefined clears that watcher's contribution when it stops. */
+  | { readonly type: "bus"; readonly locked: boolean | undefined }
 
 export const initialScreenLockState: ScreenLockState = Object.freeze({
   screen: false,
   away: false,
   sleeping: false,
   probed: false,
+  bus: undefined,
 })
 
 export function transitionScreenLock(state: ScreenLockState, event: ScreenLockEvent): ScreenLockState {
   if (event.type === "screen") return screen(state, event.locked)
 
   if (event.type === "session") return state.away === !event.active ? state : { ...state, away: !event.active }
+
+  if (event.type === "bus") return state.bus === event.locked ? state : { ...state, bus: event.locked }
 
   if (event.type === "suspended") return state.sleeping ? state : { ...state, sleeping: true }
 
@@ -57,7 +64,7 @@ export function transitionScreenLock(state: ScreenLockState, event: ScreenLockEv
 }
 
 export function isScreenLocked(state: ScreenLockState) {
-  return state.screen || state.away || state.sleeping || state.probed
+  return state.screen || state.away || state.sleeping || state.probed || state.bus === true
 }
 
 function screen(state: ScreenLockState, locked: boolean): ScreenLockState {
@@ -73,7 +80,8 @@ function same(previous: ScreenLockState, next: ScreenLockState) {
   return previous.screen === next.screen &&
     previous.away === next.away &&
     previous.sleeping === next.sleeping &&
-    previous.probed === next.probed
+    previous.probed === next.probed &&
+    previous.bus === next.bus
     ? previous
     : next
 }

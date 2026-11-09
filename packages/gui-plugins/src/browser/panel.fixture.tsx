@@ -331,7 +331,7 @@ export function mountBrowserPane(input: PaneHost) {
         })
       },
       release: async () => undefined,
-    load: async () => undefined,
+      load: async () => undefined,
       command: async (value) => {
         const command = value.command
         // Main refuses what it does not open before anything happens, naming why.
@@ -959,7 +959,7 @@ export function mountBrowserRegion(input: RegionHost) {
         ])
       },
       release: async () => undefined,
-    load: async () => undefined,
+      load: async () => undefined,
       command: async (value) => {
         if (value.command.type === "tabs.open") setStore("opens", (count) => count + 1)
 

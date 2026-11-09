@@ -190,7 +190,15 @@ describe("binding close reason", () => {
 
     expect(closeEvents(closed.effects)).toEqual([{ state: null, error: "browser.pane.registration.closed" }])
     expect(closed.effects).toContainEqual({ type: "release-pages", binding: "b1", attempts: [1] })
-    expect(closed.effects).toContainEqual({ type: "release-record", storageKey: "server\nb1" })
+    expect(closed.effects).toContainEqual({ type: "release-record", liveKey: "1\nserver\nb1" })
+  })
+
+  test("permanent replaced and missing closes release the window's live record", () => {
+    for (const outcome of ["replaced", "missing"] as const) {
+      const closed = play(attached(), on({ type: "attachment.ended", outcome }))
+
+      expect(closed.effects).toContainEqual({ type: "release-record", liveKey: "1\nserver\nb1" })
+    }
   })
 
   test("a reconnect adopts the same tab ID into the new binding", () => {
@@ -246,8 +254,8 @@ describe("binding close reason", () => {
       { state: null, error: "browser.pane.registration.closed" },
       { state: null, error: "browser.pane.registration.closed" },
     ])
-    expect(disposed.effects).toContainEqual({ type: "release-record", storageKey: "server\nb1" })
-    expect(disposed.effects).toContainEqual({ type: "release-record", storageKey: "server\nb2" })
+    expect(disposed.effects).toContainEqual({ type: "release-record", liveKey: "1\nserver\nb1" })
+    expect(disposed.effects).toContainEqual({ type: "release-record", liveKey: "1\nserver\nb2" })
     expect(transitionPane(disposed.state, registered())).toEqual({ state: disposed.state, effects: [] })
   })
 

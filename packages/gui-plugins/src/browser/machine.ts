@@ -436,6 +436,13 @@ function ipcChanged(state: Open, ipc: Ipc): Transition {
         return put(result.state, key, suspend(cleared, "ipc"), [...result.effects, ...stop(key, phase)])
       }
 
+      // A pane reload replaces every native page: drop stale embeds even while locked, and register only the
+      // attachments that were allowed to register before it.
+      if (restarted && !bound && !lost)
+        return Object.keys(attachment.embeds).length
+          ? put(result.state, key, { ...attachment, embeds: {} })
+          : result
+
       if (!lost && !(restarted && bound)) return result
       const attempt = result.state.issued + 1
 
@@ -712,8 +719,6 @@ function reconnectNow(state: Open, key: string, attachment: Attachment): Transit
 function wake(state: Open, key: string, attachment: Attachment, created: boolean): Transition & { state: Open } {
   const phase = attachment.phase
 
-  if (state.locked) return { state, effects: [] }
-
   if (
     phase.status === "registering" ||
     phase.status === "ready" ||
@@ -723,6 +728,13 @@ function wake(state: Open, key: string, attachment: Attachment, created: boolean
     return { state, effects: [] }
 
   if (phase.status === "blocked" && (phase.reason === "replaced" || !created)) return { state, effects: [] }
+
+  // A wake while locked remembers that this session wants a binding; it registers when the screen unlocks. A session
+  // that only attached but was never asked for stays idle, as it would outside a lock.
+  if (state.locked)
+    return phase.status === "suspended" && phase.reason === "locked"
+      ? { state, effects: [] }
+      : put(state, key, hold(attachment, "locked"))
 
   if (state.ipc.status !== "active") {
     if (phase.status === "suspended" && phase.reason === "ipc") return { state, effects: [] }

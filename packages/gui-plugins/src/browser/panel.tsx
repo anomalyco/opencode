@@ -76,6 +76,7 @@ export default function SessionBrowserPane(props: {
   const address = () => (state()?.url === "about:blank" ? "" : (state()?.url ?? ""))
   const failed = () => !!state()?.loadError
   const suspended = () => props.model.suspended(props.session)
+  const locked = () => props.model.locked()
   const connection = () => props.model.connection(props.session)
   const command = (action: Browser.Action) => props.model.command(props.session, action)
 
@@ -135,7 +136,7 @@ export default function SessionBrowserPane(props: {
 
   const error = () => props.model.error(props.session)
 
-  const inspectable = () => !!address() && !failed() && !suspended()
+  const inspectable = () => !!address() && !failed() && !suspended() && !locked()
   const overlayed = createMemo(() => overlayView(overlay(), props.session.key, state()?.id))
   const picking = () => overlayed().picking
   const comment = createMemo(() => overlayComment(overlay(), props.session.key, state()?.id))
@@ -775,7 +776,7 @@ export default function SessionBrowserPane(props: {
             <div class="text-13-regular leading-[var(--line-height-base)]">{plugin.t("failed.description")}</div>
           </div>
         </Show>
-        <Show when={suspended()}>
+        <Show when={suspended() && !locked()}>
           <p class="px-6 text-center text-13-regular text-v2-text-text-subtle" role="status">
             {plugin.t("suspended")}
           </p>

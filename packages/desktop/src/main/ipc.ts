@@ -1,6 +1,7 @@
 export * as Ipc from "./ipc"
 
 import { app, BrowserWindow, MessageChannelMain } from "electron"
+import { isAuxiliaryWindow } from "@opencode/plugin/gui/main"
 import { Effect, Layer } from "effect"
 import { RpcServer } from "effect/rpc"
 import { DesktopRpcs } from "../shared/ipc-rpc"
@@ -69,7 +70,10 @@ export const registerIpcHandlers = Effect.gen(function* () {
     })
 
     const post = () => {
-      if (win.isDestroyed() || win.webContents.isDestroyed()) return
+      if (win.isDestroyed() || win.webContents.isDestroyed() || isAuxiliaryWindow(win)) return
+
+      // Only the app's own renderer document gets a privileged transport port; an overlay's data URL must not.
+      if (!isRendererUrl(win.webContents.getURL())) return
       const channel = new MessageChannelMain()
       handoff.bind(win.webContents, channel.port1)
       win.webContents.postMessage(IpcTransportPort, null, [channel.port2])
@@ -77,7 +81,7 @@ export const registerIpcHandlers = Effect.gen(function* () {
 
     // A committed document replaces the bound one; its events wait for the port posted when it loads.
     win.webContents.on("did-navigate", (_event, url) => {
-      if (isRendererUrl(url)) handoff.prepare(win.webContents)
+      if (!isAuxiliaryWindow(win) && isRendererUrl(url)) handoff.prepare(win.webContents)
     })
     win.webContents.on("did-finish-load", post)
 

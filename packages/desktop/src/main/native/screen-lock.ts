@@ -67,7 +67,7 @@ function createScreenLock(): ScreenLock {
     // Best effort: a headless session, a missing D-Bus tool, or no login1 must not stop the idle probe already running.
     if (process.platform === "linux")
       void import("./linux-screen-lock")
-        .then(({ watchLinuxScreenLock }) => watchLinuxScreenLock((locked) => apply({ type: "screen", locked })))
+        .then(({ watchLinuxScreenLock }) => watchLinuxScreenLock((locked) => apply({ type: "bus", locked })))
         .catch(() => undefined)
   }
 
