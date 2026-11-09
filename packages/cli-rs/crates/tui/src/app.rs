@@ -5,6 +5,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use opencode_api::client::Client;
 use opencode_api::events::{self, Connection};
@@ -18,6 +19,7 @@ use opencode_ui::keymap::{Bind, COMMAND_PALETTE_COMMAND, Keybinds, KeymapLayer, 
 use opencode_ui::theme::{Effect, ModeSetting, TerminalColors, Theme, ThemeMode, ThemeState, ThemeStateOptions};
 use opencode_ui::toast::Toasts;
 use opencode_ui::{help, palette};
+use opentui::app::ProxyError;
 use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
 use opentui::widget::Textarea;
@@ -124,9 +126,11 @@ struct Files {
 }
 
 /// Posted when the store flushed; at most one is queued.
+#[derive(Clone)]
 struct DataChanged;
 
 /// Posted when the event connection changed state.
+#[derive(Clone)]
 struct StatusChanged(events::State);
 
 impl Tui {
@@ -450,7 +454,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     // After the first route's reads, as in TS, where they start during mount and the event stream connects later.
     // Otherwise `session.active` can answer first and read again the running sessions the route's family read brings.
     let status = deps.events.then(|| connect(&tui));
-    pump(&tui, wakeups, status);
+    pump(&tui.app, wakeups, status);
     crate::features::highlights::install(&tui, deps.continue_);
     crate::features::devtools::mount(&tui, &shell);
     crate::features::startup::run(&tui, deps.continue_);
@@ -657,7 +661,7 @@ fn install_theme(tui: &Rc<Tui>) {
 /// The store's flushes and signals, subscribed before anything can flush or signal, until [`pump`] forwards them.
 struct Wakeups {
     revisions: tokio::sync::watch::Receiver<u64>,
-    signals: tokio::sync::broadcast::Receiver<opencode_api::generated::V2Event>,
+    signals: tokio::sync::broadcast::Receiver<Arc<opencode_api::generated::V2Event>>,
     /// A [`DataChanged`] is queued.
     pending: Arc<AtomicBool>,
 }
@@ -686,13 +690,14 @@ fn install_wakeups(tui: &Rc<Tui>, connect: bool) -> Wakeups {
 }
 
 /// One task forwards store flushes (one queued wake at a time), store signals, and connection changes to the UI.
-fn pump(tui: &Tui, wakeups: Wakeups, mut status: Option<tokio::sync::watch::Receiver<events::State>>) {
+fn pump(app: &App, wakeups: Wakeups, mut status: Option<tokio::sync::watch::Receiver<events::State>>) {
     use tokio::sync::broadcast::error::RecvError;
     let Wakeups { mut revisions, mut signals, pending } = wakeups;
-    let proxy = tui.app.proxy();
-    tui.app.runtime().spawn(async move {
-        if let Some(status) = &mut status
-            && proxy.send(StatusChanged(status.borrow_and_update().clone())).is_err()
+    let proxy = app.proxy();
+    app.runtime().spawn(async move {
+        let current = status.as_mut().map(|status| status.borrow_and_update().clone());
+        if let Some(current) = current
+            && !post(&proxy, StatusChanged(current)).await
         {
             return;
         }
@@ -700,11 +705,11 @@ fn pump(tui: &Tui, wakeups: Wakeups, mut status: Option<tokio::sync::watch::Rece
             let sent = tokio::select! {
                 biased;
                 changed = revisions.changed() => match changed {
-                    Ok(()) => pending.swap(true, Ordering::SeqCst) || proxy.send(DataChanged).is_ok(),
+                    Ok(()) => pending.swap(true, Ordering::SeqCst) || post(&proxy, DataChanged).await,
                     Err(_) => false,
                 },
                 signal = signals.recv() => match signal {
-                    Ok(event) => proxy.send(crate::features::events::Signal(event)).is_ok(),
+                    Ok(event) => post(&proxy, crate::features::events::Signal(event)).await,
                     Err(RecvError::Lagged(skipped)) => {
                         log::warn!("the UI skipped {skipped} server events");
                         true
@@ -712,10 +717,10 @@ fn pump(tui: &Tui, wakeups: Wakeups, mut status: Option<tokio::sync::watch::Rece
                     Err(RecvError::Closed) => false,
                 },
                 changed = async { status.as_mut()?.changed().await.ok() }, if status.is_some() => match changed {
-                    Some(()) => {
-                        let current = status.as_mut().map(|status| status.borrow_and_update().clone());
-                        current.is_none_or(|current| proxy.send(StatusChanged(current)).is_ok())
-                    }
+                    Some(()) => match status.as_mut().map(|status| status.borrow_and_update().clone()) {
+                        Some(current) => post(&proxy, StatusChanged(current)).await,
+                        None => true,
+                    },
                     None => {
                         status = None;
                         true
@@ -727,6 +732,23 @@ fn pump(tui: &Tui, wakeups: Wakeups, mut status: Option<tokio::sync::watch::Rece
             }
         }
     });
+}
+
+/// Sends `message` to the UI, waiting while its queue is full (a burst, or a suspended terminal). False once the app
+/// has ended. Meanwhile the store's revisions and the connection status coalesce, and its signals queue up to their
+/// bound.
+async fn post<M: Clone + Send + 'static>(proxy: &AppProxy, message: M) -> bool {
+    let mut wait = Duration::from_millis(1);
+    loop {
+        match proxy.send(message.clone()) {
+            Ok(()) => return true,
+            Err(ProxyError::Closed) => return false,
+            Err(ProxyError::Full) => {
+                tokio::time::sleep(wait).await;
+                wait = (wait * 2).min(Duration::from_millis(50));
+            }
+        }
+    }
 }
 
 /// Starts the event connection and returns its state.
@@ -828,5 +850,66 @@ fn persist(files: &Files, effects: Vec<Effect>) {
         if let Err(error) = result {
             log::warn!("failed to save theme state: {error}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::features::events::Signal;
+    use events::{State, Status};
+    use opencode_api::generated::V2Event;
+    use opentui::testing::TestApp;
+
+    fn state(status: Status) -> State {
+        State { status, attempt: 0, error: None }
+    }
+
+    fn event(kind: &str) -> Arc<V2Event> {
+        Arc::new(serde_json::from_value(serde_json::json!({ "id": "evt_1", "type": kind, "data": {} })).unwrap())
+    }
+
+    // Expected: a full UI queue (a burst, a suspended terminal) delays the pump's store revisions, signals and
+    // connection changes; once it drains they arrive, and later ones still do (reviews bigboi-1 and carbon-2).
+    #[test]
+    fn a_full_queue_delays_the_pump_but_never_stops_it() {
+        let app = TestApp::new(10, 4);
+        let seen = Rc::new(RefCell::new(Vec::<String>::new()));
+        let pending = Arc::new(AtomicBool::new(false));
+        let clear = pending.clone();
+        let record = seen.clone();
+        app.on_message(move |_, _: &DataChanged| {
+            clear.store(false, Ordering::SeqCst);
+            record.borrow_mut().push("data".into());
+        });
+        let record = seen.clone();
+        app.on_message(move |_, Signal(event)| record.borrow_mut().push(event.tag().into()));
+        let record = seen.clone();
+        app.on_message(move |_, StatusChanged(state)| record.borrow_mut().push(format!("{:?}", state.status)));
+        let (revision, revisions) = tokio::sync::watch::channel(0);
+        let (signal, signals) = tokio::sync::broadcast::channel(16);
+        let (status, statuses) = tokio::sync::watch::channel(state(Status::Connecting));
+
+        let proxy = app.proxy();
+        while proxy.post(|_| {}) != Err(ProxyError::Full) {}
+        pump(&app, Wakeups { revisions, signals, pending }, Some(statuses));
+        let send = |round: u64, kind: &str, next: Status| {
+            // A pump that stopped has dropped the receivers.
+            let _ = revision.send(round);
+            let _ = signal.send(event(kind));
+            let _ = status.send(state(next));
+        };
+        send(1, "server.connected", Status::Connected);
+        std::thread::sleep(Duration::from_millis(100));
+        let arrived = |want: &[&str]| {
+            app.wait_until(Duration::from_secs(10), || {
+                want.iter().all(|want| seen.borrow().iter().any(|seen| seen == want))
+            })
+        };
+        assert!(arrived(&["data", "server.connected", "Connected"]), "after the queue drained: {:?}", seen.borrow());
+
+        seen.borrow_mut().clear();
+        send(2, "test.later", Status::Reconnecting);
+        assert!(arrived(&["data", "test.later", "Reconnecting"]), "later: {:?}", seen.borrow());
     }
 }

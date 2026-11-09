@@ -415,6 +415,7 @@ impl Manager {
         };
         let subscription = crate::features::events::subscribe(
             &tui,
+            ["plugin.updated"],
             bind!(self, |manager, _, event| {
                 if !matches!(event, V2Event::PluginUpdated(_)) {
                     return;
