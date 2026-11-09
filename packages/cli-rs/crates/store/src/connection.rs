@@ -332,6 +332,9 @@ fn is_signal(event: &V2Event) -> bool {
             | V2Event::TuiPromptAppend(_)
             | V2Event::SessionDeleted(_)
             | V2Event::SessionMoved(_)
+            // Forwarded to plugins' `on_event` (`opencode-session-usage`).
+            | V2Event::SessionCreated(_)
+            | V2Event::SessionUsageUpdated(_)
             // The tab strip's prompt pulse (E.12).
             | V2Event::SessionInboxEnqueued(_)
             // The notifications plugin (E.19a).

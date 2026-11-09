@@ -56,6 +56,7 @@ the boundary:
 | `storage_key(key)` | `storage_key(key)`; `Read::storage_get` and `Host::storage_set` on `plugin.<id>.<key>` |
 | event subscriptions (`api.event.on`) | `on_event(types, run(&dyn Host, &V2Event))` (1.4); the host sends `Request::Event` with the HTTP API's own event JSON |
 | `api.client` | `Host::fetch(Fetch { method, path, query, body }) -> RequestId` and `on_reply(run(&dyn Host, RequestId, Result<Value, String>))` (1.4) |
+| a timer's tick | `on_wake(run(&dyn Host))` (1.4): after the plugin's `Waker` woke the host, before its claims render again (`Request::Wake`, `Manifest::wake`) |
 | `on_dispose` | the instance is destroyed on deactivation |
 
 A `Line` is a list of spans with text, colors, and bold, italic, underline, and dim. A color is a theme token
@@ -95,7 +96,9 @@ order. `storage_set` shows to `storage_get` at once; the host writes the disk la
 `toast(Toast { variant, title, message, session })` shows a toast; with a `session` it offers "Open" unless that
 session's family is on screen. `attention(Attention { title, message, notify, sound })` sends a notification and plays
 a sound as the user's `attention` settings allow (`HostRequest::Attention`). `navigate(Route)` shows home, a session or
-a plugin's route. `dialog(Dialog)` shows a `Prompt`, whose text goes to its action as the input, or a `Panel { key,
+a plugin's route. `dialog(Dialog)` shows a `Prompt`, whose text goes to its action as the input, a `Select { title,
+placeholder, options, current, action }` (TS `dialog.select`), whose pick closes it and goes to its action as the
+input, or a `Panel { key,
 size, title, subtitle, body, actions, binds, bleed, centered }`, which changes in place while its key is open and keeps
 where its body is scrolled, or `Close { key }`, which closes that panel. A fetch's reply is any 2xx status's JSON body,
 or `null` without one. `copy(text, then)` copies and runs `then` once copied. `fetch` sends a request through the host's own
@@ -147,6 +150,9 @@ target is a TypeScript plugin and is listed as skipped (F16). Server-side TUI pl
 - Hot reload: the TUI watches `Loader::watch_dirs` (the `plugins` directories, each plugin directory, and the
   directory of each configured library) with `opencode_local::watch` and a 100 ms debounce (TS
   `context.tsx`), and reconciles on change. `OPENCODE_FILEWATCHER_DISABLE` turns it off (L09).
+- An external plugin with a built-in's ID replaces the built-in in its place, as TS's reconcile does
+  (`opencode-session-usage` replaces `opencode.sidebar.limit`, between the context and MCP sections); unloading it
+  brings the built-in back there.
 - The registry keeps an external plugin's place on reload, so slot order holds. `plugins` directives after
   its entry (all of them, for a discovered plugin) decide whether it starts enabled; the plugin manager
   toggles it.
@@ -170,3 +176,9 @@ draws differently (the reload tests), and `abi-1-0`, `minor-newer`, `major-2`, a
 to target other ABI versions. The tests build each variant once per test run into `target/sample-plugin`:
 the loader's unit tests in `crates/plugin/src/loader/native/tests.rs`, and the TUI tests in
 `crates/tui/tests/all/plugins.rs`.
+
+Three real TS TUI plugins are ported the same way, on `opencode-plugin-abi` alone: `subagents-sidebar`
+(`opencode-subagents-sidebar`), `force-input` (`@mynameistito/opencode-force-input`) and `session-usage`
+(`opencode-session-usage`). `crates/tui/tests/all/ports.rs` builds each into `target/sample-plugin`, loads it from a
+`plugins` directory into the TUI, and checks what it draws and sends. The host forwards `session.created` and
+`session.usage.updated` to `on_event` for the usage port.

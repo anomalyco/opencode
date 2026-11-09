@@ -1,4 +1,4 @@
-//! The plugins' dialogs ([`abi::Dialog`]): a prompt, and a live panel, which changes in place while its key is open
+//! The plugins' dialogs ([`abi::Dialog`]): a prompt, a list to pick from, and a live panel, which changes in place while its key is open
 //! (TS `/btw`'s `Answer`: the header, a body that scrolls, at most 60% of the screen high, and footer actions).
 
 use std::cell::RefCell;
@@ -11,6 +11,7 @@ use opencode_ui::dialog::{
 };
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::prompt::{PromptProps, prompt};
+use opencode_ui::select::{SelectOption, SelectProps};
 use opencode_ui::theme::Theme;
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
@@ -46,6 +47,7 @@ pub fn show(tui: &Tui, id: &str, dialog: abi::Dialog) {
                 tui.dialogs.clear();
             }
         }
+        abi::Dialog::Select(select) => pick(tui, id, select),
     }
 }
 
@@ -74,6 +76,39 @@ fn ask(tui: &Tui, id: &str, title: String, placeholder: Option<String>, action: 
                 },
             );
             view
+        },
+        None,
+        DialogOptions::default(),
+    );
+}
+
+/// TS `dialog.select`: picking an option closes the list, then runs the action with the option's value.
+fn pick(tui: &Tui, id: &str, select: abi::Select) {
+    let (weak, id) = (tui.weak(), id.to_owned());
+    tui.dialogs.replace(
+        move |cx| {
+            let options = select
+                .options
+                .iter()
+                .map(|option| {
+                    let mut item = SelectOption::new(option.title.clone(), option.value.clone());
+                    item.description = option.description.clone();
+                    item.footer = option.footer.clone();
+                    item.category = option.category.clone();
+                    item.disabled = option.disabled;
+                    item
+                })
+                .collect();
+            let mut props = SelectProps::new(select.title.clone(), options);
+            props.placeholder = select.placeholder.clone();
+            props.current = select.current.clone();
+            let (weak, id, action) = (weak.clone(), id.clone(), select.action.clone());
+            props.on_select = Some(Rc::new(move |option: &SelectOption<String>| {
+                let Some(tui) = weak.upgrade() else { return };
+                tui.dialogs.clear();
+                run(&tui, &id, &action, Some(&option.value));
+            }));
+            opencode_ui::select::select(cx, props).0
         },
         None,
         DialogOptions::default(),
