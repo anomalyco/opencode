@@ -16,6 +16,7 @@ import { sessionFormRequest, sessionPermissionRequest, sessionTreeIDs } from "@/
 import { notifySessionTabsRemoved } from "./session-events"
 import { errorMessage } from "@/shell/layout/helpers"
 import { showToast } from "@/shell/notifications/toast"
+import { createSessionRenamer } from "@/session/commands/rename-session"
 import { workingSince } from "./inbox-working"
 import {
   INITIAL_INBOX_BRANCH_STATE,
@@ -66,6 +67,8 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
   const tabs = useTabs()
   const language = useLanguage()
   const queryClient = useQueryClient()
+
+  const rename = createSessionRenamer()
 
   const [clock, setClock] = createStore({ second: Date.now(), minute: Date.now() })
   const timer = setInterval(() => setClock("minute", Date.now()), 60_000)
@@ -456,15 +459,7 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
       if (!entry.ctx.data.session.get(entry.session.id)) entry.ctx.data.session.remember(entry.session)
       entry.ctx.notification.session.markRead(entry.session.id)
     },
-    rename: async (entry: InboxEntry, title: string) => {
-      await entry.ctx.sdk.api.session.update({ sessionID: entry.session.id, title })
-      entry.ctx.data.session.remember({ ...(entry.ctx.data.session.get(entry.session.id) ?? entry.session), title })
-      entry.ctx.data.session.invalidate(entry.session.id)
-      void entry.ctx.data.session.sync(entry.session.id).catch(() => undefined)
-      void queryClient.invalidateQueries({ queryKey: ["home-sessions", entry.conn], exact: true })
-      void queryClient.invalidateQueries({ queryKey: ["inbox-sessions", entry.conn], exact: true })
-      void queryClient.invalidateQueries({ queryKey: ["inbox-archived-sessions", entry.conn], exact: true })
-    },
+    rename: (entry: InboxEntry, title: string) => rename(entry.server, entry.session, title),
     archive: (entry: InboxEntry) =>
       entry.ctx.sdk.api.session
         .update({ sessionID: entry.session.id, archived: true })

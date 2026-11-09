@@ -1858,6 +1858,39 @@ test("opening a session from the inbox keeps the list's scroll position and rows
   expect(await list.evaluate((element) => element.scrollTop)).toBe(offset)
 })
 
+test("renaming an inbox card updates the same session on Home", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "RenameInbox",
+    sessions: [
+      { id: "ses_rename_inbox", title: "Original inbox title" },
+      { id: "ses_rename_kept", title: "Unchanged title" },
+    ],
+    seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
+  })
+  await page.goto("/")
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const home = page.locator('[data-component="home-session-row-container"][data-session-id="ses_rename_inbox"]')
+
+  await expect(home).toContainText("Original inbox title")
+  await inbox
+    .locator('[data-slot="sidebar-inbox-item"]')
+    .filter({ hasText: "Original inbox title" })
+    .click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Rename", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+
+  await dialog.getByRole("textbox").fill("Renamed inbox title")
+  await dialog.getByRole("button", { name: "Save", exact: true }).click()
+  await expect(dialog).toBeHidden()
+  await expect(
+    inbox.locator('[data-slot="sidebar-inbox-item"]').filter({ hasText: "Renamed inbox title" }),
+  ).toHaveCount(1)
+  await expect(inbox.getByText("Original inbox title", { exact: true })).toHaveCount(0)
+  await expect(inbox.getByText("Unchanged title", { exact: true })).toBeVisible()
+  await expect(home).toContainText("Renamed inbox title")
+})
+
 test("the inbox Archived dialog searches only archived sessions and restores the selected session", async ({
   page,
 }) => {
