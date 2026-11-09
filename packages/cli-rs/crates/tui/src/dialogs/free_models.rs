@@ -87,7 +87,7 @@ fn options(
                     option.footer = Some("*".to_owned());
                     option.footer_fg = Some(marker);
                 }
-                option.detail = Some(model::detail(model, false, None));
+                option.detail = Some(model::detail(model, false));
                 option
             })
             .collect()
