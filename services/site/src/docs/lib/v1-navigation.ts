@@ -4,13 +4,13 @@ import { docsHref, type DocsSection } from "./navigation"
 
 /**
  * The V1 docs' languages, as their Starlight app had them (packages/web/astro.config.mjs): the folder
- * and the name, with `<html lang>` and the site's strings for the shell (src/i18n) where they aren't
- * the folder's name. Bosnian has no site strings, so its shell is English.
+ * and the name, with `<html lang>` and the site's strings (src/i18n) where they aren't the folder's
+ * name. The site has no Bosnian; src/i18n/bs.ts has the strings a docs page shows.
  */
 export const v1Locales: V1Locale[] = [
   { path: "", label: "English" },
   { path: "ar", label: "العربية" },
-  { path: "bs", label: "Bosanski", site: "en" },
+  { path: "bs", label: "Bosanski" },
   { path: "da", label: "Dansk" },
   { path: "de", label: "Deutsch" },
   { path: "es", label: "Español" },
@@ -52,26 +52,6 @@ const groupTitles: Record<string, readonly string[]> = {
   "zh-tw": ["使用", "設定", "開發"],
 }
 
-/** The callouts' labels (note, tip, caution) in each language, as Starlight translated them. English and Bosnian use the site's. */
-export const asideTitles: Record<string, readonly string[]> = {
-  ar: ["ملاحظة", "نصيحة", "تنبيه"],
-  da: ["Note", "Tip", "Bemærk"],
-  de: ["Hinweis", "Tipp", "Achtung"],
-  es: ["Nota", "Consejo", "Precaución"],
-  fr: ["Note", "Astuce", "Attention"],
-  it: ["Nota", "Consiglio", "Attenzione"],
-  ja: ["ノート", "ヒント", "注意"],
-  ko: ["참고", "팁", "주의"],
-  nb: ["Merknad", "Tips", "Advarsel"],
-  pl: ["Notatka", "Wskazówka", "Uwaga"],
-  "pt-br": ["Nota", "Dica", "Cuidado"],
-  ru: ["Заметка", "Совет", "Осторожно"],
-  th: ["หมายเหตุ", "เคล็ดลับ", "คำเตือน"],
-  tr: ["Not", "İpucu", "Dikkat"],
-  "zh-cn": ["注意", "提示", "警告"],
-  "zh-tw": ["注意", "提示", "警告"],
-}
-
 /** A V1 page's language, from its slug's first segment (`ja/config`), and its slug in English (`config`). */
 export function v1Page(slug: string) {
   const [first, ...rest] = slug.split("/")
@@ -102,7 +82,7 @@ const named: Record<string, { title: string; href?: string }> = {
 
 /**
  * The V1 docs' one section in a language: its pages named by their titles there (`titles`, by English
- * slug), as Starlight named them. Pages it doesn't have (policies, references) stay in English only.
+ * slug), as Starlight named them.
  */
 export function v1Section(locale: V1Locale, titles: Map<string, string>): DocsSection {
   return {

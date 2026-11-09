@@ -1,5 +1,5 @@
 import { For, Show, type JSX } from "solid-js"
-import { DocsLockup, type DocsVersion } from "~/component/site/docs-lockup"
+import { DocsLockup, docsSectionName, type DocsVersion } from "~/component/site/docs-lockup"
 import { DocsVersionNotice } from "~/component/site/docs-version-notice"
 import { GitHubLink } from "~/component/site/github-link"
 import { Chevron, NewTab, SearchIcon } from "~/component/site/icons"
@@ -11,6 +11,8 @@ import { OnThisPage } from "~/component/site/on-this-page"
 import { defaultRootAttributes, themeScript } from "~/component/site/preload-settings"
 import { config } from "~/config"
 import { useI18n } from "~/context/i18n"
+import type { I18n } from "~/context/i18n-context"
+import { parseLocale } from "~/lib/language"
 import { latestDocs, type DocsSet } from "../config"
 import { DocsFooter } from "../components/DocsFooter"
 import { DocsSearchDialog } from "../components/DocsSearchDialog"
@@ -135,7 +137,8 @@ export function DocsLayout(props: {
           data-layout="docs"
           data-theme="system"
           data-docs-base={props.set.base}
-          data-locale={props.v1?.locale.path ? (props.v1.locale.site ?? props.v1.locale.path) : undefined}
+          data-locale={parseLocale(props.v1?.locale.site ?? props.v1?.locale.path) ?? undefined}
+          data-strings={JSON.stringify(clientStrings(i18n))}
           {...rootAttributes()}
         >
           <script innerHTML={themeMigration + themeScript(false)} />
@@ -149,7 +152,7 @@ export function DocsLayout(props: {
               type="button"
               data-slot="search-button"
               data-search-open
-              aria-label="Search documentation"
+              aria-label={i18n.t("docs.search.open")}
               aria-haspopup="dialog"
             >
               <SearchIcon />
@@ -190,7 +193,7 @@ export function DocsLayout(props: {
                 and keeps "Contents" in its accessible name. Hidden beside the rail on wide screens. */}
             <Show when={contents.length > 0}>
               <details data-component="contents-menu" data-docs-contents>
-                <summary aria-label={`Contents: ${contents[0].title}`}>
+                <summary aria-label={i18n.t("docs.contentsOf", { section: contents[0].title })}>
                   <span data-slot="label">
                     <span data-slot="word">{contents[0].title}</span>
                   </span>
@@ -220,22 +223,22 @@ export function DocsLayout(props: {
                   data-pagefind-body={props.noindex ? undefined : ""}
                   data-pagefind-meta={`title:${props.title}`}
                 >
-                  <h1 data-pagefind-meta={`section:${section.title}`}>{props.title}</h1>
+                  <h1 data-pagefind-meta={`section:${docsSectionName(i18n, section.title)}`}>{props.title}</h1>
                   {props.children}
                   <footer data-slot="article-footer" data-pagefind-ignore>
                     <Show when={previous || next}>
-                      <nav aria-label="Pages" data-component="pagination">
+                      <nav aria-label={i18n.t("docs.pages")} data-component="pagination">
                         <Show when={previous}>
                           {(page) => (
                             <a href={docsHref(page().slug, props.set)} rel="prev">
-                              <small>Previous</small> {page().title}
+                              <small>{i18n.t("docs.previous")}</small> {page().title}
                             </a>
                           )}
                         </Show>
                         <Show when={next}>
                           {(page) => (
                             <a href={docsHref(page().slug, props.set)} rel="next">
-                              <small>Next</small> {page().title}
+                              <small>{i18n.t("docs.next")}</small> {page().title}
                             </a>
                           )}
                         </Show>
@@ -245,16 +248,16 @@ export function DocsLayout(props: {
                       {(source) => (
                         <p data-component="edit-link">
                           <a href={`${config.github.repoUrl}/blob/dev/${source()}`} target="_blank" rel="noopener">
-                            Edit this page on GitHub
+                            {i18n.t("docs.editPage")}
                             <NewTab />
                           </a>
                           <button type="button" data-copy-markdown data-funnel-copy="page-markdown" data-state="idle">
                             <span data-slot="copy-labels" aria-hidden="true">
-                              <span data-label="idle">Copy as Markdown</span>
-                              <span data-label="copied">Copied</span>
-                              <span data-label="failed">Failed</span>
+                              <span data-label="idle">{i18n.t("docs.copyMarkdown")}</span>
+                              <span data-label="copied">{i18n.t("site.action.copied")}</span>
+                              <span data-label="failed">{i18n.t("site.code.failed")}</span>
                             </span>
-                            <span data-slot="sr-only">Copy page as Markdown</span>
+                            <span data-slot="sr-only">{i18n.t("docs.copyMarkdownLabel")}</span>
                           </button>
                           <span data-slot="sr-only" aria-live="polite" />
                         </p>
@@ -271,11 +274,11 @@ export function DocsLayout(props: {
                   type="button"
                   data-slot="search"
                   data-search-open
-                  aria-label="Search documentation"
+                  aria-label={i18n.t("docs.search.open")}
                   aria-haspopup="dialog"
                   aria-keyshortcuts="Meta+K Control+K /"
                 >
-                  <span>Search</span>
+                  <span>{i18n.t("site.search.label")}</span>
                   <kbd dir="ltr">⌘K</kbd>
                 </button>
                 <Show when={contents.length > 0}>
@@ -292,6 +295,33 @@ export function DocsLayout(props: {
       </body>
     </html>
   )
+}
+
+// What client.ts says in the page's language: the theme switch, copy and search feedback, the status
+// and the Contents bar. {{params}} stay for it to fill in.
+function clientStrings(i18n: I18n) {
+  return {
+    system: i18n.t("site.theme.system"),
+    light: i18n.t("site.theme.light"),
+    dark: i18n.t("site.theme.dark"),
+    cycle: i18n.t("site.theme.cycle"),
+    copied: i18n.t("site.code.copied"),
+    copyFailed: i18n.t("docs.copyFailed"),
+    codeFailed: i18n.t("site.code.failedHint"),
+    linkCopied: i18n.t("changelog.share.copied"),
+    markdownCopied: i18n.t("docs.markdownCopied"),
+    noResults: i18n.t("site.search.noResultsFor"),
+    empty: i18n.t("docs.search.empty"),
+    browse: i18n.t("docs.search.browse"),
+    operational: i18n.t("site.status.operationalHeadline"),
+    degraded: i18n.t("site.status.degradedHeadline"),
+    outage: i18n.t("site.status.outageHeadline"),
+    unknown: i18n.t("site.status.unknownHeadline"),
+    normal: i18n.t("site.status.operational"),
+    status: i18n.t("site.footer.status"),
+    statusPrefix: i18n.t("site.status.prefix"),
+    contents: i18n.t("docs.contentsOf"),
+  }
 }
 
 // The site root's settings attributes, with the values production renders (settings-defaults.json),

@@ -65,7 +65,7 @@ Zuerst wird die Remote-Konfiguration geladen, die als Basisschicht dient. Alle a
 
 Wenn Ihre Organisation beispielsweise MCP-Server bereitstellt, sind die standardmäßig deaktiviert:
 
-```json title="Remote config from .well-known/opencode"
+```json title="Remote-Konfiguration aus .well-known/opencode"
 {
   "mcp": {
     "jira": {

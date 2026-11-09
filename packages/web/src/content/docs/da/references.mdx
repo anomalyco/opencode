@@ -1,0 +1,157 @@
+---
+title: Referencer
+description: Tilføj lokale mapper og Git-repositories som projektreferencer.
+---
+
+Referencer giver OpenCode adgang til mapper uden for det aktuelle projekt. Brug dem til at gøre dokumentation, delte biblioteker, eksempler eller et andet repository tilgængeligt, mens du arbejder.
+
+Referencer konfigureres efter alias i `opencode.json` eller `opencode.jsonc`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and documentation conventions",
+    },
+    "sdk": {
+      "repository": "anomalyco/opencode-sdk-js",
+      "branch": "main",
+      "description": "Use for JavaScript SDK implementation details",
+    },
+  },
+}
+```
+
+---
+
+## Lokale mapper
+
+Brug `path` til at referere til en lokal mappe.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+    },
+  },
+}
+```
+
+Stier kan være:
+
+- Relative til den konfigurationsfil, der definerer referencen
+- Absolutte, såsom `/home/user/docs`
+- Relative til din hjemmemappe, såsom `~/docs`
+
+Du kan også bruge en kort strengform:
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": "../docs",
+  },
+}
+```
+
+---
+
+## Git-repositories
+
+Brug `repository` til at referere til et Git-repository. OpenCode henter repositoryet ind i sin lokale repository-cache og gør den udtjekkede kildekode tilgængelig som en referencemappe.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+`repository` accepterer Git-URL'er, host/path-referencer og GitHub-kortformen `owner/repo`. Det valgfrie felt `branch` vælger en branch eller ref. Uden `branch` bruger OpenCode repositoryets standardbranch.
+
+Du kan bruge den korte strengform, når du ikke har brug for en branch, en beskrivelse eller andre indstillinger:
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+  },
+}
+```
+
+:::note
+Git-referencer opdateres asynkront. Et nyligt konfigureret repository kan være et øjeblik om at blive færdig med at klone eller opdatere.
+:::
+
+---
+
+## Beskriv brugen
+
+Tilføj `description` for at forklare, hvornår en agent skal bruge en reference.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when implementing UI components or design tokens",
+    },
+  },
+}
+```
+
+OpenCode inkluderer referencer med beskrivelser i agentens kontekst. Beskrivelser bør være korte og specifikke nok til at skelne mellem referencer med lignende indhold. Referencer uden beskrivelser er stadig tilgængelige via autofuldførelse og direkte brug, men bliver ikke præsenteret for agenter.
+
+---
+
+## Skjul autofuldførelsesposter
+
+Sæt `hidden` til `true` for at udelade en reference fra `@`-autofuldførelsen i TUI'en.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal implementation details",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` påvirker kun autofuldførelse. En skjult reference med en beskrivelse er stadig inkluderet i agentens kontekst.
+
+---
+
+## Brug referencer
+
+Konfigurerede referencer vises i `@`-autofuldførelsen i TUI'en. Skriv `@alias` for at vedhæfte referencens rod eller `@alias/` for at søge efter filer i den.
+
+```text
+Compare this implementation with @sdk/src/client.ts
+```
+
+Agenter modtager også de opløste stier og beskrivelser af konfigurerede referencer med beskrivelser i deres systemkontekst, så de kan undersøge en reference, når den er relevant, uden at du skal vedhæfte den manuelt.
+
+OpenCode tillader automatisk referencemapper gennem sin tilladelsesgrænse for eksterne mapper. Almindelige værktøjstilladelser gælder stadig; for eksempel får en agent, der ikke kan redigere filer, ikke redigeringsadgang, fordi en mappe er konfigureret som reference.
+
+---
+
+## Konfigurationsfelter
+
+| Felt          | Lokal | Git | Beskrivelse                                          |
+| ------------- | ----- | --- | ---------------------------------------------------- |
+| `path`        | Ja    | Nej | Lokal referencemappe                                 |
+| `repository`  | Nej   | Ja  | Git-URL, host/path eller GitHub-værdien `owner/repo` |
+| `branch`      | Nej   | Ja  | Valgfri Git-branch eller ref                         |
+| `description` | Ja    | Ja  | Vejledning om, hvornår referencen skal bruges        |
+| `hidden`      | Ja    | Ja  | Skjul referencen fra `@`-autofuldførelsen i TUI'en   |
+
+Referencealiaser må ikke være tomme eller indeholde `/`, mellemrum, backticks eller kommaer.

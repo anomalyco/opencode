@@ -64,7 +64,7 @@ Konfiguracja zdalna jest ładowana jako pierwsza i stanowi bazę. Wszystkie inne
 
 Na przykład, jeśli Twoja organizacja udostępnia serwery MCP, które są domyślnie wyłączone:
 
-```json title="Remote config from .well-known/opencode"
+```json title="Konfiguracja zdalna z .well-known/opencode"
 {
   "mcp": {
     "jira": {
