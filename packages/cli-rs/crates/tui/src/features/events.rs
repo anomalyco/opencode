@@ -13,6 +13,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 
 use opencode_api::generated::{McpServerStatus, V2Event};
@@ -35,9 +36,29 @@ pub struct Events {
 }
 
 /// One event the store passed on, posted to the UI thread.
-pub(crate) struct Signal(pub V2Event);
+#[derive(Clone)]
+pub(crate) struct Signal(pub Arc<V2Event>);
+
+/// The event types [`handle`] acts on, which the store therefore passes on. Keep in step with [`handle`] and the
+/// handlers it calls.
+const HANDLED: [&str; 12] = [
+    "server.connected",
+    "session.deleted",
+    "session.inbox.enqueued",
+    "session.execution.succeeded",
+    "worktree.updated",
+    "persistent-pty.added",
+    "persistent-pty.removed",
+    "persistent-pty.updated",
+    "tui.command.execute",
+    "tui.toast.show",
+    "tui.prompt.append",
+    "tui.session.select",
+];
 
 pub fn install(tui: &Tui) {
+    // For the TUI's lifetime.
+    std::mem::forget(tui.data.listen(HANDLED));
     tui.app.on_message(bind!(tui, |tui, _, Signal(event)| {
         handle(&tui, event);
         let subscribers: Vec<_> =
@@ -48,13 +69,24 @@ pub fn install(tui: &Tui) {
     }));
 }
 
-/// Calls `subscriber` with each store signal, after the TUI's own handling, until the disposer drops.
-pub fn subscribe(tui: &Tui, subscriber: impl Fn(&Tui, &V2Event) + 'static) -> Disposer {
+/// Calls `subscriber` with each store signal, after the TUI's own handling, until the disposer drops. The store passes
+/// on the events of each type in `types`; `subscriber` also sees the types other subscribers asked for.
+pub fn subscribe<S: Into<String>>(
+    tui: &Tui,
+    types: impl IntoIterator<Item = S>,
+    subscriber: impl Fn(&Tui, &V2Event) + 'static,
+) -> Disposer {
     let id = tui.events.next.get();
     tui.events.next.set(id + 1);
     tui.events.subscribers.borrow_mut().push((id, Rc::new(subscriber)));
     let subscribers = Rc::downgrade(&tui.events.subscribers);
-    Disposer::new(bind!(subscribers, |subscribers| subscribers.borrow_mut().retain(|(other, _)| *other != id)))
+    let listening = tui.data.listen(types);
+    Disposer::new(move || {
+        drop(listening);
+        if let Some(subscribers) = subscribers.upgrade() {
+            subscribers.borrow_mut().retain(|(other, _)| *other != id);
+        }
+    })
 }
 
 pub fn sync(tui: &Tui, changes: &Changes) {

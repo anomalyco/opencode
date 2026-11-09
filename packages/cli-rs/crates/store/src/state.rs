@@ -27,8 +27,8 @@ use crate::inbox::PendingUpdate;
 use crate::location::{Location, LocationData};
 use crate::messages::Transcript;
 
-/// How many [`Data::signals`] events a slow receiver may fall behind. They are every event but the deltas, so one
-/// batch may hold hundreds (a burst of `filesystem.changed`).
+/// How many [`Data::signals`] events a slow receiver may fall behind. One batch may hold hundreds of a listened type
+/// (a burst of `filesystem.changed`).
 const SIGNALS: usize = 1024;
 
 /// A store error. Shared, because one keyed read answers every caller.
@@ -257,7 +257,9 @@ pub(crate) struct Inner {
     state: Mutex<State>,
     revision: watch::Sender<u64>,
     /// The events views act on themselves, sent after their batch is applied.
-    pub(crate) signals: broadcast::Sender<opencode_api::generated::V2Event>,
+    pub(crate) signals: broadcast::Sender<Arc<opencode_api::generated::V2Event>>,
+    /// How many [`Listening`]s want each event type on [`Data::signals`].
+    pub(crate) listened: Mutex<HashMap<String, usize>>,
     /// False while the event connection is not connected; follow-up reads are skipped then.
     pub(crate) online: AtomicBool,
     disposed: AtomicBool,
@@ -284,6 +286,7 @@ impl Data {
                 state: Mutex::new(state),
                 revision: watch::channel(0).0,
                 signals: broadcast::channel(SIGNALS).0,
+                listened: Mutex::default(),
                 online: AtomicBool::new(true),
                 disposed: AtomicBool::new(false),
                 on_error: Mutex::new(None),
@@ -333,11 +336,21 @@ impl Data {
         self.inner.revision.subscribe()
     }
 
-    /// Receives every event but the streaming deltas, for the views that handle one themselves (`tui.*`,
-    /// `session.deleted`) and the plugins' `on_event`, after the store applied their batch. A receiver that falls
-    /// behind skips the oldest.
-    pub fn signals(&self) -> broadcast::Receiver<opencode_api::generated::V2Event> {
+    /// Receives the events of each type a [`Listening`] wants, for the views that handle one themselves (`tui.*`,
+    /// `session.deleted`) and the plugins' `on_event`, after the store applied their batch. Streaming deltas are never
+    /// sent. A receiver that falls behind skips the oldest.
+    pub fn signals(&self) -> broadcast::Receiver<Arc<opencode_api::generated::V2Event>> {
         self.inner.signals.subscribe()
+    }
+
+    /// Sends the events of each type in `tags` on [`Data::signals`] until the returned guard drops.
+    pub fn listen<S: Into<String>>(&self, tags: impl IntoIterator<Item = S>) -> Listening {
+        let tags: Vec<String> = tags.into_iter().map(Into::into).collect();
+        let mut listened = lock(&self.inner.listened);
+        for tag in &tags {
+            *listened.entry(tag.clone()).or_default() += 1;
+        }
+        Listening { inner: Arc::downgrade(&self.inner), tags }
     }
 
     /// The current revision and what changed after `seen`.
@@ -553,7 +566,31 @@ impl std::ops::DerefMut for Locked<'_> {
     }
 }
 
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+/// Event types [`Data::signals`] sends while it lives; see [`Data::listen`].
+#[must_use = "the types stop being sent when this drops"]
+pub struct Listening {
+    inner: std::sync::Weak<Inner>,
+    tags: Vec<String>,
+}
+
+impl Drop for Listening {
+    fn drop(&mut self) {
+        let Some(inner) = self.inner.upgrade() else {
+            return;
+        };
+        let mut listened = lock(&inner.listened);
+        for tag in &self.tags {
+            if let Some(count) = listened.get_mut(tag) {
+                *count -= 1;
+                if *count == 0 {
+                    listened.remove(tag);
+                }
+            }
+        }
+    }
+}
+
+pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 

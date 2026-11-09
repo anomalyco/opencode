@@ -114,7 +114,7 @@ pub fn set_source(tui: &Rc<Tui>, source: Rc<dyn Source>) {
         ],
     );
     // For the TUI's lifetime.
-    crate::features::events::subscribe(tui, |tui, event| {
+    crate::features::events::subscribe(tui, ["installation.update-available", "installation.updated"], |tui, event| {
         let (kind, version) = match event {
             V2Event::InstallationUpdateAvailable(event) => (Kind::Available, event.data.version.clone()),
             V2Event::InstallationUpdated(event) => (Kind::Installed, event.data.version.clone()),

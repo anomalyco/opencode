@@ -30,6 +30,7 @@ mod plugins;
 mod ports;
 mod prompt;
 mod prompt_footer;
+mod pump;
 mod queue;
 mod reconnect;
 mod resize;
