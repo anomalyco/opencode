@@ -170,3 +170,17 @@ fn the_file_tree_and_menu_are_freed_with_their_view() {
     h.app.render();
     assert_eq!(Rc::strong_count(&marker), 1);
 }
+
+// Expected (carbon-1): a plugin toggled in `/plugins` mounts the session again with its docked panel, which must not
+// take the keys from the open manager.
+#[test]
+fn a_docked_panel_does_not_take_the_plugin_manager_search() {
+    let h = mount(support::session_route("ses_a"));
+    h.wait_for("Review");
+    h.tui.keymap.dispatch("diff.open", None);
+    h.wait_for("src/main.rs");
+    crate::system::toggle_a_plugin(&h);
+    h.wait_for("src/main.rs");
+    h.app.type_text("zzqq");
+    h.wait_for("No results found");
+}

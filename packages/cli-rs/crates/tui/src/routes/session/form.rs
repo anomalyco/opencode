@@ -68,6 +68,13 @@ impl Host {
         self.current.borrow().is_some()
     }
 
+    /// The shown form's editor, when its field takes typing.
+    pub fn editor(&self) -> Option<Textarea> {
+        let current = self.current.borrow();
+        let editor = current.as_ref()?.0.editor.borrow();
+        editor.as_ref().map(|(_, textarea)| textarea.clone())
+    }
+
     /// Shows `form`, or nothing.
     pub fn show(&self, form: Option<&Form>) {
         let current = self.current.borrow().as_ref().map(|prompt| prompt.0.form.info.id.clone());
@@ -109,6 +116,10 @@ impl SessionForms {
 
     pub fn active(&self) -> bool {
         self.host.active()
+    }
+
+    pub fn editor(&self) -> Option<Textarea> {
+        self.host.editor()
     }
 
     /// `blocked`: a permission request shows instead.
@@ -1078,12 +1089,14 @@ impl Inner {
         }
         let view = self.view(&tui, &theme);
         self.root.add(&view);
-        // The editor takes the keys while the form is live; otherwise nothing behind the form may.
+        // The editor takes the keys while the form is live, or once the dialog over it closes; otherwise nothing
+        // behind the form may.
         let live = !tui.dialogs.is_open();
         match self.editor.borrow().as_ref() {
             Some((_, textarea)) if live => tui.app.focus(textarea),
-            _ if live => tui.app.blur(),
-            _ => {}
+            Some((_, textarea)) => tui.dialogs.refocus(textarea),
+            None if live => tui.app.blur(),
+            None => {}
         }
         tui.app.request_redraw();
     }
