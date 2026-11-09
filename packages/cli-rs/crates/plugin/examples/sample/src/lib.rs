@@ -3,8 +3,8 @@
 //! ticks and wakes the host, so the slot updates itself. The `v2` feature changes
 //! what it draws, so a rebuild proves hot reload. Each variant is its own feature, so cargo keeps every build.
 //!
-//! The fences ([`fence`]), the sidebar claim ([`slot`]), the home claims with their event handler ([`home`]), and a
-//! server request with a live panel ([`fetch`]) are on
+//! The fences ([`fence`]), the sidebar claim ([`slot`]), the home claims with their event handler ([`home`]), a
+//! server request with a live panel ([`fetch`]), and a prompt footer claim whose mounts fetch ([`prompt`]) are on
 //! the one API of ABI 1.4; the slot rows and the route are still the 1.3 surface. Callbacks reach the host only
 //! through the host they are called with. The `abi-1-3` feature builds [`v1_3`] instead: a plugin written against ABI
 //! 1.3, on a frozen copy of that crate; `abi-1-0-wire` exports it with the 1.0 table.
@@ -14,6 +14,7 @@
 mod fence;
 mod fetch;
 mod home;
+mod prompt;
 mod slot;
 #[cfg(feature = "abi-1-3")]
 mod v1_3;
@@ -63,6 +64,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     slot::setup(setup)?;
     home::setup(setup)?;
     fetch::setup(setup)?;
+    prompt::setup(setup)?;
     // Ticks every `tick_ms` (a second by default), `ticks` times (no limit by default), on a host that offers a
     // waker (ABI 1.3).
     let option = |name: &str| {

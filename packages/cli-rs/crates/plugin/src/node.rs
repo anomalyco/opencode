@@ -18,6 +18,8 @@ use crate::{Host, SlotInput, SlotMount, Slotted, slot};
 
 /// A slot claim's render on either path: in process it reads the host directly, over the C ABI it asks the plugin.
 pub type SlotRender<H> = Rc<dyn Fn(&H, &abi::SlotInput, &abi::Changed) -> abi::Render>;
+/// A slot claim's mount handler on either path: `true` as a claim mounts, before its first render, `false` as it goes.
+pub type MountFn<H> = Rc<dyn Fn(&H, &abi::SlotInput, bool)>;
 
 /// A mounted slot claim of the one API: the node its render returned, rendered again with each change batch, each
 /// change the host pushes ([`Host::watch`]), and each wake. Its widgets are rebuilt only when the node differs. The
@@ -26,6 +28,7 @@ pub struct Mount<H: Host> {
     root: View,
     owner: Weak<H>,
     render: SlotRender<H>,
+    mount: Option<MountFn<H>>,
     /// The slot it renders in.
     path: String,
     slot_input: SlotInput,
@@ -42,14 +45,32 @@ pub struct Mount<H: Host> {
 }
 
 impl<H: Host> Mount<H> {
-    pub fn new(host: &H, owner: Weak<H>, path: &str, input: &SlotInput, render: SlotRender<H>) -> Rc<Self> {
+    pub fn new(
+        host: &H,
+        owner: Weak<H>,
+        path: &str,
+        slot_input: &SlotInput,
+        render: SlotRender<H>,
+        on_mount: Option<MountFn<H>>,
+    ) -> Rc<Self> {
+        let input = abi::SlotInput {
+            session_id: slot_input.session_id.clone(),
+            prompt: slot_input
+                .prompt
+                .as_ref()
+                .map(|prompt| abi::PromptInput { shell: prompt.shell, show_details: prompt.show_details }),
+        };
+        if let Some(on_mount) = &on_mount {
+            on_mount(host, &input, true);
+        }
         let mount = Rc::new(Self {
             root: View::new(host.app()).column().shrink(0.0).visible(false),
             owner: owner.clone(),
             render,
+            mount: on_mount,
             path: path.to_owned(),
-            slot_input: input.clone(),
-            input: abi::SlotInput { session_id: input.session_id.clone() },
+            slot_input: slot_input.clone(),
+            input,
             shown: RefCell::new(None),
             slots: RefCell::default(),
             hovers: RefCell::default(),
@@ -111,6 +132,14 @@ impl<H: Host> Mount<H> {
             crate::settle(host, &live);
         }
         host.app().request_redraw();
+    }
+}
+
+impl<H: Host> Drop for Mount<H> {
+    fn drop(&mut self) {
+        if let (Some(on_mount), Some(host)) = (&self.mount, self.owner.upgrade()) {
+            on_mount(&host, &self.input, false);
+        }
     }
 }
 

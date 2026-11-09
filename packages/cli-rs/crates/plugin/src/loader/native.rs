@@ -46,7 +46,7 @@ use serde::de::DeserializeOwned;
 
 use super::Backend;
 use crate::activation::{Activation, Drawn, Wake};
-use crate::node::{Fences, Scroll, SlotRender, lines_widget, theme_color};
+use crate::node::{Fences, MountFn, Scroll, SlotRender, lines_widget, theme_color};
 use crate::slot::placement;
 use crate::{Definition, ErrorFn, Host, Setup, Slotted, defer, next_request, route, tui_command};
 
@@ -480,6 +480,12 @@ fn handle<H: Host>(ctx: &mut Ctx<H>, request: HostRequest) -> Result<serde_json:
         }
         HostRequest::Dialog { dialog } => ctx.effects.push(Effect::Dialog(dialog)),
         HostRequest::Copy { text, then } => ctx.effects.push(Effect::Copy(text, then)),
+        HostRequest::Interactive => return read(ctx, |read| serde_json::to_value(read.interactive())),
+        HostRequest::Shortcut { name } => return read(ctx, |read| serde_json::to_value(read.shortcut(&name))),
+        HostRequest::DialogOpen { key } => {
+            let open = ctx.host.upgrade().is_some_and(|host| host.dialog_open(&ctx.id, &key));
+            return Ok(serde_json::Value::Bool(open));
+        }
     }
     Ok(serde_json::Value::Null)
 }
@@ -675,11 +681,17 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
         // A 1.4 claim renders through `Render`; a 1.3 claim gets the 1.3 request.
         if manifest.render >= abi::RENDER && slot.render {
             let activation = guest.activation.clone();
+            let mount = slot.mount.then(|| {
+                let guest = guest.clone();
+                Rc::new(move |_: &H, input: &abi::SlotInput, mounted: bool| {
+                    guest.handle("on-mount", &Request::Mount { claim, input: input.clone(), mounted });
+                }) as MountFn<H>
+            });
             let render: SlotRender<H> = Rc::new(move |_, input, changed| {
                 let request = Request::Render { claim, input: input.clone(), changed: changed.clone() };
                 guest.request("render-slot", &request).unwrap_or(abi::Render::Hide)
             });
-            setup.claim(placement(slot), render, &activation);
+            setup.claim(placement(slot), render, mount, &activation);
             continue;
         }
         setup.slot(placement(slot), move |host, input| {
