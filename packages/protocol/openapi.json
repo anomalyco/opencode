@@ -345,16 +345,6 @@
                 }
               }
             }
-          },
-          "503": {
-            "description": "ServiceUnavailableError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
-                }
-              }
-            }
           }
         },
         "description": "Retrieve currently registered agents.",
@@ -9955,16 +9945,6 @@
                 }
               }
             }
-          },
-          "503": {
-            "description": "ServiceUnavailableError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
-                }
-              }
-            }
           }
         },
         "description": "Retrieve currently registered skills.",
@@ -19056,6 +19036,18 @@
           },
           "instructions": {
             "type": "string"
+          },
+          "criteria": {
+            "type": "object",
+            "properties": {
+              "true": {
+                "type": "string"
+              },
+              "false": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
           }
         },
         "required": ["type", "name", "instructions"],
