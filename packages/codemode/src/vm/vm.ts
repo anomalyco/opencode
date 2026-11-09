@@ -249,7 +249,8 @@ export class Vm {
 
   depth = 0
   fuel = INITIAL_FUEL
-  sliceStart = 0
+  /** When the current slice began; -1 until the next `run` starts one. Host stops don't end a slice, only a yield does. */
+  sliceStart = -1
   sliced = false
   outcome: Completion | undefined = undefined
   /** Round-trip test mode (task C): slice after this many fuel ticks, so the run is saved and restored all through. */
@@ -319,7 +320,7 @@ export class Vm {
    * other; the outcome; the next job; one inbox completion; wait for running calls; stuck.
    */
   run(): Stop {
-    this.sliceStart = performance.now()
+    if (this.sliceStart < 0) this.sliceStart = performance.now()
     if (this.tripEvery > 0) this.fuel = this.tripEvery
     const sched = this.scheduler
     const hosts = this.hosts
@@ -327,6 +328,7 @@ export class Vm {
       if (hosts.queued.length > 0) return { kind: "host", calls: hosts.handOver() }
       if (this.sliced) {
         this.sliced = false
+        this.sliceStart = -1
         return { kind: "slice" }
       }
       const input = hosts.input
@@ -337,7 +339,15 @@ export class Vm {
       }
       if (this.frames.length > 0) {
         if (hosts.blocked !== undefined) return { kind: "host", calls: [] }
-        if (this.fuel <= 0) this.fuel = this.tripEvery || INITIAL_FUEL
+        // Fuel can run out on a call that then stopped for the host (a built-in or sync extension call costs fuel too):
+        // that's a slice point as well, or a loop of such calls would refill forever without yielding.
+        if (this.fuel <= 0) {
+          this.fuel = this.tripEvery || INITIAL_FUEL
+          if (this.tripEvery > 0 || performance.now() - this.sliceStart >= SLICE_MS) {
+            this.sliced = true
+            continue
+          }
+        }
         let signal = EXEC_DONE
         try {
           signal = this.exec()
@@ -420,7 +430,7 @@ export class Vm {
    * A synchronous extension call the program is in the middle of, from its `before` hook until its result is a
    * program value or its concurrent call is running: it holds live host values.
    */
-  get activeExtension(): { readonly path: string } | undefined {
+  get activeExtension(): { readonly key: string; readonly path: string } | undefined {
     return this.hosts.extension
   }
 

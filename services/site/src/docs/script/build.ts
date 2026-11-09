@@ -5,10 +5,10 @@
 // files (config.ts `files`).
 //
 // The pages render in a small server build of their own (render.tsx), outside the site's Worker
-// bundle, which only serves the files (middleware.ts). The mode picks the restyle or the legacy pages
-// (config.ts `restyled`). On its own (CI, after `bun run generate`):
+// bundle, which only serves the files (middleware.ts). Every deploy builds the same docs. On its own
+// (CI, after `bun run generate`):
 //
-//   bun src/docs/script/build.ts [--mode dev|production] [--out <dir>]
+//   bun src/docs/script/build.ts [--out <dir>]
 import { cp, mkdir, rm } from "node:fs/promises"
 import path from "node:path"
 import { parseArgs } from "node:util"
@@ -17,24 +17,18 @@ import solid from "vite-plugin-solid"
 import { cssVariantsForProduction, devOnlyCss } from "../../../script/css-variants-plugin"
 import { foldSettingsForProduction } from "../../../script/fold-settings"
 import { config } from "../../config"
-import { base, files, restyled } from "../config"
+import { base, files } from "../config"
 import { docsHref, docsMarkdownHref } from "../lib/navigation"
 import type { docsSlugs, renderDocsMarkdown, renderDocsPage, renderLlmsTxt, renderSitemap } from "../render"
 import { docs } from "../vite"
 
-const args = parseArgs({ options: { mode: { type: "string", default: "production" }, out: { type: "string" } } })
-const mode = args.values.mode
-if (mode !== "dev" && mode !== "production") throw new Error(`Unknown --mode ${mode}; use dev or production`)
+const args = parseArgs({ options: { out: { type: "string" } } })
 const root = path.resolve(import.meta.dir, "../../..")
 const output = path.resolve(root, args.values.out ?? ".output/public")
 const cache = path.join(root, "node_modules/.cache/docs")
-const restyle = restyled(mode)
 const alias = { "~": path.join(root, "src") }
-// The restyle's stylesheet and script, or the legacy ones.
-const inputs = restyle
-  ? { stylesheet: "src/docs/styles/docs.css", script: "src/docs/client.ts" }
-  : { stylesheet: "src/docs/legacy/styles/global.css", script: "src/docs/legacy/client.ts" }
-// llms.txt and the sitemap list opencode.ai's URLs in every mode, as the pages' canonical links do:
+const inputs = { stylesheet: "src/docs/styles/docs.css", script: "src/docs/client.ts" }
+// llms.txt and the sitemap list opencode.ai's URLs on dev.opencode.ai too, as the pages' canonical links do:
 // search engines must not take dev.opencode.ai's for the real ones (src/lib/noindex.ts).
 const site = new URL(config.baseUrl)
 
@@ -50,7 +44,7 @@ await build({
   resolve: { alias },
   // The site's production CSS: the stylesheets for development tools empty, and only the settings
   // values production renders (the root's data-* attributes, DocsLayout.tsx).
-  plugins: restyle ? [devOnlyCss(), cssVariantsForProduction()] : [],
+  plugins: [devOnlyCss(), cssVariantsForProduction()],
   build: {
     outDir: path.join(cache, "client"),
     assetsDir: "_build",
@@ -66,7 +60,7 @@ const assets = {
   stylesheet: base + manifest[inputs.stylesheet].file,
   script: base + manifest[inputs.script].file,
 }
-if (restyle) await checkBudget()
+await checkBudget()
 
 await build({
   configFile: false,
@@ -78,7 +72,7 @@ await build({
   resolve: { alias },
   // Pages never hydrate, so no hydration markers. The site's components read their settings as
   // production does (script/fold-settings.ts).
-  plugins: [foldSettingsForProduction(), docs({ restyle }), solid({ ssr: true, solid: { hydratable: false } })],
+  plugins: [foldSettingsForProduction(), docs(), solid({ ssr: true, solid: { hydratable: false } })],
   build: {
     ssr: "src/docs/render.tsx",
     outDir: path.join(cache, "render"),
@@ -124,26 +118,25 @@ await Promise.all(
 
 const pagefind = path.join(output, base)
 await mkdir(pagefind, { recursive: true })
-// The restyle's phone Contents bar repeats the page's headings, and code headers and screen reader
-// text ("Copy", "Copied", "Opens in a new tab") aren't content, so they stay out of the index.
-const exclude = restyle
-  ? [
-      "--exclude-selectors",
-      "[data-component=contents-menu], [data-slot=code-head], [data-component=code-tabs] [data-slot=copy], [data-slot=sr-only]",
-    ]
-  : []
-await Bun.$`${path.join(root, "node_modules/.bin/pagefind")} --site ${pagefind} ${exclude}`.quiet()
+// The phone Contents bar repeats the page's headings, and code headers and screen reader text
+// ("Copy", "Copied", "Opens in a new tab") aren't content, so they stay out of the index.
+const exclude =
+  "[data-component=contents-menu], [data-slot=code-head], [data-component=code-tabs] [data-slot=copy], [data-slot=sr-only]"
+await Bun.$`${path.join(root, "node_modules/.bin/pagefind")} --site ${pagefind} --exclude-selectors ${exclude}`.quiet()
 checkFileNames()
 await checkAssetPrefix()
 await Bun.$`bun ${path.join(import.meta.dir, "validate-links.ts")} ${output}`
-console.log(`docs: built ${render.docsSlugs.length} pages (${mode}${restyle ? ", restyle" : ""})`)
+console.log(`docs: built ${render.docsSlugs.length} pages`)
 
 /**
- * Fails when the restyle's first JavaScript or stylesheet outgrows its budget (gzipped): every docs
+ * Fails when the docs' first JavaScript or stylesheet outgrows its budget (gzipped): every docs
  * page loads both, and nothing else is render-blocking.
  */
 async function checkBudget() {
-  const budgets = { [inputs.script]: 6.5 * 1024, [inputs.stylesheet]: 28 * 1024 }
+  // The script carries the shared nav menus (packages/nav-menus: the logo menu with its inlined brand files, and the
+  // product menu), about 4 kB of it.
+  // The stylesheet carries the phone bars (the sticky section row and the Contents bar under it), about 0.3 kB.
+  const budgets = { [inputs.script]: 11 * 1024, [inputs.stylesheet]: 29 * 1024 }
   const files = await Array.fromAsync(new Bun.Glob("_build/*.js").scan({ cwd: path.join(cache, "client") }))
   if (files.length !== 1) throw new Error(`docs: the script split into ${files.length} files: ${files.join(", ")}`)
   for (const [input, budget] of Object.entries(budgets)) {

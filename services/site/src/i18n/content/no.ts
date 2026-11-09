@@ -262,17 +262,21 @@ export const content = {
           title: "Alle MCP-klienter",
           body: "OpenCode, Claude Code, Cursor, Codex, Zed og mange flere.",
         },
-        "named-sessions": {
-          title: "Navngitte sesjoner",
-          body: "Hver sesjon beholder sine egne faner, også etter omstart.",
+        "all-your-logins": {
+          title: "Alle innloggingene dine",
+          body: "Agenter bruker nettstedene du allerede er logget inn på. Ingen nøkler, ingen oppsett.",
         },
         allowlists: { title: "Hvitelister", body: "Begrens fanene til en sesjon til nettstedene du oppgir." },
       },
       install:
-        "Én linje installerer Browse, legger det til i agentene den finner og kobler til utvidelsen. På Windows kjører du irm https://opencode.ai/browse/install.ps1 | iex. Eller be agenten din sette det opp.",
+        "Installer [Chrome-utvidelsen] først. Den guider deg gjennom resten av stegene. Vil du installere CLI-en direkte (det skal du ikke trenge), bruk en av disse.",
     },
   },
   apps: {
+    browse: {
+      category: "Nettleserstyring for agenter",
+      body: "La agenten din bruke den ekte nettleseren din, med innlogginger og faner.",
+    },
     opentunnel: { category: "Lokale tunneler", body: "Offentlige HTTPS-URL-er for lokale apper." },
     opentui: { category: "Bibliotek", body: "Et bibliotek for terminalgrensesnitt." },
     hex: { category: "Diktering", body: "Diktering rett på enheten for alle apper." },
@@ -288,7 +292,7 @@ export const content = {
     },
     subscriptions: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } },
     steps: {
-      download: { title: "Last ned", line: "Desktop, mobil eller terminal." },
+      download: { title: "Last ned", line: "Desktop, terminal eller mobil." },
       "use-free-models": {
         title: "Bruk gratis modeller",
         line: "OpenCode har et sett gratis modeller. Ingen konto trengs.",
@@ -475,7 +479,7 @@ export const content = {
       learnMore: "Les mer på [anoma.ly](site).",
       projects: {
         opencode: {
-          body: "Kodeagenten med åpen kildekode, med apper for skrivebord, mobil og terminal og et SDK. MIT-lisensiert, over 220 000 GitHub-stjerner.",
+          body: "Kodeagenten med åpen kildekode, med apper for skrivebord, terminal og mobil og et SDK. MIT-lisensiert, over 220 000 GitHub-stjerner.",
         },
         sst: {
           body: "Et rammeverk for å bygge fullstack-apper på din egen infrastruktur. MIT-lisensiert, åpent siden 2020, med over 26 000 GitHub-stjerner.",
@@ -497,10 +501,11 @@ export const content = {
     },
     about: {
       title: "Om OpenCode",
+      body: "Beskrivelser av OpenCode og produktene i lang og kort versjon, klare til å kopieres.",
       boilerplate: {
-        long: "OpenCode er en kodeagent med åpen kildekode. Den finnes som skrivebordsapp, mobilapp, terminal-UI og SDK, og fungerer med modeller fra alle leverandører, blant annet Claude, GPT og Gemini. OpenCode er MIT-lisensiert og laget av Anomaly. Den har over 220 000 GitHub-stjerner og mer enn 1 000 bidragsytere, og over 22 millioner utviklere bruker den hver måned.",
+        long: "OpenCode er en kodeagent med åpen kildekode. Den finnes som skrivebordsapp, terminal-UI, mobilapp og SDK, og fungerer med modeller fra alle leverandører, blant annet Claude, GPT og Gemini. OpenCode er MIT-lisensiert og laget av Anomaly. Den har over 220 000 GitHub-stjerner og mer enn 1 000 bidragsytere, og over 22 millioner utviklere bruker den hver måned.",
         short:
-          "OpenCode er en kodeagent med åpen kildekode fra Anomaly, med apper for skrivebord, mobil og terminal og et SDK.",
+          "OpenCode er en kodeagent med åpen kildekode fra Anomaly, med apper for skrivebord, terminal og mobil og et SDK.",
       },
       products: {
         "opencode-console": {

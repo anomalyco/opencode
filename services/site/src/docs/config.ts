@@ -7,9 +7,3 @@ export const base = "/docs/"
 // one of these names (script/build.ts checks), the Worker serves them before the docs middleware
 // (cloudflare.config.ts runWorkerFirst), and a missing one is a 404 rather than a V1 fallback.
 export const files = ["_build", "assets", "pagefind", "favicon.svg", "llms.txt", "sitemap.xml", "openapi.json"]
-
-// The restyle (the site's shell and David's docs components) builds for dev.opencode.ai first: the
-// `--mode dev` build (dev.opencode.ai and CI) and the development server render it, while the
-// production build keeps the docs as they were (legacy/) until David signs off. To ship it to
-// opencode.ai, return true here, then delete legacy/ and this switch (AGENTS.md, "Restyle").
-export const restyled = (mode: "dev" | "production") => mode === "dev"

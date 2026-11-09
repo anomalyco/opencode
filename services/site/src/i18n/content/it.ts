@@ -355,9 +355,9 @@ export const content = {
           title: "Ogni client MCP",
           body: "OpenCode, Claude Code, Cursor, Codex, Zed e molti altri.",
         },
-        "named-sessions": {
-          title: "Sessioni con nome",
-          body: "Ogni sessione mantiene le sue schede, anche dopo un riavvio.",
+        "all-your-logins": {
+          title: "Tutti i tuoi accessi",
+          body: "Gli agenti usano i siti a cui hai già effettuato l'accesso. Niente chiavi, niente configurazione.",
         },
         allowlists: {
           title: "Allowlist",
@@ -365,10 +365,14 @@ export const content = {
         },
       },
       install:
-        "Una riga installa Browse, lo aggiunge agli agenti che trova e abbina l'estensione. Su Windows, esegui irm https://opencode.ai/browse/install.ps1 | iex. Oppure chiedi al tuo agente di configurarlo.",
+        "Installa prima l'[estensione di Chrome]. Ti guida nel resto dei passaggi. Per installare la CLI direttamente (non dovrebbe servirti), usa uno di questi.",
     },
   },
   apps: {
+    browse: {
+      category: "Controllo del browser per agenti",
+      body: "Lascia che il tuo agente usi il tuo vero browser, con i tuoi accessi e le tue schede.",
+    },
     opentunnel: {
       category: "Tunnel locali",
       body: "URL HTTPS pubblici per le app locali.",
@@ -407,7 +411,7 @@ export const content = {
     steps: {
       download: {
         title: "Scarica",
-        line: "Desktop, mobile o terminale.",
+        line: "Desktop, terminale o mobile.",
       },
       "use-free-models": {
         title: "Modelli gratuiti",
@@ -740,7 +744,7 @@ export const content = {
       more: "Tra gli altri progetti ci sono SST e OpenTUI, tutti open source su [GitHub](github).",
       projects: {
         opencode: {
-          body: "L'agente di coding open source, con app per desktop, mobile e terminale, e un SDK. Licenza MIT, oltre 220.000 stelle su GitHub.",
+          body: "L'agente di coding open source, con app per desktop, terminale e mobile, e un SDK. Licenza MIT, oltre 220.000 stelle su GitHub.",
         },
         sst: {
           body: "Un framework per creare app full-stack sulla tua infrastruttura. Licenza MIT, open source dal 2020, oltre 26.000 stelle su GitHub.",
@@ -763,10 +767,11 @@ export const content = {
     },
     about: {
       title: "Chi è OpenCode",
+      body: "Descrizioni di OpenCode e dei suoi prodotti in versione lunga e breve, pronte da copiare.",
       boilerplate: {
-        long: "OpenCode è un agente di coding open source. È disponibile come app desktop, app mobile, UI da terminale e SDK, e funziona con modelli di qualsiasi provider, tra cui Claude, GPT e Gemini. OpenCode ha licenza MIT ed è sviluppato da Anomaly. Ha oltre 220.000 stelle su GitHub e più di 1.000 contributori, e oltre 22 milioni di sviluppatori lo usano ogni mese.",
+        long: "OpenCode è un agente di coding open source. È disponibile come app desktop, UI da terminale, app mobile e SDK, e funziona con modelli di qualsiasi provider, tra cui Claude, GPT e Gemini. OpenCode ha licenza MIT ed è sviluppato da Anomaly. Ha oltre 220.000 stelle su GitHub e più di 1.000 contributori, e oltre 22 milioni di sviluppatori lo usano ogni mese.",
         short:
-          "OpenCode è un agente di coding open source di Anomaly, con app per desktop, mobile e terminale, e un SDK.",
+          "OpenCode è un agente di coding open source di Anomaly, con app per desktop, terminale e mobile, e un SDK.",
       },
       products: {
         "opencode-console": {

@@ -54,8 +54,8 @@ export function downloadContent(t: Translate, route: (path: string) => string) {
 }
 
 /**
- * The download sections. `apps: false` leaves out Desktop, Mobile and
- * Terminal, as at the bottom of /product.
+ * The download sections. `apps: false` leaves out Desktop, Terminal and
+ * Mobile, as at the bottom of /product.
  */
 export function downloadSectionsMarkdown(
   context: MarkdownContext,
@@ -118,12 +118,12 @@ export function productDownloads(slug: PageSlug, route: (path: string) => string
   return result
 }
 
-/** A product page's Download section as Markdown. */
+/** A product page's Download section (Install on the Terminal page) as Markdown. */
 export function productDownloadMarkdown(slug: PageSlug, context: MarkdownContext) {
   const content = downloadContent(context.t, context.route)
   const details = productDownloads(slug, context.route)
   return blocks(
-    "## Download",
+    slug === "terminal" ? "## Install" : "## Download",
     details.lead,
     slug === "desktop" &&
       blocks(
@@ -147,17 +147,17 @@ export function storeMarkdown(store: { label: string; device: string; href: stri
   return `${link(store.label, store.href)} (${store.device})`
 }
 
-/** The Desktop, Mobile and Terminal download sections. */
+/** The Desktop, Terminal and Mobile download sections. */
 function downloadAppsMarkdown(context: MarkdownContext) {
   const content = downloadContent(context.t, context.route)
   return blocks(
     `## ${content.desktop.title}`,
     content.desktop.builds.map((build) => `- ${link(build.label, build.href)}`).join("\n"),
     codeFence("bash", content.desktop.install.command),
-    `## ${content.mobile.title}`,
-    content.mobile.stores.map((store) => `- ${storeMarkdown(store)}`).join("\n"),
     `## ${content.terminal.title}`,
     codeFence("bash", content.terminal.installs.map((item) => `# ${item.id}\n${item.command}`).join("\n\n")),
+    `## ${content.mobile.title}`,
+    content.mobile.stores.map((store) => `- ${storeMarkdown(store)}`).join("\n"),
   ).trimEnd()
 }
 

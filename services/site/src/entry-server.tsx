@@ -10,7 +10,16 @@ import preloads from "virtual:i18n-preload"
 // Every language, before any page renders.
 import "~/i18n/server"
 
-const criticalCSS = `[data-component="top"]{min-height:80px;display:flex;align-items:center}`
+const criticalCSS = `[data-component="top"]{min-height:80px;display:flex;align-items:center}html[data-scroll-restore] #app{opacity:0}`
+
+// A reload, or a return from another site, lands on a history entry the router left a scroll position
+// for (createScrollRestoration in @solidjs/router keeps them in sessionStorage by the entry's depth).
+// WebKit paints the top of the page while it's still parsing and restores only once the page has
+// loaded, so the reader saw the top and then a jump. When there's a position to go back to, the page
+// stays hidden (its background still paints) until the document has been parsed, and the script after
+// #app scrolls there before anything paints; the timer shows it anyway if that never runs.
+const scrollHoldScript = `try{const n=performance.getEntriesByType("navigation")[0],d=history.state&&history.state._depth,y=n&&n.type!=="navigate"&&d!=null&&JSON.parse(sessionStorage.getItem("solid-router:scroll")||"{}")[d];if(y>0){const r=document.documentElement;r.dataset.scrollRestore=y;setTimeout(()=>delete r.dataset.scrollRestore,2000)}}catch{}`
+const scrollRestoreScript = `{const r=document.documentElement,y=+r.dataset.scrollRestore;if(y){scrollTo(0,y);delete r.dataset.scrollRestore}}`
 
 // A reload in the Markdown view keeps the page hidden until the view shows (site.tsx), so the view's
 // code (markdown-pages.ts, loaded on first use) and its strings in the page's language are fetched
@@ -51,6 +60,7 @@ export default createHandler(
               {/* After the charset meta: the art is over 1 KB, and the meta must come in the first 1024 bytes. */}
               {ssr([`\n${sourceLogo}\n`]) as unknown as Element}
               <style>{criticalCSS}</style>
+              <script innerHTML={scrollHoldScript} />
               {/* Development only, before Vite's client loads: the device preview's Freeze (lib/freeze.ts). */}
               {import.meta.env.DEV && <script innerHTML={freezeScript} />}
               {assets}
@@ -58,6 +68,7 @@ export default createHandler(
             </head>
             <body>
               <div id="app">{children}</div>
+              <script innerHTML={scrollRestoreScript} />
               {scripts}
             </body>
           </html>

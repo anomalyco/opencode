@@ -1,7 +1,7 @@
 import { Link, Title, Meta } from "@solidjs/meta"
-import { Router, useCurrentMatches, useLocation } from "@solidjs/router"
+import { Router, useBeforeLeave, useCurrentMatches, useIsRouting, useLocation } from "@solidjs/router"
 import { FileRoutes } from "@solidjs/start/router"
-import { Show, Suspense } from "solid-js"
+import { createEffect, Show, Suspense } from "solid-js"
 import { isServer } from "solid-js/web"
 import { Favicon } from "@opencode/ui/favicon"
 import { Font } from "@opencode/ui/font"
@@ -15,7 +15,7 @@ import { ogImage } from "~/lib/og"
 import { strip } from "~/lib/language"
 import { HeadMetaProvider, LiveMeta } from "~/component/head-meta"
 import { viewportContent } from "~/lib/viewport"
-import { quietPreloads } from "~/lib/route-preloads"
+import { quietPreloads, setNavigating } from "~/lib/route-preloads"
 // Before the router, so its popstate listener comes first.
 import "~/component/site/popstate"
 import { monoFontFaces } from "~/component/site/mono-fonts"
@@ -24,8 +24,8 @@ import { monoFontFaces } from "~/component/site/mono-fonts"
 const shareImagePages = [
   "/",
   "/desktop",
-  "/mobile",
   "/terminal",
+  "/mobile",
   "/sdk",
   "/ide",
   "/mini",
@@ -50,6 +50,16 @@ function AppMeta() {
   // The 404 route and its /dev/404 previews (the dev server shows one for bad URLs).
   const notFound = () => matches().some((match) => match.route.pattern.includes("404"))
   preloadStrings()
+  // Preloaded pages' stylesheets wait for a navigation (lib/route-preloads.ts).
+  if (!isServer) {
+    const routing = useIsRouting()
+    // A leave that another listener blocked, or that stays on this page, never starts routing.
+    useBeforeLeave(() => {
+      setNavigating(true)
+      queueMicrotask(() => routing() || setNavigating(false))
+    })
+    createEffect(() => setNavigating(routing()))
+  }
   return (
     <>
       <Title>opencode</Title>

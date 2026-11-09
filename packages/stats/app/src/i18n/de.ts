@@ -23,6 +23,7 @@ export const dict = {
   "header.githubAria": "OpenCode auf GitHub mit Stern markieren",
   "header.github": "GitHub",
   "header.tryOpenCode": "OpenCode ausprobieren",
+  "header.tryOpenCodeShort": "Jetzt testen",
   "header.openNav": "Navigation öffnen",
   "header.closeNav": "Navigation schließen",
   "theme.groupLabel": "Design",

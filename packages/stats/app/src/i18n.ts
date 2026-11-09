@@ -42,6 +42,9 @@ const en = {
   "header.githubAria": "Star OpenCode on GitHub",
   "header.github": "GitHub",
   "header.tryOpenCode": "Try OpenCode",
+  // The header button's label on phones: the same where it fits beside the 20px product name at 375px, else a short
+  // "Try now".
+  "header.tryOpenCodeShort": "Try OpenCode",
   "header.openNav": "Open navigation",
   "header.closeNav": "Close navigation",
   "theme.groupLabel": "Theme",
@@ -57,7 +60,7 @@ const en = {
   "footer.contact": "Contact us",
   "footer.community": "Community",
   "footer.youtube": "YouTube",
-  "footer.homeAria": "OpenCode home",
+  "footer.homeAria": "OpenCode Home",
   "footer.status.operational": "All systems operational",
   "footer.status.degraded": "Degraded performance",
   "footer.status.outage": "Service disruption",

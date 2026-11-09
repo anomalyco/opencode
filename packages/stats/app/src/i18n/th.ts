@@ -25,6 +25,7 @@ export const dict = {
   "header.githubAria": "กดดาว OpenCode บน GitHub",
   "header.github": "GitHub",
   "header.tryOpenCode": "ลองใช้ OpenCode",
+  "header.tryOpenCodeShort": "ลองเลย",
   "header.openNav": "เปิดการนำทาง",
   "header.closeNav": "ปิดการนำทาง",
   "theme.groupLabel": "ธีม",

@@ -1,8 +1,6 @@
-// The slug of every docs page (vite.ts), so the Worker knows them without loading any content, and
-// whether this build renders the restyle (config.ts `restyled`).
+// The slug of every docs page (vite.ts), so the Worker knows them without loading any content.
 declare module "virtual:docs-pages" {
   export const docsSlugs: string[]
-  export const restyle: boolean
 }
 
 // Solid's Babel preset ships no types; vite.ts passes it straight to Babel.

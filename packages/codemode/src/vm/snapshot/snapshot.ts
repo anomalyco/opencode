@@ -1,15 +1,16 @@
 import type { Interpreter } from "../runtime/interpreter.js"
 import type { ToolCall } from "../../tool-runtime.js"
+import { fromBytes, SnapshotError, toBytes } from "../../suspend-error.js"
 import type { Encoded, Record } from "./codec.js"
-import { SnapshotError } from "./codec.js"
 
-export { SnapshotError }
+export { fromBytes, SnapshotError, toBytes }
 
 /** The snapshot format this build writes and reads: the bytecode VM's (see `src/vm/snapshot.ts`). */
 export const FORMAT = 2
 
 /**
- * A run's whole state as JSON: a header that says which build and sources it belongs to, and the graph of records (see codec.ts) rooted at the VM, the interpreter, and the global scope, then
+ * A suspended run's whole state as JSON: a header that says which build and sources it belongs to and what budget it
+ * has used, and the graph of records (see codec.ts) rooted at the VM, the interpreter, and the global scope, then
  * every built-in or host global the run changed.
  */
 export type Snapshot = {
@@ -22,8 +23,12 @@ export type Snapshot = {
 export type Header = {
   /** The build that wrote it: the package version, and a hash of the opcodes, the prelude's bytecode, codecs, and built-ins. */
   readonly build: string
-  /** A hash of the host's globals (extensions, a test harness), which the restoring runtime must have too. */
+  /**
+   * A hash of the host's globals (extensions, a test harness), and of each extension's name and whether it has
+   * `snapshot` hooks, which the restoring runtime must have too.
+   */
   readonly hosts: string
+  readonly runId: string
   /** The program texts, re-parsed and recompiled on restore, and checked against their hashes and bytecode hashes. */
   readonly sources: ReadonlyArray<{
     readonly id: string
@@ -31,23 +36,28 @@ export type Header = {
     readonly hash: string
     readonly bytecode: string
   }>
+  readonly limits: {
+    readonly timeoutMs: number | null
+    readonly maxToolCalls: number | null
+    readonly maxOutputBytes: number | null
+  }
+  /** What the run has used so far, across every resume: active milliseconds, and tool calls admitted. */
+  readonly budget: { readonly activeMs: number; readonly toolCalls: number }
   /** The tool calls admitted so far. */
   readonly toolCalls: ReadonlyArray<ToolCall>
 }
 
-export const hostsId = (ctx: Interpreter<unknown>): string => hash(ctx.intrinsics.hosts().join("\n"))
+export type SnapshotHeader = Header
 
-/** A snapshot as bytes: UTF-8 JSON. */
-export const toBytes = (snapshot: Snapshot): Uint8Array => new TextEncoder().encode(JSON.stringify(snapshot))
-
-/** Reads bytes `toBytes` wrote; `restore` checks what they hold. */
-export const fromBytes = (bytes: Uint8Array): unknown => {
-  try {
-    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
-  } catch (error) {
-    throw new SnapshotError(`Invalid snapshot: the bytes are not UTF-8 JSON (${String(error)}).`)
-  }
-}
+export const hostsId = (ctx: Interpreter<unknown>): string =>
+  hash(
+    [
+      ...ctx.intrinsics.hosts(),
+      ...(ctx.hosts?.extensions ?? []).map(
+        (extension) => `${extension.name} ${extension.hooked ? "hooks" : "no hooks"}`,
+      ),
+    ].join("\n"),
+  )
 
 // --- Validation ---
 
@@ -66,14 +76,25 @@ const array = (value: unknown, what: string): ReadonlyArray<unknown> =>
 const string = (value: unknown, what: string): string =>
   typeof value === "string" ? value : fail(`${what} is not text.`)
 
+const number = (value: unknown, what: string): number =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fail(`${what} is not a number.`)
+
+const limit = (value: unknown, what: string): number | null => (value === null ? null : number(value, what))
+
+/** A saved state's header, checked in full, before anything is restored. */
+export const header = (saved: unknown): Header => validate(saved).header
+
 // The header is checked in full; records are checked as they are decoded.
 export const validate = (saved: unknown): Snapshot => {
   const root = object(saved, "the snapshot")
   if (root.format !== FORMAT) fail(`format ${String(root.format)} is not ${FORMAT}.`)
   const header = object(root.header, "the header")
+  const limits = object(header.limits, "the limits")
+  const budget = object(header.budget, "the budget")
   const checked: Header = {
     build: string(header.build, "the build"),
     hosts: string(header.hosts, "the host globals"),
+    runId: string(header.runId, "the run id"),
     sources: array(header.sources, "the sources").map((item) => {
       const source = object(item, "a source")
       return {
@@ -83,6 +104,12 @@ export const validate = (saved: unknown): Snapshot => {
         bytecode: string(source.bytecode, "a bytecode hash"),
       }
     }),
+    limits: {
+      timeoutMs: limit(limits.timeoutMs, "timeoutMs"),
+      maxToolCalls: limit(limits.maxToolCalls, "maxToolCalls"),
+      maxOutputBytes: limit(limits.maxOutputBytes, "maxOutputBytes"),
+    },
+    budget: { activeMs: number(budget.activeMs, "the active time"), toolCalls: number(budget.toolCalls, "tool calls") },
     toolCalls: array(header.toolCalls, "the tool calls").map((item) => ({
       name: string(object(item, "a tool call").name, "a tool name"),
     })),

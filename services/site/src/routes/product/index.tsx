@@ -13,7 +13,7 @@ import { SectionHeading } from "~/component/site/on-this-page"
 import { ProductGrid } from "~/component/site/products"
 import { anomalyMarks, ProductList } from "~/component/site/product-list"
 import { BrowseMark } from "~/component/site/icons"
-import { anomalyProducts } from "~/component/site/links"
+import { anomalyProducts, appLink } from "~/component/site/links"
 import { appsSource } from "~/i18n/content/areas/apps"
 import "~/component/site/product-list.css"
 import { productsOrderScript } from "~/component/site/products-order"
@@ -41,13 +41,15 @@ export default function Product() {
       href: language.route(`/product/${extension.slug}`),
       icon: <BrowseMark />,
     })),
-    ...anomalyProducts.map((app) => ({
-      name: app.name,
-      description: appCopy()[app.id].body,
-      href: app.href,
-      external: true,
-      icon: anomalyMarks[app.id](),
-    })),
+    // Browse is listed above with its own page.
+    ...anomalyProducts
+      .filter((app) => !productLandingPages().some((extension) => extension.slug === app.id))
+      .map((app) => ({
+        name: app.name,
+        description: appCopy()[app.id].body,
+        ...appLink(app, language.route),
+        icon: anomalyMarks[app.id](),
+      })),
   ])
   const title = () => i18n.t("product.title")
   const description = () => i18n.t("product.meta.description")

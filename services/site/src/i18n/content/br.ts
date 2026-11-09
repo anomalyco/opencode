@@ -380,9 +380,9 @@ export const content = {
           title: "Todo cliente MCP",
           body: "OpenCode, Claude Code, Cursor, Codex, Zed e muitos outros.",
         },
-        "named-sessions": {
-          title: "Sessões nomeadas",
-          body: "Cada sessão mantém suas abas, mesmo após reiniciar.",
+        "all-your-logins": {
+          title: "Todos os seus logins",
+          body: "Os agentes usam os sites em que você já está conectado. Sem chaves, sem configuração.",
         },
         allowlists: {
           title: "Lista de sites",
@@ -390,10 +390,14 @@ export const content = {
         },
       },
       install:
-        "Uma linha instala o Browse, adiciona aos agentes que encontrar e pareia a extensão. No Windows, rode irm https://opencode.ai/browse/install.ps1 | iex. Ou peça ao seu agente para configurar.",
+        "Instale a [extensão do Chrome] primeiro. Ela guia você pelo resto dos passos. Para instalar a CLI diretamente (você não deve precisar disso), use qualquer um destes.",
     },
   },
   apps: {
+    browse: {
+      category: "Controle do navegador para agentes",
+      body: "Deixe seu agente usar seu navegador de verdade, com seus logins e abas.",
+    },
     hex: {
       category: "Ditado por voz",
       body: "Ditado por voz no aparelho para qualquer app.",
@@ -446,7 +450,7 @@ export const content = {
     steps: {
       download: {
         title: "Baixe",
-        line: "Desktop, mobile ou terminal.",
+        line: "Desktop, terminal ou mobile.",
       },
       "use-free-models": {
         title: "Use modelos grátis",
@@ -790,7 +794,7 @@ export const content = {
       projects: {
         opencode: {
           name: "OpenCode",
-          body: "O agente de programação de código aberto, com apps para desktop, mobile e terminal, e um SDK. Licença MIT, mais de 220.000 estrelas no GitHub.",
+          body: "O agente de programação de código aberto, com apps para desktop, terminal e mobile, e um SDK. Licença MIT, mais de 220.000 estrelas no GitHub.",
         },
         sst: {
           name: "SST",
@@ -816,10 +820,11 @@ export const content = {
     },
     about: {
       title: "Sobre o OpenCode",
+      body: "Descrições do OpenCode e de seus produtos em versões longa e curta, prontas para copiar.",
       boilerplate: {
-        long: "OpenCode é um agente de programação de código aberto. Ele vem como app desktop, app mobile, interface de terminal e SDK, e funciona com modelos de qualquer provedor, incluindo Claude, GPT e Gemini. O OpenCode tem licença MIT e é feito pela Anomaly. Tem mais de 220.000 estrelas no GitHub e mais de 1.000 colaboradores, e mais de 22 milhões de desenvolvedores o usam todo mês.",
+        long: "OpenCode é um agente de programação de código aberto. Ele vem como app desktop, interface de terminal, app mobile e SDK, e funciona com modelos de qualquer provedor, incluindo Claude, GPT e Gemini. O OpenCode tem licença MIT e é feito pela Anomaly. Tem mais de 220.000 estrelas no GitHub e mais de 1.000 colaboradores, e mais de 22 milhões de desenvolvedores o usam todo mês.",
         short:
-          "OpenCode é um agente de programação de código aberto da Anomaly, com apps para desktop, mobile e terminal, e um SDK.",
+          "OpenCode é um agente de programação de código aberto da Anomaly, com apps para desktop, terminal e mobile, e um SDK.",
       },
       products: {
         "opencode-console": {

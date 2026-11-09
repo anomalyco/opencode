@@ -3,8 +3,8 @@ import { extensionPages } from "~/component/site/extension-data"
 
 const browse = extensionPages.find((extension) => extension.slug === "browse")!
 
-// The browse page (anomalyco/browse): the Chrome Web Store is the main action, the standalone
-// installer is the command, and the product name is always lowercase.
+// The browse page (anomalyco/browse): the Chrome Web Store is the main action, the install leads
+// with the extension and then lists the CLI commands, and the product name is always lowercase.
 describe("browse", () => {
   test("is a product at /product/browse with the Chrome Web Store as its main action", () => {
     expect(browse.product).toBe(true)
@@ -12,10 +12,12 @@ describe("browse", () => {
     expect(browse.source).toBe("https://github.com/anomalyco/browse")
   })
 
-  test("installs from the standalone script, with no Node.js requirement", () => {
-    expect(browse.install.command).toBe("curl -fsSL https://opencode.ai/browse/install | bash")
-    expect(browse.install.lead).toContain("https://opencode.ai/browse/install.ps1")
-    expect(browse.install.lead).not.toMatch(/node\.?js|npx/i)
+  test("leads the install with the extension, then lists the standalone scripts first", () => {
+    expect(browse.install.lead).toContain("[Chrome extension]")
+    expect(browse.install.commands?.slice(0, 2)).toEqual([
+      { method: "curl", command: "curl -fsSL https://opencode.ai/browse/install | bash" },
+      { method: "pwsh", command: "irm https://opencode.ai/browse/install.ps1 | iex" },
+    ])
   })
 
   test("keeps the documented title and description lengths", () => {

@@ -1,4 +1,4 @@
-import { CodeMode } from "../../src/index.js"
+import { CodeMode, type Extension } from "../../src/index.js"
 
 export * from "../../src/codemode.js"
 
@@ -11,6 +11,11 @@ if (process.env.CODEMODE_ROUNDTRIP === "1") {
   setRoundTrip(true)
 }
 
-export const make: typeof CodeMode.make = (options = {}) => CodeMode.make({ engine, ...options })
+export const make = <
+  const Provided extends Record<string, unknown> = {},
+  const Extensions extends ReadonlyArray<Extension.Extension> = [],
+>(
+  options: CodeMode.Options<Provided, Extensions> = {},
+) => CodeMode.make<Provided, Extensions>({ engine, ...options })
 
 export const execute: typeof CodeMode.execute = (options) => CodeMode.execute({ engine, ...options })

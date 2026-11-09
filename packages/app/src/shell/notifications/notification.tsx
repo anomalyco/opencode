@@ -71,6 +71,9 @@ const LEGACY_MIGRATION_PAGE = 200
 
 const LEGACY_MIGRATION_CONCURRENCY = 4
 
+// Manual unread is client-local: the server's viewed watermark can only move forwards.
+const ManualUnreadStore = Persistence.struct({ sessions: Persistence.array(Schema.String) })
+
 export function createServerNotificationState(input: {
   sdk: ServerSDK
   data: Data
@@ -129,6 +132,15 @@ export function createServerNotificationState(input: {
 
   const legacyTarget = Persist.serverGlobal(input.sdk.scope, "notification")
   const [legacy, setLegacy, , legacyReady] = persisted(legacyTarget, LegacyNotificationStore, {}, platform)
+
+  const [manual, setManual, , manualReady] = persisted(
+    Persist.serverGlobal(input.sdk.scope, "notification.manual-unread"),
+    ManualUnreadStore,
+    { sessions: [] },
+    platform,
+  )
+
+  const manuallyUnread = createMemo(() => new Set(manual.sessions))
   const [legacyState, setLegacyState] = createSignal(INITIAL_LEGACY_MIGRATION_STATE)
   const discovered = Date.now()
   let legacyRun: AbortController | undefined
@@ -241,7 +253,20 @@ export function createServerNotificationState(input: {
     if (online) reports.forEach((_, root) => dispatchView(root, { type: "connected" }))
   })
 
-  const unread = (session?: Pick<SessionInfo, "id" | "time">) => selectSessionUnread(legacyState(), session)
+  const unread = (session?: Pick<SessionInfo, "id" | "time">) =>
+    (!!session && manuallyUnread().has(session.id)) || selectSessionUnread(legacyState(), session)
+
+  const updateManual = (sessionID: string, unread: boolean) => {
+    const apply = () => {
+      if (disposed.value || manuallyUnread().has(sessionID) === unread) return
+      setManual("sessions", (sessions) =>
+        unread ? [...sessions, sessionID] : sessions.filter((id) => id !== sessionID),
+      )
+    }
+
+    if (manualReady()) return apply()
+    void manualReady.promise?.then(apply, apply)
+  }
 
   const roots = (directory: string) =>
     input.data.session
@@ -258,6 +283,13 @@ export function createServerNotificationState(input: {
 
     if (idle === undefined || !isSessionUnread(session)) return
     dispatchView(root, { type: "view", idle })
+  }
+
+  const opened = (sessionID: string) => updateManual(input.data.session.root(sessionID), false)
+
+  const read = (sessionID: string) => {
+    opened(sessionID)
+    view(sessionID)
   }
 
   // Loading the session keeps a background completion visible in the server-derived unread state.
@@ -368,6 +400,12 @@ export function createServerNotificationState(input: {
   }
 
   const unsub = input.sdk.event.listen((event) => {
+    if (event.type === "session.deleted") {
+      updateManual(event.data.sessionID, false)
+
+      return
+    }
+
     if (event.type === "permission.asked") {
       void handleRequest("permission", event.data.sessionID, event.data.id)
 
@@ -402,6 +440,7 @@ export function createServerNotificationState(input: {
 
   return {
     session: {
+      ready: manualReady,
       /**
        * Whether the session's root has an execution result no client has viewed yet. `snapshot` stands in for a root
        * session that isn't loaded, such as a row from the fetched home index.
@@ -409,15 +448,23 @@ export function createServerNotificationState(input: {
       unread(sessionID: string, snapshot?: SessionInfo) {
         return unread(input.data.session.get(input.data.session.root(sessionID)) ?? snapshot)
       },
+      manuallyUnread(sessionID: string) {
+        return manuallyUnread().has(input.data.session.root(sessionID))
+      },
       /** Reports the session's latest idle transition to the server as viewed. */
       markViewed: view,
+      opened,
+      markRead: read,
+      markUnread(sessionID: string) {
+        updateManual(input.data.session.root(sessionID), true)
+      },
     },
     project: {
       hasUnread(directory: string) {
         return roots(directory).some((session) => unread(session))
       },
       markViewed(directory: string) {
-        roots(directory).forEach((session) => view(session.id))
+        roots(directory).forEach((session) => read(session.id))
       },
     },
   }

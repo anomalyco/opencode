@@ -191,14 +191,21 @@ export const content = {
         "lend-a-tab": { title: "أعِر علامة تبويب", body: "انقر زر شريط الأدوات لتسليم الوكيل علامة تبويب مفتوحة." },
         "record-and-capture": { title: "تسجيل والتقاط", body: "لقطات شاشة وتسجيلات شاشة وحركة الشبكة بصيغة HAR." },
         "any-mcp-client": { title: "أي عميل MCP", body: "OpenCode وClaude Code وCursor وCodex وZed وغيرها الكثير." },
-        "named-sessions": { title: "جلسات مسمّاة", body: "تحتفظ كل جلسة بعلامات تبويبها حتى بعد إعادة التشغيل." },
+        "all-your-logins": {
+          title: "كل تسجيلات دخولك",
+          body: "يستخدم الوكلاء المواقع التي سجّلت الدخول إليها بالفعل. بلا مفاتيح ولا إعداد.",
+        },
         allowlists: { title: "قوائم السماح", body: "اقصر علامات تبويب الجلسة على المواقع التي تحددها." },
       },
       install:
-        "سطر واحد يثبّت Browse، ويضيفه إلى الوكلاء الذين يجدهم ويقرن الإضافة. على Windows، شغّل irm https://opencode.ai/browse/install.ps1 | iex. أو اطلب من وكيلك إعداده.",
+        "ثبّت [إضافة Chrome] أولًا، وستُرشدك خلال بقية الخطوات. لتثبيت CLI مباشرة (لن تحتاج إلى ذلك عادةً)، استخدم أيًّا من هذه الأوامر.",
     },
   },
   apps: {
+    browse: {
+      category: "التحكم في المتصفح للوكلاء",
+      body: "دع وكيلك يستخدم متصفحك الحقيقي، مع تسجيلات دخولك وعلامات التبويب.",
+    },
     opentunnel: { category: "أنفاق محلية", body: "عناوين HTTPS عامة للتطبيقات المحلية." },
     opentui: { category: "مكتبة", body: "مكتبة لواجهات المستخدم في الطرفية." },
     hex: { category: "إملاء صوتي", body: "إملاء صوتي على الجهاز لأي تطبيق." },
@@ -215,7 +222,7 @@ export const content = {
     },
     subscriptions: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } },
     steps: {
-      download: { title: "نزّل", line: "Desktop أو Mobile أو Terminal." },
+      download: { title: "نزّل", line: "Desktop أو Terminal أو Mobile." },
       "use-free-models": {
         title: "نماذج مجانية",
         line: "يأتي OpenCode مع مجموعة من النماذج المجانية. لا حاجة إلى حساب.",
@@ -395,7 +402,7 @@ export const content = {
       learnMore: "لمعرفة المزيد، زُر [anoma.ly](site).",
       projects: {
         opencode: {
-          body: "وكيل البرمجة مفتوح المصدر، مع تطبيقات لسطح المكتب والهاتف والطرفية، وSDK. مرخّص بـ MIT، وأكثر من 220,000 نجمة على GitHub.",
+          body: "وكيل البرمجة مفتوح المصدر، مع تطبيقات لسطح المكتب والطرفية والهاتف، وSDK. مرخّص بـ MIT، وأكثر من 220,000 نجمة على GitHub.",
         },
         sst: {
           body: "إطار عمل لبناء تطبيقات متكاملة على بنيتك التحتية الخاصة. مرخّص بـ MIT، ومفتوح منذ 2020، وأكثر من 26,000 نجمة على GitHub.",
@@ -417,9 +424,10 @@ export const content = {
     },
     about: {
       title: "عن OpenCode",
+      body: "أوصاف OpenCode ومنتجاته بنسختين طويلة وقصيرة، جاهزة للنسخ.",
       boilerplate: {
-        long: "OpenCode وكيل برمجة مفتوح المصدر. يتوفر كتطبيق لسطح المكتب وتطبيق للهاتف وواجهة طرفية وSDK، ويعمل مع نماذج من أي مزوّد، منها Claude وGPT وGemini. OpenCode مرخّص بـ MIT ومن صنع Anomaly. لديه أكثر من 220,000 نجمة على GitHub وأكثر من 1,000 مساهم، ويستخدمه أكثر من 22 مليون مطوّر كل شهر.",
-        short: "OpenCode وكيل برمجة مفتوح المصدر من Anomaly، مع تطبيقات لسطح المكتب والهاتف والطرفية، وSDK.",
+        long: "OpenCode وكيل برمجة مفتوح المصدر. يتوفر كتطبيق لسطح المكتب وواجهة طرفية وتطبيق للهاتف وSDK، ويعمل مع نماذج من أي مزوّد، منها Claude وGPT وGemini. OpenCode مرخّص بـ MIT ومن صنع Anomaly. لديه أكثر من 220,000 نجمة على GitHub وأكثر من 1,000 مساهم، ويستخدمه أكثر من 22 مليون مطوّر كل شهر.",
+        short: "OpenCode وكيل برمجة مفتوح المصدر من Anomaly، مع تطبيقات لسطح المكتب والطرفية والهاتف، وSDK.",
       },
       products: {
         "opencode-console": {

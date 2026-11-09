@@ -5,7 +5,8 @@ import { base } from "../config"
 
 /**
  * The site's ⌘K palette (search-palette.css) with the default look, searching the docs' full text
- * with Pagefind. Hidden until client.ts opens it and fills in the results.
+ * with Pagefind. Hidden until client.ts opens it and fills in the results. With nothing typed it is
+ * just the field: the results list stays empty, so docs.css hides it and the field's divider.
  */
 export function DocsSearchDialog() {
   const look = siteSettingsDefaults
@@ -28,7 +29,7 @@ export function DocsSearchDialog() {
           <input
             type="search"
             role="combobox"
-            aria-expanded="true"
+            aria-expanded="false"
             aria-haspopup="listbox"
             aria-controls="docs-search-results"
             aria-autocomplete="list"
@@ -48,9 +49,7 @@ export function DocsSearchDialog() {
             <span data-slot="cancel">Cancel</span>
           </button>
         </div>
-        <div data-slot="results" id="docs-search-results" role="listbox" aria-label="Results">
-          <p data-slot="empty" />
-        </div>
+        <div data-slot="results" id="docs-search-results" role="listbox" aria-label="Results" />
       </div>
     </div>
   )

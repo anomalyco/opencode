@@ -20,7 +20,6 @@ import {
   Suspense,
   Switch,
 } from "solid-js"
-import { Faq } from "~/component/faq"
 import { ConsoleField } from "~/component/site/console-field"
 import { ChevronRight, ExternalArrow } from "~/component/site/icons"
 import { LogoWall } from "~/component/site/logo-wall"
@@ -49,7 +48,7 @@ import { isMobile } from "~/lib/platform"
 import { LocaleLinks } from "~/component/locale-links"
 import { ShareMeta } from "~/component/share-meta"
 import { ogImage } from "~/lib/og"
-import { faqData, JsonLd, organizationData, softwareData, websiteData } from "~/component/structured-data"
+import { JsonLd, organizationData, softwareData, websiteData } from "~/component/structured-data"
 import { Rich } from "~/component/site/rich-text"
 import { homeOrderDefaultCss, homeOrderScript, homeOrderStyleId, useHomeOrder } from "~/component/site/home-order"
 import { designCopy, designEditing } from "~/component/site/design-copy"
@@ -217,7 +216,6 @@ export default function Home() {
           operatingSystem: "macOS, Windows, Linux",
         })}
       />
-      <JsonLd data={faqData(content().faq.items)} />
 
       {/* The default section order from the server; a saved one (Design mode, development only)
           replaces it before the sections paint. */}
@@ -448,37 +446,6 @@ export default function Home() {
           </div>
         </section>
       </Show>
-
-      <section
-        data-component="block"
-        data-section="faq"
-        data-design="faqColumns spacer spacerLength spacerCount spacerStartDash spacerStartGap spacerCurve ditherHeight ditherOrientation ditherDirection ditherLength ditherPixel ditherPattern ditherDensity ditherOpacity ditherCurve ditherLine"
-        data-columns={siteSettings.faqColumns.charAt(0)}
-      >
-        <h2 data-slot="label">{content().faq.title}</h2>
-        <div data-slot="body">
-          <ul data-component="faq">
-            <For each={content().faq.items}>
-              {(item) => (
-                <li>
-                  <Faq question={item.question}>
-                    <Show
-                      when={"copy" in item && item.copy ? (item.copy as CopyId) : undefined}
-                      fallback={<Rich value={item.answer} />}
-                    >
-                      {(copy) => (
-                        <span data-design-copy={copy()}>
-                          <Rich value={richCopy(copy(), item.answer, content().copyLinks)} />
-                        </span>
-                      )}
-                    </Show>
-                  </Faq>
-                </li>
-              )}
-            </For>
-          </ul>
-        </div>
-      </section>
 
       <section
         data-component="block"
@@ -896,7 +863,11 @@ function SlotStat(props: { value: string; start?: number; stat: number }) {
 }
 
 function SlotDigit(props: { digit: number; start?: number; place: number; stat: number }) {
+  // The reel's cells are added when it first spins and stay; only a spinning reel shows more than the
+  // first (index.css). Removing them as each digit landed, a frame apart, restyled the whole page in
+  // each of those frames (every :has() rule re-checks a removal), right while it scrolled.
   const [reel, setReel] = createSignal([props.digit])
+  const [spinning, setSpinning] = createSignal(false)
   let strip: HTMLSpanElement | undefined
   createEffect(
     on(
@@ -911,6 +882,7 @@ function SlotDigit(props: { digit: number; start?: number; place: number; stat: 
           props.digit,
         ]
         setReel(digits)
+        setSpinning(true)
         const line = strip.parentElement?.getBoundingClientRect().height ?? 0
         const animation = strip.animate(
           [{ transform: "translateY(0)" }, { transform: `translateY(${-(digits.length - 1) * line}px)` }],
@@ -922,7 +894,8 @@ function SlotDigit(props: { digit: number; start?: number; place: number; stat: 
           },
         )
         animation.onfinish = () => {
-          setReel([props.digit])
+          setReel((cells) => cells.with(0, props.digit))
+          setSpinning(false)
           animation.cancel()
         }
         onCleanup(() => animation.cancel())
@@ -930,7 +903,7 @@ function SlotDigit(props: { digit: number; start?: number; place: number; stat: 
     ),
   )
   return (
-    <span data-slot="reel" aria-hidden="true" data-spinning={reel().length > 1 ? "" : undefined}>
+    <span data-slot="reel" aria-hidden="true" data-spinning={spinning() ? "" : undefined}>
       <span data-slot="strip" ref={strip}>
         <Index each={reel()}>{(digit) => <span>{digit()}</span>}</Index>
       </span>

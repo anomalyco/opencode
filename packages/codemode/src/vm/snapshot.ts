@@ -4,7 +4,7 @@ import { staticNames, unchanged } from "./runtime/intrinsic-names.js"
 import { Fn, Obj } from "./runtime/objects.js"
 import { nodeId, type Source } from "./runtime/source.js"
 import { type ClassSpec, codecShape, decode, encode, type Json, SnapshotError } from "./snapshot/codec.js"
-import { FORMAT, hash, hostsId, type Snapshot, validate } from "./snapshot/snapshot.js"
+import { FORMAT, type Header, hash, hostsId, type Snapshot, validate } from "./snapshot/snapshot.js"
 import { AsyncFromSyncCloseTarget, FinallyTarget, VmScheduler } from "./async.js"
 import { Code, hashOf } from "./code.js"
 import { COMPILER_VERSION, compileSource } from "./compiler/compile.js"
@@ -25,6 +25,9 @@ import { CustomIter, Frame, Mode, Vm, VmInternalFn } from "./vm.js"
 // - New VM state must be listed in the `Vm` spec: an unknown own field is a codec gap, so nothing is silently dropped.
 
 export type CaptureOptions = {
+  readonly limits?: Header["limits"]
+  /** Active milliseconds used so far, across every resume. */
+  readonly activeMs?: number
   /** Throw on the first value with no data form, instead of reporting it in `lost`. */
   readonly strict: boolean
 }
@@ -59,7 +62,7 @@ const vmSpecs = (): ReadonlyArray<ClassSpec> =>
       name: "HostCalls",
       ctor: HostCalls,
       anchor: "hosts",
-      fields: ["queued", "running", "inbox", "nextID", "blocked", "input"],
+      fields: ["runId", "queued", "running", "inbox", "nextID", "blocked", "input"],
       skip: ["ctx", "promises", "extension", "extensionResume"],
     },
     {
@@ -143,6 +146,7 @@ export const captureVm = (
     },
     lost,
     strict: options.strict,
+    hosts: ctx.hosts,
     specs: vmSpecs(),
     external: (value): Json | undefined => {
       if (value === HOLE) return "hole"
@@ -157,12 +161,15 @@ export const captureVm = (
     header: {
       build: buildId(),
       hosts: hostsId(ctx),
+      runId: vm.hosts.runId,
       sources: programs.map((source) => ({
         id: source.id,
         code: source.code,
         hash: hash(source.code),
         bytecode: vm.sourceCodes.get(source.id)![0]!.source.hash,
       })),
+      limits: options.limits ?? { timeoutMs: null, maxToolCalls: null, maxOutputBytes: null },
+      budget: { activeMs: options.activeMs ?? 0, toolCalls: ctx.tools.calls.length },
       toolCalls: ctx.tools.calls.map((call) => ({ name: call.name })),
     },
     roots: encoded.roots,
@@ -210,6 +217,7 @@ export const restoreVm = (vm: Vm, saved: unknown, options: RestoreOptions): Snap
     anchor: (name) => anchors.get(name),
     node: (source, index) => sources.get(source)?.nodes[index],
     interruption: options.interruption,
+    hosts: ctx.hosts,
     specs: vmSpecs(),
     external: (data) => {
       if (data === "hole") return HOLE

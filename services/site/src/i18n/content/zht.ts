@@ -191,14 +191,18 @@ export const content = {
           title: "任何 MCP 用戶端",
           body: "OpenCode、Claude Code、Cursor、Codex、Zed 等眾多用戶端。",
         },
-        "named-sessions": { title: "具名工作階段", body: "每個工作階段都保留自己的分頁，重新啟動後依然存在。" },
+        "all-your-logins": {
+          title: "沿用你的所有登入",
+          body: "代理直接使用你已登入的網站。無需金鑰，無需設定。",
+        },
         allowlists: { title: "允許清單", body: "將工作階段的分頁限制在你指定的網站內。" },
       },
       install:
-        "一行指令安裝 Browse，將它加入找到的代理並配對擴充功能。在 Windows 上執行 irm https://opencode.ai/browse/install.ps1 | iex。也可以請代理幫你設定。",
+        "請先安裝 [Chrome 擴充功能]，它會引導你完成其餘步驟。如需直接安裝 CLI（通常不需要），可使用以下任一指令。",
     },
   },
   apps: {
+    browse: { category: "代理瀏覽器控制", body: "讓你的代理使用你真正的瀏覽器，保留登入狀態和分頁。" },
     hex: { category: "語音聽寫", body: "適用於任何應用程式的裝置端語音聽寫。" },
     opentunnel: { category: "本機通道", body: "為本機應用程式提供公開的 HTTPS URL。" },
     opentui: { category: "函式庫", body: "用於打造終端機使用者介面的函式庫。" },
@@ -215,7 +219,7 @@ export const content = {
     },
     subscriptions: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } },
     steps: {
-      download: { title: "下載", line: "桌面、行動裝置或終端機。" },
+      download: { title: "下載", line: "桌面、終端機或行動裝置。" },
       "use-free-models": { title: "使用免費模型", line: "OpenCode 內建一組免費模型，不需要帳號。" },
       "add-more-models": {
         title: "加入更多模型",
@@ -390,7 +394,7 @@ export const content = {
       projects: {
         opencode: {
           name: "OpenCode",
-          body: "開源編碼代理，提供桌面、行動和終端機應用程式以及 SDK。採用 MIT 授權，GitHub 星星超過 220,000 顆。",
+          body: "開源編碼代理，提供桌面、終端機和行動應用程式以及 SDK。採用 MIT 授權，GitHub 星星超過 220,000 顆。",
         },
         sst: {
           name: "SST",
@@ -416,9 +420,10 @@ export const content = {
     },
     about: {
       title: "關於 OpenCode",
+      body: "OpenCode 及其產品的介紹，有長短兩個版本，可直接複製。",
       boilerplate: {
-        long: "OpenCode 是一個開源編碼代理。它提供桌面應用程式、行動應用程式、終端機介面和 SDK，並支援任何供應商的模型，包括 Claude、GPT 和 Gemini。OpenCode 採用 MIT 授權，由 Anomaly 打造。它在 GitHub 上擁有超過 220,000 顆星星和 1,000 多位貢獻者，每月有超過 2200 萬名開發者使用。",
-        short: "OpenCode 是 Anomaly 推出的開源編碼代理，提供桌面、行動和終端機應用程式以及 SDK。",
+        long: "OpenCode 是一個開源編碼代理。它提供桌面應用程式、終端機介面、行動應用程式和 SDK，並支援任何供應商的模型，包括 Claude、GPT 和 Gemini。OpenCode 採用 MIT 授權，由 Anomaly 打造。它在 GitHub 上擁有超過 220,000 顆星星和 1,000 多位貢獻者，每月有超過 2200 萬名開發者使用。",
+        short: "OpenCode 是 Anomaly 推出的開源編碼代理，提供桌面、終端機和行動應用程式以及 SDK。",
       },
       products: {
         "opencode-console": {

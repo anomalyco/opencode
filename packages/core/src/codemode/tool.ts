@@ -11,8 +11,7 @@ import type {
   Namespace as ToolNamespace,
   Result,
 } from "@opencode/schema/tool"
-import { Clock, Context, Effect, Option, Ref, Schema, Semaphore } from "effect"
-import { Config } from "../config.js"
+import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
 import { Flag } from "../flag.js"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
@@ -73,22 +72,6 @@ export type Inventory = {
   readonly namespaces?: ReadonlyMap<string, ToolNamespace>
 }
 
-/** Reads `experimental.codemode_vm` (or `OPENCODE_FLAGS`) on every call; without one, it is off. */
-const vmEnabled = Effect.gen(function* () {
-  const overrides = (yield* Flag.Overrides) ?? ""
-  for (const item of overrides
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .toReversed()) {
-    if (item === "codemode_vm" || item === "codemodeVm") return true
-    if (item === "-codemode_vm" || item === "-codemodeVm") return false
-  }
-  const config = yield* Effect.serviceOption(Config.Service)
-  if (Option.isNone(config)) return false
-  return Config.latest(yield* config.value.entries(), "experimental")?.codemode_vm === true
-})
-
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
 const description = [
   "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
@@ -103,6 +86,7 @@ export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
   permission: Permission.Interface,
+  flag: Flag.Interface,
 ) => {
   return {
     name: "execute",
@@ -136,7 +120,7 @@ export const create = (
               yield* Effect.sleep(wait).pipe(Effect.andThen(lock.withPermit(publish)), Effect.forkIn(scope))
             }),
           )
-        const result = yield* runtime(inventory, (yield* vmEnabled) ? "vm" : "legacy")
+        const result = yield* runtime(inventory, (yield* flag.enabled("codemode_vm")) ? "vm" : "legacy")
           .execute(code)
           .pipe(
             Effect.provideService(Run, {
@@ -249,7 +233,10 @@ export const catalog = (inventory: Inventory) => {
       type: "tool",
       name: tool.path.split(".").at(-1) ?? tool.path,
       description: tool.description,
-      signature: tool.signature,
+      // Rendered only for the tools the catalog shows.
+      get signature() {
+        return tool.signature
+      },
       pinned: pinned.has(tool.path),
     }
   return {
@@ -309,8 +296,9 @@ export const check = (
   bindings: Readonly<Record<string, CodeMode.DataValue>>,
   limits: CodeMode.ExecutionLimits,
   executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<Result, Error>,
+  flag: Flag.Interface,
 ) =>
-  vmEnabled.pipe(
+  flag.enabled("codemode_vm").pipe(
     Effect.flatMap((vm) =>
       CodeMode.make({
         tools: inventoryTools(inventory),

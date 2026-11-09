@@ -1,16 +1,13 @@
 import { For, Show, type JSX } from "solid-js"
 import { DocsLockup } from "~/component/site/docs-lockup"
 import { GitHubLink } from "~/component/site/github-link"
-import { Chevron, SearchIcon } from "~/component/site/icons"
+import { Chevron, NewTab, SearchIcon } from "~/component/site/icons"
 import { interFaces, interLatin } from "~/component/site/inter-fonts"
-import { siteLinks } from "~/component/site/links"
 import { LogoIcon } from "~/component/site/marks"
+import { Bracket } from "~/component/site/site-controls"
 import { monoFontFaces, monoFontLatin } from "~/component/site/mono-fonts"
-import { ContentsMenu, OnThisPage } from "~/component/site/on-this-page"
-import { MenuSheet, MenuToggle } from "~/component/site/phone-menu"
+import { OnThisPage } from "~/component/site/on-this-page"
 import { defaultRootAttributes, themeScript } from "~/component/site/preload-settings"
-import { navDefaults } from "~/component/site/settings"
-import { ExternalArrow, NewTab } from "~/component/site/icons"
 import { config } from "~/config"
 import { useI18n } from "~/context/i18n"
 import { base } from "../config"
@@ -65,10 +62,17 @@ export function DocsLayout(props: {
   const contents = props.headings
     .filter((heading) => heading.depth === 2 || heading.depth === 3)
     .map((heading) => ({ id: heading.slug, title: heading.text, level: heading.depth as 2 | 3 }))
-  const links = siteLinks(i18n.t, (path) => path)
-  const nav = navDefaults.flatMap((entry) => (entry.visible ? links.nav.filter((item) => item.id === entry.id) : []))
   const logo = () => (
-    <a href="/" data-slot="logo" data-variant="icon" aria-label={i18n.t("nav.logoAlt")} title={i18n.t("nav.home")}>
+    <a
+      href="/"
+      data-slot="logo"
+      data-variant="icon"
+      data-nav-logo
+      aria-haspopup="menu"
+      aria-expanded="false"
+      aria-label={i18n.t("nav.logoHome")}
+      title={i18n.t("nav.logoHome")}
+    >
       <LogoIcon />
     </a>
   )
@@ -114,32 +118,7 @@ export function DocsLayout(props: {
               <SearchIcon />
             </button>
             <GitHubLink owner="topbar" />
-            <MenuToggle open={false} onToggle={() => undefined} />
           </header>
-          <MenuSheet open={false} onClose={() => undefined}>
-            <For each={nav}>
-              {(item, index) => (
-                <li data-nav-id={item.id}>
-                  <a
-                    href={item.href}
-                    target={"external" in item && item.external ? "_blank" : undefined}
-                    aria-current={item.id === "docs" ? "page" : undefined}
-                  >
-                    <span data-slot="index" aria-hidden="true">
-                      [<span data-slot="number">{index() + 1}</span>]
-                    </span>
-                    <span data-slot="label">{item.label}</span>
-                    <Show when={"arrow" in item && item.arrow}>
-                      <ExternalArrow />
-                    </Show>
-                    <Show when={"external" in item && item.external}>
-                      <NewTab />
-                    </Show>
-                  </a>
-                </li>
-              )}
-            </For>
-          </MenuSheet>
 
           <div data-slot="frame">
             <aside
@@ -152,8 +131,11 @@ export function DocsLayout(props: {
               {logo()}
               <div data-component="section-nav">
                 <button type="button" data-slot="section-toggle" aria-expanded="false" aria-controls="section-nav">
-                  {/* The page in its section, or the section when the page is named like its title ("Docs" over "Intro"). */}
-                  <span>{current && current.title !== props.title ? current.title : section.title}</span>
+                  {/* The current page as the nav marks it ("[-] Intro" on /docs). */}
+                  <span data-slot="current">
+                    <Bracket />
+                    <span data-slot="label">{current?.title ?? props.title}</span>
+                  </span>
                   <Chevron />
                 </button>
                 <div data-slot="section-body" id="section-nav">
@@ -161,6 +143,28 @@ export function DocsLayout(props: {
                 </div>
               </div>
             </aside>
+            {/* Mobile layout: the Contents rail folded into a bar stuck under the
+                section row from load. It names the section being read (client.ts swaps the label as you scroll)
+                and keeps "Contents" in its accessible name. Hidden beside the rail on wide screens. */}
+            <Show when={contents.length > 0}>
+              <details data-component="contents-menu" data-docs-contents>
+                <summary aria-label={`Contents: ${contents[0].title}`}>
+                  <span data-slot="label">
+                    <span data-slot="word">{contents[0].title}</span>
+                  </span>
+                  <Chevron />
+                </summary>
+                <ul>
+                  <For each={contents}>
+                    {(item) => (
+                      <li data-level={item.level === 3 ? "3" : undefined}>
+                        <a href={`#${item.id}`}>{item.title}</a>
+                      </li>
+                    )}
+                  </For>
+                </ul>
+              </details>
+            </Show>
             <GitHubLink owner="corner" />
 
             <main data-component="content" id="content" tabindex={-1}>
@@ -172,10 +176,6 @@ export function DocsLayout(props: {
                   data-pagefind-meta={`title:${props.title}`}
                 >
                   <h1 data-pagefind-meta={`section:${section.title}`}>{props.title}</h1>
-                  {/* Phones: the Contents rail folded into a bar under the title (Pagefind skips it, build.ts). */}
-                  <Show when={contents.length > 0}>
-                    <ContentsMenu items={contents} />
-                  </Show>
                   {props.children}
                   <footer data-slot="article-footer" data-pagefind-ignore>
                     <Show when={previous || next}>
