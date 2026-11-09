@@ -904,7 +904,8 @@ describe("SessionProjector", () => {
         .get()
         .pipe(Effect.orDie)
       expect(row?.data).toMatchObject({ content: [] })
-      expect(yield* SessionHistory.loadMessageRow(db, row!)).toMatchObject({
+      const [loaded] = yield* SessionHistory.decodeMessageRows(db, [row!])
+      expect(loaded).toMatchObject({
         content: [
           { id: "succeeded", native: { call: "succeeded", result: "succeeded" }, state: { status: "completed" } },
           { id: "failed", native: { call: "failed" }, state: { status: "error" } },
@@ -1844,7 +1845,7 @@ describe("SessionProjector", () => {
           .where(eq(SessionMessageTable.session_id, forkedSessionID))
           .get()
           .pipe(Effect.orDie)
-        const loadedFork = yield* SessionHistory.loadMessageRow(db, forkedMessage!).pipe(Effect.orDie)
+        const [loadedFork] = yield* SessionHistory.decodeMessageRows(db, [forkedMessage!]).pipe(Effect.orDie)
         expect(loadedFork).toMatchObject({
           type: "assistant",
           content: [

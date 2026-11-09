@@ -15,7 +15,7 @@ import {
   currentToolGroupedRead,
   currentToolHasLoadedFiles,
 } from "../message/current-tool-state"
-import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
+import { TimelineRow, type PartGroup, type PartRef } from "./timeline-row"
 import { timelineCategory, timelineNoticePlacement, timelineNoticeRequired, type TimelineDetail } from "./detail"
 import {
   IDLE_TURN_PHASE,
@@ -29,7 +29,7 @@ import {
   type TurnThinkingPlacement,
 } from "./turn-phase-machine"
 
-export { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap, type TurnPhase }
+export { TimelineRow, type PartGroup, type PartRef, type TurnPhase }
 
 export type ReasoningMode = "hidden" | "compact" | "full"
 
