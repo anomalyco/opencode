@@ -42,7 +42,7 @@ These actions start watches without a tool call:
 | `gh pr create`                                                             | The pull request          |
 | `git push` to GitHub                                                       | The branch's Actions runs |
 
-Commands only start a watch when they succeed. Slack drafts and scheduled messages start nothing. A session's own posts don't wake it.
+Commands only start a watch when they succeed. Slack drafts and scheduled messages start nothing. A session's own posts don't wake it. A watch on a pull request or issue ends 30 minutes after it merges or closes, so late comments and a quick reopen still reach the session.
 
 Slack posts outside a thread also watch more of the conversation, because people often answer in the channel:
 
@@ -119,14 +119,15 @@ Your other sessions don't consume a session's updates. A watch still ends on sch
 | ------------------------------------- | ------------------------- |
 | Watches per member, in each workspace | 100                       |
 | Longest watch                         | 14 days                   |
-| Wakes in a row without you typing     | 5                         |
+| Wakes in 10 minutes                   | 5                         |
+| Wakes since your last prompt          | 20                        |
 | Wakes per channel follow-up window    | 3                         |
 | How long updates wait for a client    | 72 hours                  |
 | Size of one update                    | 8 KiB, longer text is cut |
 
-After 5 wakes in a row, later updates wait for your next prompt, which resets the count. At 100 watches, a new watch fails until a session stops one with `unwatch`. Service accounts have the same limit as members.
+Past either wake limit, later updates wait for your next prompt or your own Slack message, which resets both. CI updates count only toward the 20, because one push can start several workflows. At 100 watches, a new watch ends the one that's been quiet longest, starting with the session's own if it holds more than 25. Service accounts have the same limit as members.
 
-Console groups a burst of events on one watch into one update. It sends at most one update every 10 seconds for each watch.
+Console groups a burst of events on one watch into one update. It sends at most one update every 10 seconds for each watch. A bot that keeps editing its Slack message wakes the session once, 15 seconds after its last edit.
 
 ## Safety
 
