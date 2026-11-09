@@ -17,7 +17,7 @@ import ranges from "../../asset/fonts/opentui-mono.json"
 export const monoFontLatin = regularLatin
 
 // Settings › Mono font (development only): the family ahead of the stack. IBM Plex Mono loads from
-// ibm-plex-mono.css once picked; an installed font is used by name. The pre-paint script
+// ibm-plex-mono.dev.css once picked; an installed font is used by name. The pre-paint script
 // (preload-settings.ts) preloads the picked font's regular file.
 export const monoFontDefault = "OpenTUI Mono"
 export const monoFontsBuiltIn = [monoFontDefault, "IBM Plex Mono"] as const

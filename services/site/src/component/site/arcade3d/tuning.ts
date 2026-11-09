@@ -128,24 +128,6 @@ const defaults = () =>
     ["quality", "auto"],
   ]) as Values
 
-const schema = z
-  .object({
-    ...Object.fromEntries(
-      Object.entries(controls).map(([group, section]) => [
-        group,
-        z
-          .object(
-            Object.fromEntries(
-              Object.entries(section.items).map(([key, item]) => [key, z.number().min(item.min).max(item.max)]),
-            ),
-          )
-          .partial(),
-      ]),
-    ),
-    quality: z.enum(qualities),
-  })
-  .partial()
-
 const [tuning, setTuning] = createStore<Values>(defaults())
 export { tuning }
 const [fps, setFps] = createSignal(0)
@@ -153,6 +135,23 @@ export { fps, setFps }
 
 /** Merge saved values over the defaults; anything missing or out of range falls back. */
 export function applyTuning(input: unknown) {
+  const schema = z
+    .object({
+      ...Object.fromEntries(
+        Object.entries(controls).map(([group, section]) => [
+          group,
+          z
+            .object(
+              Object.fromEntries(
+                Object.entries(section.items).map(([key, item]) => [key, z.number().min(item.min).max(item.max)]),
+              ),
+            )
+            .partial(),
+        ]),
+      ),
+      quality: z.enum(qualities),
+    })
+    .partial()
   const parsed = schema.safeParse(input)
   if (!parsed.success) return false
   const next = defaults()
@@ -168,6 +167,9 @@ export function applyTuning(input: unknown) {
  * the rest; this follows that setting, including Reset and Import from the Settings panel.
  */
 export function followTuning() {
+  // Production always renders the default settings, so there is nothing to follow, and its bundle
+  // leaves zod out.
+  if (import.meta.env.PROD) return
   createEffect(() => {
     if (!applyTuning(siteSettings.arcade3d)) setTuning(reconcile(defaults()))
   })

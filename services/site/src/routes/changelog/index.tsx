@@ -18,7 +18,6 @@ import {
   ChangelogUnavailable,
 } from "~/component/site/changelog-entry"
 import { useMarkdown } from "~/component/site/use-markdown"
-import { changelogMarkdown } from "~/lib/changelog-markdown"
 import { PageTitle } from "~/component/site/sticky-title"
 
 export default function Changelog() {
@@ -29,7 +28,9 @@ export default function Changelog() {
   const page = () => Number(params.page ?? 1) || 1
   const filter = () => areaKeys(params.area)
   const view = createAsync(() => changelogPage(page(), filter()))
-  const markdown = useMarkdown("/changelog", changelogMarkdown, { changelog: view })
+  const markdown = useMarkdown("/changelog", (context, pages) => pages.changelogMarkdown(context), {
+    changelog: view,
+  })
   const feed = () => language.route(`/changelog.xml${changelogQuery({ filter: filter() })}`)
 
   return (

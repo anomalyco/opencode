@@ -39,12 +39,12 @@ export function getDownloadPlatform(os: OS): DownloadPlatform {
 /**
  * The exact desktop build for this computer, when the browser can tell: the Mac's chip (Chromium's
  * client hints, else the WebGL renderer in Safari and Firefox, whose user agent always says "Intel
- * Mac"), and the one Windows build. Nothing when it can't tell (Linux .deb or .rpm, an unknown Mac),
- * so no list marks two builds as this computer.
+ * Mac"), and the Windows build (ARM64 when the client hints say so, else x64). Nothing when it can't
+ * tell (Linux .deb, .rpm or AppImage, an unknown Mac), so no list marks two builds as this computer.
  */
 export async function detectDesktopBuild(): Promise<DownloadPlatform | undefined> {
   const os = detectOS()
-  if (os === "Windows") return "windows-x64-nsis"
+  if (os === "Windows") return (await clientArchitecture()) === "arm" ? "windows-aarch64-nsis" : "windows-x64-nsis"
   if (os !== "macOS") return
   const architecture = await clientArchitecture()
   if (architecture === "arm") return "darwin-aarch64-dmg"
@@ -52,6 +52,17 @@ export async function detectDesktopBuild(): Promise<DownloadPlatform | undefined
   const renderer = webglRenderer()
   if (/apple (m\d|gpu)/i.test(renderer)) return "darwin-aarch64-dmg"
   if (/intel|amd|radeon/i.test(renderer)) return "darwin-x64-dmg"
+  return
+}
+
+/**
+ * The build a Download button starts: the exact build when known, else on an ARM64 Linux computer
+ * the ARM64 .deb (getDownloadPlatform gives the x64 .deb to the rest).
+ */
+export async function detectDesktopDownload(): Promise<DownloadPlatform | undefined> {
+  const build = await detectDesktopBuild()
+  if (build || detectOS() !== "Linux") return build
+  if ((await clientArchitecture()) === "arm" || /aarch64|arm64/i.test(navigator.platform)) return "linux-aarch64-deb"
   return
 }
 
@@ -82,8 +93,11 @@ export const desktopAssets = {
   "windows-aarch64-nsis": "opencode-desktop-win-arm64.exe",
   "windows-x64-nsis": "opencode-desktop-win-x64.exe",
   "linux-x64-deb": "opencode-desktop-linux-amd64.deb",
-  "linux-x64-appimage": "opencode-desktop-linux-x86_64.AppImage",
+  "linux-aarch64-deb": "opencode-desktop-linux-arm64.deb",
   "linux-x64-rpm": "opencode-desktop-linux-x86_64.rpm",
+  "linux-aarch64-rpm": "opencode-desktop-linux-aarch64.rpm",
+  "linux-x64-appimage": "opencode-desktop-linux-x86_64.AppImage",
+  "linux-aarch64-appimage": "opencode-desktop-linux-arm64.AppImage",
 } as const satisfies Record<DownloadPlatform, string>
 
 /**
@@ -100,13 +114,18 @@ export function getDownloadHref(platform: DownloadPlatform, channel: "latest" | 
   return `${updateApi}/${channel}/desktop/opencode/${desktopAssets[platform]}`
 }
 
-/** The desktop builds, in order. The .AppImage build stays out until it works. */
+/** The desktop builds, in order. */
 export const desktopBuilds = [
   { platform: "macOS", label: "download.platform.macosAppleSilicon", id: "darwin-aarch64-dmg" },
   { platform: "macOS", label: "download.platform.macosIntel", id: "darwin-x64-dmg" },
   { platform: "Windows", label: "download.platform.windowsX64", id: "windows-x64-nsis" },
-  { platform: "Linux", label: "download.platform.linuxDeb", id: "linux-x64-deb" },
-  { platform: "Linux", label: "download.platform.linuxRpm", id: "linux-x64-rpm" },
+  { platform: "Windows", label: "download.platform.windowsArm64", id: "windows-aarch64-nsis" },
+  { platform: "Linux", label: "download.platform.linuxDebX64", id: "linux-x64-deb" },
+  { platform: "Linux", label: "download.platform.linuxDebArm64", id: "linux-aarch64-deb" },
+  { platform: "Linux", label: "download.platform.linuxRpmX64", id: "linux-x64-rpm" },
+  { platform: "Linux", label: "download.platform.linuxRpmArm64", id: "linux-aarch64-rpm" },
+  { platform: "Linux", label: "download.platform.linuxAppImageX64", id: "linux-x64-appimage" },
+  { platform: "Linux", label: "download.platform.linuxAppImageArm64", id: "linux-aarch64-appimage" },
 ] as const satisfies readonly { platform: string; label: Key; id: DownloadPlatform }[]
 
 export { desktopInstall } from "~/lib/install-commands"

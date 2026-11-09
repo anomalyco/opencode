@@ -322,6 +322,8 @@ const [refund, department] = response.answers
 ```
 
 `input` is a JSON object or an ordered list of `text`, `json` and `media` parts. Answers come back in question order.
+A `predicate` can say what counts as true and as false with `criteria: { true, false }`; hosts without a criteria field
+read them appended to the instructions.
 A question the host declines is `{ name, type: "error", reason, message? }`, with `reason` such as `"refusal"`; the
 other answers still come back.
 `response.usage` has `inputTokens`, `outputTokens`, `totalTokens` and the host's reported `cost` when it sends one;

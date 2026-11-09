@@ -3,13 +3,10 @@ import { SessionBlob } from "@opencode/core/session/blob"
 import { FileNotFoundError } from "@opencode/protocol/errors"
 import { Effect } from "effect"
 import { type HttpServerRequest, HttpServerResponse } from "effect/http"
+import { ContentHeaders } from "../content-headers"
 
 const INLINE_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
 const CACHE_CONTROL = "private, max-age=31536000, immutable"
-const SECURITY_HEADERS = {
-  "x-content-type-options": "nosniff",
-  "content-security-policy": "default-src 'none'; sandbox",
-}
 
 /** `media.get` in the `server.experimental` group; serves only blobs a message or inbox item still references. */
 export const makeMediaGet = Effect.gen(function* () {
@@ -24,8 +21,9 @@ export const makeMediaGet = Effect.gen(function* () {
       const headers = {
         "cache-control": CACHE_CONTROL,
         etag,
-        ...SECURITY_HEADERS,
-        ...(inline ? {} : { "content-disposition": "attachment" }),
+        "content-disposition": ContentHeaders.disposition(""),
+        "content-security-policy": ContentHeaders.CONTENT_SECURITY_POLICY,
+        "x-content-type-options": "nosniff",
       }
       if (matchesIfNoneMatch(request.headers["if-none-match"], etag))
         return HttpServerResponse.empty({ status: 304, headers })

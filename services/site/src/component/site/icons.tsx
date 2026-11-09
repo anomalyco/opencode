@@ -104,7 +104,13 @@ export function NewTab() {
 export function Chevron() {
   return (
     <svg data-slot="chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-      <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="square" />
+      <path
+        d="M3 4.5L6 7.5L9 4.5"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="square"
+        vector-effect="non-scaling-stroke"
+      />
     </svg>
   )
 }
@@ -117,6 +123,32 @@ export function ChevronRight() {
   return (
     <svg data-slot="chevron-right" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
       <path d="M3.5 2.5L6 5L3.5 7.5" stroke="currentColor" stroke-width="1" stroke-linecap="square" />
+    </svg>
+  )
+}
+
+/**
+ * A magnifying glass for search buttons, a 1.5px stroke at any size: a lens and a short handle in a 16px ink box,
+ * the width of the menu lines, so it sits with them and the chevrons. search-palette.tsx draws the same.
+ */
+export function SearchIcon() {
+  return (
+    <svg data-slot="search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle
+        cx="7.43"
+        cy="7.43"
+        r="5.06"
+        stroke="currentColor"
+        stroke-width="1.5"
+        vector-effect="non-scaling-stroke"
+      />
+      <path
+        d="M11 11L13.33 13.33"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="square"
+        vector-effect="non-scaling-stroke"
+      />
     </svg>
   )
 }
@@ -156,15 +188,6 @@ export function CheckIcon() {
   return (
     <svg data-slot="button-icon" width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
       <path d="M4 10.5L8 14.5L16 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" />
-    </svg>
-  )
-}
-
-/** The GitLab mark (packages/ui provider/gitlab.svg), cropped to the tanuki. */
-export function GitLabMark() {
-  return (
-    <svg width="20" height="20" viewBox="100 100 180 180" fill="currentColor" aria-hidden="true">
-      <path d="M265.26416,174.37243l-.2134-.55822-21.19899-55.30908c-.4236-1.08359-1.18542-1.99642-2.17699-2.62689-.98837-.63373-2.14749-.93253-3.32305-.87014-1.1689.06239-2.29195.48925-3.20809,1.21821-.90957.73554-1.56629,1.73047-1.87493,2.85346l-14.31327,43.80662h-57.90965l-14.31327-43.80662c-.30864-1.12299-.96536-2.11791-1.87493-2.85346-.91614-.72895-2.03911-1.15582-3.20809-1.21821-1.17548-.06239-2.33468.23641-3.32297.87014-.99166.63047-1.75348,1.5433-2.17707,2.62689l-21.19891,55.31237-.21348.55493c-6.28158,16.38521-.92929,34.90803,13.05891,45.48782.02621.01641.04922.03611.07552.05582l.18719.14119,32.29094,24.17392,15.97151,12.09024,9.71951,7.34871c2.34117,1.77316,5.57877,1.77316,7.92002,0l9.71943-7.34871,15.96822-12.09024,32.48142-24.31511c.02958-.02299.05588-.04269.08538-.06568,13.97834-10.57977,19.32735-29.09604,13.04905-45.47796Z" />
     </svg>
   )
 }

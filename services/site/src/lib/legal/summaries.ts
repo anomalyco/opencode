@@ -17,7 +17,9 @@ export const legalSummaries: Record<string, LegalNode[][]> = {
       ["a", { href: "#categories-of-personal-data" }, "What we collect"],
     ],
     [
-      "Prompts are passed through to the upstream model provider to provide the services and are not stored. ",
+      "Prompts are passed through to the upstream model provider to provide the services and are not stored, except by hosted agents, which keep sessions until 30 days without activity and email records until the inbox is disconnected (see ",
+      ["a", { href: "#integrations" }, "Integrations with Third-Party Services"],
+      "). ",
       ["a", { href: "#categories-of-personal-data" }, "What we collect"],
     ],
     [
@@ -35,7 +37,7 @@ export const legalSummaries: Record<string, LegalNode[][]> = {
     ],
     ["You keep ownership of your Input and you own the Output. ", ["a", { href: "#your-ip" }, "Your IP"]],
     [
-      "We use Content to provide the Services, comply with the law, enforce our terms and keep the Services safe. On an unpaid account, we may also use it to develop and improve the Services. ",
+      "We use Content to provide the Services, comply with the law, enforce our terms and keep the Services safe. On an unpaid account, we may also use it to develop and improve the Services. We never use Content obtained or derived from a Connected Service for that. ",
       ["a", { href: "#your-ip" }, "Your IP"],
     ],
     [

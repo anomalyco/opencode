@@ -1,0 +1,742 @@
+/* The docs' one stylesheet: the site's own stylesheets for the shell and the shared components, David's
+   docs components (docs-variants.css), and below them the base rules for the docs' own parts (the
+   section nav, the article, the aside, the API cards). script/build.ts builds it under /docs/_build
+   with the site's production CSS plugins, so only the chosen docs options ship. */
+@import "../../style/index.css";
+@import "../../component/site/site.css";
+@import "../../component/site/rtl.css";
+@import "../../component/site/github-link.css";
+@import "../../component/site/tap-targets.css";
+@import "../../component/site/docs-lockup.css";
+@import "../../component/site/nav-menus.css";
+@import "../../component/site/on-this-page.css";
+@import "../../component/site/search-palette.css";
+@import "../../component/site/docs-variants.css";
+
+/* Pages load as plain documents; the next one fades in, and the shell stays put. */
+@view-transition {
+  navigation: auto;
+}
+
+/* Highlighted code (rehype-shiki.ts) in David's code colours (docs-variants.css --token-*), each 4.5:1
+   or more on the code body in both themes: keywords and flags violet, commands and functions orange,
+   strings green, numbers and constants teal, comments the output grey. */
+[data-page="docs"] {
+  --shiki-foreground: var(--code-text);
+  --shiki-token-keyword: var(--token-flag);
+  --shiki-token-function: var(--token-command);
+  --shiki-token-string: var(--token-string);
+  --shiki-token-string-expression: var(--token-string);
+  --shiki-token-constant: var(--token-operator);
+  --shiki-token-link: var(--token-operator);
+  --shiki-token-comment: var(--token-output);
+  --shiki-token-parameter: var(--code-text);
+  --shiki-token-punctuation: var(--code-text);
+}
+
+/* ───────────── Section nav ─────────────
+   The current section's pages in the footer's bracket list: "[ ]" before each, "[-]" and ink on the
+   current page with the titles' faux medium, a dash on hover. 20px lines on a 30px pitch, like the
+   Contents rail. The first item's text top sits on the content line, level with the page title's and
+   the search box's top (DESIGN.md): OpenTUI Mono's cap top sits 0.3253em less than half the line
+   below the line's top, and the first row's 5px hit area hangs above it (its margin collapses into
+   this one). */
+[data-site] [data-component="docs-nav"] {
+  margin-top: calc(0.3253em - 15px);
+  font-family: var(--font-mono);
+  font-size: var(--mono-size);
+  line-height: 20px;
+
+  [data-slot="group"] + [data-slot="group"] {
+    margin-top: 2rem;
+  }
+
+  [data-slot="group-title"] {
+    display: block;
+    margin-bottom: 0.75rem;
+    margin-inline-start: var(--bracket-bearing);
+    font-size: var(--fs-micro);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  li + li {
+    margin-top: 10px;
+  }
+
+  /* Half the gap above and below, so the rows meet without moving the text. */
+  a {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding-block: 5px;
+    margin-block: -5px;
+    color: var(--text-weak);
+    transition: color 150ms ease;
+
+    &[aria-current="page"] {
+      color: var(--text-strong);
+      -webkit-text-stroke: var(--title-stroke);
+
+      [data-slot="box"] {
+        color: var(--text-strong);
+        -webkit-text-stroke: 0;
+      }
+
+      [data-slot="fill"]::before {
+        opacity: 1;
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+      outline-offset: 2px;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+
+        [data-slot="box"] {
+          color: var(--text-strong);
+        }
+
+        [data-slot="fill"]::before {
+          opacity: 1;
+        }
+      }
+    }
+  }
+
+  /* As the footer list draws it (site.css): "[" and "]" round a cell for the dash. */
+  [data-slot="box"] {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    color: var(--nav-marker);
+    transition: color 150ms ease;
+  }
+
+  [data-slot="fill"] {
+    display: grid;
+    place-items: center;
+    width: 2ch;
+    height: 1lh;
+  }
+
+  [data-slot="fill"]::before {
+    content: "";
+    opacity: 0;
+  }
+
+  [data-slot="label"] {
+    min-width: 0;
+  }
+}
+
+/* Phones and tablets: the section menu is a bar stuck under the top bar from page load, with one
+   edge-to-edge line above and one below. The top line stands in for the top bar's hairline, and the
+   Contents bar pins under this one (--contents-top), its top line on this bar's bottom line, so each
+   join has one line. The bar names the current page as the nav marks it ("[-] Intro"); open, the
+   nav drops over the page and scrolls when it's longer than the window. */
+@media (max-width: 60rem) {
+  [data-site][data-layout="docs"] {
+    --contents-top: calc(var(--topbar-height) + env(safe-area-inset-top, 0px) + var(--row-height));
+
+    /* Jumps land below the bar on pages without a Contents bar (on-this-page.css adds that one). */
+    &:not(:has([data-component="contents-menu"])) [data-component="docs-article"] :is(h2, h3, h4, h5, h6)[id] {
+      scroll-margin-top: calc(var(--contents-top) + 1rem);
+    }
+
+    [data-component="topbar"]::after {
+      display: none;
+    }
+
+    /* No menu button (the two bars are the docs' navigation); the GitHub mark takes its column. */
+    [data-component="topbar"] [data-component="github-link"] {
+      margin-inline-end: -0.75rem;
+    }
+
+    /* The Contents bar sits right under the section row from load (it follows the sidebar in the
+       frame), so both rows are stuck from the start and draw their lines from the start. An open row
+       and its list are one surface: the line between them goes, and the list's bottom edge stays. */
+    [data-docs-contents] {
+      margin: 0 var(--edge);
+
+      summary::after {
+        opacity: 1;
+        transition: none;
+      }
+
+      &[open] summary::after {
+        display: none;
+      }
+
+      /* The section's name, swapped in place (client.ts): each word is one line that ends in "…",
+         and the label clips the swap to its own line box. The leaving word lies over the new one. */
+      summary [data-slot="label"] {
+        position: relative;
+        flex: 1 1 auto;
+        min-width: 0;
+        margin-inline-end: 1rem;
+        overflow: clip;
+      }
+
+      [data-slot="word"] {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+
+        &[data-leaving] {
+          position: absolute;
+          inset: 0;
+        }
+      }
+    }
+
+    [data-component="section-nav"][data-open] [data-slot="section-toggle"]::after {
+      display: none;
+    }
+
+    /* The bar's bottom line is the Contents bar's top join too, so the Contents bar only fades in
+       its own bottom line when it pins: one line at each join, through the moment it sticks. */
+    [data-component="contents-menu"] summary::before {
+      display: none;
+    }
+
+    /* The Contents bar and its list in the nav's type: OpenTUI Mono at the nav's size. */
+    [data-component="contents-menu"] :is(summary, a) {
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+    }
+
+    [data-component="sidebar"][data-section-nav] {
+      position: sticky;
+      top: calc(var(--topbar-height) + env(safe-area-inset-top, 0px));
+      z-index: 9;
+      background: var(--bg);
+    }
+
+    /* The desktop nav's scroll box would clip the lines and the open list. */
+    [data-component="sidebar"][data-section-nav] > [data-component="section-nav"] {
+      overflow: visible;
+    }
+
+    [data-component="section-nav"] {
+      position: relative;
+
+      /* The row spans the screen, its padding putting the label and chevron back in place, so its
+         press fill reaches both edges (on-this-page.css says why a painted outset isn't enough). */
+      [data-slot="section-toggle"] {
+        position: relative;
+        width: calc(100% + 2 * var(--edge));
+        margin-inline: calc(-1 * var(--edge));
+        padding-inline: var(--edge);
+
+        &::before,
+        &::after {
+          content: "";
+          position: absolute;
+          inset-inline: 0;
+          height: 1px;
+          background: var(--border);
+          pointer-events: none;
+        }
+
+        &::before {
+          top: 0;
+        }
+
+        &::after {
+          bottom: 0;
+        }
+      }
+
+      [data-slot="current"] {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        min-width: 0;
+        -webkit-text-stroke: var(--title-stroke);
+
+        /* Just the page's title, on the content edge like the Contents bar's label below it; the
+           open list keeps the nav's "[-]" markers. */
+        [data-slot="box"] {
+          display: none;
+        }
+
+        [data-slot="label"] {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      }
+
+      [data-slot="section-body"] {
+        position: absolute;
+        top: 100%;
+        inset-inline: calc(-1 * var(--edge));
+        max-height: calc(100dvh - var(--contents-top) - 1rem);
+        padding-inline: var(--edge);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
+
+        /* Each page is a row across the whole list, filled edge to edge while pressed. */
+        [data-component="docs-nav"] a {
+          margin-inline: calc(-1 * var(--edge));
+          padding-inline: var(--edge);
+
+          &:active {
+            background: var(--row-press);
+          }
+        }
+      }
+    }
+  }
+}
+
+/* Beside the article the nav scrolls under the logo and lockup, and fades out at an edge while items
+   pass under it (client.ts sets data-fade-top and data-fade-bottom). Phones keep hard cuts. */
+@media (min-width: 60.0625rem) {
+  [data-site] [data-component="sidebar"] > [data-component="section-nav"] {
+    --fade: 2.5rem;
+    /* The nav is cap-trimmed, so it gives back the line above the first item for focus rings. */
+    margin-top: -4px;
+    padding-top: 4px;
+
+    &[data-fade-top] {
+      mask-image: linear-gradient(to bottom, transparent, black var(--fade));
+    }
+
+    &[data-fade-bottom] {
+      mask-image: linear-gradient(to top, transparent, black var(--fade));
+    }
+
+    &[data-fade-top][data-fade-bottom] {
+      mask-image: linear-gradient(to bottom, transparent, black var(--fade) calc(100% - var(--fade)), transparent);
+    }
+  }
+}
+
+/* The line above Previous / Next is a divider like the docs' others (tables, code frames, the bars),
+   not ink (Pagination 4 in docs-variants.css draws it in --text-strong; doubled to outrank it). */
+[data-site][data-page="docs"] [data-component="docs-article"] [data-component="pagination"][data-component] {
+  border-top-color: var(--border);
+}
+
+/* ───────────── Right rail: search over Contents ───────────── */
+[data-site] [data-component="docs-aside"] {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2rem;
+
+  > [data-component="on-this-page"] {
+    align-self: stretch;
+
+    /* "CONTENTS" does the left nav's group titles' job, so it is drawn like them ("CONFIGURE"). */
+    [data-slot="heading"] {
+      font-size: var(--fs-micro);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+  }
+
+  [data-slot="search"] {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: var(--mono-size);
+    color: var(--text-weak);
+    transition: color 150ms ease;
+
+    /* ⌘K at the label's size, in its muted colour. */
+    kbd {
+      font-size: inherit;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+      }
+    }
+  }
+}
+
+/* Search dialog, Clean: with nothing typed it is just the field, with no results list and no divider.
+   The list fades and slides in under the field when a query fills it, so the panel's growth reads as
+   one motion rather than a jump. */
+[data-site] [data-search-dialog] {
+  /* Esc at the field's size; phones swap it for Cancel, already at that size. */
+  [data-slot="esc"] {
+    font-size: var(--fs-input);
+  }
+
+  [data-slot="results"] {
+    animation: docs-search-results var(--search-duration) var(--ease-out);
+
+    &:empty {
+      display: none;
+    }
+  }
+
+  [data-slot="field"]:has(+ [data-slot="results"]:empty) {
+    border-bottom-color: transparent;
+  }
+
+  [data-slot="empty"] a {
+    color: var(--text-strong);
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+      outline-offset: 2px;
+    }
+  }
+
+  @media (pointer: coarse) {
+    [data-slot="option"] {
+      min-height: 2.75rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="results"] {
+      animation: none;
+    }
+  }
+}
+
+/* Phones: Cancel's text ends on the results' text end (their 0.875rem inset), not at the screen
+   edge; its 44px hit area still reaches the edge, and the field gives up the width. */
+@media (max-width: 40rem) {
+  [data-site] [data-search-dialog][data-style] {
+    [data-slot="field"] {
+      padding-inline-end: 0.875rem;
+    }
+
+    [data-slot="close"] {
+      position: relative;
+
+      &::after {
+        content: "";
+        position: absolute;
+        inset-block: 0;
+        inset-inline: -0.5rem -0.875rem;
+      }
+    }
+  }
+}
+
+@keyframes docs-search-results {
+  from {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+}
+
+/* Phones: search in the top bar, before the GitHub mark, with the same 44px target. */
+[data-site] [data-component="topbar"] [data-slot="search-button"] {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin-inline-start: auto;
+  color: var(--text-strong);
+
+  svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  & + [data-component="github-link"] {
+    margin-inline-start: 0;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: -2px;
+  }
+}
+
+/* ───────────── Article ─────────────
+   Reading text in Inter at the reading size, capped at about 90 characters, section titles in OpenTUI
+   Mono. Typography 4 (docs-variants.css) sets h3 to h6 and the heading rhythm. */
+[data-site] [data-component="docs-article"] {
+  font: 400 var(--fs-read) / 1.6 var(--font-sans);
+  color: var(--text);
+
+  :is(h1, h2, h3, h4, h5, h6) {
+    color: var(--text-strong);
+    text-wrap: pretty;
+  }
+
+  /* The title's cap top sits on the content line, level with the nav's first item. */
+  h1 {
+    margin: 0 0 1.5rem;
+    font: 400 var(--fs-h1) / 1.15 var(--font-mono);
+    letter-spacing: -0.02em;
+    text-box: trim-start cap alphabetic;
+  }
+
+  h2 {
+    font: 400 var(--fs-title) / 1.35 var(--font-mono);
+    -webkit-text-stroke: var(--title-stroke);
+  }
+
+  h2,
+  h3 {
+    scroll-margin-top: 2rem;
+  }
+
+  /* Text stops at about 90 characters (42 body ems of Inter, so headings share it); blocks (code,
+     tables, callouts, tabs, file trees, cards, steps, the API and config blocks) keep the full
+     column, and text inside a block fills that block. Narrower columns are under the cap. */
+  --text-measure: calc(42 * var(--fs-read));
+
+  :is(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote, dl, summary):not(
+    [data-component="steps"],
+    :is(
+        [data-component="callout"],
+        [data-component="code-frame"],
+        [data-component="code-tabs"],
+        [data-component="plan-tabs"],
+        [data-component="docs-card"],
+        [data-component="api-operation"],
+        [data-component="cli-command"],
+        table,
+        figure
+      )
+      *
+  ) {
+    max-width: var(--text-measure);
+  }
+
+  p {
+    margin: 0 0 1rem;
+  }
+
+  hr {
+    margin: 2rem 0;
+    border: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  strong {
+    font-weight: 600;
+    color: var(--text-strong);
+  }
+
+  /* Keys: the mono key cap (Kbd option 1). */
+  kbd {
+    padding: 0.05em 0.35em;
+    border: 1px solid var(--border);
+    font: 400 var(--fs-micro) / 1.4 var(--font-mono);
+    color: var(--text-strong);
+    white-space: nowrap;
+  }
+
+  /* An image in running text (cli/config.mdx) gets the media frame. */
+  :is(p > img, > img) {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 0 0 1.5rem;
+    border: 1px solid var(--border);
+  }
+
+  /* Wide tables scroll in their wrapper (rehype-table-scroll.ts) instead of widening the page. */
+  .docs-table-scroll {
+    max-width: 100%;
+    margin: 0 0 1.5rem;
+    overflow-x: auto;
+
+    > table {
+      margin-bottom: 0;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+      outline-offset: 2px;
+    }
+  }
+
+  /* The code surfaces are keyboard scrollable; their ring sits inside. */
+  :is(pre, [data-slot="code"]):focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: -2px;
+  }
+
+  /* Plan tabs switch prose and tables, which take the full width under the tab row. */
+  [data-component="plan-tabs"] [role="tab"] {
+    cursor: pointer;
+  }
+
+  /* Code tabs: the tab row scrolls sideways under the pinned Copy, and each panel scrolls its code. */
+  [data-component="code-tabs"] {
+    [data-slot="tabs"] {
+      display: flex;
+      overflow-x: auto;
+      scrollbar-width: none;
+
+      button {
+        flex-shrink: 0;
+        cursor: pointer;
+      }
+    }
+
+    [data-slot="code"] {
+      overflow-x: auto;
+      font: 400 var(--fs-meta) / 1.6 var(--font-mono);
+      white-space: pre;
+    }
+  }
+}
+
+/* The phone Contents bar sits in the article, under the title, so the article's list and link
+   styles stay off it (on-this-page.css draws it). */
+[data-site][data-page="docs"][data-docs-variants] [data-component="docs-article"] [data-component="contents-menu"] {
+  ul {
+    max-width: none;
+    margin: 0;
+    padding: 0 var(--edge) 0.75rem;
+  }
+
+  ul > li {
+    margin: 0;
+    padding: 0;
+
+    &::before {
+      content: none;
+    }
+  }
+
+  a {
+    text-decoration: none;
+  }
+}
+
+/* The edit link's row spans the article, with Copy as Markdown at its end. */
+[data-site] [data-component="docs-article"] [data-component="edit-link"] {
+  max-width: none;
+}
+
+/* Copy as Markdown, beside the edit link at the article's end, in its type. The three labels share
+   one cell, so the button keeps the longest one's width. */
+[data-site] [data-component="edit-link"] [data-copy-markdown] {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--text-weak);
+  cursor: pointer;
+  transition: color 150ms ease;
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      color: var(--text-strong);
+    }
+  }
+
+  [data-slot="copy-labels"] {
+    display: inline-grid;
+    justify-items: end;
+
+    > * {
+      grid-area: 1 / 1;
+      visibility: hidden;
+    }
+  }
+
+  &[data-state="idle"] [data-label="idle"],
+  &[data-state="copied"] [data-label="copied"],
+  &[data-state="failed"] [data-label="failed"] {
+    visibility: visible;
+  }
+}
+
+/* ───────────── API reference ─────────────
+   Each endpoint and schema is an Endpoint Card (api-7) that opens on its own: the header row is the
+   summary, with a plus that turns to a minus, and no rule under it while closed. */
+[data-site][data-page="docs"][data-docs-variants]
+  [data-component="docs-article"]
+  details[data-component="api-operation"] {
+  margin-bottom: 0.75rem;
+  scroll-margin-top: 2rem;
+
+  > summary {
+    position: relative;
+    padding-inline-end: 2.75rem;
+    cursor: pointer;
+    list-style: none;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+
+    /* The plus and minus, as in the FAQ (details-2). */
+    &::before,
+    &::after {
+      content: "";
+      position: absolute;
+      inset-inline-end: 1rem;
+      top: calc(50% - 0.5px);
+      width: 12px;
+      height: 1px;
+      background: var(--code-label);
+    }
+
+    &::after {
+      rotate: 90deg;
+      transition: scale 200ms var(--ease-out);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+      outline-offset: -2px;
+    }
+  }
+
+  &[open] > summary::after {
+    scale: 0 1;
+  }
+
+  &:not([open]) > summary {
+    border-bottom: 0;
+  }
+
+  [data-slot="api-summary"] {
+    font-family: var(--font-sans);
+    color: var(--code-label);
+  }
+
+  [data-slot="operation-id"] {
+    font: 400 var(--fs-micro) / 1.4 var(--font-mono);
+    color: var(--code-label);
+
+    code {
+      padding: 0;
+      border: 0;
+      background: none;
+      font: inherit;
+      color: var(--code-text);
+    }
+  }
+
+  a[data-slot="ref-type"] {
+    color: var(--code-text);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-site] details[data-component="api-operation"] > summary::after {
+    transition: none;
+  }
+}

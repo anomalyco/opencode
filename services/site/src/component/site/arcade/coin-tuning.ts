@@ -95,7 +95,6 @@ const defaults = () =>
   ) as CoinValues
 
 const storageKey = "opencode-arcade-coin-v1"
-const saved = z.record(z.string(), z.record(z.string(), z.number()))
 
 export const [coinValues, setCoinValues] = createStore<CoinValues>(defaults())
 /** Settings › Coin › Preview: the token held still over the cabinet, in its held pose. */
@@ -105,7 +104,12 @@ export const [coinReplay, setCoinReplay] = createSignal(0)
 
 /** Saved values over the defaults, each kept inside its control's range. */
 export function loadCoinValues() {
-  const parsed = saved.safeParse(readJson(localStorage.getItem(storageKey)))
+  // Values are saved from Settings, a development tool, so production keeps the defaults, and its
+  // bundle leaves zod out.
+  if (import.meta.env.PROD) return
+  const parsed = z
+    .record(z.string(), z.record(z.string(), z.number()))
+    .safeParse(readJson(localStorage.getItem(storageKey)))
   if (!parsed.success) return
   const next = defaults()
   for (const [group, entry] of Object.entries(coinControls) as [CoinGroup, Controls[CoinGroup]][])

@@ -4,14 +4,14 @@ export const privacyPolicy: LegalDocumentContent = {
   path: "/legal/privacy-policy",
   title: "Privacy Policy",
   metaTitle: "OpenCode | Privacy Policy for the website and services",
-  effective: "Effective date: Nov 4, 2026",
+  effective: "Effective date: Nov 9, 2026",
   description:
     "How OpenCode collects, uses, shares and protects your personal data when you use the OpenCode website, apps and hosted services, and the choices you have.",
   body: [
     [
       "p",
       {},
-      "At OpenCode, we take your privacy seriously. Please read this Privacy Policy to learn how we treat your personal data. ",
+      'OpenCode is provided by Anomaly Innovations, Inc. ("Anomaly," "OpenCode," "we," "us" or "our"). We take your privacy seriously. Please read this Privacy Policy to learn how we treat your personal data. ',
       [
         "strong",
         {},
@@ -59,11 +59,12 @@ export const privacyPolicy: LegalDocumentContent = {
         ],
       ],
       ["li", {}, ["a", { href: "#how-we-disclose" }, "How We Disclose Your Personal Data"]],
+      ["li", {}, ["a", { href: "#integrations" }, "Integrations with Third-Party Services"]],
       [
         "li",
         {},
         ["a", { href: "#tracking-tools" }, "Tracking Tools and Opt-Out"],
-        ["ul", {}, ["li", {}, ["a", { href: "#product-analytics" }, "Product Analytics on opencode.ai/console"]]],
+        ["ul", {}, ["li", {}, ["a", { href: "#product-analytics" }, "Product Analytics on opencode.ai"]]],
       ],
       ["li", {}, ["a", { href: "#data-security" }, "Data Security"]],
       ["li", {}, ["a", { href: "#personal-data-of-children" }, "Personal Data of Children"]],
@@ -231,7 +232,12 @@ export const privacyPolicy: LegalDocumentContent = {
                 "ul",
                 {},
                 ["li", {}, "Passing through to upstream provider to provide services"],
-                ["li", {}, "Not stored"],
+                [
+                  "li",
+                  {},
+                  "Not stored, except by hosted agents as described in ",
+                  ["a", { href: "#integrations" }, "Integrations with Third-Party Services"],
+                ],
               ],
             ],
             [
@@ -394,6 +400,70 @@ export const privacyPolicy: LegalDocumentContent = {
       {},
       "We may create aggregated, de-identified or anonymized data from the Personal Data we collect, including by removing information that makes the data personally identifiable to a particular user. We may use such aggregated, de-identified or anonymized data and disclose it with third parties for our lawful business purposes, including to analyze, build and improve the Services and promote our business, provided that we will not disclose such data in a manner that could identify you.",
     ],
+    ["h2", { id: "integrations" }, "Integrations with Third-Party Services"],
+    [
+      "p",
+      {},
+      'OpenCode Console lets a workspace connect third-party services ("Connected Services"), such as Slack, Zoom, HubSpot, GitHub, Google Workspace and Microsoft 365, so that its members\' OpenCode agents can use them. This section explains how we handle data from Connected Services. It supplements the rest of this Privacy Policy and controls where they conflict.',
+    ],
+    [
+      "p",
+      {},
+      ["strong", {}, "What we receive and store."],
+      " To connect a Connected Service, you sign in with that service and authorize OpenCode Console, or you or a workspace administrator enter an API key. We encrypt and store the access and refresh tokens or API keys, and any OAuth client secret your workspace provides, and we record the permissions you granted, so that your OpenCode agent can act for you within them. Where a service gives us your user or workspace identifier when you sign in, as Slack and Zoom do, we store it too, so we can recognize your connection and act when the service tells us you removed our app. We store information about the service's tools and instructions, such as their names, descriptions and inputs, and the status of your connection. When you run OpenCode on your own device, OpenCode Console doesn't store the content you access through a Connected Service, such as messages, files, meetings, recordings or CRM records.",
+    ],
+    [
+      "p",
+      {},
+      ["strong", {}, "Hosted agents."],
+      " When your workspace runs an OpenCode agent hosted by OpenCode Console, such as in Slack, GitHub, Discord, email or the Console itself, we store the content of each session (one conversation with the agent, such as a Slack thread). This includes the messages and files shared with the agent, the files in its sandbox (the isolated environment where it runs commands), and the results of its tool calls, including content it retrieves from Connected Services. We store this so the agent can finish its work and continue the conversation later. We delete a session and its sandbox 30 days after its last activity, such as a message to the agent, a scheduled run or a response it finishes. Reading a session doesn't count as activity. We delete them sooner when the agent, its service account or the workspace is deleted. We also delete them sooner when the Slack, GitHub or email inbox connection the session came through is disconnected or removed, such as by uninstalling OpenCode from Slack, or when the agent no longer has a trigger (the setting that lets a Slack workspace, Discord server, GitHub repository, inbox, webhook or schedule start the agent) for the place the session came from. Pausing an agent or turning a trigger off doesn't delete its sessions. For emails sent to an inbox connected to your workspace's agent, we delete the full messages after 90 days, or sooner when the inbox is disconnected or the workspace is deleted. While the inbox is connected, we keep each email's sender, recipient, subject and a preview of up to 200 characters, along with the agent's draft and sent replies and its notes to your team, in the workspace's review queue, and delete them after the inbox is disconnected or the workspace is deleted. If someone schedules a task with the agent in Slack, we keep its instructions until 30 days after the schedule ends, or until Slack is disconnected or the workspace is deleted. To ask us to delete a session or email thread sooner, email ",
+      ["a", { href: "mailto:help@anoma.ly" }, "help@anoma.ly"],
+      ".",
+    ],
+    [
+      "p",
+      {},
+      ["strong", {}, "How we use it."],
+      " When your OpenCode agent uses a Connected Service, OpenCode Console sends the request to the service with your credentials and returns the service's response to your OpenCode agent. We use data from Connected Services only to provide these features to you, keep them secure and comply with the law. Our request logs record limited information about each request, such as the service, the tool used and whether it succeeded, but not what was sent or returned. We keep these logs for up to 30 days. These logs don't include the content of hosted agent sessions. See \"Hosted agents\" above for what they store and how long we keep it.",
+    ],
+    [
+      "p",
+      {},
+      ["strong", {}, "AI models."],
+      " Your OpenCode agent sends what it receives from a Connected Service to the AI model you or your workspace chose, to complete your request. When a third party provides that model, that third party's terms and retention policies apply. We don't use data from Connected Services to train, develop or improve artificial intelligence or machine learning models, and we don't sell it or use it for advertising.",
+    ],
+    [
+      "p",
+      {},
+      ["strong", {}, "Sharing."],
+      " We disclose data from Connected Services only as you direct (such as to the AI model you use), to service providers that host and operate the Services for us under confidentiality and data protection obligations at least as protective as this Privacy Policy, and as the law requires.",
+    ],
+    [
+      "p",
+      {},
+      ["strong", {}, "Retention and deletion."],
+      ' We keep your tokens or API keys for a Connected Service until you disconnect it, a workspace administrator removes it, you leave the workspace, your account is deleted, the workspace is deleted in OpenCode Console or the service tells us you removed our app. We then delete them and any user identifier we stored. Where the service supports it, we also ask the service to revoke your OAuth tokens, unless another of your connections still relies on the same authorization. Hosted agent sessions are deleted as described under "Hosted agents" above. Disconnecting any other Connected Service, such as Zoom or HubSpot, doesn\'t delete what a session already received from it. That content stays until the session is deleted. To ask for access to or deletion of your data, email ',
+      ["a", { href: "mailto:help@anoma.ly" }, "help@anoma.ly"],
+      ".",
+    ],
+    [
+      "p",
+      {},
+      ["strong", {}, "Your choices."],
+      " You can disconnect a Connected Service at any time in OpenCode Console. You can also remove our app in the service's own settings, such as Slack's app management, Zoom's Added Apps, HubSpot's Connected Apps, GitHub's Applications settings, your Google Account's third-party connections or Microsoft's My Apps.",
+    ],
+    [
+      "p",
+      {},
+      ["strong", {}, "Google user data."],
+      " OpenCode's use and transfer to any other app of information received from Google APIs will adhere to the ",
+      [
+        "a",
+        { href: "https://developers.google.com/terms/api-services-user-data-policy" },
+        "Google API Services User Data Policy",
+      ],
+      ", including the Limited Use requirements. We don't use Google Workspace data obtained through Google APIs to develop, improve or train generalized artificial intelligence or machine learning models.",
+    ],
     ["h2", { id: "tracking-tools" }, "Tracking Tools and Opt-Out"],
     [
       "p",
@@ -425,11 +495,7 @@ export const privacyPolicy: LegalDocumentContent = {
         "li",
         {},
         ["strong", {}, "Performance/Analytical Cookies."],
-        " Performance/Analytical Cookies allow us to understand how visitors use our Services. They do this by collecting information about the number of visitors to the Services, what pages visitors view on our Services and how long visitors are viewing pages on the Services. Performance/Analytical Cookies also help us measure the performance of our advertising campaigns in order to help us improve our campaigns and the Services' content for those who engage with our advertising. For example, Google LLC (\"Google\") uses cookies in connection with its Google Analytics services. Google's ability to use and disclose information collected by Google Analytics about your visits to the Services is subject to the Google Analytics Terms of Use and the Google Privacy Policy. You have the option to opt-out of Google's use of Cookies by visiting the Google advertising opt-out page at ",
-        ["a", { href: "http://www.google.com/privacy_ads.html" }, "www.google.com/privacy_ads.html"],
-        " or the Google Analytics Opt-out Browser Add-on at ",
-        ["a", { href: "https://tools.google.com/dlpage/gaoptout/" }, "https://tools.google.com/dlpage/gaoptout/"],
-        ".",
+        " Performance/Analytical Cookies allow us to understand how visitors use our Services. They do this by collecting information about the number of visitors to the Services, what pages visitors view on our Services and how long visitors are viewing pages on the Services. Performance/Analytical Cookies also help us measure the performance of our advertising campaigns in order to help us improve our campaigns and the Services' content for those who engage with our advertising.",
       ],
     ],
     [
@@ -444,13 +510,13 @@ export const privacyPolicy: LegalDocumentContent = {
       ["a", { href: "http://www.allaboutcookies.org/" }, "http://www.allaboutcookies.org/"],
       ".",
     ],
-    // Carried over from dev: #61905 (first-party product analytics) and #62084 (no cookie banner). Needs legal sign-off.
-    ["h3", { id: "product-analytics" }, "Product Analytics on opencode.ai/console"],
+    ["h3", { id: "product-analytics" }, "Product Analytics on opencode.ai"],
     [
       "p",
       {},
-      "When you visit pages under opencode.ai/console, including the sign-in pages, we record the pages you view, how long each page is visible, how long you're active on it and how far you scroll, the links and buttons you click, and the type of any sign-in error. In the Console we record the pages you open and the controls you use in its navigation, plan, billing and onboarding screens. We also record account and workspace events: when you sign up, sign in, verify your email, approve a device, create or delete a workspace, invite or remove members, create API keys, connect providers or clients, and start or complete a checkout or payment, including its amount and any decline reason. We use these records to understand how people find OpenCode and where they stop before signing up or subscribing, so we can improve the Services.",
+      "When you visit opencode.ai, including the docs and the Console, we record the pages you view, how long each page is visible, how long you're active on it, how far you scroll and how quickly it loads. We also record the links and buttons you click, when you download an app or copy a command, when you search (but not what you search for), and the type of any sign-in error. We record each click under a fixed name we give that link or button, so text you or your team entered, such as workspace names or email addresses, isn't recorded even when it appears on the page. We record account and workspace events: when you sign up, sign in, verify your email, approve a device, create or delete a workspace, invite or remove members, create API keys, connect providers or clients, and start or complete a checkout or payment, including its amount and any decline reason. We use these records to understand how people find OpenCode and where they stop before signing up or subscribing, so we can improve the Services.",
     ],
+    ["p", {}, "We collect these records ourselves and don't use third-party analytics services on opencode.ai."],
     [
       "p",
       {},
@@ -459,7 +525,7 @@ export const privacyPolicy: LegalDocumentContent = {
     [
       "p",
       {},
-      "We set the following first-party Cookies. Your browser sends them only to opencode.ai/console. We also keep a list in your browser's local storage of which events it has already reported that day.",
+      "We set the following first-party Cookies. Your browser sends them only to opencode.ai. We also keep a list in your browser's local storage of which events it has already reported that day.",
     ],
     [
       "div",
@@ -476,7 +542,7 @@ export const privacyPolicy: LegalDocumentContent = {
             {},
             ["td", {}, "oc_vid"],
             ["td", {}, "A random ID for your browser"],
-            ["td", {}, "1 year from when it's first set"],
+            ["td", {}, "1 year from your latest visit"],
           ],
           [
             "tr",
@@ -492,9 +558,16 @@ export const privacyPolicy: LegalDocumentContent = {
             [
               "td",
               {},
-              "How you first and most recently arrived: the page you landed on, the domain of the website that referred you, any campaign (UTM) parameters in the link, and the last sign-up or sign-in link you clicked",
+              "The page you first and most recently landed on, the domain of the website that referred you and any campaign (UTM) parameters in the link, plus the last link into the Console you clicked (a sign-up or sign-in link, and the plan it was for, if any) and when you clicked it",
             ],
-            ["td", {}, "1 year"],
+            ["td", {}, "1 year from the last time it changed"],
+          ],
+          [
+            "tr",
+            {},
+            ["td", {}, "oc_optout"],
+            ["td", {}, "A record that you turned off analytics in this browser"],
+            ["td", {}, "1 year from your latest visit"],
           ],
         ],
       ],
@@ -504,6 +577,15 @@ export const privacyPolicy: LegalDocumentContent = {
       {},
       "When you create an account, sign in, verify your email or approve a device, we link the records from that browser to your account. Records made while you're signed in carry your account ID directly.",
     ],
+    [
+      "p",
+      {},
+      "If your browser sends a Global Privacy Control signal, or you ",
+      ["a", { href: "https://opencode.ai/legal/privacy-policy#product-analytics" }, "turn off analytics on this page"],
+      ", we still record the page views, clicks and other browser events above, but without the IDs and arrival details in oc_vid, oc_sid and oc_attr, and without your account or workspace ID. We delete those Cookies and the local storage list from your browser and don't set them again while analytics are off. Account and workspace events, such as sign-ups, payments and workspace changes, still carry your account ID, but we don't link them or any other records to that browser, even if you're signed in.",
+    ],
+    // The on and off control for this browser (AnalyticsChoice); the Markdown version leaves it out.
+    ["analytics-choice", {}],
     [
       "p",
       {},

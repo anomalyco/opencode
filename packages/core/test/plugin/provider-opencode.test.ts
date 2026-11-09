@@ -12,14 +12,12 @@ import { App } from "@opencode/core/app"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { ConfigIntegration } from "@opencode/core/config/integration"
-import { ConfigMcpPlugin } from "@opencode/core/config/plugin/mcp"
 import { ConfigPolicyPlugin } from "@opencode/core/config/plugin/policy"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { ConfigWebSearchPlugin } from "@opencode/core/config/plugin/websearch"
-import { ConsoleAccess } from "@opencode/core/console-access"
 import { Credential } from "@opencode/core/credential"
+import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Integration } from "@opencode/core/integration"
-import { Mcp } from "@opencode/core/mcp/index"
 import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
@@ -29,15 +27,13 @@ import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
 import { OpencodePlugin } from "@opencode/core/plugin/provider/opencode"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
-import { SessionMessage } from "@opencode/core/session/message"
 import { Skill } from "@opencode/core/skill"
 import { WebSearch } from "@opencode/core/websearch"
 import { withEnv } from "../fixture/env"
 import { drain } from "../lib/clock"
 import { eventually } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
-import { emptyMcp } from "../fixture/mcp"
-import { makePluginTestLayer, PluginTestLayer } from "./fixture"
+import { PluginTestLayer } from "./fixture"
 
 const it = testEffect(PluginTestLayer)
 
@@ -82,51 +78,6 @@ const inProcess = (server: { fetch: (request: Request) => Response | Promise<Res
       ),
     ),
   )
-
-// Without `drain`: what the hook applied must be visible when it returns.
-const prompt = Effect.fn(function* () {
-  const hooks = yield* PluginHooks.Service
-  yield* hooks.trigger("session", "prompt", {
-    sessionID: Session.ID.make("ses_console_prompt"),
-    messageID: SessionMessage.ID.make("msg_console_prompt"),
-    prompt: { text: "hello" },
-    delivery: "steer",
-  })
-})
-
-// Records the MCP servers config transforms produce, rebuilt on each reload and registration as the MCP service does.
-type McpServerConfig = NonNullable<ReturnType<Mcp.Editor["get"]>>
-const recordingMcp = (() => {
-  const transforms = new Set<(editor: Mcp.Editor) => void>()
-  const configured = new Map<string, McpServerConfig>()
-  const reload = () =>
-    Effect.sync(() => {
-      const servers = new Map<string, McpServerConfig>()
-      const editor: Mcp.Editor = {
-        list: () => Array.from(servers, ([name, config]) => [Mcp.ServerName.make(name), config] as const),
-        get: (name) => servers.get(name),
-        set: (name, config) => servers.set(name, structuredClone(config) as McpServerConfig),
-        update: (name, update) => {
-          const config = servers.get(name)
-          if (config) update(config)
-        },
-        remove: (name) => servers.delete(name),
-      }
-      transforms.forEach((transform) => transform(editor))
-      configured.clear()
-      servers.forEach((config, name) => configured.set(name, config))
-    })
-  const service = Mcp.Service.of({
-    ...emptyMcp,
-    transform: (callback) =>
-      Effect.sync(() => {
-        transforms.add(callback)
-        return { dispose: Effect.sync(() => transforms.delete(callback)).pipe(Effect.andThen(reload)) }
-      }).pipe(Effect.tap(reload)),
-    reload,
-  })
-  return { configured, layer: Layer.succeed(Mcp.Service, service) }
-})()
 
 function consoleServer(orgID: string | null | undefined, unavailable = false) {
   const config: { authorization: string | null; orgID: string | null }[] = []
@@ -408,10 +359,14 @@ describe("OpencodePlugin", () => {
                   label: initial.label,
                 }),
               ).toEqual(stored.value)
-              expect(requests).toEqual(["/auth/device/token", "/api/v2/config"])
-              // The refresh and the config fetch both say which OpenCode is asking.
-              expect(agents).toEqual(["opencode/beta/1.2.3/test", "opencode/beta/1.2.3/test"])
-            }).pipe(Effect.provideService(App.Metadata, App.make({ name: "test", version: "1.2.3", channel: "beta" }))),
+              expect(requests).toEqual([
+                "/auth/device/token",
+                "/api/v2/config",
+                ...(scenario.orgID === "org-missing" ? [] : ["/api/v2/instructions", "/api/v2/skills"]),
+              ])
+              // The refresh and every Console fetch say which OpenCode is asking.
+              expect(agents).toEqual(requests.map(() => "opencode/beta/1.2.3/test"))
+            }).pipe(Effect.provideService(App.Service, App.make({ name: "test", version: "1.2.3", channel: "beta" }))),
           ({ server }) => Effect.promise(() => server.stop(true)),
         ),
     )
@@ -460,6 +415,7 @@ describe("OpencodePlugin", () => {
           server: Bun.serve({
             port: 0,
             fetch: (request) => {
+              if (new URL(request.url).pathname !== "/api/v2/config") return new Response(null, { status: 404 })
               authorization.push(request.headers.get("authorization"))
               requests.push(`${request.method} ${new URL(request.url).pathname}`)
               const origin = new URL(request.url).origin
@@ -745,7 +701,8 @@ describe("OpencodePlugin", () => {
         const state = { advertised: false, failing: false, requests: 0 }
         const server = Bun.serve({
           port: 0,
-          fetch: () => {
+          fetch: (request) => {
+            if (new URL(request.url).pathname !== "/api/v2/config") return new Response(null, { status: 404 })
             state.requests++
             if (state.failing) return new Response("Unavailable", { status: 502 })
             return Response.json({
@@ -816,187 +773,6 @@ describe("OpencodePlugin", () => {
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
   )
-
-  it.effect("applies a credential switch only when it changes the Console config", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => Bun.serve({ port: 0, fetch: () => Response.json({ providers: {} }) })),
-      (server) =>
-        Effect.gen(function* () {
-          const credentials = yield* Credential.Service
-          const providers = yield* Provider.Service
-          const bus = yield* Bus.Service
-          const rebuilds = { count: 0 }
-          const key = (key: string) =>
-            Credential.Key.make({ type: "key", key, metadata: { server: server.url.origin } })
-          yield* credentials.create({ integrationID: Integration.ID.make("opencode"), value: key("first") })
-          yield* providers.transform(() => {
-            rebuilds.count++
-          })
-          yield* addPlugin().pipe(inProcess(server))
-          yield* drain
-          const initial = rebuilds.count
-
-          const second = yield* credentials.create({
-            integrationID: Integration.ID.make("opencode"),
-            value: key("second"),
-          })
-          yield* drain
-          expect(rebuilds.count).toBe(initial + 1)
-
-          // A switch queued behind a prompt that already applied this credential's config.
-          yield* bus.publish(Credential.Event.Switched, {
-            integrationID: Integration.ID.make("opencode"),
-            credentialID: second.id,
-          })
-          yield* drain
-          expect(rebuilds.count).toBe(initial + 1)
-        }),
-      (server) => Effect.promise(() => server.stop(true)),
-    ),
-  )
-
-  describe("refreshing Console config", () => {
-    const serve = () =>
-      Effect.sync(() => {
-        const state = { advertised: false, requests: [] as (string | null)[], hang: false }
-        const hanging: (() => void)[] = []
-        const server = Bun.serve({
-          port: 0,
-          fetch: (request) => {
-            state.requests.push(request.headers.get("authorization"))
-            const response = Response.json({
-              providers: {},
-              ...(state.advertised ? { websearch: { provider: "opencode" } } : {}),
-            })
-            if (!state.hang) return response
-            return new Promise<Response>((resolve) => hanging.push(() => resolve(response)))
-          },
-        })
-        return { server, state, release: () => hanging.splice(0).forEach((resolve) => resolve()) }
-      })
-    const key = (server: Bun.Server<undefined>, key = "secret") =>
-      Credential.Key.make({ type: "key", key, metadata: { server: server.url.origin } })
-    // A real macrotask, so a request can reach the server without advancing the TestClock as `drain` does.
-    const settle = Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)))
-    const connect = Effect.fn(function* (server: Bun.Server<undefined>, poll = false) {
-      const credentials = yield* Credential.Service
-      const credential = yield* credentials.create({
-        integrationID: Integration.ID.make("opencode"),
-        value: key(server),
-      })
-      yield* addPlugin().pipe(inProcess(server), Effect.provideService(ConsoleAccess.Options, { poll }))
-      yield* drain
-      return credential
-    })
-
-    it.effect("schedules no background Console check", () =>
-      Effect.acquireUseRelease(
-        serve(),
-        ({ server, state }) =>
-          Effect.gen(function* () {
-            yield* connect(server)
-            expect(state.requests).toHaveLength(1)
-            yield* TestClock.adjust("5 minutes")
-            yield* drain
-            expect(state.requests).toHaveLength(1)
-          }),
-        ({ server }) => Effect.promise(() => server.stop(true)),
-      ),
-    )
-
-    it.effect("refreshes Console config older than a minute when a prompt starts", () =>
-      Effect.acquireUseRelease(
-        serve(),
-        ({ server, state }) =>
-          Effect.gen(function* () {
-            const websearch = yield* WebSearch.Service
-            yield* connect(server)
-            state.advertised = true
-
-            yield* TestClock.adjust("50 seconds")
-            yield* prompt()
-            expect(state.requests).toHaveLength(1)
-            expect(yield* websearch.providers()).toEqual([])
-
-            yield* TestClock.adjust("20 seconds")
-            yield* prompt()
-            expect(state.requests).toHaveLength(2)
-            expect(yield* websearch.providers()).toContainEqual(consoleSearch)
-          }),
-        ({ server }) => Effect.promise(() => server.stop(true)),
-      ),
-    )
-
-    it.effect("admits a prompt after 3 seconds on the config it has when the Console doesn't answer", () =>
-      Effect.acquireUseRelease(
-        serve(),
-        ({ server, state, release }) =>
-          Effect.gen(function* () {
-            const websearch = yield* WebSearch.Service
-            state.advertised = true
-            yield* connect(server)
-            expect(yield* websearch.providers()).toContainEqual(consoleSearch)
-
-            state.hang = true
-            state.advertised = false
-            yield* TestClock.adjust("2 minutes")
-            const admitted = yield* prompt().pipe(Effect.forkChild({ startImmediately: true }))
-            yield* TestClock.adjust("3 seconds")
-            yield* Fiber.join(admitted)
-            expect(state.requests).toHaveLength(2)
-            expect(yield* websearch.providers()).toContainEqual(consoleSearch)
-            release()
-          }),
-        ({ server, release }) => Effect.sync(release).pipe(Effect.andThen(Effect.promise(() => server.stop(true)))),
-      ),
-    )
-
-    it.effect("admits a prompt within 3 seconds while a background check waits on the Console", () =>
-      Effect.acquireUseRelease(
-        serve(),
-        ({ server, state, release }) =>
-          Effect.gen(function* () {
-            const websearch = yield* WebSearch.Service
-            state.advertised = true
-            yield* connect(server, true)
-
-            state.hang = true
-            state.advertised = false
-            yield* TestClock.adjust("1 minute")
-            yield* settle
-            expect(state.requests).toHaveLength(2)
-
-            const admitted = yield* prompt().pipe(Effect.forkChild({ startImmediately: true }))
-            yield* settle
-            yield* TestClock.adjust("3 seconds")
-            yield* Fiber.join(admitted)
-            // The prompt joined the background check's request rather than sending its own.
-            expect(state.requests).toHaveLength(2)
-            expect(yield* websearch.providers()).toContainEqual(consoleSearch)
-            release()
-          }),
-        ({ server, release }) => Effect.sync(release).pipe(Effect.andThen(Effect.promise(() => server.stop(true)))),
-      ),
-    )
-
-    it.effect("fetches again under a key replaced in place, even while the last config is fresh", () =>
-      Effect.acquireUseRelease(
-        serve(),
-        ({ server, state }) =>
-          Effect.gen(function* () {
-            const credentials = yield* Credential.Service
-            const credential = yield* connect(server)
-            expect(state.requests).toEqual(["Bearer secret"])
-
-            yield* credentials.update(credential.id, { value: key(server, "rotated") })
-            yield* TestClock.adjust("10 seconds")
-            yield* prompt()
-            expect(state.requests).toEqual(["Bearer secret", "Bearer rotated"])
-          }),
-        ({ server }) => Effect.promise(() => server.stop(true)),
-      ),
-    )
-  })
 
   it.effect("refreshes past future-only policies while retaining config on malformed statements", () =>
     Effect.acquireUseRelease(
@@ -1127,7 +903,8 @@ describe("OpencodePlugin", () => {
         const state = { sso: false, requests: 0 }
         const server = Bun.serve({
           port: 0,
-          fetch: () => {
+          fetch: (request) => {
+            if (new URL(request.url).pathname !== "/api/v2/config") return new Response(null, { status: 404 })
             state.requests++
             if (state.sso)
               return Response.json(
@@ -1334,6 +1111,30 @@ describe("OpencodePlugin", () => {
     ),
   )
 
+  it.effect("activates when the Console accepts the config request but never answers", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const integrations = yield* Integration.Service
+      const state = { requests: 0 }
+      const hanging = {
+        fetch: () => {
+          state.requests++
+          return new Promise<Response>(() => {})
+        },
+      }
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.example" } }),
+      })
+      const activation = yield* addPlugin().pipe(inProcess(hanging), Effect.forkChild({ startImmediately: true }))
+      // Four attempts of 5 seconds each, with 1, 2 and 4 seconds of backoff between them.
+      yield* TestClock.adjust("1 second").pipe(Effect.repeat({ times: 29 }))
+      yield* Fiber.join(activation)
+      expect(state.requests).toBe(4)
+      expect((yield* integrations.get(Integration.ID.make("opencode")))?.connections).toHaveLength(1)
+    }),
+  )
+
   it.effect("reports a Console session rejected before its token expires as signed out", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
@@ -1398,6 +1199,7 @@ describe("OpencodePlugin", () => {
           port: 0,
           fetch: async (request) => {
             const path = new URL(request.url).pathname
+            if (path === "/api/v2/instructions" || path === "/api/v2/skills") return new Response(null, { status: 404 })
             const body = request.method === "POST" ? await request.json() : undefined
             requests.push({
               method: request.method,
@@ -1592,6 +1394,8 @@ describe("OpencodePlugin", () => {
           )
           expect(requests).toEqual([
             "https://opencode.ai/console/api/v2/config",
+            "https://opencode.ai/console/api/v2/instructions",
+            "https://opencode.ai/console/api/v2/skills",
             "https://opencode.ai/console/api/websearch",
           ])
         }),
@@ -1732,6 +1536,7 @@ describe("OpencodePlugin", () => {
             if (url.pathname === "/api/v2/config") {
               return Response.json({ providers: {}, websearch: { provider: "opencode" } })
             }
+            if (url.pathname.startsWith("/api/v2/")) return new Response(null, { status: 404 })
             return Response.redirect(`${url.origin}/loop`, 302)
           },
         })
@@ -1775,10 +1580,9 @@ describe("OpencodePlugin", () => {
               authorization: request.headers.get("authorization"),
               orgID: request.headers.get("x-org-id"),
             })
-            if (url.pathname === "/api/v2/config") {
-              return Response.json({ providers: {}, library: { skills: [{ slug: "deploy", version: "1" }] } })
-            }
-            if (url.pathname === "/api/v2/library/skills/deploy") {
+            if (url.pathname === "/api/v2/config") return Response.json({ providers: {} })
+            if (url.pathname === "/api/v2/skills") return Response.json({ skills: [{ slug: "deploy", version: "1" }] })
+            if (url.pathname === "/api/v2/skills/deploy") {
               // Skill archives come from presigned storage on its own host, where the signature covers the encoding.
               const target = new URL("/archive/deploy.json?expires=1&sig=a%20b~c", url)
               target.hostname = "127.0.0.1"
@@ -1805,7 +1609,7 @@ describe("OpencodePlugin", () => {
 
           yield* eventually(skills.list(), (list) => list.some((skill) => skill.id === Skill.ID.make("deploy")))
           expect(downloads).toContainEqual({
-            path: "/api/v2/library/skills/deploy",
+            path: "/api/v2/skills/deploy",
             search: "",
             authorization: "Bearer secret",
             orgID: "org_test",
@@ -1821,6 +1625,155 @@ describe("OpencodePlugin", () => {
     ),
   )
 
+  it.effect("keeps Console instructions and skills through an edit or a Console error, and clears them on 404", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const discovery = yield* InstructionDiscovery.Service
+      const skills = yield* Skill.Service
+      const state = { instruction: "Use tabs.", lists: 200 }
+      const server = {
+        fetch: (request: Request) => {
+          const path = new URL(request.url).pathname
+          if (path === "/api/v2/config") return Response.json({ providers: {} })
+          if ((path === "/api/v2/instructions" || path === "/api/v2/skills") && state.lists !== 200)
+            return new Response(null, { status: state.lists })
+          if (path === "/api/v2/instructions")
+            return Response.json({ instructions: [{ id: "style", content: state.instruction }] })
+          if (path === "/api/v2/skills") return Response.json({ skills: [{ slug: "deploy", version: "1" }] })
+          if (path === "/api/v2/skills/deploy") return Response.json(skillBundle)
+          return new Response(null, { status: 404 })
+        },
+      }
+      const loaded = Effect.all([discovery.list(), skills.get(Skill.ID.make("deploy"))]).pipe(
+        Effect.map(([files, skill]) => ({
+          instructions: Array.isArray(files)
+            ? files.filter((file) => file.path.startsWith("OpenCode Console")).map((file) => file.content)
+            : [],
+          skill: skill?.description,
+        })),
+      )
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+      })
+      yield* addPlugin().pipe(inProcess(server))
+      yield* drain
+      expect(yield* loaded).toEqual({ instructions: ["Use tabs."], skill: "Deploys the service." })
+
+      // The config is unchanged, so config keeps the Console document it already holds.
+      state.instruction = "Use spaces."
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+      expect(yield* loaded).toEqual({ instructions: ["Use spaces."], skill: "Deploys the service." })
+
+      // A Console error keeps both, through the retries.
+      state.lists = 503
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+      yield* TestClock.adjust("10 seconds")
+      yield* drain
+      expect(yield* loaded).toEqual({ instructions: ["Use spaces."], skill: "Deploys the service." })
+
+      // A 404 means the workspace has none.
+      state.lists = 404
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+      expect(yield* loaded).toEqual({ instructions: [], skill: undefined })
+    }),
+  )
+
+  it.effect("applies Console policies while its instructions and skills fail, and keeps a list over a malformed one", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const config = yield* Config.Service
+      const discovery = yield* InstructionDiscovery.Service
+      const sudo: ConfigPolicy.Info = { action: "tool.use", resource: "shell:sudo *", effect: "deny" }
+      const state: { lists: "down" | "ok" | "malformed" } = { lists: "down" }
+      const server = {
+        fetch: (request: Request) => {
+          const path = new URL(request.url).pathname
+          if (path === "/api/v2/config") return Response.json({ providers: {}, policies: [sudo] })
+          if (path !== "/api/v2/instructions" && path !== "/api/v2/skills") return new Response(null, { status: 404 })
+          if (state.lists === "down") return new Response("Unavailable", { status: 503 })
+          if (path === "/api/v2/skills") return Response.json({ skills: [] })
+          if (state.lists === "malformed") return Response.json({ instructions: [{ id: "style" }] })
+          return Response.json({ instructions: [{ id: "style", content: "Use tabs." }] })
+        },
+      }
+      const instructions = discovery
+        .list()
+        .pipe(
+          Effect.map((files) =>
+            Array.isArray(files)
+              ? files.filter((file) => file.path.startsWith("OpenCode Console")).map((file) => file.content)
+              : [],
+          ),
+        )
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+      })
+
+      // Once the lists' retries run out, startup still applies the config's policies, just without the lists.
+      const started = yield* addPlugin().pipe(inProcess(server), Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("10 seconds")
+      yield* Fiber.join(started)
+      expect(yield* consolePolicies(config)).toEqual([sudo])
+      expect(yield* instructions).toEqual([])
+
+      state.lists = "ok"
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+      expect(yield* instructions).toEqual(["Use tabs."])
+
+      state.lists = "malformed"
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+      expect(yield* instructions).toEqual(["Use tabs."])
+      expect(yield* consolePolicies(config)).toEqual([sudo])
+    }),
+  )
+
+  it.effect("requests Console instructions and skills together", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const discovery = yield* InstructionDiscovery.Service
+      const requests: string[] = []
+      // Instructions answer only once skills were requested, so fetching the lists one after the other never finishes.
+      const skillsRequested = Promise.withResolvers<void>()
+      const server = {
+        fetch: async (request: Request) => {
+          const path = new URL(request.url).pathname
+          requests.push(path)
+          if (path === "/api/v2/config") return Response.json({ providers: {} })
+          if (path === "/api/v2/instructions") {
+            await skillsRequested.promise
+            return Response.json({ instructions: [{ id: "style", content: "Use tabs." }] })
+          }
+          if (path === "/api/v2/skills") {
+            skillsRequested.resolve()
+            return Response.json({ skills: [] })
+          }
+          return new Response(null, { status: 404 })
+        },
+      }
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+      })
+      const activation = yield* addPlugin().pipe(inProcess(server), Effect.forkChild({ startImmediately: true }))
+      yield* drain
+      expect(requests.toSorted()).toEqual(["/api/v2/config", "/api/v2/instructions", "/api/v2/skills"])
+      yield* Fiber.join(activation)
+      const files = yield* discovery.list()
+      expect(
+        Array.isArray(files)
+          ? files.filter((file) => file.path.startsWith("OpenCode Console")).map((file) => file.content)
+          : [],
+      ).toEqual(["Use tabs."])
+    }),
+  )
+
   it.live("keeps credentials on a same-origin skill redirect", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
@@ -1830,10 +1783,9 @@ describe("OpencodePlugin", () => {
           fetch: (request) => {
             const url = new URL(request.url)
             downloads.push({ path: url.pathname, authorization: request.headers.get("authorization") })
-            if (url.pathname === "/api/v2/config") {
-              return Response.json({ providers: {}, library: { skills: [{ slug: "deploy", version: "1" }] } })
-            }
-            if (url.pathname === "/api/v2/library/skills/deploy")
+            if (url.pathname === "/api/v2/config") return Response.json({ providers: {} })
+            if (url.pathname === "/api/v2/skills") return Response.json({ skills: [{ slug: "deploy", version: "1" }] })
+            if (url.pathname === "/api/v2/skills/deploy")
               return Response.redirect(`${url.origin}/assets/deploy.json`, 302)
             return Response.json(skillBundle)
           },
@@ -1875,6 +1827,7 @@ describe("OpencodePlugin", () => {
                 websearch: { provider: "opencode" },
               })
             }
+            if (url.pathname.startsWith("/api/v2/")) return new Response(null, { status: 404 })
             return new Response(
               new ReadableStream({
                 start(controller) {
@@ -2186,67 +2139,6 @@ describe("OpencodePlugin", () => {
         expect(required(yield* catalog.get(Provider.ID.openai)).settings?.apiKey).toBeUndefined()
         expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("paid"))).enabled).toBe(true)
       }),
-    ),
-  )
-})
-
-describe("OpencodePlugin prompt refresh", () => {
-  const it = testEffect(makePluginTestLayer(undefined, undefined, recordingMcp.layer))
-
-  it.effect("applies a rotated MCP header and a new policy before the prompt hook returns", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const state = { header: "Bearer one", deny: false }
-        const server = Bun.serve({
-          port: 0,
-          fetch: () =>
-            Response.json({
-              providers: { remote: { name: "Remote" } },
-              mcp: {
-                servers: {
-                  gateway: {
-                    type: "remote",
-                    url: "https://gateway.example/mcp",
-                    headers: { authorization: state.header },
-                  },
-                },
-              },
-              policies: state.deny ? [{ action: "provider.use", resource: "remote", effect: "deny" }] : [],
-            }),
-        })
-        return { server, state }
-      }),
-      ({ server, state }) =>
-        Effect.gen(function* () {
-          const credentials = yield* Credential.Service
-          const providers = yield* Provider.Service
-          const header = () => {
-            const gateway = recordingMcp.configured.get("gateway")
-            return gateway?.type === "remote" ? gateway.headers?.authorization : undefined
-          }
-          yield* credentials.create({
-            integrationID: Integration.ID.make("opencode"),
-            value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
-          })
-          const host = yield* PluginHost.make(yield* Plugin.Service, "test")
-          yield* OpencodePlugin.effect(host).pipe(
-            inProcess(server),
-            Effect.provideService(ConsoleAccess.Options, { poll: false }),
-          )
-          yield* ConfigMcpPlugin.Plugin.effect(host)
-          yield* ConfigPolicyPlugin.Plugin.effect(host)
-          yield* drain
-          expect(header()).toBe("Bearer one")
-          expect(yield* providers.get(Provider.ID.make("remote"))).toBeDefined()
-
-          state.header = "Bearer two"
-          state.deny = true
-          yield* TestClock.adjust("2 minutes")
-          yield* prompt()
-          expect(header()).toBe("Bearer two")
-          expect(yield* providers.get(Provider.ID.make("remote"))).toBeUndefined()
-        }),
-      ({ server }) => Effect.promise(() => server.stop(true)),
     ),
   )
 })

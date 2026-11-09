@@ -13,7 +13,7 @@ describe("voice orb", () => {
   })
 
   test("shows by default everywhere, production included (as the Hex promo)", () => {
-    expect(siteSettingsSchema.parse({}).voiceOrb).toBe("always")
+    expect(siteSettingsSchema().parse({}).voiceOrb).toBe("always")
   })
 
   // For launch the orb is a Hex promo: voice mode's code, audio and speech must not load with it.

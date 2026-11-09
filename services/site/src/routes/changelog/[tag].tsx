@@ -12,7 +12,7 @@ import { useMarkdown } from "~/component/site/use-markdown"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { changelogEntry } from "~/lib/changelog"
-import { changelogEntryPageMarkdown } from "~/lib/changelog-markdown"
+import { entryStatus } from "~/lib/changelog-notes"
 import { PageTitle } from "~/component/site/sticky-title"
 
 /** One release's page, `/changelog/<tag>`: the entry in full, with Share, and the newer and older entries. */
@@ -22,7 +22,11 @@ export default function ChangelogRelease() {
   const params = useParams()
   const view = createAsync(() => changelogEntry(params.tag ?? ""))
   const entry = () => view()?.entries[0]
-  const markdown = useMarkdown(`/changelog/${params.tag}`, changelogEntryPageMarkdown, { changelog: view })
+  const markdown = useMarkdown(
+    `/changelog/${params.tag}`,
+    (context, pages) => pages.changelogEntryPageMarkdown(context),
+    { changelog: view },
+  )
   const description = () => {
     const current = entry()
     if (!current) return i18n.t("changelog.meta.description")
@@ -73,9 +77,7 @@ export default function ChangelogRelease() {
               when={entry()}
               fallback={
                 <>
-                  <Show when={current().ok}>
-                    <HttpStatusCode code={404} />
-                  </Show>
+                  <HttpStatusCode code={entryStatus(current())} />
                   <Title>{i18n.t("changelog.title")}</Title>
                   <section data-component="hero">
                     <PageTitle title={i18n.t("changelog.hero.title")} />

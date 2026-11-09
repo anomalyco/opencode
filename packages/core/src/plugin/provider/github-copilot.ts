@@ -2,7 +2,7 @@ import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect
 import type { SessionRequestKind, SessionTitle } from "@opencode/plugin/effect/session"
 import { isRecord } from "@opencode/util/record"
 import { Effect, Option, Schema } from "effect"
-import { FetchHttpClient, HttpClient } from "effect/http"
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Credential } from "../../credential.js"
 import { CopilotModels } from "../../github-copilot/models.js"
@@ -104,17 +104,14 @@ const oauth = (app: App.Info) =>
             Effect.flatMap((token) => {
               if (token.access_token) {
                 const access = token.access_token
-                return request(
-                  `${domain === "github.com" ? "https://api.github.com" : `https://api.${domain}`}/copilot_internal/user`,
-                  {
-                    headers: {
-                      Accept: "application/json",
-                      Authorization: `Bearer ${access}`,
-                      "User-Agent": App.useragent(app),
-                      "X-GitHub-Api-Version": userApiVersion,
-                    },
+                return request(userURL(enterprise ? domain : undefined), {
+                  headers: {
+                    Accept: "application/json",
+                    Authorization: `Bearer ${access}`,
+                    "User-Agent": App.useragent(app),
+                    "X-GitHub-Api-Version": userApiVersion,
                   },
-                ).pipe(
+                }).pipe(
                   Effect.map((user) => Option.getOrUndefined(decodeUser(user))),
                   // Only an explicit entitlement answer blocks login; a failed
                   // or malformed lookup must not turn a GitHub hiccup into a denial.
@@ -180,7 +177,43 @@ export const GithubCopilotPlugin = define({
       load: Effect.fn("GithubCopilotPlugin.load")(function* (_, options) {
         const { connection, credential } = yield* activeCredential(ctx, "github-copilot")
         if (!connection || credential?.type !== "oauth") return { connection, value: {} }
-        const url = copilotBaseURL(credential.metadata) ?? baseURL()
+        // The account's API endpoint changes with its plan, so read it again on every refresh; the one stored at
+        // login is the fallback.
+        const endpoint = yield* cache
+          .get({
+            key: `github-copilot-endpoint:${IntegrationConnection.key(connection)}`,
+            ...options,
+            load: ctx.integration.connection.resolve(connection).pipe(
+              Effect.flatMap((current) =>
+                current?.type === "oauth"
+                  ? HttpClient.filterStatusOk(http)
+                      .execute(
+                        HttpClientRequest.get(
+                          userURL(
+                            typeof current.metadata?.enterpriseUrl === "string"
+                              ? current.metadata.enterpriseUrl
+                              : undefined,
+                          ),
+                        ).pipe(
+                          HttpClientRequest.setHeaders({
+                            Accept: "application/json",
+                            Authorization: `Bearer ${current.refresh}`,
+                            "User-Agent": App.useragent(ctx.app),
+                            "X-GitHub-Api-Version": userApiVersion,
+                          }),
+                        ),
+                      )
+                      .pipe(
+                        Effect.flatMap(HttpClientResponse.schemaBodyJson(User)),
+                        Effect.map((user) => user.endpoints?.api?.replace(/\/+$/, "")),
+                        Effect.timeout("5 seconds"),
+                      )
+                  : Effect.fail(new Error("GitHub Copilot connection has no OAuth credential")),
+              ),
+            ),
+          })
+          .pipe(Effect.orElseSucceed(() => undefined))
+        const url = endpoint || copilotBaseURL(credential.metadata)
         const headers = (yield* providers.get(Provider.ID.githubCopilot))?.headers ?? {}
         const models = yield* cache
           .get({
@@ -223,21 +256,21 @@ export const GithubCopilotPlugin = define({
         return
       }
       // Without the live model list, the models.dev package says which Copilot API serves
-      // each model: Anthropic Messages stays native, OpenAI means Responses, and anything
-      // else goes through the bundled Copilot SDK's model ID fallback.
+      // each model: Anthropic means Messages, OpenAI means Responses, and anything else
+      // falls back to the model ID.
       for (const id of item.models.keys()) {
         evt.models.update(item.provider.id, id, (model) => {
-          if (model.package === "@opencode/ai/providers/anthropic") {
-            if (loaded.baseURL)
-              model.settings = Provider.mergeOverlay(model.settings, { baseURL: `${loaded.baseURL}/v1` })
-            return
-          }
-          const responses = model.package === "@opencode/ai/providers/openai"
-          model.package = Provider.aisdk("@ai-sdk/github-copilot")
-          model.settings = Provider.mergeOverlay(model.settings, {
-            ...(loaded.baseURL ? { baseURL: loaded.baseURL } : {}),
-            ...(responses ? { endpoint: "responses" } : {}),
-          })
+          const route = CopilotModels.routeFor(
+            model.modelID ?? model.id,
+            model.package === "@opencode/ai/providers/anthropic"
+              ? "messages"
+              : model.package === "@opencode/ai/providers/openai"
+                ? "responses"
+                : undefined,
+            loaded.baseURL ?? baseURL(),
+          )
+          model.package = route.package
+          model.settings = Provider.mergeOverlay(model.settings, { baseURL: route.baseURL })
         })
       }
     })
@@ -250,20 +283,6 @@ export const GithubCopilotPlugin = define({
         })
       }
     })
-    yield* ctx.aisdk.hook(
-      "sdk",
-      Effect.fn(function* (evt) {
-        if (evt.package !== "@ai-sdk/github-copilot") return
-        evt.options.fetch = copilotFetch(
-          typeof evt.options.apiKey === "string" ? evt.options.apiKey : undefined,
-          evt.options.fetch,
-          ctx.app,
-        )
-        const mod = yield* Effect.promise(() => import("../../github-copilot/copilot-provider.js"))
-        evt.sdk = mod.createOpenaiCompatible(evt.options)
-      }),
-      { providerID: Provider.ID.githubCopilot },
-    )
     yield* ctx.session.hook(
       "model.request",
       (evt) =>
@@ -307,40 +326,15 @@ export const GithubCopilotPlugin = define({
       "http.request",
       (evt) =>
         Effect.gen(function* () {
-          const token = evt.request.headers.get("x-api-key")
+          // The Messages route sends the token as `x-api-key`, the OpenAI routes as a bearer token.
+          const token =
+            evt.request.headers.get("x-api-key") ??
+            evt.request.headers.get("authorization")?.replace(/^Bearer\s+/i, "")
           if (!token) return
           const text = yield* Effect.promise(() => evt.request.clone().text())
           const body = Option.getOrUndefined(decodeBody(text))
           applyHeaders(evt.request.headers, token, ctx.app, requestMetadata(evt.request.url, body))
         }),
-      { providerID: Provider.ID.githubCopilot },
-    )
-    yield* ctx.aisdk.hook(
-      "language",
-      Effect.fn(function* (evt) {
-        if (evt.sdk.responses === undefined && evt.sdk.chat === undefined) {
-          evt.language = evt.sdk.languageModel(evt.model.modelID ?? evt.model.id)
-          return
-        }
-        if (evt.options.endpoint === "responses" && evt.sdk.responses) {
-          evt.language = evt.sdk.responses(evt.model.modelID ?? evt.model.id)
-          return
-        }
-        if (evt.options.endpoint === "chat" && evt.sdk.chat) {
-          evt.language = evt.sdk.chat(evt.model.modelID ?? evt.model.id)
-          return
-        }
-        const id = evt.model.modelID ?? evt.model.id
-        // Copilot serves Grok and MAI Code only on /responses, and Gemini only on
-        // /chat/completions; advertised endpoint metadata above wins whenever the
-        // live model list provides it.
-        const gpt = /^gpt-(\d+)/.exec(id)
-        const responses =
-          (gpt !== null && Number(gpt[1]) >= 5 && !id.startsWith("gpt-5-mini")) ||
-          id.startsWith("grok-") ||
-          id.startsWith("mai-code-")
-        evt.language = responses ? evt.sdk.responses(id) : evt.sdk.chat(id)
-      }),
       { providerID: Provider.ID.githubCopilot },
     )
   }),
@@ -364,6 +358,10 @@ function oauthURLs(domain: string) {
     device: `https://${domain}/login/device/code`,
     token: `https://${domain}/login/oauth/access_token`,
   }
+}
+
+function userURL(enterprise?: string) {
+  return `${enterprise ? `https://api.${normalizeDomain(enterprise)}` : "https://api.github.com"}/copilot_internal/user`
 }
 
 function baseURL(enterprise?: string) {
@@ -471,17 +469,6 @@ export function utilityTitle(
   )
 }
 
-export function copilotFetch(token: string | undefined, upstream: Fetch | undefined, app: App.Info): Fetch {
-  const send = upstream ?? fetch
-  return async (input, init) => {
-    const requestHeaders = new Headers(init?.headers)
-    const url = input instanceof URL ? input.href : typeof input === "string" ? input : input.url
-    const body = typeof init?.body === "string" ? Option.getOrUndefined(decodeBody(init.body)) : undefined
-    applyHeaders(requestHeaders, token, app, requestMetadata(url, body))
-    return send(input, { ...init, headers: requestHeaders })
-  }
-}
-
 function applyHeaders(headers: Headers, token: string | undefined, app: App.Info, metadata: RequestMetadata) {
   if (token) {
     headers.delete("authorization")
@@ -515,19 +502,23 @@ function requestMetadata(url: string, body: unknown) {
     const last = body.input.at(-1)
     return {
       agent: !isRecord(last) || last.role !== "user",
+      // Tool results carry their images in `output`, user messages in `content`.
       vision: body.input.some(
         (item) =>
           isRecord(item) &&
-          Array.isArray(item.content) &&
-          item.content.some((part) => isRecord(part) && part.type === "input_image"),
+          [item.content, item.output].some(
+            (parts) => Array.isArray(parts) && parts.some((part) => isRecord(part) && part.type === "input_image"),
+          ),
       ),
     }
   }
   if (!Array.isArray(body.messages)) return { agent: false, vision: false }
   const last = body.messages.at(-1)
   if (url.includes("completions")) {
+    const previous = body.messages.at(-2)
     return {
-      agent: !isRecord(last) || last.role !== "user",
+      // Chat Completions moves tool-result images into a user message after the tool messages.
+      agent: !isRecord(last) || last.role !== "user" || (isRecord(previous) && previous.role === "tool"),
       vision: body.messages.some(
         (message) =>
           isRecord(message) &&

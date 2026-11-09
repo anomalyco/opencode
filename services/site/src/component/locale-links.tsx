@@ -3,7 +3,7 @@ import { For } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 import { config } from "~/config"
 import { useLanguage } from "~/context/language"
-import { LOCALES, route, tag } from "~/lib/language"
+import { LOCALES, localized, route, tag } from "~/lib/language"
 
 function skip(path: string) {
   const evt = getRequestEvent()
@@ -20,18 +20,20 @@ function skip(path: string) {
 
 /**
  * The canonical URL and the language alternates. `englishOnly` pages serve the same English text at
- * every locale URL, so the English URL is canonical and is the only alternate.
+ * every locale URL, and an address that never takes a locale (lib/language.ts `localized`) has one
+ * URL, so for both the English URL is canonical and is the only alternate.
  */
 export function LocaleLinks(props: { path: string; englishOnly?: boolean }) {
   const language = useLanguage()
   if (skip(props.path)) return null
-  const canonical = `${config.baseUrl}${route(props.englishOnly ? "en" : language.locale(), props.path)}`
+  const englishOnly = props.englishOnly || !localized(props.path)
+  const canonical = `${config.baseUrl}${route(englishOnly ? "en" : language.locale(), props.path)}`
 
   return (
     <>
       <Link rel="canonical" href={canonical} />
       <Meta property="og:url" content={canonical} />
-      <For each={props.englishOnly ? (["en"] as const) : LOCALES}>
+      <For each={englishOnly ? (["en"] as const) : LOCALES}>
         {(locale) => (
           <Link rel="alternate" hreflang={tag(locale)} href={`${config.baseUrl}${route(locale, props.path)}`} />
         )}

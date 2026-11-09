@@ -1,7 +1,7 @@
 import type { createMiddleware } from "@solidjs/start/middleware"
 import { getRequestEvent } from "solid-js/web"
 import { background, edgeCache } from "~/lib/edge-cache"
-import { LOCALE_HEADER, localeFromRequest } from "~/lib/language"
+import { pageLocale } from "~/lib/language"
 import { findPageMarkdown } from "~/lib/page-markdown"
 import { platformFromUserAgent } from "~/lib/platform"
 
@@ -15,14 +15,15 @@ import { platformFromUserAgent } from "~/lib/platform"
 // - Personal, sign-in and API addresses: `private, no-store`.
 //
 // The cache key is the page's address without its locale, plus the language the page renders in
-// and the visitor's platform class, because the server renders both: an unprefixed address follows
-// the oc_locale cookie, else Accept-Language (decision D7, still open, keeps negotiating), and the
+// and the visitor's platform class, because the server renders both: the language comes from the
+// address's locale prefix only (entry-server.tsx, never the cookie or Accept-Language), and the
 // download buttons and product order follow the user agent. So one cached copy serves everyone who
 // would get the same HTML, and Vary (which Cloudflare's cache would apply to raw header values) plays
 // no part. The build id is in the key too, so a deploy starts from an empty cache without a purge.
 //
-// Never cached: a response that sets other cookies, and any status but 200. A render that used a
-// stand-in for GitHub's data (lib/edge-cache.ts) is kept fresh for 30 seconds only.
+// Never cached: a response that sets other cookies, and any status but 200; a server error (a
+// release page while GitHub is down) also tells browsers not to keep it, and to retry in a minute. A render that used a stand-in for GitHub's data (lib/edge-cache.ts)
+// is kept fresh for 30 seconds only.
 
 type Middleware = ReturnType<typeof createMiddleware>[number]
 
@@ -66,8 +67,7 @@ export const htmlCache: Middleware = async (event, next) => {
   if (kind !== "page") return next()
 
   const cache = edgeCache()
-  // A prefixed address (/ja) and a negotiated one (/ in Japanese) are kept apart.
-  const language = `${localeFromRequest(request)}${request.headers.has(LOCALE_HEADER) ? "" : "-negotiated"}`
+  const language = pageLocale(request)
   const platform = platformFromUserAgent(request.headers.get("user-agent") ?? "") ?? "other"
   const key = new Request(`${url.origin}/__html/${build}/${language}/${platform}${path}${url.search}`)
   const hit = cache && (await cache.match(key).catch(() => undefined))
@@ -86,6 +86,11 @@ export const htmlCache: Middleware = async (event, next) => {
 
   const value = await next()
   if (typeof value !== "string") return value
+  if (event.res.status && event.res.status >= 500) {
+    event.res.headers.set("Cache-Control", "no-store")
+    event.res.headers.set("Retry-After", "60")
+    return value
+  }
   const cookies = event.res.headers.getSetCookie()
   event.res.headers.set("Cache-Control", cookies.length ? cookiePolicy : browserPolicy)
   event.res.headers.set("ETag", await etag(value))

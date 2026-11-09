@@ -1,72 +1,36 @@
-import { createMemo, createSignal } from "solid-js"
+import { createMemo } from "solid-js"
 import { useLanguage } from "~/context/language"
 import type { Locale } from "~/lib/language"
-import { loadLocale } from "~/i18n"
-import { itemIds, keyedList, source, structuralPaths, type Content, type ContentOverlay, type Overlay } from "./source"
+import { contentArea } from "~/i18n"
+import type { Content } from "./source"
+import { itemIds, keyedList, structuralPaths, type Overlay } from "./paths"
 
 export type { Content, ContentOverlay } from "./source"
+export { loadLanguage, loadSlice } from "~/i18n"
 
-// As with the UI dictionaries (i18n/index.ts): the server registers every language's copy at startup
-// (i18n/server.ts), the browser fetches only the page's language (entry-client.tsx) and one it
-// switches to (loadContent).
-const files: Record<Exclude<Locale, "en">, () => Promise<{ content: ContentOverlay }>> = {
-  zh: () => import("./zh"),
-  zht: () => import("./zht"),
-  ko: () => import("./ko"),
-  de: () => import("./de"),
-  es: () => import("./es"),
-  fr: () => import("./fr"),
-  it: () => import("./it"),
-  da: () => import("./da"),
-  ja: () => import("./ja"),
-  pl: () => import("./pl"),
-  ru: () => import("./ru"),
-  uk: () => import("./uk"),
-  ar: () => import("./ar"),
-  no: () => import("./no"),
-  br: () => import("./br"),
-  th: () => import("./th"),
-  tr: () => import("./tr"),
-}
-const [loaded, setLoaded] = createSignal<Partial<Record<Locale, ContentOverlay>>>({})
-const overlay = (locale: Exclude<Locale, "en">) => loaded()[locale]
-
-/** Fetches a language's page copy once, so siteContent(locale) and localize() use it from then on. */
-export async function loadContent(locale: Locale) {
-  if (locale === "en" || loaded()[locale]) return
-  const file = await files[locale]()
-  setLoaded((all) => ({ ...all, [locale]: file.content }))
-}
-
-/** Every language's copy at once: the server's (i18n/server.ts). */
-export function registerContent(all: Partial<Record<Locale, ContentOverlay>>) {
-  setLoaded(all)
-}
-
-/** A language's dictionary and page copy, before the page renders in it. */
-export function loadLanguage(locale: Locale) {
-  return Promise.all([loadLocale(locale), loadContent(locale)])
-}
-
-const cache = new Map<Locale, Content>()
-
-/** The structured page copy in `locale`, with English wherever the locale's file has no translation. */
-export function siteContent(locale: Locale): Content {
-  if (locale === "en") return source
-  const cached = cache.get(locale)
-  if (cached) return cached
-  const translation = overlay(locale)
-  // Not fetched yet (only between a language switch and its file arriving): English meanwhile.
-  if (!translation) return source
-  const merged = merge(source, translation)
-  cache.set(locale, merged)
-  return merged
-}
+// Each language's page copy loads with its dictionary (i18n/index.ts), by area (products, brand, …),
+// and is merged here over the English the page passes in: a page's own build of an area (with its
+// localized links), or the English source of one (content/areas, through useArea).
+const merged = new WeakMap<object, Map<Locale, { overlay: unknown; value: unknown }>>()
 
 /** One area's copy built with the page's own localized links, with the locale's translations over it. */
 export function localize<K extends keyof Content>(locale: Locale, key: K, base: Content[K]): Content[K] {
   if (locale === "en") return base
-  return merge(base, (overlay(locale) as Partial<Record<keyof Content, Overlay<Content[K]>>> | undefined)?.[key], key)
+  const overlay = contentArea(locale, key)
+  // The same English and translation give the same objects, so lists keyed by them stay put.
+  const byLocale = merged.get(base) ?? new Map<Locale, { overlay: unknown; value: unknown }>()
+  merged.set(base, byLocale)
+  const known = byLocale.get(locale)
+  if (known && known.overlay === overlay) return known.value as Content[K]
+  const value = merge(base, overlay as Overlay<Content[K]> | undefined, key)
+  byLocale.set(locale, { overlay, value })
+  return value
+}
+
+/** An area of page copy in the current locale, inside a component: its English source with the locale's translations over it. */
+export function useArea<K extends keyof Content>(key: K, english: Content[K]) {
+  const language = useLanguage()
+  return createMemo(() => localize(language.locale(), key, english))
 }
 
 /**
@@ -80,12 +44,6 @@ export function englishText(localized: unknown, english: unknown, out = new Map<
     englishText(value, (english as Record<string, unknown>)[key], out),
   )
   return out
-}
-
-/** `siteContent` for the current locale, inside a component. */
-export function useContent() {
-  const language = useLanguage()
-  return createMemo(() => siteContent(language.locale()))
 }
 
 function merge<T>(base: T, overlay: Overlay<T> | undefined, path = ""): T {

@@ -1678,7 +1678,7 @@ export type CredentialUpdated = {
   metadata?: { [x: string]: any }
   type: "credential.updated"
   location?: LocationRef
-  data: {}
+  data: { integrationID: IntegrationID; credentialID: CredentialID }
 }
 
 export type CredentialSwitched = {
@@ -2551,6 +2551,7 @@ export type ConfigEntry =
           media_blob?: boolean
           schedules?: boolean
           artifacts?: boolean
+          codemode_vm?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
@@ -3952,7 +3953,12 @@ export type ExperimentalGenerateDecisionsInput = {
     | { readonly type: "file"; readonly data: string; readonly mime: string; readonly name?: string }
   >
   readonly questions: ReadonlyArray<
-    | { readonly type: "predicate"; readonly name: string; readonly instructions: string }
+    | {
+        readonly type: "predicate"
+        readonly name: string
+        readonly instructions: string
+        readonly criteria?: { readonly true?: string; readonly false?: string }
+      }
     | {
         readonly type: "choice"
         readonly name: string

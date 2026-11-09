@@ -1,7 +1,8 @@
-// Every language for the server, which renders any of them on any request; the browser loads only the
-// page's own (entry-client.tsx). Imported by entry-server.tsx and middleware.ts, never by client code.
-import { registerLocales } from "~/i18n"
-import { registerContent } from "~/i18n/content"
+// Every language for the server, which renders any of them on any request; the browser loads only what
+// the page shows (i18n/index.ts). Imported by entry-server.tsx and middleware.ts, never by client code.
+import { register } from "~/i18n"
+import { payload } from "~/i18n/tables"
+import { dict as en } from "~/i18n/en"
 import { dict as zh } from "~/i18n/zh"
 import { dict as zht } from "~/i18n/zht"
 import { dict as ko } from "~/i18n/ko"
@@ -37,23 +38,25 @@ import { content as brContent } from "~/i18n/content/br"
 import { content as thContent } from "~/i18n/content/th"
 import { content as trContent } from "~/i18n/content/tr"
 
-registerLocales({ zh, zht, ko, de, es, fr, it, da, ja, pl, ru, uk, ar, no, br, th, tr })
-registerContent({
-  zh: zhContent,
-  zht: zhtContent,
-  ko: koContent,
-  de: deContent,
-  es: esContent,
-  fr: frContent,
-  it: itContent,
-  da: daContent,
-  ja: jaContent,
-  pl: plContent,
-  ru: ruContent,
-  uk: ukContent,
-  ar: arContent,
-  no: noContent,
-  br: brContent,
-  th: thContent,
-  tr: trContent,
-})
+register("en", { dict: en, content: {}, same: [] }, true)
+const languages = {
+  zh: [zh, zhContent],
+  zht: [zht, zhtContent],
+  ko: [ko, koContent],
+  de: [de, deContent],
+  es: [es, esContent],
+  fr: [fr, frContent],
+  it: [it, itContent],
+  da: [da, daContent],
+  ja: [ja, jaContent],
+  pl: [pl, plContent],
+  ru: [ru, ruContent],
+  uk: [uk, ukContent],
+  ar: [ar, arContent],
+  no: [no, noContent],
+  br: [br, brContent],
+  th: [th, thContent],
+  tr: [tr, trContent],
+} as const
+for (const [locale, [dict, content]] of Object.entries(languages))
+  register(locale as keyof typeof languages, payload(dict, content), true)

@@ -20,6 +20,7 @@ export function AgentRulesButton(props: { label: string; copied: string; source:
       type="button"
       data-component="site-button"
       data-slot="agent-rules"
+      data-funnel-copy="agent-rules"
       data-variant="neutral"
       data-design="agentButtonCopied"
       data-design-copy="brand.agentButton"
