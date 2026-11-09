@@ -231,13 +231,16 @@ fn two_btw_questions_can_be_pending_at_once() {
     h.tui.keymap.dispatch("session.aside", Some("two"));
     h.wait("both questions to go out", || server.sent("/generate").len() == 2);
     h.wait_for("/btw");
+    // Both requests wait for the gate on the transport's runtime, which may poll either first, so either question may
+    // be answered first.
     server.release();
-    h.wait_for("answer to one");
+    h.wait("an answer", || ["answer to one", "answer to two"].iter().any(|answer| h.app.text().contains(answer)));
+    let (first, second) = if h.app.text().contains("answer to one") { ("one", "two") } else { ("two", "one") };
     h.app.press("escape");
-    h.wait_gone("answer to one");
+    h.wait_gone(&format!("answer to {first}"));
     assert!(h.app.text().contains("/btw"), "one question is still pending:\n{}", h.app.text());
     server.release();
-    h.wait_for("answer to two");
+    h.wait_for(&format!("answer to {second}"));
     h.app.press("escape");
     h.wait_gone("/btw");
 }
