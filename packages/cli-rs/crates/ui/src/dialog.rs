@@ -649,6 +649,97 @@ fn footer_item(cx: &DialogCx, action: FooterAction, primary: bool) -> AnyWidget 
     item.as_any()
 }
 
+/// `DialogButton`.
+#[derive(Clone)]
+pub struct DialogButton {
+    pub label: String,
+    pub run: Rc<dyn Fn()>,
+}
+
+/// `DialogButtons`: a right-aligned row of buttons; the active one is highlighted, and hovering a button makes it
+/// active. The dialog binds the arrow keys and Enter through [`DialogButtons::step`] and [`DialogButtons::run`].
+#[derive(Clone)]
+pub struct DialogButtons {
+    pub view: View,
+    state: Rc<ButtonsState>,
+}
+
+struct ButtonsState {
+    buttons: Vec<(DialogButton, View, Text)>,
+    active: Cell<usize>,
+    theme: Theme,
+}
+
+impl DialogButtons {
+    pub fn new(cx: &DialogCx, buttons: Vec<DialogButton>, active: usize) -> Self {
+        let view = View::new(&cx.app).row().justify(Justify::End);
+        let buttons = buttons
+            .into_iter()
+            .map(|button| {
+                let label = Text::new(&cx.app, button.label.clone());
+                let item = View::new(&cx.app).padding_x(1).child(&label);
+                view.add(&item);
+                (button, item, label)
+            })
+            .collect();
+        let state = Rc::new(ButtonsState { buttons, active: Cell::new(active), theme: cx.theme.clone() });
+        // The handlers hold the state weakly: it holds the views that hold them.
+        for (index, (_, item, _)) in state.buttons.iter().enumerate() {
+            let weak = Rc::downgrade(&state);
+            item.on_hover(move |_cx, over| {
+                if over && let Some(state) = weak.upgrade() {
+                    state.set_active(index);
+                }
+            });
+            let weak = Rc::downgrade(&state);
+            item.mouse_pointer(MousePointer::POINTER).on_mouse(move |_cx, event| {
+                if matches!(event.kind, MouseEventKind::Up(_))
+                    && let Some(state) = weak.upgrade()
+                {
+                    (state.buttons[index].0.run)();
+                }
+            });
+        }
+        state.paint();
+        Self { view, state }
+    }
+
+    pub fn active(&self) -> usize {
+        self.state.active.get()
+    }
+
+    /// Moves the highlight by `by`, wrapping around.
+    pub fn step(&self, by: isize) {
+        let count = self.state.buttons.len() as isize;
+        if count > 0 {
+            self.state.set_active((self.active() as isize + by).rem_euclid(count) as usize);
+        }
+    }
+
+    /// Runs the active button.
+    pub fn run(&self) {
+        if let Some((button, _, _)) = self.state.buttons.get(self.active()) {
+            (button.run)();
+        }
+    }
+}
+
+impl ButtonsState {
+    fn set_active(&self, index: usize) {
+        self.active.set(index);
+        self.paint();
+    }
+
+    fn paint(&self) {
+        let theme = &self.theme;
+        for (index, (_, item, label)) in self.buttons.iter().enumerate() {
+            let active = self.active.get() == index;
+            item.bg(if active { theme.background.action.primary.focused } else { Color::TRANSPARENT });
+            label.fg(if active { theme.text.action.primary.focused } else { theme.text.muted });
+        }
+    }
+}
+
 /// Sends keys to the keymap before any widget, as the TUI's keymap provider does: a key the keymap handles does
 /// not reach the focused widget. The keymap's focus follows the app's first, so target layers see it.
 pub fn route_keys(app: &App, keymap: Rc<DialogKeymap>) -> HandlerId {

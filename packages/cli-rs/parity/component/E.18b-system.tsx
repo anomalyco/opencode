@@ -224,6 +224,13 @@ const update = (state: UpdateState, check?: (signal: AbortSignal) => Promise<str
 )
 const updated = (f: string) => f.includes("Update") || f.includes("Updating")
 await render("E.18b/update-available", update({ type: "available", version: "2.0.28" }), updated)
+// Left moves the active button from Update to Skip.
+await render("E.18b/update-left", update({ type: "available", version: "2.0.28" }), updated, {
+  act: async (setup) => {
+    setup.mockInput.pressArrow("left")
+    await Bun.sleep(50)
+  },
+})
 await render("E.18b/update-installing", update({ type: "installing", version: "2.0.28" }), updated)
 await render("E.18b/update-installed", update({ type: "installed", version: "2.0.28" }), updated)
 await render("E.18b/update-failed", update({ type: "failed", message: "npm exited with code 1" }), updated)
