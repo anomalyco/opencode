@@ -244,12 +244,12 @@ const size = { width: 90, height: 34 }
 // Tall enough for the whole model list: TS does not scroll to a current model below the first screen
 // (parity/deviations/DLG13-model-scroll.md).
 const tall = { width: 90, height: 60 }
-await capture({ ...tall, fixture: "model", dialog: () => <DialogModel />, ready: (f) => f.includes("usage") })
+await capture({ ...tall, fixture: "model", dialog: () => <DialogModel />, ready: (f) => f.includes("favorite") })
 await capture({
   ...tall,
   fixture: "model-filter",
   dialog: () => <DialogModel />,
-  ready: (f) => f.includes("usage"),
+  ready: (f) => f.includes("favorite"),
   act: (setup) => setup.mockInput.typeText("gpt"),
 })
 await capture({ ...size, fixture: "agent", dialog: () => <DialogAgent />, ready: (f) => f.includes("plan") })
