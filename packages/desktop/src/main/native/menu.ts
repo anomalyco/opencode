@@ -4,7 +4,7 @@ import {
   DESKTOP_MENU,
   desktopMenuKey,
   desktopMenuVisible,
-  desktopMenuWithExtensions,
+  desktopMenuWithPlugins,
   type DesktopMenu,
   type DesktopMenuEntry,
   type DesktopMenuRole,
@@ -13,17 +13,25 @@ import { MenuCommandTriggered } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 
 import { runDesktopMenuAction } from "./menu-actions"
+import {
+  createMenuState,
+  selectMenuActionWindow,
+  transitionMenu,
+  type MenuEvent,
+  type MenubarProvider,
+} from "./menu-machine"
 import { nativeT } from "./translations"
 
 type Deps = {
-  trigger: (id: string) => void
+  /** The window a menu command goes to; the renderer decides what it does there. */
+  commandWindow: () => BrowserWindow | null
   installCli: () => void
   createWindow: () => void
   openExternal: (url: string) => void
   relaunch: () => void
 }
 
-/** A GUI extension's contribution to the native menu, already translated by the extension. */
+/** A GUI plugin's contribution to the native menu, already translated by the plugin. */
 export type MenubarEntry = {
   readonly menu: string
   readonly id: string
@@ -34,27 +42,37 @@ export type MenubarEntry = {
   run(): void
 }
 
-let menubar: () => readonly MenubarEntry[] = () => []
+const installation = { state: createMenuState<Deps>() }
 
-let installed: Deps | undefined
-
-/** Contributions are read on every build; setting a provider rebuilds an installed menu. */
-export function setMenubarProvider(provider: () => readonly MenubarEntry[]) {
-  menubar = provider
-  refreshMenu()
+function dispatch(event: MenuEvent<Deps>) {
+  const next = transitionMenu(installation.state, event)
+  installation.state = next.state
+  next.commands.forEach((command) => build(command.deps, command.provider))
 }
 
-/** Rebuilds an installed menu after its contributions changed. */
+/** Contributions are read on every build; setting a provider rebuilds an installed menu. */
+export function setMenubarProvider(provider: MenubarProvider) {
+  dispatch({ type: "provider.changed", provider })
+}
+
+/** Rebuilds an installed menu after its contributions or translations changed. */
 export function refreshMenu() {
-  if (installed) createMenu(installed)
+  dispatch({ type: "refreshed" })
 }
 
 export function createMenu(deps: Deps) {
-  installed = deps
+  dispatch({ type: "installed", deps })
+}
 
+/** Later contributions and translations no longer rebuild the menu. */
+export function disposeMenu() {
+  dispatch({ type: "disposed" })
+}
+
+function build(deps: Deps, provider: MenubarProvider) {
   if (process.platform !== "darwin") return
 
-  const extra = menubar()
+  const extra = provider()
 
   const template = DESKTOP_MENU.filter((menu) => desktopMenuVisible(menu, "macos")).map((menu) =>
     nativeMenu(
@@ -85,15 +103,14 @@ export function sendMenuCommand(win: BrowserWindow, id: string) {
 function nativeMenu(menu: DesktopMenu, extra: readonly MenubarEntry[], deps: Deps): MenuItemConstructorOptions {
   if (menu.role && !extra.length) return { role: nativeRole(menu.role), label: nativeT(menu.labelKey) }
 
-  const items = desktopMenuWithExtensions(
+  const items = desktopMenuWithPlugins(
     (menu.items ?? [])
       .filter((entry) => desktopMenuVisible(entry, "macos"))
       .map((entry) => ({ key: desktopMenuKey(entry), entry })),
     extra,
   )
 
-  return {
-    ...(menu.role ? { role: nativeRole(menu.role) } : {}),
+  const options: MenuItemConstructorOptions = {
     label: nativeT(menu.labelKey),
     submenu: items.map((item) => {
       const entry = item.entry
@@ -104,12 +121,21 @@ function nativeMenu(menu: DesktopMenu, extra: readonly MenubarEntry[], deps: Dep
       return nativeItem(entry, deps)
     }),
   }
+
+  if (menu.role) options.role = nativeRole(menu.role)
+
+  return options
 }
 
 function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOptions {
   if (entry.type === "separator") return { type: "separator" }
 
-  if (entry.role) return { role: nativeRole(entry.role), label: entry.labelKey ? nativeT(entry.labelKey) : undefined }
+  if (entry.role)
+    return {
+      role: nativeRole(entry.role),
+      label: entry.labelKey ? nativeT(entry.labelKey) : undefined,
+      accelerator: entry.accelerator?.macos,
+    }
 
   const item: MenuItemConstructorOptions = {
     label: entry.labelKey ? nativeT(entry.labelKey) : undefined,
@@ -118,17 +144,25 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
 
   if (entry.command) {
     const command = entry.command
-    item.click = () => deps.trigger(command)
+
+    item.click = () => {
+      const win = deps.commandWindow()
+
+      if (win) sendMenuCommand(win, command)
+    }
   }
 
   if (entry.action) {
     const action = entry.action
-    item.click = () =>
-      runDesktopMenuAction(BrowserWindow.getFocusedWindow(), action, {
+    item.click = () => {
+      const win = selectMenuActionWindow(BrowserWindow.getFocusedWindow(), BrowserWindow.getAllWindows())
+
+      runDesktopMenuAction(win, action, {
         installCli: deps.installCli,
         createWindow: deps.createWindow,
         relaunch: deps.relaunch,
       })
+    }
   }
 
   if (entry.href) {
@@ -139,6 +173,6 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
   return item
 }
 
-function nativeRole(role: DesktopMenuRole) {
-  return role as NonNullable<MenuItemConstructorOptions["role"]>
+function nativeRole(role: DesktopMenuRole): NonNullable<MenuItemConstructorOptions["role"]> {
+  return role
 }

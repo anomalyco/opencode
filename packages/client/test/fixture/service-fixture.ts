@@ -1,7 +1,14 @@
+import { expect } from "bun:test"
 import { mkdtemp, rename, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { waitForExit } from "./service-timing"
+
+// Windows has no catchable SIGTERM: process.kill ends the target at once with exit code 1, so the
+// service's SIGTERM handler (record the signal, unregister a lingering server, exit 0) runs only on POSIX.
+export const catchesSigterm = process.platform !== "win32"
+export const stopSignal = catchesSigterm ? "SIGTERM" : undefined
+export const stoppedExitCode = catchesSigterm ? 0 : 1
 
 export async function serviceFixture() {
   const directory = await mkdtemp(join(tmpdir(), "opencode-client-service-"))
@@ -64,6 +71,12 @@ export async function serviceFixture() {
     track(pid: number) {
       pids.add(pid)
     },
+    // The signal the service recorded while shutting down, if its handler ran.
+    signal() {
+      return Bun.file(registration + ".signal")
+        .text()
+        .catch(() => undefined)
+    },
     async waitForFile(file = registration) {
       for (let attempt = 0; attempt < 600; attempt++) {
         if (await Bun.file(file).exists()) return
@@ -92,7 +105,13 @@ export async function serviceFixture() {
   }
 }
 
-export async function expectPortAvailable(url: string) {
-  const server = Bun.serve({ port: Number(new URL(url).port), fetch: () => new Response() })
-  await server.stop(true)
+// The service listens on an ephemeral port. Once it stops, any process may reuse that port for an outgoing connection
+// (Windows hands them out from 49152 up, and other suites run alongside), so binding it again proves nothing. What the
+// tests need is that nothing accepts connections there anymore.
+export async function expectNotListening(url: string) {
+  const outcome = await fetch(url).then(
+    (response) => `listening (${response.status})`,
+    () => "no response",
+  )
+  expect(outcome).toBe("no response")
 }

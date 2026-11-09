@@ -36,7 +36,14 @@ export const register = Effect.fnUntraced(function* (options: {
     found.url === info.url &&
     found.pid === info.pid &&
     found.password === info.password
-  yield* fs.writeFileString(temp, encoded, { mode: 0o600 }).pipe(Effect.andThen(fs.rename(temp, options.file)))
+  yield* fs
+    .writeFileString(temp, encoded, { mode: 0o600 })
+    .pipe(
+      // Windows rename can fail with EPERM while a contender or test polls the registration file.
+      Effect.andThen(
+        fs.rename(temp, options.file).pipe(Effect.retry({ times: 20, schedule: Schedule.spaced("10 millis") })),
+      ),
+    )
   yield* current.pipe(
     Effect.catchCause((cause) =>
       Effect.logWarning("managed service registration check failed; shutting down", {

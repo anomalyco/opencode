@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import jsQR from "jsqr"
-import { renderUnicodeCompact } from "uqr"
+import { renderUnicodeCompact } from "@opencode/util/qr"
 import { renderAuthQr, renderQr } from "../src/util/qr"
 
 const authorizationUrl = "https://accounts.x.ai/oauth2/device?user_code=ABCD-EFGH"
@@ -39,28 +39,28 @@ function decode(modules: boolean[][]) {
       }
     }
   }
-  return jsQR(pixels, width, height, { inversionAttempts: "dontInvert" })?.data
+  // jsqr is CommonJS; under some resolvers the function is on `default`.
+  const reader = typeof jsQR === "function" ? jsQR : (jsQR as { default: typeof jsQR }).default
+  return reader(pixels, width, height, { inversionAttempts: "dontInvert" })?.data
 }
 
+// Matches @opencode/util/qr renderUnicodeCompact: filled glyphs are light modules, spaces are dark.
 function modulesFromCompact(rendered: string) {
-  return rendered.split("\n").flatMap((line) => {
-    const top: boolean[] = []
-    const bottom: boolean[] = []
-    for (const glyph of line) {
-      if (glyph === "█") {
-        top.push(false)
-        bottom.push(false)
-      } else if (glyph === "▀") {
-        top.push(false)
-        bottom.push(true)
-      } else if (glyph === "▄") {
-        top.push(true)
-        bottom.push(false)
-      } else if (glyph === " ") {
-        top.push(true)
-        bottom.push(true)
-      } else throw new Error(`unexpected QR glyph ${glyph}`)
-    }
-    return bottom.some((dark) => !dark) ? [top, bottom] : [top]
-  })
+  const halves: Record<string, [boolean, boolean]> = {
+    "\u2588": [false, false],
+    "\u2580": [false, true],
+    "\u2584": [true, false],
+    " ": [true, true],
+  }
+  const lines = rendered.split("\n")
+  return lines
+    .flatMap((line) => {
+      const pairs = [...line].map((char) => {
+        const pair = halves[char]
+        if (!pair) throw new Error(`unexpected QR glyph ${char}`)
+        return pair
+      })
+      return [pairs.map((pair) => pair[0]), pairs.map((pair) => pair[1])]
+    })
+    .slice(0, lines[0].length)
 }

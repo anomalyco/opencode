@@ -3,8 +3,12 @@ import { Marked } from "marked"
 export function createMarkdownBase() {
   return new Marked({
     renderer: {
-      link({ href, title, text }) {
+      link({ href, title, tokens }) {
         const titleAttr = title ? ` title="${title}"` : ""
+        const text = this.parser.parseInline(tokens)
+
+        // A fragment link points within the document, so it stays in the page.
+        if (href.startsWith("#")) return `<a href="${href}"${titleAttr}>${text}</a>`
 
         return `<a href="${href}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${text}</a>`
       },

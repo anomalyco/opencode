@@ -2,82 +2,105 @@ import { net, protocol } from "electron"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { documentPolicyHeader, jsCallStacksDocumentPolicy } from "./headers"
-import { extensionHost, rendererHost, rendererProtocol } from "./scheme"
+import {
+  createProtocolBurstState,
+  isProtocolBurstSettled,
+  transitionProtocolBurst,
+  type ProtocolBurstCommand,
+  type ProtocolBurstEvent,
+} from "./protocol-machine"
+import { rendererHost, rendererProtocol } from "./scheme"
 
-export type ProtocolReport = (level: "warning" | "error", message: string, data: Record<string, unknown>) => void
+/** What a renderer protocol problem is about: the request, and the file or failure behind it. */
+export type ProtocolDetails = {
+  readonly url: string
+  readonly file?: string
+  readonly status?: number
+  readonly statusText?: string
+  readonly error?: Error | string
+}
 
-export type ExtensionAssets = (request: Request, url: URL) => Response | Promise<Response>
+export type ProtocolReport = (level: "warning" | "error", message: string, data: ProtocolDetails) => void
 
 // The entry module registers the handler the moment the first window exists, before logging is up,
 // so problems go to the console until the logging layer installs a reporter.
 let report: ProtocolReport = (level, message, data) => console[level === "error" ? "error" : "warn"](message, data)
 
-// Extension files live in the storage database, which opens after the first window starts loading.
-let extensionAssets: ExtensionAssets = () => new Response(null, { status: 503 })
-
 export function setProtocolReporter(reporter: ProtocolReport) {
   report = reporter
 }
 
-export function setExtensionAssets(provider: ExtensionAssets) {
-  extensionAssets = provider
+// The entry module holds the main bundle back until the renderer's initial burst of asset requests
+// has been answered, because this handler runs on the main thread and a 100 ms module evaluation
+// would otherwise sit between the renderer and its HTML.
+const burst = { state: createProtocolBurstState() }
+
+/** The burst's cap and quiet-window timers; the machine says when each starts and stops. */
+type BurstTimers = { cap?: ReturnType<typeof setTimeout>; quiet?: ReturnType<typeof setTimeout> }
+
+const timers: BurstTimers = {}
+
+const dispatch = (event: ProtocolBurstEvent) => {
+  const next = transitionProtocolBurst(burst.state, event)
+  burst.state = next.state
+  next.commands.forEach(perform)
 }
 
-// Requests in flight and when the last one arrived. The entry module holds the main bundle back
-// until the renderer's initial burst of asset requests has been answered, because this handler
-// runs on the main thread and a 100 ms module evaluation would otherwise sit between the renderer
-// and its HTML.
-let inflight = 0
+const perform = (command: ProtocolBurstCommand) => {
+  switch (command.type) {
+    case "start-cap-timer":
+      clearTimeout(timers.cap)
+      timers.cap = setTimeout(() => dispatch({ type: "cap.elapsed" }), command.delayMs)
 
-let served = 0
+      return
+    case "start-quiet-timer":
+      clearTimeout(timers.quiet)
+      timers.quiet = setTimeout(() => dispatch({ type: "quiet.elapsed", attempt: command.attempt }), command.delayMs)
 
-let lastRequest = 0
+      return
+    case "cancel-quiet-timer":
+      clearTimeout(timers.quiet)
+      timers.quiet = undefined
+
+      return
+    case "clear-timers":
+      clearTimeout(timers.cap)
+      clearTimeout(timers.quiet)
+      timers.cap = undefined
+      timers.quiet = undefined
+
+      return
+    case "resolve":
+      return command.replies.forEach((reply) => reply())
+  }
+}
 
 export function rendererAssetsServed(options: { quietMs: number; capMs: number }) {
-  const start = Date.now()
+  return new Promise<void>((reply) => dispatch({ type: "wait.requested", ...options, reply }))
+}
 
-  return new Promise<void>((resolve) => {
-    const check = () => {
-      const now = Date.now()
-
-      if (now - start >= options.capMs) return resolve()
-
-      if (served > 0 && inflight === 0 && now - lastRequest >= options.quietMs) return resolve()
-      setTimeout(check, 5)
-    }
-
-    check()
-  })
+/** The first window closed before the bundle loaded: the app quits, so nothing waits for its assets. */
+export function cancelRendererAssetsServed() {
+  dispatch({ type: "cancelled" })
 }
 
 export function registerRendererProtocol(rendererRoot: string) {
   if (protocol.isProtocolHandled(rendererProtocol)) return
 
   protocol.handle(rendererProtocol, async (request) => {
-    inflight++
-    lastRequest = Date.now()
+    if (isProtocolBurstSettled(burst.state)) return serve(request, rendererRoot)
+    dispatch({ type: "request.started" })
 
     try {
       return await serve(request, rendererRoot)
     } finally {
-      inflight--
-      served++
+      dispatch({ type: "request.finished" })
     }
   })
 }
 
 async function serve(request: Request, rendererRoot: string) {
   const url = new URL(request.url)
-
-  if (url.host === extensionHost) {
-    return Promise.resolve()
-      .then(() => extensionAssets(request, url))
-      .catch((error: unknown) => {
-        report("error", "extension asset error", { url: request.url, error })
-
-        return new Response(null, { status: 500 })
-      })
-  }
 
   if (url.host !== rendererHost) {
     report("warning", "rejected host", { url: request.url })
@@ -109,7 +132,7 @@ async function serve(request: Request, rendererRoot: string) {
 
     return addDocumentPolicy(response, file)
   } catch (error) {
-    report("error", "fetch error", { url: request.url, file, error })
+    report("error", "fetch error", { url: request.url, file, error: error instanceof Error ? error : String(error) })
 
     return new Response("Not found", { status: 404 })
   }

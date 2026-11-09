@@ -12,9 +12,14 @@
 - Record the corpora used and flag uncertain or regional terminology in review notes.
 - Also use the relevant language authority or official dictionary for the locale (for example RAE/Fundéu, FranceTerme, Duden, TDK, Kotus/Kielitoimiston sanakirja, Språkrådet/Bokmålsordboka, Rada Języka Polskiego/PWN, the Russian and Arabic language academies, the Ukrainian Orthography, Taiwan MOE dictionaries, or the Royal Society of Thailand). Treat the English dictionary as the semantic source of truth and preserve placeholders, code identifiers, product names, and keyboard labels.
 
+## State
+
+- Lifecycles in shared components follow the State Machines section of `packages/app/AGENTS.md`. A component that accepts a controlled value keeps one source of truth with an explicit `controlled | uncontrolled` mode in its machine, and keeps its public props API compatible. Precedent: `src/hooks/list-machine.ts`.
+
 ## Typography
 
 - Use the shared typography metrics instead of copying solid line heights from design exports: `--line-height-tight` is `12px`, `--line-height-compact` is `16px`, and `--line-height-base` is `20px`.
 - Inter text at `13px` must use at least the compact `16px` line height. A `13px` solid line box can clip `g`, `j`, `p`, `q`, and `y` when the text or an ancestor truncates or hides overflow.
 - Reserve `line-height: 1` and `leading-none` for non-text glyphs, icons, or deliberately reviewed display marks. Do not compensate text with transforms, negative margins, or clip-padding hacks.
 - `TextShimmer` inherits font metrics. Put typography overrides on its parent when they must supersede the component defaults.
+- Fonts follow the Fonts section of `packages/app/AGENTS.md`: use `var(--font-family-sans)` or `var(--font-family-mono)` and their aliases, never a literal family, and never add font files or `@font-face` rules here.

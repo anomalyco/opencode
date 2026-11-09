@@ -7,8 +7,10 @@ import type { HttpMiddleware, Transport, TransportPrepareInput } from "./index.j
 import * as ProviderShared from "../../protocols/shared.js"
 import {
   AIError,
+  DEFAULT_CHUNK_TIMEOUT_MS,
   DEFAULT_HTTP_TIMEOUT_MS,
   mergeJsonRecords,
+  timeoutConfig,
   TransportError,
   type HttpContext,
   type HttpTimeout,
@@ -31,13 +33,6 @@ export interface HttpPrepared<Frame> {
   readonly middleware?: HttpMiddleware
 }
 
-const applyQuery = (url: string, query: Record<string, string> | undefined) => {
-  if (!query) return url
-  const next = new URL(url)
-  Object.entries(query).forEach(([key, value]) => next.searchParams.set(key, value))
-  return next.toString()
-}
-
 const bodyWithOverlay = <Body>(body: Body, request: LLMRequest, encodeBody: (body: Body) => string) =>
   Effect.gen(function* () {
     if (request.http?.body === undefined) return { jsonBody: body, bodyText: encodeBody(body) }
@@ -50,10 +45,11 @@ const bodyWithOverlay = <Body>(body: Body, request: LLMRequest, encodeBody: (bod
 
 export const jsonRequestParts = <Body>(input: JsonRequestInput<Body>) =>
   Effect.gen(function* () {
-    const url = applyQuery(
-      renderEndpoint(input.endpoint, { request: input.request, body: input.body }).toString(),
-      input.request.http?.query,
-    )
+    const endpoint = renderEndpoint(input.endpoint, { request: input.request, body: input.body })
+    if (input.request.http?.query) {
+      Object.entries(input.request.http.query).forEach(([key, value]) => endpoint.searchParams.set(key, value))
+    }
+    const url = endpoint.toString()
     const body = yield* bodyWithOverlay(input.body, input.request, input.encodeBody)
     const headers = yield* Auth.toEffect(input.auth)({
       request: input.request,
@@ -62,7 +58,7 @@ export const jsonRequestParts = <Body>(input: JsonRequestInput<Body>) =>
       body: body.bodyText,
       headers: Headers.fromInput({
         ...input.headers?.({ request: input.request }),
-        ...input.request.http?.headers,
+        ...input.request.headers,
       }),
     })
     return { url, jsonBody: body.jsonBody, bodyText: body.bodyText, headers }
@@ -88,6 +84,7 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
         url: parts.url,
         body: parts.bodyText,
         headers: parts.headers,
+        encoding: prepareInput.request.http?.encoding,
       })
       return {
         request,
@@ -109,11 +106,12 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
           }),
         })
       const started = yield* Clock.currentTimeMillis
+      const limits = timeoutConfig(request.timeout)
       // Unlike the header and chunk limits, the whole-request budget has no default.
-      const total = request.http?.timeout ? Duration.millis(request.http.timeout) : Duration.infinity
+      const total = limits.total ? Duration.millis(limits.total) : Duration.infinity
       const response = yield* runtime.http.execute(prepared.request, prepared.middleware).pipe(
         Effect.timeoutOrElse({
-          duration: Duration.min(timeoutDuration(request.http?.headerTimeout), total),
+          duration: Duration.min(timeoutDuration(limits.headers), total),
           orElse: () => timeout("request", "Timed out waiting for response headers"),
         }),
       )
@@ -123,7 +121,7 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
         frames: prepared.framing.frame(
           RequestExecutor.responseStream(response).pipe(
             Stream.timeoutOrElse({
-              duration: timeoutDuration(request.http?.chunkTimeout),
+              duration: timeoutDuration(limits.chunk, DEFAULT_CHUNK_TIMEOUT_MS),
               orElse: () => Stream.fail(timeout("read", "Timed out waiting for response data", http)),
             }),
             Stream.interruptWhen(
@@ -135,12 +133,13 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
         ),
         http,
         body: prepared.framing.body,
+        raw: prepared.framing.raw,
       }
     }),
 })
 
-const timeoutDuration = (value: HttpTimeout | undefined) =>
-  value === false ? Duration.infinity : Duration.millis(value ?? DEFAULT_HTTP_TIMEOUT_MS)
+const timeoutDuration = (value: HttpTimeout | undefined, fallback = DEFAULT_HTTP_TIMEOUT_MS) =>
+  value === false ? Duration.infinity : Duration.millis(value ?? fallback)
 
 export const sseJson = {
   id: "http-json/sse",

@@ -56,7 +56,7 @@
  */
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CodeMode } from "../src/index.js"
+import { CodeMode } from "./lib/index.js"
 
 const value = async (code: string) => {
   const result = await Effect.runPromise(CodeMode.execute({ code, tools: {} }))
@@ -337,6 +337,20 @@ describe("Test262 Array callback adaptations", () => {
 })
 
 describe("Array callback regressions", () => {
+  test("flatMap skips holes in callback results while retaining explicit undefined", async () => {
+    expect(
+      await value(`
+        return [
+          [1].flatMap(() => [, 2]),
+          [1, 2].flatMap(() => Array(2)),
+          [1].flatMap(() => [undefined, 2]),
+          [1].flatMap(() => [[, 2]])[0].length,
+          0 in [1].flatMap(() => [[, 2]])[0]
+        ]
+      `),
+    ).toEqual([[2], [], [null, 2], 2, false])
+  })
+
   test("reduce and reduceRight find the first present element", async () => {
     expect(
       await value(`

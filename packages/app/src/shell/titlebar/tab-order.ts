@@ -1,10 +1,19 @@
-export function adjacentTabKey(order: string[], current: string | undefined, offset: -1 | 1) {
-  if (!current || order.length === 0) return
+/** The nearest other tab in the offset's direction, wrapping around, that `include` accepts. */
+export function adjacentTabKey(
+  order: string[],
+  current: string | undefined,
+  offset: -1 | 1,
+  include: (key: string) => boolean = () => true,
+) {
+  if (!current) return
   const index = order.indexOf(current)
 
   if (index === -1) return
 
-  return order[(index + offset + order.length) % order.length]
+  return Array.from(
+    { length: order.length - 1 },
+    (_, step) => order[(index + offset * (step + 1) + order.length) % order.length],
+  ).find(include)
 }
 
 export function mergeVisibleTabOrder(all: string[], current: string[], next: string[]) {

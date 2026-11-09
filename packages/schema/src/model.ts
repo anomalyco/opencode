@@ -1,8 +1,9 @@
 export * as Model from "./model.js"
 
-import { Schema } from "effect"
+import { Schema, Struct } from "effect"
 import { optional, statics } from "./schema.js"
 import { Provider } from "./provider.js"
+import { Compatibility, MaxTokensField, MediaInput, ReasoningField } from "./model-compatibility.js"
 import { Money } from "./money.js"
 import { ephemeral, inventory } from "./event.js"
 
@@ -42,28 +43,30 @@ export const Ref = Schema.Struct({
   )
 export interface Ref extends Schema.Schema.Type<typeof Ref> {}
 
+export { Compatibility, MaxTokensField, MediaInput, ReasoningField }
+
 export const Family = Schema.String.pipe(Schema.brand("Model.Family"))
 export type Family = typeof Family.Type
 
-export type ReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
-export const ReasoningField: Schema.Codec<ReasoningField> = Schema.Union([
-  Schema.Literals(["reasoning", "reasoning_content", "reasoning_text"]),
+/** What a model produces, from models.dev. Open-ended: new types keep being added. Only chat models are offered for sessions; an unset type means chat. */
+export type Type = "chat" | "decision" | "image" | (string & {})
+export const Type: Schema.Codec<Type> = Schema.Union([
+  Schema.Literals(["chat", "decision", "image"]),
   Schema.String,
-]).annotate({ identifier: "Model.ReasoningField" })
-
-export const MaxTokensField = Schema.Literals(["max_completion_tokens", "max_tokens"]).annotate({
-  identifier: "Model.MaxTokensField",
-})
-export type MaxTokensField = typeof MaxTokensField.Type
+]).annotate({ identifier: "Model.Type" })
 
 export const Settings = Schema.StructWithRest(
-  Schema.Struct({
-    compaction: Provider.Compaction.pipe(optional),
-  }),
+  Schema.Struct(Struct.pick(Provider.Settings.schema.fields, ["compaction", "cache", "encoding"])),
   // Provider packages may define arbitrary model-level options beyond OpenCode's shared compaction policy.
   [Schema.Record(Schema.String, Schema.Any)],
 ).annotate({ identifier: "Model.Settings" })
 export type Settings = typeof Settings.Type
+
+// Variants switch request settings. The prompt cache belongs to the model, so a variant can't change it.
+const VariantSettings = Schema.StructWithRest(
+  Schema.Struct(Struct.omit(Settings.schema.fields, ["cache"])),
+  Settings.records,
+).annotate({ identifier: "Model.VariantSettings" })
 
 export const Overlays = {
   settings: Settings.pipe(optional),
@@ -71,26 +74,13 @@ export const Overlays = {
   body: Schema.Record(Schema.String, Schema.Any).pipe(optional),
 }
 
-export interface Compatibility extends Schema.Schema.Type<typeof Compatibility> {}
-export const Compatibility = Schema.Struct({
-  reasoningField: ReasoningField.pipe(optional),
-  /** Require every assistant message to include its reasoning field, even when empty. */
-  requireReasoning: Schema.Boolean.pipe(optional),
-  maxTokensField: MaxTokensField.pipe(optional),
-  requireFinishReason: Schema.Boolean.pipe(optional),
-  requireAssistantAfterTool: Schema.Boolean.pipe(optional),
-  supportsPromptCacheKey: Schema.Boolean.pipe(optional),
-  /** Supports Anthropic's thinking-prefix mismatch controls. Overrides model-ID detection. */
-  supportsThinkingBlockBinding: Schema.Boolean.pipe(optional),
-  /** Supports per-message effort updates. Overrides model-ID detection. */
-  supportsEffortUpdates: Schema.Boolean.pipe(optional),
-}).annotate({ identifier: "Model.Compatibility" })
-
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
 export const Capabilities = Schema.Struct({
   tools: Schema.Boolean,
   input: Schema.Array(Schema.String),
   output: Schema.Array(Schema.String),
+  /** Whether the model accepts a sampling temperature. Unknown when unset. */
+  temperature: Schema.Boolean.pipe(optional),
 })
   .annotate({ identifier: "Model.Capabilities" })
   .pipe(
@@ -117,6 +107,7 @@ export interface Variant extends Schema.Schema.Type<typeof Variant> {}
 export const Variant = Schema.Struct({
   id: VariantID,
   ...Overlays,
+  settings: VariantSettings.pipe(optional),
 }).annotate({ identifier: "Model.Variant" })
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}
@@ -125,6 +116,7 @@ export const Info = Schema.Struct({
   modelID: ID,
   providerID: Provider.ID,
   canonical: Provider.ID.pipe(optional),
+  type: Type.pipe(optional),
   family: Family.pipe(optional),
   name: Schema.String,
   compatibility: Compatibility.pipe(optional),

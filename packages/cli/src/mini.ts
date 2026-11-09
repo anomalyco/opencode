@@ -1,6 +1,7 @@
 import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { ClientError, OpenCode, type OpenCodeClient } from "@opencode/client/promise"
 import type { MiniFrontendInput } from "@opencode/tui/mini"
+import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
 import { setTimeout } from "node:timers/promises"
 import { readStdin } from "./util/io"
 import { createMiniHost, INTERACTIVE_INPUT_ERROR, usingInteractiveStdin } from "./mini-host"
@@ -140,6 +141,8 @@ export function createMiniConnection(input: MiniCommandInput["server"]) {
     OpenCode.make({
       baseUrl: endpoint.url,
       headers: Service.headers(endpoint),
+      // Session waits can remain idle until background work finishes.
+      fetch: noTimeoutFetch,
     })
   const reconnect = input.reconnect
   return {

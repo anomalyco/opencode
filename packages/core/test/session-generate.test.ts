@@ -1,5 +1,6 @@
 import { expect } from "bun:test"
 import {
+  AIError,
   LLMClient,
   LLMEvent,
   LLMResponse,
@@ -7,9 +8,11 @@ import {
   Message,
   SystemPart,
   ToolDefinition,
+  TransportError,
   type LLMRequest,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
+import { TestLLM } from "@opencode/ai/testing"
 import type { StreamOptions } from "@opencode/ai/route"
 import { Agent } from "@opencode/core/agent"
 import { Database } from "@opencode/core/database/database"
@@ -50,8 +53,10 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Tool } from "@opencode/core/tool"
+import { Money } from "@opencode/schema/money"
 import { asc, eq } from "drizzle-orm"
-import { Effect, Layer, Schema, Stream } from "effect"
+import { Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { testEffect } from "./lib/effect"
 
 const requests: LLMRequest[] = []
@@ -74,7 +79,13 @@ const client = Layer.mock(LLMClient.Service)({
         LLMEvent.stepFinish({
           index: 0,
           reason: { normalized: "stop" },
-          usage: { inputTokens: 100, outputTokens: 10 },
+          usage: {
+            inputTokens: 100,
+            outputTokens: 10,
+            nonCachedInputTokens: 60,
+            cacheReadInputTokens: 30,
+            cacheWriteInputTokens: 10,
+          },
         }),
         LLMEvent.finish({ reason: { normalized: "stop" } }),
       ])
@@ -87,7 +98,13 @@ const models = Layer.mock(SessionRunnerModel.Service)({
     Effect.succeed(
       SessionRunnerModel.resolved(model, {
         capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
-        cost: [],
+        cost: [
+          {
+            input: Money.USDPerMillionTokens.make(1),
+            output: Money.USDPerMillionTokens.make(2),
+            cache: { read: Money.USDPerMillionTokens.make(0.1), write: Money.USDPerMillionTokens.make(0.5) },
+          },
+        ],
         limit: { context: 200_000, output: 32_000 },
       }),
     ),
@@ -327,11 +344,13 @@ it.effect(
         Effect.provideService(Instance.Service, instances),
       )
 
-      expect(result).toBe("Transient answer")
+      expect(result.text).toBe("Transient answer")
+      expect(result.tokens).toEqual({ input: 60, output: 10, reasoning: 0, cache: { read: 30, write: 10 } })
+      expect(result.cost).toBeCloseTo(0.000088)
       expect(requests).toHaveLength(1)
       expect(requests[0]?.model).toBe(model)
       expect(requests[0]?.system.map((part) => part.text)).toContain("Initial context")
-      expect(requests[0]?.http?.headers).toMatchObject({ "X-Session-Id": sessionID })
+      expect(requests[0]?.headers).toMatchObject({ "X-Session-Id": sessionID })
       expect(requests[0]?.promptCacheKey).toBe(sessionID)
       const instructionUpdates = requests[0]?.messages.flatMap((message) =>
         message.role === "system"
@@ -388,10 +407,43 @@ it.effect(
       expect(requests).toHaveLength(1)
       expect(requests[0]?.system.map((part) => part.text)).toContain("Answer briefly.")
       expect(userTexts(requests[0])).toEqual(["[redacted]"])
-      expect(requests[0]?.generation).toEqual(expect.objectContaining({ maxTokens: 32 }))
+      expect(requests[0]?.maxTokens).toBe(32)
       expect(requests[0]?.providerOptions).toEqual({ reasoningEffort: "low" })
     }),
   { timeout: 15_000 },
+)
+
+it.effect("regenerates a failed partial answer without mutating Session history", () =>
+  Effect.gen(function* () {
+    instruction = "Initial context"
+    const { db, bus, instructions, session, instances } = yield* setup
+    yield* InstructionState.prepare(db, bus, instructions, sessionID)
+    const before = yield* durableState(db, sessionID)
+    const llm = yield* TestLLM.Test
+    yield* llm.push(
+      TestLLM.failAfter(
+        new AIError({
+          reason: new TransportError({ message: "Disconnected", transport: "http", operation: "read" }),
+        }),
+        LLMEvent.textStart({ id: "failed" }),
+        LLMEvent.textDelta({ id: "failed", text: "Discard this" }),
+      ),
+      TestLLM.text("Fresh answer", "success"),
+    )
+    const result = yield* SessionGenerate.generate({ session, prompt: "Summarize privately" }).pipe(
+      Effect.provideService(Instance.Service, instances),
+      Effect.provideService(LLMClient.Service, llm),
+      Effect.forkChild({ startImmediately: true }),
+    )
+    yield* llm.wait(1)
+    yield* TestClock.adjust("3 seconds")
+    expect((yield* Fiber.join(result)).text).toBe("Fresh answer")
+    const requests = yield* llm.requests()
+    expect(requests).toHaveLength(2)
+    expect(requests[1]).toBe(requests[0])
+    expect(userTexts(requests[1])).toContain("Summarize privately")
+    expect(yield* durableState(db, sessionID)).toEqual(before)
+  }).pipe(Effect.provide(TestLLM.testLayer())),
 )
 
 it.effect(

@@ -1,14 +1,14 @@
 import { expect } from "bun:test"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { Plugin } from "@opencode/plugin/effect"
-import { Context, Deferred, Effect, Fiber, Layer } from "effect"
+import { Context, Deferred, Effect, Layer } from "effect"
 import { HttpEffect, HttpRouter, HttpServer } from "effect/http"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { createRoutes } from "../src/routes"
 
 it.live(
-  "provider reads stay nonblocking while authentication discovery waits for plugins",
+  "catalog reads answer while plugins are still activating",
   () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped("opencode-provider-endpoints-")
@@ -32,6 +32,7 @@ it.live(
                   models: { chat: {} },
                 },
               },
+              agents: { reviewer: { description: "Reviews changes" } },
             }),
           },
         }).pipe(Layer.provide(HttpServer.layerServices)),
@@ -62,11 +63,15 @@ it.live(
             }),
           )
         })
-      // Config providers activate after SDK plugins; reads must return the current snapshot without waiting.
-      const list = yield* request("GET", "/api/provider").pipe(Effect.timeout("2 seconds"))
+      // Config providers and agents activate after SDK plugins. Reads return the current snapshot without waiting,
+      // and clients refresh on the matching *.updated events.
+      yield* request("GET", "/api/provider").pipe(Effect.timeout("2 seconds"))
       yield* Deferred.await(started)
-      const integrations = yield* request("GET", "/api/integration").pipe(Effect.forkScoped)
-      expect(list.status).toBe(200)
+      for (const route of ["/api/provider", "/api/agent", "/api/model", "/api/skill", "/api/integration"]) {
+        const response = yield* request("GET", route).pipe(Effect.timeout("2 seconds"))
+        expect(response.status).toBe(200)
+      }
+      const list = yield* request("GET", "/api/provider").pipe(Effect.timeout("2 seconds"))
       expect(yield* Effect.promise(() => list.json())).toMatchObject({
         location: { directory: tmp.path },
         data: expect.not.arrayContaining([expect.objectContaining({ id: "custom" })]),
@@ -78,11 +83,6 @@ it.live(
         providerID: "custom",
       })
       yield* Deferred.succeed(release, undefined)
-      const discovered = yield* Fiber.join(integrations)
-      expect(discovered.status).toBe(200)
-      expect(yield* Effect.promise(() => discovered.json())).toMatchObject({
-        data: expect.arrayContaining([expect.objectContaining({ id: "opencode" })]),
-      })
     }),
   15_000,
 )

@@ -36,6 +36,10 @@ export class LocalConfig extends Schema.Class<LocalConfig>("Mcp.LocalConfig")({
   }),
   timeout: TimeoutConfig.pipe(optional),
   protocol: Protocol.pipe(optional),
+  pool: Schema.Boolean.pipe(optional).annotate({
+    description:
+      'Share one connection to this server across every directory that configures it identically, instead of one per directory. Only connections that negotiate the 2026-07-28 revision are shared; an unset "protocol" becomes "auto", and "legacy" never shares. Defaults to false.',
+  }),
 }) {}
 
 export class OAuthConfig extends Schema.Class<OAuthConfig>("Mcp.OAuthConfig")({
@@ -61,6 +65,10 @@ export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")
   }),
   timeout: TimeoutConfig.pipe(optional),
   protocol: Protocol.pipe(optional),
+  pool: Schema.Boolean.pipe(optional).annotate({
+    description:
+      'Share one connection to this server across every directory that configures it identically, instead of one per directory. Only connections that negotiate the 2026-07-28 revision are shared; an unset "protocol" becomes "auto", and "legacy" never shares. Defaults to false.',
+  }),
 }) {}
 
 export const ServerConfig = Schema.Union([LocalConfig, RemoteConfig]).pipe(Schema.toTaggedUnion("type"))
@@ -91,6 +99,8 @@ export interface Server extends Schema.Schema.Type<typeof Server> {}
 export const Server = Schema.Struct({
   name: Schema.String,
   status: Status,
+  // Display title from the connected server's `serverInfo.title`; absent while disconnected or when not provided.
+  title: optional(Schema.String),
   // Set for remote servers registered as OAuth integrations; lets clients act on the right integration
   // without matching by name, which could collide with provider or plugin integrations.
   integrationID: optional(IntegrationID),

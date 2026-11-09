@@ -1,0 +1,14 @@
+[data-component="slash"] {
+  flex-shrink: 0;
+  color: var(--v2-icon-icon-faint);
+  /* The space between the slash's ink and the text on each side, less the neighbours' own side bearing. */
+  margin-inline: max(0px, calc(var(--slash-gap, 6px) - 0.5px));
+}
+
+/* Generated content keeps the separator empty for assistive tech; it takes the neighbouring text's size. */
+[data-component="slash"]::before {
+  content: "/";
+  font-weight: var(--font-weight-normal);
+  /* Cancels the glyph's side bearings so the margins measure to its ink. */
+  margin-inline: -0.25px -0.34px;
+}

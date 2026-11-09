@@ -99,6 +99,8 @@ export class Attempt extends Schema.Class<Attempt>("Integration.Attempt")({
   mode: Schema.Literals(["auto", "code"]),
   // Older servers omit this. A missing value is not a device flow.
   device: Schema.optionalKey(Schema.Boolean),
+  /** An `auto` attempt also accepts the redirect URL pasted from the browser as its `code`. */
+  paste: Schema.optionalKey(Schema.Literal(true)),
   time: AttemptTime,
 }) {}
 

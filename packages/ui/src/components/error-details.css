@@ -1,0 +1,40 @@
+[data-component="error-details"] {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 16px 16px;
+
+  [data-slot="error-details-text"] {
+    min-height: 0;
+    flex: 1;
+    margin: 0;
+    overflow: auto;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: var(--v2-background-bg-layer-03);
+    color: var(--v2-text-text-base);
+    font-family: var(--v2-font-family-code);
+    font-size: 12px;
+    line-height: 18px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    user-select: text;
+
+    &:focus-visible {
+      outline: 1px solid var(--v2-border-border-focus);
+    }
+  }
+
+  [data-slot="error-details-actions"] {
+    display: flex;
+    flex-shrink: 0;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .error-details-copy {
+    margin-inline-end: auto;
+  }
+}

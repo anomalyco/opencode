@@ -4,8 +4,8 @@ import { Context, Effect, Layer, Option, Schema, Stream, Struct } from "effect"
 import { Provider } from "@opencode/schema/provider"
 import { Model } from "@opencode/schema/model"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { HttpTimeout, type ProviderPackageDefinition } from "@opencode/ai"
-import { isRecord } from "@opencode/ai/utils/record"
+import { HttpTimeout, type ProviderPackage } from "@opencode/ai/effect"
+import { isRecord } from "@opencode/util/record"
 import { Npm } from "@opencode/util/npm"
 import type { DeepMutable } from "./schema.js"
 import { importModule, resolveModule } from "@opencode/util/runtime-import"
@@ -42,10 +42,14 @@ export class LoadError extends Schema.TaggedError<LoadError>()("Provider.LoadErr
   package: Schema.String,
   cause: Schema.Defect(),
 }) {}
-export type ProviderPackage = ProviderPackageDefinition
 
 const packages = new Map<string, Promise<unknown>>()
 const builtins = new Map<string, () => Promise<unknown>>([
+  ["@opencode/ai/providers/alibaba", () => import("@opencode/ai/providers/alibaba")],
+  ["@opencode/ai/providers/alibaba/chat", () => import("@opencode/ai/providers/alibaba/chat")],
+  ["@opencode/ai/providers/alibaba/messages", () => import("@opencode/ai/providers/alibaba/messages")],
+  ["@opencode/ai/providers/alibaba/responses", () => import("@opencode/ai/providers/alibaba/responses")],
+  ["@opencode/ai/providers/alibaba/images", () => import("@opencode/ai/providers/alibaba/images")],
   ["@opencode/ai/providers/amazon-bedrock", () => import("@opencode/ai/providers/amazon-bedrock")],
   ["@opencode/ai/providers/amazon-bedrock/mantle", () => import("@opencode/ai/providers/amazon-bedrock/mantle")],
   [
@@ -53,68 +57,121 @@ const builtins = new Map<string, () => Promise<unknown>>([
     () => import("@opencode/ai/providers/amazon-bedrock/mantle/chat"),
   ],
   [
+    "@opencode/ai/providers/amazon-bedrock/mantle/messages",
+    () => import("@opencode/ai/providers/amazon-bedrock/mantle/messages"),
+  ],
+  [
     "@opencode/ai/providers/amazon-bedrock/mantle/responses",
     () => import("@opencode/ai/providers/amazon-bedrock/mantle/responses"),
   ],
-  ["@opencode/ai/providers/alibaba/chat", () => import("@opencode/ai/providers/alibaba/chat")],
-  ["@opencode/ai/providers/alibaba/messages", () => import("@opencode/ai/providers/alibaba/messages")],
-  ["@opencode/ai/providers/alibaba/responses", () => import("@opencode/ai/providers/alibaba/responses")],
   ["@opencode/ai/providers/anthropic", () => import("@opencode/ai/providers/anthropic")],
   ["@opencode/ai/providers/anthropic-compatible", () => import("@opencode/ai/providers/anthropic-compatible")],
   ["@opencode/ai/providers/azure", () => import("@opencode/ai/providers/azure")],
   ["@opencode/ai/providers/azure/chat", () => import("@opencode/ai/providers/azure/chat")],
   ["@opencode/ai/providers/azure/responses", () => import("@opencode/ai/providers/azure/responses")],
+  ["@opencode/ai/providers/azure/images", () => import("@opencode/ai/providers/azure/images")],
+  ["@opencode/ai/providers/azure/messages", () => import("@opencode/ai/providers/azure/messages")],
   ["@opencode/ai/providers/baseten", () => import("@opencode/ai/providers/baseten")],
+  ["@opencode/ai/providers/baseten/decisions", () => import("@opencode/ai/providers/baseten/decisions")],
   ["@opencode/ai/providers/cerebras", () => import("@opencode/ai/providers/cerebras")],
   ["@opencode/ai/providers/cloudflare-ai-gateway", () => import("@opencode/ai/providers/cloudflare-ai-gateway")],
+  [
+    "@opencode/ai/providers/cloudflare-ai-gateway/decisions",
+    () => import("@opencode/ai/providers/cloudflare-ai-gateway/decisions"),
+  ],
   ["@opencode/ai/providers/cloudflare-workers-ai", () => import("@opencode/ai/providers/cloudflare-workers-ai")],
+  [
+    "@opencode/ai/providers/cloudflare-workers-ai/decisions",
+    () => import("@opencode/ai/providers/cloudflare-workers-ai/decisions"),
+  ],
+  [
+    "@opencode/ai/providers/cloudflare-workers-ai/images",
+    () => import("@opencode/ai/providers/cloudflare-workers-ai/images"),
+  ],
   ["@opencode/ai/providers/cohere", () => import("@opencode/ai/providers/cohere")],
   ["@opencode/ai/providers/cohere/chat", () => import("@opencode/ai/providers/cohere/chat")],
   ["@opencode/ai/providers/deepinfra", () => import("@opencode/ai/providers/deepinfra")],
   ["@opencode/ai/providers/deepseek", () => import("@opencode/ai/providers/deepseek")],
   ["@opencode/ai/providers/digitalocean", () => import("@opencode/ai/providers/digitalocean")],
+  ["@opencode/ai/providers/digitalocean/decisions", () => import("@opencode/ai/providers/digitalocean/decisions")],
+  ["@opencode/ai/providers/digitalocean/images", () => import("@opencode/ai/providers/digitalocean/images")],
+  ["@opencode/ai/providers/digitalocean/responses", () => import("@opencode/ai/providers/digitalocean/responses")],
   ["@opencode/ai/providers/fireworks", () => import("@opencode/ai/providers/fireworks")],
   ["@opencode/ai/providers/google", () => import("@opencode/ai/providers/google")],
   ["@opencode/ai/providers/google/interactions", () => import("@opencode/ai/providers/google/interactions")],
+  ["@opencode/ai/providers/google/images", () => import("@opencode/ai/providers/google/images")],
   ["@opencode/ai/providers/google-vertex", () => import("@opencode/ai/providers/google-vertex")],
+  ["@opencode/ai/providers/google-vertex/chat", () => import("@opencode/ai/providers/google-vertex/chat")],
   ["@opencode/ai/providers/google-vertex/gemini", () => import("@opencode/ai/providers/google-vertex/gemini")],
   [
     "@opencode/ai/providers/google-vertex/interactions",
     () => import("@opencode/ai/providers/google-vertex/interactions"),
   ],
-  ["@opencode/ai/providers/google-vertex/chat", () => import("@opencode/ai/providers/google-vertex/chat")],
-  ["@opencode/ai/providers/google-vertex/responses", () => import("@opencode/ai/providers/google-vertex/responses")],
   ["@opencode/ai/providers/google-vertex/messages", () => import("@opencode/ai/providers/google-vertex/messages")],
   ["@opencode/ai/providers/google-vertex/mistral", () => import("@opencode/ai/providers/google-vertex/mistral")],
+  ["@opencode/ai/providers/google-vertex/responses", () => import("@opencode/ai/providers/google-vertex/responses")],
+  ["@opencode/ai/providers/google-vertex/images", () => import("@opencode/ai/providers/google-vertex/images")],
+  ["@opencode/ai/providers/google-vertex-messages", () => import("@opencode/ai/providers/google-vertex-messages")],
   ["@opencode/ai/providers/groq", () => import("@opencode/ai/providers/groq")],
+  ["@opencode/ai/providers/meta", () => import("@opencode/ai/providers/meta")],
   ["@opencode/ai/providers/meta/chat", () => import("@opencode/ai/providers/meta/chat")],
+  ["@opencode/ai/providers/meta/images", () => import("@opencode/ai/providers/meta/images")],
   ["@opencode/ai/providers/meta/messages", () => import("@opencode/ai/providers/meta/messages")],
   ["@opencode/ai/providers/meta/responses", () => import("@opencode/ai/providers/meta/responses")],
+  ["@opencode/ai/providers/minimax", () => import("@opencode/ai/providers/minimax")],
   ["@opencode/ai/providers/minimax/chat", () => import("@opencode/ai/providers/minimax/chat")],
+  ["@opencode/ai/providers/minimax/images", () => import("@opencode/ai/providers/minimax/images")],
   ["@opencode/ai/providers/minimax/messages", () => import("@opencode/ai/providers/minimax/messages")],
   ["@opencode/ai/providers/minimax/responses", () => import("@opencode/ai/providers/minimax/responses")],
   ["@opencode/ai/providers/mistral", () => import("@opencode/ai/providers/mistral")],
+  ["@opencode/ai/providers/moonshot", () => import("@opencode/ai/providers/moonshot")],
   ["@opencode/ai/providers/moonshot/chat", () => import("@opencode/ai/providers/moonshot/chat")],
   ["@opencode/ai/providers/moonshot/messages", () => import("@opencode/ai/providers/moonshot/messages")],
   ["@opencode/ai/providers/moonshot/responses", () => import("@opencode/ai/providers/moonshot/responses")],
   ["@opencode/ai/providers/openai", () => import("@opencode/ai/providers/openai")],
   ["@opencode/ai/providers/openai/chat", () => import("@opencode/ai/providers/openai/chat")],
   ["@opencode/ai/providers/openai/responses", () => import("@opencode/ai/providers/openai/responses")],
+  ["@opencode/ai/providers/openai/images", () => import("@opencode/ai/providers/openai/images")],
   ["@opencode/ai/providers/openai-compatible", () => import("@opencode/ai/providers/openai-compatible")],
   [
     "@opencode/ai/providers/openai-compatible/responses",
     () => import("@opencode/ai/providers/openai-compatible/responses"),
   ],
+  ["@opencode/ai/providers/openai-compatible/images", () => import("@opencode/ai/providers/openai-compatible/images")],
   [
     "@opencode/ai/providers/openai-compatible-responses",
     () => import("@opencode/ai/providers/openai-compatible-responses"),
   ],
+  ["@opencode/ai/providers/opencode/decisions", () => import("@opencode/ai/providers/opencode/decisions")],
   ["@opencode/ai/providers/openrouter", () => import("@opencode/ai/providers/openrouter")],
+  ["@opencode/ai/providers/openrouter/decisions", () => import("@opencode/ai/providers/openrouter/decisions")],
+  ["@opencode/ai/providers/openrouter/images", () => import("@opencode/ai/providers/openrouter/images")],
+  ["@opencode/ai/providers/openrouter/responses", () => import("@opencode/ai/providers/openrouter/responses")],
   ["@opencode/ai/providers/togetherai", () => import("@opencode/ai/providers/togetherai")],
+  ["@opencode/ai/providers/typesafe-ai/decisions", () => import("@opencode/ai/providers/typesafe-ai/decisions")],
   ["@opencode/ai/providers/venice", () => import("@opencode/ai/providers/venice")],
+  ["@opencode/ai/providers/venice/responses", () => import("@opencode/ai/providers/venice/responses")],
   ["@opencode/ai/providers/vercel-ai-gateway", () => import("@opencode/ai/providers/vercel-ai-gateway")],
+  ["@opencode/ai/providers/vercel-ai-gateway/chat", () => import("@opencode/ai/providers/vercel-ai-gateway/chat")],
+  [
+    "@opencode/ai/providers/vercel-ai-gateway/messages",
+    () => import("@opencode/ai/providers/vercel-ai-gateway/messages"),
+  ],
+  [
+    "@opencode/ai/providers/vercel-ai-gateway/responses",
+    () => import("@opencode/ai/providers/vercel-ai-gateway/responses"),
+  ],
+  [
+    "@opencode/ai/providers/vercel-ai-gateway/decisions",
+    () => import("@opencode/ai/providers/vercel-ai-gateway/decisions"),
+  ],
+  ["@opencode/ai/providers/vercel-ai-gateway/images", () => import("@opencode/ai/providers/vercel-ai-gateway/images")],
   ["@opencode/ai/providers/xai", () => import("@opencode/ai/providers/xai")],
+  ["@opencode/ai/providers/xai/images", () => import("@opencode/ai/providers/xai/images")],
+  ["@opencode/ai/providers/zai", () => import("@opencode/ai/providers/zai")],
   ["@opencode/ai/providers/zai/chat", () => import("@opencode/ai/providers/zai/chat")],
+  ["@opencode/ai/providers/zai/images", () => import("@opencode/ai/providers/zai/images")],
+  ["@opencode/ai/providers/zai-coding-plan", () => import("@opencode/ai/providers/zai-coding-plan")],
   ["@opencode/ai/providers/zai-coding-plan/chat", () => import("@opencode/ai/providers/zai-coding-plan/chat")],
   ["@opencode/ai/providers/zai-coding-plan/messages", () => import("@opencode/ai/providers/zai-coding-plan/messages")],
   [
@@ -122,6 +179,9 @@ const builtins = new Map<string, () => Promise<unknown>>([
     () => import("@opencode/ai/providers/zai-coding-plan/responses"),
   ],
 ])
+
+/** Native `@opencode/ai/providers/*` entrypoints bundled with Core and loadable by name from config. */
+export const builtinPackages: ReadonlySet<string> = new Set(builtins.keys())
 
 export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: string, npm?: Npm.Interface) {
   const specifier = packageName(input)
@@ -152,22 +212,30 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: s
   return yield* importPackage(specifier, entrypoint)
 })
 
-/** opencode settings consumed in Core; native packages never receive them. */
-const CORE_KEYS = ["chunkTimeout", "compaction", "fetch", "headerTimeout", "timeout", "transport"] as const
-const PROVIDER_ONLY_KEYS = ["chunkTimeout", "headerTimeout", "timeout", "transport"] as const
+const settingsKeys = Struct.keys(Provider.Settings.schema.fields)
+const providerOnlyKeys = settingsKeys.filter((key) => !(key in Model.Settings.schema.fields))
 
-export function nativeSettings(settings: Settings): Settings {
-  return Struct.omit(settings, CORE_KEYS)
+/** The provider options: every settings key OpenCode doesn't read itself. */
+export function nativeSettings(settings: Settings) {
+  return Struct.omit(settings, settingsKeys)
 }
 
+/** Settings a model inherits from its provider. */
 export function modelSettings(settings: Settings | undefined) {
-  return settings && Struct.omit(settings, PROVIDER_ONLY_KEYS)
+  return settings && Struct.omit(settings, providerOnlyKeys)
 }
 
 const decodeTimeout = Schema.decodeUnknownOption(HttpTimeout)
 
-/** Applied to `headerTimeout` and `chunkTimeout` when provider settings leave them unset or invalid. */
+/** Applied to `headerTimeout` when provider settings leave it unset or invalid. */
 export const DEFAULT_TIMEOUT_MS = 300_000
+
+/**
+ * Applied to `chunkTimeout` when provider settings leave it unset or invalid. Some providers, such as DeepSeek, have
+ * specifically asked clients to allow at least 15 minutes, because their models can stream nothing for minutes while
+ * they reason.
+ */
+export const DEFAULT_CHUNK_TIMEOUT_MS = 900_000
 
 /** One timeout setting without a default; invalid values are dropped. */
 export function timeout(value: unknown) {
@@ -179,8 +247,15 @@ export function timeouts(settings: Readonly<Record<string, unknown>>) {
   return {
     timeout: timeout(settings.timeout),
     headerTimeout: timeout(settings.headerTimeout) ?? DEFAULT_TIMEOUT_MS,
-    chunkTimeout: timeout(settings.chunkTimeout) ?? DEFAULT_TIMEOUT_MS,
+    chunkTimeout: timeout(settings.chunkTimeout) ?? DEFAULT_CHUNK_TIMEOUT_MS,
   }
+}
+
+const decodeEncoding = Schema.decodeUnknownOption(Provider.Encoding)
+
+/** Request body encoding from provider or model settings; invalid values are dropped. */
+export function encoding(settings: Readonly<Record<string, unknown>>) {
+  return Option.getOrUndefined(decodeEncoding(settings.encoding))
 }
 
 export function mergeOverlay(
@@ -189,16 +264,21 @@ export function mergeOverlay(
 ): Record<string, Json> | undefined {
   if (base === undefined) return overlay && decodeJsonRecord({ ...overlay })
   if (overlay === undefined) return decodeJsonRecord({ ...base })
-  return decodeJsonRecord(
-    Object.fromEntries(
-      new Set([...Object.keys(base), ...Object.keys(overlay)]).values().map((key): [string, unknown] => {
-        const left = base[key]
-        const right = overlay[key]
-        if (right === undefined) return [key, left]
-        if (isRecord(left) && isRecord(right)) return [key, mergeOverlay(left, right) ?? {}]
-        return [key, right]
-      }),
-    ),
+  return decodeJsonRecord(mergeRecord(base, overlay))
+}
+
+function mergeRecord(
+  base: Readonly<Record<string, unknown>>,
+  overlay: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    new Set([...Object.keys(base), ...Object.keys(overlay)]).values().map((key): [string, unknown] => {
+      const left = base[key]
+      const right = overlay[key]
+      if (right === undefined) return [key, left]
+      if (isRecord(left) && isRecord(right)) return [key, mergeRecord(left, right)]
+      return [key, right]
+    }),
   )
 }
 
@@ -223,6 +303,9 @@ export type Request = Provider.Request
 
 export const Compaction = Provider.Compaction
 export type Compaction = Provider.Compaction
+
+export const Cache = Provider.Cache
+export type Cache = Provider.Cache
 
 export const Transport = Provider.Transport
 export type Transport = Provider.Transport
@@ -443,7 +526,7 @@ const layer = Layer.effect(
         },
       )
     })
-    yield* bus.subscribe([Integration.Event.Updated, Credential.Event.Updated, Credential.Event.Switched]).pipe(
+    yield* bus.subscribe([Integration.Event.Updated, Credential.Event.Switched]).pipe(
       Stream.runForEach(() => notify),
       Effect.forkScoped({ startImmediately: true }),
     )
@@ -483,5 +566,5 @@ const importPackage = Effect.fn("Provider.importPackage")(function* (
       cause: new Error(`Provider package ${specifier} does not export model(modelID, settings)`),
     })
   }
-  return module as ProviderPackageDefinition
+  return module as ProviderPackage.Definition
 })

@@ -12,14 +12,15 @@ Compact single-line text field with neutral elevation, optional trailing copy ac
 - \`copyLabel\`: Accessible name for the copy button (default: "Copy").
 - \`onCopyClick\`: Handler for the copy button.
 - \`invalid\`: Error outline and danger text color.
-- \`appearance\`: \`"base"\` (28px) or \`"large"\` (32px).
+- \`appearance\`: \`"small"\` (24px), \`"base"\` (28px), or \`"large"\` (32px).
+- \`surface\`: \`"base"\` (default) or \`"layer-1"\` for a flat fill; \`"invisible"\` is unfilled at rest, with hover fill and inset focus/error outlines.
 
 ### States
 - **Hover**: neutral overlay on the raised surface.
 - **Focus** (\`:focus-within\`): focus border, elevation removed.
 - **Invalid**: danger border and text.
 - **Disabled**: 50% opacity.
-- Uses \`data-component="text-input-v2"\` with \`--v2-background-bg-base\`, \`--v2-elevation-button-neutral\`, \`--v2-text-text-faint\` (placeholder), and \`--v2-icon-icon-muted\` (copy icon).
+- Uses \`data-component="text-input-v2"\` with \`--v2-background-bg-base\`, \`--v2-elevation-input\`, \`--v2-text-text-faint\` (placeholder), and \`--v2-icon-icon-muted\` (copy icon).
 
 ### Field
 Compose with \`Field\` for label, helper prefix/suffix, and tooltip — see the **Field** story.
@@ -45,11 +46,16 @@ export default {
     disabled: false,
     invalid: false,
     appearance: "base",
+    surface: "base",
   },
   argTypes: {
+    surface: {
+      control: "select",
+      options: ["base", "layer-1", "invisible"],
+    },
     appearance: {
       control: "select",
-      options: ["base", "large"],
+      options: ["small", "base", "large"],
     },
     showCopyButton: {
       control: "boolean",
@@ -67,6 +73,18 @@ export default {
 }
 
 export const Playground = {}
+
+export const Surfaces = {
+  render: () => (
+    <div style={{ display: "grid", gap: "20px", width: "280px" }}>
+      <TextInput placeholder="Base (default)" />
+      <TextInput surface="layer-1" placeholder="Layer 1" />
+      <TextInput surface="invisible" placeholder="Invisible" />
+      <TextInput surface="invisible" placeholder="Invisible, invalid" invalid />
+      <TextInput surface="invisible" placeholder="Invisible, disabled" disabled />
+    </div>
+  ),
+}
 
 export const WithCopyButton = {
   args: {
@@ -101,9 +119,13 @@ export const Controlled = {
 export const Appearances = {
   render: () => (
     <div style={{ display: "grid", gap: "20px", width: "280px" }}>
+      <TextInput appearance="small" placeholder="Small (24px)" />
       <TextInput appearance="base" placeholder="Base (28px)" defaultValue="Base" />
       <TextInput appearance="large" placeholder="Large (32px)" defaultValue="Large" />
       <TextInput appearance="large" placeholder="Large with copy" defaultValue="copy-me" showCopyButton />
+      <TextInput appearance="small" placeholder="Small with clear" showClearButton />
+      <TextInput appearance="base" placeholder="Base with clear" showClearButton />
+      <TextInput appearance="large" placeholder="Large with clear" showClearButton />
     </div>
   ),
 }

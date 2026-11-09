@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "Debugbalk in-/uitschakelen",
+  providerAriaLabel: "Prestatiediagnose van provider",
+  na: "n.v.t.",
+  "duration.label": "TIME",
+  "duration.tip": "Tijd vanaf de prompt die de laatste beurt startte tot het antwoord klaar was.",
+  "tps.label": "TPS",
+  "tps.tip": "Uitvoer- en redeneertokens per seconde over de modelverzoeken van de laatste beurt, zonder tooltijd.",
+  "focus.label": "FOCUS",
+  "focus.tip": "Dwing focusstijlen af voor alle interactieve elementen",
+  "focus.on": "AAN",
+  "focus.off": "UIT",
+  "direction.label": "DIR",
+  "direction.tip": "Dwing de lay-outrichting voor de hele app af zonder de geselecteerde taal te wijzigen",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

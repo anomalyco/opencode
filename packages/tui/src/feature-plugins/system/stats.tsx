@@ -140,7 +140,7 @@ export function StatsPoster(props: { stats: SessionStatsInfo }) {
 function StatsPage(props: { context: Plugin.Context; onClose: () => void }) {
   const [result] = createResource(() => {
     const now = new Date()
-    return props.context.client.session.stats({
+    return props.context.client.experimental.session.stats({
       from: new Date(now.getFullYear(), 0, 1).getTime(),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       tools: "none",

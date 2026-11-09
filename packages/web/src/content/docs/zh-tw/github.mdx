@@ -57,19 +57,18 @@ opencode github install
        permissions:
          id-token: write
        steps:
-          - name: Checkout repository
-            uses: actions/checkout@v6
-            with:
-              fetch-depth: 1
-              persist-credentials: false
+         - name: Checkout repository
+           uses: actions/checkout@v6
+           with:
+             fetch-depth: 1
+             persist-credentials: false
 
-          - name: Run OpenCode
+         - name: Run OpenCode
            uses: anomalyco/opencode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            with:
-             model: anthropic/claude-sonnet-4-20250514
-             # share: true
+             model: anthropic/claude-sonnet-5-5
              # github_token: xxxx
    ```
 
@@ -83,7 +82,6 @@ opencode github install
 
 - `model`：OpenCode 使用的模型，格式為 `provider/model`。此項為**必填**。
 - `agent`：要使用的代理，必須是主代理。如果未找到，則回退到設定中的 `default_agent`，若仍未找到則使用 `"build"`。
-- `share`：是否共享 OpenCode 工作階段。對於公開儲存庫，預設為 **true**。
 - `prompt`：可選的自訂提示詞，用於覆寫預設行為。可透過此項自訂 OpenCode 處理請求的方式。
 - `token`：可選的 GitHub 存取權杖，用於執行建立評論、提交變更和建立 Pull Request 等操作。預設情況下，OpenCode 使用 OpenCode GitHub App 的安裝存取權杖，因此提交、評論和 Pull Request 會顯示為來自該應用程式。
 
@@ -144,7 +142,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: anthropic/claude-sonnet-5-5
           prompt: |
             Review the codebase for any TODO comments and create a summary.
             If you find issues worth addressing, open an issue to track them.
@@ -182,7 +180,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: anthropic/claude-sonnet-5-5
           use_github_token: true
           prompt: |
             Review this pull request:
@@ -238,7 +236,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: anthropic/claude-sonnet-5-5
           prompt: |
             Review this issue. If there's a clear fix or relevant docs:
             - Provide documentation links
@@ -257,7 +255,7 @@ jobs:
 ```yaml title=".github/workflows/opencode.yml"
 - uses: anomalyco/opencode/github@latest
   with:
-    model: anthropic/claude-sonnet-4-5
+    model: anthropic/claude-sonnet-5-5
     prompt: |
       Review this pull request:
       - Check for code quality issues

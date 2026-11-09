@@ -48,16 +48,6 @@ opencode CLI는 아래 명령들도 제공합니다.
 
 ---
 
-### agent
-
-opencode용 에이전트를 관리합니다.
-
-```bash
-opencode agent [command]
-```
-
----
-
 ### attach
 
 `serve` 또는 `web` 명령으로 이미 실행 중인 opencode 백엔드 서버에 터미널을 연결합니다.
@@ -86,28 +76,6 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--fork"}</code></nobr>     |      | 이어서 실행할 때 세션 포크 (`--continue` 또는 `--session`과 함께 사용)     |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | 기본 인증 비밀번호 (기본값: `OPENCODE_SERVER_PASSWORD`)                    |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | 기본 인증 사용자 이름 (기본값: `OPENCODE_SERVER_USERNAME` 또는 `opencode`) |
-
----
-
-#### create
-
-커스텀 설정으로 새 에이전트를 만듭니다.
-
-```bash
-opencode agent create
-```
-
-이 명령은 커스텀 시스템 프롬프트와 도구 설정을 사용해 새 에이전트를 만드는 과정을 안내합니다.
-
----
-
-#### list
-
-사용 가능한 모든 에이전트를 표시합니다.
-
-```bash
-opencode agent list
-```
 
 ---
 
@@ -345,7 +313,6 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--continue"}</code></nobr> | `-c` | 마지막 세션 이어서 실행                                                    |
 | <nobr><code>{"--session"}</code></nobr>  | `-s` | 이어서 실행할 세션 ID                                                      |
 | <nobr><code>{"--fork"}</code></nobr>     |      | 세션을 이어갈 때 포크 생성 (`--continue` 또는 `--session`과 함께 사용)     |
-| <nobr><code>{"--share"}</code></nobr>    |      | 세션 공유                                                                  |
 | <nobr><code>{"--model"}</code></nobr>    | `-m` | 사용할 모델 (`provider/model` 형식)                                        |
 | <nobr><code>{"--agent"}</code></nobr>    |      | 사용할 에이전트                                                            |
 | <nobr><code>{"--file"}</code></nobr>     | `-f` | 메시지에 첨부할 파일                                                       |
@@ -442,17 +409,14 @@ opencode export [sessionID]
 
 ### import
 
-JSON 파일 또는 OpenCode 공유 URL에서 세션 데이터를 가져옵니다.
+JSON 파일에서 세션 데이터를 가져옵니다.
 
 ```bash
 opencode import <file>
 ```
 
-로컬 파일이나 OpenCode 공유 URL에서 가져올 수 있습니다.
-
 ```bash
 opencode import session.json
-opencode import https://opncd.ai/s/abc123
 ```
 
 ---
@@ -564,7 +528,6 @@ OpenCode는 환경 변수로도 구성할 수 있습니다.
 
 | 변수                                  | 타입    | 설명                                           |
 | ------------------------------------- | ------- | ---------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | 세션 자동 공유                                 |
 | `OPENCODE_GIT_BASH_PATH`              | string  | Windows에서 Git Bash 실행 파일 경로            |
 | `OPENCODE_CONFIG`                     | string  | 설정 파일 경로                                 |
 | `OPENCODE_CONFIG_DIR`                 | string  | 설정 디렉터리 경로                             |

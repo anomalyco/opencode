@@ -1,5 +1,13 @@
-import { createMemo, createSignal, onCleanup, type Accessor } from "solid-js"
-import createPresence from "solid-presence"
+import { createEffect, createMemo, createSignal, onCleanup, untrack, type Accessor } from "solid-js"
+import {
+  createAnimatedPresenceState,
+  selectAnimatedAnimate,
+  selectAnimatedShow,
+  selectAnimatedValue,
+  transitionAnimatedPresence,
+  type AnimatedPresenceState,
+} from "./presence-machine"
+import { createPresence } from "./presence"
 
 export function createAnimatedPresence<T>(
   value: Accessor<T | undefined>,
@@ -7,46 +15,52 @@ export function createAnimatedPresence<T>(
   identity?: Accessor<unknown>,
   minimumDuration = 0,
 ) {
-  const [tick, setTick] = createSignal(0)
+  const hasIdentity = identity !== undefined
+  // The attempt of the last linger whose timer fired; the machine ignores it unless that linger is still running.
+  const [elapsed, setElapsed] = createSignal(-1)
+  let timer: ReturnType<typeof setTimeout> | undefined
 
-  const animation = createMemo<{
-    identity?: unknown
-    show: boolean
-    animate: boolean
-    value: T | undefined
-    started: number
-  }>((previous) => {
-    tick()
-    const currentIdentity = identity?.()
-    const current = value()
-    const same = !identity || previous?.identity === currentIdentity
-    const started = same && previous?.show ? previous.started : performance.now()
+  // A memo, not an effect, so a read right after `value` changes already sees the next state. A sync with unchanged
+  // inputs returns the same state, so re-running for a timer applies only the timer.
+  const machine = createMemo<AnimatedPresenceState<T>>(
+    (previous) =>
+      transitionAnimatedPresence(
+        transitionAnimatedPresence(previous, {
+          type: "sync",
+          value: value(),
+          identity: identity?.(),
+          hasIdentity,
+          minimumDuration,
+          now: Date.now(),
+        }),
+        { type: "linger.elapsed", attempt: elapsed() },
+      ),
+    createAnimatedPresenceState({ value: untrack(value), identity: untrack(() => identity?.()), now: Date.now() }),
+  )
 
-    const remaining =
-      current === undefined && same && previous?.show ? minimumDuration - (performance.now() - started) : 0
+  createEffect(() => {
+    const state = machine()
+    clearTimeout(timer)
 
-    const show = current !== undefined || remaining > 0
-
-    if (remaining > 0) {
-      const timer = setTimeout(() => setTick((value) => value + 1), remaining)
-      onCleanup(() => clearTimeout(timer))
-    }
-
-    return {
-      identity: currentIdentity,
-      show,
-      started,
-      animate: previous !== undefined && same && (previous.animate || previous.show !== show),
-      value: current ?? (same ? previous?.value : undefined),
-    }
+    if (state.status !== "lingering") return
+    const attempt = state.attempt
+    // Rounded up: a timer cut short by a fraction of a millisecond would leave the linger running.
+    timer = setTimeout(() => setElapsed(attempt), Math.ceil(state.delayMs))
   })
 
-  const presence = createPresence({ show: () => animation().show, element })
+  onCleanup(() => clearTimeout(timer))
+
+  const presence = createPresence({
+    show: () => selectAnimatedShow(machine()),
+    element,
+    // A change that does not animate (another identity) must not wait for the previous identity's exit.
+    instant: () => !selectAnimatedAnimate(machine()),
+  })
 
   return {
     ...presence,
-    show: () => animation().show,
-    animate: () => animation().animate,
-    value: () => animation().value,
+    show: () => selectAnimatedShow(machine()),
+    animate: () => selectAnimatedAnimate(machine()),
+    value: () => selectAnimatedValue(machine()),
   }
 }

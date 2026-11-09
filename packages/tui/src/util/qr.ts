@@ -1,4 +1,4 @@
-import { encode, renderUnicodeCompact } from "uqr"
+import { encode, renderUnicodeCompact } from "@opencode/util/qr"
 
 type QrOptions = {
   border?: number
@@ -24,8 +24,9 @@ export function renderAuthQr(
   options: { device?: boolean; tty?: boolean; columns?: number; rows?: number; contrast?: boolean },
 ) {
   if (!options.device || options.tty === false) return
-  const encoded = encode(url, { border: 4 })
-  if (options.columns !== undefined && encoded.size > options.columns) return
-  if (options.rows !== undefined && Math.ceil(encoded.size / 2) > options.rows) return
+  // encode() returns modules without a quiet zone; border 4 matches the rendered QR.
+  const size = encode(url).length + 8
+  if (options.columns !== undefined && size > options.columns) return
+  if (options.rows !== undefined && Math.ceil(size / 2) > options.rows) return
   return renderQr(url, { border: 4, contrast: options.contrast })
 }

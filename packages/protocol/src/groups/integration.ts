@@ -154,7 +154,8 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
         OpenApi.annotations({
           identifier: "integration.oauth.complete",
           summary: "Complete OAuth connection",
-          description: "Complete a code-based OAuth attempt and store the resulting credential.",
+          description:
+            "Complete a code-based OAuth attempt and store the resulting credential. For an automatic attempt with `paste`, `code` is the redirect URL copied from the browser, and the result arrives through the attempt status.",
         }),
       ),
   )

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LeadConvertSettings xmlns="http://soap.sforce.com/2006/04/metadata">
+    <allowOwnerChange>true</allowOwnerChange>
+    <objectMapping>
+        <inputObject>Lead</inputObject>
+        <mappingFields>
+            <inputField>Has_Console_Account__c</inputField>
+            <outputField>Has_Console_Account__c</outputField>
+        </mappingFields>
+        <mappingFields>
+            <inputField>Console_Account_ID__c</inputField>
+            <outputField>Console_Account_ID__c</outputField>
+        </mappingFields>
+        <mappingFields>
+            <inputField>Console_Signup_Date__c</inputField>
+            <outputField>Console_Signup_Date__c</outputField>
+        </mappingFields>
+        <outputObject>Contact</outputObject>
+    </objectMapping>
+    <opportunityCreationOptions>VisibleOptional</opportunityCreationOptions>
+</LeadConvertSettings>

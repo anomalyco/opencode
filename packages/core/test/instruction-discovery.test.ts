@@ -1,20 +1,24 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, PlatformError, PubSub, Stream } from "effect"
+import { HttpClient, HttpClientResponse } from "effect/http"
 import fs from "fs/promises"
 import path from "path"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Bus } from "@opencode/core/bus"
+import { Config } from "@opencode/core/config"
 import { ConfigInstructionPlugin } from "@opencode/core/config/plugin/instruction"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath } from "@opencode/core/schema"
+import { Document, Info } from "@opencode/schema/config"
+import { Event } from "@opencode/schema/event"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { tempGlobalLayer } from "./fixture/global"
 import { location } from "./fixture/location"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { readInitial, readUpdate, state } from "./lib/instructions"
 import { testEffect } from "./lib/effect"
 import { host } from "./plugin/host"
@@ -26,13 +30,25 @@ const instructionLayer = (input: {
   home?: string
   locationServiceLayer: Layer.Layer<Location.Service>
   filesystemLayer?: Layer.Layer<FSUtil.Service>
+  instructions?: string[]
+  http?: HttpClient.HttpClient
   project?: boolean
 }) => {
   const watcher = Watcher.testLayer
+  const config = Config.testLayer(input.instructions ? [configured(input.instructions)] : [])
   return Layer.mergeAll(
     AppNodeBuilder.build(
-      LayerNode.group([InstructionDiscovery.node, Bus.node, FSUtil.node, Global.node, Location.node, Watcher.node]),
+      LayerNode.group([
+        InstructionDiscovery.node,
+        Bus.node,
+        Config.node,
+        FSUtil.node,
+        Global.node,
+        Location.node,
+        Watcher.node,
+      ]),
       [
+        Config.node.replace(config),
         InstructionDiscovery.node.replace(InstructionDiscovery.configured({ project: input.project })),
         Global.node.replace(
           input.config || input.home
@@ -48,20 +64,43 @@ const instructionLayer = (input: {
       ],
     ),
     watcher,
+    config,
+    Layer.succeed(HttpClient.HttpClient, input.http ?? respond(() => new Response(null, { status: 404 }))),
   )
 }
 
-const start = Effect.fnUntraced(function* () {
-  yield* ConfigInstructionPlugin.Plugin.effect(host())
+const start = Effect.fnUntraced(function* (ctx = host()) {
+  yield* ConfigInstructionPlugin.Plugin.effect(ctx)
   return yield* InstructionDiscovery.Service
 })
 
-const file = (path: string, content: string) =>
-  new InstructionDiscovery.File({ path: AbsolutePath.make(path), content })
+const configured = (instructions: string[]) => new Document({ type: "document", info: new Info({ instructions }) })
+
+const readFailure = (tag: "NotFound" | "Unknown", code: string, file: string) =>
+  PlatformError.systemError({
+    _tag: tag,
+    module: "FileSystem",
+    method: "readFile",
+    pathOrDescriptor: file,
+    cause: Object.assign(new Error(code), { code }),
+  })
+
+const configUpdated = () => ({ id: Event.ID.create(), created: Date.now(), type: "config.updated" as const, data: {} })
+
+const respond = (handler: (url: string) => Response) =>
+  HttpClient.make((request) => Effect.succeed(HttpClientResponse.fromWeb(request, handler(request.url))))
+
+const file = (path: string, content: string) => new InstructionDiscovery.File({ path, content })
 
 function emitAndWait(update: Watcher.Update) {
   return Effect.gen(function* () {
     const watcher = yield* Watcher.Test
+    yield* triggerAndWait(watcher.emit(update))
+  })
+}
+
+function triggerAndWait<E, R>(trigger: Effect.Effect<void, E, R>) {
+  return Effect.gen(function* () {
     const bus = yield* Bus.Service
     const updated = yield* Deferred.make<void>()
     const fiber = yield* bus.subscribe(InstructionDiscovery.Event.Updated).pipe(
@@ -69,7 +108,7 @@ function emitAndWait(update: Watcher.Update) {
       Effect.forkScoped,
     )
     yield* Effect.yieldNow
-    yield* watcher.emit(update)
+    yield* trigger
     yield* Deferred.await(updated).pipe(Effect.timeout("2 seconds"))
     yield* Fiber.interrupt(fiber)
   })
@@ -157,10 +196,7 @@ describe("InstructionDiscovery", () => {
 
 describe("ConfigInstructionPlugin.Plugin", () => {
   it.live("loads global and upward project files and rescans them on change", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((tmp) => {
         const global = path.join(tmp.path, "global")
         const home = path.join(tmp.path, "home")
@@ -250,11 +286,137 @@ describe("ConfigInstructionPlugin.Plugin", () => {
     ),
   )
 
+  it.live("loads configured files, globs, home paths, and URLs alongside AGENTS.md", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((tmp) => {
+        const project = path.join(tmp.path, "repo")
+        const directory = path.join(project, "packages", "core")
+        const agents = path.join(project, "AGENTS.md")
+        const first = path.join(project, "rules", "a.md")
+        const second = path.join(project, "rules", "b.md")
+        const absolute = path.join(tmp.path, "absolute.md")
+        const homeFile = path.join(tmp.path, "home.md")
+        const noteTop = path.join(tmp.path, "notes", "guide.md")
+        const noteNested = path.join(tmp.path, "notes", "projects", "memory.md")
+        const remote = "https://example.test/instructions.md"
+        const requests: string[] = []
+        return Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.dirname(first), { recursive: true })
+            await fs.mkdir(directory, { recursive: true })
+            await fs.mkdir(path.dirname(noteNested), { recursive: true })
+            await Promise.all([
+              fs.writeFile(agents, "agents"),
+              fs.writeFile(first, "first"),
+              fs.writeFile(second, "second"),
+              fs.writeFile(absolute, "absolute"),
+              fs.writeFile(homeFile, "home"),
+              fs.writeFile(noteTop, "note top"),
+              fs.writeFile(noteNested, "note nested"),
+            ])
+          })
+
+          const discovery = yield* start()
+          const initialized = yield* readInitial(yield* discovery.load())
+          // The unreachable URL and missing file are skipped without making AGENTS.md unavailable.
+          expect(initialized.text).toBe(
+            [
+              `Instructions from: ${agents}\nagents`,
+              `Instructions from: ${first}\nfirst`,
+              `Instructions from: ${second}\nsecond`,
+              `Instructions from: ${absolute}\nabsolute`,
+              `Instructions from: ${homeFile}\nhome`,
+              `Instructions from: ${noteTop}\nnote top`,
+              `Instructions from: ${noteNested}\nnote nested`,
+              `Instructions from: ${remote}\nremote`,
+            ].join("\n\n"),
+          )
+
+          yield* Effect.promise(() => fs.writeFile(first, "changed"))
+          yield* emitAndWait({ type: "update", path: first })
+          expect((yield* readUpdate(yield* discovery.load(), initialized)).text).toBe(
+            `The instructions changed:\nInstructions from: ${first}\nchanged`,
+          )
+          // File rescans reuse fetched URLs instead of requesting them again.
+          expect(requests).toHaveLength(2)
+        }).pipe(
+          Effect.provide(
+            instructionLayer({
+              config: path.join(tmp.path, "global"),
+              home: tmp.path,
+              instructions: [
+                "rules/*.md",
+                absolute,
+                "~/home.md",
+                "~/notes/**/*.md",
+                remote,
+                "missing.md",
+                "https://example.test/missing.md",
+              ],
+              http: respond((url) => {
+                requests.push(url)
+                return url === remote ? new Response("remote") : new Response(null, { status: 404 })
+              }),
+              locationServiceLayer: Layer.succeed(
+                Location.Service,
+                Location.Service.of(
+                  location(
+                    { directory: AbsolutePath.make(directory) },
+                    { projectDirectory: AbsolutePath.make(project) },
+                  ),
+                ),
+              ),
+            }),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.live("reloads configured sources on config updates and keeps the last fetched URL", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((tmp) => {
+        const first = path.join(tmp.path, "first.md")
+        const second = path.join(tmp.path, "second.md")
+        const remote = "https://example.test/instructions.md"
+        const responses = [new Response("remote"), new Response(null, { status: 500 })]
+        return Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.writeFile(first, "first")
+            await fs.writeFile(second, "second")
+          })
+          const events = yield* PubSub.unbounded<ReturnType<typeof configUpdated>>()
+          const config = yield* Config.Test
+          const discovery = yield* start(host({ event: { subscribe: () => Stream.fromPubSub(events) } }))
+          const initialized = yield* readInitial(yield* discovery.load())
+          expect(initialized.text).toBe(
+            [`Instructions from: ${first}\nfirst`, `Instructions from: ${remote}\nremote`].join("\n\n"),
+          )
+
+          yield* config.setEntries([configured([second, remote])])
+          yield* triggerAndWait(PubSub.publish(events, configUpdated()).pipe(Effect.asVoid))
+          expect((yield* readInitial(yield* discovery.load())).text).toBe(
+            [`Instructions from: ${second}\nsecond`, `Instructions from: ${remote}\nremote`].join("\n\n"),
+          )
+        }).pipe(
+          Effect.provide(
+            instructionLayer({
+              config: path.join(tmp.path, "global"),
+              instructions: [first, remote],
+              http: respond(() => responses.shift() ?? new Response(null, { status: 500 })),
+              locationServiceLayer: Layer.succeed(
+                Location.Service,
+                Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
+              ),
+            }),
+          ),
+        )
+      }),
+    ),
+  )
+
   it.live("keeps an empty AGENTS.md as available context", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const file = path.join(tmp.path, "AGENTS.md")
@@ -277,10 +439,7 @@ describe("ConfigInstructionPlugin.Plugin", () => {
   )
 
   it.live("discovers a newly created instruction file above the project root", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((tmp) => {
         const home = path.join(tmp.path, "home")
         const shared = path.join(home, "code")
@@ -324,10 +483,7 @@ describe("ConfigInstructionPlugin.Plugin", () => {
   )
 
   it.live("stops instruction candidates at the project root outside home", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((tmp) => {
         const global = path.join(tmp.path, "global")
         const home = path.join(tmp.path, "home")
@@ -368,10 +524,7 @@ describe("ConfigInstructionPlugin.Plugin", () => {
   ;(process.platform === "win32" ? it.live : it.live.skip)(
     "stops at the project root when the location drive letter differs in case",
     () =>
-      Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      ).pipe(
+      tmpdirScoped().pipe(
         Effect.flatMap((tmp) => {
           const global = path.join(tmp.path, "global")
           const home = path.join(tmp.path, "home")
@@ -450,7 +603,7 @@ describe("ConfigInstructionPlugin.Plugin", () => {
           FSUtil.Service.of({
             ...fs,
             up: () => Effect.succeed([discovered]),
-            readFileStringSafe: () => Effect.undefined,
+            readFileString: (file) => Effect.fail(readFailure("NotFound", "ENOENT", file)),
           }),
         ),
       ),
@@ -470,6 +623,38 @@ describe("ConfigInstructionPlugin.Plugin", () => {
           locationServiceLayer: Layer.succeed(
             Location.Service,
             Location.Service.of(location({ directory: AbsolutePath.make("/repo") })),
+          ),
+        }),
+      ),
+    )
+  })
+
+  it.effect("skips discovered files a sandbox denies and keeps the rest available", () => {
+    const denied = path.resolve("/repo/AGENTS.md")
+    const readable = path.resolve("/repo/packages/AGENTS.md")
+    const sandboxedFS = Layer.effect(
+      FSUtil.Service,
+      FSUtil.Service.pipe(
+        Effect.map((fs) =>
+          FSUtil.Service.of({
+            ...fs,
+            up: () => Effect.succeed([readable, denied]),
+            readFileString: (file) =>
+              file === denied ? Effect.fail(readFailure("Unknown", "EPERM", file)) : Effect.succeed("package"),
+          }),
+        ),
+      ),
+    ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
+    return Effect.gen(function* () {
+      const discovery = yield* start()
+      expect((yield* readInitial(yield* discovery.load())).text).toBe(`Instructions from: ${readable}\npackage`)
+    }).pipe(
+      Effect.provide(
+        instructionLayer({
+          filesystemLayer: sandboxedFS,
+          locationServiceLayer: Layer.succeed(
+            Location.Service,
+            Location.Service.of(location({ directory: AbsolutePath.make("/repo/packages") })),
           ),
         }),
       ),

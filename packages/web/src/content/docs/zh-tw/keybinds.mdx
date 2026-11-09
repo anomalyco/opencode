@@ -24,8 +24,6 @@ OpenCode 提供了一系列快捷鍵，您可以透過 `tui.json` 進行自訂�
     "session_timeline": "<leader>g",
     "session_fork": "none",
     "session_rename": "none",
-    "session_share": "none",
-    "session_unshare": "none",
     "session_interrupt": "escape",
     "session_compact": "<leader>c",
     "session_child_first": "<leader>down",

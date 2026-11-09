@@ -8,7 +8,13 @@ import { WebSearchParallel } from "@opencode/core/plugin/websearch/parallel"
 import { WebSearchTavily } from "@opencode/core/plugin/websearch/tavily"
 import { WebSearchTinyFish } from "@opencode/core/plugin/websearch/tinyfish"
 import { host, integrationHost, webSearchHost } from "./host"
-import { requests, signals, resetWebSearchFixture, webSearchIntegrationTest } from "./websearch-fixture"
+import {
+  requests,
+  signals,
+  resetWebSearchFixture,
+  setResponseHeaders,
+  webSearchIntegrationTest,
+} from "./websearch-fixture"
 
 beforeEach(() => {
   resetWebSearchFixture(
@@ -353,11 +359,15 @@ describe("built-in web search providers", () => {
         integrationID: Integration.ID.make("tinyfish"),
         key: "tinyfish-secret",
       })
+      setResponseHeaders({ "mcp-session-id": "ses_tinyfish" })
       yield* websearch.query({ query: "effect typescript", providerID: WebSearch.ID.make("tinyfish") })
-      expect(requests[1]).toMatchObject({
-        headers: { "x-api-key": "tinyfish-secret" },
+      expect(requests[1]?.body).toMatchObject({ method: "initialize" })
+      expect(requests[2]?.body).toMatchObject({ method: "notifications/initialized" })
+      expect(requests[3]).toMatchObject({
+        headers: { "x-api-key": "tinyfish-secret", "mcp-session-id": "ses_tinyfish" },
+        body: { method: "tools/call" },
       })
-      expect(requests[1]?.headers["x-tinyfish-access-mode"]).toBeUndefined()
+      expect(requests[3]?.headers["x-tinyfish-access-mode"]).toBeUndefined()
     }),
   )
 })

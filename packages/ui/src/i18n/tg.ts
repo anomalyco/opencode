@@ -71,10 +71,6 @@ export const dict = {
   "dialog.usageExceeded.freeTier.description":
     "Ба OpenCode Go бо нархи $10 дар як моҳ обуна шавед, то ба беҳтарин моделҳои кушодаасос дастрасии боэътимод дошта бошед.",
   "dialog.usageExceeded.freeTier.actionLabel": "Обуна шавед",
-  "dialog.usageExceeded.accountRateLimit.title": "Ба маҳдудияти рафтан расид",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Ба ҳадди ниҳоии истифода расид. Барои идома додани истифодаи ин модел ҳоло, истифода аз тавозуни дастрасатонро фаъол созед",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Танзимотро кушоед",
   "ui.sessionTurn.status.delegating": "Супоридани кор",
   "ui.sessionTurn.status.planning": "Банақшагирии қадамҳои оянда",
   "ui.sessionTurn.status.gatheringContext": "Таҳқиқ кардан",
@@ -190,7 +186,6 @@ export const dict = {
   "ui.question.answer.none": "(ҷавоб нест)",
   "ui.question.review.notAnswered": "(ҷавоб дода нашудааст)",
   "ui.question.multiHint": "Ҳамаи ҷавобҳои мувофиқро интихоб кунед",
-  "ui.question.singleHint": "Як ҷавобро интихоб кунед",
   "ui.question.custom.placeholder": "Ҷавоби худро нависед…",
   "ui.messagePart.context.match.one": "({{count}} мувофиқат)",
   "ui.messagePart.context.match.other": "({{count}} мувофиқат)",

@@ -1,19 +1,7 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test"
+import { describe, expect, jest, test } from "bun:test"
 import { createRoot } from "solid-js"
-import type { LineComment } from "./comments"
-
-let createCommentSessionForTest: typeof import("./comments").createCommentSessionForTest
-
-beforeAll(async () => {
-  mock.module("@solidjs/router", () => ({
-    useNavigate: () => () => undefined,
-    useParams: () => ({}),
-    useLocation: () => ({}),
-    useSearchParams: () => [{}, () => undefined],
-  }))
-  const mod = await import("./comments")
-  createCommentSessionForTest = mod.createCommentSessionForTest
-})
+import { COMMENT_FOCUS_TIMEOUT_MS } from "./comment-focus-machine"
+import { createCommentSessionForTest, type LineComment } from "./comments"
 
 function line(file: string, id: string, time: number): LineComment {
   return {
@@ -74,6 +62,27 @@ describe("comments session indexing", () => {
 
       dispose()
     })
+  })
+
+  test("an unanswered focus request expires", () => {
+    jest.useFakeTimers()
+
+    try {
+      createRoot((dispose) => {
+        const comments = createCommentSessionForTest({ "a.ts": [line("a.ts", "a1", 10)] })
+
+        comments.open({ file: "a.ts", id: "a1" })
+        jest.advanceTimersByTime(COMMENT_FOCUS_TIMEOUT_MS - 1)
+        expect(comments.focus()).toEqual({ file: "a.ts", id: "a1" })
+        jest.advanceTimersByTime(1)
+        expect(comments.focus()).toBeNull()
+        expect(comments.active()).toEqual({ file: "a.ts", id: "a1" })
+
+        dispose()
+      })
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   test.each(["replace", "clear"] as const)("%s resets comment state and focus", (action) => {

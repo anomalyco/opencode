@@ -157,8 +157,6 @@ opencode 서버는 다음과 같은 API를 노출합니다.
 | `POST`   | `/session/:id/init`                      | 앱 초기화 및 `AGENTS.md` 분석      | 몸: `{ messageID, providerID, modelID }`, 반환 `boolean`                      |
 | `POST`   | `/session/:id/fork`                      | 메시지의 기존 세션                 | 몸: `{ messageID? }`, 반환 <a href={typesUrl}><code>Session</code></a>        |
 | `POST`   | `/session/:id/abort`                     | 운영 중인 세션                     | 반품 `boolean`                                                                |
-| `POST`   | `/session/:id/share`                     | 세션 공유                          | <a href={typesUrl}><code>Session</code></a>                                   |
-| `DELETE` | `/session/:id/share`                     | 세션 공유                          | <a href={typesUrl}><code>Session</code></a>                                   |
 | `GET`    | `/session/:id/diff`                      | `/session/:id/diff`                | `messageID?`, 반환 <a href={typesUrl}><code>FileDiff[]</code></a>             |
 | `POST`   | `/session/:id/summarize`                 | 세션을 요약                        | 본체: `{ providerID, modelID }`, `boolean` 반환                               |
 | `POST`   | `/session/:id/revert`                    | 메시지 재생                        | 몸: `{ messageID, partID? }`, 반환 `boolean`                                  |
