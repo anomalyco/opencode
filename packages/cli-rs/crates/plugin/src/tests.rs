@@ -453,3 +453,87 @@ fn a_claim_on_an_unmounted_child_slot_degrades_to_its_parent() {
     let _mounted = mount(&registry);
     assert_eq!(rows(&host)[..2], ["content", "status"]);
 }
+
+// Expected: a parent claim that shows or hides its nested slot outside a change batch, on a wake or on the
+// invalidation after one of its handlers, moves the child slot's claim at once: the next frame shows it exactly once,
+// inside the parent claim or degraded after it.
+#[test]
+fn a_claim_on_a_child_slot_moves_when_a_wake_or_an_invalidation_redraws_its_parent() {
+    use abi::{Node, Render, Span};
+    let host = host();
+    let hidden = Rc::new(Cell::new(false));
+    let hide = hidden.clone();
+    let render: node::SlotRender<TestHost> = Rc::new(move |_, _, _| match hide.get() {
+        true => Render::Hide,
+        false => {
+            Render::Show(Node::row(vec![Node::text([Span::new("footer ")]), Node::slot(slot::HOME_FOOTER_STATUS)]))
+        }
+    });
+    let activation = Rc::new(std::cell::RefCell::new(None));
+    let footer = {
+        let activation = activation.clone();
+        Definition::new("footer", move |cx: &mut Setup<'_, TestHost>| {
+            let wake = Arc::new(crate::activation::Wake::new(None));
+            let created = crate::activation::Activation::new(cx.host(), wake);
+            cx.claim(Placement::append(slot::HOME_FOOTER), render.clone(), &created);
+            *activation.borrow_mut() = Some(created);
+        })
+    };
+    let status = rendering("status", Placement::append(slot::HOME_FOOTER_STATUS), || {
+        Render::Show(Node::text([Span::new("status")]))
+    });
+    let registry = Rc::new(Registry::new(vec![footer, status], []));
+    *host.registry.borrow_mut() = Rc::downgrade(&registry);
+    registry.activate(&host);
+    let parent = View::new(host.app()).column();
+    host.app().root().add(&parent);
+    let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |parent| {
+        parent.add(&Text::new(host.app(), "content"));
+    });
+    let activation = activation.borrow().clone().unwrap();
+    let shown = |host: &TestHost| rows(host).into_iter().filter(|row| !row.is_empty()).collect::<Vec<_>>();
+    assert_eq!(shown(&host), ["content", "footer status"]);
+
+    hidden.set(true);
+    activation.redraw();
+    assert_eq!(shown(&host), ["content", "status"]);
+    hidden.set(false);
+    activation.redraw();
+    assert_eq!(shown(&host), ["content", "footer status"]);
+
+    hidden.set(true);
+    activation.invalidate();
+    assert_eq!(shown(&host), ["content", "status"]);
+    hidden.set(false);
+    activation.invalidate();
+    assert_eq!(shown(&host), ["content", "footer status"]);
+}
+
+// Expected: a replaced diagram that scrolls on a drag frees its widgets and the drag handler with them: ten
+// replacements leave the handlers' hold on a shared value where it was.
+#[test]
+fn a_replaced_drag_text_drops_its_handlers() {
+    use abi::Span;
+    let host = host();
+    let parent = View::new(host.app()).column();
+    host.app().root().add(&parent);
+    let held = Rc::new(());
+    let start = Rc::strong_count(&held);
+    for index in 0..10 {
+        let lines = vec![vec![Span::new(format!("diagram {index} {}", "-".repeat(60)))]];
+        let widget = node::lines_widget(host.app(), &host.theme(), &lines, None, node::Scroll::Drag);
+        parent.clear();
+        parent.add(&widget);
+        host.app.render();
+        // The text under the drag lives as long as this handler.
+        let held = held.clone();
+        host.app().widget_at(1, 0).unwrap().on_mouse(move |_, _| {
+            let _ = &held;
+        });
+        host.app.drag((10, 0), (2, 0));
+        assert!(rows(&host)[0].starts_with(&format!("{index} -")), "{:?}", rows(&host)[0]);
+    }
+    parent.clear();
+    host.app.render();
+    assert_eq!(Rc::strong_count(&held), start);
+}

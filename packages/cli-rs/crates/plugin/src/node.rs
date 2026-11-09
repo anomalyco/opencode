@@ -99,10 +99,16 @@ impl<H: Host> Mount<H> {
                 slots.extend(host.slot(parent, path, &self.slot_input));
             });
         }
-        *self.slots.borrow_mut() = slots;
+        let dropped = self.slots.replace(slots);
+        let live = dropped.iter().chain(self.slots.borrow().iter()).find_map(|slot| slot.live().cloned());
+        drop(dropped);
         *self.hovers.borrow_mut() = hovers;
         self.root.visible(node.is_some());
         *self.shown.borrow_mut() = Some(node);
+        // The slots it nests may have mounted or gone, which moves the claims that degrade onto their ancestors.
+        if let Some(live) = live {
+            crate::settle(host, &live);
+        }
         host.app().request_redraw();
     }
 }
