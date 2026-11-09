@@ -30,16 +30,31 @@ async fn list(client: &Client, call: Result<Call, Error>) -> Result<Vec<Value>, 
 
 /// `loadCatalog`: agents, references, and commands of the location; a failed list is empty.
 pub async fn catalog(client: &Client, directory: &str) -> Catalog {
-    let (agents, references, commands) = futures_util::future::join3(
+    let (agents, references, commands) = lists(client, directory).await;
+    build(agents.unwrap_or_default(), references.unwrap_or_default(), commands.unwrap_or_default())
+}
+
+/// `fetchCatalog`, which a catalog refresh reads: `None` when any list fails, so the catalog shown stays.
+pub async fn refresh_catalog(client: &Client, directory: &str) -> Option<Catalog> {
+    let (agents, references, commands) = lists(client, directory).await;
+    Some(build(agents.ok()?, references.ok()?, commands.ok()?))
+}
+
+type List = Result<Vec<Value>, String>;
+
+async fn lists(client: &Client, directory: &str) -> (List, List, List) {
+    futures_util::future::join3(
         list(client, Client::agent_list_call(&AgentListInput { location: location(directory) })),
         list(client, Client::reference_list_call(&ReferenceListInput { location: location(directory) })),
         list(client, Client::command_list_call(&CommandListInput { location: location(directory) })),
     )
-    .await;
+    .await
+}
+
+fn build(agents: Vec<Value>, references: Vec<Value>, commands: Vec<Value>) -> Catalog {
     let text = |value: &Value| value.as_str().map(str::to_owned);
     Catalog {
         agents: agents
-            .unwrap_or_default()
             .iter()
             .map(|agent| Agent {
                 id: text(&agent["id"]).unwrap_or_default(),
@@ -51,7 +66,6 @@ pub async fn catalog(client: &Client, directory: &str) -> Catalog {
             })
             .collect(),
         references: references
-            .unwrap_or_default()
             .iter()
             .filter(|reference| !reference["hidden"].as_bool().unwrap_or(false))
             .map(|reference| Reference {
@@ -68,7 +82,6 @@ pub async fn catalog(client: &Client, directory: &str) -> Catalog {
         // `runCommand` keeps the name and description only.
         commands: Some(
             commands
-                .unwrap_or_default()
                 .iter()
                 .map(|command| Command {
                     name: text(&command["name"]).unwrap_or_default(),
