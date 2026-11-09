@@ -21,6 +21,8 @@ export type Ipc =
  * - `registering`: a binding waits for main to take it.
  * - `ready`: main took the binding.
  * - `backoff`: main closed or refused the binding; a timer registers again.
+ * - `reconnecting`: the server connection went away after it accepted the binding; the live pages stay, and a timer
+ *   registers again.
  * - `suspended`: the tabs stay without a binding. `idle`: the server evicted it, and a user or agent wakes it. `ipc`:
  *   the pane's Ipc is gone, and it registers again once the Ipc is back. `locked`: the screen is locked, and it
  *   registers again once it unlocks.
@@ -33,6 +35,7 @@ export type Phase =
   | { readonly status: "registering"; readonly attempt: number; readonly attempts: number }
   | { readonly status: "ready"; readonly attempt: number }
   | { readonly status: "backoff"; readonly attempt: number; readonly attempts: number }
+  | { readonly status: "reconnecting"; readonly attempt: number; readonly attempts: number }
   | { readonly status: "suspended"; readonly reason: SuspendReason }
   | { readonly status: "blocked"; readonly reason: "replaced" | "missing" }
 
@@ -87,12 +90,16 @@ export type State =
       readonly issued: number
       readonly unsupported: Readonly<Record<string, true | undefined>>
       readonly sessions: Readonly<Record<string, Attachment | undefined>>
+      /** The screen is locked: no attachment may start and commands are refused. */
+      readonly locked: boolean
     }
   | { readonly status: "disposed" }
 
 export type Event =
   | { readonly type: "disposed" }
   | { readonly type: "ipc.changed"; readonly ipc: Ipc }
+  /** The screen locked: every attachment stops and no register may start until it unlocks. */
+  | { readonly type: "screen.locked" }
   /** The screen unlocked: attachments the lock ended register again. */
   | { readonly type: "screen.unlocked" }
   /** An unsupported server reconnected, restarted, or is no longer listed: it may have the browser RPC now. */
@@ -108,6 +115,8 @@ export type Event =
   | { readonly type: "session.located"; readonly sessionKey: string; readonly located: boolean }
   /** A user or agent edge asks for the pane: focus, a key, the route, or a Session execution. */
   | { readonly type: "session.wake"; readonly sessionKey: string }
+  /** The server announced that it is back; a pane that lost the connection retries now. */
+  | { readonly type: "session.reconnect"; readonly sessionKey: string }
   /** The server finished creating the session. */
   | { readonly type: "session.created"; readonly sessionKey: string }
   | {
@@ -233,6 +242,7 @@ type SessionEvent = Exclude<
       | "disposed"
       | "ipc.changed"
       | "server.changed"
+      | "screen.locked"
       | "screen.unlocked"
       | "session.attached"
       | "session.removed"
@@ -245,7 +255,7 @@ type SessionEvent = Exclude<
 const noFocus = (): AddressFocus => ({ status: "none" })
 
 export function createInitialState(ipc: Ipc): State {
-  return { status: "open", ipc, issued: 0, unsupported: {}, sessions: {} }
+  return { status: "open", ipc, issued: 0, unsupported: {}, sessions: {}, locked: false }
 }
 
 export function transition(state: State, event: Event): Transition {
@@ -255,9 +265,12 @@ export function transition(state: State, event: Event): Transition {
 
   if (event.type === "ipc.changed") return ipcChanged(state, event.ipc)
 
-  if (event.type === "server.changed") return serverChanged(state, event.serverID)
+  if (event.type === "screen.locked") return locked(state)
 
-  if (event.type === "screen.unlocked") return unlocked(state)
+  if (event.type === "screen.unlocked")
+    return state.locked ? unlocked({ ...state, locked: false }) : { state, effects: [] }
+
+  if (event.type === "server.changed") return serverChanged(state, event.serverID)
 
   if (event.type === "session.attached") return attached(state, event)
 
@@ -328,6 +341,28 @@ export function sessionTab(state: State, sessionKey: string, tabID: string) {
 
 export function sessionSuspended(state: State, sessionKey: string) {
   return attachmentOf(state, sessionKey)?.phase.status === "suspended"
+}
+
+export type BrowserConnection = "connected" | "disconnected" | "reconnecting"
+
+/** How the pane's server connection reads: ready, retrying a lost connection, or waiting for a user edge. */
+export function sessionConnection(state: State, sessionKey: string): BrowserConnection {
+  const attachment = attachmentOf(state, sessionKey)
+
+  if (!attachment) return "disconnected"
+  const phase = attachment.phase
+
+  if (phase.status === "reconnecting") return "reconnecting"
+
+  if (phase.status === "backoff" && attachment.browser) return "reconnecting"
+
+  if (phase.status === "registering" && attachment.browser) return "reconnecting"
+
+  if (phase.status === "suspended") return "disconnected"
+
+  if (phase.status === "blocked") return "disconnected"
+
+  return "connected"
 }
 
 export function sessionError(state: State, sessionKey: string) {
@@ -469,6 +504,8 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
       return located(state, key, attachment, event.located)
     case "session.wake":
       return wake(state, key, attachment, false)
+    case "session.reconnect":
+      return reconnectNow(state, key, attachment)
     case "session.created":
       return wake(state, key, attachment, true)
     case "session.command":
@@ -503,7 +540,7 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
 
       if (event.unavailable) return put(state, key, suspend(attachment, "ipc"), stop(key, phase))
 
-      if (event.locked) return put(state, key, suspend(attachment, "locked"), stop(key, phase))
+      if (event.locked) return put({ ...state, locked: true }, key, hold(attachment, "locked"), stop(key, phase))
 
       // Main closed a binding it took; its closed-state event decides, and the register timeout bounds the wait.
       if (event.closed) return { state, effects: [] }
@@ -518,9 +555,13 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
     }
 
     case "retry.due": {
-      if (phase.status !== "backoff" || phase.attempt !== event.attempt) return { state, effects: [] }
+      if (state.locked) return put(state, key, hold(attachment, "locked"), stop(key, phase))
+
+      if ((phase.status !== "backoff" && phase.status !== "reconnecting") || phase.attempt !== event.attempt)
+        return { state, effects: [] }
 
       if (state.ipc.status !== "active") return put(state, key, suspend(attachment, "ipc"))
+
       const attempt = state.issued + 1
 
       return put(
@@ -529,7 +570,6 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
         {
           ...attachment,
           phase: { status: "registering", attempt, attempts: phase.attempts },
-          embeds: {},
           error: undefined,
         },
         register(key, attempt, attachment.browser),
@@ -581,6 +621,22 @@ function located(state: Open, key: string, attachment: Attachment, value: boolea
   )
 }
 
+// A locked screen stops every attachment where it is. The tabs, live-page embeds and browser inventory stay; unlock
+// wakes only the attachments the lock ended.
+function locked(state: Open): Transition {
+  return listed(state.sessions).reduce<Transition & { state: Open }>(
+    (result, [key, attachment]) => {
+      if (attachment.phase.status === "blocked") return result
+
+      return put(result.state, key, hold(attachment, "locked", attachment.browser), [
+        ...result.effects,
+        ...stop(key, attachment.phase),
+      ])
+    },
+    { state: { ...state, locked: true }, effects: [] },
+  )
+}
+
 // Every attachment the locked screen ended registers again. One woken before the unlock already did.
 function unlocked(state: Open): Transition {
   return listed(state.sessions).reduce<Transition & { state: Open }>(
@@ -594,10 +650,36 @@ function unlocked(state: Open): Transition {
   )
 }
 
+/** A restarted server lets a lost connection retry now, instead of waiting out its backoff. */
+function reconnectNow(state: Open, key: string, attachment: Attachment): Transition {
+  if (state.locked) return { state, effects: [] }
+  const phase = attachment.phase
+
+  if (phase.status !== "reconnecting" && !(phase.status === "backoff" && attachment.browser))
+    return { state, effects: [] }
+
+  if (state.ipc.status !== "active") return put(state, key, suspend(attachment, "ipc"))
+  const attempt = state.issued + 1
+
+  return put(
+    state,
+    key,
+    {
+      ...attachment,
+      phase: { status: "registering", attempt, attempts: "attempts" in phase ? phase.attempts : 0 },
+      error: undefined,
+    },
+    [...stop(key, phase), ...register(key, attempt, attachment.browser)],
+    attempt,
+  )
+}
+
 // Passive edges wake an idle or suspended pane without bypassing transport backoff or duplicating a binding. Only the
 // server creating the session lifts `missing`; nothing lifts `replaced` but the user's next session visit elsewhere.
 function wake(state: Open, key: string, attachment: Attachment, created: boolean): Transition & { state: Open } {
   const phase = attachment.phase
+
+  if (state.locked) return { state, effects: [] }
 
   if (phase.status === "registering" || phase.status === "ready" || phase.status === "backoff")
     return { state, effects: [] }
@@ -616,8 +698,8 @@ function wake(state: Open, key: string, attachment: Attachment, created: boolean
   return put(
     state,
     key,
-    { ...attachment, phase: { status: "registering", attempt, attempts: 0 }, embeds: {}, error: undefined },
-    register(key, attempt, restore),
+    { ...attachment, phase: { status: "registering", attempt, attempts: 0 }, error: undefined },
+    [...stop(key, phase), ...register(key, attempt, restore)],
     attempt,
   )
 }
@@ -636,6 +718,15 @@ function command(
   const focus: AddressFocus = event.focusAddress
     ? { status: "opening", request, known: attachment.browser?.tabs.map((tab) => tab.id) ?? [], settled: false }
     : attachment.addressFocus
+
+  if (state.locked)
+    return put(
+      state,
+      key,
+      { ...attachment, error: undefined, addressFocus: noFocus() },
+      [{ type: "reject-command", sessionKey: key, request, error: "browser.pane.locked", unavailable: false }],
+      request,
+    )
 
   if (phase.status === "registering" || phase.status === "ready")
     return put(
@@ -710,6 +801,10 @@ function commandFailed(
     return put(state, key, { ...attachment, addressFocus: focus })
   }
 
+  // A command refused by the lock is expected, not an error the window shows.
+  if (event.error === "browser.pane.locked")
+    return put(state, key, { ...attachment, error: undefined, addressFocus: focus })
+
   const replaced = attachment.phase.status === "blocked" && attachment.phase.reason === "replaced"
 
   return put(state, key, {
@@ -766,6 +861,15 @@ function paneState(
     )
   }
 
+  // The server accepted this binding, then the connection went away. Keep the inventory and the live-page embeds while
+  // retrying, so the pages stay rendered and the next binding can adopt them.
+  if (event.error === "browser.pane.disconnected") {
+    const browser = event.state ?? attachment.browser
+    const mirrored = event.state ? mirror(key, attachment.strip, browser, false) : undefined
+
+    return reconnect(state, key, attachment, phase, browser, mirrored?.effects ?? [], mirrored?.strip)
+  }
+
   // Main closed the binding, or never took it. Keep the tabs and register again with backoff.
   if (event.error === "browser.pane.registration.closed") return backoff(state, key, attachment, phase)
 
@@ -775,10 +879,15 @@ function paneState(
     const mirrored = event.state ? mirror(key, attachment.strip, browser, false) : undefined
     const reason = event.error === "browser.pane.locked" ? "locked" : "idle"
 
-    return put(state, key, { ...suspend(attachment, reason, browser), strip: mirrored?.strip ?? attachment.strip }, [
-      ...stop(key, phase),
-      ...(mirrored?.effects ?? []),
-    ])
+    const next =
+      event.error === "browser.pane.locked" ? hold(attachment, reason, browser) : suspend(attachment, reason, browser)
+
+    return put(
+      event.error === "browser.pane.locked" ? { ...state, locked: true } : state,
+      key,
+      { ...next, strip: mirrored?.strip ?? attachment.strip },
+      [...stop(key, phase), ...(mirrored?.effects ?? [])],
+    )
   }
 
   const mirrored = mirror(key, attachment.strip, event.state, true)
@@ -802,6 +911,46 @@ function paneState(
   )
 }
 
+/** Keeps the live pages and their embeds while a lost server connection retries with bounded backoff. */
+function reconnect(
+  state: Open,
+  key: string,
+  attachment: Attachment,
+  phase: Phase,
+  browser: Browser.State | null,
+  mirroredEffects: readonly MachineEffect[],
+  mirroredStrip: Strip | undefined,
+): Transition {
+  const prior = phase.status === "reconnecting" || phase.status === "registering" ? phase.attempts : 0
+  const attempt = state.issued + 1
+
+  return put(
+    state,
+    key,
+    {
+      ...attachment,
+      phase: { status: "reconnecting", attempt, attempts: prior + 1 },
+      browser,
+      error: undefined,
+      strip: mirroredStrip ?? attachment.strip,
+      addressFocus: noFocus(),
+    },
+    [
+      ...stop(key, phase),
+      ...mirroredEffects,
+      {
+        type: "schedule-retry",
+        sessionKey: key,
+        attempt,
+        // A disconnected pane retries often enough to catch a server whose plugin is still booting; the cap keeps it
+        // from spinning while the server stays away.
+        delayMs: Math.min(5_000, RETRY_BASE_MS * 2 ** Math.min(prior, 10)),
+      },
+    ],
+    attempt,
+  )
+}
+
 function backoff(state: Open, key: string, attachment: Attachment, phase: Bound): Transition {
   const prior = phase.status === "registering" ? phase.attempts : 0
   const attempt = state.issued + 1
@@ -812,7 +961,6 @@ function backoff(state: Open, key: string, attachment: Attachment, phase: Bound)
     {
       ...attachment,
       phase: { status: "backoff", attempt, attempts: prior + 1 },
-      embeds: {},
       error: undefined,
       addressFocus: noFocus(),
     },
@@ -897,6 +1045,17 @@ function suspend(attachment: Attachment, reason: SuspendReason, browser = attach
   }
 }
 
+/** A lock suspension keeps the embeds: the same live pages stay on screen while the attachment is gone. */
+function hold(attachment: Attachment, reason: SuspendReason, browser = attachment.browser): Attachment {
+  return {
+    ...attachment,
+    phase: { status: "suspended", reason },
+    browser,
+    error: undefined,
+    addressFocus: noFocus(),
+  }
+}
+
 function current(phase: Phase, attempt: number) {
   return (phase.status === "registering" || phase.status === "ready") && phase.attempt === attempt ? phase : undefined
 }
@@ -917,7 +1076,7 @@ function stop(key: string, phase: Phase): MachineEffect[] {
 
   if (phase.status === "ready") return [{ type: "close-registration", sessionKey: key, attempt: phase.attempt }]
 
-  if (phase.status === "backoff") return [{ type: "cancel-retry", sessionKey: key }]
+  if (phase.status === "backoff" || phase.status === "reconnecting") return [{ type: "cancel-retry", sessionKey: key }]
 
   return []
 }

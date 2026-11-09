@@ -23,6 +23,7 @@ import {
   serverSupported,
   sessionAttached,
   sessionBrowser,
+  sessionConnection,
   sessionEmbed,
   sessionError,
   sessionPending,
@@ -412,7 +413,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   createKeyed(pane, (current) => current.on("event", (value) => listeners.get(value.binding)?.(value.event)))
   createKeyed(pane, (current) =>
     current.on("screen", (value) => {
-      if (!value.locked) dispatch({ type: "screen.unlocked" })
+      dispatch({ type: value.locked ? "screen.locked" : "screen.unlocked" })
     }),
   )
 
@@ -458,6 +459,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
               if (event.data.sessionID === ref.id) dispatch({ type: "session.wake", sessionKey })
             }),
           )
+          // A restarted server announces itself; a pane that lost the connection retries at once instead of waiting
+          // out the rest of its backoff.
+          onCleanup(data.on("server.connected", () => dispatch({ type: "session.reconnect", sessionKey })))
         },
       )
 
@@ -631,6 +635,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       return code === undefined ? undefined : describe(code)
     },
     suspended: (session: Session) => sessionSuspended(machine(), session.key),
+    connection: (session: Session) => sessionConnection(machine(), session.key),
     /** The host embed of a tab's page, once main created the page. */
     embed: (session: Session, tabID: string) => sessionEmbed(machine(), session.key, tabID),
     /**

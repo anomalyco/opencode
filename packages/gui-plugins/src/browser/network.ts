@@ -6,32 +6,68 @@ import { BrowserProxy } from "@opencode/plugin-browser/proxy"
 import { Effect } from "effect"
 import { Base64 } from "effect/encoding"
 
+/** The connection a live page's proxy tunnels through. Absent while the server is disconnected. */
+export type BrowserNetworkUpstream = {
+  readonly rpc: RpcClient<typeof Browser.Definition, unknown>
+  readonly attachment: { sessionID: Session.ID; connectionID: string }
+  readonly location: { directory: string; workspace?: string }
+}
+
 export type BrowserNetwork = Effect.Success<ReturnType<typeof createBrowserNetwork>>
 
+/** A session's proxy and partition, kept for as long as the session's live pages are. */
 export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function* (input: {
-  rpc: RpcClient<typeof Browser.Definition, unknown>
-  attachment: { sessionID: Session.ID; connectionID: string }
-  location: { directory: string; workspace?: string }
-  partition: string
+  readonly partition: string
+  /** The current binding's tunnel RPC, or undefined while the server is disconnected. */
+  readonly upstream: () => BrowserNetworkUpstream | undefined
 }) {
-  const options = { location: input.location }
+  const current = () => {
+    const upstream = input.upstream()
+
+    if (!upstream) throw new Error("browser.network.disconnected")
+
+    return upstream
+  }
 
   const proxy = yield* Effect.acquireRelease(
     Effect.tryPromise(() =>
       BrowserProxy.make({
-        open: (target, signal) =>
-          Effect.runPromise(input.rpc["tunnel.open"]({ ...input.attachment, target }, options), { signal }),
-        read: (tunnelID, signal) =>
-          Effect.runPromise(input.rpc["tunnel.read"]({ ...input.attachment, tunnelID }, options), { signal }),
-        write: (tunnelID, data, end, signal) =>
-          Effect.runPromise(
-            input.rpc["tunnel.write"]({ ...input.attachment, tunnelID, data: Base64.encode(data), end }, options),
+        open: (target, signal) => {
+          const upstream = current()
+
+          return Effect.runPromise(
+            upstream.rpc["tunnel.open"]({ ...upstream.attachment, target }, { location: upstream.location }),
             { signal },
-          ),
-        close: (tunnelID) =>
-          Effect.runPromise(
-            input.rpc["tunnel.close"]({ ...input.attachment, tunnelID }, options).pipe(Effect.timeout("5 seconds")),
-          ),
+          )
+        },
+        read: (tunnelID, signal) => {
+          const upstream = current()
+
+          return Effect.runPromise(
+            upstream.rpc["tunnel.read"]({ ...upstream.attachment, tunnelID }, { location: upstream.location }),
+            { signal },
+          )
+        },
+        write: (tunnelID, data, end, signal) => {
+          const upstream = current()
+
+          return Effect.runPromise(
+            upstream.rpc["tunnel.write"](
+              { ...upstream.attachment, tunnelID, data: Base64.encode(data), end },
+              { location: upstream.location },
+            ),
+            { signal },
+          )
+        },
+        close: (tunnelID) => {
+          const upstream = current()
+
+          return Effect.runPromise(
+            upstream.rpc["tunnel.close"]({ ...upstream.attachment, tunnelID }, { location: upstream.location }).pipe(
+              Effect.timeout("5 seconds"),
+            ),
+          )
+        },
       }),
     ),
     (proxy) => Effect.promise(() => proxy.close()),
@@ -71,6 +107,8 @@ export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function*
 
       return () => contents.off("login", login)
     },
+    /** Ends the page connections that still run through the old binding; new requests fail fast. */
+    disconnect: () => partition.closeAllConnections(),
     /**
      * Fetches a page icon through the server's network, as the page loaded it. Resolves undefined for anything but a
      * small image: a failure, a timeout, another content type, or more than `MAX_ICON_BYTES`.

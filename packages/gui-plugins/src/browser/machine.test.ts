@@ -5,6 +5,7 @@ import {
   createInitialState,
   REGISTER_TIMEOUT_MS,
   serverSupported,
+  sessionConnection,
   sessionError,
   sessionPending,
   sessionSuspended,
@@ -534,6 +535,83 @@ describe("browser pane machine", () => {
     expect(later.effects).toEqual([])
   })
 
+  test("a lost connection keeps the live pages and retries on its own", () => {
+    const start = ready()
+
+    const embedded = transition(start, {
+      type: "pane.embed",
+      sessionKey: key,
+      attempt: attempt(start),
+      tabID: tabA,
+      embed: "e1",
+    }).state
+
+    const lost = transition(embedded, paneState(embedded, inventory(tab(tabA)), "browser.pane.disconnected"))
+    expect(phase(lost.state)).toMatchObject({ status: "reconnecting", attempts: 1 })
+    expect(attachment(lost.state)?.browser).toEqual(inventory(tab(tabA)))
+    expect(attachment(lost.state)?.embeds).toEqual({ [tabA]: "e1" })
+    expect(sessionConnection(lost.state, key)).toBe("reconnecting")
+    expect(sessionSuspended(lost.state, key)).toBe(false)
+    expect(lost.effects).toContainEqual(expect.objectContaining({ type: "schedule-retry", delayMs: 1_000 }))
+
+    const retry = attempt(lost.state)
+    const registering = transition(lost.state, { type: "retry.due", sessionKey: key, attempt: retry })
+    expect(phase(registering.state)).toMatchObject({ status: "registering", attempts: 1 })
+    expect(registering.effects).toContainEqual({
+      type: "open-registration",
+      sessionKey: key,
+      attempt: attempt(registering.state),
+      restore: inventory(tab(tabA)),
+    })
+    expect(attachment(registering.state)?.embeds).toEqual({ [tabA]: "e1" })
+
+    const failed = transition(registering.state, {
+      type: "register.failed",
+      sessionKey: key,
+      attempt: attempt(registering.state),
+      unavailable: false,
+      closed: false,
+      locked: false,
+    })
+
+    expect(phase(failed.state)).toMatchObject({ status: "backoff", attempts: 2 })
+    expect(attachment(failed.state)?.embeds).toEqual({ [tabA]: "e1" })
+    expect(sessionConnection(failed.state, key)).toBe("reconnecting")
+
+    const again = transition(failed.state, {
+      type: "retry.due",
+      sessionKey: key,
+      attempt: attempt(failed.state),
+    }).state
+
+    const accepted = transition(again, {
+      type: "register.accepted",
+      sessionKey: key,
+      attempt: attempt(again),
+    }).state
+
+    expect(sessionConnection(accepted, key)).toBe("connected")
+    expect(attachment(accepted)?.embeds).toEqual({ [tabA]: "e1" })
+  })
+
+  test("a restarted server retries a lost connection at once", () => {
+    const start = ready()
+    const lost = transition(start, paneState(start, inventory(tab(tabA)), "browser.pane.disconnected")).state
+    const early = transition(lost, { type: "session.reconnect", sessionKey: key })
+
+    expect(phase(early.state)).toMatchObject({ status: "registering", attempts: 1 })
+    expect(early.effects).toContainEqual({ type: "cancel-retry", sessionKey: key })
+    expect(early.effects).toContainEqual(
+      expect.objectContaining({ type: "open-registration", restore: inventory(tab(tabA)) }),
+    )
+  })
+
+  test("a suspended pane without retries reads as disconnected", () => {
+    const start = ready()
+    const idle = transition(start, paneState(start, inventory(tab(tabA)), "browser.pane.suspended")).state
+    expect(sessionConnection(idle, key)).toBe("disconnected")
+  })
+
   test("a missing session waits without an error until the server creates it", () => {
     const start = replay(attach()).state
     const missing = transition(start, paneState(start, null, "browser.pane.missing")).state
@@ -627,31 +705,43 @@ describe("browser pane machine", () => {
 
   test("a locked screen keeps the tabs and registers again only once it unlocks", () => {
     const start = ready()
-    const locked = transition(start, paneState(start, inventory(tab(tabA)), "browser.pane.locked")).state
-    expect(phase(locked)).toEqual({ status: "suspended", reason: "locked" })
-    expect(attachment(locked)?.browser?.tabs.map((item) => item.id)).toEqual([tabA])
-
-    // An edge while still locked registers, main refuses it, and the pane waits without a retry timer.
-    const woken = transition(locked, { type: "session.wake", sessionKey: key })
-    expect(types(woken.effects)).toEqual(["open-registration", "schedule-register-timeout"])
-
-    const refused = transition(woken.state, {
-      type: "register.failed",
+    const embedded = transition(start, {
+      type: "pane.embed",
       sessionKey: key,
-      attempt: attempt(woken.state),
-      unavailable: false,
-      closed: false,
-      locked: true,
-    })
+      attempt: attempt(start),
+      tabID: tabA,
+      embed: "e1",
+    }).state
+    const held = transition(embedded, { type: "screen.locked" })
+    expect(held.state.status === "open" && held.state.locked).toBe(true)
+    expect(phase(held.state)).toEqual({ status: "suspended", reason: "locked" })
+    expect(attachment(held.state)?.browser?.tabs.map((item) => item.id)).toEqual([tabA])
+    expect(attachment(held.state)?.embeds).toEqual({ [tabA]: "e1" })
 
-    expect(phase(refused.state)).toEqual({ status: "suspended", reason: "locked" })
-    expect(types(refused.effects)).not.toContain("schedule-retry")
+    // No edge, retry, or command may register or reach the pane while locked.
+    const woken = transition(held.state, { type: "session.wake", sessionKey: key })
+    expect(woken.state).toBe(held.state)
+    expect(woken.effects).toEqual([])
 
-    const unlocked = transition(refused.state, { type: "screen.unlocked" })
+    const commanded = replay([command()], held.state)
+    expect(types(commanded.effects)).toEqual(["reject-command"])
+    expect(commanded.effects).toContainEqual(expect.objectContaining({ error: "browser.pane.locked" }))
+
+    const unlocked = transition(held.state, { type: "screen.unlocked" })
+    expect(unlocked.state.status === "open" && unlocked.state.locked).toBe(false)
     expect(phase(unlocked.state)).toMatchObject({ status: "registering" })
     expect(unlocked.effects).toContainEqual(
       expect.objectContaining({ type: "open-registration", restore: inventory(tab(tabA)) }),
     )
+    expect(attachment(unlocked.state)?.embeds).toEqual({ [tabA]: "e1" })
+  })
+
+  test("a locked pane.state keeps the tabs without a retry timer", () => {
+    const start = ready()
+    const locked = transition(start, paneState(start, inventory(tab(tabA)), "browser.pane.locked")).state
+
+    expect(phase(locked)).toEqual({ status: "suspended", reason: "locked" })
+    expect(types(transition(locked, { type: "session.wake", sessionKey: key }).effects)).toEqual([])
   })
 
   test("unlocking leaves panes the lock did not suspend alone", () => {

@@ -3,13 +3,13 @@ import { Browser } from "@opencode/plugin-browser/rpc"
 import { OpenCode } from "@opencode/client/effect"
 import { SessionID } from "@opencode/schema/session-id"
 import electron, { type BrowserWindow } from "electron"
-import { Cause, Deferred, Effect, ManagedRuntime, Option, Queue, Schedule, Schema, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, ManagedRuntime, Option, Queue, Schedule, Schema, Scope, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
 import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plugin/gui/main"
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure } from "./errors"
-import { createBrowserNetwork, type BrowserNetwork } from "./network"
+import { createBrowserNetwork, type BrowserNetwork, type BrowserNetworkUpstream } from "./network"
 import { destinationOrigin, fileURLWithin, refusal } from "./policy"
 import { createRefs } from "./refs"
 import type { PaneEvent } from "./ipc"
@@ -25,6 +25,7 @@ import {
   selectBinding,
   selectFileRoots,
   selectInventory,
+  selectNextAttempt,
   selectOwnedBinding,
   selectPageAttempt,
   selectTabSlot,
@@ -39,19 +40,37 @@ import { createBrowserRestoreStore } from "./restore"
 
 type Target = { readonly server: string; readonly session: string; readonly restore?: Browser.State }
 
+/** Where a live page currently reports: the binding and attempt that own it. Adoption updates it in place. */
+type PageOwner = { binding: string; attempt: number }
+
+/** A page kept for a session across bindings. The same WebContents and partition serve every reconnection. */
+type PageEntry = { readonly tabID: Browser.TabID; readonly page: BrowserPage; owner: PageOwner }
+
+/** A session's browser, kept while the app runs so a reconnect adopts its live pages. */
+type SessionRecord = {
+  readonly storageKey: string
+  readonly partition: string
+  readonly pages: Map<Browser.TabID, PageEntry>
+  scoped: Scope.Closeable
+  network: BrowserNetwork
+  /** The current binding's tunnel. Absent while the server is disconnected. */
+  upstream?: BrowserNetworkUpstream
+  /** The binding currently allowed to use this record. */
+  binding?: string
+}
+
 /** The Electron and Effect handles of one binding; its phase lives in the pane machine. */
 type Handle = {
   window: number
   win: BrowserWindow
-  partition: string
+  record: SessionRecord
   abort: AbortController
   registered: ReturnType<typeof Promise.withResolvers<void>>
   cleanup: () => void
   timer?: ReturnType<typeof setTimeout>
-  network?: BrowserNetwork
   sendState?: (state: Browser.State) => void
-  /** Pages by attempt. */
-  pages: Map<number, BrowserPage>
+  /** Pages live in this binding, by attempt. */
+  pages: Map<number, PageEntry>
   /** Agent requests in flight by request ID. */
   requests: Map<string, AbortController>
 }
@@ -74,11 +93,13 @@ export function createBrowserPane(input: {
 }) {
   const machine: PaneMachine = { state: createPaneState() }
   const handles = new Map<string, Handle>()
+  const records = new Map<string, SessionRecord>()
   const restore = createBrowserRestoreStore(input.storage)
   const shared: Shared = { ref: createRefs(input.refs) }
   // Page disposals in flight. Finishing a trace or CPU profile can hold a page open, and the pane's own disposal waits
   // for them so a replacement never starts beside old pages still recording.
   const releasing = new Set<Promise<void>>()
+  const releasingRecords = new Set<Promise<void>>()
   const disposals = new WeakMap<BrowserPage, Promise<void>>()
   // Keep long-lived RPC requests off Chromium's shared HTTP connection pool.
   const runtime = ManagedRuntime.make(NodeHttpClient.layerNodeHttp)
@@ -99,15 +120,16 @@ export function createBrowserPane(input: {
       if (win.isDestroyed() || win.webContents.isDestroyed()) throw new Error("browser.pane.owner.unavailable")
       const sessionID = SessionID.make(target.session)
       const storageKey = `${target.server}\n${sessionID}`
-      const partition = `opencode-browser-${crypto.randomUUID()}`
+      const existing = records.get(storageKey)
+      // One window owns a session's pages at a time. A disconnected record has no binding, so the next register adopts it.
 
-      // Navigation guards cover documents; subresources (img, script, fetch) also must not read
-      // file: URLs outside the roots. One listener per partition covers every page in this attachment.
-      electron.session
-        .fromPartition(partition)
-        .webRequest.onBeforeRequest({ urls: ["file://*/*"] }, (details, callback) =>
-          callback({ cancel: !fileURLWithin(details.url, selectFileRoots(machine.state, binding)) }),
-        )
+      if (existing?.binding && selectBinding(machine.state, existing.binding))
+        throw new Error("browser.pane.owner.invalid")
+      const record = existing ?? (await createRecord(storageKey))
+
+      if (input.locked()) throw new Error("browser.pane.locked")
+
+      record.binding = binding
 
       const closed = () => dispatchBinding(binding, { type: "owner.closed" })
 
@@ -121,7 +143,7 @@ export function createBrowserPane(input: {
       const handle: Handle = {
         window,
         win,
-        partition,
+        record,
         abort: new AbortController(),
         registered: Promise.withResolvers(),
         cleanup: () => {
@@ -170,7 +192,8 @@ export function createBrowserPane(input: {
 
             const attachment = { sessionID, connectionID: crypto.randomUUID() }
             const rpc = client.rpc(Browser.Definition)
-            handle.network = yield* createBrowserNetwork({ rpc, attachment, location: options.location, partition })
+            // The proxy is stable for the session; only its upstream changes with the binding.
+            const upstream: BrowserNetworkUpstream = { rpc, attachment, location: options.location }
             const connected = yield* Deferred.make<void>()
             const outbound = yield* Queue.unbounded<Effect.Effect<void>>()
 
@@ -263,7 +286,15 @@ export function createBrowserPane(input: {
 
                   if (frame.kind === "foreign") return
 
-                  if (frame.kind === "attached") return dispatchBinding(binding, { type: "server.attached", fileRoots })
+                  if (frame.kind === "attached") {
+                    if (input.locked() || !selectBinding(machine.state, binding)) return
+
+                    record.upstream = upstream
+                    dispatchBinding(binding, { type: "server.attached", fileRoots })
+                    adopt(binding, record)
+
+                    return
+                  }
 
                   if (frame.kind === "incompatible") return dispatchBinding(binding, { type: "handshake.unsupported" })
 
@@ -297,12 +328,32 @@ export function createBrowserPane(input: {
             }),
             // Inside the scope: closing the tunnels, the proxy and the partition's connections can take seconds, and
             // nothing that happens meanwhile changes why the attachment ended.
-            Effect.tap((outcome) => Effect.sync(() => dispatchBinding(binding, { type: "attachment.ended", outcome }))),
+            Effect.tap((outcome) =>
+              Effect.sync(() => {
+                // Only clear the upstream this binding installed: a replacement may already own the record.
+                if (record.binding === binding) {
+                  record.upstream = undefined
+                  void record.network.disconnect().catch(() => undefined)
+                }
+
+                dispatchBinding(binding, {
+                  type: "attachment.ended",
+                  outcome,
+                  keep: record.pages.size > 0,
+                })
+              }),
+            ),
             Effect.scoped,
           ),
           { signal: handle.abort.signal },
         )
-        .catch(() => dispatchBinding(binding, { type: "attachment.ended", outcome: "closed" }))
+        .catch(() =>
+          dispatchBinding(binding, {
+            type: "attachment.ended",
+            outcome: "closed",
+            keep: record.pages.size > 0,
+          }),
+        )
       await handle.registered.promise
 
       if (!selectBinding(machine.state, binding)) throw new Error("browser.pane.registration.closed")
@@ -353,6 +404,11 @@ export function createBrowserPane(input: {
     },
     /** The screen locked: every attachment ends, so the server drops this desktop's browser tools until it unlocks. */
     lock() {
+      // The pages stay live behind the local proxy, but it has no upstream to tunnel through while locked.
+      records.forEach((record) => {
+        record.upstream = undefined
+        void record.network.disconnect().catch(() => undefined)
+      })
       dispatch({ type: "locked" })
     },
     /**
@@ -361,6 +417,8 @@ export function createBrowserPane(input: {
      */
     async dispose() {
       dispatch({ type: "disposed" })
+      await Promise.all(Array.from(records.keys(), (storageKey) => releaseLater(storageKey)))
+      await Promise.all(releasingRecords)
       await Promise.all(releasing)
       await runtime.dispose()
     },
@@ -380,6 +438,8 @@ export function createBrowserPane(input: {
     if (effect.type === "save-restore") return restore.save(effect.storageKey, effect.snapshot)
 
     if (effect.type === "remove-restore") return restore.remove(effect.storageKey)
+
+    if (effect.type === "release-record") return void releaseLater(effect.storageKey)
 
     if (effect.type === "warn") return void runtime.runFork(Effect.logWarning(effect.message, effect.detail))
     const handle = handles.get(effect.binding)
@@ -411,12 +471,19 @@ export function createBrowserPane(input: {
 
     if (effect.type === "release-pages")
       return effect.attempts.forEach((attempt) => {
-        const page = handle.pages.get(attempt)
+        const entry = handle.pages.get(attempt)
         handle.pages.delete(attempt)
 
-        if (page) release(page)
+        if (!entry) return
+
+        if (entry.owner.binding !== effect.binding || entry.owner.attempt !== attempt) return
+
+        if (handle.record.pages.get(entry.tabID) === entry) handle.record.pages.delete(entry.tabID)
+        release(entry.page)
       })
     handles.delete(effect.binding)
+
+    if (handle.record.binding === effect.binding) handle.record.binding = undefined
     clearTimeout(handle.timer)
     handle.registered.reject(new Error("browser.pane.registration.closed"))
     handle.cleanup()
@@ -443,6 +510,103 @@ export function createBrowserPane(input: {
     void settled.finally(() => releasing.delete(settled))
   }
 
+  async function createRecord(storageKey: string) {
+    const partition = `opencode-browser-${crypto.randomUUID()}`
+
+    let upstream: BrowserNetworkUpstream | undefined
+    const scoped = await runtime.runPromise(Scope.make())
+
+    const network = await runtime.runPromise(
+      createBrowserNetwork({ partition, upstream: () => upstream }).pipe(Effect.provideService(Scope.Scope, scoped)),
+    )
+
+    const record: SessionRecord = {
+      storageKey,
+      partition,
+      pages: new Map(),
+      scoped,
+      network,
+      get upstream() {
+        return upstream
+      },
+      set upstream(value) {
+        upstream = value
+      },
+    }
+
+    // Navigation guards cover documents; subresources (img, script, fetch) also must not read file: URLs outside the
+    // roots. One listener per partition covers every page for the session, across bindings.
+    electron.session
+      .fromPartition(partition)
+      .webRequest.onBeforeRequest({ urls: ["file://*/*"] }, (details, callback) =>
+        callback({
+          cancel: !fileURLWithin(details.url, record.binding ? selectFileRoots(machine.state, record.binding) : []),
+        }),
+      )
+
+    records.set(storageKey, record)
+
+    return record
+  }
+
+  async function releaseRecord(storageKey: string) {
+    const record = records.get(storageKey)
+
+    if (!record) return
+    records.delete(storageKey)
+    record.upstream = undefined
+    await record.network.disconnect().catch(() => undefined)
+    record.pages.forEach((entry) => release(entry.page))
+    record.pages.clear()
+    await Promise.all(releasing)
+    await runtime.runPromise(Scope.close(record.scoped, Exit.void)).catch(() => undefined)
+  }
+
+  function releaseLater(storageKey: string) {
+    const done = releaseRecord(storageKey)
+    releasingRecords.add(done)
+    void done.finally(() => releasingRecords.delete(done))
+
+    return done
+  }
+
+  /**
+   * Adopts the session's live pages into a newly attached binding. Their WebContents, tab IDs and page state stay as
+   * they were; only the owner and attempts the machine tracks change. Tabs with no live page stay unloaded.
+   */
+  function adopt(binding: string, record: SessionRecord) {
+    const entry = selectBinding(machine.state, binding)
+    const handle = handles.get(binding)
+
+    if (entry?.status !== "attached" || !handle) return
+    const tabs = new Set(entry.tabs.keys())
+
+    record.pages.forEach((page, tabID) => {
+      if (tabs.has(tabID) && !page.page.contents.isDestroyed()) return
+      record.pages.delete(tabID)
+      release(page.page)
+    })
+
+    let attempt = selectNextAttempt(machine.state, binding)
+
+    if (attempt === undefined) return
+    let published: { tabID: Browser.TabID; attempt: number; tab: Browser.Tab } | undefined
+
+    record.pages.forEach((page, tabID) => {
+      if (attempt === undefined) return
+      page.owner.binding = binding
+      page.owner.attempt = attempt
+      handle.pages.set(attempt, page)
+      const tab = page.page.state()
+      dispatchBinding(binding, { type: "tab.opened", tabID, attempt, tab })
+      emit(binding, { type: "embed", tabID, embed: page.page.embed })
+      published = { tabID, attempt, tab }
+      attempt = selectNextAttempt(machine.state, binding)
+    })
+
+    if (published) dispatchBinding(binding, { type: "tab.published", ...published })
+  }
+
   function inventory(binding: string): Browser.State {
     const entry = selectBinding(machine.state, binding)
 
@@ -453,7 +617,7 @@ export function createBrowserPane(input: {
   function page(binding: string, tabID: Browser.TabID) {
     const attempt = selectPageAttempt(machine.state, binding, tabID)
 
-    return attempt === undefined ? undefined : handles.get(binding)?.pages.get(attempt)
+    return attempt === undefined ? undefined : handles.get(binding)?.pages.get(attempt)?.page
   }
 
   /** The tab's page, created the first time the pane shows a restored or crashed tab or a command names it. */
@@ -491,73 +655,96 @@ export function createBrowserPane(input: {
     const entry = selectBinding(machine.state, binding)
     const handle = handles.get(binding)
 
-    if (entry?.status !== "attached" || !handle?.network)
-      throw new Error("Browser network is not ready; no tab was opened.")
+    if (entry?.status !== "attached" || !handle) throw new Error("Browser network is not ready; no tab was opened.")
     const id = options.restore?.id ?? Browser.TabID.make(`tab_${crypto.randomUUID()}`)
     const attempt = entry.nextAttempt
     const win = handle.win
-    // Every callback is fenced to this page: a later page of the same tab has another attempt.
-    const current = () => isCurrentPage(machine.state, binding, id, attempt)
-    const focused = () => isFocusedPage(machine.state, binding, id, attempt)
+    const owner: PageOwner = { binding, attempt }
+    let page!: BrowserPage
+    let live: PageEntry | undefined
+    // Every callback is fenced to this page: a later page of the same tab has another attempt, and adoption updates
+    // the owner in place so the same page keeps reporting to whichever binding now owns it.
+
+    const current = () =>
+      live !== undefined &&
+      handle.record.pages.get(id) === live &&
+      isCurrentPage(machine.state, owner.binding, id, owner.attempt)
+
+    const focused = () => current() && isFocusedPage(machine.state, owner.binding, id, owner.attempt)
 
     const fail = () => {
       if (current())
-        dispatchBinding(binding, {
+        dispatchBinding(owner.binding, {
           type: "tab.crashed",
           tabID: id,
-          attempt,
+          attempt: owner.attempt,
           tab: page.contents.isDestroyed() ? undefined : page.state(),
         })
     }
 
-    const page = createBrowserPage(win, {
+    page = createBrowserPage(win, {
       id,
-      partition: handle.partition,
-      network: handle.network,
+      partition: handle.record.partition,
+      network: handle.record.network,
       initialize: options.initialize,
       restore: options.restore,
       popupOptions: options.popupOptions,
-      fileRoots: () => selectFileRoots(machine.state, binding),
+      fileRoots: () => selectFileRoots(machine.state, owner.binding),
       shared,
       embeds: input.embeds,
       fail,
       publish: (error) => {
-        if (current()) dispatchBinding(binding, { type: "tab.published", tabID: id, attempt, tab: page.state(), error })
+        if (current())
+          dispatchBinding(owner.binding, {
+            type: "tab.published",
+            tabID: id,
+            attempt: owner.attempt,
+            tab: page.state(),
+            error,
+          })
       },
       inspect: (event) => {
-        if (current()) emit(binding, { type: "inspect", tabID: id, ...event })
+        if (current()) emit(owner.binding, { type: "inspect", tabID: id, ...event })
       },
       // Icons and zoom are local to this desktop, and follow the states reported before them, so the window files a new
       // page's icon under that page's URL.
       detail: (value) => {
-        if (current()) emit(binding, { type: "page", tabID: id, ...value })
+        if (current()) emit(owner.binding, { type: "page", tabID: id, ...value })
       },
-      zoomed: () => handles.get(binding)?.pages.forEach((page) => page.detail()),
+      zoomed: () => handle.pages.forEach((item) => item.page.detail()),
       shortcut: (shortcut) => {
         if (!focused() || win.isDestroyed()) return
 
         // The page held keyboard focus; the command runs in the app, which may move focus there, as ⌘L does.
         if (win.isFocused()) win.webContents.focus()
-        emit(binding, { type: "shortcut", ...shortcut })
+        emit(owner.binding, { type: "shortcut", ...shortcut })
       },
       focused: () => {
-        if (focused()) emit(binding, { type: "focused", tabID: id })
+        if (focused()) emit(owner.binding, { type: "focused", tabID: id })
       },
       popup: (popupOptions, background) => {
-        const popup = create(binding, { initialize: false, popupOptions })
+        const popup = create(owner.binding, { initialize: false, popupOptions })
 
-        if (!background) dispatchBinding(binding, { type: "tab.focused", tabID: popup.state().id })
+        if (!background) dispatchBinding(owner.binding, { type: "tab.focused", tabID: popup.state().id })
 
         return popup.contents
       },
     })
 
-    handle.pages.set(attempt, page)
+    live = { tabID: id, page, owner }
+    handle.record.pages.set(id, live)
+    handle.pages.set(attempt, live)
     dispatchBinding(binding, { type: "tab.opened", tabID: id, attempt, tab: options.restore ?? page.state() })
     // Straight to the window, not through the server report: the embed is local to this desktop.
     emit(binding, { type: "embed", tabID: id, embed: page.embed })
     void page.ready.then(() => {
-      if (current()) dispatchBinding(binding, { type: "tab.published", tabID: id, attempt, tab: page.state() })
+      if (current())
+        dispatchBinding(owner.binding, {
+          type: "tab.published",
+          tabID: id,
+          attempt: owner.attempt,
+          tab: page.state(),
+        })
     }, fail)
 
     return page
@@ -567,7 +754,7 @@ export function createBrowserPane(input: {
   function refresh(binding: string, tabID: Browser.TabID, page: BrowserPage) {
     const attempt = selectPageAttempt(machine.state, binding, tabID)
 
-    if (attempt === undefined || handles.get(binding)?.pages.get(attempt) !== page) return
+    if (attempt === undefined || handles.get(binding)?.pages.get(attempt)?.page !== page) return
     dispatchBinding(binding, { type: "tab.published", tabID, attempt, tab: page.state() })
   }
 

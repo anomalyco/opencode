@@ -76,6 +76,7 @@ export default function SessionBrowserPane(props: {
   const address = () => (state()?.url === "about:blank" ? "" : (state()?.url ?? ""))
   const failed = () => !!state()?.loadError
   const suspended = () => props.model.suspended(props.session)
+  const connection = () => props.model.connection(props.session)
   const command = (action: Browser.Action) => props.model.command(props.session, action)
 
   const page = () => {
@@ -401,6 +402,7 @@ export default function SessionBrowserPane(props: {
       id="browser-panel"
       // A click on the pane's own surface, like its loading or error view, keeps focus here, so its shortcuts apply.
       tabIndex={-1}
+      data-browser-connection={connection()}
       class="relative size-full min-w-0 overflow-hidden bg-v2-background-bg-base flex flex-col outline-none"
     >
       <div
@@ -717,6 +719,15 @@ export default function SessionBrowserPane(props: {
           aria-live="assertive"
         >
           {error()}
+        </div>
+      </Show>
+      <Show when={connection() !== "connected"}>
+        <div
+          data-slot="browser-connection-notice"
+          role="status"
+          class="shrink-0 px-3 py-1.5 text-12-regular text-v2-text-text-muted border-b border-v2-border-border-muted"
+        >
+          {plugin.t("connection.disconnected")}
         </div>
       </Show>
       <embeds.View

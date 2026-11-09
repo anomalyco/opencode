@@ -22,8 +22,15 @@ function createScreenLock(): ScreenLock {
   let state = initialScreenLockState
   let started = false
 
-  // The threshold only separates `active` from `idle`, which both mean unlocked here.
-  const idle = () => powerMonitor.getSystemIdleState(60)
+  // The threshold only separates `active` from `idle`, which both mean unlocked here. A platform that cannot answer
+  // reports `unknown`, which changes nothing.
+  const idle = (): ReturnType<typeof powerMonitor.getSystemIdleState> => {
+    try {
+      return powerMonitor.getSystemIdleState(60)
+    } catch {
+      return "unknown"
+    }
+  }
 
   const apply = (event: ScreenLockEvent) => {
     const before = isScreenLocked(state)
@@ -36,6 +43,7 @@ function createScreenLock(): ScreenLock {
   const start = () => {
     if (started) return
     started = true
+
     apply({ type: "probed", idle: idle() })
     powerMonitor.on("lock-screen", () => apply({ type: "screen", locked: true }))
     powerMonitor.on("unlock-screen", () => apply({ type: "screen", locked: false }))

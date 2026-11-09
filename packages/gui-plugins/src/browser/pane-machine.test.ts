@@ -150,13 +150,15 @@ describe("binding close reason", () => {
     expect(transitionBinding(closed, { type: "pane.disposed" })).toEqual({ state: closed, effects: [] })
   })
 
-  test("an unavailable server suspends an attached binding with its tabs and rejects a connecting one", () => {
+  test("an unavailable server keeps an attached binding's pages and rejects a connecting one", () => {
     const restore = { tabs: [tab(tabA, dashboard)], focusedTabID: tabA }
     const suspended = play(attached(restore), on({ type: "attachment.ended", outcome: "unavailable" }))
     expect(closeEvents(suspended.effects)).toEqual([
-      { state: { tabs: [tab(tabA, dashboard, "", 1)], focusedTabID: tabA }, error: "browser.pane.suspended" },
+      { state: { tabs: [tab(tabA, dashboard, "", 1)], focusedTabID: tabA }, error: "browser.pane.disconnected" },
     ])
     expect(suspended.effects.map((effect) => effect.type)).not.toContain("remove-restore")
+    expect(suspended.effects.map((effect) => effect.type)).not.toContain("release-pages")
+    expect(suspended.effects.map((effect) => effect.type)).not.toContain("release-record")
 
     const connecting = play(
       createPaneState(),
@@ -166,6 +168,46 @@ describe("binding close reason", () => {
 
     expect(closeEvents(connecting.effects)).toEqual([{ state: null, error: "browser.pane.unsupported" }])
     expect(connecting.effects.at(-1)).toEqual({ type: "teardown", binding: "b1" })
+  })
+
+  test("a lost connection keeps the live pages for the reconnecting binding", () => {
+    const live = liveDashboard()
+    const lost = play(live, on({ type: "attachment.ended", outcome: "closed" }))
+
+    expect(closeEvents(lost.effects)).toEqual([
+      {
+        state: { tabs: [tab(tabA, dashboard, "Dashboard", 1)], focusedTabID: tabA },
+        error: "browser.pane.disconnected",
+      },
+    ])
+    expect(lost.effects.map((effect) => effect.type)).not.toContain("release-pages")
+    expect(lost.effects.map((effect) => effect.type)).not.toContain("release-record")
+    expect(lost.effects.map((effect) => effect.type)).not.toContain("remove-restore")
+  })
+
+  test("closing the pane releases its live pages and its session record", () => {
+    const closed = play(liveDashboard(), on({ type: "client.closed" }))
+
+    expect(closeEvents(closed.effects)).toEqual([{ state: null, error: "browser.pane.registration.closed" }])
+    expect(closed.effects).toContainEqual({ type: "release-pages", binding: "b1", attempts: [1] })
+    expect(closed.effects).toContainEqual({ type: "release-record", storageKey: "server\nb1" })
+  })
+
+  test("a reconnect adopts the same tab ID into the new binding", () => {
+    const live = liveDashboard()
+    expect(selectBinding(live, "b1")?.nextAttempt).toBe(2)
+
+    const reopened = play(
+      createPaneState(),
+      registered({ tabs: [tab(tabA, dashboard, "Dashboard")], focusedTabID: tabA }),
+      on({ type: "server.attached", fileRoots: [] }),
+      on({ type: "tab.opened", tabID: tabA, attempt: 1, tab: tab(tabA, dashboard, "Dashboard", 2) }),
+      on({ type: "tab.published", tabID: tabA, attempt: 1, tab: tab(tabA, dashboard, "Dashboard", 2) }),
+    )
+
+    expect(entry(reopened.state).tabs.get(tabA)).toMatchObject({ status: "live", attempt: 1 })
+    expect(entry(reopened.state).focusedTabID).toBe(tabA)
+    expect(entry(reopened.state).nextAttempt).toBe(2)
   })
 
   test("classifies attachment failures", () => {
@@ -188,7 +230,7 @@ describe("binding close reason", () => {
     expect(removes({ type: "attachment.ended", outcome: "closed" })).toBe(false)
   })
 
-  test("disposing the pane suspends every binding with its tabs and refuses new ones", () => {
+  test("disposing the pane closes every binding and releases its pages", () => {
     const restore = { tabs: [tab(tabA, dashboard)], focusedTabID: tabA }
 
     const disposed = play(
@@ -201,9 +243,11 @@ describe("binding close reason", () => {
 
     expect(disposed.state).toEqual({ status: "disposed" })
     expect(closeEvents(disposed.effects)).toEqual([
-      { state: { tabs: [tab(tabA, dashboard, "", 1)], focusedTabID: tabA }, error: "browser.pane.suspended" },
-      { state: { tabs: [], focusedTabID: null }, error: "browser.pane.suspended" },
+      { state: null, error: "browser.pane.registration.closed" },
+      { state: null, error: "browser.pane.registration.closed" },
     ])
+    expect(disposed.effects).toContainEqual({ type: "release-record", storageKey: "server\nb1" })
+    expect(disposed.effects).toContainEqual({ type: "release-record", storageKey: "server\nb2" })
     expect(transitionPane(disposed.state, registered())).toEqual({ state: disposed.state, effects: [] })
   })
 

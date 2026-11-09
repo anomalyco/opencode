@@ -75,6 +75,8 @@ export type PaneEvent = typeof PaneEvent.Type
  * - `"browser.pane.replaced"`: another window attached to the same session. The event carries no tabs.
  * - `"browser.pane.suspended"`: the server dropped an attached binding (idle eviction), or main's plugin is going away.
  *   The event carries the tabs the binding had.
+ * - `"browser.pane.disconnected"`: the connection to the server went away after it accepted the binding. The desktop
+ *   keeps the live pages and reconnects on its own; the event carries the tabs the binding had.
  * - `"browser.pane.locked"`: the screen is locked, so main ends every attachment and refuses new ones until it unlocks.
  *   The event carries the tabs the binding had; the window registers again on the `screen` event that reports unlock.
  * - `"browser.pane.missing"`: the session no longer exists. The event carries no tabs, and main forgot its saved tabs.
@@ -85,6 +87,7 @@ export const PaneCloseReason = Schema.Literals([
   "browser.pane.unsupported",
   "browser.pane.replaced",
   "browser.pane.suspended",
+  "browser.pane.disconnected",
   "browser.pane.locked",
   "browser.pane.missing",
   "browser.pane.registration.closed",
