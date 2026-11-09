@@ -1,5 +1,4 @@
 import { SyntaxStyle, type NativeResourceOwner, type RGBA, type ThemeTokenStyle } from "@opentui/core"
-import { contrast } from "./color.js"
 import type { ResolvedThemeTokens } from "./index.js"
 
 export function generateSyntax(theme: ResolvedThemeTokens, owner: NativeResourceOwner) {
@@ -16,11 +15,8 @@ export function generateSyntax(theme: ResolvedThemeTokens, owner: NativeResource
     rule(["extmark.skill"], (theme.categorical[1] ?? theme.categorical[0])[step], { bold: true }),
     rule(
       ["extmark.paste"],
-      oppositeOf(theme.text.base, [
-        theme.background.base,
-        theme.text.action.primary.focused,
-        theme.background.raised.base,
-      ]),
+      // The page color: dark in dark mode, light in light mode. A transparent page (the system theme) falls back to the selected-row text.
+      theme.background.base.a === 1 ? theme.background.base : theme.text.action.primary.focused,
       {
         background: feedback.warning.base,
         bold: true,
@@ -100,11 +96,4 @@ function rule(
   style: Omit<ThemeTokenStyle["style"], "foreground"> = {},
 ): ThemeTokenStyle {
   return { scope, style: { foreground, ...style } }
-}
-
-// The paste chip's text is the inverse of the theme's text: dark in dark mode, light in light mode.
-function oppositeOf(text: RGBA, candidates: RGBA[]) {
-  const opaque = candidates.filter((color) => color.a === 1)
-  if (!opaque.length) return candidates[0]!
-  return opaque.reduce((best, color) => (contrast(color, text) > contrast(best, text) ? color : best))
 }

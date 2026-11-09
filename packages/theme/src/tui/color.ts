@@ -1,5 +1,3 @@
-import type { RGBA } from "@opentui/core"
-
 type OklchColor = {
   l: number
   c: number
@@ -76,13 +74,4 @@ export function oklchToHex(color: OklchColor) {
       .toString(16)
       .padStart(2, "0")
   return `#${toHex(rgb.r)}${toHex(rgb.g)}${toHex(rgb.b)}`
-}
-
-export function contrast(first: RGBA, second: RGBA) {
-  const luminance = (color: RGBA) => {
-    const channel = (value: number) => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
-    return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b)
-  }
-  const [lighter, darker] = [luminance(first), luminance(second)].sort((a, b) => b - a)
-  return (lighter! + 0.05) / (darker! + 0.05)
 }
