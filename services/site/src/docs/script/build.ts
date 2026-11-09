@@ -133,7 +133,10 @@ console.log(`docs: built ${render.docsSlugs.length} pages`)
  * page loads both, and nothing else is render-blocking.
  */
 async function checkBudget() {
-  const budgets = { [inputs.script]: 6.5 * 1024, [inputs.stylesheet]: 28 * 1024 }
+  // The script carries the shared nav menus (packages/nav-menus: the logo menu with its inlined brand files, and the
+  // product menu), about 4 kB of it.
+  // The stylesheet carries the phone bars (the sticky section row and the Contents bar under it), about 0.3 kB.
+  const budgets = { [inputs.script]: 11 * 1024, [inputs.stylesheet]: 29 * 1024 }
   const files = await Array.fromAsync(new Bun.Glob("_build/*.js").scan({ cwd: path.join(cache, "client") }))
   if (files.length !== 1) throw new Error(`docs: the script split into ${files.length} files: ${files.join(", ")}`)
   for (const [input, budget] of Object.entries(budgets)) {

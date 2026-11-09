@@ -2,7 +2,7 @@ import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect
 import type { SessionRequestKind, SessionTitle } from "@opencode/plugin/effect/session"
 import { isRecord } from "@opencode/util/record"
 import { Effect, Option, Schema } from "effect"
-import { FetchHttpClient, HttpClient } from "effect/http"
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Credential } from "../../credential.js"
 import { CopilotModels } from "../../github-copilot/models.js"
@@ -104,17 +104,14 @@ const oauth = (app: App.Info) =>
             Effect.flatMap((token) => {
               if (token.access_token) {
                 const access = token.access_token
-                return request(
-                  `${domain === "github.com" ? "https://api.github.com" : `https://api.${domain}`}/copilot_internal/user`,
-                  {
-                    headers: {
-                      Accept: "application/json",
-                      Authorization: `Bearer ${access}`,
-                      "User-Agent": App.useragent(app),
-                      "X-GitHub-Api-Version": userApiVersion,
-                    },
+                return request(userURL(enterprise ? domain : undefined), {
+                  headers: {
+                    Accept: "application/json",
+                    Authorization: `Bearer ${access}`,
+                    "User-Agent": App.useragent(app),
+                    "X-GitHub-Api-Version": userApiVersion,
                   },
-                ).pipe(
+                }).pipe(
                   Effect.map((user) => Option.getOrUndefined(decodeUser(user))),
                   // Only an explicit entitlement answer blocks login; a failed
                   // or malformed lookup must not turn a GitHub hiccup into a denial.
@@ -180,7 +177,43 @@ export const GithubCopilotPlugin = define({
       load: Effect.fn("GithubCopilotPlugin.load")(function* (_, options) {
         const { connection, credential } = yield* activeCredential(ctx, "github-copilot")
         if (!connection || credential?.type !== "oauth") return { connection, value: {} }
-        const url = copilotBaseURL(credential.metadata) ?? baseURL()
+        // The account's API endpoint changes with its plan, so read it again on every refresh; the one stored at
+        // login is the fallback.
+        const endpoint = yield* cache
+          .get({
+            key: `github-copilot-endpoint:${IntegrationConnection.key(connection)}`,
+            ...options,
+            load: ctx.integration.connection.resolve(connection).pipe(
+              Effect.flatMap((current) =>
+                current?.type === "oauth"
+                  ? HttpClient.filterStatusOk(http)
+                      .execute(
+                        HttpClientRequest.get(
+                          userURL(
+                            typeof current.metadata?.enterpriseUrl === "string"
+                              ? current.metadata.enterpriseUrl
+                              : undefined,
+                          ),
+                        ).pipe(
+                          HttpClientRequest.setHeaders({
+                            Accept: "application/json",
+                            Authorization: `Bearer ${current.refresh}`,
+                            "User-Agent": App.useragent(ctx.app),
+                            "X-GitHub-Api-Version": userApiVersion,
+                          }),
+                        ),
+                      )
+                      .pipe(
+                        Effect.flatMap(HttpClientResponse.schemaBodyJson(User)),
+                        Effect.map((user) => user.endpoints?.api?.replace(/\/+$/, "")),
+                        Effect.timeout("5 seconds"),
+                      )
+                  : Effect.fail(new Error("GitHub Copilot connection has no OAuth credential")),
+              ),
+            ),
+          })
+          .pipe(Effect.orElseSucceed(() => undefined))
+        const url = endpoint || copilotBaseURL(credential.metadata)
         const headers = (yield* providers.get(Provider.ID.githubCopilot))?.headers ?? {}
         const models = yield* cache
           .get({
@@ -364,6 +397,10 @@ function oauthURLs(domain: string) {
     device: `https://${domain}/login/device/code`,
     token: `https://${domain}/login/oauth/access_token`,
   }
+}
+
+function userURL(enterprise?: string) {
+  return `${enterprise ? `https://api.${normalizeDomain(enterprise)}` : "https://api.github.com"}/copilot_internal/user`
 }
 
 function baseURL(enterprise?: string) {

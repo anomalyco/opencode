@@ -416,6 +416,7 @@ export const content = {
     },
     about: {
       title: "关于 OpenCode",
+      body: "OpenCode 及其产品的介绍，有长短两个版本，可直接复制。",
       boilerplate: {
         long: "OpenCode 是一个开源编程代理。它提供桌面应用、终端界面、移动应用和 SDK，并支持任意提供商的模型，包括 Claude、GPT 和 Gemini。OpenCode 采用 MIT 许可，由 Anomaly 打造。它在 GitHub 上拥有超过 220,000 个星标和 1,000 多位贡献者，每月有超过 2200 万开发者使用。",
         short: "OpenCode 是 Anomaly 推出的开源编程代理，提供桌面、终端和移动应用以及 SDK。",
