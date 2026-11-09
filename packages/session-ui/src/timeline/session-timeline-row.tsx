@@ -398,10 +398,12 @@ export function createSessionTimelineRowRenderer(input: {
             reasoningDefaultOpen={timelineThinkingOpen(input.timelineDetail())}
             reasoningOpen={(id) => input.disclosure.value(id)}
             onReasoningOpenChange={(id, open) => input.disclosure.set(id, open)}
-            toolDefaultOpen={(tool) => timelineDefaultOpen(input.timelineDetail(), tool)}
+            toolDefaultOpen={(tool) => timelineDefaultOpen(input.timelineDetail(), tool, !!input.activity?.())}
             toolOpen={(id) => input.disclosure.value(`${row().group.key}:tool:${id}`)}
             onToolOpenChange={(id, open) => input.disclosure.set(`${row().group.key}:tool:${id}`, open)}
-            fileOpen={(path) => input.disclosure.value(`patch:${path}`) ?? timelineDiffOpen(input.timelineDetail())}
+            fileOpen={(path) =>
+              input.disclosure.value(`patch:${path}`) ?? timelineDiffOpen(input.timelineDetail(), !!input.activity?.())
+            }
             onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
             open={input.disclosure.value(key()) === true}
             busy={
@@ -459,7 +461,7 @@ export function createSessionTimelineRowRenderer(input: {
           fileOpen={(path) => {
             const open = input.disclosure.value(`${row().group.key}:file:${path}`)
 
-            return open ?? timelineDiffOpen(input.timelineDetail())
+            return open ?? timelineDiffOpen(input.timelineDetail(), !!input.activity?.())
           }}
           onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
           onSizeChange={onSizeChange}
@@ -489,7 +491,7 @@ export function createSessionTimelineRowRenderer(input: {
     const defaultOpen = createMemo(() => {
       const item = content()
 
-      return item ? timelineDefaultOpen(input.timelineDetail(), item) : undefined
+      return item ? timelineDefaultOpen(input.timelineDetail(), item, !!input.activity?.()) : undefined
     })
 
     // Only the finished turn's footer part derives them, and only while the host shows sources.
@@ -693,10 +695,20 @@ export function createSessionTimelineRowRenderer(input: {
       }
     })
 
+    // The Activity timeline shows the goal the user set as their own message. Core describes it as "Goal: <objective>".
+    const goal = createMemo(() => {
+      const value = message()
+
+      if (!input.activity?.() || value?.type !== "synthetic" || value.metadata?.source !== "goal") return
+      const description = value.description
+
+      if (description) return description.replace(/^Goal: /, "")
+    })
+
     const content = createMemo(() => {
       const value = message()
 
-      return value ? notice(value) : undefined
+      return value && !goal() ? notice(value) : undefined
     })
 
     const childID = createMemo(() => {
@@ -753,7 +765,23 @@ export function createSessionTimelineRowRenderer(input: {
 
     return (
       <>
-        <Show when={compaction()}>
+        <Show when={goal()}>
+          {(objective) => (
+            <div data-slot="session-turn-message-container" class={`w-full pt-6 ${inset()}`}>
+              <div data-component="user-message" data-goal="">
+                <div data-slot="user-message-body">
+                  <div data-slot="user-message-text" dir="auto">
+                    <span data-slot="user-message-goal-badge" dir="ltr">
+                      /goal
+                    </span>
+                    <bdi>{objective()}</bdi>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </Show>
+        <Show when={!goal() && compaction()}>
           {(message) => (
             <div data-slot="session-turn-message-container" class={`w-full ${inset()}`}>
               <div data-slot="session-turn-compaction">
@@ -869,7 +897,7 @@ export function createSessionTimelineRowRenderer(input: {
     const defaultOpen = createMemo(() => {
       const value = message()
 
-      return !!value && timelineDefaultOpen(input.timelineDetail(), value)
+      return !!value && timelineDefaultOpen(input.timelineDetail(), value, !!input.activity?.())
     })
 
     return (

@@ -1406,38 +1406,42 @@ function FileAccordionItem(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
   type?: string
+  /** The content always shows, so open means shown in full rather than cut, as the Activity timeline shows a diff. */
+  preview?: boolean
   header: JSX.Element
   children: JSX.Element
 }) {
   const id = createUniqueId()
+  const shown = () => props.open || !!props.preview
 
   return (
     <div
       data-slot="accordion-item"
       data-type={props.type}
-      data-expanded={props.open ? "" : undefined}
-      data-closed={!props.open ? "" : undefined}
+      data-preview={props.preview ? "" : undefined}
+      data-expanded={shown() ? "" : undefined}
+      data-closed={!shown() ? "" : undefined}
     >
       <h3
         data-slot="accordion-header"
         data-component="sticky-accordion-header"
-        data-expanded={props.open ? "" : undefined}
-        data-closed={!props.open ? "" : undefined}
+        data-expanded={shown() ? "" : undefined}
+        data-closed={!shown() ? "" : undefined}
       >
         <button
           type="button"
           id={`${id}-trigger`}
           data-slot="accordion-trigger"
-          data-expanded={props.open ? "" : undefined}
-          data-closed={!props.open ? "" : undefined}
+          data-expanded={shown() ? "" : undefined}
+          data-closed={!shown() ? "" : undefined}
           aria-expanded={props.open}
-          aria-controls={props.open ? `${id}-content` : undefined}
+          aria-controls={shown() ? `${id}-content` : undefined}
           onClick={() => batch(() => props.onOpenChange(!props.open))}
         >
           {props.header}
         </button>
       </h3>
-      <Show when={props.open}>
+      <Show when={shown()}>
         <div
           id={`${id}-content`}
           role="region"
@@ -2015,11 +2019,30 @@ ToolRegistry.register({
   },
 })
 
-function ConsoleOutput(props: { command?: string; output: string }) {
+function ConsoleOutput(props: {
+  command?: string
+  output: string
+  /** Cuts the output to a few lines until it is expanded, as the Activity timeline shows a shell. */
+  clamp?: { expanded: boolean; onExpand: () => void; tail: boolean }
+}) {
   const i18n = useI18n()
 
+  const pre = (output: string) => (
+    <pre data-slot="bash-pre">
+      <code>
+        <LinkedText text={output} />
+      </code>
+    </pre>
+  )
+
   return (
-    <div data-component="bash-output" data-variant="shell" dir="ltr">
+    <div
+      data-component="bash-output"
+      data-variant="shell"
+      data-clamp={props.clamp ? "" : undefined}
+      data-expanded={props.clamp?.expanded ? "" : undefined}
+      dir="ltr"
+    >
       <div
         data-slot="bash-scroll"
         data-scrollable
@@ -2041,15 +2064,75 @@ function ConsoleOutput(props: { command?: string; output: string }) {
           {(output) => (
             <div data-slot="bash-result">
               <ConsoleCopy text={output()} label={i18n.t("ui.message.copyOutput")} />
-              <pre data-slot="bash-pre">
-                <code>
-                  <LinkedText text={output()} />
-                </code>
-              </pre>
+              <Show when={props.clamp} fallback={pre(output())}>
+                {(clamp) => (
+                  <ClampedContent expanded={clamp().expanded} onExpand={clamp().onExpand} tail={clamp().tail}>
+                    {pre(output())}
+                  </ClampedContent>
+                )}
+              </Show>
             </div>
           )}
         </Show>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Content cut to a few lines, as the Activity timeline shows shell output and diffs. A click on the cut content shows
+ * all of it. `tail` keeps the newest lines in view, as running output grows at the bottom.
+ */
+function ClampedContent(props: { expanded: boolean; onExpand: () => void; tail?: boolean; children: JSX.Element }) {
+  const i18n = useI18n()
+  const [overflow, setOverflow] = createSignal(false)
+  const clamped = () => !props.expanded && overflow()
+  let frame: HTMLDivElement | undefined
+  let content: HTMLDivElement | undefined
+
+  const measure = () => {
+    if (!frame || !content) return
+    setOverflow(content.offsetHeight > frame.clientHeight + 1)
+
+    if (props.tail && !props.expanded) frame.scrollTop = frame.scrollHeight
+  }
+
+  onMount(() => {
+    const observer = new ResizeObserver(measure)
+
+    if (frame) observer.observe(frame)
+
+    if (content) observer.observe(content)
+    onCleanup(() => observer.disconnect())
+  })
+
+  createEffect(on(() => props.expanded, measure, { defer: true }))
+
+  const expand = () => {
+    // Selecting text in the cut lines is not a request to see the rest.
+    if (!clamped() || window.getSelection()?.toString()) return
+    props.onExpand()
+  }
+
+  return (
+    <div
+      ref={frame}
+      data-component="clamped-content"
+      data-clamped={props.expanded ? undefined : ""}
+      data-overflow={clamped() ? "" : undefined}
+      data-tail={props.tail ? "" : undefined}
+      role={clamped() ? "button" : undefined}
+      tabIndex={clamped() ? 0 : undefined}
+      aria-expanded={clamped() ? false : undefined}
+      aria-label={clamped() ? i18n.t("ui.common.showMore") : undefined}
+      onClick={expand}
+      onKeyDown={(event) => {
+        if (!clamped() || (event.key !== "Enter" && event.key !== " ")) return
+        event.preventDefault()
+        props.onExpand()
+      }}
+    >
+      <div ref={content}>{props.children}</div>
     </div>
   )
 }
@@ -2402,6 +2485,9 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const data = useData()
+    // The Activity timeline always shows the command and its output, the output cut to a few lines until expanded.
+    const activity = useActivityTimeline()
+    const [expanded, setExpanded] = createSignal(false)
 
     const runProps = () =>
       shellRunProps(
@@ -2450,42 +2536,83 @@ ToolRegistry.register({
         onCleanup(follower.dispose)
       })
 
-      return <ConsoleOutput command={view().command} output={view().output} />
+      return (
+        <ConsoleOutput
+          command={view().command}
+          output={view().output}
+          clamp={
+            activity()
+              ? {
+                  expanded: props.open ?? expanded(),
+                  onExpand: () => {
+                    setExpanded(true)
+                    props.onOpenChange?.(true)
+                  },
+                  tail: props.status === "running",
+                }
+              : undefined
+          }
+        />
+      )
     }
 
-    return (
-      <BasicTool
-        {...props}
-        status={view().basicStatus}
-        icon="console"
-        rail={false}
-        hasContent
-        compact
-        allowOpenWhilePending
-        trigger={(open) => (
-          <div data-slot="basic-tool-tool-info-structured">
-            <div data-slot="basic-tool-tool-info-main">
-              <span data-slot="basic-tool-tool-title">
-                <TextShimmer text={i18n.t("ui.tool.shell")} active={view().pending} />
+    const activityShell = () => (
+      <div data-component="shell-tool" data-activity-timeline="">
+        <Show
+          when={view().command}
+          fallback={
+            <Show when={view().writingPlaceholder}>
+              <span data-slot="shell-tool-writing">
+                <TextShimmer text={i18n.t("ui.tool.shell.writingCommand")} active />
               </span>
-              <Show when={!open()}>
-                <Show
-                  when={view().command}
-                  fallback={
-                    <Show when={view().writingPlaceholder}>
-                      <span data-slot="basic-tool-tool-subtitle">{i18n.t("ui.tool.shell.writingCommand")}</span>
+            </Show>
+          }
+        >
+          <Output />
+        </Show>
+      </div>
+    )
+
+    return (
+      <Show
+        when={activity()}
+        fallback={
+          <BasicTool
+            {...props}
+            status={view().basicStatus}
+            icon="console"
+            rail={false}
+            hasContent
+            compact
+            allowOpenWhilePending
+            trigger={(open) => (
+              <div data-slot="basic-tool-tool-info-structured">
+                <div data-slot="basic-tool-tool-info-main">
+                  <span data-slot="basic-tool-tool-title">
+                    <TextShimmer text={i18n.t("ui.tool.shell")} active={view().pending} />
+                  </span>
+                  <Show when={!open()}>
+                    <Show
+                      when={view().command}
+                      fallback={
+                        <Show when={view().writingPlaceholder}>
+                          <span data-slot="basic-tool-tool-subtitle">{i18n.t("ui.tool.shell.writingCommand")}</span>
+                        </Show>
+                      }
+                    >
+                      {(command) => <ShellSubmessage text={command()} animate={animateCommand} />}
                     </Show>
-                  }
-                >
-                  {(command) => <ShellSubmessage text={command()} animate={animateCommand} />}
-                </Show>
-              </Show>
-            </div>
-          </div>
-        )}
+                  </Show>
+                </div>
+              </div>
+            )}
+          >
+            <Output />
+          </BasicTool>
+        }
       >
-        <Output />
-      </BasicTool>
+        {activityShell()}
+      </Show>
     )
   },
 })
@@ -2702,10 +2829,30 @@ ToolRegistry.register({
                   onOpenChange: (open) => props.onFileOpenChange?.(file().path, open),
                 })
 
+                const preview = () => activity() && file().views.length > 0
+
+                const views = () => (
+                  <For each={file().views}>
+                    {(view) => (
+                      <div data-component="apply-patch-file-diff">
+                        <Dynamic
+                          component={fileComponent}
+                          mode="diff"
+                          virtualize={props.virtualizeDiff}
+                          fileDiff={view.fileDiff}
+                          hunkSeparators={view.fileDiff.isPartial ? "simple" : "line-info-basic"}
+                          onRendered={props.onContentRendered}
+                        />
+                      </div>
+                    )}
+                  </For>
+                )
+
                 return (
                   <FileAccordionItem
                     open={disclosure.open()}
                     onOpenChange={disclosure.setOpen}
+                    preview={preview()}
                     type={file().type}
                     header={
                       <div data-slot="apply-patch-trigger-content">
@@ -2742,21 +2889,10 @@ ToolRegistry.register({
                       </div>
                     }
                   >
-                    <Show when={disclosure.mounted()}>
-                      <For each={file().views}>
-                        {(view) => (
-                          <div data-component="apply-patch-file-diff">
-                            <Dynamic
-                              component={fileComponent}
-                              mode="diff"
-                              virtualize={props.virtualizeDiff}
-                              fileDiff={view.fileDiff}
-                              hunkSeparators={view.fileDiff.isPartial ? "simple" : "line-info-basic"}
-                              onRendered={props.onContentRendered}
-                            />
-                          </div>
-                        )}
-                      </For>
+                    <Show when={preview()} fallback={<Show when={disclosure.mounted()}>{views()}</Show>}>
+                      <ClampedContent expanded={disclosure.open()} onExpand={() => disclosure.setOpen(true)}>
+                        {views()}
+                      </ClampedContent>
                     </Show>
                   </FileAccordionItem>
                 )

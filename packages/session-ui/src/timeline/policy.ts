@@ -51,8 +51,13 @@ export function timelineTextShows(content: Exclude<Content, { type: "tool" }>) {
   return content.type === "reasoning" && content.time?.completed === undefined
 }
 
-/** Whether an item starts open. What the user opened or closed always wins over this. */
-export function timelineDefaultOpen(detail: TimelineDetail, item: Content | SessionMessageShell) {
+/**
+ * Whether an item starts open. What the user opened or closed always wins over this. In the Activity timeline a shell
+ * and a diff always show, cut to a few lines, so open means shown in full and they start cut.
+ */
+export function timelineDefaultOpen(detail: TimelineDetail, item: Content | SessionMessageShell, activity = false) {
+  if (activity && timelineClamps(item)) return false
+
   // The user ran this command, so it opens to confirm it went through, whatever the setting.
   if (item.type === "shell") return true
 
@@ -85,8 +90,18 @@ export function timelineThinkingOpen(detail: TimelineDetail) {
 }
 
 /** Whether a file's diff starts open where an edit shows its files. */
-export function timelineDiffOpen(detail: TimelineDetail) {
-  return detail.edit.details === "expanded"
+export function timelineDiffOpen(detail: TimelineDetail, activity = false) {
+  return !activity && detail.edit.details === "expanded"
+}
+
+function timelineClamps(item: Content | SessionMessageShell) {
+  if (item.type === "shell") return true
+
+  // A call that errored shows as an error card, which keeps its own default. A command that exits non-zero still clamps.
+  if (item.type !== "tool" || item.state.status === "error") return false
+  const category = timelineCategory(item)
+
+  return (category === "shell" && canonicalToolName(item.name) === "shell") || category === "edit"
 }
 
 // Like the TUI, background work reports its outcome as its own row where it finished, never folded into a group.

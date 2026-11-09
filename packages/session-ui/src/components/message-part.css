@@ -2047,3 +2047,79 @@
     --opencode-diffs-addition-color: transparent;
   }
 }
+
+/* Cut content shows its first lines, fading out where it is cut; a click shows the rest. Running output keeps its newest
+   lines in view instead, so it fades at the top. */
+[data-component="clamped-content"] {
+  &[data-clamped] {
+    max-height: var(--clamped-content-height, 96px);
+    overflow: hidden;
+  }
+
+  &[data-overflow] {
+    mask-image: linear-gradient(#000 calc(100% - 20px), transparent);
+  }
+
+  &[data-overflow][data-tail] {
+    mask-image: linear-gradient(transparent, #000 20px);
+  }
+}
+
+/* In the Activity timeline a shell is its command and output, always showing, with the output cut to four lines. */
+[data-component="shell-tool"][data-activity-timeline] {
+  [data-slot="shell-tool-writing"] {
+    display: block;
+    font-size: 13px;
+    line-height: var(--line-height-compact);
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-component="bash-output"][data-clamp] {
+    [data-slot="bash-scroll"] {
+      max-height: none;
+    }
+
+    [data-component="clamped-content"] {
+      grid-area: 1 / 1;
+      /* The top padding and four lines of output. */
+      --clamped-content-height: calc(12px + 4 * var(--line-height-base));
+    }
+  }
+}
+
+/* A diff shows four lines until it is expanded. */
+[data-activity-timeline]
+  [data-component="accordion"][data-scope="apply-patch"]
+  [data-slot="accordion-item"][data-preview] {
+  --clamped-content-height: 96px;
+}
+
+/* Opened groups in the Activity timeline indent their rows without the rail beside them. */
+[data-activity-timeline] [data-component="collapsed-tool-group"] > [data-component="collapsible"].tool-collapsible {
+  > [data-slot="collapsible-content"]::before {
+    display: none;
+  }
+}
+
+/* A goal the user set reads as their message, opening with a /goal badge. The badge sits as far from the bubble's
+   leading edge as from its top: the top padding plus the space the 20px badge leaves in the first line. */
+[data-component="user-message"][data-goal] [data-slot="user-message-text"] {
+  --goal-badge-inset: calc(8px + (1lh - 20px) / 2);
+  padding-inline-start: var(--goal-badge-inset);
+
+  [data-slot="user-message-goal-badge"] {
+    display: inline-block;
+    height: 20px;
+    margin-block-start: calc((1lh - 20px) / 2);
+    margin-inline-end: 6px;
+    padding: 0 6px;
+    vertical-align: top;
+    border-radius: 6px;
+    background: var(--v2-background-bg-layer-03);
+    color: var(--v2-text-text-base);
+    font-family: var(--v2-font-family-code);
+    font-size: 12px;
+    font-weight: 440;
+    line-height: 20px;
+  }
+}
