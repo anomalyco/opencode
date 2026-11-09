@@ -270,7 +270,11 @@ impl Inner {
                 "session.half.page.up",
                 "session.half.page.down",
             ]),
-            KeymapLayer::default().enabled(unfocused).bindings(["session.first", "session.last"]),
+            // In composer mode (a subagent session's open composer has no prompt), so Home and End still jump.
+            KeymapLayer::default()
+                .mode(crate::composer::MODE)
+                .enabled(unfocused)
+                .bindings(["session.first", "session.last"]),
             KeymapLayer::default().bindings([
                 "session.first",
                 "session.last",
