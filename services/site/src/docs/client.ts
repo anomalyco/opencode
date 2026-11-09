@@ -390,13 +390,8 @@ nav.addEventListener("scroll", fade, { passive: true })
 
 // The sidebar leaves with the article at the page's end, but the logo and lockup stay fixed
 // (site.css): while it is on its way out its items pass under them, and data-under fades them there,
-// as Site does on the site's own pages.
+// as Site does on the site's own pages. The scroll spy below sets it, in the same frame.
 const sidebar = nav.parentElement!
-function under() {
-  sidebar.toggleAttribute("data-under", sidebar.getBoundingClientRect().top < -0.5)
-}
-window.addEventListener("scroll", under, { passive: true })
-under()
 
 // The Contents rail and its phone bar mark the section being read: the last heading past a third of
 // the window, or at the end of the page the one the address names (else the last in view). The rail
@@ -451,13 +446,15 @@ function nameSection(title: string, animate: boolean) {
 
 let spied = ""
 function spy() {
+  sidebar.toggleAttribute("data-under", sidebar.getBoundingClientRect().top < -0.5)
   const tops = headings.map((heading) => ({ id: heading.id, top: heading.getBoundingClientRect().top }))
   const visible = tops.filter((item) => item.top >= 0 && item.top < innerHeight)
   const bottom = scrollY + innerHeight >= html.scrollHeight - 2
   const end = visible.find((item) => `#${item.id}` === decodeURIComponent(location.hash)) ?? visible.at(-1)
   const id = (bottom && end ? end : tops.filter((item) => item.top <= innerHeight / 3).at(-1))?.id ?? tops[0]?.id
+  // Desktop hides the Contents bar (display: none), so it has no offsetParent and nothing to measure.
   const contents = $<HTMLElement>("[data-component=contents-menu]")
-  if (contents)
+  if (contents?.offsetParent)
     contents.toggleAttribute(
       "data-stuck",
       scrollY > 0 && contents.getBoundingClientRect().top <= parseFloat(getComputedStyle(contents).top) + 0.5,
@@ -646,7 +643,8 @@ function choose(option: HTMLAnchorElement) {
 }
 
 // The status bars, as the site's footer shows them: the last five 3-hour windows by their worst
-// service, then the live status. Kept a minute in sessionStorage, since every docs page is a full load.
+// service, then the live status (the site's /status.json). Asked for once the footer comes near, and
+// kept five minutes in sessionStorage, since every docs page is a full load.
 type Status = "operational" | "degraded" | "outage" | "unknown"
 const headlines = {
   operational: "All systems operational",
@@ -654,7 +652,6 @@ const headlines = {
   outage: "Service disruption",
   unknown: "Status unavailable",
 }
-const rank = { unknown: 0, operational: 1, degraded: 2, outage: 3 }
 function showStatus(bars: Status[]) {
   const link = $("[data-component=status]")
   if (!link) return
@@ -672,17 +669,21 @@ function showStatus(bars: Status[]) {
 }
 const saved = JSON.parse(sessionStorage.getItem("docs-status-bars") ?? "null") as { bars: Status[]; at: number } | null
 if (saved?.bars?.length === 6) showStatus(saved.bars)
-const idle = (run: () => void) => ("requestIdleCallback" in window ? requestIdleCallback(run) : setTimeout(run, 1500))
-if (!saved || Date.now() - saved.at > 60_000)
-  idle(() =>
-    fetch("/status/api/status", { signal: AbortSignal.timeout(10_000) })
-      .then((response) => (response.ok ? response.json() : Promise.reject()))
-      .then((body: { status: Status; history: { services: Record<string, Status> }[] }) => {
-        const worst = (list: Status[]) => list.reduce<Status>((a, b) => (rank[b] > rank[a] ? b : a), "unknown")
-        const bars = [...body.history.slice(-5).map((entry) => worst(Object.values(entry.services))), body.status]
-        if (bars.length !== 6 || !bars.every((bar) => bar in rank)) return
-        sessionStorage.setItem("docs-status-bars", JSON.stringify({ bars, at: Date.now() }))
-        showStatus(bars)
-      })
-      .catch(() => undefined),
+const footerStatus = $("[data-component=status]")
+if (footerStatus && (!saved || Date.now() - saved.at > 300_000)) {
+  const near = new IntersectionObserver(
+    (entries) => {
+      if (!entries[0].isIntersecting) return
+      near.disconnect()
+      fetch("/status.json", { signal: AbortSignal.timeout(10_000) })
+        .then((response) => (response.ok ? response.json() : Promise.reject()))
+        .then((body: { bars: Status[] }) => {
+          sessionStorage.setItem("docs-status-bars", JSON.stringify({ bars: body.bars, at: Date.now() }))
+          showStatus(body.bars)
+        })
+        .catch(() => undefined)
+    },
+    { rootMargin: "100% 0px" },
   )
+  near.observe(footerStatus)
+}
