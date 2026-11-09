@@ -473,7 +473,11 @@ unsafe extern "C" fn picking_create(
 fn picked(loopback: bool) -> (Vec<opentui::testing::Cell>, String) {
     let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
     let definition = match loopback {
-        true => opencode_plugin::loader::native::loopback(&h.tui, picking_create).unwrap().0,
+        true => {
+            opencode_plugin::loader::native::loopback(&opencode_tui::plugins::host::host(&h.tui), picking_create)
+                .unwrap()
+                .0
+        }
         false => abi::Plugin { id: "probe", setup: picking }.into(),
     };
     opencode_tui::plugins::host::add(&h.tui, definition);

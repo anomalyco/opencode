@@ -1,4 +1,5 @@
-//! Diff viewer (E.15a, row F15, `feature-plugins/system/diff-viewer.tsx`): the `opencode.diffs` plugin. `/diff`
+//! Diff viewer (E.15a, row F15, `feature-plugins/system/diff-viewer.tsx`): the `opencode.diffs` host entry, which
+//! owns panel docking, focus, file watching and menus, so it is not a plugin. `/diff`
 //! docks the viewer beside the session as its panel, or opens it as a full-screen route outside a session. The
 //! viewer loads the VCS or last-turn diff, and shows each file as a card under a sticky header, with the file tree
 //! beside the cards when the screen is wide enough, split or unified hunks by width, and reviewed marks.
@@ -13,7 +14,6 @@ use std::rc::{Rc, Weak};
 
 use opencode_api::generated::{FileDiffInfo, FileDiffInfoStatus, LocationQueryInput, SessionID, VcsMode};
 use opencode_local::cli_config::{DiffSource, DiffView as PreferredView};
-use opencode_plugin::{Definition, Setup, Slotted};
 use opencode_store::Location;
 use opencode_ui::bind;
 use opentui::keymap::{Condition, Disposer};
@@ -157,32 +157,37 @@ pub struct Shared {
     route: RefCell<Option<RouteData>>,
 }
 
-pub fn plugin() -> Definition<Tui> {
-    Definition::new(ID, |setup: &mut Setup<'_, Tui>| {
-        let tui = setup.host().clone();
-        let shared = Rc::new(Shared::default());
-        let panel = shared.clone();
-        tui.panels.register(
-            ID,
-            ROUTE,
-            Rc::new(move |tui, host, input| {
-                let place = Place::Panel { host: host.clone(), session: SessionID(input.target.session.clone()) };
-                let viewer = Viewer::mount(tui, &panel, place, i64::from(input.width));
-                host.add(&viewer.root);
-                // The panel's host keeps the viewer, so its keys, menu, and watch go when the panel closes.
-                Box::new(viewer)
-            }),
-        );
-        let route = shared.clone();
-        setup.route(ROUTE, move |tui| {
-            let data = route.route.borrow().clone().unwrap_or(RouteData { session: None, back: Route::Home });
-            let place = Place::Route { session: data.session, back: data.back };
-            Box::new(RouteSlot(Viewer::mount(tui, &route, place, i64::from(tui.app.size().0))))
-        });
-        let open = shared.clone();
-        setup.layer(keys::open_layer(&tui, Rc::new(move |tui| self::open(tui, &open))));
-        setup.on_dispose(bind!(tui, |tui| tui.panels.release(&tui, ID)));
-    })
+/// The host entry: the panel, the route and `diff.open` while it is active.
+pub fn activate(tui: &Rc<Tui>) -> Disposer {
+    let shared = Rc::new(Shared::default());
+    let panel = shared.clone();
+    tui.panels.register(
+        ID,
+        ROUTE,
+        Rc::new(move |tui, host, input| {
+            let place = Place::Panel { host: host.clone(), session: SessionID(input.target.session.clone()) };
+            let viewer = Viewer::mount(tui, &panel, place, i64::from(input.width));
+            host.add(&viewer.root);
+            // The panel's host keeps the viewer, so its keys, menu, and watch go when the panel closes.
+            Box::new(viewer)
+        }),
+    );
+    *tui.plugins.diffs.borrow_mut() = Some(shared.clone());
+    let layer = tui.keymap.layer(keys::open_layer(tui, Rc::new(move |tui| self::open(tui, &shared))));
+    let layer = layer.map_err(|error| log::error!("plugin {ID} keymap layer: {error}")).ok();
+    Disposer::new(bind!(tui, |tui| {
+        drop(layer);
+        tui.plugins.diffs.take();
+        tui.panels.release(&tui, ID);
+    }))
+}
+
+/// The full-screen route of the active viewer: what `diff.open` asked for, else the home's diff. The route keeps the
+/// viewer, so its keys, menu, and watch go when the route does.
+pub fn route(tui: &Tui, shared: &Rc<Shared>) -> Rc<Viewer> {
+    let data = shared.route.borrow().clone().unwrap_or(RouteData { session: None, back: Route::Home });
+    let place = Place::Route { session: data.session, back: data.back };
+    Viewer::mount(tui, shared, place, i64::from(tui.app.size().0))
 }
 
 /// `diff.open`: closes the session's open viewer, else docks one beside the session, else opens the route.
@@ -202,14 +207,6 @@ fn open(tui: &Tui, shared: &Rc<Shared>) {
     }
     *shared.route.borrow_mut() = Some(RouteData { session: None, back: route });
     tui.navigate(Route::Plugin { id: ID.to_owned(), name: ROUTE.to_owned() });
-}
-
-struct RouteSlot(Rc<Viewer>);
-
-impl Slotted<Tui> for RouteSlot {
-    fn root(&self) -> View {
-        self.0.root.clone()
-    }
 }
 
 /// Where the viewer shows.
@@ -293,6 +290,10 @@ pub struct Viewer {
 }
 
 impl Viewer {
+    pub fn root(&self) -> View {
+        self.root.clone()
+    }
+
     fn mount(tui: &Tui, shared: &Rc<Shared>, place: Place, width: i64) -> Rc<Self> {
         let session = match &place {
             Place::Panel { session, .. } => Some(session.clone()),

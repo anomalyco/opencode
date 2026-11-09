@@ -40,7 +40,7 @@ pub struct Session {
     _actions: actions::Actions,
     queued: queued::Queued,
     /// The `session.composer.top` slot's plugin claims (P.1).
-    slot: opencode_plugin::SlotMount<Tui>,
+    slot: opencode_plugin::SlotMount,
     composer: crate::composer::Composer,
     permission: permission::Permission,
     form: form::SessionForms,
@@ -162,7 +162,7 @@ impl RouteView for Session {
         self.composer.sync(tui, self.form.active(), !self.frame.session_active());
         let blocked = self.permission.active() || self.form.active() || self.composer.open();
         self.queued.sync(tui, changes, blocked);
-        self.slot.sync(tui, changes);
+        crate::plugins::host::changed(tui, changes, |changed| self.slot.sync(tui, changed));
         if (self.permission.active() || self.form.active() || self.location.active()) != prompting {
             self.prompt.root().visible(prompting);
             // An open dialog keeps the keys; the prompt takes them when it closes.

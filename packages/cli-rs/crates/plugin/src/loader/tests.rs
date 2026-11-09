@@ -28,7 +28,7 @@ pub(super) struct TestHost {
     /// The event handlers of [`Host::on_event`], which [`TestHost::emit`] calls.
     pub events: Rc<RefCell<Vec<Handler>>>,
     /// The registry nested slots mount from.
-    pub registry: RefCell<std::rc::Weak<crate::Registry<TestHost>>>,
+    pub registry: RefCell<std::rc::Weak<crate::Registry>>,
     pub routes: RefCell<Vec<(String, String)>>,
     pub remounts: Cell<usize>,
     /// The mode it reports, whatever the theme's background.
@@ -86,8 +86,6 @@ impl abi::Read for Fixture<'_> {
 }
 
 impl Host for TestHost {
-    type Changes = ();
-
     fn app(&self) -> &App {
         &self.app
     }
@@ -131,7 +129,7 @@ impl Host for TestHost {
         }))
     }
 
-    fn slot(&self, parent: &View, path: &str, input: &crate::SlotInput) -> Option<crate::SlotMount<Self>> {
+    fn slot(&self, parent: &View, path: &str, input: &crate::SlotInput) -> Option<crate::SlotMount> {
         Some(self.registry.borrow().upgrade()?.mount(self, parent, path, input, |_| {}))
     }
 
@@ -195,6 +193,11 @@ pub(super) fn host() -> Rc<TestHost> {
     })
 }
 
+/// `host` as the registry takes it.
+pub(super) fn dynamic(host: &Rc<TestHost>) -> Rc<dyn Host> {
+    host.clone()
+}
+
 pub(super) fn entry<'a>(entries: &'a [Entry], target: &str) -> &'a Entry {
     entries
         .iter()
@@ -211,13 +214,8 @@ struct Fake {
     active: Rc<Cell<i32>>,
 }
 
-impl Backend<TestHost> for Fake {
-    fn load(
-        &self,
-        _: &Rc<TestHost>,
-        library: &[u8],
-        options: Option<&str>,
-    ) -> Result<(Definition<TestHost>, ErrorFn), String> {
+impl Backend for Fake {
+    fn load(&self, _: &Rc<dyn Host>, library: &[u8], options: Option<&str>) -> Result<(Definition, ErrorFn), String> {
         self.loads.set(self.loads.get() + 1);
         let text = String::from_utf8_lossy(library).into_owned();
         let id = text.strip_prefix("id=").ok_or(text.clone())?.trim().to_owned();
@@ -294,16 +292,15 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     let file = root.path().join(format!("extra.{}", std::env::consts::DLL_EXTENSION));
     write(&file, "id=extra");
     let host = host();
-    let registry = Registry::<TestHost>::new(Vec::new(), [file.to_str().unwrap(), "@acme/tui"]);
+    let registry = Registry::define(Vec::new(), [file.to_str().unwrap(), "@acme/tui"]);
     let fake = Rc::new(Fake::default());
     let configured = registry.skipped().into_iter().map(|target| Configured { target, options: None }).collect();
-    let loader =
-        Loader::new(fake.clone() as Rc<dyn Backend<TestHost>>, config.clone(), root.path().to_path_buf(), configured);
+    let loader = Loader::new(fake.clone() as Rc<dyn Backend>, config.clone(), root.path().to_path_buf(), configured);
     let lib_target = lib_dir.to_string_lossy().into_owned();
     let file_target = file.to_string_lossy().into_owned();
     let ts_target = ts_dir.to_string_lossy().into_owned();
 
-    assert!(loader.reconcile(&host, &registry));
+    assert!(loader.reconcile(&dynamic(&host), &registry));
     let entries = registry.entries();
     assert_eq!(entry(&entries, &lib_target).id, "fake");
     assert_eq!(entry(&entries, &lib_target).source, Source::External);
@@ -316,29 +313,29 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     assert!(loader.watch_dirs().contains(&lib_dir));
 
     // Nothing changed: no load, no remount.
-    assert!(!loader.reconcile(&host, &registry));
+    assert!(!loader.reconcile(&dynamic(&host), &registry));
     assert_eq!(fake.loads.get(), 2);
 
     // A broken build keeps the running version and says so.
     write(&lib_dir.join(entry_file()), "boom");
-    assert!(loader.reconcile(&host, &registry));
+    assert!(loader.reconcile(&dynamic(&host), &registry));
     let entries = registry.entries();
     assert_eq!(entry(&entries, &lib_target).status, Status::Failed("boom (previous version still active)".to_owned()));
     assert_eq!(fake.active.get(), 2);
     // The same broken build is not retried.
-    assert!(!loader.reconcile(&host, &registry));
+    assert!(!loader.reconcile(&dynamic(&host), &registry));
     assert_eq!(fake.loads.get(), 3);
     // The running version can be disabled, and enabling it starts it afresh without the stale failure.
     assert!(entry(&registry.entries(), &lib_target).active);
-    assert!(registry.set_active(&host, "fake", false));
+    assert!(registry.set_active(&dynamic(&host), "fake", false));
     assert_eq!(entry(&registry.entries(), &lib_target).status, Status::Inactive);
-    assert!(registry.set_active(&host, "fake", true));
+    assert!(registry.set_active(&dynamic(&host), "fake", true));
     assert_eq!(entry(&registry.entries(), &lib_target).status, Status::Active);
     assert_eq!(fake.active.get(), 2);
 
     // A fixed build replaces it in place, under its new ID.
     write(&lib_dir.join(entry_file()), "id=fake2");
-    assert!(loader.reconcile(&host, &registry));
+    assert!(loader.reconcile(&dynamic(&host), &registry));
     let entries = registry.entries();
     assert_eq!(entry(&entries, &lib_target).id, "fake2");
     assert_eq!(entry(&entries, &lib_target).status, Status::Active);
@@ -353,7 +350,7 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
 
     // A removed build unloads; the directory is a TypeScript plugin now.
     fs::remove_file(lib_dir.join(entry_file())).unwrap();
-    assert!(loader.reconcile(&host, &registry));
+    assert!(loader.reconcile(&dynamic(&host), &registry));
     let entries = registry.entries();
     assert_eq!(entry(&entries, &lib_target).status, Status::Skipped(SKIPPED.to_owned()));
     assert!(!entries.iter().any(|entry| entry.id == "fake2"));
@@ -362,7 +359,7 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     // Deleted directories leave the list, whether they were skipped or loaded.
     fs::remove_dir_all(&lib_dir).unwrap();
     fs::remove_dir_all(&ts_dir).unwrap();
-    assert!(loader.reconcile(&host, &registry));
+    assert!(loader.reconcile(&dynamic(&host), &registry));
     let entries = registry.entries();
     let gone = |entry: &Entry| entry.target.as_ref().is_some_and(|target| [&lib_target, &ts_target].contains(&target));
     assert!(!entries.iter().any(gone), "{entries:?}");
@@ -377,14 +374,10 @@ fn a_build_that_never_loaded_is_failed_and_ids_stay_unique() {
     write(&config.join(format!("plugins/b/{}", entry_file())), "id=same");
     write(&config.join(format!("plugins/c/{}", entry_file())), "not a library");
     let host = host();
-    let registry = Registry::<TestHost>::new(Vec::new(), []);
-    let loader = Loader::new(
-        Rc::new(Fake::default()) as Rc<dyn Backend<TestHost>>,
-        config.clone(),
-        root.path().to_path_buf(),
-        Vec::new(),
-    );
-    loader.reconcile(&host, &registry);
+    let registry = Registry::define(Vec::new(), []);
+    let loader =
+        Loader::new(Rc::new(Fake::default()) as Rc<dyn Backend>, config.clone(), root.path().to_path_buf(), Vec::new());
+    loader.reconcile(&dynamic(&host), &registry);
     let entries = registry.entries();
     let target = |name: &str| config.join("plugins").join(name).to_string_lossy().into_owned();
     assert_eq!(entry(&entries, &target("a")).status, Status::Active);
@@ -407,14 +400,14 @@ fn directives_after_an_entry_disable_an_external_plugin() {
     write(&config.join(format!("one.{}", std::env::consts::DLL_EXTENSION)), "id=one");
     write(&config.join(format!("plugins/two/{}", entry_file())), "id=two");
     let host = host();
-    let registry = Registry::<TestHost>::new(Vec::new(), ["-one", ONE, "-two", "-*", "two"]);
+    let registry = Registry::define(Vec::new(), ["-one", ONE, "-two", "-*", "two"]);
     let loader = Loader::new(
-        Rc::new(Fake::default()) as Rc<dyn Backend<TestHost>>,
+        Rc::new(Fake::default()) as Rc<dyn Backend>,
         config.clone(),
         root.path().to_path_buf(),
         vec![Configured { target: ONE.to_owned(), options: None }],
     );
-    loader.reconcile(&host, &registry);
+    loader.reconcile(&dynamic(&host), &registry);
     let entries = registry.entries();
     let status = |id: &str| entries.iter().find(|entry| entry.id == id).unwrap().status.clone();
     // `-one` comes before its entry, `-*` after it; `two` is discovered, so every directive applies.
@@ -432,7 +425,7 @@ fn watch_dirs_cover_a_plugins_directory_made_later() {
     let cwd = project.join("a");
     fs::create_dir_all(project.join(".git")).unwrap();
     fs::create_dir_all(&cwd).unwrap();
-    let loader = Loader::<TestHost>::new(Rc::new(Fake::default()), config, cwd.clone(), Vec::new());
+    let loader = Loader::new(Rc::new(Fake::default()), config, cwd.clone(), Vec::new());
     let dirs = loader.watch_dirs();
     assert!(dirs.contains(&cwd) && dirs.contains(&project), "{dirs:?}");
     fs::create_dir_all(cwd.join(".opencode")).unwrap();

@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use opencode_local::cli_config::Info;
 use opencode_parity::{Fixture, compare, fixtures_dir};
-use opencode_plugin::{Definition, Setup};
+use opencode_plugin::abi;
 use opencode_tui::dialogs::highlights::Highlight;
 use opencode_tui::dialogs::{pair, settings, status, theme_list};
 use opencode_tui::features::{highlights, update_notification};
@@ -276,19 +276,26 @@ fn plugin_server() -> Answer {
     })
 }
 
-/// A TUI plugin besides the built-ins; `mounted` counts its activations.
-fn team_plugin(mounted: Rc<std::cell::Cell<u32>>) -> Definition<Tui> {
-    Definition::new("team.tui", move |setup: &mut Setup<'_, Tui>| {
-        mounted.set(mounted.get() + 1);
-        let _ = setup;
-    })
+thread_local! {
+    /// The activations of [`team_plugin`] on this test's thread.
+    static ACTIVATIONS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
-fn plugin_manager(app: &TestApp, extra: Value) -> (Mounted, Rc<std::cell::Cell<u32>>) {
+/// A TUI plugin besides the built-ins, which counts its activations in [`ACTIVATIONS`].
+fn team_plugin() -> abi::Plugin {
+    fn setup(_: &mut abi::Setup) -> Result<(), String> {
+        ACTIVATIONS.set(ACTIVATIONS.get() + 1);
+        Ok(())
+    }
+    abi::Plugin { id: "team.tui", setup }
+}
+
+/// The TUI with the plugin server and [`team_plugin`], and how often that plugin was activated.
+fn plugin_manager(app: &TestApp, extra: Value) -> (Mounted, fn() -> u32) {
     let mounted = mount_with(app, support::component_info(extra), plugin_server());
-    let activations = Rc::new(std::cell::Cell::new(0));
-    opencode_tui::plugins::host::add(&mounted.tui, team_plugin(activations.clone()));
-    (mounted, activations)
+    ACTIVATIONS.set(0);
+    opencode_tui::plugins::host::add(&mounted.tui, team_plugin().into());
+    (mounted, || ACTIVATIONS.get())
 }
 
 fn active(tui: &Tui, id: &str) -> bool {
@@ -335,6 +342,35 @@ fn plugin_manager_matches_typescript() {
     assert_dialog(&app, "E.18b/plugins-internal", "Plugins");
 }
 
+// Expected: the plugin manager and the diff viewer are host entries among the built-ins in TS order. Disabling the
+// viewer takes `diff.open` away; enabling it brings it back, and its route shows the viewer, not the missing route.
+#[test]
+fn the_host_entries_list_and_toggle_like_plugins() {
+    let app = TestApp::new(100, 30);
+    let (mounted, _) = plugin_manager(&app, json!({}));
+    let tui = &mounted.tui;
+    let builtins: Vec<String> = tui
+        .plugins
+        .entries()
+        .into_iter()
+        .filter(|entry| entry.source == opencode_plugin::Source::Builtin)
+        .map(|entry| entry.id)
+        .collect();
+    let at = |id: &str| builtins.iter().position(|known| known == id).unwrap();
+    assert!(at("opencode.notifications") < at("opencode.plugins") && at("opencode.plugins") < at("opencode.stats"));
+    assert_eq!(builtins.last().map(String::as_str), Some("opencode.diffs"));
+
+    let host = opencode_tui::plugins::host::host(tui);
+    assert!(tui.plugins.set_active(&host, "opencode.diffs", false));
+    assert!(!active(tui, "opencode.diffs"));
+    assert!(!matches!(tui.keymap.dispatch("diff.open", None), opentui::keymap::RunResult::Ok));
+    assert!(tui.plugins.set_active(&host, "opencode.diffs", true));
+    assert!(matches!(tui.keymap.dispatch("diff.open", None), opentui::keymap::RunResult::Ok));
+    assert_eq!(tui.route(), Route::Plugin { id: "opencode.diffs".to_owned(), name: "diff".to_owned() });
+    app.render();
+    assert!(!app.text().contains("Unknown plugin route"), "{}", app.text());
+}
+
 #[test]
 fn plugin_manager_toggles_checks_and_updates() {
     let app = TestApp::new(100, 30);
@@ -342,7 +378,7 @@ fn plugin_manager_toggles_checks_and_updates() {
     let tui = &mounted.tui;
     opencode_tui::dialogs::plugins::show(tui);
     wait_for(&app, "disable enter");
-    assert_eq!(activations.get(), 1);
+    assert_eq!(activations(), 1);
 
     // Enter disables the TUI plugin and enables it again.
     app.press("enter");
@@ -352,7 +388,7 @@ fn plugin_manager_toggles_checks_and_updates() {
     app.press("enter");
     wait_for(&app, "disable enter");
     assert!(active(tui, "team.tui"));
-    assert_eq!(activations.get(), 2);
+    assert_eq!(activations(), 2);
 
     // ctrl+u updates the outdated package, then reads the list again.
     app.press("down");
