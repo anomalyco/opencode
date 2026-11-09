@@ -302,6 +302,39 @@ fn a_rebuild_whose_setup_fails_keeps_the_running_version() {
     let screen = markdown(&host, &registry, "```sample\nstill\n```\n");
     assert!(screen.contains("SAMPLE v1 STILL"), "{screen}");
     assert!(matches!(host.keymap().dispatch("sample.hello", None), RunResult::Ok));
+    // A second failed rebuild keeps it running too.
+    fs::write(dir.join(entry_file()), build("major-2")).unwrap();
+    assert!(loader.reconcile(&dynamic(&host), &registry));
+    let entry = crate::loader::tests::entry(&registry.entries(), &target).clone();
+    assert!(entry.active);
+    assert!(matches!(&entry.status, Status::Failed(error) if error.ends_with("(previous version still active)")));
+}
+
+// Expected (carbon-3): a failed rebuild of a plugin that panicked shows the rebuild's error, not the old panic, and the
+// dead instance is not kept as the running version.
+#[test]
+fn a_failed_rebuild_of_a_panicked_plugin_shows_its_own_error() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let config = root.path().join("config");
+    let dir = config.join("plugins/sample");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join(entry_file()), build("")).unwrap();
+    let host = host();
+    let registry = Registry::define(Vec::new(), []);
+    let loader =
+        Loader::new(Rc::new(Native) as Rc<dyn Backend>, config, root.path().to_path_buf(), Vec::<Configured>::new());
+    assert!(loader.reconcile(&dynamic(&host), &registry));
+    host.keymap().dispatch("sample.panic", None);
+    host.app.advance(Duration::from_millis(1));
+    fs::write(dir.join(entry_file()), build("major-2")).unwrap();
+    assert!(loader.reconcile(&dynamic(&host), &registry));
+    let entry = entry(&registry.entries(), &dir.to_string_lossy()).clone();
+    assert!(!entry.active);
+    assert!(
+        matches!(&entry.status, Status::Failed(error) if error.contains("ABI 2.0") && !error.contains("previous")),
+        "{:?}",
+        entry.status
+    );
 }
 
 // Expected: a table from a C plugin is refused, without reading past its declared size or through a null or

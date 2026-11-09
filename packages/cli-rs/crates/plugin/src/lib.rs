@@ -768,9 +768,9 @@ struct Plugin {
     enabled: bool,
     /// The activation order and registrations while active.
     active: Option<(u64, Registration)>,
-    /// The built-in an external plugin of its ID replaced in place (TS `desired.set(id, ...)`), and whether it was
-    /// enabled; it comes back when the external plugin is unloaded.
-    shadowed: Option<(Definition, bool)>,
+    /// The built-in an external plugin of its ID replaced in place (TS `desired.set(id, ...)`), whether it was
+    /// enabled, and its failure; it comes back when the external plugin is unloaded.
+    shadowed: Option<(Definition, bool, Option<String>)>,
     /// The activation order it keeps once it was active, so its claims, or those of a replacement of a built-in, take
     /// the same place again.
     place: Option<u64>,
@@ -928,8 +928,8 @@ impl Registry {
                         Some(builtin) => {
                             builtin.place = builtin.active.as_ref().map(|(order, _)| *order).or(builtin.place);
                             let original = std::mem::replace(&mut builtin.definition, definition);
-                            builtin.shadowed = Some((original, builtin.enabled));
-                            (builtin.source, builtin.enabled, builtin.failed) = (Source::External, enabled, None);
+                            builtin.shadowed = Some((original, builtin.enabled, builtin.failed.take()));
+                            (builtin.source, builtin.enabled) = (Source::External, enabled);
                             Some(builtin.active.take())
                         }
                         None => {
@@ -949,22 +949,28 @@ impl Registry {
     }
 
     /// Records that the build of `target` did not load, and returns whether an active plugin of it keeps running. An
-    /// inactive one is listed as failed with `error`, and enabling it fails the same rather than start the build it
-    /// had; without a plugin, the target is listed as failed.
+    /// inactive one, or one that panicked, is listed as failed with `error`, and enabling it fails the same rather
+    /// than start the build it had; without a plugin, the target is listed as failed.
     pub fn failed_load(&self, target: &str, error: &str) -> bool {
-        let kept = self.with_target(target, |plugin| {
-            if plugin.active.is_some() {
-                return true;
+        // Whether it keeps running, and the registration of a plugin that panicked, which goes.
+        let outcome = self.with_target(target, |plugin| {
+            let panicked = plugin.definition.external.as_ref().is_some_and(|(_, error)| error().is_some());
+            if plugin.active.is_some() && !panicked {
+                return (true, None);
             }
             let broken = error.to_owned();
             plugin.failed = Some(broken.clone());
             plugin.definition.setup = Rc::new(move |_| Err(broken.clone()));
-            false
+            (false, plugin.active.take())
         });
-        kept.unwrap_or_else(|| {
+        let Some((kept, dead)) = outcome else {
             self.set_unloaded(target, Some(Status::Failed(error.to_owned())));
-            false
-        })
+            return false;
+        };
+        if let Some((_, registration)) = dead {
+            registration.dispose();
+        }
+        kept
     }
 
     /// Deactivates every active plugin, the last activated first, while the host is still alive: the host exits (TS
@@ -1003,9 +1009,10 @@ impl Registry {
                 return;
             };
             match plugins[index].shadowed.take() {
-                Some((definition, enabled)) => {
+                Some((definition, enabled, failed)) => {
                     let plugin = &mut plugins[index];
                     (plugin.definition, plugin.source, plugin.enabled) = (definition, Source::Builtin, enabled);
+                    plugin.failed = failed;
                     (plugin.active.take(), enabled.then(|| plugin.definition.id.clone()))
                 }
                 None => (plugins.remove(index).active, None),
