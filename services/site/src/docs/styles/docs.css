@@ -498,12 +498,13 @@
   }
 
   /* Text stops at about 90 characters (42 body ems of Inter, so headings share it); blocks (code,
-     tables, callouts, tabs, file trees, cards, steps, the API and config blocks) keep the full
-     column, and text inside a block fills that block. Narrower columns are under the cap. */
+     tables, callouts, tabs, file trees, cards, steps, the API and config blocks, the edit link's row
+     with Copy as Markdown at its end) keep the full column, and text inside a block fills that block. Narrower columns are under the cap. */
   --text-measure: calc(42 * var(--fs-read));
 
   :is(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote, dl, summary):not(
     [data-component="steps"],
+    [data-component="edit-link"],
     :is(
         [data-component="callout"],
         [data-component="code-frame"],
@@ -624,14 +625,11 @@
   }
 }
 
-/* The edit link's row spans the article, with Copy as Markdown at its end. */
-[data-site] [data-component="docs-article"] [data-component="edit-link"] {
-  max-width: none;
-}
-
 /* Copy as Markdown, beside the edit link at the article's end, in its type. The three labels share
-   one cell, so the button keeps the longest one's width. */
+   one cell, so the button keeps the longest one's width. It stays on the end edge, under the divider's
+   end, even when a narrow phone wraps it below the edit link. */
 [data-site] [data-component="edit-link"] [data-copy-markdown] {
+  margin-inline-start: auto;
   font: inherit;
   letter-spacing: inherit;
   text-transform: inherit;
