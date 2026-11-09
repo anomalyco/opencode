@@ -362,6 +362,13 @@ impl Prompt {
         }
     }
 
+    /// The location's agents, references, and commands, read again; an open completion follows.
+    pub fn set_catalog(&self, catalog: Catalog) {
+        self.0.state.borrow_mut().catalog = catalog;
+        self.0.paint();
+        self.0.refresh();
+    }
+
     /// Opens the session: reads the catalogs, the prompt history, and the inbox.
     pub fn open(&self, client: &Client, session: &str, directory: &str, resume: bool) {
         *self.0.target.borrow_mut() =
@@ -377,9 +384,7 @@ impl Prompt {
         let (client, directory) = (client.clone(), directory.to_owned());
         self.0.app.spawn(async move { api::catalog(&client, &directory).await }, move |_, catalog| {
             if let Some(inner) = weak.upgrade() {
-                inner.state.borrow_mut().catalog = catalog;
-                inner.paint();
-                inner.refresh();
+                Prompt(inner).set_catalog(catalog);
             }
         });
         if !resume {

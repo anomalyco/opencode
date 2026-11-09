@@ -102,6 +102,7 @@ pub fn run(input: Input) -> error::Result<()> {
         animations: input.config.animations != Some(false),
         providers: RefCell::new(None),
         variants: RefCell::new(Vec::new()),
+        catalog_refresh: Cell::new(None),
         preferences: ModelPreferences::new(&input.paths.state),
         config_store: CliConfig::new(&input.paths),
         queue: RefCell::new(Queue::default()),
@@ -242,6 +243,8 @@ struct Mini {
     providers: RefCell<Option<Vec<Provider>>>,
     /// The current model's variants (`state.variants`).
     variants: RefCell<Vec<String>>,
+    /// A catalog refresh in flight, and whether another follows it (`requestCatalogRefresh`).
+    catalog_refresh: Cell<Option<bool>>,
     preferences: ModelPreferences,
     config_store: CliConfig,
     queue: RefCell<Queue>,
@@ -761,6 +764,11 @@ impl Mini {
             return;
         }
         let mut hydrated = None;
+        let catalog = match &incoming {
+            Incoming::Event(event) => self.catalog_event(event),
+            Incoming::Hydrated { .. } => true,
+            Incoming::Disconnected(_) => false,
+        };
         let output = {
             let mut transcript = self.transcript.borrow_mut();
             let Some(transcript) = transcript.as_mut() else {
@@ -808,6 +816,86 @@ impl Mini {
         if connected {
             self.send_waiting(cx);
         }
+        if catalog {
+            self.refresh_catalog();
+        }
+    }
+
+    /// `catalogEvents` of this session's location. On a cold Location the first reads may be empty; these events
+    /// say the catalog changed.
+    fn catalog_event(&self, event: &V2Event) -> bool {
+        const TYPES: [&str; 8] = [
+            "provider.updated",
+            "model.updated",
+            "integration.updated",
+            "credential.switched",
+            "agent.updated",
+            "command.updated",
+            "skill.updated",
+            "reference.updated",
+        ];
+        if !TYPES.contains(&event.tag()) {
+            return false;
+        }
+        let value = serde_json::to_value(event).unwrap_or_default();
+        let Some(directory) = value["location"]["directory"].as_str() else {
+            return true;
+        };
+        self.session.borrow().as_ref().is_none_or(|session| session.directory == directory)
+    }
+
+    /// `requestCatalogRefresh`: reads the agents, references, commands, and providers again, then the default
+    /// model when none is chosen. A request while one runs queues one more.
+    fn refresh_catalog(self: &Rc<Self>) {
+        if self.catalog_refresh.get().is_some() {
+            self.catalog_refresh.set(Some(true));
+            return;
+        }
+        let Some(directory) = self.session.borrow().as_ref().map(|session| session.directory.clone()) else {
+            return;
+        };
+        self.catalog_refresh.set(Some(false));
+        let client = self.client.clone();
+        let mini = self.clone();
+        let read = directory.clone();
+        self.app.spawn(
+            async move {
+                futures_util::future::join(
+                    crate::prompt::api::refresh_catalog(&client, &read),
+                    crate::variants::load(&client, &read),
+                )
+                .await
+            },
+            move |_, (catalog, providers)| {
+                let queued = mini.catalog_refresh.take() == Some(true);
+                if mini.state.borrow().closed
+                    || mini.session.borrow().as_ref().is_none_or(|session| session.directory != directory)
+                {
+                    return;
+                }
+                if let Some(catalog) = catalog {
+                    mini.prompt.set_catalog(catalog);
+                }
+                if let Ok(providers) = providers {
+                    *mini.providers.borrow_mut() = Some(providers);
+                    if let Some(model) = mini.selection() {
+                        // `applyModelInfo`: the variant stays while the model still has it.
+                        let variants = crate::variants::variants_for(&mini.providers(), &model);
+                        let current = mini.state.borrow().model.as_ref().and_then(|model| model.2.clone());
+                        *mini.variants.borrow_mut() = variants;
+                        mini.set_variant(current.filter(|variant| mini.variants.borrow().contains(variant)));
+                    }
+                }
+                mini.footers.models_changed();
+                mini.paint_status();
+                if mini.state.borrow().model.is_none() {
+                    mini.load_default_model(&directory);
+                }
+                if queued {
+                    mini.refresh_catalog();
+                }
+            },
+        );
     }
 
     /// A hydration's idle status names the request shown (`blockerStatus`).
