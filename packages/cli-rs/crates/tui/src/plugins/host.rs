@@ -626,11 +626,8 @@ pub fn host(tui: &Rc<Tui>) -> Rc<dyn Host> {
     tui.clone()
 }
 
-/// Activates the plugins once the TUI is built, and logs the configured plugins it skipped.
+/// Activates the plugins once the TUI is built.
 pub fn install(tui: &Rc<Tui>) {
-    for target in tui.plugins.skipped() {
-        log::warn!("plugin {target} skipped: {}", opencode_plugin::SKIPPED);
-    }
     let _ = tui.plugins.tui.set(tui.weak());
     tui.plugins.activate(&host(tui));
     crate::features::events::subscribe(tui, |tui, event| {

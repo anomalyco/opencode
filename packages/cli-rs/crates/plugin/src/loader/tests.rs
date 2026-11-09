@@ -460,3 +460,51 @@ fn watch_dirs_cover_a_plugins_directory_made_later() {
     let dirs = loader.watch_dirs();
     assert!(dirs.contains(&cwd.join(".opencode/plugins")) && !dirs.contains(&cwd), "{dirs:?}");
 }
+
+/// The warnings logged in this process.
+fn warnings() -> &'static std::sync::Mutex<Vec<String>> {
+    struct Capture(std::sync::Mutex<Vec<String>>);
+    impl log::Log for Capture {
+        fn enabled(&self, metadata: &log::Metadata) -> bool {
+            metadata.level() <= log::Level::Warn
+        }
+        fn log(&self, record: &log::Record) {
+            if self.enabled(record.metadata()) {
+                self.0.lock().unwrap().push(record.args().to_string());
+            }
+        }
+        fn flush(&self) {}
+    }
+    static CAPTURE: std::sync::OnceLock<&'static Capture> = std::sync::OnceLock::new();
+    let capture = CAPTURE.get_or_init(|| {
+        let capture: &'static Capture = Box::leak(Box::new(Capture(std::sync::Mutex::default())));
+        let _ = log::set_logger(capture);
+        log::set_max_level(log::LevelFilter::Warn);
+        capture
+    });
+    &capture.0
+}
+
+// Expected (D6): a configured native library is not logged as a skipped TypeScript plugin; a TypeScript target is.
+#[test]
+fn only_a_target_without_a_native_build_is_logged_as_skipped() {
+    let warnings = warnings();
+    let root = opencode_util::temp::tempdir().unwrap();
+    let config = root.path().join("config");
+    let file = config.join(format!("native.{}", std::env::consts::DLL_EXTENSION));
+    write(&file, "id=native");
+    let (native, typescript) = (file.to_string_lossy().into_owned(), format!("{}/typescript.ts", config.display()));
+    let registry = Registry::define(Vec::new(), [native.as_str(), typescript.as_str()]);
+    let configured = registry.skipped().into_iter().map(|target| Configured { target, options: None }).collect();
+    let loader =
+        Loader::new(Rc::new(Fake::default()) as Rc<dyn Backend>, config, root.path().to_path_buf(), configured);
+    loader.reconcile(&dynamic(&host()), &registry);
+    let skipped: Vec<String> = warnings
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|line| line.contains(&*root.path().to_string_lossy()))
+        .cloned()
+        .collect();
+    assert_eq!(skipped, [format!("plugin {typescript} skipped: {SKIPPED}")]);
+}
