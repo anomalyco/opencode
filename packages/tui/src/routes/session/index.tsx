@@ -94,8 +94,8 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { DialogExportResult } from "../../ui/dialog-export-result"
 import { useConfig, useNewDesigns, useRichMedia } from "../../config"
 import { useMedia } from "../../context/media"
-import type { MediaItem } from "../../component/media/model"
-import { MediaStrip } from "../../component/media/strip"
+import { serverFileExists } from "../../component/media/file"
+import { useMediaSources } from "../../component/media/source"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
@@ -130,7 +130,14 @@ import { isRecord } from "../../util/record"
 import { parseTodos } from "../../util/todo"
 import { createHistoryPrepend } from "./history"
 import { context, use, type PendingAction } from "./render-context"
-import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDisplay } from "./message-parts"
+import {
+  INLINE_TOOL_ICON_WIDTH,
+  InlineToolRow,
+  ReasoningPart,
+  SessionMedia,
+  TextPart,
+  toolDisplay,
+} from "./message-parts"
 import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/session"
 import { SessionGroupView, type ToolRef } from "./group-view"
 import { createSessionGallery } from "./gallery"
@@ -241,7 +248,11 @@ export function Session(props: {
     const queued = new Set(queuedPrompts().map((item) => item.id))
     return messages().filter((message) => !queued.has(message.id) && (!boundary || message.id < boundary))
   })
-  const gallery = createSessionGallery(visible, () => session()?.location)
+  const mediaSources = useMediaSources()
+  const gallery = createSessionGallery(visible, () => session()?.location, {
+    home: mediaSources.localServer ? paths.home : undefined,
+    exists: (file, location) => serverFileExists(file, location, mediaSources),
+  })
   const [composer, setComposer] = createStore({
     open: false,
     tab: undefined as string | undefined,
@@ -2693,29 +2704,6 @@ function ToolImages(props: { tools: readonly ToolRef[] }) {
       <SessionMedia
         match={(item) => props.tools.some((tool) => item.id.startsWith(`${tool.messageID}:tool:${tool.part.id}:`))}
       />
-    </Show>
-  )
-}
-
-// The gallery items `match` selects. A tile opens the viewer over the whole session's gallery at that item.
-function SessionMedia(props: { match: (item: MediaItem) => boolean; paddingLeft?: number }) {
-  const ctx = use()
-  const media = useMedia()
-  const gallery = () => ctx.media?.() ?? []
-  const items = createMemo(() => gallery().filter(props.match))
-  const paddingLeft = () => props.paddingLeft ?? 3
-
-  return (
-    <Show when={items().length > 0}>
-      <box flexShrink={0} paddingTop={1} paddingLeft={paddingLeft()} paddingRight={2} paddingBottom={1}>
-        <MediaStrip
-          items={items()}
-          // The left border of a user message takes one more cell.
-          width={ctx.width - paddingLeft() - 3}
-          height={Math.max(4, Math.min(8, Math.floor(ctx.terminal.height / 4)))}
-          onOpen={(index) => media.openViewer(gallery(), gallery().indexOf(items()[index]!))}
-        />
-      </box>
     </Show>
   )
 }

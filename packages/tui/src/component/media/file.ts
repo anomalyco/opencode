@@ -1,8 +1,8 @@
 import { mediaHashFromUri, type LocationRef } from "@opencode/client"
-import { mkdir, rename, rm } from "node:fs/promises"
+import { mkdir, rename, rm, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { MEDIA_EXTENSIONS, mediaMime, type MediaItem } from "./model"
+import { MEDIA_EXTENSIONS, mediaMime, pathFlavor, type MediaItem } from "./model"
 
 /**
  * Content-addressed files under `directory`, named `<sha256><extension>`. Each is written once to a temporary name and
@@ -41,6 +41,7 @@ export type MediaSources = Readonly<{
   localServer: boolean
   media?: Readonly<{ read: (uri: string) => Promise<Uint8Array> }>
   readFile?: (input: { path: string; location: LocationRef }) => Promise<Uint8Array>
+  listFiles?: (input: { path: string; location: LocationRef }) => Promise<readonly { path: string; type: string }[]>
 }>
 
 /** A local path `<video>` can open: the item's own file, or its bytes copied into the media files. */
@@ -82,17 +83,38 @@ function readMedia(item: MediaItem, sources: MediaSources) {
   return sources.media.read(item.uri)
 }
 
-// The server's paths follow its own OS, which need not be this machine's.
+/**
+ * Whether a file exists at a server path. A remote server is asked for a listing of its directory, and only inside
+ * `location`, the only place this terminal could read it from.
+ */
+export async function serverFileExists(file: string, location: LocationRef, sources: MediaSources) {
+  if (sources.localServer)
+    return stat(file).then(
+      (info) => info.isFile(),
+      () => false,
+    )
+  const relative = locationPath(file, location.directory)
+  if (relative === undefined || !sources.listFiles) return false
+  const name = relative.split("/").at(-1)
+  const entries = await sources.listFiles({ path: path.posix.dirname(relative), location })
+  return entries.some((entry) => entry.type === "file" && entry.path.split(/[\\/]/).at(-1) === name)
+}
+
 async function readServerFile(item: MediaItem, sources: MediaSources) {
   const url = URL.parse(item.uri)
   const location = item.location
   if (url?.protocol !== "file:" || (url.host !== "" && url.host !== "localhost") || !location || !sources.readFile)
     throw new Error(`Cannot read ${item.uri} from this terminal`)
   const pathname = decodeURIComponent(url.pathname)
-  const file = /^\/[a-z]:\//i.test(pathname) ? pathname.slice(1) : pathname
-  const flavor = /^(?:[a-z]:[\\/]|\\\\)/i.test(location.directory) ? path.win32 : path.posix
-  const relative = flavor.relative(location.directory, file).replaceAll("\\", "/")
-  if (!relative || relative === ".." || relative.startsWith("../") || flavor.isAbsolute(relative))
-    throw new Error(`${item.uri} lies outside ${location.directory}`)
+  const relative = locationPath(/^\/[a-z]:\//i.test(pathname) ? pathname.slice(1) : pathname, location.directory)
+  if (relative === undefined) throw new Error(`${item.uri} lies outside ${location.directory}`)
   return sources.readFile({ path: relative, location })
+}
+
+// The `/`-separated path of a server file inside `directory`.
+function locationPath(file: string, directory: string) {
+  const flavor = pathFlavor(directory)
+  const relative = flavor.relative(directory, file).replaceAll("\\", "/")
+  if (!relative || relative === ".." || relative.startsWith("../") || flavor.isAbsolute(relative)) return undefined
+  return relative
 }

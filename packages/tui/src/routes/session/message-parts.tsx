@@ -6,7 +6,10 @@ import type {
   SessionMessageAssistantReasoning,
   SessionMessageAssistantText,
 } from "@opencode/client"
+import type { MediaItem } from "../../component/media/model"
+import { MediaStrip } from "../../component/media/strip"
 import { Spinner } from "../../component/spinner"
+import { useMedia } from "../../context/media"
 import { createSyntaxStyleMemo, useTheme, useThemes } from "../../context/theme"
 import { reasoningSummary } from "../../context/thinking"
 import { usePlugin } from "../../plugin/context"
@@ -179,6 +182,11 @@ export function TextPart(props: {
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
   const plugins = usePlugin()
+  // The ids of the videos this text names, numbered by text part as in the row's `text:<n>` part id.
+  const media = createMemo(
+    () =>
+      `${props.message.id}:text:${props.message.content.filter((part) => part.type === "text").indexOf(props.part)}:`,
+  )
   return (
     <Show when={props.part.text.trim()}>
       <box paddingLeft={3} flexShrink={0}>
@@ -193,6 +201,30 @@ export function TextPart(props: {
           conceal={ctx.markdownMode() === "rendered"}
           fg={theme.markdown.text}
           bg={theme.background.base}
+        />
+      </box>
+      <SessionMedia match={(item) => item.id.startsWith(media())} />
+    </Show>
+  )
+}
+
+// The gallery items `match` selects. A tile opens the viewer over the whole session's gallery at that item.
+export function SessionMedia(props: { match: (item: MediaItem) => boolean; paddingLeft?: number }) {
+  const ctx = use()
+  const media = useMedia()
+  const gallery = () => ctx.media?.() ?? []
+  const items = createMemo(() => gallery().filter(props.match))
+  const paddingLeft = () => props.paddingLeft ?? 3
+
+  return (
+    <Show when={items().length > 0}>
+      <box flexShrink={0} paddingTop={1} paddingLeft={paddingLeft()} paddingRight={2} paddingBottom={1}>
+        <MediaStrip
+          items={items()}
+          // The left border of a user message takes one more cell.
+          width={ctx.width - paddingLeft() - 3}
+          height={Math.max(4, Math.min(8, Math.floor(ctx.terminal.height / 4)))}
+          onOpen={(index) => media.openViewer(gallery(), gallery().indexOf(items()[index]!))}
         />
       </box>
     </Show>
