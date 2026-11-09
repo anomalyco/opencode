@@ -1,0 +1,16 @@
+# The quick start of `crates/plugin-abi/README.md`. The SDK's `sdk` test checks that the README shows this crate and
+# builds it; the loader's tests install it in a `plugins` directory and run it. Not a workspace member.
+[package]
+name = "opencode-hello-plugin"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "opencode_hello"
+crate-type = ["cdylib"]
+
+[dependencies]
+opencode-plugin-abi = { path = "../../../plugin-abi" }
+
+[workspace]

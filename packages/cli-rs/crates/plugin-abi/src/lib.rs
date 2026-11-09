@@ -23,10 +23,11 @@
 //!
 //! A plugin written in Rust is a `cdylib` that depends on this crate and calls [`export_plugin!`] with a setup
 //! function. The setup registers the P.1 surface through [`Setup`]: commands, code-fence renderers, slot claims,
-//! routes, and storage keys. Renderers return styled rows ([`Line`]); the host turns them into widgets. Panics are
-//! caught at every boundary and reported to the host, which shows them in its plugin manager; the plugin's own
-//! panic hook is silenced so nothing prints over the TUI. Keep the default `panic = "unwind"`. Other languages
-//! implement the same structs and JSON by hand.
+//! routes, storage keys, and handlers of events, replies, mounts, wakes and disposal. Renderers return data
+//! ([`Fenced`], [`Render`] with [`Node`]s); the host turns it into widgets. `crates/plugin-abi/README.md` has a quick
+//! start. Panics are caught at every boundary and reported to the host, which shows them in its plugin manager; the
+//! plugin's own panic hook is silenced so nothing prints over the TUI. Keep the default `panic = "unwind"`. Other
+//! languages implement the same structs and JSON by hand.
 //!
 //! # One API (O-67)
 //!
@@ -164,8 +165,8 @@ pub struct HostApi {
     /// It is a redraw hint: it carries no data and drains nothing for the plugin, which keeps its own results and
     /// reads all of them when the host asks for rows. Wakes that arrive before the host handles one count once, and
     /// the host never drops the last one. Callable from any thread, but `ctx` is valid only until `destroy` returns,
-    /// so a plugin stops and joins every thread that may call it before `destroy` returns. A plugin reads it as
-    /// [`HostHandle::waker`].
+    /// so a plugin makes sure no thread calls it after that. A Rust plugin reads it as [`Setup::waker`], whose
+    /// [`Waker`] the SDK revokes in `destroy`.
     pub wake: Option<unsafe extern "C" fn(ctx: *mut c_void)>,
 }
 
@@ -200,7 +201,7 @@ pub struct HostApiV1_2 {
     pub theme_mode: Option<unsafe extern "C" fn(*mut c_void) -> u32>,
 }
 
-/// Dark or light, from [`HostHandle::theme_mode`] and [`Read::theme_mode`].
+/// Dark or light, from [`Read::theme_mode`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ThemeMode {
     Dark,
@@ -893,7 +894,7 @@ fn is_no_padding(value: &(u16, u16)) -> bool {
 /// What a slot passes to the claims that render in it. A path fills what it has.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SlotInput {
-    /// `prompt.footer*`, `session.composer.top`, `session.panel` and `sidebar.*`.
+    /// `prompt.footer*`, `session.composer.top` and `sidebar.*`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
     /// `prompt.footer*`: the prompt's mode and whether its details show.
@@ -1023,8 +1024,8 @@ pub struct Member {
     pub updated: f64,
 }
 
-/// From the host to the plugin. Results: `Fence` → `Option<Vec<Line>>`, `RenderFence` → [`Fenced`], `Render` →
-/// [`Render`], `Slot` and `Route` → `Vec<Line>`, `Command` → `null`.
+/// From the host to the plugin. Results: `Fence` → `Option<Vec<Line>>`, `RenderFence` → [`Fenced`], `Render` and
+/// `RenderRoute` → [`Render`], `Slot` and `Route` → `Vec<Line>`, everything else `null`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum Request {
@@ -1330,7 +1331,14 @@ pub enum Route {
 }
 
 /// A request to the server, for [`Host::fetch`]: it goes through the host's own client, to the server the host talks
-/// to now, with the host's credentials.
+/// to now, with the host's credentials. A path that would leave that server's origin, such as
+/// `/https://elsewhere/`, is refused before the credentials go on.
+///
+/// The reply is the JSON body of any 2xx status, or `null` without a body. An error is text: a declared server error's
+/// message (else its tag), `UnexpectedStatus: <status>: <body>` for another error status (the body trimmed and cut at
+/// 200 characters; without a body just `UnexpectedStatus: <status>`), `Transport: …` when the request could not be
+/// sent or would leave the origin, `MalformedResponse: …` for a body that is not JSON, and `unsupported method …` or
+/// `the path … does not start with /` for a request the host does not send.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Fetch {
     /// `GET`, `POST`, `PUT`, `PATCH` or `DELETE`.
@@ -1559,8 +1567,9 @@ pub trait Read {
 /// What a command or an event handler reads and asks of the host. An effect waits until the outermost plugin
 /// callback has returned, and effects run in the order they were asked for.
 pub trait Host: Read {
-    /// Stores `value`, an object, under one of the plugin's declared storage keys. [`Read::storage_get`] reads it back
-    /// at once; the host writes it to disk later, and claims render again with [`Changed::local`].
+    /// Stores `value`, an object or an array, under one of the plugin's declared storage keys. [`Read::storage_get`]
+    /// reads it back at once; the host writes it to disk later, and claims render again with [`Changed::local`]. The
+    /// host ignores any other value, and a key that was not declared.
     fn storage_set(&self, key: &str, value: serde_json::Value);
     /// Sets `fields` in the object stored under one of the plugin's declared storage keys and keeps its other fields
     /// (TS `update((draft) => { draft.open = … })`). A host with storage sets them in the latest stored object under
@@ -1990,7 +1999,9 @@ impl Setup<'_> {
     }
 
     /// Calls `run` with each server event whose type is one of `types` (such as `session.execution.failed`), after
-    /// the host has applied it, as the HTTP API's [`V2Event`].
+    /// the host has applied it, as the HTTP API's [`V2Event`]. The streaming deltas (`session.text.delta`,
+    /// `session.reasoning.delta`, `session.tool.input.delta`, `session.compaction.delta`) never arrive. A UI thread
+    /// that falls more than 1024 events behind (of the types anyone in the TUI listens to) skips the oldest.
     pub fn on_event(&mut self, types: &[&str], run: impl Fn(&dyn Host, &V2Event) + 'static) {
         self.registered.manifest.events.push(types.iter().map(|kind| (*kind).to_owned()).collect());
         self.registered.events.push(Rc::new(run));
@@ -2004,7 +2015,8 @@ impl Setup<'_> {
 
     /// Claims a place in the slot tree. `render` reads what it shows and returns it; it gets the slot's input and
     /// what changed since it last rendered, and runs again with each change batch, each change of the host's own
-    /// state, and each wake.
+    /// state, each wake, and after each of the plugin's commands and event, reply, mount and wake handlers (with
+    /// [`Changed::woken`]).
     pub fn slot(&mut self, at: Placement, render: impl Fn(&dyn Read, &SlotInput, &Changed) -> Render + 'static) {
         self.registered.manifest.slots.push(SlotClaim { kind: at.kind, path: at.path, render: true, mount: false });
         self.registered.slots.push(SlotFn::Render(Rc::new(render)));

@@ -1,8 +1,12 @@
 # P.4 external plugins (`rs-plugin-loader`)
 
-Row F16. External TUI plugins are native shared libraries (`.so`, `.dylib`, `.dll`) loaded with `libloading`
-behind a stable C ABI (decision O-42, which replaces the WASM design of O-7 and O-40). There is no sandbox: a
-plugin is code the user chose to run on their own machine. No cargo feature gates it; `libloading` is small.
+Row F16. External TUI plugins are native shared libraries behind a stable C ABI (decision O-42, which replaces the
+WASM design of O-7 and O-40). The host opens them with `dlopen` (`opencode_util::dl`), so they load on Linux
+(`.so`) and macOS (`.dylib`); on Windows every plugin fails to load. There is no sandbox: a plugin is code the user
+chose to run on their own machine. No cargo feature gates it.
+
+To write one, start with the quick start in [`crates/plugin-abi/README.md`](../crates/plugin-abi/README.md). It also
+lists which old binaries load and what changed from the 1.3 SDK. This document is the reference.
 
 ## The ABI
 
@@ -16,169 +20,261 @@ exports one symbol, `opencode_plugin_v1`, that returns a `#[repr(C)]` table, `Pl
 | `create(host, options, &instance, &out)` | 1.0 | Runs the setup; writes the manifest JSON |
 | `call(instance, request, &out)` | 1.0 | Handles a request; writes the result JSON |
 | `destroy(instance)`, `free(buffer)` | 1.0 | Ends an instance; frees a buffer the plugin wrote |
-| `describe(&out)` | 1.1 | Optional (nullable): the plugin's metadata, such as its version |
+| `describe(&out)` | 1.1 | Optional (nullable): the plugin's ID and version, read before any setup |
 
-The host passes a `HostApi` table of the same shape (`size`, `major`, `minor`, `ctx`, `call`, `free`, and since
-1.2 the nullable `theme_mode(ctx)`, dark or light, which a plugin reads as `Host::theme_mode` and gets `None` from
-an older host, and since 1.3 the nullable `wake(ctx)`, callable from any thread, which a plugin reads as
-`Host::waker`). Past
-the tables, everything crosses as JSON in byte buffers: the `Manifest`, a `Request` from the host (`fence`,
-`slot`, `route`, `command`), and a `HostRequest` from the plugin (`log`, `toast`, `storage-get`,
-`storage-set`, `open-route`). Each side frees the buffers it allocated, so each keeps its own allocator.
+The host passes a `HostApi` table of the same shape: `size`, `major`, `minor`, `ctx`, `call`, `free`, since 1.2 the
+nullable `theme_mode(ctx)` (dark or light), and since 1.3 the nullable `wake(ctx)`, callable from any thread until
+`destroy` returns. Past the tables, everything crosses as JSON in byte buffers: the `Manifest`, a `Request` from the
+host, and a `HostRequest` from the plugin. Each side frees the buffers it allocated, so each keeps its own allocator.
+The rustdoc of `Request` and `HostRequest` lists every request and what it answers; a plugin in another language
+implements the same structs and JSON.
 
 Versions only grow by appending:
 
-- A new entry goes at the end of a table and is optional. A reader treats entries past the other side's
-  `size` as absent, so a plugin built against ABI 1.0 loads on a 1.3 host.
+- A new entry goes at the end of a table and is optional. A reader treats entries past the other side's `size` as
+  absent, so a plugin built against ABI 1.0 loads on a 1.4 host.
 - JSON payloads only gain optional fields; readers ignore fields they do not know.
 - A plugin built against a newer minor version loads on an older host and uses what the host offers: the host
   answers a request it does not know with an error. A plugin that cannot work without a newer host sets
-  `requires_minor`, and the host refuses it with a message naming both versions.
-- Only a deliberate major-version break refuses a plugin. The host reads `major` before anything else, and
-  the plugin manager shows why: "plugin ABI 2.0 is not supported: this opencode-rs loads ABI 1.x plugins
-  (up to 1.3); rebuild the plugin against opencode-plugin-abi 1".
+  `requires_minor`, and the host refuses it: "plugin needs host ABI 1.4 or newer, this opencode-rs has 1.3; update
+  opencode-rs". `export_plugin!` sets `requires_minor` to 4, because only a 1.4 host sends the render requests the
+  SDK answers.
+- 1.4 renders are opt-in on the wire. `Setup` sets `Manifest::render` to 2 (`RENDER`), and a 1.4 claim sets
+  `SlotClaim::render`. The host sends `RenderFence`, `Render` and `RenderRoute` only to such a plugin and claim; every
+  other plugin, and a `slot_lines` claim or `route_lines` route, gets the 1.3 requests `Fence`, `Slot` and `Route`,
+  and answers with rows.
+- Only a deliberate major-version break refuses a plugin. The host reads `major` before anything else, and the
+  plugin manager shows why: "plugin ABI 2.0 is not supported: this opencode-rs loads ABI 1.x plugins (up to 1.4);
+  rebuild the plugin against opencode-plugin-abi 1".
 
 A Rust-ABI `dylib` was rejected because it breaks with every compiler or crate version.
 
 ## Writing a plugin
 
-A Rust plugin is a `cdylib` that calls `export_plugin!("my.plugin", setup)`. The macro generates the table and
-the shims. `setup(&mut Setup)` registers the P.1 surface as data, because widgets and closures cannot cross
-the boundary:
+A Rust plugin is a `cdylib` that calls `export_plugin!("my.plugin", setup)`, with `fn setup(setup: &mut Setup) ->
+Result<(), String>`. The macro generates the table, `describe` (the ID and the crate's version) and the shims. Setup
+registers the P.1 surface as data, because widgets and closures cannot cross the boundary:
 
-| P.1 (`opencode_plugin::Setup`) | ABI (`opencode_plugin_abi::Setup`) |
+| P.1 (TS `api.*`) | ABI (`opencode_plugin_abi::Setup`) |
 | --- | --- |
 | `layer` (commands, palette, slash, keybinds) | `command(Command, run(&dyn Host, input))`; the host builds the keymap layer. A command without `palette` and `slash` is hidden: a click or `Host::dispatch` runs it |
-| `code_block(language, render)` | `code_block(language, render(&dyn Read, &Fence) -> Fenced)` (1.4) |
-| `slot(placement, render)` | `slot(Placement, render(&dyn Read, &SlotInput, &Changed) -> Render)` (1.4); the 1.3 form is `slot_lines(SlotKind, path, render(session_id) -> Vec<Line>)` |
-| a slot component's lifetime | `on_mount(Placement, run(&dyn Host, &SlotInput, mounted))` (1.4) for the claim registered last there: `true` before a mount's first render, `false` as it unmounts (`Request::Mount`) |
-| `route(name, render)` | `route(name, render(&dyn Read, &Changed) -> Render)` (1.4), drawn centered in a scroll box on the page background; the 1.3 form is `route_lines(name, render() -> Vec<Line>)` |
-| `storage_key(key)` | `storage_key(key)`; `Read::storage_get` and `Host::storage_set` on `plugin.<id>.<key>` |
-| event subscriptions (`api.event.on`) | `on_event(types, run(&dyn Host, &V2Event))` (1.4); the host sends `Request::Event` with the HTTP API's own event JSON |
-| `api.client` | `Host::fetch(Fetch { method, path, query, body }) -> RequestId` and `on_reply(run(&dyn Host, RequestId, Result<Value, String>))` (1.4) |
-| a timer's tick | `on_wake(run(&dyn Host))` (1.4): after the plugin's `Waker` woke the host, before its claims render again (`Request::Wake`, `Manifest::wake`) |
-| `on_dispose` | the instance is destroyed on deactivation |
+| `code_block(language, render)` | `code_block(language, render(&dyn Read, &Fence) -> Fenced)` |
+| `slot(placement, render)` | `slot(Placement, render(&dyn Read, &SlotInput, &Changed) -> Render)`; the 1.3 form is `slot_lines(SlotKind, path, render(session_id) -> Vec<Line>)` |
+| a slot component's lifetime | `on_mount(Placement, run(&dyn Host, &SlotInput, mounted))` for the claim registered last there: `true` before a mount's first render, `false` as it unmounts |
+| `route(name, render)` | `route(name, render(&dyn Read, &Changed) -> Render)`, drawn centered in a scroll box on the page background; the 1.3 form is `route_lines(name, render() -> Vec<Line>)` |
+| a route page's `onMount` | `on_route_mount(name, run(&dyn Host, mounted))`, however the route was opened |
+| `storage_key(key)` | `storage_key(key)`; `Read::storage_get`, `Host::storage_set` and `Host::storage_merge` on `plugin.<id>.<key>` |
+| event subscriptions (`api.event.on`) | `on_event(types, run(&dyn Host, &V2Event))`, with the HTTP API's own event |
+| `api.client` | `Host::fetch(Fetch { method, path, query, body }) -> RequestId` and `on_reply(run(&dyn Host, RequestId, Result<Value, String>))` |
+| a timer's tick | `Setup::waker()` on the plugin's thread, and `on_wake(run(&dyn Host))` on the UI thread |
+| a fence's cleanup | `on_fence_gone(run(key))` |
+| `on_dispose` | `on_dispose(run(&dyn Host))` |
+| `api.themeMode` | `Read::theme_mode()` |
 
-A `Line` is a list of spans with text, colors, and bold, italic, underline, and dim. A color is a theme token
-path (`text.muted`, `markdown.heading`), a scale step (`categorical.3.300`), `#rrggbb`, or (1.4) an `Rgba`, sent
-as `#rrggbbaa`, so plugins follow the theme; `Read::color(token)` resolves one to an `Rgba`. The host draws rows
-without wrapping. A fence returns `Fenced::{Code, Keep, Lines { lines, fg, drag }}`, with `Fence::key` naming the
-block across renders and `Fence::width` the terminal's columns. `fg` is the default for spans without one.
-`Lines` scrolls sideways on a horizontal wheel, as LaTeX's formulas do; with `drag` it scrolls under a left drag
-and swallows a horizontal wheel, as Mermaid's diagrams do. `Setup::options()` holds the
-`options` of the plugin's `plugins` entry as JSON text. Other languages implement the same structs and JSON.
+`Setup::options()` holds the `options` of the plugin's `plugins` entry as JSON text. `Setup::host()` is the host
+while setup runs; no callback can keep it (a compile error).
 
-A 1.4 slot render returns `Render::{Keep, Hide, Show(Node)}`. A `Node` is a `Box` (a column or a row, with gap,
-padding, justification and background) or a `Text` of spans (with a hover color), each with a `Layout` (width,
-grow, shrink, minimum width 0) and an optional `Click`: on the press or the release of the left button, the host
-shows the hand and, once the event is handled, runs the click's `Action::Command { name, input }`, a command of the
-plugin's or of the host's (such as `mcp.list` with a server's name, or the hidden `workspace.directory` with a
-directory). A `Slot { path }` node mounts the claims of a published slot inside the claim's own (such as
-`home.footer.status` in `home.footer`) in its place; the host draws nothing for any other path. The nested claims
-stay mounted while the outer claim keeps its node, and get each change batch it gets. The host
-rebuilds the claim's widgets only when the node differs from the last one; `Keep` keeps them, so a render that
-`Changed` shows is unaffected returns at once. `Changed` lists the sessions whose info or status changed, the
-sessions whose message list changed (`lists`), the messages that changed in place, and the locations whose
-catalogs changed, from the store's batch; the host also renders with `local` when its own state (the selected
-model, the usage limits, the settings, the plugins' storage) changes, with `size` on a resize, and with `woken` on a wake. A claim's first
-render gets `all`. The render reads through `Read`: `session`, `family`, `messages` (a visitor), `models`,
-`mcp_servers`, `integrations` and `vcs` per location, `model`, `limits`, `providers`, `info` (the version, the
-terminal size, where the TUI works), `route` (what the TUI shows), `interactive` (whether the session pane owns the
-input, TS `useInteractivity`; a change renders with `all` and keeps the claim mounted), `shortcut(name)` (a command's
-first key), `dialog_open(key)` and `storage_get`. `SlotInput` carries the session and, in `prompt.footer*`, the
-prompt's `shell` mode and `show_details`; a slot mounts its claims again when its input changes. Reads are pure, also inside the `messages` visitor: a catalog
-that is not loaded reads as `None`, and the host starts its load after the render returns. Over the ABI each read is
-one `HostRequest`, and `messages` hands the visitor the plugin's own copy.
+A `Line` is a list of spans with text, colors, and bold, italic, underline, dim and strikethrough. A color is a theme
+token path (`text.muted`, `markdown.heading`), a scale step (`categorical.3.300`), `#rrggbb`, or an `Rgba`, sent as
+`#rrggbbaa`, so plugins follow the theme; `Read::color(token)` resolves one to an `Rgba`. The host draws rows without
+wrapping. A fence returns `Fenced::{Code, Keep, Lines { lines, fg, drag }}`, with `Fence::key` naming the block across
+renders and `Fence::width` the terminal's columns. `fg` is the default for spans without one. `Lines` scrolls
+sideways on a horizontal wheel, as LaTeX's formulas do; with `drag` it scrolls under a left drag and swallows a
+horizontal wheel, as Mermaid's diagrams do.
 
-A 1.4 command gets a `Host`: the reads, and effects that wait until the outermost plugin callback returns and run in
-order. `storage_set` shows to `storage_get` at once; the host writes the disk later and renders the claims with
-`local`. `dispatch(name, input)` runs any registered command, palette or not (`HostRequest::Dispatch`).
-`toast(Toast { variant, title, message, session })` shows a toast; with a `session` it offers "Open" unless that
-session's family is on screen. `attention(Attention { title, message, notify, sound })` sends a notification and plays
-a sound as the user's `attention` settings allow (`HostRequest::Attention`). `navigate(Route)` shows home, a session or
-a plugin's route. `dialog(Dialog)` shows a `Prompt`, whose text goes to its action as the input, a `Select { title,
-placeholder, options, current, action }` (TS `dialog.select`), whose pick closes it and goes to its action as the
-input, or a `Panel { key,
-size, title, subtitle, body, actions, binds, bleed, centered }`, which changes in place while its key is open and keeps
-where its body is scrolled, or `Close { key }`, which closes that panel. A fetch's reply is any 2xx status's JSON body,
-or `null` without one. `copy(text, then)` copies and runs `then` once copied. `fetch` sends a request through the host's own
-client, to the server the TUI talks to now (a managed service it follows across restarts); the reply comes back to
-the `on_reply` handlers on the UI thread, in order with the other effects, unless the plugin was disposed first. A
-command of `Scope::Route(name)` runs while that route shows (`/stats`' escape); `description` and `arguments` (the
-slash command keeps its text and passes it as the input) show in the palette and the prompt. Nodes also have `align`,
-`Justify::SpaceAround`, `Markdown { text }` (with the active fence renderers in a panel) and `Spinner { label }`. An
-event handler and a reply handler get the same `Host`.
-The 1.3
-`HostHandle` (`Setup::host`) is still valid for the instance.
+A slot render returns `Render::{Keep, Hide, Show(Node)}`. A `Node` is a `Box` (a column or a row, with gap, padding,
+justification, alignment and background) or a `Text` of spans (with wrapping, truncation and a hover color), each
+with a `Layout` (width, grow, shrink, minimum width 0) and an optional `Click`: on the press or the release of the
+left button, the host shows the hand and, once the event is handled, runs the click's `Action::Command { name, input
+}`, a command of the plugin's or of the host's (such as `mcp.list` with a server's name, or the hidden
+`workspace.directory` with a directory). `Markdown { text }` draws Markdown with the active fence renderers, and
+`Spinner { label }` a spinner. A `Slot { path }` node mounts the claims of a published slot inside the claim's own
+(such as `home.footer.status` in `home.footer`) in its place; the host draws nothing for any other path. The nested
+claims stay mounted while the outer claim keeps its node, and get each change batch it gets.
 
-What does not cross: arbitrary widget trees, mouse handlers, and live store access (`api.state`). A slot or
-route is drawn when it mounts, asks for its rows again with each change batch of the store and each wake, and
-redraws when they differ. Every call into a plugin runs on the UI thread, so a render must return quickly. Slow
-work, such as network I/O, runs on the plugin's own thread, which calls `Waker::wake` when it has something to
-show; the host posts the wake through the app's proxy, and wakes before it handles one count once. A waker is
-valid until the host destroys the instance, so the plugin stops its threads when its state drops (the sample's
-`Ticker`).
+The slots the TUI mounts, and what their `SlotInput` carries:
 
-## Discovery
+| Path | Where | Input |
+| --- | --- | --- |
+| `home.footer`, `home.footer.status` | the home screen's footer, and its status part | none |
+| `prompt.footer`, `prompt.footer.status`, `prompt.footer.file` | the prompt's footer row | the session, if any, and `prompt { shell, show_details }` |
+| `session.composer.top` | above the session's prompt | the session |
+| `sidebar.content`, `sidebar.footer` | the session sidebar, while it shows | the session |
+
+`app` and `session.panel` are published paths, but the TUI mounts no slot there yet, so claims on them draw nothing.
+`SlotKind` places a claim `before` or `after` the slot, or `prepend`s or `append`s it inside, in plugin order; a
+`replace` claim replaces the slot's content and suppresses every claim inside it, and the last one per path wins. Another claim on
+a child path that is not mounted is appended to the nearest mounted ancestor. A slot mounts its claims again when its
+input changes.
+
+### What a callback may do
+
+Every call into a plugin runs on the UI thread, so a callback must return quickly.
+
+- A render (a fence, a slot claim or a route) gets a `Read`. It reads and returns a value, and has no effects. Reads
+  are pure, also inside the `messages` visitor: a catalog that is not loaded reads as `None`, the host starts the
+  load once the outermost plugin callback has returned, and the claim renders again with the location in
+  `Changed::locations`. The reads are `session`, `family`, `messages`, `models`, `mcp_servers`, `integrations` and
+  `vcs` per location, `model`, `limits`, `providers`, `info` (the version, the terminal size, where the TUI works,
+  how many plugins failed), `route`, `interactive` (whether the session pane owns the input, TS `useInteractivity`),
+  `shortcut(name)` (a command's first key), `dialog_open(key)`, `storage_get`, `color` and `theme_mode`. Over the ABI
+  each read is one `HostRequest`, and `messages` hands the visitor the plugin's own copy.
+- Setup, a command, and the handlers of events, replies, mounts, route mounts, wakes and disposal get a `Host`: the
+  reads, and effects. Effects wait until the outermost plugin callback returns and then run in the order they were
+  asked for, on the same queue as the built-ins' effects, so a plugin never reenters itself through the host. Over
+  the ABI, a request into a plugin that is already running is dropped and logged.
+- The effects: `storage_set` and `storage_merge`; `dispatch(name, input)`, which runs any registered command, palette
+  or not; `toast(Toast { variant, title, message, session })`, which with a `session` offers "Open" unless that
+  session's family is on screen (a toast without a title takes the session's); `attention(Attention { title, message,
+  notify, sound })`, a notification and a sound as the user's `attention` settings allow; `open_route(name)` and
+  `navigate(Route)` (home, a session, or a plugin's route); `dialog(Dialog)`; `copy(text, then)`, which copies and
+  runs `then` once copied; and `fetch`.
+- A `Dialog` is a `Prompt`, whose text goes to its action as the input; a `Select { title, placeholder, options,
+  current, action }` (TS `dialog.select`), whose pick closes it and goes to its action as the input; a `Panel { key,
+  size, title, subtitle, body, actions, binds, bleed, centered }`, which changes in place while its key is open and
+  keeps where its body is scrolled; or `Close { key }`, which closes that panel.
+- A command of `Scope::Route(name)` runs while that route shows (`/stats`' escape); `description` and `arguments`
+  (the slash command keeps its text and passes it as the input) show in the palette and the prompt.
+
+### When claims render
+
+A claim's first render gets `Changed::all`. After that, a mounted claim or route renders again:
+
+- with each change batch of the store: `sessions` whose info or status changed, `lists` whose message list changed,
+  `messages` that changed in place, and `locations` whose catalogs changed;
+- with `local` when the host's own state changes: the selected model, the usage limits, the settings, the plugins'
+  storage (also another client's write), or the count of failed plugins;
+- with `size` on a resize, and with `all` when `interactive` changes;
+- with `woken` after each of the plugin's commands and its event, reply, mount, route-mount and wake handlers
+  (queued after their effects, and coalesced), so a handler's change shows without a wake; and after a wake.
+
+The host rebuilds a claim's widgets only when its node differs from the last one; `Keep` keeps them, so a render that
+`Changed` shows is unaffected returns at once.
+
+### Storage
+
+`storage_key(key)` declares a key; only declared keys read and write, as `plugin.<id>.<key>` in the TUI's storage.
+Declared in setup, a key works in setup too. A value is an object or an array; the host ignores any other value. A
+write shows to `storage_get` at once; the host writes the disk later, in order, and renders the claims with `local`.
+`storage_merge(key, fields)` sets fields in the latest stored object under the storage lock and keeps the others, so
+fields another client stored stay (TS `update((draft) => …)`). On an older host it falls back to read, merge and
+`storage_set`. Writes queued when the TUI exits reach the disk before it does.
+
+### Fetch
+
+`fetch` sends a request through the host's own client, with its credentials, to the server the TUI talks to now (a
+managed service it follows across restarts). The path starts with `/` and stays on that server: a path that would
+reach another origin, such as `/https://elsewhere/`, is refused before the credentials go on. The reply comes back to
+the `on_reply` handlers on the UI thread, in order with the other effects, unless the plugin was disposed first. It
+is the JSON body of any 2xx status, or `null` without a body. An error is text: a declared server error's message
+(else its tag), `UnexpectedStatus: 404: <body>` for another error status (the body trimmed and cut at 200
+characters; `UnexpectedStatus: 404` without one), `Transport: …` when the request could not be sent or would leave the
+origin, or `MalformedResponse: …` when the body is not JSON. A fetch asked for by a failed setup or by a dispose
+callback is not sent.
+
+### Events
+
+`on_event(types, run)` gets the server events of those types, after the store applied their batch, while the plugin
+is active. The streaming deltas (`session.text.delta`, `session.reasoning.delta`, `session.tool.input.delta`,
+`session.compaction.delta`) never arrive. If the UI thread falls more than 1024 events behind, the oldest are
+skipped.
+
+### Fences
+
+`Fence::key` names a block while it changes, across renders that return `Lines` or `Keep`, so a plugin can keep
+state for it. `on_fence_gone(run)` gets each key once, after the block whose output (`Lines` or `Keep`) showed goes or
+falls back to the code view, on the UI thread after the event that freed it. A block that only ever returned `Code`
+sends nothing. The host sends `FenceGone` only to a plugin that registered a handler.
+
+### Threads and the waker
+
+Slow work, such as a timer or network I/O, runs on the plugin's own thread, which calls `Waker::wake` (from
+`Setup::waker()`; `None` from a host older than 1.3) when it has something to show. A wake is a redraw hint, not a
+message. The host posts it to the UI thread; wakes before it handles one count once, and the last is never lost,
+even when the queue is full. On the UI thread the host runs the plugin's `on_wake` handlers, then renders its mounted
+claims and routes with `woken`; a render shows every result that is ready, not one per wake. `Waker` is `Clone` and
+`Send`. Disposing the plugin revokes every clone before the `on_dispose` callbacks run: it waits for wakes in
+progress, and a later wake does nothing. Stop the threads in `on_dispose`, or when the plugin's state drops (the
+sample's `Ticker`).
+
+## Discovery and configuration
 
 The same targets as TS (`plugin/discovery.ts`, `plugin/context.tsx` reconcile):
 
-1. Every subdirectory of the `plugins` directories: the global config directory's, then each `.opencode` from
-   the project root (nearest `.git` or `.hg`) down to the working directory.
-2. Each `cli.json` `plugins` entry that names no built-in. Relative paths start at the config directory.
+1. Every subdirectory (or symlink to one) of the `plugins` directories: the global config directory's
+   (`~/.config/opencode/plugins`, or `$OPENCODE_CONFIG_DIR/plugins`), then each `.opencode/plugins` from the project
+   root (the nearest directory with `.git` or `.hg`) down to the working directory.
+2. Each entry of `plugins` in `cli.json` (in the global config directory) that names no built-in: a string, or `{
+   "package": …, "options": { … } }`. A local path is absolute, starts with `./` or `../` (from the config
+   directory), or is a `file://` URL; `~` is not expanded. An entry that starts with `-` disables the plugins it
+   names, by ID; `*` and `prefix.*` select several.
 
-Targets merge by local path; a later entry replaces an earlier one in its place. A target has a native build
-when it is a shared library, or a directory with `plugin.so` (`plugin.dylib`, `plugin.dll`). Every other
-target is a TypeScript plugin and is listed as skipped (F16). Server-side TUI plugins (`GET /api/plugin` with
-`features.tui`) are TypeScript packages and are not loaded.
+Targets merge by local path; a later entry replaces an earlier one in its place. A target has a native build when it
+is a shared library, or a directory with `plugin.so` (`plugin.dylib`). Every other target is a TypeScript plugin and
+is listed as skipped (F16). Server-side TUI plugins (`GET /api/plugin` with `features.tui`) are TypeScript packages
+and are not loaded. The `plugins` entries after a plugin's own entry (all of them, for a discovered plugin) decide
+whether it starts enabled. A toggle in `/plugins` lasts until the TUI exits, also across hot reloads; it is not
+saved, as in TS.
 
 ## Lifecycle
 
-- Loading a build reads its ID from `describe` and runs no setup. Setup (`create`) runs on each activation,
-  and deactivation or unloading destroys that instance, so a plugin that `cli.json` disables starts nothing. A
-  plugin without `describe` (ABI 1.0) tells its ID only from setup, so its setup runs once at load and that
-  instance is destroyed at once. A setup that fails fails the plugin on activation, except for a new build of
-  an active plugin: it starts before the active one stops, so when its setup fails it is destroyed, the active
-  one keeps running, and the plugin reports `… (previous version still active)`, as TS does.
-- `Loader::reconcile` loads new and changed builds (by content digest), unloads removed ones, and remounts the
-  route when anything changed. A build that fails while a previous version runs keeps the previous version
-  and reports `… (previous version still active)`, as TS does.
-- Each build is copied to a file of its own before it is opened, because the platform loader returns a
-  library already open at the same path, and build tools often write a new build over the old one. Libraries
-  are never unloaded: a running plugin's code must outlive every pointer into it, so a reload leaks one
-  mapping.
-- Hot reload: the TUI watches `Loader::watch_dirs` (the `plugins` directories, each plugin directory, and the
-  directory of each configured library) with `opencode_local::watch` and a 100 ms debounce (TS
-  `context.tsx`), and reconciles on change. `OPENCODE_FILEWATCHER_DISABLE` turns it off (L09).
+- Loading a build reads its ID from `describe` and runs no setup. Setup (`create`) runs on each activation, and
+  deactivation, unloading, a reload and the TUI's exit destroy that instance, so a plugin that `cli.json` disables
+  starts nothing. A plugin without `describe` (ABI 1.0) tells its ID only from setup, so its setup runs once at load
+  and that instance is destroyed at once; what it asks for, including storage writes, is dropped.
+- Destroying an instance revokes its waker, then runs its `on_dispose` callbacks, last registered first, each even when
+  another panics, while the host is still valid. Their effects run, except a fetch, which is not sent.
+- A setup that returns `Err` or panics runs the `on_dispose` callbacks it registered, and the plugin is `failed`
+  and inactive, with a toast. Enabling it in the plugin manager runs setup again.
+- `Loader::reconcile` loads new and changed builds (by content digest), unloads removed ones, and remounts the route
+  when anything changed. A new build of an active plugin starts before the active one stops. When it fails to load
+  or its setup fails, the running version keeps running and the plugin reports `… (previous version still active)`,
+  as TS does. A failed build of an inactive or panicked plugin replaces its error, and enabling it fails the same way.
+- A build whose ID another external plugin has is refused ("plugin ID … is already registered") and loads once that
+  ID is free.
 - An external plugin with a built-in's ID replaces the built-in in its place, as TS's reconcile does
-  (`opencode-session-usage` replaces `opencode.sidebar.limit`, between the context and MCP sections); unloading it
-  brings the built-in back there.
-- The registry keeps an external plugin's place on reload, so slot order holds. `plugins` directives after
-  its entry (all of them, for a discovered plugin) decide whether it starts enabled; the plugin manager
-  toggles it.
+  (`session-usage`, ID `opencode.sidebar.limit`, replaces the built-in usage section, between the context and MCP
+  sections); unloading it brings the built-in back there, enabled or failed as it was. `ctrl+a` in `/plugins` shows
+  the built-ins' IDs.
+- A plugin keeps its place among the claims, and its fence precedence, across a reload and a toggle.
+- Each build is copied to a file of its own before it is opened, because the platform loader returns a library
+  already open at the same path, and build tools often write a new build over the old one. Libraries are never
+  unloaded: a running plugin's code must outlive every pointer into it, so a reload leaks one mapping.
+- Hot reload: the TUI watches `Loader::watch_dirs` (the `plugins` directories, each plugin directory, and the
+  directory of each configured library) with `opencode_local::watch` and a 100 ms debounce (TS `context.tsx`), and
+  reconciles on change. `OPENCODE_FILEWATCHER_DISABLE` turns it off (L09).
 
 ## Failures
 
-- The shims catch the plugin's panics, and the host's callbacks catch the host's, so no panic unwinds across
-  the boundary. The shims also silence the plugin's own panic hook, which would print over the TUI.
-- A panic fails the plugin: it is not called again, its fences fall back to the code view, its slots and
-  routes draw empty, the plugin manager lists it as `failed` with the message, and an error toast says
-  "Plugin failed: <id>". Enabling it again in the plugin manager starts a fresh instance.
+- The shims catch the plugin's panics, and the host's callbacks catch the host's, so no panic unwinds across the
+  boundary. The shims also silence the plugin's own panic hook, which would print over the TUI. A plugin must keep
+  `panic = "unwind"`.
+- A panic fails the plugin: it is not called again, its commands leave the keymap, its fences (also the ones already
+  drawn) fall back to the code view, and its slots and routes draw empty. It stays active, so the plugin manager can
+  disable it; enabling it again starts a fresh instance.
+- Every failure (a load, a setup, a panic) shows in `/plugins` as `failed` with an `x`. Space ("view error") shows
+  the message on a loaded plugin's row, where Enter toggles the plugin; Enter shows it on a target that did not load. A toast "Plugin failed: <id>" with "Run /plugins to view details." offers "Open plugins"; it names
+  the target when no build ever described an ID. The home footer counts the failed plugins. The log
+  (`~/.local/share/opencode/log/`) has each failure, and each request a plugin answered with an error.
 - A crash that is not a panic, such as a segfault, ends the TUI. There is no sandbox to contain it.
-- Host effects (toasts, routes) run after the call returns, so a plugin never reenters itself through the
-  host.
 
 ## Sample and tests
 
-`crates/plugin/examples/sample` is a small `cdylib` with its own workspace and `Cargo.lock`, so it is not a
-member of the client's workspace and the other crates build as before. Its features select variants: `v2`
-draws differently (the reload tests), and `abi-1-0`, `minor-newer`, `major-2`, and `requires-future` pretend
-to target other ABI versions. The tests build each variant once per test run into `target/sample-plugin`:
-the loader's unit tests in `crates/plugin/src/loader/native/tests.rs`, and the TUI tests in
+`crates/plugin/examples/sample` is a small `cdylib` with its own workspace and `Cargo.lock`, so it is not a member of
+the client's workspace and the other crates build as before. Its features select variants: `v2` draws differently
+and `setup-fails` fails (the reload tests); `abi-1-0`, `minor-newer`, `major-2`, and `requires-future` pretend to
+target other ABI versions; `abi-1-3` is a plugin on the frozen 1.3 SDK (`sample/abi-1-3`), and `abi-1-0-wire` is that
+plugin behind the 1.0 table. The tests build each variant once per test run into `target/sample-plugin`: the
+loader's unit tests in `crates/plugin/src/loader/native/tests.rs`, and the TUI tests in
 `crates/tui/tests/all/plugins.rs`.
+
+`crates/plugin/examples/hello` is the README's quick start. `crates/plugin-abi/tests/sdk.rs` checks that the README
+shows it as it is and that it builds on the SDK alone. The loader test
+`the_quick_start_plugin_loads_from_a_plugins_directory_and_runs` installs it in a `plugins` directory, loads it, and
+runs its command and its claim. `examples/author` is a larger
+author's fixture (storage, an event, a fence), which `crates/tui/tests/all/ports.rs` loads into the TUI.
 
 Three real TS TUI plugins are ported the same way, on `opencode-plugin-abi` alone: `subagents-sidebar`
 (`opencode-subagents-sidebar`), `force-input` (`@mynameistito/opencode-force-input`) and `session-usage`
 (`opencode-session-usage`). `crates/tui/tests/all/ports.rs` builds each into `target/sample-plugin`, loads it from a
-`plugins` directory into the TUI, and checks what it draws and sends. The host forwards `session.created` and
-`session.usage.updated` to `on_event` for the usage port.
+`plugins` directory into the TUI, and checks what it draws and sends.

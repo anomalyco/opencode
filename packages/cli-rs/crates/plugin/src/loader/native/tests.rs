@@ -1427,3 +1427,43 @@ fn deactivating_all_disposes_every_active_plugin() {
     assert_eq!(toasts, ["setup", "dispose"]);
     assert!(registry.entries().iter().all(|entry| !entry.active), "{:?}", registry.entries());
 }
+
+// Expected: the quick start of `crates/plugin-abi/README.md` (`examples/hello`) works as it says: installed as
+// `<config>/plugins/hello/plugin.so`, it is active, `hello.greet` toasts, and its claim draws in `home.footer`.
+#[test]
+fn the_quick_start_plugin_loads_from_a_plugins_directory_and_runs() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let target = root.join("../../target/sample-plugin");
+    let status = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned()))
+        .args(["build", "--quiet", "--manifest-path"])
+        .arg(root.join("examples/hello/Cargo.toml"))
+        .arg("--target-dir")
+        .arg(&target)
+        .status()
+        .unwrap();
+    assert!(status.success(), "the quick start plugin did not build");
+    let name = format!("{}opencode_hello{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX);
+    let temp = opencode_util::temp::tempdir().unwrap();
+    let config = temp.path().join("config");
+    let dir = config.join("plugins/hello");
+    fs::create_dir_all(&dir).unwrap();
+    fs::copy(target.join("debug").join(name), dir.join(entry_file())).unwrap();
+
+    let host = host();
+    let registry = Registry::define(Vec::new(), []);
+    let loader =
+        Loader::new(Rc::new(Native) as Rc<dyn Backend>, config, temp.path().to_path_buf(), Vec::<Configured>::new());
+    assert!(loader.reconcile(&dynamic(&host), &registry));
+    let hello = entry(&registry.entries(), &dir.to_string_lossy()).clone();
+    assert_eq!((hello.id.as_str(), hello.status), ("example.hello", Status::Active));
+
+    assert!(matches!(host.keymap().dispatch("hello.greet", None), RunResult::Ok));
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(*host.toasts.borrow(), [abi::Toast::new(abi::Variant::Success, "Hello from a plugin")]);
+    let parent = View::new(host.app());
+    let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+    host.app().root().clear();
+    host.app().root().add(&parent);
+    host.app.render();
+    assert!(host.app.text().contains("hello"), "{}", host.app.text());
+}
