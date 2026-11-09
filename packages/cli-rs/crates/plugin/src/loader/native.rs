@@ -452,6 +452,8 @@ fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, Stri
         HostRequest::Toast { variant, message, title, session } => {
             ctx.effects.push(Effect::Toast(abi::Toast { variant, title, message, session }));
         }
+        // An instance that only tells its ID changes nothing, also as it is destroyed.
+        HostRequest::StorageSet { .. } | HostRequest::StorageMerge { .. } if ctx.quiet => {}
         HostRequest::StorageGet { key: name } => {
             let stored = key(ctx, &name)?;
             let value = ctx.host.upgrade().and_then(|host| host.storage_read(&stored));
