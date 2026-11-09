@@ -499,8 +499,10 @@ pub fn layout_view(
     let root = View::new(&cx.app).padding_x(inset).padding_edge(Edge::Bottom, 1).gap(1);
     root.add(header);
     let wrapper = View::new(&cx.app).child(body);
+    // A gap of 0 lets a raised bleed body meet the footer band.
     if footer.is_some() {
         wrapper.padding_edge(Edge::Bottom, footer_gap.saturating_sub(1));
+        wrapper.margin_edge(Edge::Bottom, footer_gap.min(1) as i32 - 1);
     }
     root.add(&wrapper);
     if let Some(footer) = footer {
