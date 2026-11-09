@@ -77,7 +77,12 @@ pub fn show(tui: &Tui) {
         open: Cell::new(false),
         following: RefCell::new(None),
     });
-    SHOWN.with(|shown| shown.borrow_mut().push(Rc::downgrade(&manager)));
+    SHOWN.with(|shown| {
+        let mut shown = shown.borrow_mut();
+        // A closed manager's weak handle still holds its allocation.
+        shown.retain(|manager| manager.strong_count() > 0);
+        shown.push(Rc::downgrade(&manager));
+    });
     manager.open(None);
     manager.refetch();
     manager.follow();
