@@ -1,14 +1,15 @@
 //! Update dialog (E.18b): `packages/tui/src/component/dialog-update.tsx`. `features::update_notification` opens it
 //! from `/update` and the home notice, and owns the state it shows.
 //!
-//! Opening it with `checks` runs a check of the updater. Enter runs the last footer action: `update` to install,
-//! `restart` after an install, else `skip`, which dismisses the notice.
+//! Opening it with `checks` runs a check of the updater. Its buttons are `Skip`, which dismisses the notice, then
+//! `Update` to install or `Restart` after an install; the last one starts active. The arrows and Tab move between
+//! them and Enter runs the active one.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use opencode_ui::bind;
-use opencode_ui::dialog::{DialogCx, DialogOptions, FooterAction, FooterProps, HeaderProps, footer, header};
+use opencode_ui::dialog::{DialogButton, DialogButtons, DialogCx, DialogOptions, HeaderProps, header};
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::motion::Spinner;
 use opentui::keymap::Disposer;
@@ -48,28 +49,35 @@ pub fn show(tui: &Tui, checks: bool) {
                     return View::new(&cx.app);
                 };
                 let root = View::new(&cx.app);
+                let row: Rc<RefCell<Option<DialogButtons>>> = Rc::default();
                 let draw: Rc<dyn Fn()> = Rc::new({
-                    let (weak, cx, root, check) = (tui.weak(), Rc::downgrade(cx), root.clone(), check.clone());
+                    let (weak, cx, root, check, row) =
+                        (tui.weak(), Rc::downgrade(cx), root.clone(), check.clone(), row.clone());
                     move || {
                         let (Some(tui), Some(cx)) = (weak.upgrade(), cx.upgrade()) else {
                             return;
                         };
-                        draw(&tui, &cx, &root, &check.borrow());
+                        *row.borrow_mut() = draw(&tui, &cx, &root, &check.borrow());
                     }
                 });
                 draw();
                 *tui.updates.dialog.borrow_mut() = Some(Rc::downgrade(&draw));
-                let enter = {
-                    let (weak, check) = (tui.weak(), check.clone());
-                    bind!(weak, |tui, _: Option<&str>, _: Option<&KeyEvent>| {
-                        let shown = shown(&tui, &check.borrow());
-                        if let Some(run) = buttons(&tui, &shown).pop().map(|button| button.1) {
-                            tui.app.defer(move |_| run());
+                let command = |key: &str, title: &str, run: fn(&DialogButtons)| {
+                    let row = row.clone();
+                    TuiCommand::inline(key, move |_, _| {
+                        if let Some(buttons) = row.borrow().as_ref() {
+                            run(buttons);
                         }
                     })
+                    .title(title)
+                    .group("Dialog")
                 };
                 cx.layer(KeymapLayer::new(vec![
-                    TuiCommand::inline("return", enter).title("Confirm update action").group("Dialog"),
+                    command("return", "Confirm update action", DialogButtons::run),
+                    command("left", "Previous update action", |buttons| buttons.step(-1)),
+                    command("shift+tab", "Previous update action", |buttons| buttons.step(-1)),
+                    command("right", "Next update action", |buttons| buttons.step(1)),
+                    command("tab", "Next update action", |buttons| buttons.step(1)),
                 ]));
                 // The dialog owns the drawing; a check that ends after it closed is dropped.
                 let (weak, owner) = (tui.weak(), draw.clone());
@@ -151,7 +159,7 @@ fn buttons(tui: &Tui, shown: &Shown) -> Vec<Button> {
     buttons
 }
 
-fn draw(tui: &Tui, cx: &Rc<DialogCx>, root: &View, check: &Check) {
+fn draw(tui: &Tui, cx: &Rc<DialogCx>, root: &View, check: &Check) -> Option<DialogButtons> {
     let app = &cx.app;
     let theme = &cx.theme;
     let shown = shown(tui, check);
@@ -180,32 +188,31 @@ fn draw(tui: &Tui, cx: &Rc<DialogCx>, root: &View, check: &Check) {
             Text::new(app, message.clone()).fg(theme.text.feedback.error.base).as_any()
         }
     };
-    let buttons = buttons(tui, &shown);
-    let count = buttons.len();
-    let primary = buttons
+    let buttons: Vec<DialogButton> = buttons(tui, &shown)
         .into_iter()
-        .enumerate()
-        .map(|(index, (label, run))| {
-            let mut action = FooterAction::new(label.to_lowercase());
-            if index + 1 == count {
-                action = action.key("enter");
-            }
-            // A footer action runs inside the footer it replaces, so it waits for the event to end.
+        .map(|(label, run)| {
+            // A button runs inside the dialog it redraws, so it waits for the event to end.
             let app = app.clone();
-            action.on_trigger = Some(Rc::new(move || {
+            let run: Rc<dyn Fn()> = Rc::new(move || {
                 let run = run.clone();
                 app.defer(move |_| run());
-            }));
-            action
+            });
+            DialogButton { label: label.to_owned(), run }
         })
         .collect();
+    // A new set of buttons starts on the last one.
+    let row = (!buttons.is_empty()).then(|| {
+        let last = buttons.len() - 1;
+        DialogButtons::new(cx, buttons, last)
+    });
     root.clear();
     root.add(&opencode_ui::dialog::layout_view(
         cx,
         &header(cx, HeaderProps::new(title)),
         &View::new(app).child(&body),
-        Some(&footer(cx, FooterProps { primary, ..FooterProps::default() })),
+        row.as_ref().map(|row| &row.view),
         opencode_ui::dialog::DIALOG_INSET,
         1,
     ));
+    row
 }

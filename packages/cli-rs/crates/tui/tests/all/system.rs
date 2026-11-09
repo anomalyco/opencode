@@ -685,12 +685,36 @@ fn update_dialog_matches_typescript_through_an_install() {
     let (tui, updater) = with_updater(&app, None);
     update_notification::client_notice(&tui, available("2.0.28"));
     update_notification::open(&tui, update_notification::Origin::Notification);
-    wait_for(&app, "update enter");
+    wait_for(&app, "Skip  Update");
     app.press("enter");
     wait_for(&app, "Installing");
     updater.finish_apply(Err("npm exited with code 1".to_owned()));
     wait_for(&app, "npm exited with code 1");
     assert_dialog(&app, "E.18b/update-failed", "Update available");
+}
+
+#[test]
+fn update_choices_are_keyboard_navigable_buttons() {
+    // `dialog-update.test.tsx`: Left moves from Update to Skip, and Enter runs it. Tab wraps back to Update.
+    for (keys, installs) in
+        [(&["left"][..], false), (&["shift+tab"], false), (&["left", "tab"], true), (&["right"], false)]
+    {
+        let app = TestApp::new(80, 30);
+        let (tui, updater) = with_updater(&app, None);
+        update_notification::client_notice(&tui, available("2.0.28"));
+        update_notification::open(&tui, update_notification::Origin::Notification);
+        wait_for(&app, "Skip  Update");
+        for key in keys {
+            app.press(key);
+        }
+        if keys == ["left"] {
+            assert_dialog(&app, "E.18b/update-left", "Update available");
+        }
+        app.press("enter");
+        app.wait_until(WAIT, || !app.text().contains("Update available"));
+        assert_eq!(updater.applies.borrow().len(), usize::from(installs), "{keys:?}");
+        assert!(!app.text().contains("Update available"), "{keys:?}");
+    }
 }
 
 #[test]
@@ -716,7 +740,7 @@ fn update_checks_show_their_result_as_typescript() {
     update_notification::open(&tui, update_notification::Origin::Manual);
     wait_for(&app, "Checking");
     updater.finish_check(Ok(Some(update_notification::Check::Notice(available("2.0.29")))));
-    wait_for(&app, "update enter");
+    wait_for(&app, "Skip  Update");
     assert_eq!(tui.updates.state(), Some(update_notification::UpdateState::Available("2.0.29".to_owned())));
 
     let app = TestApp::new(80, 30);
@@ -741,7 +765,7 @@ fn the_home_notice_opens_the_dialog_and_skip_hides_it_for_good() {
     wait_for(&app, "Update available");
     assert_dialog(&app, "E.18b/update-available", "Update available");
     // Skip dismisses the notice and remembers it.
-    click_on(&app, "skip");
+    click_on(&app, "Skip");
     app.wait_until(WAIT, || !app.text().contains("to install v2.0.28"));
     assert!(!app.text().contains("Update available"), "{}", app.text());
     let storage = tui.storage().unwrap();
