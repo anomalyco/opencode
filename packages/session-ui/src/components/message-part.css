@@ -2056,12 +2056,25 @@
     overflow: hidden;
   }
 
+  /* The fade is the code's own background, so the cut lines fade into the block rather than through it. */
   &[data-overflow] {
-    mask-image: linear-gradient(#000 calc(100% - 20px), transparent);
+    position: relative;
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset-inline: 0;
+      bottom: 0;
+      height: 20px;
+      background: linear-gradient(transparent, var(--clamped-content-fade));
+      pointer-events: none;
+    }
   }
 
-  &[data-overflow][data-tail] {
-    mask-image: linear-gradient(transparent, #000 20px);
+  &[data-overflow][data-tail]::after {
+    top: 0;
+    bottom: auto;
+    background: linear-gradient(var(--clamped-content-fade), transparent);
   }
 }
 
@@ -2083,6 +2096,7 @@
       grid-area: 1 / 1;
       /* The top padding and four lines of output. */
       --clamped-content-height: calc(12px + 4 * var(--line-height-base));
+      --clamped-content-fade: var(--bash-section-background);
     }
   }
 }
@@ -2092,6 +2106,8 @@
   [data-component="accordion"][data-scope="apply-patch"]
   [data-slot="accordion-item"][data-preview] {
   --clamped-content-height: 96px;
+  /* The diff's background, as the viewer sets it. */
+  --clamped-content-fade: var(--opencode-diffs-bg, var(--color-background-stronger));
 }
 
 /* Opened groups in the Activity timeline indent their rows 12px, as an opened thought indents its text, without the

@@ -2104,7 +2104,10 @@ function ClampedContent(props: {
     frame.style.setProperty("--clamped-content-height", height ? `${height}px` : null)
     setOverflow(content.offsetHeight > frame.clientHeight + 1)
 
-    if (props.tail && !props.expanded) frame.scrollTop = frame.scrollHeight
+    // Shifting the content rather than scrolling it keeps the fade over the frame's edge.
+    const shift = props.tail && !props.expanded ? Math.min(0, frame.clientHeight - content.offsetHeight) : 0
+
+    content.style.translate = shift ? `0 ${shift}px` : ""
   }
 
   onMount(() => {
