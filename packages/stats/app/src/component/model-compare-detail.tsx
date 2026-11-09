@@ -49,6 +49,7 @@ import {
   type ResolvedComparisonFamily,
 } from "../lib/comparison-pages"
 import { baseUrl } from "../lib/language"
+import { providerIconId } from "../lib/provider-icon"
 import { runStatsEffect } from "../stats-runtime"
 import { breadcrumbList, FormatLinks, JsonLd } from "./agent-meta"
 import { NotFoundMeta } from "./not-found-meta"
@@ -809,7 +810,7 @@ function ModelAvatar(props: { model: ModelCatalogEntry; size: "large" | "small" 
 }
 
 function LabLogo(props: { lab: string; label: string; size: "large" | "small" | "tiny" }) {
-  const iconId = () => getProviderIconId(props.lab)
+  const iconId = () => providerIconId(props.lab)
 
   return (
     <Show when={!isProviderlessLab(props.lab)}>
@@ -1178,13 +1179,6 @@ function formatMoney(value: number) {
 
 function trimNumber(value: number, digits: number) {
   return Number(value.toFixed(digits)).toLocaleString("en")
-}
-
-function getProviderIconId(provider: string) {
-  const id = provider.toLowerCase().replace(/[^a-z0-9]+/g, "")
-  if (id === "moonshot") return "moonshotai"
-  if (id === "zhipu") return "zhipuai"
-  return id
 }
 
 function ChevronDownIcon() {

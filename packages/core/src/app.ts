@@ -13,6 +13,8 @@ export const Metadata = Context.Reference<Info>("@Mackery6969/App", {
   defaultValue: () => make(),
 })
 
+export class Service extends Context.Service<Service, Info>()("@opencode/App") {}
+
 export function make(input: Partial<Info> = {}): Info {
   return {
     name: input.name ?? "opencode",
@@ -25,9 +27,9 @@ export function useragent(app: Info) {
   return `opencode/${app.channel}/${app.version}/${app.name}`
 }
 
-export const layer = (input?: Partial<Info>) => Layer.succeed(Metadata, make(input))
+export const layer = (input?: Partial<Info>) => Layer.succeed(Service, make(input))
 
 export const configured = (input?: Partial<Info>) =>
-  makeGlobalNode({ service: Metadata, layer: layer(input), deps: [] })
+  makeGlobalNode({ service: Service, layer: layer(input), deps: [] })
 
 export const node = configured()

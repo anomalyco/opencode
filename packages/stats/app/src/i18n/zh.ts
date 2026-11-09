@@ -25,6 +25,7 @@ export const dict = {
   "header.githubAria": "在 GitHub 上为 OpenCode 加星",
   "header.github": "GitHub",
   "header.tryOpenCode": "试用 OpenCode",
+  "header.tryOpenCodeShort": "立即试用",
   "header.openNav": "打开导航",
   "header.closeNav": "关闭导航",
   "theme.groupLabel": "主题",

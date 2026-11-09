@@ -12,11 +12,9 @@ import { toSessionError } from "@Mackery6969/core/session/to-session-error"
 import { Tool } from "@Mackery6969/core/tool"
 import { WebSearchTool } from "@Mackery6969/core/tool/plugin/websearch"
 import { makeLocationNode } from "@Mackery6969/util/effect/app-node"
-import { Image } from "@Mackery6969/core/image"
 import { testEffect } from "./lib/effect"
-import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
-import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNodeReplacements } from "./lib/tool"
 import { webSearchHost } from "./plugin/host"
 import { TestWebSearch } from "./lib/websearch"
 import type { SessionContext } from "@Mackery6969/plugin/effect/session"
@@ -82,7 +80,7 @@ const setup = Effect.gen(function* () {
   )
   const context = yield* Layer.build(
     AppNodeBuilder.build(LayerNode.group([Tool.node, webSearchToolNode]), [
-      Permission.node.replace(
+      ...toolNodeReplacements(
         permissionLayer({
           assert: (input) =>
             Effect.sync(() => {
@@ -102,7 +100,6 @@ const setup = Effect.gen(function* () {
             }),
         }),
       ),
-      Image.node.replace(imagePassthrough),
     ]),
   )
   return Object.assign(fixture, { websearch, kv, registry: Context.get(context, Tool.Service) })

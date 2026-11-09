@@ -26,7 +26,7 @@ import { SessionInbox } from "@Mackery6969/core/session/inbox"
 import { SessionStore } from "@Mackery6969/core/session/store"
 import { SessionStored } from "@Mackery6969/core/session/stored"
 import { SessionBlob } from "@Mackery6969/core/session/blob"
-import { Config } from "@Mackery6969/core/config"
+import { Flag } from "@Mackery6969/core/flag"
 import { Document, Info } from "@Mackery6969/schema/config"
 import { ConfigExperimental } from "@Mackery6969/schema/config/experimental"
 import { SessionHistory } from "@Mackery6969/core/session/history"
@@ -69,7 +69,7 @@ const model = { id: Model.ID.make("model"), providerID: Provider.ID.make("provid
 const previousModel = { ...model, variant: Model.VariantID.make("medium") }
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
 const experimental = (flags: ConstructorParameters<typeof ConfigExperimental.Info>[0]) =>
-  Config.testLayer([
+  Flag.testLayer([
     new Document({ type: "document", info: new Info({ experimental: new ConfigExperimental.Info(flags) }) }),
   ])
 const mediaBlob = experimental({ media_blob: true })

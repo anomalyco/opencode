@@ -247,7 +247,7 @@ body {
   gap: 16px;
   box-sizing: border-box;
   height: var(--nav-bar-height);
-  padding: 0 var(--nav-end) 0 var(--nav-edge);
+  padding-inline: var(--nav-edge) var(--nav-end);
   border-bottom: 1px solid var(--nav-rule);
 }
 
@@ -261,16 +261,15 @@ body {
   --github-focus: var(--stats-accent);
 }
 
-/* Phones: the rule is drawn inside the 56px bar, as opencode.ai's top bar does, and the menu button's centre is where
-   the site's is (its 32px box 6px further in than the site's 44px one). */
+/* Phones: the rule is drawn inside the 56px bar, as opencode.ai's top bar does. The menu button and the GitHub mark
+   before it sit where the Console's and opencode.ai's do: the button's centre where the site's 44px button has it
+   (its 32px box 6px further in), the mark's 16px before it. */
 @media (max-width: 60rem) {
+  /* 12px at least between the lockup's chevron and TRY OPENCODE, so the 20px name still fits at 375px. */
   [data-page="stats"] [data-slot="header-bar"] {
+    gap: 12px;
     border-bottom: 0;
     box-shadow: inset 0 -1px 0 var(--nav-rule);
-  }
-
-  [data-page="stats"] [data-slot="menu-button"] {
-    margin-inline-end: 6px;
   }
 }
 
@@ -313,16 +312,53 @@ body {
   color: var(--stats-text);
 }
 
+/* Try OpenCode, the GitHub mark and the menu button sit 24px apart, ink to ink: the button's edge to the mark, and the
+   mark to the menu's lines. That is as close as their 44px targets go without overlapping. */
 [data-page="stats"] [data-slot="header-actions"] {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
 }
 
-[data-page="stats"] [data-slot="header-button"],
-[data-page="stats"] [data-slot="menu-button"] {
+[data-page="stats"] [data-slot="header-actions"] [data-slot="header-button"] {
+  margin-inline-end: 14px;
+}
+
+/* In capitals, as the nav's other labels (DATA, the product menu), at their 0 tracking. */
+[data-page="stats"] [data-slot="header-actions"] [data-slot="header-button"] strong {
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+/* Phones show the short label (header.tryOpenCodeShort: "Try now" where "Try OpenCode" doesn't fit beside the 20px
+   product name), on a button 4px shorter, 28px, with a 44px tall target. The link's aria-label keeps the full name. */
+[data-page="stats"] [data-slot="header-actions"] [data-slot="header-button"] [data-slot="label-short"] {
+  display: none;
+}
+
+@media (max-width: 60rem) {
+  [data-page="stats"] [data-slot="header-actions"] [data-slot="header-button"] {
+    height: 28px;
+    overflow: visible;
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: -8px 0;
+    }
+
+    [data-slot="label"] {
+      display: none;
+    }
+
+    [data-slot="label-short"] {
+      display: inline;
+    }
+  }
+}
+
+[data-page="stats"] [data-slot="header-button"] {
   position: relative;
   flex-shrink: 0;
   display: inline-flex;
@@ -340,8 +376,7 @@ body {
   cursor: pointer;
 }
 
-[data-page="stats"] [data-slot="header-button"]::before,
-[data-page="stats"] [data-slot="menu-button"]::before {
+[data-page="stats"] [data-slot="header-button"]::before {
   position: absolute;
   top: 0;
   right: 0;
@@ -357,8 +392,7 @@ body {
 }
 
 [data-page="stats"] [data-slot="header-button"] strong,
-[data-page="stats"] [data-slot="header-button"] span,
-[data-page="stats"] [data-slot="menu-button"] svg {
+[data-page="stats"] [data-slot="header-button"] span {
   position: relative;
   z-index: 1;
 }
@@ -380,16 +414,99 @@ body {
     inset 0 1px 2px 0 #ffffff24;
 }
 
+/* The menu button, as the Console's (packages/site in anomalyco/opencode-console, landing.css): no box, two lines that
+   meet in the middle and turn into a cross while the menu is open, and back. 32 × 28, with a 44px target. */
 [data-page="stats"] [data-slot="menu-button"] {
+  position: relative;
+  flex-shrink: 0;
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 32px;
+  height: 28px;
+  margin: 0;
   padding: 0;
-  color: #3a3a3a;
-  background: #ffffff;
-  box-shadow:
-    0 0 0 0 #00000024,
-    0 0 0 0.5px #00000024,
-    0 1px 1.5px 0 #0000001a;
+  border: 0;
+  appearance: none;
+  background: none;
+  color: var(--stats-text);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+
+  margin-inline-start: 6px;
+
+  /* A 44px target, reaching 4px towards the GitHub mark's (they meet) and 8px past the lines' end. */
+  &::after {
+    content: "";
+    position: absolute;
+    inset-block: -8px;
+    inset-inline: -4px -8px;
+  }
+
+  @media (max-width: 60rem) {
+    margin-inline-end: 6px;
+  }
+}
+
+[data-page="stats"] [data-slot="menu-lines"] {
+  position: relative;
+  width: 16px;
+  height: 8.5px;
+  /* Centred, the 8.5px box would start on a quarter pixel; this puts both lines on half pixels, so each is exactly 3
+     device pixels at 2×. */
+  margin-top: -0.5px;
+
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 1.5px;
+    background: currentColor;
+    transform-origin: 50% 50%;
+    /* Closing: the cross unrotates, then the lines part; the two overlap so it reads as one motion. */
+    transition:
+      rotate 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+      translate 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) 0.12s;
+  }
+
+  &::before {
+    top: 0;
+  }
+
+  &::after {
+    top: calc(100% - 1.5px);
+  }
+}
+
+/* Opening: the lines meet in the middle, then turn into a cross about their centre, overlapping slightly. */
+[data-page="stats"] [data-slot="menu-button"][aria-expanded="true"] [data-slot="menu-lines"] {
+  &::before,
+  &::after {
+    transition:
+      translate 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+      rotate 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) 0.12s;
+  }
+
+  &::before {
+    translate: 0 3.5px;
+    rotate: 45deg;
+  }
+
+  &::after {
+    translate: 0 -3.5px;
+    rotate: -45deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-page="stats"] [data-slot="menu-lines"] {
+    &::before,
+    &::after {
+      transition: none !important;
+    }
+  }
 }
 
 [data-page="stats"] [data-slot="header-button"]:focus-visible,
@@ -7278,7 +7395,8 @@ body {
   --stats-text: #ffffff;
   --stats-muted: #d4d4d4;
   --stats-faint: #a3a3a3;
-  --stats-accent-text: #8190ff;
+  --stats-accent: #6b8fff;
+  --stats-accent-text: #6b8fff;
   --stats-theme-icon-active: #fafafa;
   --stats-bar-idle: #303030;
   --stats-dot: #303030;
@@ -7296,6 +7414,7 @@ body {
   --lab-usage-bar: #3a3a3a;
   --lab-usage-line: #a3a3a3;
   --lab-usage-band: #242424;
+  --lab-usage-active: #6b8fff;
 }
 
 [data-page="stats"][data-theme="dark"] [data-component="model-usage-chart"][data-variant="model-trend"],
@@ -7305,6 +7424,7 @@ body {
   --model-trend-bar: #3a3a3a;
   --model-trend-line: #a3a3a3;
   --model-trend-band: #242424;
+  --model-trend-active: #6b8fff;
 }
 
 [data-page="stats"][data-theme="dark"] [data-component="chart-tooltip"],
@@ -7404,16 +7524,6 @@ body {
   background: #ffffff0d;
 }
 
-[data-page="stats"][data-theme="dark"] [data-slot="menu-button"],
-:root[data-stats-theme="dark"] [data-page="stats"]:not([data-theme="light"]) [data-slot="menu-button"] {
-  color: #fafafa;
-  background: #ffffff0f;
-  box-shadow:
-    0 -0.5px 0 0 #ffffff33,
-    0 0 0 0.5px #ffffff33,
-    0 1px 2px 0 #00000066;
-}
-
 [data-page="stats"][data-theme="dark"] [data-slot="header-button"][data-variant="contrast"],
 :root[data-stats-theme="dark"]
   [data-page="stats"]:not([data-theme="light"])
@@ -7447,7 +7557,8 @@ body {
     --stats-text: #ffffff;
     --stats-muted: #d4d4d4;
     --stats-faint: #a3a3a3;
-    --stats-accent-text: #8190ff;
+    --stats-accent: #6b8fff;
+    --stats-accent-text: #6b8fff;
     --stats-theme-icon-active: #fafafa;
     --stats-bar-idle: #303030;
     --stats-dot: #303030;
@@ -7464,6 +7575,7 @@ body {
     --lab-usage-bar: #3a3a3a;
     --lab-usage-line: #a3a3a3;
     --lab-usage-band: #242424;
+    --lab-usage-active: #6b8fff;
   }
 
   :root:not([data-stats-theme="light"])
@@ -7472,6 +7584,7 @@ body {
     --model-trend-bar: #3a3a3a;
     --model-trend-line: #a3a3a3;
     --model-trend-band: #242424;
+    --model-trend-active: #6b8fff;
   }
 
   :root:not([data-stats-theme="light"]) [data-page="stats"]:not([data-theme="light"]) [data-component="chart-tooltip"] {
@@ -7536,15 +7649,6 @@ body {
     [data-slot="leader-watermark"] {
     color: var(--stats-line-strong);
     opacity: 0.78;
-  }
-
-  :root:not([data-stats-theme="light"]) [data-page="stats"]:not([data-theme="light"]) [data-slot="menu-button"] {
-    color: #fafafa;
-    background: #ffffff0f;
-    box-shadow:
-      0 -0.5px 0 0 #ffffff33,
-      0 0 0 0.5px #ffffff33,
-      0 1px 2px 0 #00000066;
   }
 
   :root:not([data-stats-theme="light"])

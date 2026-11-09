@@ -6,10 +6,12 @@ import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpaw
 import { TestClock } from "effect/testing"
 import { eq } from "drizzle-orm"
 import { Agent } from "@Mackery6969/core/agent"
+import { App } from "@Mackery6969/core/app"
 import { Database } from "@Mackery6969/core/database/database"
 import { AppNodeBuilder } from "@Mackery6969/core/effect/app-node-builder"
 import { Environment } from "@Mackery6969/core/environment/index"
 import { FileAccess } from "@Mackery6969/core/file-access"
+import { Flag } from "@Mackery6969/core/flag"
 import { Image } from "@Mackery6969/core/image"
 import { Instance } from "@Mackery6969/core/instance/service"
 import { LayerNode } from "@Mackery6969/util/effect/layer-node"
@@ -215,6 +217,7 @@ const locations = makeGlobalNode({
   layer: Layer.effect(
     LocationServiceMap.Service,
     Effect.gen(function* () {
+      const app = yield* App.Service
       const bus = yield* Bus.Service
       const store = yield* SessionStore.Service
       const saved = yield* PermissionSaved.Service
@@ -229,15 +232,13 @@ const locations = makeGlobalNode({
           }
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
           return Layer.mergeAll(
-            ref.directory === enabledDirectory || ref.directory === missingDirectory
-              ? enabled
-              : ref.directory === toggleDirectory
-                ? toggled
-                : disabled,
             configureAgent.pipe(
               Layer.provideMerge(
                 LayerNode.compile(
                   LayerNode.group([
+                    App.node,
+                    Config.node,
+                    Flag.node,
                     Location.node,
                     Environment.node,
                     PluginHooks.node,
@@ -249,7 +250,15 @@ const locations = makeGlobalNode({
                   ]),
                   {
                     replacements: [
+                      App.node.replace(Layer.succeed(App.Service, app)),
                       Bus.node.replace(Layer.succeed(Bus.Service, bus)),
+                      Config.node.replace(
+                        ref.directory === enabledDirectory || ref.directory === missingDirectory
+                          ? enabled
+                          : ref.directory === toggleDirectory
+                            ? toggled
+                            : disabled,
+                      ),
                       SessionStore.node.replace(Layer.succeed(SessionStore.Service, store)),
                       PermissionSaved.node.replace(Layer.succeed(PermissionSaved.Service, saved)),
                       Location.node.replace(Layer.succeed(Location.Service, location(ref))),
@@ -278,7 +287,7 @@ const locations = makeGlobalNode({
       )
     }),
   ),
-  deps: [Bus.node, SessionStore.node, PermissionSaved.node],
+  deps: [App.node, Bus.node, SessionStore.node, PermissionSaved.node],
 })
 const it = testEffect(
   AppNodeBuilder.build(

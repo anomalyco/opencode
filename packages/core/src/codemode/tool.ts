@@ -86,6 +86,7 @@ export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
   permission: Permission.Interface,
+  flag: Flag.Interface,
 ) => {
   return {
     name: "execute",
@@ -119,7 +120,7 @@ export const create = (
               yield* Effect.sleep(wait).pipe(Effect.andThen(lock.withPermit(publish)), Effect.forkIn(scope))
             }),
           )
-        const result = yield* runtime(inventory, (yield* Flag.enabled("codemode_vm")) ? "vm" : "legacy")
+        const result = yield* runtime(inventory, (yield* flag.enabled("codemode_vm")) ? "vm" : "legacy")
           .execute(code)
           .pipe(
             Effect.provideService(Run, {
@@ -232,7 +233,10 @@ export const catalog = (inventory: Inventory) => {
       type: "tool",
       name: tool.path.split(".").at(-1) ?? tool.path,
       description: tool.description,
-      signature: tool.signature,
+      // Rendered only for the tools the catalog shows.
+      get signature() {
+        return tool.signature
+      },
       pinned: pinned.has(tool.path),
     }
   return {
@@ -292,8 +296,9 @@ export const check = (
   bindings: Readonly<Record<string, CodeMode.DataValue>>,
   limits: CodeMode.ExecutionLimits,
   executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<Result, Error>,
+  flag: Flag.Interface,
 ) =>
-  Flag.enabled("codemode_vm").pipe(
+  flag.enabled("codemode_vm").pipe(
     Effect.flatMap((vm) =>
       CodeMode.make({
         tools: inventoryTools(inventory),

@@ -42,6 +42,9 @@ export default defineConfig({
     allowedHosts: true,
   },
   build: {
+    rollupOptions: {
+      external: ["cloudflare:workers"],
+    },
     minify: "esbuild",
     cssMinify: true,
     // Browsers with native light-dark(), as services/site targets. For older targets the minifier lowers light-dark()

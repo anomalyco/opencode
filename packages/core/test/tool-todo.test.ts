@@ -1,18 +1,15 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Stream } from "effect"
 import { AppNodeBuilder } from "@Mackery6969/core/effect/app-node-builder"
-import { Config } from "@Mackery6969/core/config"
-import { Image } from "@Mackery6969/core/image"
-import { Permission } from "@Mackery6969/core/permission"
+import { Flag } from "@Mackery6969/core/flag"
 import { Session } from "@Mackery6969/core/session"
 import { Tool } from "@Mackery6969/core/tool"
 import { TodoTool } from "@Mackery6969/core/tool/plugin/todo"
 import { Document, Info, type Entry } from "@Mackery6969/schema/config"
 import { ConfigExperimental } from "@Mackery6969/schema/config/experimental"
 import { testEffect } from "./lib/effect"
-import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
-import { executeTool, registerToolPlugin, toolDefinitions, toolIdentity } from "./lib/tool"
+import { executeTool, registerToolPlugin, toolDefinitions, toolIdentity, toolNodeReplacements } from "./lib/tool"
 
 const sessionID = Session.ID.make("ses_todo_tool_test")
 const enabled = new ConfigExperimental.Info({ todo: true })
@@ -23,14 +20,12 @@ const todos = [
   { content: "Rewrite everything", status: "cancelled" },
 ] as const
 
-const it = testEffect(
-  AppNodeBuilder.build(Tool.node, [Image.node.replace(imagePassthrough), Permission.node.replace(permissionLayer())]),
-)
+const it = testEffect(AppNodeBuilder.build(Tool.node, toolNodeReplacements()))
 
 const setup = (experimental: ConfigExperimental.Info | undefined) =>
   Effect.gen(function* () {
     yield* registerToolPlugin(TodoTool.Plugin, { event: { subscribe: () => Stream.never } }).pipe(
-      Effect.provide(Layer.mock(Config.Service)({ entries: () => Effect.succeed([document(experimental)]) })),
+      Effect.provide(Flag.testLayer([document(experimental)])),
       Effect.provide(permissionLayer({ assert: () => Effect.void })),
     )
     return yield* Tool.Service

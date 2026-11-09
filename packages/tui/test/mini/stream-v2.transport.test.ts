@@ -3601,7 +3601,7 @@ describe("V2 mini transport", () => {
       id: "evt_credential.updated",
       created: 0,
       type: "credential.updated",
-      data: {},
+      data: { integrationID: "openai", credentialID: "credential" },
     })
     for (const credentialID of ["credential", null])
       events.push({

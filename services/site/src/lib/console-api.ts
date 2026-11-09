@@ -19,7 +19,7 @@ import { sdkInstalls } from "~/lib/install-commands"
 
 const brand = {
   light: { open: "#626262", code: "#1f1f1f", inner: "#d2d2d2", text: "#333333", dim: "#737373", link: "#3b5cf6" },
-  dark: { open: "#aeaeae", code: "#eeeeee", inner: "#4b4b4b", text: "#c8c8c8", dim: "#8a8a8a", link: "#4f8bff" },
+  dark: { open: "#aeaeae", code: "#eeeeee", inner: "#4b4b4b", text: "#c8c8c8", dim: "#8a8a8a", link: "#6b8fff" },
 }
 const mono = "font-family: ui-monospace, Menlo, Consolas, monospace;"
 const buildLabels: Record<string, string> = {

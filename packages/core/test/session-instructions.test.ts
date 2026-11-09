@@ -13,6 +13,7 @@ import { Global } from "@Mackery6969/util/global"
 import { Image } from "@Mackery6969/core/image"
 import { Location } from "@Mackery6969/core/location"
 import { FileAccess } from "@Mackery6969/core/file-access"
+import { Environment } from "@Mackery6969/core/environment/index"
 import { Model } from "@Mackery6969/core/model"
 import { Permission } from "@Mackery6969/core/permission"
 import { Project } from "@Mackery6969/core/project"
@@ -50,6 +51,7 @@ const readToolNode = makeLocationNode({
     SessionInstructions.node,
     Skill.node,
     FSUtil.node,
+    Environment.node,
     Location.node,
   ],
 })

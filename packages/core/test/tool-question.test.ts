@@ -7,12 +7,10 @@ import { Permission } from "@Mackery6969/core/permission"
 import { Session } from "@Mackery6969/core/session"
 import { Tool } from "@Mackery6969/core/tool"
 import { QuestionTool } from "@Mackery6969/core/tool/plugin/question"
-import { Image } from "@Mackery6969/core/image"
 import { testEffect } from "./lib/effect"
-import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
-import { makeLocationNode } from "@Mackery6969/util/effect/app-node"
-import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNodeReplacements } from "./lib/tool"
 
 const sessionID = Session.ID.make("ses_question_tool_test")
 const assertions: Permission.AssertInput[] = []
@@ -66,9 +64,8 @@ const questionToolNode = makeLocationNode({
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Tool.node, questionToolNode]), [
-    Permission.node.replace(permission),
+    ...toolNodeReplacements(permission),
     Form.node.replace(form),
-    Image.node.replace(imagePassthrough),
   ]),
 )
 
