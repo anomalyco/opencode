@@ -1073,7 +1073,7 @@ describe("CodeMode public contract", () => {
     }
   })
 
-  test("a query term that is a whole word of the path outranks a substring of it", async () => {
+  test("a query term matches whole words, not substrings", async () => {
     const simple = (description: string) =>
       Tool.make({
         description,
@@ -1092,11 +1092,43 @@ describe("CodeMode public contract", () => {
     expect(ranked.ok).toBe(true)
     if (ranked.ok) {
       const value = ranked.value as { items: Array<{ path: string }> }
-      expect(value.items.map((item) => item.path)).toStrictEqual([
-        "tools.cloudflare.get_zones",
-        "tools.cloudflare.get_timezones",
-      ])
+      expect(value.items.map((item) => item.path)).toStrictEqual(["tools.cloudflare.get_zones"])
     }
+  })
+
+  test("search ranks by rare words, prefers short names and falls back from an empty namespace", async () => {
+    const simple = (description: string) =>
+      Tool.make({
+        description,
+        input: Schema.Struct({}),
+        output: Schema.String,
+        execute: () => Effect.succeed("ok"),
+      })
+    const runtime = CodeMode.make({
+      tools: {
+        gmail: { list_labels: simple("List the labels in the mailbox"), list_messages: simple("List messages") },
+        slack: {
+          list_channels: simple("List channels"),
+          list_users: simple("List users"),
+          list_user_groups: simple("List user groups"),
+          get_schedules: simple("Get scheduled messages"),
+        },
+      },
+    })
+    const paths = async (query: Record<string, unknown>) => {
+      const result = await Effect.runPromise(runtime.execute(`return search(${JSON.stringify(query)})`))
+      expect(result.ok).toBe(true)
+      return result.ok ? (result.value as { items: Array<{ path: string }> }).items.map((item) => item.path) : []
+    }
+
+    // "list" is in every tool; "labels" decides.
+    expect((await paths({ query: "list gmail labels" }))[0]).toBe("tools.gmail.list_labels")
+    // Both match "users"; the shorter, more general name wins.
+    expect((await paths({ query: "users", namespace: "slack" }))[0]).toBe("tools.slack.list_users")
+    // A word prefix of 4+ letters finds the longer word.
+    expect(await paths({ query: "schedul" })).toStrictEqual(["tools.slack.get_schedules"])
+    // A namespace guess with nothing for the query searches every namespace.
+    expect(await paths({ query: "labels", namespace: "slack" })).toStrictEqual(["tools.gmail.list_labels"])
   })
 
   test("a plural query term matches singular-only tool text", async () => {
