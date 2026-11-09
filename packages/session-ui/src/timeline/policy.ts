@@ -124,3 +124,18 @@ export function shellFailed(message: SessionMessageShell) {
     message.status === "timeout" || (message.status === "exited" && message.exit !== undefined && message.exit !== 0)
   )
 }
+
+/** What the agent was doing with a call: reading the codebase, changing files, running commands, or something else. */
+export type TimelineMode = "explore" | "edit" | "run" | "tool"
+
+export function timelineMode(tool: Extract<Content, { type: "tool" }>): TimelineMode {
+  const name = canonicalToolName(tool.name)
+
+  if (["read", "list", "glob", "grep", "webfetch", "websearch", "skill"].includes(name)) return "explore"
+
+  if (name === "edit" || name === "write" || name === "patch") return "edit"
+
+  if (name === "shell" || name === "execute") return "run"
+
+  return "tool"
+}

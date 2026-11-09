@@ -300,6 +300,7 @@ function MessageTimelineView(
     },
     actions: props.actions,
     timelineDetail: props.data.timelineDetail,
+    activity: settings.general.activityTimeline,
     disclosure: virtualized.disclosure,
     centered: () => props.centered,
     padding: turnPadding,

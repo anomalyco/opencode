@@ -84,6 +84,7 @@ import {
   type SubagentRunState,
 } from "./run-machine"
 import { LinkedText } from "../components/linked-text"
+import { timelineMode, type TimelineMode } from "../timeline/policy"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -418,8 +419,96 @@ export type ContextGroupPart =
   | (SessionMessageAssistantReasoning & { id: string; streaming?: boolean })
   | { type: "notice" | "text"; id: string; render: () => JSX.Element }
 
+// The most consequential work names a group: changing files over running commands, and both over reading.
+const modePriority: TimelineMode[] = ["edit", "run", "tool", "explore"]
+
+const modeVerb = {
+  explore: "ui.timeline.activity.explored",
+  edit: "ui.timeline.activity.edited",
+  run: "ui.timeline.activity.ran",
+  tool: "ui.timeline.activity.used",
+} as const
+
+const decodeChangedPath = Schema.decodeUnknownOption(Schema.Struct({ file: Schema.String }))
+
+/**
+ * Names a stretch of the agent's work by its main mode, then what its other calls did: "Edited 4 files · 2 commands".
+ * `code` marks a main part that is a command, shown in the code font.
+ */
+function activityLabel(tools: SessionMessageAssistantTool[], i18n: UiI18n) {
+  const modes = new Set(tools.map(timelineMode))
+  const mode = modePriority.find((item) => modes.has(item))
+
+  if (!mode) return
+
+  const calls = (item: TimelineMode) => tools.filter((tool) => timelineMode(tool) === item)
+  const count = (names: string[]) => tools.filter((tool) => names.includes(canonicalToolName(tool.name))).length
+  const reads = new Set(tools.flatMap((tool) => (tool.name === "read" ? [toolInput(currentToolInput(tool)).path] : [])))
+
+  const files = [
+    ...new Set(
+      calls("edit").flatMap((tool) => {
+        const changed = (toolMetadata(currentToolMetadata(tool)).files ?? []).flatMap((file) =>
+          Option.toArray(decodeChangedPath(file)).map((value) => value.file),
+        )
+        const path = toolInput(currentToolInput(tool)).path
+
+        return changed.length ? changed : path ? [path] : []
+      }),
+    ),
+  ]
+
+  // Reads count as files where exploring names the group, and as reads beside other work.
+  const explore = (main: boolean) =>
+    [
+      [main ? "ui.timeline.activity.files" : "ui.timeline.activity.reads", reads.size] as const,
+      ["ui.timeline.activity.searches", count(["glob", "grep", "list"])] as const,
+      ["ui.timeline.activity.webSearches", count(["websearch"])] as const,
+      ["ui.timeline.activity.pages", count(["webfetch"])] as const,
+      ["ui.timeline.activity.skills", count(["skill"])] as const,
+    ].flatMap(([key, value]) => (value > 0 ? [i18n.plural(key, value)] : []))
+
+  const runs = calls("run")
+  const single = runs.length === 1 ? runCommand(runs[0]!) : undefined
+  const commands = runs.length ? [i18n.plural("ui.timeline.activity.commands", runs.length)] : []
+  const used = [...new Set(calls("tool").map((tool) => toolTitle(tool, i18n)))]
+
+  const others = {
+    explore: explore(false),
+    edit: files.length ? [i18n.plural("ui.timeline.activity.editedFiles", files.length)] : [],
+    run: commands,
+    tool: used,
+  }
+
+  const main = {
+    // A few files read better by name; past that, the count says more than a list that truncates.
+    edit:
+      files.length <= 3
+        ? files.map((path) => getFilename(path)).join(", ")
+        : i18n.plural("ui.timeline.activity.files", files.length),
+    run: single ?? commands[0]!,
+    tool: used.join(", "),
+    explore: explore(true).join(", "),
+  }[mode]
+
+  return {
+    verb: i18n.t(modeVerb[mode]),
+    main,
+    code: mode === "run" && !!single,
+    others: modePriority.filter((item) => item !== mode).flatMap((item) => others[item]),
+  }
+}
+
+function runCommand(tool: SessionMessageAssistantTool) {
+  if (tool.name === "execute") return executeToolSubtitle(executeToolCalls(currentToolMetadata(tool)))
+
+  return toolInput(currentToolInput(tool)).command
+}
+
 export function CurrentContextToolGroup(props: {
   parts: ContextGroupPart[]
+  /** Names the group by what the agent did, explored, edited or ran, rather than which tools it called. */
+  activity?: boolean
   busy: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -487,7 +576,27 @@ export function CurrentContextToolGroup(props: {
     })
   })
 
+  const activity = createMemo(() => {
+    if (!props.activity) return
+
+    const value = activityLabel(tools(), i18n)
+
+    if (!value) return { verb: i18n.t("ui.timeline.activity.thought"), main: "", code: false, others: [] }
+
+    return value
+  })
+
   const label = createMemo(() => {
+    const value = activity()
+
+    if (value) {
+      const text = [[value.verb, value.main].filter(Boolean).join(" "), value.others.join(", ")]
+        .filter(Boolean)
+        .join(" · ")
+
+      return { text, title: "", before: "", count: undefined, between: "", after: "" }
+    }
+
     const thoughts = reasoning().length
 
     if (thinking()) {
@@ -612,38 +721,60 @@ export function CurrentContextToolGroup(props: {
         onOpenChange={change}
         trigger={
           <div data-component="context-tool-group-trigger" aria-label={label().text}>
-            <span data-slot="context-tool-group-title">
-              <Show when={label().before || label().count || label().between}>
-                <span data-slot="context-tool-group-usage">
-                  <Show when={label().before}>
-                    {(before) => <span data-slot="context-tool-group-prefix">{before()}</span>}
+            <Show
+              when={activity()}
+              fallback={
+                <span data-slot="context-tool-group-title">
+                  <Show when={label().before || label().count || label().between}>
+                    <span data-slot="context-tool-group-usage">
+                      <Show when={label().before}>
+                        {(before) => <span data-slot="context-tool-group-prefix">{before()}</span>}
+                      </Show>
+                      <Show when={label().count}>
+                        {(count) => (
+                          <span data-slot="context-tool-group-count">
+                            <AnimatedNumber value={count()} />
+                          </span>
+                        )}
+                      </Show>
+                      <Show when={label().between}>
+                        {(between) => <span data-slot="context-tool-group-prefix">{between()}</span>}
+                      </Show>
+                    </span>
                   </Show>
-                  <Show when={label().count}>
-                    {(count) => (
-                      <span data-slot="context-tool-group-count">
-                        <AnimatedNumber value={count()} />
+                  <Show when={label().title}>
+                    {(title) => (
+                      <span data-slot="basic-tool-tool-title">
+                        <Show when={thinking()} fallback={title()}>
+                          <TextShimmer text={title()} active />
+                        </Show>
                       </span>
                     )}
                   </Show>
-                  <Show when={label().between}>
-                    {(between) => <span data-slot="context-tool-group-prefix">{between()}</span>}
+                  <Show when={elapsed()}>{(value) => <span data-slot="basic-tool-tool-subtitle">{value()}</span>}</Show>
+                  <Show when={label().after}>
+                    {(after) => <span data-slot="context-tool-group-prefix">{after()}</span>}
                   </Show>
                 </span>
-              </Show>
-              <Show when={label().title}>
-                {(title) => (
-                  <span data-slot="basic-tool-tool-title">
-                    <Show when={thinking()} fallback={title()}>
-                      <TextShimmer text={title()} active />
-                    </Show>
-                  </span>
-                )}
-              </Show>
-              <Show when={elapsed()}>{(value) => <span data-slot="basic-tool-tool-subtitle">{value()}</span>}</Show>
-              <Show when={label().after}>
-                {(after) => <span data-slot="context-tool-group-prefix">{after()}</span>}
-              </Show>
-            </span>
+              }
+            >
+              {(value) => (
+                <span data-slot="context-tool-group-title" data-activity="">
+                  <span data-slot="context-tool-group-verb">{value().verb}</span>
+                  <Show when={value().main}>
+                    <span data-slot="context-tool-group-detail" data-code={value().code ? "" : undefined}>
+                      {value().main}
+                    </span>
+                  </Show>
+                  <Show when={value().others.length > 0}>
+                    <span data-slot="context-tool-group-separator" aria-hidden="true">
+                      ·
+                    </span>
+                    <span data-slot="context-tool-group-detail">{value().others.join(", ")}</span>
+                  </Show>
+                </span>
+              )}
+            </Show>
           </div>
         }
       >

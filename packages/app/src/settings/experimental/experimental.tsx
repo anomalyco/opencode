@@ -66,6 +66,20 @@ export const SettingsExperimental: Component = () => {
               </div>
             </SettingsRow>
             <SettingsRow
+              title={language.t("settings.experimental.row.activityTimeline.title")}
+              description={language.t("settings.experimental.row.activityTimeline.description")}
+            >
+              <div data-action="settings-activity-timeline">
+                <Switch
+                  checked={settings.general.activityTimeline()}
+                  onChange={(checked) => settings.general.setActivityTimeline(checked)}
+                  hideLabel
+                >
+                  {language.t("settings.experimental.row.activityTimeline.title")}
+                </Switch>
+              </div>
+            </SettingsRow>
+            <SettingsRow
               title={language.t("settings.experimental.row.newQuestionUI.title")}
               description={language.t("settings.experimental.row.newQuestionUI.description")}
             >

@@ -1287,6 +1287,40 @@
     min-width: 0;
   }
 
+  /* An activity label: what the agent did, muted, then what it touched in base text. */
+  [data-slot="context-tool-group-title"][data-activity] {
+    gap: 6px;
+  }
+
+  [data-slot="context-tool-group-verb"],
+  [data-slot="context-tool-group-detail"],
+  [data-slot="context-tool-group-separator"] {
+    flex-shrink: 0;
+    font-family: var(--v2-font-family-sans);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+    white-space: nowrap;
+  }
+
+  [data-slot="context-tool-group-verb"],
+  [data-slot="context-tool-group-separator"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="context-tool-group-detail"] {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--v2-text-text-base);
+
+    &[data-code] {
+      font-family: var(--v2-font-family-code);
+    }
+  }
+
   [data-slot="context-tool-group-usage"] {
     flex-shrink: 0;
     display: flex;

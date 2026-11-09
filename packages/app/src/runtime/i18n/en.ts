@@ -848,6 +848,9 @@ export const dict = {
   "settings.experimental.row.foldUserMessages.title": "Fold long messages",
   "settings.experimental.row.foldUserMessages.description":
     "Fold your messages past 12 lines behind a Read more button",
+  "settings.experimental.row.activityTimeline.title": "Activity timeline",
+  "settings.experimental.row.activityTimeline.description":
+    "Group the agent's work by what it did, explored, edited or ran, with one status line below the turn",
   "settings.experimental.row.newQuestionUI.title": "New question UI",
   "settings.experimental.row.newQuestionUI.description": "Preview the keyboard-first question dock",
   "settings.experimental.row.sidebarOrganize.title": "Organize vertical sidebar",

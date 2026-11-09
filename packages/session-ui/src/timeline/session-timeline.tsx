@@ -14,6 +14,8 @@ export type SessionTimelineProps = {
   actions?: SessionUserActions
   /** Defaults to the Compact preset. */
   timelineDetail?: TimelineDetail
+  /** The Activity timeline experiment. */
+  activity?: boolean
   turnDiffs?: boolean
   class?: string
 }
@@ -35,6 +37,7 @@ export function SessionTimeline(props: SessionTimelineProps) {
     presentation: (message) => props.presentation?.[message.id],
     actions: props.actions,
     timelineDetail: () => props.timelineDetail ?? defaultTimelineDetail,
+    activity: () => props.activity ?? false,
     disclosure: {
       value: (key) => toolOpen[key],
       set: (key, open) => setToolOpen(key, open),

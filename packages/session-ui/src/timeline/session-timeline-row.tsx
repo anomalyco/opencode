@@ -88,6 +88,8 @@ export function createSessionTimelineRowRenderer(input: {
   presentation: (message: SessionMessageUser) => SessionUserPresentation | undefined
   actions?: SessionUserActions
   timelineDetail: Accessor<TimelineDetail>
+  /** The Activity timeline experiment: groups named by what the agent did, and one status line below the turn. */
+  activity?: Accessor<boolean>
   foldUserMessages?: Accessor<boolean>
   disclosure: {
     value: (key: string) => boolean | undefined
@@ -378,6 +380,7 @@ export function createSessionTimelineRowRenderer(input: {
         <div class="contents" data-notices-only={parts().every((part) => part.type === "notice") ? "" : undefined}>
           <SessionContextToolGroup
             parts={parts()}
+            activity={input.activity?.()}
             patchGroupKey={(tools) => {
               const parts = tools.map((tool) => patchPartKeys.get(tool)!)
 

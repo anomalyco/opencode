@@ -133,6 +133,8 @@ const generalSchema = Persistence.struct({
   foldUserMessages: Schema.Boolean,
   // The redesigned keyboard-first question dock, off until it ships.
   newQuestionUI: Schema.Boolean,
+  // The timeline that groups the agent's work by what it did, off until it ships.
+  activityTimeline: Persistence.optional(Schema.Boolean),
   sidebarOrganize: Schema.Literals(["projects", "list"]),
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
   // Owned by the review plugin, which copies it out once; kept so settings rewrites cannot drop it first.
@@ -421,6 +423,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         foldUserMessages: withFallback(() => store.general?.foldUserMessages, defaultSettings.general.foldUserMessages),
         setFoldUserMessages(value: boolean) {
           setStore("general", "foldUserMessages", value)
+        },
+        activityTimeline: withFallback(() => store.general?.activityTimeline, false),
+        setActivityTimeline(value: boolean) {
+          setStore("general", "activityTimeline", value)
         },
         newQuestionUI: withFallback(() => store.general?.newQuestionUI, defaultSettings.general.newQuestionUI),
         setNewQuestionUI(value: boolean) {
