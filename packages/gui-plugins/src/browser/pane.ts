@@ -103,6 +103,7 @@ export function createBrowserPane(input: {
   // for them so a replacement never starts beside old pages still recording.
   const releasing = new Set<Promise<void>>()
   const releasingRecords = new Set<Promise<void>>()
+  const closingRecords = new WeakMap<SessionRecord, Promise<void>>()
   const disposals = new WeakMap<BrowserPage, Promise<void>>()
   // Keep long-lived RPC requests off Chromium's shared HTTP connection pool.
   const runtime = ManagedRuntime.make(NodeHttpClient.layerNodeHttp)
@@ -151,24 +152,37 @@ export function createBrowserPane(input: {
         win.webContents.off("did-start-navigation", navigate)
       }
 
-      const record = existing ?? (await createRecordOnce(storageKey))
+      let record: SessionRecord
+
+      try {
+        record = existing ?? (await createRecordOnce(storageKey))
+      } catch (cause) {
+        // The owner listeners were installed before the record existed; a failed create must not leave them behind.
+        cleanup()
+        throw cause
+      }
 
       if (disposed || isPaneDisposed(machine.state) || records.get(storageKey) !== record) {
         cleanup()
 
-        if (records.get(storageKey) === record && !record.binding) await discardRecord(record)
+        if (!claimed(record)) await discardRecord(record)
         throw new Error("browser.pane.disposed")
       }
 
       if (input.locked()) {
         cleanup()
 
-        if (!existing && records.get(storageKey) === record && !record.binding) await discardRecord(record)
+        if (!claimed(record)) await discardRecord(record)
         throw new Error("browser.pane.locked")
       }
 
       if (ownerGone) {
         cleanup()
+        // Let the other continuations of the same create promise claim the record first. Only an unowned record is
+        // discarded; a concurrent register that won keeps it.
+        queueMicrotask(() => {
+          if (records.get(storageKey) === record && !claimed(record)) void discardLater(record)
+        })
         throw new Error("browser.pane.registration.closed")
       }
 
@@ -533,6 +547,10 @@ export function createBrowserPane(input: {
     if (!selectOwnedBinding(machine.state, window, binding)) throw new Error("browser.pane.unavailable")
   }
 
+  function claimed(record: SessionRecord) {
+    return record.binding ? selectBinding(machine.state, record.binding) : undefined
+  }
+
   /** To the window only, while the binding's handle exists; a close event goes out before its teardown. */
   function emit(binding: string, event: PaneEvent) {
     const handle = handles.get(binding)
@@ -604,21 +622,38 @@ export function createBrowserPane(input: {
     return record
   }
 
-  async function discardRecord(record: SessionRecord) {
-    record.upstream = undefined
-    await record.network.disconnect().catch(() => undefined)
-    record.pages.forEach((entry) => release(entry.page))
-    record.pages.clear()
-    await Promise.all(releasing)
-    await runtime.runPromise(Scope.close(record.scoped, Exit.void)).catch(() => undefined)
+  function discardRecord(record: SessionRecord) {
+    const pending = closingRecords.get(record)
+
+    if (pending) return pending
+
+    if (records.get(record.storageKey) === record) records.delete(record.storageKey)
+
+    const done = (async () => {
+      record.upstream = undefined
+      await record.network.disconnect().catch(() => undefined)
+      record.pages.forEach((entry) => release(entry.page))
+      record.pages.clear()
+      await Promise.all(releasing)
+      await runtime.runPromise(Scope.close(record.scoped, Exit.void)).catch(() => undefined)
+    })()
+
+    closingRecords.set(record, done)
+    releasingRecords.add(done)
+    void done.finally(() => releasingRecords.delete(done))
+
+    return done
   }
 
   async function releaseRecord(storageKey: string) {
     const record = records.get(storageKey)
 
     if (!record) return
-    records.delete(storageKey)
     await discardRecord(record)
+  }
+
+  function discardLater(record: SessionRecord) {
+    return discardRecord(record)
   }
 
   function releaseLater(storageKey: string) {
