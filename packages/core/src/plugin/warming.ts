@@ -34,6 +34,14 @@ const Decision = Data.taggedEnum<Decision>()
 // The interval for "auto" when the model has no cache.ttl, a little under the five minutes most explicit caches last.
 const fallbackInterval = Duration.minutes(4)
 
+/** Whether a session's warming is sending pings. */
+type Status = Data.TaggedEnum<{
+  Active: {}
+  /** A ping missed the cache, so pinging waits for the session's next non-warming request. */
+  StoppedAfterMiss: {}
+}>
+const Status = Data.taggedEnum<Status>()
+
 export const Plugin = define({
   id: "opencode.warming",
   effect: Effect.fn(function* (ctx) {
@@ -77,7 +85,7 @@ export const Plugin = define({
     })
 
     const scope = yield* Scope.Scope
-    const sessions = new Map<Session.ID, { last: number; expires: number; settings: Settings }>()
+    const sessions = new Map<Session.ID, { last: number; expires: number; settings: Settings; status: Status }>()
     // Sessions already told their cache outlives the window; the check runs on every request.
     const outlived = new Set<Session.ID>()
     // A ping during a model request would compete with the request it keeps warm, which stalls single-slot local models.
@@ -126,11 +134,27 @@ export const Plugin = define({
 
       const last = current.last
       yield* Effect.logInfo("warming session", { sessionID, last })
-      yield* ctx.session
+      const result = yield* ctx.session
         .generate({ sessionID, prompt: current.settings.prompt })
-        .pipe(Effect.catchCause((cause) => Effect.logWarning("failed to warm session", { sessionID, cause })))
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("failed to warm session", { sessionID, cause }).pipe(Effect.as(undefined)),
+          ),
+        )
       const latest = sessions.get(sessionID)
-      if (latest === current && latest.last === last) latest.last = yield* Clock.currentTimeMillis
+      if (latest !== current || latest.last !== last) return yield* loop(sessionID)
+      // A ping that wrote more to the cache than it read rebuilt the cache instead of keeping it, so later pings
+      // would keep paying for that. Providers that report no cache usage never count as a miss.
+      if (result && result.tokens.cache.read < result.tokens.cache.write) {
+        latest.status = Status.StoppedAfterMiss()
+        yield* Effect.logInfo("stopped warming session after a cache miss", {
+          sessionID,
+          read: result.tokens.cache.read,
+          write: result.tokens.cache.write,
+        })
+        return
+      }
+      latest.last = yield* Clock.currentTimeMillis
       return yield* loop(sessionID)
     })
 
@@ -180,14 +204,15 @@ export const Plugin = define({
 
         const now = yield* Clock.currentTimeMillis
         const duration = Duration.toMillis(settings.duration)
-        if (active) {
+        if (active && Status.$is("Active")(active.status)) {
           active.last = now
           active.expires = now + duration
           active.settings = settings
           return
         }
-        sessions.set(event.sessionID, { last: now, expires: now + duration, settings })
-        yield* Effect.logInfo("scheduled session warming", {
+        // A session stopped after a miss has no running loop, so its next real request starts one.
+        sessions.set(event.sessionID, { last: now, expires: now + duration, settings, status: Status.Active() })
+        yield* Effect.logInfo(active ? "resumed session warming" : "scheduled session warming", {
           sessionID: event.sessionID,
           interval: settings.interval,
           expires: now + duration,

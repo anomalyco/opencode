@@ -165,6 +165,16 @@ window continues to count down.
 00:08  next warming attempt
 ```
 
+A warming request that misses the cache, reading less from it than it writes,
+stops warming for that session until its next non-warming request. Providers
+that don't report cache usage never count as a miss.
+
+```text
+00:04  warming request misses the cache; warming stops
+00:10  normal model request; warming resumes
+00:14  warming request
+```
+
 ## Costs
 
 Warming requests are real provider requests. They can consume tokens, incur
