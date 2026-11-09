@@ -21,6 +21,8 @@ import { SessionSchema } from "./session/schema.js"
 import { State } from "./state.js"
 import { definition, effectiveName, execute, normalizedName, normalizeContent } from "./tool/runtime.js"
 import { Wildcard } from "./util/wildcard.js"
+import { ReadToolFileSystem } from "./tool/read-filesystem.js"
+import { Mime } from "./mime.js"
 
 export class RegistrationError extends Schema.TaggedError<RegistrationError>()("Tool.RegistrationError", {
   name: Schema.String,
@@ -145,8 +147,10 @@ const layer = Layer.effect(
           if (item.type !== "file") return item
           const url = URL.parse(item.uri.trim())
           if (url?.protocol !== "file:") return item
-          if (!/^(image|audio|video)\//.test(item.mime) && item.mime !== "application/pdf" && item.mime !== "text/plain")
-            return note(item, "unsupported file type")
+          const mime = item.mime.split(";", 1)[0].trim().toLowerCase()
+          // Only media the read tool also accepts is sent inline; other types would fail request lowering on every later turn.
+          const media = ReadToolFileSystem.MEDIA_MIMES.has(mime)
+          if (!media && !Mime.isTextual(mime)) return note(item, "unsupported file type")
           const target = yield* Effect.try(() => {
             url.search = ""
             url.hash = ""
@@ -158,6 +162,11 @@ const layer = Layer.effect(
           if (Number(info.value.size) > MAX_INLINE_FILE_BYTES) return note(item, "exceeds the inline size limit")
           const bytes = yield* fs.readFile(target.value).pipe(Effect.option)
           if (Option.isNone(bytes)) return note(item, "could not be read")
+          if (!media)
+            return {
+              type: "text" as const,
+              text: `[Resource ${item.name ?? item.uri} (${item.mime})]\n${Buffer.from(bytes.value).toString("utf8")}`,
+            }
           return { ...item, uri: `data:${item.mime};base64,${Buffer.from(bytes.value).toString("base64")}` }
         }),
       )
