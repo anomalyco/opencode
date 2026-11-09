@@ -109,8 +109,9 @@ impl ThemeState {
         let lock = options.mode.and_then(ModeSetting::lock);
         let mut mode = lock.or(options.terminal).unwrap_or(options.fallback);
         let palette = options.palette.filter(TerminalColors::usable);
+        // The terminal's reported mode wins over the cached palette's background (#62248).
         if let Some(palette) = &palette {
-            mode = lock.or_else(|| terminal_mode(palette)).unwrap_or(mode);
+            mode = lock.or(options.terminal).or_else(|| terminal_mode(palette)).unwrap_or(mode);
         }
         let catalog = Catalog::default();
         let current = catalog.load("opencode", mode).expect("the built-in opencode theme loads");
@@ -351,6 +352,15 @@ mod tests {
         state.config_mode(ModeSetting::System);
         assert!(!state.locked());
         assert!(state.take_effects().is_empty(), "config changes are not written back");
+    }
+
+    #[test]
+    fn the_terminal_mode_wins_over_a_cached_palette() {
+        let light = Some(palette("#ffffff"));
+        let state = ThemeState::new(ThemeStateOptions { palette: light.clone(), ..options() });
+        assert_eq!(state.mode(), ThemeMode::Light);
+        let state = ThemeState::new(ThemeStateOptions { palette: light, terminal: Some(ThemeMode::Dark), ..options() });
+        assert_eq!(state.mode(), ThemeMode::Dark);
     }
 
     #[test]
