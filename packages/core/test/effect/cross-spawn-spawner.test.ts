@@ -3,7 +3,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { inspect } from "node:util"
-import { Cause, Deferred, Effect, Exit, PlatformError, Redacted, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Option, PlatformError, Redacted, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -380,6 +380,32 @@ describe("cross-spawn spawner", () => {
         )
 
         expect(Exit.isFailure(exit) ? true : exit.value !== ChildProcessSpawner.ExitCode(0)).toBe(true)
+      }),
+    )
+
+    fx.live(
+      "forceKillAfter empties the process group after its leader exits",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+
+        // The leader exits on SIGTERM. Its child ignores SIGTERM and starts one short sleep after another for about
+        // 10 seconds, so nothing is left behind even if the stop fails.
+        const handle = yield* ChildProcess.make(
+          "sh",
+          [
+            "-c",
+            '(trap "" TERM; i=0; while [ $i -lt 200 ]; do sleep 0.05; i=$((i + 1)); done) >/dev/null 2>&1 & echo $!; wait',
+          ],
+          { stdin: "ignore" },
+        )
+        const group = -Number(handle.pid)
+        yield* Effect.addFinalizer(() => Effect.try(() => process.kill(group, "SIGKILL")).pipe(Effect.ignore))
+        const child = Number(new TextDecoder().decode(Option.getOrThrow(yield* Stream.runHead(handle.stdout))))
+        expect(alive(child)).toBe(true)
+
+        yield* handle.kill({ forceKillAfter: 100 })
+
+        expect(alive(group)).toBe(false)
       }),
     )
 

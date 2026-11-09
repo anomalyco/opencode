@@ -11,6 +11,7 @@ import {
   PlatformError,
   Predicate,
   Redacted,
+  Schedule,
   Sink,
   Stream,
 } from "effect"
@@ -514,9 +515,18 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
       )
     const attempt = terminate(opts?.killSignal ?? "SIGTERM")
     if (opts?.forceKillAfter === undefined) return attempt
-    return Effect.timeoutOrElse(attempt, {
+    // Descendants can outlive the leader in its group. A group ID stays reserved until its last member is reaped, so
+    // signalling the group until ESRCH stays on this group.
+    const grouped = globalThis.process.platform !== "win32" && (command.options.detached ?? true)
+    const untilGroupGone = (signal: NodeJS.Signals | 0) =>
+      Effect.try(() => grouped && globalThis.process.kill(-proc.pid!, signal)).pipe(
+        Effect.orElseSucceed(() => false),
+        Effect.repeat({ while: Boolean, schedule: Schedule.spaced("10 millis") }),
+      )
+    return Effect.timeoutOrElse(Effect.andThen(attempt, untilGroupGone(0)), {
       duration: opts.forceKillAfter,
-      orElse: () => terminate("SIGKILL"),
+      orElse: () =>
+        terminate("SIGKILL").pipe(Effect.andThen(untilGroupGone("SIGKILL").pipe(Effect.timeoutOption("1 second")))),
     })
   }
 
