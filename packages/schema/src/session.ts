@@ -15,6 +15,7 @@ import { Permission } from "./permission.js"
 import { TokenUsage } from "./token-usage.js"
 import { Revert } from "./session-revert.js"
 import { SessionFork } from "./session-fork.js"
+import { Github } from "./github.js"
 
 export const ID = SessionID
 export type ID = SessionID
@@ -60,6 +61,8 @@ export const Info = Schema.Struct({
   /** Evaluated after the agent's rules; the last matching rule wins. */
   permissions: Permission.Ruleset.pipe(optional),
   revert: Revert.pipe(optional),
+  /** GitHub PR linked to this session. Set when the session is tracking PR changes. */
+  githubPr: Schema.NullOr(Github.PRReference).pipe(optional),
 }).annotate({ identifier: "Session.Info" })
 
 export const ListAnchor = Schema.Struct({

@@ -81,6 +81,8 @@ import { GlobTool } from "../tool/plugin/glob.js"
 import { GrepTool } from "../tool/plugin/grep.js"
 import { ImageGenerateTool } from "../tool/plugin/image-generate.js"
 import { McpResourceTools } from "../tool/plugin/mcp-resource.js"
+import { Github } from "../github.js"
+import { GithubTools } from "../tool/plugin/github.js"
 import { OpenCodeTools } from "../tool/plugin/opencode.js"
 import { QuestionTool } from "../tool/plugin/question.js"
 import { ReadToolFileSystem } from "../tool/read-filesystem.js"
@@ -137,6 +139,7 @@ const services = [
   FileWrite.Service,
   Formatter.Service,
   Generate.Service,
+  Github.Service,
   LocationWatcherPolicy.Service,
   FileSystem.Service,
   FSUtil.Service,
@@ -197,6 +200,7 @@ export const requirements = LayerNode.group([
   FileWrite.node,
   Formatter.node,
   Generate.node,
+  Github.node,
   LocationWatcherPolicy.node,
   FileSystem.node,
   FSUtil.node,
@@ -266,6 +270,7 @@ const pre = [
   GrepTool.Plugin,
   ImageGenerateTool.Plugin,
   OpenCodeTools.Plugin,
+  GithubTools.Plugin,
   McpResourceTools.Plugin,
   QuestionTool.Plugin,
   ReadTool.Plugin,

@@ -6,6 +6,10 @@ import { Context, Effect, Fiber, type JsonSchema, Layer, Option, PubSub, Schema,
 import { makeLocationNode } from "@Mackery6969/util/effect/app-node"
 import { extension } from "mime-types"
 import { Bus } from "../bus.js"
+import { Github } from "../github.js"
+import { Git } from "../git.js"
+import { Location } from "../location.js"
+import { Session } from "../session.js"
 
 import { Mcp } from "../mcp/index.js"
 import { Mime } from "../mime.js"
@@ -49,9 +53,31 @@ export const layer = Layer.effect(
     const initial = yield* lock
       .withPermit(
         Effect.gen(function* () {
+          const sessionService = yield* Session.Service
+          const gitService = yield* Git.Service
+          const locationService = yield* Location.Service
           discovered = yield* mcp.tools()
+          // Check if GitHub is in use (PR reference on session or GitHub remote detected).
+          // MCP GitHub tools are gated to save tokens for non-GitHub projects.
+          let githubInUse = false
+          // Check session for PR reference.
+          const sessions = yield* sessionService.list({})
+          if (sessions.data.some((s) => s.githubPr !== null && s.githubPr !== undefined)) {
+            githubInUse = true
+          }
+          // Check git remote for GitHub origin.
+          if (!githubInUse) {
+            const repo = yield* gitService.repo.discover(locationService.directory)
+            const remoteUrl = repo
+              ? yield* gitService.remote.get(repo, "origin")
+              : undefined
+            const matched = remoteUrl ? Github.parseRemote(remoteUrl) : undefined
+            if (matched) githubInUse = true
+          }
           yield* tools.transform((editor) => {
             for (const tool of discovered) {
+              // Gate GitHub MCP tools when no GitHub usage is detected.
+              if (!githubInUse && tool.name.startsWith("github_")) continue
               editor.add({
                 name: tool.name,
                 options: { namespace: namespace(tool.server), codemode: tool.codemode !== false },
@@ -173,5 +199,5 @@ const toContent = Effect.fnUntraced(function* (part: Mcp.ToolResultContent, tool
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Tool.node, Mcp.node, Bus.node, Permission.node, ToolOutput.node],
+  deps: [Tool.node, Mcp.node, Bus.node, Permission.node, ToolOutput.node, Session.node, Git.node, Location.node],
 })
