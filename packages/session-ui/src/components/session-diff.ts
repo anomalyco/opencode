@@ -29,20 +29,21 @@ const diffCacheLimit = 16
 
 const fileDiffCache = new Map<string, FileDiffMetadata>()
 
-export function resolveFileDiff(diff: DiffSource) {
+/** `context` is how many unchanged lines a diff built from complete contents keeps around each change. */
+export function resolveFileDiff(diff: DiffSource, context = hunkContext) {
   // Untyped persisted payloads may carry `patch: null`; those render from their contents.
-  if (diff.patch != null) return fileDiffFromPatch(diff.file, diff.patch)
+  if (diff.patch != null) return fileDiffFromPatch(diff.file, diff.patch, context)
 
   return fileDiffFromContent(diff.file, diff.before ?? "", diff.after ?? "")
 }
 
-export function normalize(diff: ReviewDiff): ViewDiff {
+export function normalize(diff: ReviewDiff, context?: number): ViewDiff {
   return {
     file: diff.file,
     additions: diff.additions,
     deletions: diff.deletions,
     status: diff.status,
-    fileDiff: resolveFileDiff(diff),
+    fileDiff: resolveFileDiff(diff, context),
   }
 }
 
@@ -52,14 +53,14 @@ export function text(diff: ViewDiff, side: "deletions" | "additions") {
   return diff.fileDiff.additionLines.join("")
 }
 
-function fileDiffFromPatch(file: string, patch: string) {
-  const key = `${file}\0${patch}`
+function fileDiffFromPatch(file: string, patch: string, context: number) {
+  const key = `${file}\0${patch}\0${context}`
 
   return cachedFileDiff(`patch\0${key}`, () => {
     const complete = completePatch(patch)
 
     const value = complete
-      ? fileDiffFromCompletePatch(file, complete)
+      ? fileDiffFromCompletePatch(file, complete, context)
       : (partialFileDiff(file, patch) ?? emptyFileDiff(file))
 
     // The patch text fixes both the content and the producer's alignment, so equal keys always mean equal hunks.
@@ -182,10 +183,14 @@ function splitPatch(patch: string) {
 // A complete patch already carries the producer's line diff. Splitting its single full-context hunk at long
 // unchanged runs yields, in linear time, the collapsed hunks Pierre would get by diffing the reconstructed files
 // again whenever both algorithms choose the same alignment.
-function fileDiffFromCompletePatch(file: string, patch: { before: string; after: string; lines: string[] }) {
+function fileDiffFromCompletePatch(
+  file: string,
+  patch: { before: string; after: string; lines: string[] },
+  context: number,
+) {
   // Pierre reads names back from header text, so a fixed header keeps tabs, quotes, and newlines in `file` intact.
   const value =
-    processFile(`--- a\n+++ a\n${splitHunk(patch.lines)}`, {
+    processFile(`--- a\n+++ a\n${splitHunk(patch.lines, context)}`, {
       isGitDiff: false,
       oldFile: { name: file, contents: patch.before },
       newFile: { name: file, contents: patch.after },
@@ -199,7 +204,7 @@ function fileDiffFromCompletePatch(file: string, patch: { before: string; after:
 // Pierre's file diffs use jsdiff's default of four context lines; longer unchanged runs end one hunk and start the next.
 const hunkContext = 4
 
-function splitHunk(lines: string[]) {
+function splitHunk(lines: string[], context: number) {
   const rows = lines.reduce<{ line: string; marker?: string }[]>((result, line) => {
     const previous = result.at(-1)
 
@@ -219,8 +224,8 @@ function splitHunk(lines: string[]) {
 
   const ranges = changes.reduce<{ start: number; end: number }[]>((result, index) => {
     const previous = result.at(-1)
-    const start = Math.max(0, index - hunkContext)
-    const end = Math.min(rows.length - 1, index + hunkContext)
+    const start = Math.max(0, index - context)
+    const end = Math.min(rows.length - 1, index + context)
 
     if (previous && start <= previous.end + 1) {
       previous.end = end

@@ -51,6 +51,7 @@ import { SessionError } from "../components/session-error"
 import type { TimelineDetail } from "./detail"
 import { timelineCategory, timelineDefaultOpen, timelineDiffOpen, timelineThinkingOpen } from "./policy"
 import { userMessageRuns, userRunSpring } from "./user-runs"
+import { ActivityTimelineProvider } from "./activity-context"
 import { attached } from "../components/message-file"
 import { createReactiveTimelineProjection, Timeline, TimelineRow, unwrapErrorMessage, type PartRef } from "./projection"
 import { IDLE_TURN_PHASE, sameRef, viewTurnPhase } from "./turn-phase-machine"
@@ -626,6 +627,7 @@ export function createSessionTimelineRowRenderer(input: {
       }}
       id={Predicate.isTagged(props.row, "UserMessage") ? input.anchor?.(props.row.userMessageID) : undefined}
       data-message-id={props.row.userMessageID}
+      data-activity-timeline={input.activity?.() ? "" : undefined}
       data-timeline-row={props.row._tag}
       data-timeline-spacing={Predicate.isTagged(props.row, "AssistantPart") ? props.row.spacing : undefined}
       classList={{
@@ -1389,9 +1391,11 @@ export function createSessionTimelineRowRenderer(input: {
 
   function Row(props: { row: Accessor<TimelineRow.TimelineRow>; onSizeChange?: () => void }) {
     return (
-      <Show when={TimelineRow.key(props.row())} keyed>
-        {(_key) => render(props.row, props.onSizeChange)}
-      </Show>
+      <ActivityTimelineProvider value={() => !!input.activity?.()}>
+        <Show when={TimelineRow.key(props.row())} keyed>
+          {(_key) => render(props.row, props.onSizeChange)}
+        </Show>
+      </ActivityTimelineProvider>
     )
   }
 

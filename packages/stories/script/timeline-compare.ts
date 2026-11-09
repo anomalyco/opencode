@@ -11,7 +11,7 @@
 //     folder git ignores, since they hold real code and paths.
 import { $ } from "bun"
 import { createHash } from "node:crypto"
-import { existsSync } from "node:fs"
+import { existsSync, watch } from "node:fs"
 import { cp, mkdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -74,8 +74,10 @@ if (!existsSync(marker) || (await Bun.file(marker).text()) !== lock) {
   await Bun.write(marker, lock)
 }
 
-// Head's renderer, so both sides speak the same messages. It uses only what every build has.
+// Head's renderer, so both sides speak the same messages. It uses only what every build has. Edits to it reach the
+// base as they are saved, so its stories server reloads it like head's.
 await cp(path.join(root, renderer), path.join(base, renderer))
+watch(path.join(root, renderer), () => void cp(path.join(root, renderer), path.join(base, renderer)))
 
 const serve = (cwd: string, port: number, label: string) =>
   Bun.spawn(["bun", "x", "vite", "--port", String(port), "--strictPort"], {

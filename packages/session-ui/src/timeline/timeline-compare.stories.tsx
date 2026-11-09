@@ -60,7 +60,7 @@ export const Compare = {
       tick: Number.MAX_SAFE_INTEGER,
       playing: false,
       width: 720,
-      theme: "light" as "light" | "dark",
+      theme: "dark" as "light" | "dark",
       turnDiffs: false,
       view: "side" as View,
       mix: 50,

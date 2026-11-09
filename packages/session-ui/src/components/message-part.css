@@ -2017,3 +2017,33 @@
   flex-direction: column;
   gap: 8px;
 }
+
+/* In the Activity timeline each changed file is its own accordion, rather than one stacked group. */
+[data-activity-timeline] [data-component="accordion"][data-scope="apply-patch"] {
+  gap: 8px;
+
+  [data-slot="accordion-item"] + [data-slot="accordion-item"] {
+    margin-top: 0;
+  }
+
+  [data-slot="accordion-item"] [data-slot="accordion-header"] [data-slot="accordion-trigger"] {
+    border-radius: var(--radius-lg);
+  }
+
+  [data-slot="accordion-item"][data-expanded] [data-slot="accordion-header"] [data-slot="accordion-trigger"] {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  [data-slot="accordion-item"][data-expanded] [data-slot="accordion-content"] {
+    border-bottom-left-radius: var(--radius-lg);
+    border-bottom-right-radius: var(--radius-lg);
+  }
+
+  /* A created file is all new, so its code reads plain rather than as one long addition. */
+  [data-slot="accordion-item"][data-type="add"] {
+    --opencode-diffs-addition-bg: transparent;
+    --opencode-diffs-addition-number-fg: var(--v2-text-text-faint);
+    --opencode-diffs-addition-color: transparent;
+  }
+}

@@ -85,6 +85,7 @@ import {
 } from "./run-machine"
 import { LinkedText } from "../components/linked-text"
 import { timelineMode, type TimelineMode } from "../timeline/policy"
+import { useActivityTimeline } from "../timeline/activity-context"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -2666,6 +2667,8 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const fileComponent = useFileComponent()
+    // The Activity timeline keeps one unchanged line around each change, enough to place it without a wall of context.
+    const activity = useActivityTimeline()
 
     const files = createMemo(
       () =>
@@ -2675,7 +2678,7 @@ ToolRegistry.register({
           additions: 0,
           deletions: 0,
           views: [],
-        })) ?? patchFileGroups(props.metadata.files),
+        })) ?? patchFileGroups(props.metadata.files, activity() ? 1 : undefined),
     )
 
     const title = createMemo(() => {
