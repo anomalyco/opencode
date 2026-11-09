@@ -81,9 +81,9 @@ pub fn show(local: &Rc<Local>, on_connected: Option<OnConnected>) {
 }
 
 /// `DialogIntegration { integrationID, autoConnect }`, which the MCP dialog (E.17b) opens for a server that needs
-/// sign-in: the integration's accounts or methods at once.
-pub fn show_auto_connect(tui: &Tui, integration: &IntegrationID) {
-    open_list(Flow { local: tui.local.clone(), on_connected: None }, Some(integration.clone()));
+/// sign-in: the integration's accounts or methods at once. Without `on_connected`, a connect closes the dialog.
+pub fn show_auto_connect(tui: &Tui, integration: &IntegrationID, on_connected: Option<OnConnected>) {
+    open_list(Flow { local: tui.local.clone(), on_connected }, Some(integration.clone()));
 }
 
 #[derive(Clone)]
