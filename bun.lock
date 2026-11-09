@@ -1709,6 +1709,8 @@
 
     "@hona/strobe-linux-x64": ["@hona/strobe-linux-x64@0.23.0", "", { "os": "linux", "cpu": "x64" }, "sha512-h9wIIQsPSiB/e3ioVIjGl3x9y6cZ9HBtj4lo5Ywon+3uu54glKcWrBFFodMr1USdtLyVma6nz7VoWF3di0MAkw=="],
 
+    "@hona/strobe-win32-arm64": ["@hona/strobe-win32-arm64@0.23.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-iZrapEkGGytITsAGjMVOMb2Ixs0h70vSLlJ7MB0Hk6cM1UIDxF+NlwPnQUqx9z9B5X74AvRbXGe7M+zoZaunAg=="],
+
     "@hona/strobe-win32-x64": ["@hona/strobe-win32-x64@0.23.0", "", { "os": "win32", "cpu": "x64" }, "sha512-fwZKFYqvSXL3zcqNoMEOdvxTTputm1CaQ4A0CYtemSAsx++PMtwH/bEho+F9qqe3uVxhP1J6976cWBmsRDc/ww=="],
 
     "@hono/node-server": ["@hono/node-server@2.1.5", "", { "peerDependencies": { "hono": "^4 || ^5.0.0-0" } }, "sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q=="],
