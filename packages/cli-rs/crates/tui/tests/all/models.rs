@@ -38,20 +38,13 @@ struct Server {
     seen: Mutex<Vec<(String, String)>>,
     /// The bodies of mutating requests, by path.
     writes: Mutex<Vec<(String, Value)>>,
-    /// Holds the usage limits back, as OpenCode Console can.
-    slow_usage: std::sync::atomic::AtomicBool,
 }
 
 impl Server {
     fn new() -> Arc<Self> {
         let text = std::fs::read_to_string(fixtures_dir().join("E.16/server.json")).unwrap();
         let server: Value = serde_json::from_str(&text).unwrap();
-        Arc::new(Self {
-            routes: server["routes"].clone(),
-            seen: Mutex::default(),
-            writes: Mutex::default(),
-            slow_usage: Default::default(),
-        })
+        Arc::new(Self { routes: server["routes"].clone(), seen: Mutex::default(), writes: Mutex::default() })
     }
 
     fn seen(&self) -> Vec<(String, String)> {
@@ -94,14 +87,7 @@ impl Transport for Server {
             }
             _ => (404, json!({})),
         };
-        let slow =
-            path == "/api/experimental/usage/limits" && self.slow_usage.load(std::sync::atomic::Ordering::SeqCst);
-        Box::pin(async move {
-            if slow {
-                tokio::time::sleep(Duration::from_millis(300)).await;
-            }
-            Ok(support::respond(status, &body))
-        })
+        Box::pin(async move { Ok(support::respond(status, &body)) })
     }
 }
 
@@ -179,7 +165,7 @@ fn model_dialog_matches_typescript_opened_and_filtered() {
     // Tall enough for the whole list (parity/deviations/DLG13-model-scroll.md).
     let kit = kit(90, 60);
     model::show(&kit.local, None);
-    kit.settle("usage");
+    kit.settle("favorite");
     assert_fixture(&kit.app.render(), "E.16/model");
     kit.app.type_text("gpt");
     kit.settle("GPT-5 mini");
@@ -227,7 +213,7 @@ fn go_upsell_matches_typescript_when_compact() {
 fn dialogs_send_reads_only() {
     let kit = kit(90, 34);
     model::show(&kit.local, None);
-    kit.settle("usage");
+    kit.settle("favorite");
     usage::show(&kit.local);
     kit.settle("left");
     let seen = kit.fixture.seen();
@@ -327,19 +313,17 @@ fn leader_m_picks_a_model_and_saves_it_as_recent() {
 }
 
 #[test]
-fn a_filter_typed_before_the_limits_arrive_stays() {
-    let h = mount();
-    h.fixture.slow_usage.store(true, std::sync::atomic::Ordering::SeqCst);
-    // The limits load when the dialog opens; the dialog opens again to show the usage action.
-    h.app.press("ctrl+x");
-    h.app.press("m");
-    h.wait_for("Search models");
-    h.app.type_text("mini");
-    h.wait_for("GPT-5 mini");
-    assert!(!h.app.text().contains("ctrl+u"), "the limits came too early");
-    let screen = h.wait_for("ctrl+u");
-    assert!(screen.contains("GPT-5 mini"), "{screen}");
-    assert!(!screen.contains("Claude Haiku"), "the filter was lost:\n{screen}");
+fn the_model_picker_shows_no_usage_with_the_limits_loaded() {
+    let kit = kit(90, 60);
+    model::show(&kit.local, None);
+    kit.settle("favorite ctrl+f");
+    let screen = kit.app.text();
+    for text in ["usage ctrl+u", "per 1M", "left"] {
+        assert!(!screen.contains(text), "{text:?} showed:\n{screen}");
+    }
+    kit.app.press("ctrl+u");
+    kit.app.wait_until(Duration::from_millis(100), || false);
+    assert!(kit.app.text().contains("Search models"), "ctrl+u left the picker:\n{}", kit.app.text());
 }
 
 #[test]
@@ -476,12 +460,9 @@ fn leader_a_switches_the_agent() {
 }
 
 #[test]
-fn usage_opens_from_the_model_dialog_and_a_row_opens_its_limits() {
+fn usage_opens_from_its_command_and_a_row_opens_its_limits() {
     let h = mount();
-    h.app.press("ctrl+x");
-    h.app.press("m");
-    h.wait_for("usage");
-    h.app.press("ctrl+u");
+    h.tui.keymap.dispatch("usage.show", None);
     h.wait_for("$0.50 left");
     h.app.press("return");
     let screen = h.wait_for("Usage › Claude Sonnet");

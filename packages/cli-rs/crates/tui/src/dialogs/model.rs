@@ -4,7 +4,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use opencode_api::generated::{ModelInfo, ModelInfoStatus, ProviderInfo, SessionInfo, UsageLimitsInfo};
+use opencode_api::generated::{ModelInfo, ModelInfoStatus, ProviderInfo, SessionInfo};
 use opencode_api::js::locale_compare;
 use opencode_local::model_pref::Model;
 use opencode_ui::bind;
@@ -34,7 +34,6 @@ struct Row {
     category: Option<String>,
     favorite: bool,
     free: bool,
-    model: ModelInfo,
 }
 
 /// `sortModelOptions`: OpenCode Go, then OpenCode, then by provider name, free models first; stable otherwise.
@@ -64,7 +63,6 @@ pub fn show(local: &Rc<Local>, provider: Option<String>) {
         crate::dialogs::free_models::show(local);
         return;
     }
-    local.load_usage(true);
     open(local, provider, String::new());
 }
 
@@ -106,7 +104,6 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Op
     let on_select = { Rc::new(bind!(local, |local, option: &SelectOption<Model>| choose(&local, &option.value))) };
     props.on_select = Some(on_select);
     let connect = { Rc::new(bind!(local, |local| connect(&local))) };
-    let usage = { Rc::new(bind!(local, |local| crate::dialogs::usage::show(&local))) };
     let provider_title = if connected { "connect integration" } else { "view all integrations" };
     let favorite_title = {
         let weak = Rc::downgrade(local);
@@ -123,11 +120,6 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Op
             ..SelectAction::new("model.dialog.provider", provider_title, |_| {})
         },
         SelectAction {
-            run: ActionRun::Dialog(usage),
-            hidden: !matches!(local.usage(), Some(Some(_))),
-            ..SelectAction::new("model.dialog.usage", "usage", |_| {})
-        },
-        SelectAction {
             title: Rc::new(favorite_title),
             ..SelectAction::new("model.dialog.favorite", "Favorite", {
                 bind!(local, |local, option| local.toggle_favorite(&option.value))
@@ -138,15 +130,14 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Op
     if !filter.is_empty() {
         handle.set_filter(filter);
     }
-    // Refresh the rows as the catalog, the favorites, or the connections change. When the usage action or the
-    // connected state would change the footer, the dialog opens again with the same filter.
-    let usage_shown = matches!(local.usage(), Some(Some(_)));
+    // Refresh the rows as the catalog, the favorites, or the connections change. When the connected state would
+    // change the footer, the dialog opens again with the same filter.
     let reopened = Rc::new(Cell::new(false));
     cx.on_close(local.subscribe(bind!(local, |local| {
         if reopened.get() {
             return;
         }
-        if matches!(local.usage(), Some(Some(_))) != usage_shown || local.connected() != connected {
+        if local.connected() != connected {
             reopened.set(true);
             let provider = provider.clone();
             let again = local.clone();
@@ -193,15 +184,12 @@ fn catalog_options(
     let provider_name = |id: &str| {
         providers.iter().find(|item| item.id.0 == id).map_or(id.to_owned(), |provider| provider.name.clone())
     };
-    let usage = local.usage().flatten();
-    // The detail row shows the price, so the trailing slot only marks favorites.
-    let marked = |option: &mut SelectOption<Model>, model: &ModelInfo, favorite: bool| {
+    // The trailing slot only marks favorites.
+    let marked = |option: &mut SelectOption<Model>, favorite: bool| {
         if favorite {
             option.footer = Some("*".to_owned());
             option.footer_fg = Some(marker);
         }
-        let provider = providers.iter().find(|item| item.id == model.provider_id);
-        option.detail = Some(detail(model, true, usage_label(usage.as_ref(), model, provider)));
     };
     let section = |items: &[Model], category: &str| -> Vec<SelectOption<Model>> {
         if !show_sections {
@@ -214,7 +202,7 @@ fn catalog_options(
                 let mut option = SelectOption::new(model.name.clone(), Model::new(&model.provider_id.0, &model.id))
                     .description(provider_name(&model.provider_id.0))
                     .category(category);
-                marked(&mut option, model, favorite_now.contains(item));
+                marked(&mut option, favorite_now.contains(item));
                 Some(option)
             })
             .collect()
@@ -240,7 +228,6 @@ fn catalog_options(
                 category: connected.then(|| if free_group(model) { "Free".to_owned() } else { name }),
                 favorite,
                 free: is_free(model),
-                model: model.clone(),
                 value,
             }
         })
@@ -251,7 +238,7 @@ fn catalog_options(
     let to_option = |row: Row| {
         let mut option = SelectOption::new(row.title, row.value);
         option.category = row.category;
-        marked(&mut option, &row.model, row.favorite);
+        marked(&mut option, row.favorite);
         option
     };
     if !needle.is_empty() {
@@ -292,29 +279,9 @@ fn catalog_options(
         .collect()
 }
 
-/// What the model picker says the usage limits leave a model: `$x left`, in the error color when it cannot take
-/// another request, or `No limit` for a paid model OpenCode Console serves without one.
-fn usage_label(
-    info: Option<&UsageLimitsInfo>,
-    model: &ModelInfo,
-    provider: Option<&ProviderInfo>,
-) -> Option<(String, bool)> {
-    let info = info?;
-    let usage = crate::dialogs::usage::model_usage(info, model, provider);
-    if let Some(usage) = usage {
-        let level = crate::dialogs::usage::level(&usage, model);
-        return Some((
-            format!("{} left", crate::dialogs::usage::format_dollars(usage.left)),
-            matches!(level, crate::dialogs::usage::Level::Out | crate::dialogs::usage::Level::Reached),
-        ));
-    }
-    let paid = !model.cost.iter().all(|cost| cost.input == 0.0);
-    (crate::dialogs::usage::served_by_console(provider) && paid).then(|| ("No limit".to_owned(), false))
-}
-
 /// `ModelDetail`: the selected model's price (unless `price` is false), input modalities, context window, and
-/// reasoning support, below the list; after what its usage limits leave when `usage` says so.
-pub fn detail(model: &ModelInfo, price: bool, usage: Option<(String, bool)>) -> select::Detail {
+/// reasoning support, below the list. Only the free models picker shows it.
+pub fn detail(model: &ModelInfo, price: bool) -> select::Detail {
     let model = model.clone();
     select::Detail::View(Rc::new(move |cx| {
         let (app, theme) = (&cx.app, &cx.theme);
@@ -346,25 +313,12 @@ pub fn detail(model: &ModelInfo, price: bool, usage: Option<(String, bool)>) -> 
             Text::new(app, spans).wrap(WrapMode::None).shrink(0.0)
         };
         let row = View::new(app).row().gap(2).justify(Justify::SpaceBetween);
-        match &usage {
-            Some((text, danger)) => {
-                row.add(
-                    &Text::new(app, text.as_str())
-                        .fg(if *danger { theme.text.feedback.error.base } else { theme.text.muted })
-                        .wrap(WrapMode::None),
-                );
-                let price = if !cost.is_empty() && cost != "Free" { format!("{cost} per 1M") } else { cost.clone() };
-                row.add(&list([vec![price], facts.clone()].concat()));
-            }
-            None => {
-                if price {
-                    row.add(&Text::new(app, cost.as_str()).fg(theme.text.muted).wrap(WrapMode::None));
-                } else {
-                    row.justify(Justify::Start);
-                }
-                row.add(&list(facts.clone()));
-            }
+        if price {
+            row.add(&Text::new(app, cost.as_str()).fg(theme.text.muted).wrap(WrapMode::None));
+        } else {
+            row.justify(Justify::Start);
         }
+        row.add(&list(facts));
         row.as_any()
     }))
 }
