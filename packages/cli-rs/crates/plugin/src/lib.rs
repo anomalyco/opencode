@@ -766,7 +766,8 @@ struct Plugin {
     /// The built-in an external plugin of its ID replaced in place (TS `desired.set(id, ...)`), and whether it was
     /// enabled; it comes back when the external plugin is unloaded.
     shadowed: Option<(Definition, bool)>,
-    /// The activation order a replacement of a built-in keeps, so its claims take the built-in's place.
+    /// The activation order it keeps once it was active, so its claims, or those of a replacement of a built-in, take
+    /// the same place again.
     place: Option<u64>,
     /// Why it is not active although it was started: its setup failed, or its build did not load.
     failed: Option<String>,
@@ -920,7 +921,7 @@ impl Registry {
                         .find(|plugin| plugin.source == Source::Builtin && plugin.definition.id == definition.id)
                     {
                         Some(builtin) => {
-                            builtin.place = builtin.active.as_ref().map(|(order, _)| *order);
+                            builtin.place = builtin.active.as_ref().map(|(order, _)| *order).or(builtin.place);
                             let original = std::mem::replace(&mut builtin.definition, definition);
                             builtin.shadowed = Some((original, builtin.enabled));
                             (builtin.source, builtin.enabled, builtin.failed) = (Source::External, enabled, None);
@@ -1150,8 +1151,8 @@ impl Registry {
         Some(RouteMount(render(host)))
     }
 
-    /// The code-block renderers of the active plugins, drawing in `theme`. At one language the last-enabled
-    /// plugin wins.
+    /// The code-block renderers of the active plugins, drawing in `theme`. At one language the plugin
+    /// last in activation order wins; a plugin keeps its place.
     pub fn code_blocks(&self, theme: &Theme) -> CodeBlockRenderers {
         let mut renderers = CodeBlockRenderers::default();
         for (_, registration) in self.by_activation() {
@@ -1178,7 +1179,8 @@ impl Registry {
             log::error!("plugin {id} failed: {error}");
         }
         self.with_plugin(id, move |plugin| match started {
-            Ok(active) => (plugin.active, plugin.failed) = (Some(active), None),
+            // The plugin keeps this place among the claims when it is enabled again or rebuilt.
+            Ok(active) => (plugin.place, plugin.active, plugin.failed) = (Some(active.0), Some(active), None),
             Err(error) => plugin.failed = Some(error),
         });
         error
