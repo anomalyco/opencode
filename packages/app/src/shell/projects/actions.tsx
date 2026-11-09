@@ -63,6 +63,7 @@ export function createProjectActions() {
     onSelect?: (server: ServerConnection.Any, directories: string[]) => void,
   ) {
     if (authenticate(conn, (next) => choose(next, onSelect))) return
+
     if (isServerFailed(global.servers.health[ServerConnection.key(conn)])) return
     pickDirectory({
       server: conn,
@@ -70,9 +71,12 @@ export function createProjectActions() {
       multiple: true,
       onSelect: (result) => {
         const directories = homeProjectDirectories(result)
+
         if (!directories.length) return
+
         if (onSelect) return onSelect(conn, directories)
         const ctx = global.serverCtx(ServerConnection.key(conn))
+
         if (ctx) void addProjects(ctx, directories)
       },
     })
