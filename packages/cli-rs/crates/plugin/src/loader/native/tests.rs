@@ -256,6 +256,13 @@ fn setup_runs_on_activation_and_the_instance_is_destroyed_after() {
     assert_eq!(stored("destroyed"), None);
     registry.unload(&dynamic(&host), "sample.so");
     assert_eq!(stored("destroyed").as_deref(), Some("{\"destroyed\":true}"));
+
+    // Expected (bigboi-6): a build without `describe` runs setup once to tell its ID; that instance's disposal
+    // stores nothing.
+    let (definition, _) = Native.load(&dynamic(&host), &build("abi-1-0"), Some("{\"probe\":true}")).unwrap();
+    assert_eq!(definition.id, "sample");
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(stored("destroyed"), None);
 }
 
 #[test]
