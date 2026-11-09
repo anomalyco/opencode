@@ -9,7 +9,7 @@
 @source "../../../../desktop/src/renderer";
 @source not "../../../../desktop/src/renderer/**/*.test.{ts,tsx}";
 @source "../../../../session-ui/src";
-@source "../../../../gui-extensions/src";
+@source "../../../../gui-plugins/src";
 @source not "../../../../session-ui/src/**/*.test.{ts,tsx}";
 @source "../../../../stories";
 @source "../../../src";

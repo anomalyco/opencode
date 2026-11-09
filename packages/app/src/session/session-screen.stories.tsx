@@ -188,7 +188,11 @@ export const McpElicitationRequest = {
           id: "frm_elicitation_preview",
           sessionID: "global",
           title: "release is requesting input",
-          metadata: { kind: "mcp-elicitation", server: "release", message: "Publish v2.4.0 to the selected channel?" },
+          metadata: {
+            kind: "mcp-elicitation",
+            server: "release",
+            message: "Publish v2.4.0 to the selected channel? Changelog: https://example.com/releases/v2.4.0",
+          },
           fields: [
             { key: "approve", type: "boolean", title: "Approve publish", required: true },
             {
@@ -200,7 +204,13 @@ export const McpElicitationRequest = {
                 { value: "latest", label: "Latest" },
               ],
             },
-            { key: "notes", type: "string", title: "Release notes", placeholder: "Optional summary" },
+            {
+              key: "notes",
+              type: "string",
+              title: "Release notes",
+              description: "Follow https://example.com/docs/release-notes",
+              placeholder: "Optional summary",
+            },
             { key: "retries", type: "integer", title: "Retries", minimum: 0, default: 2 },
           ],
         },
@@ -277,6 +287,21 @@ export const ChildSession = {
         model: { provider: "Anthropic", name: "Claude Opus 5.5", variant: "high" },
         status: "running",
         started: Date.now() - 65_000,
+      }}
+    />
+  ),
+}
+
+export const ChildSessionNoOutcome = {
+  render: () => (
+    <SessionPreview
+      title="Inspect a child Session with no recorded outcome"
+      description={description}
+      document={subagentDocument}
+      child={{
+        agent: "surveyor",
+        model: { provider: "Anthropic", name: "Claude Opus 5.5", variant: "high" },
+        started: 0,
       }}
     />
   ),

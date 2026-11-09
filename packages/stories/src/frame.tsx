@@ -9,7 +9,7 @@ import { Font } from "@opencode/ui/font"
 import { LanguageProvider, UiI18nBridge, useLanguage } from "@/runtime/i18n/language"
 import { SettingsProvider } from "@/settings/model"
 import { findStory } from "virtual:story-index"
-import { ExtensionStory } from "./extension"
+import { PluginStory } from "./plugin"
 
 type Args = { [key: string]: unknown }
 
@@ -87,7 +87,7 @@ function Decorators(props: { scheme: ColorScheme; fullscreen: boolean; file: str
                     color: "var(--text-base)",
                   }}
                 >
-                  <ExtensionStory file={props.file}>{props.children}</ExtensionStory>
+                  <PluginStory file={props.file}>{props.children}</PluginStory>
                 </div>
               </DialogProvider>
             </SettingsProvider>

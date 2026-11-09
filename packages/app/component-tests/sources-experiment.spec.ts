@@ -5,9 +5,9 @@ import { expect, sourceURL, story } from "../../stories/playwright/story"
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 
 const modules = {
-  fixture: source("./extension-host.fixture.tsx"),
-  definition: source("../../gui-extensions/src/sources/index.ts"),
-  renderer: source("../../gui-extensions/src/sources/renderer.tsx"),
+  fixture: source("./plugin-host.fixture.tsx"),
+  definition: source("../../gui-plugins/src/sources/index.ts"),
+  renderer: source("../../gui-plugins/src/sources/renderer.tsx"),
   tuning: source("../../ui/src/motion-tuning.ts"),
 }
 
@@ -72,7 +72,7 @@ story("turning the Sources experiment off closes its open panel and loads no mor
       const host: { container: HTMLElement; unmount: () => void } = mountSessionRegion({
         active: "sources:main",
         messages: JSON.parse(input.messages),
-        definitions: [{ ...definition, renderer: async () => ({ default: renderer }) }],
+        definitions: [{ ...definition, id: "sources", windowEntry: async () => ({ default: renderer }) }],
       })
 
       const panel = () => host.container.querySelector('[data-slot="session-sources-panel"]')

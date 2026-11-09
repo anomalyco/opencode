@@ -20,12 +20,14 @@ test("command catalog persistence validates metadata and omits executable fields
     open: { title: "Open", keybind: "mod+o", hidden: false, onSelect: "invalid" },
     shell: { title: "Terminal", section: "terminal" },
     stale: { title: "Stale", section: "removed" },
+    "acme.open": { plugin: "acme", title: "Open Acme" },
   })
 
   expect(catalog).toEqual({
     open: { title: "Open", keybind: "mod+o", hidden: false },
     shell: { title: "Terminal", section: "terminal" },
     stale: { title: "Stale" },
+    "acme.open": { plugin: "acme", title: "Open Acme" },
   })
   expect(decode({})).toEqual({})
   expect(() => decode({ open: { title: 1 } })).toThrow()
@@ -118,6 +120,11 @@ describe("command keybinds", () => {
     { config: "mod+shift+[", event: { key: "Х", code: "BracketLeft", ctrlKey: true, shiftKey: true }, match: true },
     // macOS Option turns L into ¬; the physical key still matches.
     { config: "meta+alt+l", event: { key: "¬", code: "KeyL", metaKey: true, altKey: true }, match: true },
+    // macOS Option turns . into ≥; preserve ASCII layout mappings.
+    { config: "meta+alt+.", event: { key: "≥", code: "Period", metaKey: true, altKey: true }, match: true },
+    { config: "mod+alt+.", event: { key: ".", code: "Period", ctrlKey: true, altKey: true }, match: true },
+    { config: "mod+alt+.", event: { key: "ю", code: "Period", ctrlKey: true, altKey: true }, match: true },
+    { config: "mod+alt+.", event: { key: "v", code: "Period", ctrlKey: true, altKey: true }, match: false },
   ])("matchKeybind $config with $event.key is $match", (row) => {
     expect(matchKeybind(parseKeybind(row.config), new KeyboardEvent("keydown", row.event))).toBe(row.match)
   })

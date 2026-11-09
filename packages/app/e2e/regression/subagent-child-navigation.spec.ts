@@ -136,6 +136,10 @@ test("shows the full ancestor path and navigates to an earlier subagent", async 
   await expect(header.locator('[data-slot="session-title-ancestor"]')).toHaveText([parentTitle, childTitle])
   await expect(header.locator('[data-slot="session-title-parent"]')).toHaveText(grandchildTitle)
   await expect(header.getByRole("heading", { name: greatGrandchildTitle })).toBeVisible()
+  // Project, each ancestor and the title are all split by the same slash.
+  const separators = header.locator('[data-slot="session-title-separator"]')
+  await expect(separators).toHaveCount(4)
+  await expect(separators.locator('[data-component="slash"]')).toHaveCount(4)
 
   await header.getByRole("button", { name: childTitle, exact: true }).click()
   await expect(page).toHaveURL(sessionHref(childID))

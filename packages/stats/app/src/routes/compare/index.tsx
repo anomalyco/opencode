@@ -7,12 +7,8 @@ import { LocaleLinks } from "../../component/locale-links"
 import { useI18n } from "../../context/i18n"
 import { useLanguage } from "../../context/language"
 import { localizedUrl } from "../../lib/language"
-import {
-  ComparisonCardsSection,
-  comparisonHref,
-  modelRefFromCatalog,
-  type ComparisonPair,
-} from "../compare-cards"
+import { providerIconId } from "../../lib/provider-icon"
+import { ComparisonCardsSection, comparisonHref, modelRefFromCatalog, type ComparisonPair } from "../compare-cards"
 import { formatCatalogLabName, getModelCatalog, type ModelCatalogEntry } from "../model-catalog"
 import { setStatsPageCacheHeaders } from "../stats-cache"
 import {
@@ -451,7 +447,7 @@ function ModelAvatar(props: { model: ModelCatalogEntry; size: "large" | "small" 
 }
 
 function LabLogo(props: { lab: string; label: string; size: "large" | "small" | "tiny" }) {
-  const iconId = () => getProviderIconId(props.lab)
+  const iconId = () => providerIconId(props.lab)
 
   return (
     <span data-slot="compare-home-avatar" data-lab={iconId()} data-size={props.size} aria-label={props.label}>
@@ -605,11 +601,4 @@ function displayDateTime(value: string | undefined) {
   if (!Number.isNaN(date.getTime())) return date.getTime()
   const year = Number(value.match(/\d{4}/)?.[0] ?? 0)
   return Number.isFinite(year) ? year : 0
-}
-
-function getProviderIconId(provider: string) {
-  const id = provider.toLowerCase().replace(/[^a-z0-9]+/g, "")
-  if (id === "moonshot") return "moonshotai"
-  if (id === "zhipu") return "zhipuai"
-  return id
 }

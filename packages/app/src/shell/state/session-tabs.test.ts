@@ -114,7 +114,7 @@ test.each<{ name: string; run: () => SessionTabs; expected: SessionTabs }>([
     expected: { all: [A, T2, T1], active: T2, panes: { [T1]: "bottom" }, selected: { side: T2, bottom: T1 } },
   },
   {
-    name: "a new tab joins the pane of its extension's last tab",
+    name: "a new tab joins the pane of its plugin's last tab",
     run: () =>
       placeSessionTabs({ all: [A, T1], active: T1, panes: { [T1]: "bottom" } }, { all: [A, T1, T2], active: T2 }),
     expected: {
@@ -130,9 +130,21 @@ test.each<{ name: string; run: () => SessionTabs; expected: SessionTabs }>([
     expected: { all: [T1, B], active: B, panes: { [B]: "split" }, selected: { split: B } },
   },
   {
-    name: "a pane's target places a new tab of another extension",
-    run: () => placeSessionTabs({ all: [A], active: A }, { all: [A, T1], active: T1 }, "split"),
+    name: "a pane's target places a new tab of another plugin",
+    run: () => placeSessionTabs({ all: [A], active: A }, { all: [A, T1], active: T1 }, { pane: "split" }),
     expected: { all: [A, T1], active: T1, panes: { [T1]: "split" }, selected: { side: A, split: T1 } },
+  },
+  {
+    name: "a terminal launcher's target leaves a file opened meanwhile in its own pane",
+    run: () =>
+      placeSessionTabs({ all: [A], active: A }, { all: [A, B], active: B }, { pane: "bottom", plugin: "terminal" }),
+    expected: { all: [A, B], active: B, selected: { side: B } },
+  },
+  {
+    name: "a plugin's target places that plugin's new tab",
+    run: () =>
+      placeSessionTabs({ all: [A], active: A }, { all: [A, T1], active: T1 }, { pane: "bottom", plugin: "terminal" }),
+    expected: { all: [A, T1], active: T1, panes: { [T1]: "bottom" }, selected: { side: A, bottom: T1 } },
   },
 ])("$name", ({ run, expected }) => {
   expect(run()).toEqual(expected)

@@ -1,7 +1,7 @@
 export * as ConfigIntegration from "./integration.js"
 
 import { Option, Schema, SchemaGetter } from "effect"
-import { Config } from "@opencode/schema/config"
+import { Config, type Entry } from "@opencode/schema/config"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { ConfigProvider } from "@opencode/schema/config/provider"
@@ -15,7 +15,7 @@ export const Policies = Schema.Array(Schema.Unknown).pipe(
     decode: SchemaGetter.transform((policies) =>
       policies.filter((policy) => {
         const action = Schema.decodeUnknownOption(Schema.Struct({ action: Schema.String }))(policy)
-        if (Option.isSome(action) && !Schema.is(ConfigPolicy.Info.fields.action)(action.value.action)) return false
+        if (Option.isSome(action) && !Schema.is(ConfigPolicy.Action)(action.value.action)) return false
         const effect = Schema.decodeUnknownOption(Schema.Struct({ effect: Schema.String }))(policy)
         return Option.isNone(effect) || Schema.is(ConfigPolicy.Effect)(effect.value.effect)
       }),
@@ -48,6 +48,23 @@ export class Document extends Config.Document.extend<Document>("Config.Integrati
   /** Organization behind the connection, named in denials by the document's policies. */
   organization: Schema.optional(Schema.String),
 }) {}
+
+/**
+ * A config document a well-known origin delivers. `integrationID` is the origin, so `integration.use` decides the
+ * providers it defines by the origin rather than by provider ID.
+ */
+export class WellKnownDocument extends Config.Document.extend<WellKnownDocument>("Config.WellKnownDocument")({
+  integrationID: IntegrationID,
+}) {}
+
+/** The integration whose delivered document last defines each provider. */
+export function suppliers(entries: readonly Entry[]) {
+  return new Map(
+    entries
+      .filter((entry): entry is WellKnownDocument => entry instanceof WellKnownDocument)
+      .flatMap((document) => Object.keys(document.info.providers ?? {}).map((id) => [id, document.integrationID])),
+  )
+}
 
 /**
  * Builds an integration document from the allow-listed keys of a remote config: providers, remote MCP servers,

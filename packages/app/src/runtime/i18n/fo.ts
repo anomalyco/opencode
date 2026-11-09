@@ -727,6 +727,7 @@ export const dict = {
   "dialog.server.menu.remove": "Strika",
   "home.workspaceTip": "Byrja næstu setu í einum nýggjum arbeiðsøki fyri at halda broytingar einstøkar",
   "session.tab.add": "Legg flipa til",
+  "session.tab.closeOthers": "Lat hinar flipanar aftur",
   "session.queue.attachments.one": "Pluss {{count}} viðheft",
   "session.queue.attachments.other": "Umframt {{count}} viðheftir",
   "settings.backToSettings": "Aftur til innstillingar",

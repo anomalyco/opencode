@@ -53,7 +53,10 @@ export const decodedAsset = (
     Effect.map((bytes) => Media.bytes(bytes, mediaType, options)),
   )
 
-/** One image of an OpenAI-shaped `data` array, which carries either `b64_json` or a `url`. */
+/**
+ * One image of an OpenAI-shaped `data` array, which carries `b64_json`, a `url`, or both. `b64_json` wins; a `data:`
+ * URL decodes inline with its own media type, and any other URL stays a URL asset for the caller to download.
+ */
 export const imageOutput = (
   invalid: (message: string, cause?: unknown) => AIError,
   label: string,
@@ -62,6 +65,10 @@ export const imageOutput = (
   options?: Media.AssetOptions,
 ) => {
   if (item.b64_json) return decodedAsset(invalid, label, item.b64_json, mediaType, options)
+  if (item.url?.startsWith("data:")) {
+    const asset = Media.parseDataUrl(item.url, options)
+    return asset === undefined ? Effect.fail(invalid(`${label} has an invalid data URL`)) : Effect.succeed(asset)
+  }
   if (item.url) return Effect.succeed(Media.url(item.url, { ...options, mediaType }))
   return Effect.fail(invalid(`${label} has neither image data nor a URL`))
 }

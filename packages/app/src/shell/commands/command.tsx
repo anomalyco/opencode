@@ -1,6 +1,6 @@
 import { createSimpleContext } from "@opencode/ui/context"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { type Accessor, batch, createEffect, createMemo, onCleanup, onMount, untrack } from "solid-js"
+import { type Accessor, batch, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { Predicate, Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
@@ -10,6 +10,7 @@ import { useSettings } from "@/settings/model"
 import { keybindRenames } from "@/settings/keybinds/migration"
 import en from "@/runtime/i18n/en"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { INITIAL_KEYBIND_SUSPEND_STATE, selectKeybindsSuspended, transitionKeybindSuspend } from "./suspend-machine"
 
 const IS_MAC = typeof navigator !== "undefined" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
@@ -60,7 +61,7 @@ function normalizeKey(key: string) {
 }
 
 export function keyFromKeyboardEvent(event: KeyboardEvent) {
-  const key = normalizeKey(bracketKey(event))
+  const key = normalizeKey(physicalKey(event))
 
   if (!event.altKey || /^[a-z0-9]$/.test(key)) return key
 
@@ -69,13 +70,19 @@ export function keyFromKeyboardEvent(event: KeyboardEvent) {
   return event.code.slice(3).toLowerCase()
 }
 
-// ⇧[ types { on US layouts, so ⇧⌘[ binds as written; a layout that types no ASCII there falls back to the physical key.
-function bracketKey(event: Pick<KeyboardEvent, "key" | "code">) {
+// ⇧[ types { and ⌥. types ≥ on US layouts. Keep ASCII layout mappings; non-ASCII falls back to the physical key.
+function physicalKey(event: Pick<KeyboardEvent, "key" | "code">) {
   if (event.key === "{" || event.key === "}") return event.key === "{" ? "[" : "]"
 
-  if (!/^[^\x00-\x7f]$/u.test(event.key) || !/^Bracket(Left|Right)$/.test(event.code)) return event.key
+  if (!/^[^\x00-\x7f]$/u.test(event.key)) return event.key
 
-  return event.code === "BracketLeft" ? "[" : "]"
+  if (event.code === "BracketLeft") return "["
+
+  if (event.code === "BracketRight") return "]"
+
+  if (event.code === "Period") return "."
+
+  return event.key
 }
 
 function signature(key: string, ctrl: boolean, meta: boolean, shift: boolean, alt: boolean) {
@@ -104,6 +111,8 @@ export type CommandSection = typeof CommandSection.Type
 
 export interface CommandOption {
   id: string
+  /** The GUI plugin that contributes the command. Settings > Shortcuts lists it only while that plugin is installed. */
+  plugin?: string
   title: string
   description?: string
   /** Extra words the command palette matches, separated by spaces. */
@@ -128,7 +137,8 @@ export interface CommandOption {
   when?: (event: KeyboardEvent) => boolean
   /** The keybind leaves this event to its target, as if the command had no keybind. */
   skip?: (event: KeyboardEvent) => boolean
-  onSelect?: (source?: "palette" | "keybind" | "slash", input?: string) => void | Promise<void>
+  /** From a keybind, returning false declines the key: the event goes on to its target. */
+  onSelect?: (source?: "palette" | "keybind" | "slash", input?: string) => void | false | Promise<void>
   onHighlight?: () => (() => void) | void
 }
 
@@ -173,6 +183,7 @@ export function resolveKeybindOption(candidates: CommandOption[] | undefined, ev
 export type CommandSource = "palette" | "keybind" | "slash"
 
 const CommandCatalogItem = Persistence.struct({
+  plugin: Schema.optional(Schema.String),
   title: Schema.String,
   description: Schema.optional(Schema.String),
   category: Schema.optional(Schema.String),
@@ -331,7 +342,6 @@ function displayKeybindParts(kb: Keybind, t?: (key: KeyLabel) => string) {
   ])
 
   const key = kb.key.toLowerCase()
-
   const label = named.get(key)
 
   const displayKey =
@@ -377,10 +387,11 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const settings = useSettings()
     const language = useLanguage()
 
-    const [store, setStore] = createStore<{ registrations: CommandRegistration[]; suspendCount: number }>({
+    const [store, setStore] = createStore<{ registrations: CommandRegistration[] }>({
       registrations: [],
-      suspendCount: 0,
     })
+
+    const [suspendState, setSuspendState] = createSignal(INITIAL_KEYBIND_SUSPEND_STATE)
 
     const warnedDuplicates = new Set<string>()
 
@@ -427,6 +438,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
           setCatalog(
             actionId(opt.id),
             reconcile({
+              plugin: opt.plugin,
               title: opt.title,
               description: opt.description,
               category: opt.category,
@@ -440,7 +452,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       )
     })
 
-    // Built-in GUI extensions republished these commands under new ids. Drop the old entries so
+    // Built-in plugins republished these commands under new ids. Drop the old entries so
     // Settings > Shortcuts lists each command once.
     createEffect(() => {
       if (!catalogReady()) return
@@ -469,7 +481,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       ]
     })
 
-    const suspended = () => store.suspendCount > 0
+    const suspended = () => selectKeybindsSuspended(suspendState())
 
     const palette = createMemo(() => {
       const config = settings.keybinds.get(PALETTE_ID) ?? DEFAULT_PALETTE_KEYBIND
@@ -521,9 +533,14 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       }
 
       if (!option) return
+
+      // A command that returns false declines the key, which goes on to its target.
+      const result = option.onSelect?.("keybind")
+
+      if (result === false) return
       event.preventDefault()
       event.stopPropagation()
-      void option.onSelect?.("keybind")
+      void result
     }
 
     onMount(() => {
@@ -586,8 +603,17 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
         return !!config && matchKeybind(parseKeybind(config), event)
       },
       show: showPalette,
+      /** Suspends command keybinds until the returned release runs. Each caller holds its own lease. */
+      suspend() {
+        const next = transitionKeybindSuspend(untrack(suspendState), { type: "suspend" })
+        setSuspendState(next)
+
+        return () =>
+          setSuspendState((current) => transitionKeybindSuspend(current, { type: "resume", hold: next.issued }))
+      },
+      /** One shared idempotent hold: `false` suspends keybinds and `true` releases only that hold. */
       keybinds(enabled: boolean) {
-        setStore("suspendCount", (count) => Math.max(0, count + (enabled ? -1 : 1)))
+        setSuspendState((current) => transitionKeybindSuspend(current, { type: "keybinds", enabled }))
       },
       suspended,
       get catalog() {

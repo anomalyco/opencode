@@ -1,5 +1,5 @@
 import type { BunPlugin } from "bun"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { ModelsDev } from "../src/models-dev"
 
 // A floor, not equality: guards against an error page or a truncated body
@@ -9,9 +9,52 @@ export const committedSnapshot = new URL("../src/models-dev/snapshot.txt", impor
 
 export async function fetchModelsSnapshot() {
   const source = process.env.OPENCODE_MODELS_URL || "https://models.opencode.ai"
-  const response = await fetch(`${source}/api.json`, { signal: AbortSignal.timeout(30_000) })
-  if (!response.ok) throw new Error(`${source}/api.json returned ${response.status} ${response.statusText}`)
-  return validateModelsSnapshot(await response.text())
+  const url = `${source}${ModelsDev.catalogPath}`
+  const response = await fetch(url, { signal: AbortSignal.timeout(30_000) })
+  if (!response.ok) throw new Error(`${url} returned ${response.status} ${response.statusText}`)
+  return validateModelsSnapshot(trim(await response.text()))
+}
+
+// Model fields opencode never reads. Dropping them keeps the bundled copy small; every
+// other field, including ones models.dev adds later, is kept as published.
+const UNUSED_MODEL_FIELDS = new Set([
+  "description",
+  "canonical_id",
+  "knowledge",
+  "last_updated",
+  "deprecation_date",
+  "open_weights",
+  "metadata",
+])
+
+const Catalog = Schema.fromJsonString(
+  Schema.Record(
+    Schema.String,
+    Schema.StructWithRest(
+      Schema.Struct({ models: Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown)) }),
+      [Schema.Record(Schema.String, Schema.Unknown)],
+    ),
+  ),
+)
+
+function trim(text: string) {
+  const catalog = Schema.decodeUnknownSync(Catalog)(text)
+  return JSON.stringify(
+    Object.fromEntries(
+      Object.entries(catalog).map(([id, provider]) => [
+        id,
+        {
+          ...provider,
+          models: Object.fromEntries(
+            Object.entries(provider.models).map(([modelID, model]) => [
+              modelID,
+              Object.fromEntries(Object.entries(model).filter(([key]) => !UNUSED_MODEL_FIELDS.has(key))),
+            ]),
+          ),
+        },
+      ]),
+    ),
+  )
 }
 
 async function validateModelsSnapshot(text: string) {

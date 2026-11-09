@@ -38,11 +38,8 @@ const decodeLegacy = Schema.decodeUnknownOption(
 )
 const decodeRegistration = Schema.decodeUnknownEffect(Schema.fromJsonString(Service.Info))
 
-// Released channels share one service, port and database, so switching between stable and beta keeps the same sessions.
-// Dev builds come from every merge to dev and run their own: sharing let a dev build replace the stable server, and a
-// beta app then adopt that dev server.
 export function filename(channel = OPENCODE_CHANNEL) {
-  if (channel === "latest" || channel === "beta" || channel === "next") return "service.json"
+  if (channel === "latest" || channel === "dev" || channel === "beta" || channel === "next") return "service.json"
   return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
@@ -57,9 +54,8 @@ export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platf
 }
 
 function channelPort(channel: string) {
-  if (channel === "latest" || channel === "beta" || channel === "next") return 0xc0de
+  if (channel === "latest" || channel === "dev" || channel === "beta" || channel === "next") return 0xc0de
   if (channel === "local") return 0xc0df
-  if (channel === "dev") return 0xc0e0
   return 10_000 + (Number.parseInt(Hash.fast(channel).slice(0, 8), 16) % 50_000)
 }
 
@@ -129,11 +125,7 @@ const paths = Effect.gen(function* () {
     legacyConfigFile: legacy ? path.join(global.config, legacy) : undefined,
     legacyRegistrationFiles: [
       ...(legacy ? [path.join(global.state, legacy)] : []),
-      // Dev never owned the shared registration, even while it wrote there; a dev server still in it belongs to an
-      // older build and is left for a released client to replace.
-      ...(name !== "service.json" && OPENCODE_CHANNEL !== "local" && OPENCODE_CHANNEL !== "dev"
-        ? [path.join(global.state, "service.json")]
-        : []),
+      ...(name !== "service.json" && OPENCODE_CHANNEL !== "local" ? [path.join(global.state, "service.json")] : []),
     ],
     configFile: path.join(global.config, name),
   }

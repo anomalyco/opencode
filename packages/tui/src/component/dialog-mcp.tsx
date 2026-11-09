@@ -101,7 +101,13 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
     const server = servers().find((entry) => entry.name === name)
     if (!server) return
     if (server.status.status === "needs_auth" && server.integrationID) {
-      dialog.replace(() => <DialogIntegration integrationID={server.integrationID} autoConnect />)
+      dialog.replace(() => (
+        <DialogIntegration
+          integrationID={server.integrationID}
+          autoConnect
+          onConnected={() => dialog.replace(() => <DialogMcp initialServer={server.name} />)}
+        />
+      ))
       return
     }
     if (!statusError(server.status)) return
@@ -121,7 +127,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
     setLoading((prev) => new Set(prev).add(name))
     const target = current()
     const input = { server: name, location: { directory: target.directory } }
-    const call = server.status.status === "connected" ? client.api.mcp.disconnect(input) : client.api.mcp.connect(input)
+    const call = server.status.status === "connected" ? client.api.experimental.mcp.disconnect(input) : client.api.experimental.mcp.connect(input)
     void call.catch(toast.error).finally(() =>
       setLoading((prev) => {
         const next = new Set(prev)
@@ -142,6 +148,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
             titlePlaceholder="Search MCP servers"
             options={options()}
             preserveSelection
+            focusTarget={props.initialServer}
             onMove={(option) => setFocused(option.value as string)}
             onSelect={(option) => select(option.value as string)}
             actions={[

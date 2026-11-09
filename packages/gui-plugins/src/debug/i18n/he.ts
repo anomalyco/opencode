@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "הצגה או הסתרה של סרגל ניפוי הבאגים",
+  providerAriaLabel: "אבחון ביצועי הספק",
+  na: "לא זמין",
+  "duration.label": "TIME",
+  "duration.tip": "הזמן מההנחיה שפתחה את התור האחרון ועד להשלמת התשובה.",
+  "tps.label": "TPS",
+  "tps.tip": "אסימוני פלט וחשיבה לשנייה בבקשות למודל בתור האחרון, ללא זמן הכלים.",
+  "focus.label": "FOCUS",
+  "focus.tip": "כפה סגנונות מיקוד על כל האלמנטים האינטראקטיביים",
+  "focus.on": "מופעל",
+  "focus.off": "כבוי",
+  "direction.label": "DIR",
+  "direction.tip": "כפה את כיוון פריסת האפליקציה המלא מבלי לשנות את השפה שנבחרה",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

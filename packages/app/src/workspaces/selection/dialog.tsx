@@ -12,27 +12,20 @@ import {
 import { TextInput } from "@opencode/ui/text-input"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { getFilename } from "@opencode/util/path"
-import { createEffect, createMemo, createResource, For, onCleanup, onMount, Show } from "solid-js"
-import { createStore } from "solid-js/store"
-import { useGlobal } from "@/runtime/server/runtime"
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
+import { useServer } from "@/runtime/server/current"
 import { inferHomeDirectory } from "@/runtime/server/global-sync/bootstrap"
 import { useLanguage } from "@/runtime/i18n/language"
-import { ServerConnection, serverName } from "@/runtime/server/registry"
+import { ServerConnection, serverName, useServers } from "@/runtime/server/registry"
 import { pathKey } from "@/workspaces/path-key"
 import type { LocationRef } from "@opencode/client/promise"
 import {
   absoluteTreePath,
-  activeTreeNavigation,
   canonicalPickerPath,
-  nextSuggestionIndex,
-  pickerFileSearchQuery,
   pickerAbsoluteInput,
   pickerMode,
-  cleanPickerInput,
   createPriorityTaskQueue,
   createDirectorySearch,
-  currentPickerSuggestions,
   displayPickerPath,
   shortenPickerRecentPath,
   pickerParent,
@@ -41,6 +34,23 @@ import {
   pickerRelativePath,
   pickerAbsolutePath,
 } from "./domain"
+import {
+  createPickerTreeState,
+  hasPickerGitRepo,
+  pickerTreeView,
+  transitionPickerTree,
+  type PickerNode,
+  type PickerTreeEffect,
+  type PickerTreeEvent,
+} from "./tree-machine"
+import {
+  createPickerComboboxState,
+  pickerComboboxView,
+  transitionPickerCombobox,
+  type PickerComboboxEffect,
+  type PickerComboboxEvent,
+  type PickerSuggestion,
+} from "./combobox-machine"
 import "./dialog.css"
 
 const TREE_SPRITE_SHEET = `<svg xmlns="http://www.w3.org/2000/svg" data-icon-sprite aria-hidden="true" width="0" height="0" style="display:none"><symbol id="picker-chevron-down" viewBox="0 0 14 14"><path d="M4 5.5L7 8.5L10 5.5" fill="none" stroke="currentColor"/></symbol></svg>`
@@ -60,8 +70,8 @@ interface DirectoryPickerDialogProps {
 }
 
 export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
-  const global = useGlobal()
-  const serverCtx = global.ensureServerCtx(props.server)
+  const servers = useServers()
+  const serverCtx = useServer().ctx
   const sync = serverCtx.sync
   const sdk = serverCtx.sdk
   const dialog = useDialog()
@@ -73,24 +83,22 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     directory: language.t("dialog.directory.action.selectFolder"),
   }
 
-  const [state, setState] = createStore({
-    root: "",
-    input: "",
-    selected: "",
-    suggestionsOpen: false,
-    activeSuggestion: -1,
-    loading: false,
-    error: false,
-    rootValid: false,
+  // One signal holds both immutable machine states, so a write replaces them whole and never merges into shared objects.
+  const [machines, setMachines] = createSignal({
+    tree: createPickerTreeState(),
+    combobox: createPickerComboboxState(),
   })
 
-  const listings = new Map<string, Promise<Array<{ name: string; type: "file" | "directory" }> | undefined>>()
-  const loads = createPriorityTaskQueue<Array<{ name: string; type: "file" | "directory" }> | undefined>(3)
-  const gitRepos = new Set<string>()
+  const treeMachine = createMemo(() => machines().tree)
+  const treeView = createMemo(() => pickerTreeView(treeMachine(), policy))
+  const treeRoot = createMemo(() => treeView().root)
+  const comboboxView = createMemo(() => pickerComboboxView(machines().combobox))
+  const loads = createPriorityTaskQueue<PickerNode[]>(3)
+  const treeTimers = new Set<ReturnType<typeof setTimeout>>()
+  let activeSearch: { controller: AbortController; timer: ReturnType<typeof setTimeout> } | undefined
   let tree: FileTree | undefined
   let container: HTMLDivElement | undefined
   let pathArea: HTMLDivElement | undefined
-  let navigation = 0
 
   const knownGitRepos = createMemo(() => {
     const keys = new Set<string>()
@@ -110,32 +118,23 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     return keys
   })
 
-  const [fallbackPath] = createResource(
-    () => (props.location ? undefined : true),
-    () => sdk.api.location.get().catch(() => undefined),
-    { initialValue: undefined },
+  const home = createMemo(() => sync.data.path.home || inferHomeDirectory(props.location?.directory ?? ""))
+
+  const subtitle = createMemo(() => (servers.local(props.server) ? undefined : serverName(props.server)))
+
+  const location = createMemo(
+    () => {
+      const directory = props.location?.directory ?? treeView().locationDirectory
+
+      return directory ? { directory } : undefined
+    },
+    undefined,
+    { equals: (previous, next) => previous?.directory === next?.directory },
   )
-
-  const home = createMemo(
-    () =>
-      sync.data.path.home || inferHomeDirectory(props.location?.directory ?? ""),
-  )
-
-  const subtitle = createMemo(() => (ServerConnection.local(props.server) ? undefined : serverName(props.server)))
-
-  const location = createMemo(() => {
-    const current = props.location ?? fallbackPath.latest
-
-    return current ? { directory: current.directory } : undefined
-  })
 
   const start = createMemo(
     () =>
-      props.start ||
-      home() ||
-      props.location?.directory ||
-      sync.data.path.directory ||
-      fallbackPath.latest?.directory,
+      props.start || home() || props.location?.directory || sync.data.path.directory || treeView().locationDirectory,
   )
 
   const recentProjects = createMemo(() => {
@@ -156,363 +155,253 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
       .slice(0, 5)
   })
 
-  const search = createDirectorySearch({ sdk, home, location, base: () => state.root || start() })
+  const search = createDirectorySearch({ sdk, home, location, base: () => treeView().root || start() })
 
-  const [suggestions] = createResource(
-    () => state.input,
-    async (value) => {
-      const cleaned = cleanPickerInput(value)
-      const typed = cleaned.replace(/\/+$/, "")
-      const current = displayPickerPath(state.root, value, home()).replace(/\/+$/, "")
-
-      if (!cleaned || (state.root && typed === current)) return { query: value, items: [] }
-      const directories = (await search(value)).map((absolute) => ({ absolute, type: "directory" as const }))
-
-      if (!policy.includeFiles) return { query: value, items: directories.slice(0, 5) }
-      const base = location()?.directory
-
-      if (!base) return { query: value, items: directories.slice(0, 5) }
-      const query = pickerRelativePath(base, pickerAbsoluteInput(cleaned, home(), state.root || base))
-
-      if (query === undefined) return { query: value, items: directories.slice(0, 5) }
-
-      const files = await sdk.api.file
-        .find({
-          location: location(),
-          query,
-          type: "file",
-          limit: 20,
-        })
-        .then((result) => result.data)
-        .catch(() => [])
-
-      const results = [
-        ...directories,
-        ...files.map((entry) => ({ absolute: pickerAbsolutePath(entry.path, base), type: "file" as const })),
-      ]
-
-      return {
-        query: value,
-        items: Array.from(new Map(results.map((result) => [result.absolute, result])).values()).slice(0, 8),
-      }
-    },
-  )
-
-  const currentSuggestions = createMemo(() =>
-    currentPickerSuggestions(suggestions.latest, state.input, suggestions.loading),
-  )
-  const resolvedResult = createMemo(() => policy.result(state.root, state.selected, state.rootValid))
   const fullSelectionPath = createMemo(() => {
-    const value = resolvedResult()
+    const value = treeView().result
 
     return value ? displayPickerPath(value, "", home()) : ""
   })
+
   const shortSelectionPath = createMemo(() => {
-    const value = resolvedResult()
+    const value = treeView().result
 
     return value ? shortenPickerRecentPath(value, home()) : ""
   })
 
-  async function load(path: string, generation: number, priority: "user" | "background" = "user") {
-    const key = path.replace(/\/+$/, "")
-    setState("error", false)
-    const absolute = absoluteTreePath(state.root, key)
-    const existing = listings.get(key)
+  function navigation(path: string) {
+    return { path, home: home(), fallback: start() || home(), located: Boolean(location()) }
+  }
 
-    if (existing && priority === "user") loads.promote(`${generation}:${key}`)
+  function dispatchTree(event: PickerTreeEvent) {
+    untrack(() => {
+      const previous = machines().tree
+      const next = transitionPickerTree(previous, event, policy)
 
-    const request =
-      existing ??
-      loads.schedule(`${generation}:${key}`, priority, () => {
-        if (!activeTreeNavigation(generation, navigation)) return Promise.resolve(undefined)
-        const current = location()
+      if (next.state !== previous) setMachines((current) => ({ ...current, tree: next.state }))
+      next.effects.forEach(
+        (effect) => void Promise.try(() => runTreeEffect(effect)).catch((cause: unknown) => console.error(cause)),
+      )
+    })
+  }
 
-        if (!current) return Promise.resolve(undefined)
+  function dispatchCombobox(event: PickerComboboxEvent) {
+    return untrack(() => {
+      const previous = machines().combobox
 
-        return listPickerDirectory(sdk, current, absolute).catch(() => undefined)
+      const next = transitionPickerCombobox(previous, event, {
+        policy,
+        home: home(),
+        root: treeView().root,
+        fallback: start() || home(),
+        locationDirectory: location()?.directory,
       })
 
-    listings.set(key, request)
-    const nodes = await request
-
-    if (!activeTreeNavigation(generation, navigation)) return false
-
-    if (!nodes) {
-      listings.delete(key)
-
-      if (!key) setState("error", true)
-
-      return false
-    }
-
-    const isRepo = nodes.some((node) => node.name === ".git")
-    const repoKey = pathKey(canonicalPickerPath(absolute))
-    const newlyDiscoveredRepo = isRepo && !gitRepos.has(repoKey)
-
-    if (newlyDiscoveredRepo) gitRepos.add(repoKey)
-
-    const entries = policy
-      .entries(
-        key,
-        nodes.filter((node) => node.name !== ".git"),
+      if (next.state !== previous) setMachines((current) => ({ ...current, combobox: next.state }))
+      next.effects.forEach(
+        (effect) => void Promise.try(() => runComboboxEffect(effect)).catch((cause: unknown) => console.error(cause)),
       )
-      .filter((item) => !tree?.getItem(item))
 
-    if (entries.length > 0) {
-      tree?.batch(entries.map((item) => ({ type: "add", path: item })))
-    }
+      return next
+    })
+  }
 
-    if (newlyDiscoveredRepo) {
-      tree?.setComposition(tree.getComposition())
-    }
-
-    // Preloading the root's folders makes their first expand instant and finds git repos for the badge.
-    if (!key && priority === "user") {
-      for (const node of nodes) {
-        if (node.type === "directory" && node.name !== ".git") void load(node.name, generation, "background")
+  function runTreeEffect(effect: PickerTreeEffect) {
+    if (effect.type === "resolve-location") {
+      const settle = (event: Extract<PickerTreeEvent, { attempt: number }>) => {
+        clearTimeout(timer)
+        treeTimers.delete(timer)
+        dispatchTree(event)
       }
+
+      const timer = setTimeout(() => settle({ type: "location.timed-out", attempt: effect.attempt }), effect.timeoutMs)
+
+      treeTimers.add(timer)
+      void Promise.try(() => sdk.api.location.get()).then(
+        (current) => settle({ type: "location.resolved", attempt: effect.attempt, directory: current?.directory }),
+        () => settle({ type: "location.failed", attempt: effect.attempt }),
+      )
+
+      return
     }
 
-    return true
-  }
+    if (effect.type === "list") {
+      const failed = { type: "dir.failed" as const, dir: effect.dir, attempt: effect.attempt }
 
-  function displayInputDirectory(path: string) {
-    const displayed = displayPickerPath(path, state.input, home())
-    const separator = displayed.includes("\\") ? "\\" : "/"
+      void loads
+        .schedule(String(effect.attempt), effect.priority, (signal) => {
+          const current = location()
 
-    return displayed.endsWith(separator) ? displayed : displayed + separator
-  }
+          if (!current) return Promise.reject(new Error("The picker has no server location"))
 
-  function expandTreeDirectory(path: string) {
-    const item = tree?.getItem(`${path}/`)
+          // The timeout starts when the listing does, so preloads waiting in the queue cannot expire. Aborting the
+          // job cancels the request and frees its queue slot, so hung listings cannot block the next root.
+          const timer = setTimeout(() => {
+            treeTimers.delete(timer)
+            dispatchTree({ type: "dir.timed-out", dir: effect.dir, attempt: effect.attempt })
+            loads.abort(String(effect.attempt))
+          }, effect.timeoutMs)
 
-    if (item && "expand" in item && !item.isExpanded()) item.expand()
-  }
+          treeTimers.add(timer)
 
-  function selectOnlyTreeItem(entry: string) {
-    for (const selectedPath of tree?.getSelectedPaths() ?? []) {
-      if (selectedPath !== entry) tree?.getItem(selectedPath)?.deselect()
+          return listPickerDirectory(sdk, current, absoluteTreePath(effect.root, effect.dir), signal).finally(() => {
+            clearTimeout(timer)
+            treeTimers.delete(timer)
+          })
+        })
+        .then(
+          (nodes) =>
+            dispatchTree(nodes ? { type: "dir.loaded", dir: effect.dir, attempt: effect.attempt, nodes } : failed),
+          () => dispatchTree(failed),
+        )
+
+      return
     }
-    tree?.getItem(entry)?.select()
-    tree?.focusPath(entry)
-    // The tree measures newly expanded rows after this frame, so an immediate scroll clamps to the old height.
-    requestAnimationFrame(() => tree?.scrollToPath(entry, { offset: "center" }))
-  }
 
-  async function navigate(path: string, options?: { selectChild?: string; input?: string }) {
-    const value = policy.navigation(
-      pickerAbsoluteInput(cleanPickerInput(path), home(), state.root || start() || home()),
-    )
+    if (effect.type === "promote") return loads.promote(String(effect.attempt))
 
-    if (!value) return
-    const token = ++navigation
-    setState({
-      loading: true,
-      rootValid: false,
-      selected: "",
-      suggestionsOpen: false,
-      activeSuggestion: -1,
-      root: value,
-      input: options?.input ?? "",
-    })
-    listings.clear()
-    tree?.resetPaths([])
-    const valid = await load("", token)
+    if (effect.type === "queue.reset") {
+      loads.clear()
+      treeTimers.forEach((timer) => clearTimeout(timer))
+      treeTimers.clear()
 
-    if (!activeTreeNavigation(token, navigation)) return
-    setState({
-      rootValid: valid,
-      loading: false,
-    })
+      return
+    }
 
-    if (!valid) return
+    if (effect.type === "tree.reset") return tree?.resetPaths([])
 
-    if (!options?.selectChild) {
+    if (effect.type === "tree.add") {
+      const paths = effect.paths.filter((path) => !tree?.getItem(path))
+
+      if (paths.length > 0) tree?.batch(paths.map((path) => ({ type: "add", path })))
+
+      return
+    }
+
+    if (effect.type === "tree.expand") {
+      const item = tree?.getItem(`${effect.dir}/`)
+
+      if (item && "expand" in item && !item.isExpanded()) item.expand()
+
+      return
+    }
+
+    if (effect.type === "tree.select") {
+      for (const selectedPath of tree?.getSelectedPaths() ?? []) {
+        if (selectedPath !== effect.entry) tree?.getItem(selectedPath)?.deselect()
+      }
+
+      tree?.getItem(effect.entry)?.select()
+      tree?.focusPath(effect.entry)
+      // The tree measures newly expanded rows after this frame, so an immediate scroll clamps to the old height.
+      requestAnimationFrame(() => tree?.scrollToPath(effect.entry, { offset: "center" }))
+
+      return
+    }
+
+    if (effect.type === "tree.clear-selection") {
+      for (const selectedPath of tree?.getSelectedPaths() ?? []) {
+        tree?.getItem(selectedPath)?.deselect()
+      }
+
+      tree?.focusNearestPath(null)
+
+      return
+    }
+
+    if (effect.type === "tree.focus-initial") {
       if (!tree?.getFocusedPath()) tree?.focusNearestPath(null)
 
       return
     }
 
-    const entry = `${getFilename(options.selectChild)}/`
-    selectOnlyTreeItem(entry)
-    setState("selected", policy.selection(value, entry) ?? options.selectChild)
+    tree?.setComposition(tree.getComposition())
   }
 
-  async function selectDirectory(path: string, options?: { fromInput?: boolean }) {
-    const value = policy.navigation(
-      pickerAbsoluteInput(cleanPickerInput(path), home(), state.root || start() || home()),
-    )
+  function runComboboxEffect(effect: PickerComboboxEffect) {
+    if (effect.type === "search.start") {
+      stopSearch()
+      const controller = new AbortController()
 
-    if (!value) return
-    const nextInput = options?.fromInput ? displayInputDirectory(value) : state.input
-    const relative = state.root && state.rootValid ? pickerRelativePath(state.root, value) : undefined
-
-    if (relative === "") {
-      for (const selectedPath of tree?.getSelectedPaths() ?? []) {
-        tree?.getItem(selectedPath)?.deselect()
-      }
-      tree?.focusNearestPath(null)
-      setState({
-        selected: "",
-        suggestionsOpen: false,
-        activeSuggestion: -1,
-        input: nextInput,
-      })
-
-      return
-    }
-
-    if (relative) {
-      const token = navigation
-      const segments = relative.split("/").filter(Boolean)
-      const entry = `${relative}/`
-      setState({
-        suggestionsOpen: false,
-        activeSuggestion: -1,
-        input: nextInput,
-      })
-
-      const ancestors = segments.slice(0, -1).map((_, index) => segments.slice(0, index + 1).join("/"))
-
-      for (const ancestor of ancestors) {
-        const loaded = await load(ancestor, token)
-
-        if (!activeTreeNavigation(token, navigation)) return
-
-        if (!loaded) break
-        expandTreeDirectory(ancestor)
+      const settle = (event: Extract<PickerComboboxEvent, { attempt: number }>) => {
+        if (activeSearch?.controller === controller) stopSearch()
+        dispatchCombobox(event)
       }
 
-      if (!tree?.getItem(entry)) {
-        await navigate(value, { input: nextInput })
-
-        return
+      activeSearch = {
+        controller,
+        timer: setTimeout(() => settle({ type: "search.timed-out", attempt: effect.attempt }), effect.timeoutMs),
       }
 
-      selectOnlyTreeItem(entry)
-      setState("selected", policy.selection(state.root, entry) ?? value)
-
-      if (!options?.fromInput) return
-      expandTreeDirectory(relative)
-      await load(relative, token)
+      void Promise.try(() => suggestions(effect.query, controller.signal)).then(
+        (items) => settle({ type: "search.resolved", attempt: effect.attempt, items }),
+        () => settle({ type: "search.failed", attempt: effect.attempt }),
+      )
 
       return
     }
 
-    const parent = pickerParent(value)
-    const leaf = getFilename(value)
+    if (effect.type === "search.cancel") return stopSearch()
 
-    if (parent && leaf && parent !== value && parent === home()) {
-      await navigate(parent, { selectChild: value, input: nextInput })
+    if (effect.type === "selection.clear") return dispatchTree({ type: "selection.cleared" })
 
-      return
+    if (effect.type === "choose.directory") {
+      return dispatchTree({ type: "directory.chosen", ...navigation(effect.path), fromInput: true })
     }
 
-    await navigate(value, { input: nextInput })
+    dispatchTree({ type: "file.chosen", absolute: effect.absolute, home: home() })
   }
 
-  function complete() {
-    const items = currentSuggestions()
-    const match = items[state.activeSuggestion] ?? items[0]
-
-    if (!match) return
-    const value = displayPickerPath(match.absolute, state.input, home())
-    setState("input", match.type === "directory" && !value.endsWith("/") ? value + "/" : value)
-
-    if (match.type === "file") {
-      setState({
-        selected: policy.selection(state.root, pickerFileSearchQuery(state.root, match.absolute, home())) ?? "",
-        suggestionsOpen: false,
-        activeSuggestion: -1,
-      })
-    }
+  function stopSearch() {
+    if (!activeSearch) return
+    activeSearch.controller.abort()
+    clearTimeout(activeSearch.timer)
+    activeSearch = undefined
   }
 
-  function chooseSuggestion(suggestion: { absolute: string; type: "file" | "directory" }) {
-    if (suggestion.type === "directory") {
-      void selectDirectory(suggestion.absolute, { fromInput: true })
+  async function suggestions(value: string, signal: AbortSignal): Promise<PickerSuggestion[]> {
+    const directories = (await search(value, { signal })).map((absolute) => ({ absolute, type: "directory" as const }))
 
-      return
-    }
+    if (!policy.includeFiles) return directories.slice(0, 5)
+    const current = location()
+    const base = current?.directory
 
-    setState({
-      input: displayPickerPath(suggestion.absolute, state.input, home()),
-      selected: policy.selection(state.root, pickerFileSearchQuery(state.root, suggestion.absolute, home())) ?? "",
-      suggestionsOpen: false,
-      activeSuggestion: -1,
-    })
+    if (!base) return directories.slice(0, 5)
+    const query = pickerRelativePath(base, pickerAbsoluteInput(value, home(), treeView().root || base))
+
+    if (query === undefined || signal.aborted) return directories.slice(0, 5)
+
+    const files = await sdk.api.file
+      .find(
+        {
+          location: current,
+          query,
+          type: "file",
+          limit: 20,
+        },
+        { signal },
+      )
+      .then((result) => result.data)
+      .catch(() => [])
+
+    const results = [
+      ...directories,
+      ...files.map((entry) => ({ absolute: pickerAbsolutePath(entry.path, base), type: "file" as const })),
+    ]
+
+    return Array.from(new Map(results.map((result) => [result.absolute, result])).values()).slice(0, 8)
   }
 
-  function moveSuggestion(delta: -1 | 1) {
-    setState("suggestionsOpen", true)
-    setState("activeSuggestion", nextSuggestionIndex(activeSuggestionIndex(), delta, currentSuggestions().length))
-  }
+  // A root the mode does not allow (a file picker's parent outside its base) keeps the input as it was.
+  function navigate(path: string) {
+    const previous = untrack(machines).tree
+    dispatchTree({ type: "navigate", ...navigation(path) })
 
-  function activeSuggestionIndex() {
-    if (!state.suggestionsOpen) return -1
-    if (state.activeSuggestion >= 0) return state.activeSuggestion
-    const raw = cleanPickerInput(state.input)
-
-    if (raw === "~" || raw === "~/" || raw === "/" || raw.endsWith("/")) return -1
-
-    return currentSuggestions().length > 0 ? 0 : -1
-  }
-
-  function activeSuggestionValue() {
-    return currentSuggestions()[activeSuggestionIndex()]
-  }
-
-  const keyActions = new Map([
-    ["ArrowDown", () => moveSuggestion(1)],
-    ["ArrowUp", () => moveSuggestion(-1)],
-    [
-      "Enter",
-      () => {
-        const suggestion = activeSuggestionValue()
-
-        if (suggestion) {
-          chooseSuggestion(suggestion)
-
-          return
-        }
-
-        if (state.input.trim()) void selectDirectory(state.input, { fromInput: true })
-      },
-    ],
-    ["Tab", complete],
-  ])
-
-  function handleInputKey(event: KeyboardEvent) {
-    if (event.key === "Escape" && state.suggestionsOpen && currentSuggestions().length > 0) {
-      event.preventDefault()
-      event.stopPropagation()
-      setState({
-        suggestionsOpen: false,
-        activeSuggestion: -1,
-      })
-
-      return
-    }
-
-    if (event.key === "Tab") {
-      if (event.shiftKey || !state.suggestionsOpen || currentSuggestions().length === 0) return
-      event.preventDefault()
-      complete()
-
-      return
-    }
-
-    if ((event.key === "ArrowDown" || event.key === "ArrowUp") && currentSuggestions().length === 0) return
-
-    const action = keyActions.get(event.key)
-
-    if (!action) return
-    event.preventDefault()
-    action()
+    if (untrack(machines).tree !== previous) dispatchCombobox({ type: "cleared" })
   }
 
   function resolve() {
-    const path = resolvedResult()
+    const path = treeView().result
 
     if (!path) return
     props.onSelect(props.multiple ? [path] : path)
@@ -522,10 +411,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
   onMount(() => {
     const closeSuggestions = (event: PointerEvent) => {
       if (event.target instanceof Node && pathArea?.contains(event.target)) return
-      setState({
-        suggestionsOpen: false,
-        activeSuggestion: -1,
-      })
+      dispatchCombobox({ type: "dismissed" })
     }
 
     document.addEventListener("pointerdown", closeSuggestions)
@@ -549,9 +435,13 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
       },
       renderRowDecoration(context) {
         if (context.row.kind !== "directory") return null
-        const key = pathKey(canonicalPickerPath(absoluteTreePath(state.root, context.item.path)))
+        const current = untrack(machines).tree
 
-        if (!gitRepos.has(key) && !knownGitRepos().has(key)) return null
+        const key = pathKey(
+          canonicalPickerPath(absoluteTreePath(pickerTreeView(current, policy).root, context.item.path)),
+        )
+
+        if (!hasPickerGitRepo(current, context.item.path) && !knownGitRepos().has(key)) return null
 
         return { text: language.t("dialog.directory.gitRepo") }
       },
@@ -645,11 +535,10 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
         }
       `,
       onExpansionChange(change) {
-        if (change.expanded) void load(change.path, navigation)
+        if (change.expanded) dispatchTree({ type: "dir.expanded", dir: change.path })
       },
       onSelectionChange(paths) {
-        const path = paths.at(-1)
-        setState("selected", path ? (policy.selection(state.root, path) ?? "") : "")
+        dispatchTree({ type: "tree.selected", path: paths.at(-1) })
       },
     })
 
@@ -658,14 +547,29 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     tree.getFileTreeContainer()?.classList.add("directory-picker-tree")
   })
 
+  // Opens the first root. Without a dialog location the tree first resolves the server's default one.
   createEffect(() => {
+    if (treeMachine().status !== "booting") return
+
+    if (!location()) return dispatchTree({ type: "location.requested" })
     const path = start()
 
-    if (!path || !location() || state.root) return
-    void navigate(path)
+    if (path) dispatchTree({ type: "navigate", ...navigation(path) })
   })
 
-  onCleanup(() => tree?.cleanUp())
+  // Suggestions search against the root and location, so a search started before either arrived runs again.
+  createEffect(
+    on([() => location()?.directory, treeRoot], () => dispatchCombobox({ type: "context.changed" }), {
+      defer: true,
+    }),
+  )
+
+  onCleanup(() => {
+    dispatchTree({ type: "disposed" })
+    dispatchCombobox({ type: "disposed" })
+    search.dispose()
+    tree?.cleanUp()
+  })
 
   return (
     <Dialog size="large" fit class="directory-picker">
@@ -685,67 +589,67 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
       <DialogBody class="directory-picker-body">
         <div class="directory-picker-path" ref={pathArea}>
           <TextInput
-            value={state.input}
+            value={comboboxView().input}
             placeholder={language.t("dialog.directory.search.placeholder")}
             autofocus
             autocomplete="off"
             spellcheck={false}
-            showClearButton={!!state.input}
-            onClearClick={() => {
-              setState({
-                input: "",
-                suggestionsOpen: false,
-                activeSuggestion: -1,
-              })
-            }}
+            showClearButton={!!comboboxView().input}
+            onClearClick={() => dispatchCombobox({ type: "cleared" })}
             class="directory-picker-input"
-            onInput={(event) => {
-              setState({
-                input: cleanPickerInput(event.currentTarget.value),
-                selected: "",
-                suggestionsOpen: true,
-                activeSuggestion: -1,
-              })
-            }}
+            onInput={(event) => dispatchCombobox({ type: "input.changed", value: event.currentTarget.value })}
             role="combobox"
             aria-label={language.t("dialog.directory.search.placeholder")}
             aria-autocomplete="list"
-            aria-expanded={state.suggestionsOpen}
+            aria-expanded={comboboxView().listboxOpen}
             aria-controls="directory-picker-suggestions"
-            aria-activedescendant={
-              activeSuggestionIndex() >= 0 ? `directory-picker-suggestion-${activeSuggestionIndex()}` : undefined
-            }
-            onKeyDown={handleInputKey}
+            aria-activedescendant={comboboxView().activeDescendant}
+            onKeyDown={(event) => {
+              const next = dispatchCombobox({
+                type: "key.down",
+                key: event.key,
+                shiftKey: event.shiftKey,
+                composing: event.isComposing,
+              })
+
+              if (next.preventDefault) event.preventDefault()
+
+              if (next.stopPropagation) event.stopPropagation()
+            }}
           />
           <div class="directory-picker-actions">
-            <Button size="normal" variant="ghost" onClick={() => void navigate(home() || state.root)}>
+            <Button size="normal" variant="ghost" onClick={() => navigate(home() || treeView().root)}>
               ~
             </Button>
-            <Button size="normal" variant="ghost" onClick={() => void navigate(pickerRoot(state.root) || state.root)}>
+            <Button
+              size="normal"
+              variant="ghost"
+              onClick={() => navigate(pickerRoot(treeView().root) || treeView().root)}
+            >
               {language.t("dialog.directory.root")}
             </Button>
             <Button
               size="normal"
               variant="ghost"
-              onClick={() => void navigate(pickerParent(state.selected || state.root))}
+              onClick={() => navigate(pickerParent(treeView().selected || treeView().root))}
             >
               {language.t("dialog.directory.parent")}
             </Button>
           </div>
-          <Show when={state.suggestionsOpen && currentSuggestions().length > 0}>
+          <Show when={comboboxView().listboxOpen}>
             <div id="directory-picker-suggestions" role="listbox" class="directory-picker-suggestions">
-              <For each={currentSuggestions()}>
+              <For each={comboboxView().items}>
                 {(suggestion, index) => (
                   <button
                     id={`directory-picker-suggestion-${index()}`}
                     data-directory-path={suggestion.absolute}
                     role="option"
-                    aria-selected={index() === activeSuggestionIndex()}
-                    data-active={index() === activeSuggestionIndex() ? "" : undefined}
-                    onPointerMove={() => setState("activeSuggestion", index())}
-                    onClick={() => chooseSuggestion(suggestion)}
+                    aria-selected={index() === comboboxView().active}
+                    data-active={index() === comboboxView().active ? "" : undefined}
+                    onPointerMove={() => dispatchCombobox({ type: "item.hovered", index: index() })}
+                    onClick={() => dispatchCombobox({ type: "item.clicked", index: index() })}
                   >
-                    {displayPickerPath(suggestion.absolute, state.input, home())}
+                    {displayPickerPath(suggestion.absolute, comboboxView().input, home())}
                     {suggestion.type === "directory" ? "/" : ""}
                   </button>
                 )}
@@ -773,7 +677,10 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
                           name: name(),
                           path: shortPath(),
                         })}
-                        onClick={() => void selectDirectory(project.worktree)}
+                        onClick={() => {
+                          dispatchCombobox({ type: "dismissed" })
+                          dispatchTree({ type: "directory.chosen", ...navigation(project.worktree), fromInput: false })
+                        }}
                       >
                         <ProjectAvatar
                           class="shrink-0"
@@ -799,10 +706,10 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
           on:touchmove={(event) => event.stopPropagation()}
           on:wheel={{ handleEvent: (event: WheelEvent) => event.stopPropagation(), passive: true }}
         >
-          <Show when={state.loading}>
+          <Show when={treeView().loading}>
             <div class="directory-picker-state">{language.t("common.loading")}</div>
           </Show>
-          <Show when={!state.loading && state.error}>
+          <Show when={treeView().error}>
             <div class="directory-picker-state">{language.t("dialog.directory.readError")}</div>
           </Show>
         </div>
@@ -821,7 +728,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
         <Button variant="neutral" onClick={() => dialog.close()}>
           {language.t("common.cancel")}
         </Button>
-        <Button variant="contrast" disabled={!resolvedResult()} onClick={resolve}>
+        <Button variant="contrast" disabled={!treeView().result} onClick={resolve}>
           {action[policy.action]}
         </Button>
       </DialogFooter>

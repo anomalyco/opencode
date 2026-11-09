@@ -1,11 +1,11 @@
-import { Component, Show, createMemo, createResource } from "solid-js"
+import { Component, Show, createMemo } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
 import { TimelineDetailControl } from "@/settings/timeline-detail"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
-import { ExtensionSettingsSections } from "@/runtime/extension/settings-page-view"
+import { PluginSettingsSections } from "@/runtime/plugin/settings-page-view"
 import {
   type BackgroundActivity,
   type FollowUpBehavior,
@@ -17,7 +17,7 @@ import { formatKeybind } from "@/shell/commands/command"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
 import { createShellOptions } from "./behavior"
-import type { ShellSettingsController } from "./controllers"
+import { createOptimisticSetting, type ShellSettingsController } from "./controllers"
 import { InterfaceModeSetting } from "./interface-mode"
 import "@/settings/settings.css"
 
@@ -141,6 +141,7 @@ const FollowUpBehaviorSetting: Component = () => {
 const BackgroundActivitySetting = () => {
   const language = useLanguage()
   const settings = useSettings()
+
   const options = createMemo((): { value: BackgroundActivity; label: string }[] => [
     { value: "off", label: language.t("settings.timeline.row.backgroundActivity.off") },
     { value: "left", label: language.t("settings.timeline.row.backgroundActivity.left") },
@@ -171,6 +172,7 @@ const BackgroundActivitySetting = () => {
 const TimelineWidthSetting = () => {
   const language = useLanguage()
   const settings = useSettings()
+
   const options = createMemo((): { value: TimelineWidth; label: string }[] => [
     { value: "focused", label: language.t("settings.timeline.row.width.focused") },
     { value: "comfortable", label: language.t("settings.timeline.row.width.comfortable") },
@@ -233,25 +235,27 @@ export const SettingsGeneral: Component = () => {
   const mobile = createMediaQuery("(max-width: 767px)")
   const desktop = createMemo(() => platform.platform === "desktop")
 
-  const [pinchZoom, { mutate: setPinchZoom }] = createResource(
-    () => desktop() && "getPinchZoomEnabled" in platform,
-    () => Promise.resolve(platform.getPinchZoomEnabled?.() ?? false).catch(() => false),
-    { initialValue: false },
-  )
+  const pinchZoom = createOptimisticSetting({
+    source: () => (desktop() && "getPinchZoomEnabled" in platform) || undefined,
+    initial: false,
+    initialMeta: undefined,
+    load: async () => ({ value: (await platform.getPinchZoomEnabled?.()) ?? false, meta: undefined }),
+    write: (checked) => platform.setPinchZoomEnabled?.(checked),
+  })
 
-  const onPinchZoomChange = (checked: boolean) => {
-    setPinchZoom(checked)
-    const update = platform.setPinchZoomEnabled?.(checked)
-
-    if (!update) return
-    void update.catch(() => setPinchZoom(!checked))
-  }
+  const spellcheck = createOptimisticSetting({
+    source: () => (desktop() && "getSpellcheckEnabled" in platform) || undefined,
+    initial: true,
+    initialMeta: undefined,
+    load: async () => ({ value: (await platform.getSpellcheckEnabled?.()) ?? true, meta: undefined }),
+    write: (checked) => platform.setSpellcheckEnabled?.(checked),
+  })
 
   const GeneralSection = () => (
     <div class="settings-section">
       <h3 class="settings-section-title">{language.t("settings.general.section.general")}</h3>
-      <InterfaceModeSetting />
       <SettingsList>
+        <InterfaceModeSetting />
         <LanguageSetting />
 
         <WorkspaceDestinationSetting />
@@ -277,12 +281,20 @@ export const SettingsGeneral: Component = () => {
             description={language.t("settings.general.row.pinchZoom.description")}
           >
             <div data-action="settings-pinch-zoom">
-              <Switch checked={pinchZoom.latest} onChange={onPinchZoomChange} />
+              <Switch checked={pinchZoom.value()} onChange={pinchZoom.select} />
+            </div>
+          </SettingsRow>
+          <SettingsRow
+            title={language.t("settings.general.row.spellcheck.title")}
+            description={language.t("settings.general.row.spellcheck.description")}
+          >
+            <div data-action="settings-spellcheck">
+              <Switch checked={spellcheck.value()} onChange={spellcheck.select} />
             </div>
           </SettingsRow>
         </Show>
 
-        <ExtensionSettingsSections page="general" section="general" />
+        <PluginSettingsSections page="general" section="general" />
 
         <Show when={mobile()}>
           <SettingsRow
@@ -341,7 +353,7 @@ export const SettingsGeneral: Component = () => {
           </SettingsList>
         </section>
 
-        <ExtensionSettingsSections page="general" />
+        <PluginSettingsSections page="general" />
       </div>
     </>
   )

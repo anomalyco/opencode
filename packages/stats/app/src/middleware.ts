@@ -9,18 +9,26 @@ import {
   modelJson,
   modelMarkdown,
 } from "./lib/agent-formats"
-import { fromPathname, LOCALE_HEADER, pageUrl, parseLocale, prefersMarkdown, route, strip } from "./lib/language"
+import {
+  basePath,
+  cookie,
+  fromPathname,
+  LOCALE_HEADER,
+  localeFromRequest,
+  pageUrl,
+  parseLocale,
+  prefersMarkdown,
+  route,
+  strip,
+} from "./lib/language"
+import { isDataBypassPath, parsePath, type Target, type TextFormat } from "./lib/data-path"
+import { noindexOutsideProduction } from "./lib/noindex"
 import { loadComparePage, loadHomePage, loadLabPage, loadModelPage } from "./lib/page-data"
+import { labOgCard, modelOgCard } from "./og/card-data"
+import { ogResponse } from "./og/response"
 import { canonicalModelEntry, catalogModelPath, findModelCatalogLab, loadModelCatalog } from "./routes/model-catalog"
 import { statsPageCacheControl } from "./routes/stats-cache"
 
-type Format = "markdown" | "json" | "text"
-type Target =
-  | { kind: "home" }
-  | { kind: "llms" }
-  | { kind: "lab"; lab: string }
-  | { kind: "model"; lab: string; model: string }
-  | { kind: "compare"; params: string[] }
 type Rendered = {
   body: string | object | undefined
   path?: string
@@ -28,19 +36,19 @@ type Rendered = {
   unavailable?: boolean
 }
 
-const reservedSegments = new Set(["api", "_server", "_build", "stats", "sitemap.xml", "banner.jpg", "banner.png"])
-const extensionFormats = { ".md": "markdown", ".json": "json" } as const satisfies Record<string, Format>
 const contentTypes = {
   markdown: "text/markdown",
   json: "application/json",
   text: "text/plain",
-} as const satisfies Record<Format, string>
+} as const satisfies Record<TextFormat, string>
 
-export default createMiddleware({
+const pageMiddleware = createMiddleware({
   onRequest: async (event) => {
     const request = event.request
     if (request.method !== "GET" && request.method !== "HEAD") return
     const url = new URL(request.url)
+    const localized = localizedRedirect(request, url)
+    if (localized) return localized
     const path = strip(url.pathname)
     const parsed = parsePath(path)
     if (!parsed) return
@@ -65,36 +73,41 @@ export default createMiddleware({
     }
 
     if (!format) return
+    if (format === "og")
+      return ogResponse({
+        origin: url.origin,
+        path,
+        version: url.searchParams.get("v"),
+        head: request.method === "HEAD",
+        card: () => loadOgCard(parsed.target),
+      })
     return formatResponse(await render(parsed.target, format), format, { negotiated, head: request.method === "HEAD" })
   },
 })
 
-function parsePath(path: string) {
-  const segments = path.split("/").filter(Boolean).slice(1)
-  if (segments.some((segment) => !/^[\w.-]+$/.test(segment))) return undefined
-  const last = segments.at(-1) ?? ""
-  const extension = (Object.keys(extensionFormats) as (keyof typeof extensionFormats)[]).find(
-    (value) => last.endsWith(value) && last.length > value.length,
-  )
-  const parts = extension ? [...segments.slice(0, -1), last.slice(0, -extension.length)] : segments
-  const target = parseTarget(parts, extension !== undefined)
-  if (!target) return undefined
-  if (target.kind === "llms") return { target, extension: "", format: "text" as const }
-  return { target, extension: extension ?? "", format: extension && extensionFormats[extension] }
-}
+// The noindex header outside production first (lib/noindex.ts), so every response carries it.
+export default [noindexOutsideProduction, ...pageMiddleware]
 
-function parseTarget(parts: string[], formatted: boolean): Target | undefined {
-  if (parts.length === 0) return { kind: "home" }
-  if (parts.length === 1 && parts[0] === "index" && formatted) return { kind: "home" }
-  if (parts.length === 1 && parts[0] === "llms.txt" && !formatted) return { kind: "llms" }
-  if (parts[0] === "compare") {
-    if (parts.length !== 3 && parts.length !== 5) return undefined
-    return { kind: "compare", params: parts.slice(1) }
-  }
-  if (reservedSegments.has(parts[0])) return undefined
-  if (parts.length === 1) return { kind: "lab", lab: parts[0] }
-  if (parts.length === 2) return { kind: "model", lab: parts[0], model: parts[1] }
-  return undefined
+// Unprefixed pages redirect to the visitor's language from their cookie or Accept-Language. /en/data stays put so
+// English remains reachable for visitors whose browser prefers another language.
+function localizedRedirect(request: Request, url: URL) {
+  if (fromPathname(url.pathname)) return undefined
+  if (url.pathname !== basePath && !url.pathname.startsWith(`${basePath}/`)) return undefined
+  if (isDataBypassPath(url.pathname)) return undefined
+  const accept = request.headers.get("accept")
+  // Agents asking for Markdown get the English page in place.
+  if (prefersMarkdown(accept)) return undefined
+  if (accept && !accept.includes("text/html") && !accept.includes("*/*")) return undefined
+  const locale = localeFromRequest(request)
+  if (locale === "en") return undefined
+  const headers = new Headers({
+    // route() normalizes /data to /data/, so keep the visitor's own trailing slash.
+    Location: `${url.pathname === basePath ? `/${locale}${basePath}` : route(locale, url.pathname)}${url.search}`,
+    "Cache-Control": "private, no-store",
+    Vary: "Accept, Accept-Language, Cookie",
+  })
+  headers.append("Set-Cookie", cookie(locale))
+  return new Response(null, { status: 308, headers })
 }
 
 async function canonicalPath(target: Target) {
@@ -108,7 +121,13 @@ async function canonicalPath(target: Target) {
   return entry && catalogModelPath(entry)
 }
 
-async function render(target: Target, format: Format): Promise<Rendered> {
+async function loadOgCard(target: Target) {
+  if (target.kind === "lab") return labOgCard(await loadLabPage(target.lab))
+  if (target.kind === "model") return modelOgCard(await loadModelPage(target.lab, target.model))
+  return undefined
+}
+
+async function render(target: Target, format: TextFormat): Promise<Rendered> {
   if (target.kind === "llms") {
     const [home, catalog] = await Promise.all([loadHomePage(), loadModelCatalog()])
     return { body: llmsTxt(home, catalog), updatedAt: home.updatedAt }
@@ -141,7 +160,7 @@ async function render(target: Target, format: Format): Promise<Rendered> {
   return { body: compareMarkdown(data, target.params), unavailable: data.catalog.models.length === 0 }
 }
 
-function formatResponse(rendered: Rendered, format: Format, options: { negotiated: boolean; head: boolean }) {
+function formatResponse(rendered: Rendered, format: TextFormat, options: { negotiated: boolean; head: boolean }) {
   const headers = new Headers({
     "Content-Type": `${contentTypes[format]}; charset=utf-8`,
     "Cache-Control": statsPageCacheControl,

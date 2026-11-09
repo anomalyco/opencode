@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "ڈی بگ بار کو ٹوگل کریں",
+  providerAriaLabel: "فراہم کنندہ کی کارکردگی کی تشخیص",
+  na: "n/a",
+  "duration.label": "TIME",
+  "duration.tip": "تازہ ترین باری شروع کرنے والے پرامپٹ سے اس کے جواب کے مکمل ہونے تک کا وقت۔",
+  "tps.label": "TPS",
+  "tps.tip": "تازہ ترین باری کی ماڈل درخواستوں میں فی سیکنڈ آؤٹ پٹ اور استدلال ٹوکن، ٹول کے وقت کے بغیر۔",
+  "focus.label": "FOCUS",
+  "focus.tip": "تمام تفاعلی عناصر پر فوکس اسٹائلز لازماً لاگو کریں",
+  "focus.on": "چالو",
+  "focus.off": "بند",
+  "direction.label": "DIR",
+  "direction.tip": "منتخب زبان تبدیل کیے بغیر پوری ایپ کے لے آؤٹ کی سمت لازماً مقرر کریں",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

@@ -1,84 +1,183 @@
+import { createMemo, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { Icon } from "@opencode/ui/icon"
 import { LineCommentEditor } from "@opencode/ui/line-comment"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
+import { useLanguage } from "@/runtime/i18n/language"
+import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
+import type { ComposerDelivery } from "../adapter"
+import type { QuoteCommentView } from "../quote-comment-machine"
+
+const IS_MAC = /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+
+const sendLabels = {
+  queue: "session.quote.queue",
+  steer: "session.quote.steer",
+  send: "session.quote.send",
+} as const
 
 const GAP = 8
 
-const WIDTH = 380
+const WIDTH = 320
 
 export function QuoteCommentEditor(props: {
   anchor: HTMLElement
+  source?: ComposerQuoteAnchor
   text: string
-  icon?: string
+  /** The saved comment. */
   comment: string
+  view: QuoteCommentView
   mention: (query: string) => Promise<string[]>
+  onInput: (draft: string) => void
   onSubmit: (comment: string) => void
-  onClose: () => void
+  onClose: (focus?: boolean) => void
+  send?: {
+    available: boolean
+    delivery: ComposerDelivery | undefined
+    onSubmit: (comment: string) => void
+  }
 }) {
+  const language = useLanguage()
+
   const [state, setState] = createStore({
-    draft: props.comment,
     rect: bounds(props.anchor),
     viewport: window.innerWidth,
+    viewportHeight: window.innerHeight,
+    revision: 0,
     height: 0,
+    openingHeight: 0,
+  })
+
+  const width = () => Math.min(WIDTH, state.viewport - GAP * 2)
+
+  const source = createMemo(() => {
+    // DOM scroll is not reactive; scheduled measurements invalidate the source's viewport coordinates.
+    void state.revision
+
+    if (!state.openingHeight) return
+
+    return props.source?.({ width: width(), height: state.openingHeight })
   })
 
   let element: HTMLElement | undefined
-  const measure = () => setState({ rect: bounds(props.anchor), viewport: window.innerWidth })
 
-  makeEventListener(window, "resize", measure)
-  makeEventListener(document, "scroll", measure, { capture: true, passive: true })
+  let frame: number | undefined
+
+  const schedule = () => {
+    if (frame !== undefined) return
+    frame = requestAnimationFrame(() => {
+      frame = undefined
+      setState({
+        rect: bounds(props.anchor),
+        viewport: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        revision: state.revision + 1,
+      })
+    })
+  }
+
+  onCleanup(() => {
+    if (frame !== undefined) cancelAnimationFrame(frame)
+  })
+
+  makeEventListener(window, "resize", schedule)
+  makeEventListener(document, "scroll", schedule, { capture: true, passive: true })
+  createResizeObserver(() => props.anchor.parentElement, schedule)
   makeEventListener(document, "pointerdown", (event) => {
     const target = event.target
 
     if (target instanceof Node && (element?.contains(target) || props.anchor.contains(target))) return
 
-    if (state.draft.trim() === props.comment.trim()) props.onClose()
+    if (props.view.canDismissOutside) props.onClose()
   })
 
-  const width = () => Math.min(WIDTH, state.viewport - GAP * 2)
-  const left = () => Math.min(Math.max(state.rect.left, GAP), state.viewport - width() - GAP)
+  const left = () => Math.min(Math.max(source()?.left ?? state.rect.left, GAP), state.viewport - width() - GAP)
 
-  const top = () => {
-    const above = state.rect.top - state.height - GAP
+  const bottom = createMemo(() => {
+    // Preserve the opening bottom edge as the draft grows upward.
+    const above = state.rect.top - state.openingHeight - GAP
+    const desired = source()?.top ?? (above >= GAP ? above : state.rect.bottom + GAP)
 
-    return above >= GAP ? above : state.rect.bottom + GAP
-  }
+    return Math.min(state.viewportHeight - GAP, Math.max(GAP + state.openingHeight, desired + state.openingHeight))
+  })
+
+  const availableHeight = () => Math.max(0, bottom() - GAP)
+  const top = () => Math.max(GAP, bottom() - state.height)
+
+  const alternateSubmit = createMemo(() => {
+    const send = props.send
+
+    if (!send) return
+
+    return {
+      label: language.t(sendLabels[send.delivery ?? "send"]),
+      keys: [IS_MAC ? "⌘" : language.t("common.key.ctrl"), "⏎"],
+      disabled: !send.available,
+      onSubmit: send.onSubmit,
+    }
+  })
 
   return (
     <Portal>
       <div
         ref={(value) => {
           element = value
-          createResizeObserver(value, () => setState("height", value.offsetHeight))
+          createResizeObserver(value, () => {
+            setState({
+              height: value.offsetHeight,
+              openingHeight: state.openingHeight || value.offsetHeight,
+            })
+          })
         }}
         data-component="composer-quote-comment"
         data-prevent-autofocus
-        class="fixed z-50 overflow-y-auto rounded-[6px] shadow-[var(--v2-elevation-raised)]"
+        class="fixed z-50"
         style={{
           top: `${top()}px`,
           left: `${left()}px`,
           width: `${width()}px`,
+          "max-height": `${availableHeight()}px`,
+          "--line-comment-max-height": `${availableHeight()}px`,
           // Transparent rather than hidden while unmeasured, so the comment field can take focus as it mounts.
           opacity: state.height === 0 ? 0 : undefined,
         }}
       >
-        <LineCommentEditor
-          value={state.draft}
-          onInput={(value) => setState("draft", value)}
-          onCancel={props.onClose}
-          onSubmit={props.onSubmit}
-          allowEmpty
-          mention={{ items: props.mention }}
-          selection={
-            <span class="flex min-w-0 items-center gap-1" dir="auto">
-              <Icon name={props.icon ?? "outline-quote"} size="small" class="shrink-0" />
-              <span class="min-w-0 truncate leading-[var(--line-height-tight)]">{props.text.slice(0, 200)}</span>
-            </span>
-          }
-        />
+        <MenuScroll
+          class="rounded-[8px] shadow-[var(--v2-elevation-floating)]"
+          style={{ "max-height": `${availableHeight()}px` }}
+        >
+          <LineCommentEditor
+            variant="compact"
+            style={{ "--line-comment-preview-lines": props.source ? 2 : 4 }}
+            value={props.view.draft}
+            onInput={props.onInput}
+            onCancel={() => props.onClose(true)}
+            onSubmit={props.onSubmit}
+            submitting={props.view.sending}
+            alternateSubmit={alternateSubmit()}
+            placeholder={language.t("session.quote.optionalCommentPlaceholder")}
+            submitLabel={language.t(
+              props.comment.trim()
+                ? "common.save"
+                : props.view.draft.trim()
+                  ? "session.quote.addComment"
+                  : "session.quote.done",
+            )}
+            allowEmpty
+            mention={{ items: props.mention }}
+            selection={<span dir="auto">{props.text}</span>}
+          />
+          <Show when={props.view.failed}>
+            <p
+              role="alert"
+              class="rounded-b-[8px] bg-v2-background-bg-layer-01 px-3 pb-3 text-[12px] leading-[var(--line-height-compact)] text-v2-text-text-base"
+            >
+              {language.t("session.quote.sendFailed")}
+            </p>
+          </Show>
+        </MenuScroll>
       </div>
     </Portal>
   )

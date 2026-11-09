@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.messagePart.tools.used.two": "{{tools}} uporabljeno {{count}}-krat",
   "ui.messagePart.tools.used.few": "{{tools}} uporabljeno {{count}}-krat",
   "ui.common.fileCount.two": "{{count}} datoteki",
@@ -100,10 +100,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Naročite se na OpenCode Go za zanesljiv dostop do najboljših odprtokodnih modelov za 10 $/mesec.",
   "dialog.usageExceeded.freeTier.actionLabel": "Naročite se",
-  "dialog.usageExceeded.accountRateLimit.title": "Dosežena omejitev",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Omejitev uporabe je dosežena. Če želite zdaj še naprej uporabljati ta model, omogočite uporabo iz razpoložljivega stanja",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Odprite nastavitve",
   "ui.sessionTurn.status.delegating": "Delegiranje dela",
   "ui.sessionTurn.status.planning": "Načrtovanje naslednjih korakov",
   "ui.sessionTurn.status.gatheringContext": "Raziskovanje",
