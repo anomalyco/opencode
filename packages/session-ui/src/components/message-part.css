@@ -582,9 +582,16 @@
     justify-content: flex-start;
     gap: 4px;
 
-    /* The copy control stays in reach; only the metadata after it waits for hover. Keeping the
-       metadata in flow means the copy control does not move when it appears. */
-    [data-slot="text-part-meta"] {
+    /* Production keeps the whole footer hover-only. Dev channels keep the copy control visible and
+       hide only the metadata. Keeping the metadata in flow means the copy control does not move. */
+    @media (hover: hover) {
+      &:not([data-copy-always-visible]) {
+        opacity: 0;
+        pointer-events: none;
+      }
+    }
+
+    &[data-copy-always-visible] [data-slot="text-part-meta"] {
       @media (hover: hover) {
         opacity: 0;
         pointer-events: none;
@@ -661,8 +668,14 @@
     transition: none;
   }
 
-  &:hover [data-slot="text-part-meta"],
-  &:focus-within [data-slot="text-part-meta"] {
+  &:hover [data-slot="text-part-copy-wrapper"],
+  &:focus-within [data-slot="text-part-copy-wrapper"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  &:hover [data-slot="text-part-copy-wrapper"][data-copy-always-visible] [data-slot="text-part-meta"],
+  &:focus-within [data-slot="text-part-copy-wrapper"][data-copy-always-visible] [data-slot="text-part-meta"] {
     opacity: 1;
     pointer-events: auto;
   }
