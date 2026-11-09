@@ -58,6 +58,7 @@ export const registerIpcHandlers = Effect.gen(function* () {
   }
 
   const wire = (win: BrowserWindow) => {
+    if (isAuxiliaryWindow(win) || win.getParentWindow()) return
     win.webContents.on("before-input-event", (_event, input) => {
       // Ctrl+R renames the session and Ctrl+Shift+R toggles review in the renderer,
       // so the default menu's Reload and Force Reload must not take them.

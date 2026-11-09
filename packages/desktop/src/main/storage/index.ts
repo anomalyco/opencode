@@ -36,7 +36,7 @@ export const layer = Layer.effect(
     )
 
     const wire = (_event: Electron.Event | undefined, win: BrowserWindow) => {
-      if (!isAuxiliaryWindow(win)) win.on("session-end", storage.flush)
+      if (!isAuxiliaryWindow(win) && !win.getParentWindow()) win.on("session-end", storage.flush)
     }
 
     app.on("before-quit", storage.flush)
