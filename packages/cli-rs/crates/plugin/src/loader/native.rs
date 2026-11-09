@@ -589,6 +589,8 @@ impl Guest {
                 layer.dispose();
             }
             host.failed(&id);
+            // The fences it drew fall back to the code view, as the ones it draws from now on do.
+            host.remount();
         });
         self.activation.invalidate();
         None
