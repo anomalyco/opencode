@@ -582,9 +582,9 @@ export function carouselCss() {
  * ("hover · reverse") or the still fades back over it ("hover · fade"). "autoplay" plays all the
  * time. Reduced motion keeps the still.
  *
- * With `loop`, the card rests on that short idle loop instead of a still: it plays while the card
- * is on screen, crossfades to the product video on hover and back on leave. Reduced motion shows
- * its first frame (`still`).
+ * With `loop`, the card rests on that short idle loop instead of a still: it shows its first frame
+ * (`still`) until the page has loaded, then plays while the card is on screen, crossfades to the
+ * product video on hover and back on leave. Reduced motion and Save-Data keep the first frame.
  */
 export function CardVideo(props: {
   src: string
@@ -652,10 +652,17 @@ export function CardVideo(props: {
   }
   createEffect(speed)
 
-  // The idle loop plays only while the card is on screen and resting.
+  // Reduced motion and Save-Data keep a card on its still: no resting loop and no sizzle.
+  const cover = () =>
+    prefersReducedMotion() ||
+    (navigator as typeof window.navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true
+
+  // The idle loop plays only while the card is on screen and resting, and only once the page has
+  // loaded (ready), so it never competes with the stills: it starts from the frame the still shows.
+  let ready = false
   const rest = () => {
     if (!idle) return
-    if (visible && !active && mode() !== "autoplay" && !prefersReducedMotion()) {
+    if (ready && visible && !active && mode() !== "autoplay" && !cover()) {
       void idle.play().catch(() => {})
       return
     }
@@ -774,8 +781,6 @@ export function CardVideo(props: {
     // Leaving pauses the sizzle where it is and coming back resumes it, unless the card was away
     // for over 30s: then it starts again from the cover. Reduced motion and Save-Data keep the cover.
     setSizzle(window.matchMedia("(hover: none), (pointer: coarse)").matches || isMobile(detectPlatform()))
-    const connection = (navigator as typeof window.navigator & { connection?: { saveData?: boolean } }).connection
-    const cover = () => prefersReducedMotion() || connection?.saveData === true
     let wait: ReturnType<typeof setTimeout> | undefined
     let away = 0
     // Back to the cover with the sizzle rewound, without a fade (the card is off screen).
@@ -821,7 +826,13 @@ export function CardVideo(props: {
       { rootMargin: "100% 50%" },
     )
     if (media) ahead.observe(media)
+    const start = () => {
+      ready = true
+      rest()
+    }
+    afterLoad(start)
     onCleanup(() => {
+      window.removeEventListener("load", start)
       view.disconnect()
       ahead.disconnect()
       clearTimeout(wait)
@@ -839,13 +850,16 @@ export function CardVideo(props: {
       <video
         ref={video}
         aria-hidden="true"
-        // The demo's poster is its first product frame: show it only once the loop covers it, so the
-        // card never flashes the demo while it loads.
+        // The demo's poster is its first product frame, and the loop covers the demo until a frame
+        // of it is on screen (enter waits for one), so only autoplay, which takes the loop away
+        // once mounted, ever shows it.
         // On phones the cover stays over it until a frame of it is playing, so it needs no poster.
         // A clip whose still is its own poster (the feature clips) has the image over it until it
         // plays (except with autoplay), so the attribute would only download it again as WebP.
         poster={
-          (props.demo && !loaded()) || sizzle() || (!props.loop && !props.still && mode() !== "autoplay")
+          (props.demo && (still() || mode() !== "autoplay")) ||
+          sizzle() ||
+          (!props.loop && !props.still && mode() !== "autoplay")
             ? undefined
             : posterFile(props.poster)
         }
@@ -915,8 +929,8 @@ export function CardVideo(props: {
               muted
               loop
               playsinline
-              // The first screen's loops buffer with the page; the others once they play on screen.
-              preload={props.priority ? "auto" : "metadata"}
+              // Nothing loads until the loop first plays (rest), after the page has loaded.
+              preload="none"
             >
               <VideoSources src={loop()} video={() => idle} />
             </video>
