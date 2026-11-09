@@ -24,7 +24,7 @@ use std::rc::Rc;
 use crate::app::Tui;
 use crate::dialogs::settings::{set_path, update};
 
-const DOCS: &str = "https://opencode.ai/v2/docs";
+const DOCS: &str = "https://opencode.ai/docs";
 
 /// Registers the commands; the caller keeps the returned layers.
 pub fn install(tui: &Rc<Tui>) -> Vec<Disposer> {

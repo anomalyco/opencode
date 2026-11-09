@@ -184,7 +184,7 @@ fn system_commands_run_from_their_keys_and_the_palette() {
     app.press("ctrl+p");
     app.type_text("open docs");
     app.press("return");
-    assert_eq!(*capture.0.opened.borrow(), ["https://opencode.ai/v2/docs"]);
+    assert_eq!(*capture.0.opened.borrow(), ["https://opencode.ai/docs"]);
     assert!(!tui.dialogs.is_open());
 
     // Only these three of E.20's commands are in the palette, as in TS.
