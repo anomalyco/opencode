@@ -41,8 +41,19 @@ const context: SessionContext = {
   options: {},
 }
 
-/** Runs the warming plugin with the given top-level `warming` and a catalog holding the test model's `cache`. */
-const run = Effect.fnUntraced(function* (warming: unknown, cache?: Provider.Cache) {
+const hit = { read: 1000, write: 10 }
+const miss = { read: 0, write: 1000 }
+const unreported = { read: 0, write: 0 }
+
+/**
+ * Runs the warming plugin with the given top-level `warming` and a catalog holding the test model's `cache`. Each ping
+ * reports the next cache usage in `usage`.
+ */
+const run = Effect.fnUntraced(function* (
+  warming: unknown,
+  cache?: Provider.Cache,
+  usage: ReadonlyArray<typeof hit> = [],
+) {
   const warms: number[] = []
   const events = yield* Queue.unbounded<SessionEvent.Execution.Succeeded>()
   let contextHook: ((input: SessionContext) => Effect.Effect<void>) | undefined
@@ -60,12 +71,9 @@ const run = Effect.fnUntraced(function* (warming: unknown, cache?: Provider.Cach
         generate: () =>
           Clock.currentTimeMillis.pipe(
             Effect.map((now) => {
+              const cache = usage[warms.length] ?? unreported
               warms.push(now / 60_000)
-              return {
-                text: "OK",
-                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-                cost: Money.USD.zero,
-              }
+              return { text: "OK", tokens: { input: 0, output: 1, reasoning: 0, cache }, cost: Money.USD.zero }
             }),
           ),
         hook: (name, callback) => {
@@ -131,6 +139,46 @@ describe("WarmingPlugin interval", () => {
       yield* warming.turn
       for (const minutes of [2, 4]) yield* warming.at(minutes)
       expect(warming.warms).toEqual([2, 4])
+    }),
+  )
+})
+
+describe("WarmingPlugin cache miss", () => {
+  it.effect("keeps warming after a ping hits the cache", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true, undefined, [hit, hit, hit])
+      yield* warming.turn
+      for (const minutes of [4, 8, 12]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4, 8, 12])
+    }),
+  )
+
+  it.effect("stops warming after a ping misses the cache", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true, undefined, [hit, miss, hit])
+      yield* warming.turn
+      for (const minutes of [4, 8, 12, 16]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4, 8])
+    }),
+  )
+
+  it.effect("resumes warming on the next real request after a miss", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true, undefined, [miss, hit, hit])
+      yield* warming.turn
+      for (const minutes of [4, 8]) yield* warming.at(minutes)
+      yield* warming.turn
+      for (const minutes of [12, 16]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4, 12, 16])
+    }),
+  )
+
+  it.effect("doesn't count a ping without cache usage as a miss", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true, undefined, [unreported, unreported])
+      yield* warming.turn
+      for (const minutes of [4, 8]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4, 8])
     }),
   )
 })
