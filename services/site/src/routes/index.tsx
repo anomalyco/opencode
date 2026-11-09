@@ -1351,6 +1351,20 @@ function ToolGrid(props: {
     return wash.armed() && style ? { animation: style, vars: revealMotion(style, siteSettings.logoTuning) } : undefined
   }
   createEffect(on([animation, () => siteSettings.toolsStagger], wash.replay, { defer: true }))
+  // The tiles' logos (SVG masks, index.css) load once the grid is within a screen of the window, so
+  // a page doesn't fetch them with its first screen.
+  onMount(() => {
+    const near = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        grid?.setAttribute("data-near", "")
+        near.disconnect()
+      },
+      { rootMargin: "100% 0px" },
+    )
+    if (grid) near.observe(grid)
+    onCleanup(() => near.disconnect())
+  })
 
   return (
     <ul
@@ -1394,7 +1408,7 @@ function ToolGrid(props: {
                           role={props.iconTiles ? "img" : undefined}
                           aria-label={props.iconTiles ? tool.name : undefined}
                           aria-hidden={props.iconTiles ? undefined : "true"}
-                          style={{ "mask-image": `url(${tool.logo})`, "-webkit-mask-image": `url(${tool.logo})` }}
+                          style={{ "--logo": `url(${tool.logo})` }}
                         />
                         {props.iconTiles ? null : tool.name}
                       </>
@@ -1404,8 +1418,7 @@ function ToolGrid(props: {
                       data-slot="wordmark"
                       aria-hidden="true"
                       style={{
-                        "mask-image": `url(${tool.wordmark})`,
-                        "-webkit-mask-image": `url(${tool.wordmark})`,
+                        "--logo": `url(${tool.wordmark})`,
                         ...(tool.metrics ? balanceLogo(tool.metrics) : {}),
                       }}
                     />
