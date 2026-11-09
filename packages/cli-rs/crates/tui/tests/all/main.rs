@@ -9,6 +9,7 @@ mod app;
 mod attach;
 mod attention;
 mod click_focus;
+mod cold_catalogs;
 mod complete;
 mod composer;
 mod config_live;
