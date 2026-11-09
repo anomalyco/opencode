@@ -42,6 +42,7 @@ import { Skill } from "@opencode/core/skill"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { SessionStored } from "@opencode/core/session/stored"
@@ -79,7 +80,7 @@ const execution = Layer.succeed(
 const mediaDirectory = "/media"
 // A location whose instance fails to boot, the way a bad config or unreadable directory does: as a defect.
 const brokenDirectory = "/broken"
-const mediaBlob = Config.testLayer([
+const mediaBlob = Flag.testLayer([
   new Document({
     type: "document",
     info: new Info({ experimental: new ConfigExperimental.Info({ media_blob: true }) }),
@@ -90,16 +91,20 @@ const locations = makeGlobalNode({
   layer: Layer.effect(
     LocationServiceMap.Service,
     Effect.gen(function* () {
+      const app = yield* App.Service
       const bus = yield* Bus.Service
       return yield* LayerMap.make(
         (ref: Location.Ref) =>
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
           Layer.mergeAll(
-            // Every real instance has its own config, so the caller's never shows through.
-            ref.directory === mediaDirectory ? mediaBlob : Config.testLayer([]),
             ref.directory === brokenDirectory ? Layer.effectDiscard(Effect.die("instance boot failed")) : Layer.empty,
-            LayerNode.compile(LayerNode.group([PluginHooks.node, Skill.node]), {
-              replacements: [Bus.node.replace(Layer.succeed(Bus.Service, bus))],
+            // Every real instance has its own config and flags, so the caller's never show through.
+            LayerNode.compile(LayerNode.group([App.node, Config.node, Flag.node, PluginHooks.node, Skill.node]), {
+              replacements: [
+                App.node.replace(Layer.succeed(App.Service, app)),
+                Bus.node.replace(Layer.succeed(Bus.Service, bus)),
+                Config.node.replace(ref.directory === mediaDirectory ? mediaBlob : Config.testLayer([])),
+              ],
             }),
             Layer.mock(Image.Service, {
               normalize: (resource, content) =>
@@ -118,7 +123,7 @@ const locations = makeGlobalNode({
       )
     }),
   ),
-  deps: [Bus.node],
+  deps: [App.node, Bus.node],
 })
 const harness = (channel?: string) =>
   testEffect(
@@ -706,12 +711,18 @@ describe("Session.prompt", () => {
     }),
   )
 
-  devIt.effect("imports media into blobs by default on a dev-channel server with no config", () =>
+  devIt.effect("admits and imports media into blobs by default on a dev-channel server with no config", () =>
     Effect.gen(function* () {
       yield* setup
       const { db } = yield* Database.Service
       const session = yield* Session.Service
       const transfer = yield* SessionTransfer.Service
+      const prompted = yield* session.prompt({
+        sessionID,
+        text: "Inspect this image",
+        files: [{ uri: `data:image/png;base64,${pngBase64}`, name: "shot.png" }],
+        resume: false,
+      })
       const imported = yield* transfer.import({
         data: {
           info: { ...(yield* session.get(sessionID)), id: Session.ID.make("ses_import_dev") },
@@ -721,6 +732,13 @@ describe("Session.prompt", () => {
       })
 
       const hash = SessionBlob.hashBytes(Buffer.from(pngBase64, "base64"))
+      const inboxRow = yield* db
+        .select()
+        .from(SessionInboxTable)
+        .where(eq(SessionInboxTable.id, prompted.id))
+        .get()
+        .pipe(Effect.orDie)
+      expect(inboxRow?.payload).toMatchObject({ files: [{ uri: SessionStored.ref(hash), mime: "image/png" }] })
       expect(yield* db.select({ hash: BlobTable.hash }).from(BlobTable).all().pipe(Effect.orDie)).toEqual([{ hash }])
       expect(yield* session.messages({ sessionID: imported.id, order: "asc" })).toEqual(mediaMessages("ses_import_dev"))
     }),

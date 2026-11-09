@@ -23,8 +23,12 @@ export type Snapshot = {
 export type Header = {
   /** The build that wrote it: the package version, and a hash of the opcodes, the prelude's bytecode, codecs, and built-ins. */
   readonly build: string
-  /** A hash of the host's globals (extensions, a test harness), which the restoring runtime must have too. */
+  /**
+   * A hash of the host's globals (extensions, a test harness), and of each extension's name and whether it has
+   * `snapshot` hooks, which the restoring runtime must have too.
+   */
   readonly hosts: string
+  readonly runId: string
   /** The program texts, re-parsed and recompiled on restore, and checked against their hashes and bytecode hashes. */
   readonly sources: ReadonlyArray<{
     readonly id: string
@@ -45,7 +49,15 @@ export type Header = {
 
 export type SnapshotHeader = Header
 
-export const hostsId = (ctx: Interpreter<unknown>): string => hash(ctx.intrinsics.hosts().join("\n"))
+export const hostsId = (ctx: Interpreter<unknown>): string =>
+  hash(
+    [
+      ...ctx.intrinsics.hosts(),
+      ...(ctx.hosts?.extensions ?? []).map(
+        (extension) => `${extension.name} ${extension.hooked ? "hooks" : "no hooks"}`,
+      ),
+    ].join("\n"),
+  )
 
 // --- Validation ---
 
@@ -82,6 +94,7 @@ export const validate = (saved: unknown): Snapshot => {
   const checked: Header = {
     build: string(header.build, "the build"),
     hosts: string(header.hosts, "the host globals"),
+    runId: string(header.runId, "the run id"),
     sources: array(header.sources, "the sources").map((item) => {
       const source = object(item, "a source")
       return {

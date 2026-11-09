@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
-import { App } from "@opencode/core/app"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { Config } from "@opencode/core/config"
 import { Flag } from "@opencode/core/flag"
@@ -12,7 +11,7 @@ import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { Info } from "@opencode/schema/tool"
-import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
+import { Deferred, Effect, Fiber, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { it } from "./lib/effect"
 import { permissionService } from "./lib/permission"
@@ -27,19 +26,23 @@ const context = {
 
 const allowAll = permissionService({ assert: () => Effect.void })
 
-const createCodeMode = (tools: ReadonlyMap<string, Info>, permission = allowAll) =>
-  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission)
+const vmFlag = (codemode_vm: boolean): Flag.Interface => {
+  const resolve: Flag.Interface["resolve"] = (entries) =>
+    Flag.resolve({
+      entries,
+      channel: codemode_vm ? "dev" : "latest",
+      overrides: `${codemode_vm ? "" : "-"}codemode_vm`,
+    })
+  const all = Effect.sync(() => resolve([]))
+  return {
+    resolve,
+    all,
+    enabled: (key) => Effect.map(all, (flags) => flags[key].enabled),
+  }
+}
 
-const vmConfig = (codemode_vm: boolean) =>
-  Layer.merge(
-    Layer.succeed(Flag.Overrides, undefined),
-    Config.testLayer([
-      new Document({
-        type: "document",
-        info: new ConfigInfo({ experimental: new ConfigExperimental.Info({ codemode_vm }) }),
-      }),
-    ]),
-  )
+const createCodeMode = (tools: ReadonlyMap<string, Info>, permission = allowAll, flag = vmFlag(false)) =>
+  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission, flag)
 
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
@@ -136,12 +139,15 @@ describe.each([
   ["experimental.codemode_vm off (legacy)", false],
   ["experimental.codemode_vm on (vm)", true],
 ] as const)("%s", (_, vm) => {
-  const provideFlag = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(vmConfig(vm)))
-  const runFlagged = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(provideFlag(effect))
+  const flag = vmFlag(vm)
+  const createMode = (tools: ReadonlyMap<string, Info>, permission = allowAll) =>
+    createCodeMode(tools, permission, flag)
+  const provideFlag = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect
+  const runFlagged = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(effect)
 
   test("execute rejects filesystem fetches", async () => {
     const result = await runFlagged(
-      createCodeMode(new Map()).execute({ code: 'return await fetch("file:///blocked.txt")' }, context),
+      createMode(new Map()).execute({ code: 'return await fetch("file:///blocked.txt")' }, context),
     )
 
     expect(result.output.error).toBe(true)
@@ -169,7 +175,7 @@ describe.each([
       const asked: Array<Permission.AssertInput> = []
       const url = `${server.url.origin}/allowed`
       const result = await runFlagged(
-        createCodeMode(
+        createMode(
           new Map(),
           permissionService({ assert: (input) => Effect.sync(() => void asked.push(input)) }),
         ).execute({ code: `return await (await fetch("${url}", { method: "POST" })).text()` }, context),
@@ -198,7 +204,7 @@ describe.each([
           Effect.fail(new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources })),
       })
       const result = await runFlagged(
-        createCodeMode(new Map(), denied).execute(
+        createMode(new Map(), denied).execute(
           { code: `try { await fetch("${server.url.origin}/redirect") } catch (e) { return e.message }` },
           context,
         ),
@@ -212,7 +218,7 @@ describe.each([
       hits.length = 0
       const asked: Array<ReadonlyArray<string>> = []
       const result = await runFlagged(
-        createCodeMode(
+        createMode(
           new Map(),
           permissionService({ assert: (input) => Effect.sync(() => void asked.push(input.resources)) }),
         ).execute(
@@ -235,7 +241,7 @@ describe.each([
         assert: () => Effect.fail(new Permission.CorrectedError({ feedback: "use the docs site instead" })),
       })
       const result = await runFlagged(
-        createCodeMode(new Map(), corrected).execute(
+        createMode(new Map(), corrected).execute(
           { code: `try { await fetch("${url}") } catch (e) { return e.message }` },
           context,
         ),
@@ -253,7 +259,7 @@ describe.each([
           Effect.fail(new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources })),
       })
       const result = await runFlagged(
-        createCodeMode(new Map(), denied).execute(
+        createMode(new Map(), denied).execute(
           { code: `const [denied] = await Promise.allSettled([fetch("${url}")]); return denied.status` },
           context,
         ),
@@ -281,7 +287,7 @@ describe.each([
       options: { namespace: "slack.admin" },
       execute: () => Effect.succeed({ output: "created" }),
     }
-    const codeMode = createCodeMode(
+    const codeMode = createMode(
       new Map([
         ["slack_admin", callable],
         ["slack_admin_create", child],
@@ -322,10 +328,15 @@ describe.each([
       execute: (input, context) => Effect.succeed({ content: `${context.id}:${(input as { value: string }).value}` }),
     }
     const inventory = { tools: new Map([["echo", echo]]) }
-    const codeMode = CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll)
+    const codeMode = CodeModeTool.create(
+      inventory,
+      (_, tool, input, context) => execute(tool, input, context),
+      allowAll,
+      flag,
+    )
     const run = (id: string) => {
       const progress: Array<Tool.Metadata> = []
-      return CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll)
+      return CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll, flag)
         .execute(
           { code: `return await tools.echo({ value: "${id}" })` },
           { ...context, id: Tool.CallID.make(id), progress: (update) => Effect.sync(() => progress.push(update)) },
@@ -349,13 +360,13 @@ describe.each([
     expect(conversions).toBe(1)
 
     await runFlagged(
-      createCodeMode(new Map(inventory.tools)).execute({ code: 'return await tools.echo({ value: "next" })' }, context),
+      createMode(new Map(inventory.tools)).execute({ code: 'return await tools.echo({ value: "next" })' }, context),
     )
     expect(conversions).toBe(2)
   })
 
   const progressCodeMode = (started: Deferred.Deferred<void>, wait: Effect.Effect<void>) =>
-    createCodeMode(
+    createMode(
       new Map<string, Info>([
         [
           "step",
@@ -457,30 +468,40 @@ test("runtime cache is keyed per engine when experimental.codemode_vm toggles", 
     },
     execute: (input) => Effect.succeed({ content: (input as { value: string }).value }),
   }
+  const document = (codemode_vm: boolean) =>
+    new Document({
+      type: "document",
+      info: new ConfigInfo({ experimental: new ConfigExperimental.Info({ codemode_vm }) }),
+    })
   const inventory = { tools: new Map([["echo", echo]]) }
-  const codeMode = CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll)
 
-  // Legacy engine (flag off) builds and reuses the legacy runtime
   await Effect.runPromise(
-    codeMode.execute({ code: 'return await tools.echo({ value: "a" })' }, context).pipe(Effect.provide(vmConfig(false))),
-  )
-  await Effect.runPromise(
-    codeMode.execute({ code: 'return await tools.echo({ value: "b" })' }, context).pipe(Effect.provide(vmConfig(false))),
-  )
-  expect(conversions).toBe(1)
+    Effect.gen(function* () {
+      const config = yield* Config.Test
+      const flag = yield* Flag.Service
+      const codeMode = CodeModeTool.create(
+        inventory,
+        (_, tool, input, context) => execute(tool, input, context),
+        allowAll,
+        flag,
+      )
 
-  // VM engine (flag on) builds and reuses its own runtime instance for the same inventory
-  await Effect.runPromise(
-    codeMode.execute({ code: 'return await tools.echo({ value: "c" })' }, context).pipe(Effect.provide(vmConfig(true))),
-  )
-  await Effect.runPromise(
-    codeMode.execute({ code: 'return await tools.echo({ value: "d" })' }, context).pipe(Effect.provide(vmConfig(true))),
-  )
-  expect(conversions).toBe(2)
+      // Legacy engine (flag off) builds and reuses the legacy runtime
+      yield* codeMode.execute({ code: 'return await tools.echo({ value: "a" })' }, context)
+      yield* codeMode.execute({ code: 'return await tools.echo({ value: "b" })' }, context)
+      expect(conversions).toBe(1)
 
-  // Reading the catalog reuses the cached runtime without rebuilding
-  expect(CodeModeTool.catalog(inventory).tools).toHaveLength(1)
-  expect(conversions).toBe(2)
+      // VM engine (flag on) builds and reuses its own runtime instance for the same inventory
+      yield* config.setEntries([document(true)])
+      yield* codeMode.execute({ code: 'return await tools.echo({ value: "c" })' }, context)
+      yield* codeMode.execute({ code: 'return await tools.echo({ value: "d" })' }, context)
+      expect(conversions).toBe(2)
+
+      // Reading the catalog reuses the cached runtime without rebuilding
+      expect(CodeModeTool.catalog(inventory).tools).toHaveLength(1)
+      expect(conversions).toBe(2)
+    }).pipe(Effect.provide(Flag.testLayer([document(false)]))),
+  )
 })
 
 describe("codemode_vm follows the flag registry", () => {
@@ -516,21 +537,26 @@ describe("codemode_vm follows the flag registry", () => {
       },
       execute: (input) => Effect.succeed({ content: (input as { value: string }).value }),
     }
-    const codeMode = CodeModeTool.create(
-      { tools: new Map([["echo", echo]]) },
-      (_, tool, input, context) => execute(tool, input, context),
-      allowAll,
+    const inventory = { tools: new Map([["echo", echo]]) }
+    await Effect.runPromise(
+      CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll, vmFlag(false))
+        .execute({ code: 'return await tools.echo({ value: "a" })' }, context),
     )
-    const run = codeMode.execute({ code: 'return await tools.echo({ value: "a" })' }, context)
-    await Effect.runPromise(run.pipe(Effect.provide(vmConfig(false))))
     const result = await Effect.runPromise(
-      run.pipe(
+      Effect.gen(function* () {
+        const flag = yield* Flag.Service
+        return yield* CodeModeTool.create(
+          inventory,
+          (_, tool, input, context) => execute(tool, input, context),
+          allowAll,
+          flag,
+        ).execute({ code: 'return await tools.echo({ value: "a" })' }, context)
+      }).pipe(
         Effect.provide(
-          Layer.mergeAll(
-            App.layer({ channel: input.channel }),
-            Layer.succeed(Flag.Overrides, input.overrides),
-            Config.testLayer(input.entries ?? []),
-          ),
+          Flag.testLayer(input.entries ?? [], {
+            app: { channel: input.channel },
+            overrides: input.overrides,
+          }),
         ),
       ),
     )

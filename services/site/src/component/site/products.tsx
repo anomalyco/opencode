@@ -1070,7 +1070,7 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
   const storeRow = (item: (typeof stores)[number]) => (
     <>
       <PlatformIcon platform={item.beta ? "TestFlight" : item.platform} />
-      <span data-slot="label">
+      <span data-slot="label" dir="auto">
         {item.label}
         <Show when={item.beta}>
           <NewTab />
@@ -1102,7 +1102,9 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
       {(item) => (
         <a href={getDownloadHref(item.id)} data-slot="store" role="menuitem">
           <PlatformIcon platform={item.platform} />
-          <span data-slot="label">{i18n.t(item.label)}</span>
+          <span data-slot="label" dir="auto">
+            {i18n.t(item.label)}
+          </span>
         </a>
       )}
     </For>
@@ -1268,7 +1270,9 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
                           aria-label={i18n.t("site.action.comingSoonFor", { os: item.device })}
                         >
                           <PlatformIcon platform={item.platform} />
-                          <span data-slot="label">{item.device}</span>
+                          <span data-slot="label" dir="auto">
+                            {item.device}
+                          </span>
                           <span data-slot="status">{i18n.t("site.action.comingSoon")}</span>
                         </span>
                       </Show>
@@ -1378,13 +1382,11 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
                   <For each={desktopBuilds}>
                     {(item) => (
                       <li>
-                        <a
-                          href={getDownloadHref(item.id)}
-                          data-slot="row"
-                          on:click={() => sheetControl?.close()}
-                        >
+                        <a href={getDownloadHref(item.id)} data-slot="row" on:click={() => sheetControl?.close()}>
                           <PlatformIcon platform={item.platform} />
-                          <span data-slot="label">{i18n.t(item.label)}</span>
+                          <span data-slot="label" dir="auto">
+                            {i18n.t(item.label)}
+                          </span>
                         </a>
                       </li>
                     )}
@@ -1443,7 +1445,9 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
                             aria-label={i18n.t("site.action.comingSoonFor", { os: item.device })}
                           >
                             <PlatformIcon platform={item.platform} />
-                            <span data-slot="label">{item.device}</span>
+                            <span data-slot="label" dir="auto">
+                              {item.device}
+                            </span>
                             <span data-slot="status">{i18n.t("site.action.comingSoon")}</span>
                           </button>
                         </Show>

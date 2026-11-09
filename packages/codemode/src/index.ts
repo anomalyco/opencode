@@ -12,6 +12,7 @@ export {
   toolExpression,
   type Outcome,
   type Program,
+  type ProgramOptions,
   type Snapshot,
   type SnapshotHeader,
   type Suspended,

@@ -20,7 +20,6 @@ import {
   toCreateInput,
   When,
 } from "@opencode/schema/schedule"
-import { App } from "./app.js"
 import { Config } from "./config.js"
 import { Database } from "./database/database.js"
 import { FileSystem } from "./filesystem.js"
@@ -214,16 +213,15 @@ const layer = Layer.effect(
     const instances = yield* Instance.Service
     const execution = yield* SessionExecution.Service
     const doorbell = yield* Latch.make()
-    const flags = yield* Flag.resolver
 
     // Config is per location, so a schedule follows the config where its Session lives.
     const settings = (session: SessionSchema.Info) =>
       Effect.gen(function* () {
-        const config = yield* Effect.serviceOption(Config.Service)
-        if (Option.isNone(config)) return { enabled: false, timezone: undefined }
-        const entries = yield* config.value.entries()
+        const config = yield* Config.Service
+        const flags = yield* Flag.Service
+        const entries = yield* config.entries()
         return {
-          enabled: flags(entries).schedules.enabled,
+          enabled: flags.resolve(entries).schedules.enabled,
           timezone: Config.latest(entries, "timezone"),
         }
       }).pipe(instances.provide(session))
@@ -830,5 +828,5 @@ const layer = Layer.effect(
 export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.global> = makeGlobalNode({
   service: Service,
   layer,
-  deps: [App.node, Database.node, Session.node, SessionExecution.node, Instance.node],
+  deps: [Database.node, Session.node, SessionExecution.node, Instance.node],
 })

@@ -52,8 +52,13 @@ export function DocsFooter(props: { markdown?: string }) {
                   <For each={[0, 1, 2, 3, 4, 5]}>{() => <span data-state="unknown" />}</For>
                 </span>
                 <span data-slot="status-label">
-                  <span data-slot="sr-only">{i18n.t("site.status.prefix")}</span>
-                  <span data-slot="status-text">{i18n.t("site.status.unknown")}</span>
+                  <span data-slot="sr-only">
+                    {i18n.t("site.status.prefix")}
+                    {i18n.t("site.status.unknownHeadline")}
+                  </span>
+                  <span data-slot="status-text" aria-hidden="true">
+                    {i18n.t("site.footer.status")}
+                  </span>
                 </span>
                 <ExternalArrow />
                 <NewTab />

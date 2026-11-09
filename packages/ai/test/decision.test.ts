@@ -35,6 +35,16 @@ const questions = [
   { name: "refund", type: "predicate", instructions: "Is the customer asking for a refund?" },
 ] as const
 
+const defect = {
+  name: "defect",
+  type: "predicate",
+  instructions: "Is the customer reporting a product defect?",
+  criteria: {
+    true: "The product itself is broken or faulty.",
+    false: "Preference, sizing, shipping, or pricing complaint.",
+  },
+} as const
+
 const systemOneAnswers = {
   department: { type: "choice", choice: "billing", probabilities: { technical: 0.1, billing: 0.9 }, confidence: 0.8 },
   urgency: {
@@ -509,6 +519,76 @@ describe("Decision", () => {
                 model: "typesafe-ai/jev",
                 answers: [{ type: "predicate", name: "refund", probability: 0.98 }],
                 usage: { input_tokens: 10, output_tokens: 0 },
+              }),
+            )
+          }),
+        ),
+      ),
+  )
+
+  it.effect("sends predicate criteria as System One criteria", () =>
+    ai.decision
+      .generate({
+        model: TypeSafeAI.configure({ apiKey: "test" }).decision("jev-latest"),
+        input: [{ type: "text", text: "I returned the sweater because I prefer green." }],
+        questions: [defect],
+      })
+      .pipe(
+        Effect.tap((response) =>
+          Effect.sync(() =>
+            expect(response.answers).toEqual([{ name: "defect", type: "predicate", probability: 0.03 }]),
+          ),
+        ),
+        Effect.provide(
+          client((input) => {
+            expect(JSON.parse(input.text).questions).toEqual({
+              defect: {
+                type: "noul",
+                instructions: "Is the customer reporting a product defect?",
+                criteria: {
+                  true: "The product itself is broken or faulty.",
+                  false: "Preference, sizing, shipping, or pricing complaint.",
+                },
+              },
+            })
+            return Effect.succeed(
+              json(input, { model: "jev-latest", answers: { defect: { type: "noul", noul: 0.03 } } }),
+            )
+          }),
+        ),
+      ),
+  )
+
+  it.effect("appends predicate criteria to OpenAI Decisions instructions", () =>
+    ai.decision
+      .generate({
+        model: OpenAI.configure({ apiKey: "openai-key" }).decision("gpt-6-luna"),
+        input: [{ type: "text", text: "I returned the sweater because I prefer green." }],
+        questions: [defect, { ...defect, name: "only_true", criteria: { true: "The product is broken." } }],
+      })
+      .pipe(
+        Effect.provide(
+          client((input) => {
+            expect(JSON.parse(input.text).questions).toEqual([
+              {
+                name: "defect",
+                type: "predicate",
+                instructions:
+                  "Is the customer reporting a product defect?\n\nTrue means: The product itself is broken or faulty.\nFalse means: Preference, sizing, shipping, or pricing complaint.",
+              },
+              {
+                name: "only_true",
+                type: "predicate",
+                instructions: "Is the customer reporting a product defect?\n\nTrue means: The product is broken.",
+              },
+            ])
+            return Effect.succeed(
+              json(input, {
+                model: "gpt-6-luna",
+                answers: [
+                  { type: "predicate", name: "defect", probability: 0.03 },
+                  { type: "predicate", name: "only_true", probability: 0.04 },
+                ],
               }),
             )
           }),

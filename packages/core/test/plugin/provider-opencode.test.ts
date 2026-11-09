@@ -16,6 +16,7 @@ import { ConfigPolicyPlugin } from "@opencode/core/config/plugin/policy"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { ConfigWebSearchPlugin } from "@opencode/core/config/plugin/websearch"
 import { Credential } from "@opencode/core/credential"
+import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Integration } from "@opencode/core/integration"
 import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
@@ -358,10 +359,14 @@ describe("OpencodePlugin", () => {
                   label: initial.label,
                 }),
               ).toEqual(stored.value)
-              expect(requests).toEqual(["/auth/device/token", "/api/v2/config"])
-              // The refresh and the config fetch both say which OpenCode is asking.
-              expect(agents).toEqual(["opencode/beta/1.2.3/test", "opencode/beta/1.2.3/test"])
-            }).pipe(Effect.provideService(App.Metadata, App.make({ name: "test", version: "1.2.3", channel: "beta" }))),
+              expect(requests).toEqual([
+                "/auth/device/token",
+                "/api/v2/config",
+                ...(scenario.orgID === "org-missing" ? [] : ["/api/v2/instructions", "/api/v2/skills"]),
+              ])
+              // The refresh and every Console fetch say which OpenCode is asking.
+              expect(agents).toEqual(requests.map(() => "opencode/beta/1.2.3/test"))
+            }).pipe(Effect.provideService(App.Service, App.make({ name: "test", version: "1.2.3", channel: "beta" }))),
           ({ server }) => Effect.promise(() => server.stop(true)),
         ),
     )
@@ -410,6 +415,7 @@ describe("OpencodePlugin", () => {
           server: Bun.serve({
             port: 0,
             fetch: (request) => {
+              if (new URL(request.url).pathname !== "/api/v2/config") return new Response(null, { status: 404 })
               authorization.push(request.headers.get("authorization"))
               requests.push(`${request.method} ${new URL(request.url).pathname}`)
               const origin = new URL(request.url).origin
@@ -695,7 +701,8 @@ describe("OpencodePlugin", () => {
         const state = { advertised: false, failing: false, requests: 0 }
         const server = Bun.serve({
           port: 0,
-          fetch: () => {
+          fetch: (request) => {
+            if (new URL(request.url).pathname !== "/api/v2/config") return new Response(null, { status: 404 })
             state.requests++
             if (state.failing) return new Response("Unavailable", { status: 502 })
             return Response.json({
@@ -896,7 +903,8 @@ describe("OpencodePlugin", () => {
         const state = { sso: false, requests: 0 }
         const server = Bun.serve({
           port: 0,
-          fetch: () => {
+          fetch: (request) => {
+            if (new URL(request.url).pathname !== "/api/v2/config") return new Response(null, { status: 404 })
             state.requests++
             if (state.sso)
               return Response.json(
@@ -1191,6 +1199,7 @@ describe("OpencodePlugin", () => {
           port: 0,
           fetch: async (request) => {
             const path = new URL(request.url).pathname
+            if (path === "/api/v2/instructions" || path === "/api/v2/skills") return new Response(null, { status: 404 })
             const body = request.method === "POST" ? await request.json() : undefined
             requests.push({
               method: request.method,
@@ -1385,6 +1394,8 @@ describe("OpencodePlugin", () => {
           )
           expect(requests).toEqual([
             "https://opencode.ai/console/api/v2/config",
+            "https://opencode.ai/console/api/v2/instructions",
+            "https://opencode.ai/console/api/v2/skills",
             "https://opencode.ai/console/api/websearch",
           ])
         }),
@@ -1525,6 +1536,7 @@ describe("OpencodePlugin", () => {
             if (url.pathname === "/api/v2/config") {
               return Response.json({ providers: {}, websearch: { provider: "opencode" } })
             }
+            if (url.pathname.startsWith("/api/v2/")) return new Response(null, { status: 404 })
             return Response.redirect(`${url.origin}/loop`, 302)
           },
         })
@@ -1568,10 +1580,9 @@ describe("OpencodePlugin", () => {
               authorization: request.headers.get("authorization"),
               orgID: request.headers.get("x-org-id"),
             })
-            if (url.pathname === "/api/v2/config") {
-              return Response.json({ providers: {}, library: { skills: [{ slug: "deploy", version: "1" }] } })
-            }
-            if (url.pathname === "/api/v2/library/skills/deploy") {
+            if (url.pathname === "/api/v2/config") return Response.json({ providers: {} })
+            if (url.pathname === "/api/v2/skills") return Response.json({ skills: [{ slug: "deploy", version: "1" }] })
+            if (url.pathname === "/api/v2/skills/deploy") {
               // Skill archives come from presigned storage on its own host, where the signature covers the encoding.
               const target = new URL("/archive/deploy.json?expires=1&sig=a%20b~c", url)
               target.hostname = "127.0.0.1"
@@ -1598,7 +1609,7 @@ describe("OpencodePlugin", () => {
 
           yield* eventually(skills.list(), (list) => list.some((skill) => skill.id === Skill.ID.make("deploy")))
           expect(downloads).toContainEqual({
-            path: "/api/v2/library/skills/deploy",
+            path: "/api/v2/skills/deploy",
             search: "",
             authorization: "Bearer secret",
             orgID: "org_test",
@@ -1614,6 +1625,155 @@ describe("OpencodePlugin", () => {
     ),
   )
 
+  it.effect("keeps Console instructions and skills through an edit or a Console error, and clears them on 404", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const discovery = yield* InstructionDiscovery.Service
+      const skills = yield* Skill.Service
+      const state = { instruction: "Use tabs.", lists: 200 }
+      const server = {
+        fetch: (request: Request) => {
+          const path = new URL(request.url).pathname
+          if (path === "/api/v2/config") return Response.json({ providers: {} })
+          if ((path === "/api/v2/instructions" || path === "/api/v2/skills") && state.lists !== 200)
+            return new Response(null, { status: state.lists })
+          if (path === "/api/v2/instructions")
+            return Response.json({ instructions: [{ id: "style", content: state.instruction }] })
+          if (path === "/api/v2/skills") return Response.json({ skills: [{ slug: "deploy", version: "1" }] })
+          if (path === "/api/v2/skills/deploy") return Response.json(skillBundle)
+          return new Response(null, { status: 404 })
+        },
+      }
+      const loaded = Effect.all([discovery.list(), skills.get(Skill.ID.make("deploy"))]).pipe(
+        Effect.map(([files, skill]) => ({
+          instructions: Array.isArray(files)
+            ? files.filter((file) => file.path.startsWith("OpenCode Console")).map((file) => file.content)
+            : [],
+          skill: skill?.description,
+        })),
+      )
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+      })
+      yield* addPlugin().pipe(inProcess(server))
+      yield* drain
+      expect(yield* loaded).toEqual({ instructions: ["Use tabs."], skill: "Deploys the service." })
+
+      // The config is unchanged, so config keeps the Console document it already holds.
+      state.instruction = "Use spaces."
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+      expect(yield* loaded).toEqual({ instructions: ["Use spaces."], skill: "Deploys the service." })
+
+      // A Console error keeps both, through the retries.
+      state.lists = 503
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+      yield* TestClock.adjust("10 seconds")
+      yield* drain
+      expect(yield* loaded).toEqual({ instructions: ["Use spaces."], skill: "Deploys the service." })
+
+      // A 404 means the workspace has none.
+      state.lists = 404
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+      expect(yield* loaded).toEqual({ instructions: [], skill: undefined })
+    }),
+  )
+
+  it.effect("applies Console policies while its instructions and skills fail, and keeps a list over a malformed one", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const config = yield* Config.Service
+      const discovery = yield* InstructionDiscovery.Service
+      const sudo: ConfigPolicy.Info = { action: "tool.use", resource: "shell:sudo *", effect: "deny" }
+      const state: { lists: "down" | "ok" | "malformed" } = { lists: "down" }
+      const server = {
+        fetch: (request: Request) => {
+          const path = new URL(request.url).pathname
+          if (path === "/api/v2/config") return Response.json({ providers: {}, policies: [sudo] })
+          if (path !== "/api/v2/instructions" && path !== "/api/v2/skills") return new Response(null, { status: 404 })
+          if (state.lists === "down") return new Response("Unavailable", { status: 503 })
+          if (path === "/api/v2/skills") return Response.json({ skills: [] })
+          if (state.lists === "malformed") return Response.json({ instructions: [{ id: "style" }] })
+          return Response.json({ instructions: [{ id: "style", content: "Use tabs." }] })
+        },
+      }
+      const instructions = discovery
+        .list()
+        .pipe(
+          Effect.map((files) =>
+            Array.isArray(files)
+              ? files.filter((file) => file.path.startsWith("OpenCode Console")).map((file) => file.content)
+              : [],
+          ),
+        )
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+      })
+
+      // Once the lists' retries run out, startup still applies the config's policies, just without the lists.
+      const started = yield* addPlugin().pipe(inProcess(server), Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("10 seconds")
+      yield* Fiber.join(started)
+      expect(yield* consolePolicies(config)).toEqual([sudo])
+      expect(yield* instructions).toEqual([])
+
+      state.lists = "ok"
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+      expect(yield* instructions).toEqual(["Use tabs."])
+
+      state.lists = "malformed"
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+      expect(yield* instructions).toEqual(["Use tabs."])
+      expect(yield* consolePolicies(config)).toEqual([sudo])
+    }),
+  )
+
+  it.effect("requests Console instructions and skills together", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const discovery = yield* InstructionDiscovery.Service
+      const requests: string[] = []
+      // Instructions answer only once skills were requested, so fetching the lists one after the other never finishes.
+      const skillsRequested = Promise.withResolvers<void>()
+      const server = {
+        fetch: async (request: Request) => {
+          const path = new URL(request.url).pathname
+          requests.push(path)
+          if (path === "/api/v2/config") return Response.json({ providers: {} })
+          if (path === "/api/v2/instructions") {
+            await skillsRequested.promise
+            return Response.json({ instructions: [{ id: "style", content: "Use tabs." }] })
+          }
+          if (path === "/api/v2/skills") {
+            skillsRequested.resolve()
+            return Response.json({ skills: [] })
+          }
+          return new Response(null, { status: 404 })
+        },
+      }
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+      })
+      const activation = yield* addPlugin().pipe(inProcess(server), Effect.forkChild({ startImmediately: true }))
+      yield* drain
+      expect(requests.toSorted()).toEqual(["/api/v2/config", "/api/v2/instructions", "/api/v2/skills"])
+      yield* Fiber.join(activation)
+      const files = yield* discovery.list()
+      expect(
+        Array.isArray(files)
+          ? files.filter((file) => file.path.startsWith("OpenCode Console")).map((file) => file.content)
+          : [],
+      ).toEqual(["Use tabs."])
+    }),
+  )
+
   it.live("keeps credentials on a same-origin skill redirect", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
@@ -1623,10 +1783,9 @@ describe("OpencodePlugin", () => {
           fetch: (request) => {
             const url = new URL(request.url)
             downloads.push({ path: url.pathname, authorization: request.headers.get("authorization") })
-            if (url.pathname === "/api/v2/config") {
-              return Response.json({ providers: {}, library: { skills: [{ slug: "deploy", version: "1" }] } })
-            }
-            if (url.pathname === "/api/v2/library/skills/deploy")
+            if (url.pathname === "/api/v2/config") return Response.json({ providers: {} })
+            if (url.pathname === "/api/v2/skills") return Response.json({ skills: [{ slug: "deploy", version: "1" }] })
+            if (url.pathname === "/api/v2/skills/deploy")
               return Response.redirect(`${url.origin}/assets/deploy.json`, 302)
             return Response.json(skillBundle)
           },
@@ -1668,6 +1827,7 @@ describe("OpencodePlugin", () => {
                 websearch: { provider: "opencode" },
               })
             }
+            if (url.pathname.startsWith("/api/v2/")) return new Response(null, { status: 404 })
             return new Response(
               new ReadableStream({
                 start(controller) {

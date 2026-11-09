@@ -53,9 +53,18 @@ html:has([data-site][data-theme="dark"]) {
   /* Light follows Settings › Light background (pure white unless set). */
   --bg: light-dark(#fff, #0c0c0c);
   --bg-weak: light-dark(hsl(0, 0%, 96%), hsl(0, 0%, 10%));
+  /* A pressed full-width row on phones (the docs' sticky rows, the Contents list, the DOCS menu): a
+     subtle surface tint, lighter than the chevrons' and menus' press fills. */
+  --row-press: var(--bg-weak);
   /* The product cards' media backdrop (products.css), which their covers and reels are graded to in
      both themes. */
   --card-media-bg: #161616;
+  /* The document rows' model (doc-list.css, and the product lists in product-list.css): a row's text
+     on the content edge with this padding outside it, so the hover fill and the bar at its start
+     edge bleed past the edge. */
+  --doc-row-pad: 1rem;
+  --doc-row-fill: var(--bg-weak);
+  --doc-row-bar: light-dark(hsl(0, 0%, 50%), hsl(0, 0%, 46%));
   /* The home Console band (routes/index.css), dark in both themes: the panel grey in light, and in
      dark #121212, a muted step above the #0c0c0c page so it reads as a band, not a slab. A registered
      colour, so light-dark() resolves in the page's scheme here and not in the band's own forced-dark
@@ -647,10 +656,15 @@ html:has([data-site][data-theme="dark"]) {
 
   /* A leading icon carries visual weight, so trim the left padding to keep the button optically
      centered. The gap to the label matches the space left of the icon (the artwork sits about
-     1.3px inside its box), so both read as about 13px. */
+     1.3px inside its box), so both read as about 13px. The menus such a button opens set their row
+     icons with the same inset and gap (--icon-inset, --icon-gap; the store rows below), so each row's
+     icon and label start line up with the button's. */
+  --icon-inset: 0.75rem;
+  --icon-gap: 0.75rem;
+
   [data-component="site-button"]:has(> [data-slot="platform-icon"]:first-child) {
-    padding-inline-start: 0.75rem;
-    gap: 0.75rem;
+    padding-inline-start: var(--icon-inset);
+    gap: var(--icon-gap);
   }
 
   /* A trailing chevron sits midway between the label and the button's right edge: the gap and the
@@ -851,9 +865,12 @@ html:has([data-site][data-theme="dark"]) {
       }
     }
 
+    /* Rows with a platform icon: the menu starts at the button's edge, so the button's icon inset
+       and gap (above) put each row's icon and label exactly under the button's. */
     [data-slot="menu"] [data-slot="store"] {
       grid-template-columns: 14px auto auto;
-      column-gap: 0.625rem;
+      column-gap: var(--icon-gap);
+      padding-inline-start: var(--icon-inset);
       color: var(--text-strong);
 
       [data-slot="platform-icon"] {
@@ -1585,22 +1602,6 @@ html:has([data-site][data-theme="dark"]) {
     );
     --menu-open: var(--menu-hover);
     --menu-hint: var(--link);
-  }
-
-  /* In blue, a hovered current row (or one whose submenu is open) is treated like any other: its
-     active bar turns the hover bar's blue. */
-  &[data-menu-color="blue"][data-menu-active="bar"]
-    :is(
-      [data-component="language-picker"] [data-slot="item"][data-selected="true"],
-      [data-component="docs-lockup"] [role="menuitem"][aria-current="page"]
-    ):is(
-      :hover:not(:is([data-slot="menu"], [data-slot="dropdown"]):has(:focus-visible:not(:hover)) *),
-      [data-open]:not(
-          [data-slot="menu"]:has(:is([role="menuitem"]:hover, :focus-visible):not([data-slot="parent"] *)) *
-        )
-        > *
-    )::before {
-    background: var(--menu-hint);
   }
 
   /* Every menu's rows span it edge to edge, with a square tint on hover. */
@@ -3358,17 +3359,23 @@ html:has([data-site][data-theme="dark"]) {
     overflow: hidden;
   }
 
-  /* The link slides up into the bar as it opens, and back down as it closes. */
+  /* The bar's room in the page, which the opening grows to and the page moves up with. */
   [data-slot="slide"] {
-    position: relative;
+    height: calc(var(--letters-bar-height) + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* The label slides up into the bar as it opens, and back down as it closes. */
+  a > span {
     opacity: 0;
-    translate: 0 100%;
+    translate: 0 calc(var(--letters-bar-height) + env(safe-area-inset-bottom, 0px));
     transition:
       translate 300ms var(--ease-out),
       opacity 200ms ease;
   }
 
   a {
+    position: relative;
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3381,13 +3388,24 @@ html:has([data-site][data-theme="dark"]) {
     font-size: var(--fs-ui);
     font-weight: 500;
     text-decoration: none;
-    transition: background-color 150ms ease;
+    /* Hidden once the bar has closed. iOS Safari keeps tinting its bottom toolbar from the blue
+       link it last pinned to the bottom edge for as long as the link is drawn, even unpinned and
+       clipped to nothing, so the toolbar would stay blue after the bar has gone. */
+    visibility: hidden;
+    transition:
+      background-color 150ms ease,
+      visibility 0s 300ms;
   }
 
   &[data-shown] {
     grid-template-rows: 1fr;
 
-    [data-slot="slide"] {
+    a {
+      visibility: visible;
+      transition: background-color 150ms ease;
+    }
+
+    a > span {
       opacity: 1;
       translate: 0;
     }
@@ -3399,14 +3417,38 @@ html:has([data-site][data-theme="dark"]) {
       transition: none;
     }
 
+    a {
+      transition: background-color 150ms ease;
+    }
+
     /* Important, past the page-wide reduced-motion rule that zeroes every transition on small
        screens: a fade is the reduced form of this motion, not none. */
-    [data-slot="slide"] {
+    a > span {
       translate: 0;
       transition: opacity 200ms ease;
       transition-duration: 200ms !important;
     }
   }
+}
+
+/* Development only (site.tsx, ?letters-bar=instant): the bar appears at once, pushing the page up,
+   with the bottom's blue. */
+[data-site][data-letters-motion="instant"] [data-component="letters-bar"] {
+  &,
+  a,
+  a > span {
+    transition: none;
+  }
+}
+
+/* While the bar fills the bottom of the screen (site.tsx), the whole bar is pinned to the bottom
+   edge, so it is blue at full height in the same frame as iOS Safari's bottom toolbar area, while
+   its room in the page grows and the page moves up behind it. Once open it is exactly where the
+   page puts it. */
+[data-site][data-letters-end] [data-component="letters-bar"] a {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 1;
 }
 
 /* Settings › Footer › columns: the sidebar column stays empty. Under the link columns, a bar across
@@ -4156,4 +4198,54 @@ html [data-site][data-nav-numbers="1"][data-status-bars="6"] {
    untouched. Approved by David (5 Nov). */
 :where([data-site]) :is(h2, h3) {
   text-wrap: pretty;
+}
+
+/* The logo, and the docs lockup beside it, stay fixed in the top-left corner on every page. On most
+   pages the whole sidebar is fixed; in the docs layout (the docs, Press and Brand) it sticks while
+   you read and leaves with the article at the page's end, but the logo and lockup stay. Out of the
+   flow, the sidebar's top padding keeps their place for the nav (the content line, --content-top).
+   While the sidebar is on its way out (Site sets data-under), a strip of the page colour behind the
+   logo row hides what passes under it, ending in the docs nav's 2.5rem fade (docs.css). */
+@media (min-width: 60.0625rem) {
+  [data-site][data-layout="docs"] [data-component="sidebar"] {
+    padding-top: var(--content-top);
+
+    > [data-slot="logo"] {
+      position: fixed;
+      top: calc(var(--banner-offset, 0px) + var(--top));
+      inset-inline-start: calc(var(--page-offset) + var(--edge) - var(--bracket-bearing));
+      z-index: 3;
+
+      &::after {
+        content: "";
+        position: absolute;
+        z-index: -1;
+        top: calc(-1 * var(--top));
+        inset-inline-start: calc(var(--bracket-bearing) - var(--edge));
+        width: var(--sidebar-width);
+        height: var(--content-top);
+        background: var(--bg);
+        mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent);
+        opacity: 0;
+        pointer-events: none;
+      }
+    }
+
+    &[data-under] > [data-slot="logo"]::after {
+      opacity: 1;
+    }
+
+    /* A link reached with Tab scrolls into view below the logo row, never under its strip. */
+    a {
+      scroll-margin-top: var(--content-top);
+    }
+
+    > [data-component="docs-lockup"] {
+      position: fixed;
+      top: calc(var(--banner-offset, 0px) + var(--top));
+      inset-inline-start: calc(var(--page-offset) + var(--edge) + var(--lockup-logo) + 12px - 6px);
+      /* Over the logo's strip, so the lockup and its menus show above it. */
+      z-index: 4;
+    }
+  }
 }

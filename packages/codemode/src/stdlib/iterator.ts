@@ -1,4 +1,4 @@
-import { applyCollectionCallback } from "../interpreter/callback.js"
+import { applyCollectionCallback, Interruption } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { rangeError, typeError } from "../interpreter/model.js"
 import { constructor, fn, methods, receiver, requiresNew } from "../interpreter/native.js"
@@ -16,7 +16,7 @@ import {
   type Value,
 } from "../interpreter/objects.js"
 import { describeValue } from "../interpreter/references.js"
-import { type Eval, Interruption } from "../interpreter/runner.js"
+import type { Eval } from "../interpreter/runner.js"
 
 const finished: Step = { done: true, value: undefined }
 
