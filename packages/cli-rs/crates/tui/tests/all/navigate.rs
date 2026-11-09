@@ -455,3 +455,38 @@ fn position(screen: &str, text: &str) -> (usize, usize) {
     let x = line[..line.find(text).unwrap()].chars().count();
     (x, y)
 }
+
+#[test]
+fn home_and_end_navigate_a_subagent_transcript() {
+    let messages: Vec<Value> =
+        (0..20).map(|index| user(&format!("msg_{index:02}"), index, &format!("Message {index}"))).collect();
+    let fake = Fake::new(move |seen| {
+        let path = seen.path.as_str();
+        match seen.method.as_str() {
+            "GET" if path == "/api/session" => (200, json!({ "data": [], "cursor": {} })),
+            "GET" if path == "/api/session/ses_sub" => {
+                (200, json!({ "data": support::merge(info("ses_sub"), json!({ "parentID": "ses_parent" })) }))
+            }
+            "GET" if path == "/api/session/ses_sub/message" => {
+                (200, json!({ "data": messages.iter().rev().collect::<Vec<_>>(), "cursor": {} }))
+            }
+            "GET" if path == "/api/session/ses_sub/inbox" => (200, json!({ "data": [] })),
+            _ => support::not_found(),
+        }
+    });
+    let deps = Deps {
+        config: support::config(Info::default()),
+        route: support::session_route("ses_sub"),
+        ..support::deps(Arc::new(fake))
+    };
+    let h = Nav { harness: support::mount(100, 30, deps), older: Arc::default() };
+    let screen = h.wait_for("Message 19");
+    assert!(screen.contains("Subagents"), "{screen}");
+    assert!(!screen.contains("Message 0\n") && !screen.contains("Message 0 "), "{screen}");
+    h.press("home");
+    let screen = h.wait_for("Message 0");
+    assert!(!screen.contains("Message 19"), "{screen}");
+    h.press("end");
+    let screen = h.wait_for("Message 19");
+    assert!(!screen.lines().any(|line| line.trim_end().ends_with("Message 0")), "{screen}");
+}
