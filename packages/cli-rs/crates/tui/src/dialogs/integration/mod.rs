@@ -29,7 +29,7 @@ use opencode_ui::dialog::{
     footer, header, layout_view,
 };
 use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
-use opencode_ui::prompt::{PromptProps, prompt};
+use opencode_ui::prompt::{PromptAction, PromptProps, prompt};
 use opencode_ui::select::{self, Gutter, SelectAction, SelectOption, SelectProps};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::keymap::{Condition, Disposer};
@@ -913,6 +913,11 @@ impl Oauth {
 
     /// `OAuthAuto`: the URL to open, polled until the browser finishes.
     fn auto(self: &Rc<Self>) {
+        if self.attempt.paste == Some(true) {
+            self.paste();
+            self.poll();
+            return;
+        }
         let me = self.clone();
         self.flow.local.dialogs.replace(
             move |cx| {
@@ -989,6 +994,76 @@ impl Oauth {
                     }
                 }
             }),
+        );
+    }
+
+    /// `OAuthAuto` for an attempt with `paste`: a field for the URL the browser was redirected to, for a browser
+    /// that cannot reach this machine. Enter on an empty field opens the link; the status poll still settles it.
+    fn paste(self: &Rc<Self>) {
+        let me = self.clone();
+        self.flow.local.dialogs.replace(
+            move |cx| {
+                let closing = me.clone();
+                cx.on_close(Disposer::new(move || closing.close()));
+                let app = &cx.app;
+                let open = Rc::downgrade(&me);
+                let link = link(cx, &me.attempt.url, Some(Rc::new(bind!(open, |me| me.open()))));
+                let waiting = Text::new(
+                    app,
+                    "Waiting for authorization… Press enter to open the link. If the browser can't reach this \
+                     machine, paste the URL it was redirected to.",
+                )
+                .fg(cx.theme.text.muted);
+                let error = Text::new(app, "").fg(cx.theme.text.feedback.error.base).visible(false);
+                let description = View::new(app).gap(1).child(&link).child(&waiting).child(&error);
+                let on_confirm = Rc::new(bind!(me, |me, value: &str| {
+                    if value.trim().is_empty() {
+                        me.open();
+                        return;
+                    }
+                    error.visible(false);
+                    let client = me.flow.local.client.clone();
+                    let input = IntegrationOauthCompleteInput {
+                        integration_id: me.integration.id.clone(),
+                        attempt_id: me.attempt.attempt_id.clone(),
+                        location: me.flow.location(),
+                        code: Some(value.to_owned()),
+                    };
+                    let (error, app) = (error.clone(), me.flow.local.app.clone());
+                    me.flow.spawn(async move { client.integration_oauth_complete(&input).await }, move |result| {
+                        if let Err(cause) = result {
+                            error.set_text(cause.to_string());
+                            error.visible(true);
+                            app.request_redraw();
+                        }
+                    });
+                }));
+                let copy = Rc::downgrade(&me);
+                prompt(
+                    cx,
+                    PromptProps {
+                        title: me.title.clone(),
+                        subtitle: Some(me.attempt.instructions.clone()),
+                        placeholder: Some("Redirect URL".into()),
+                        description: Some(Rc::new(move |_| description.as_any())),
+                        on_confirm: Some(on_confirm),
+                        actions: vec![PromptAction {
+                            title: "copy link".into(),
+                            command: "dialog.integration.copy".into(),
+                            command_title: Some("Copy authorization link".into()),
+                            run: Rc::new(move |_| {
+                                if let Some(me) = copy.upgrade() {
+                                    me.copy();
+                                }
+                            }),
+                        }],
+                        ..PromptProps::default()
+                    },
+                )
+                .0
+            },
+            None,
+            DialogOptions::default(),
         );
     }
 

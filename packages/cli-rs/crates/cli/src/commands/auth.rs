@@ -5,6 +5,8 @@
 use std::collections::HashSet;
 use std::future::Future;
 use std::io::{IsTerminal, Read};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use indexmap::IndexMap;
@@ -905,24 +907,88 @@ pub(super) fn oauth_login(
     let input = IntegrationOauthStatusInput {
         integration_id: integration.id.clone(),
         attempt_id: attempt.attempt_id.clone(),
-        location,
+        location: location.clone(),
     };
+    // An attempt with `paste` also takes the redirect URL from a browser that cannot reach this machine, while
+    // the status poll runs; whichever settles the attempt ends the prompt.
+    let paste = (attempt.paste == Some(true) && std::io::stdin().is_terminal() && std::io::stdout().is_terminal())
+        .then(|| {
+            let complete = IntegrationOauthCompleteInput {
+                integration_id: integration.id.clone(),
+                attempt_id: attempt.attempt_id.clone(),
+                location,
+                code: None,
+            };
+            PasteRedirect::start(server.client().clone(), complete)
+        });
     let status = server.run(async {
         loop {
+            if paste.as_ref().is_some_and(PasteRedirect::cancelled) {
+                return Err(Cancelled.into());
+            }
             let status = server.client().integration_oauth_status(&input).await?.data;
             if !matches!(status, IntegrationAttemptStatus::Pending(_)) {
                 return Ok::<_, error::Error>(status);
             }
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
-    })?;
-    match status {
+    });
+    if let Some(paste) = paste {
+        paste.stop();
+    }
+    match status? {
         IntegrationAttemptStatus::Complete(_) => {
             prompt::log::success(&connected);
             Ok(guard)
         }
         IntegrationAttemptStatus::Failed(failed) => bail!("{}", failed.message),
         _ => bail!("Authorization expired"),
+    }
+}
+
+/// `pasteRedirect`: asks for the redirect URL and hands it to the attempt, which still settles through its status;
+/// a rejected URL asks again. It runs on a thread of its own until [`PasteRedirect::stop`] or a cancel.
+struct PasteRedirect {
+    stop: Arc<AtomicBool>,
+    cancelled: Arc<AtomicBool>,
+    thread: std::thread::JoinHandle<()>,
+}
+
+impl PasteRedirect {
+    fn start(client: Client, input: IntegrationOauthCompleteInput) -> Self {
+        let (stop, cancelled) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicBool::new(false)));
+        let thread = std::thread::spawn({
+            let (stop, cancelled) = (stop.clone(), cancelled.clone());
+            move || {
+                let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else {
+                    return;
+                };
+                loop {
+                    let message = "If the browser can't reach this machine, paste the URL it was redirected to";
+                    let Ok(code) = prompt::text(message).validate(required).prompt_until(Some(stop.clone())) else {
+                        cancelled.store(!stop.load(Ordering::Relaxed), Ordering::Relaxed);
+                        return;
+                    };
+                    let input = IntegrationOauthCompleteInput { code: Some(code), ..input.clone() };
+                    match runtime.block_on(client.integration_oauth_complete(&input)) {
+                        Ok(()) => return,
+                        Err(error) => prompt::log::error(&error.to_string()),
+                    }
+                }
+            }
+        });
+        Self { stop, cancelled, thread }
+    }
+
+    /// Whether the user cancelled the prompt.
+    fn cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Relaxed)
+    }
+
+    /// Ends the prompt, as a cancel, and waits for it.
+    fn stop(self) {
+        self.stop.store(true, Ordering::Relaxed);
+        let _ = self.thread.join();
     }
 }
 
