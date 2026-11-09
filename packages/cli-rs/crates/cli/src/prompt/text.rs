@@ -6,6 +6,8 @@ use super::style::{
     S_BAR, S_BAR_END, S_PASSWORD_MASK, cyan, dim, gray, hidden, inverse, strikethrough, symbol, yellow,
 };
 use super::{Cancelled, Output, State, Validate};
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 /// A line of text. Enter submits; an empty answer becomes the default value, else `""`.
 pub struct Text<'a> {
@@ -50,9 +52,14 @@ impl<'a> Text<'a> {
     }
 
     pub fn prompt(self) -> Result<String, Cancelled> {
+        self.prompt_until(None)
+    }
+
+    /// [`Text::prompt`], cancelled once `stop` is set.
+    pub fn prompt_until(self, stop: Option<Arc<AtomicBool>>) -> Result<String, Cancelled> {
         let initial = self.initial_value.clone();
         let mut prompt = TextPrompt { options: self, value: None };
-        core::run(&mut prompt, Output::Stdout, initial.as_deref())?;
+        core::run_until(&mut prompt, Output::Stdout, initial.as_deref(), stop)?;
         Ok(prompt.value.unwrap_or_default())
     }
 }
