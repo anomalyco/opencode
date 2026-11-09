@@ -998,10 +998,15 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
     setOS(detectOS())
     setSheet(prefersSheet())
     if (props.slug === "desktop") void detectDesktopDownload().then(setBuild)
+    onCleanup(() => clearTimeout(timer))
+  })
+  // While the menu is open, Escape or a click outside it closes it.
+  createEffect(() => {
+    if (!open()) return
     const close = (event: Event) => {
       if (event instanceof KeyboardEvent && event.key !== "Escape") return
       if (event instanceof MouseEvent && menu?.contains(event.target as Node)) return
-      if (event instanceof KeyboardEvent && open() && menu?.contains(document.activeElement)) trigger?.focus()
+      if (event instanceof KeyboardEvent && menu?.contains(document.activeElement)) trigger?.focus()
       setOpen(false)
     }
     document.addEventListener("keydown", close)
@@ -1009,7 +1014,6 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
     onCleanup(() => {
       document.removeEventListener("keydown", close)
       document.removeEventListener("click", close)
-      clearTimeout(timer)
     })
   })
 

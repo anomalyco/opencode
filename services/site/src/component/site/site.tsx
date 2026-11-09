@@ -62,8 +62,7 @@ import { NavVersions } from "./nav-versions"
 import { closeAllMenus, closeMenusOnLinks, onCloseMenus, takeMenuNavigation } from "./menu-open"
 import { watchSurfaces } from "./surface"
 import { designCopy, designMode } from "./design-copy"
-import { bannerThemeColorScript, bannerTopColor, bannerVisible, SiteBanner } from "./site-banner"
-import { bannerDismissScript } from "./site-banner-script"
+import { bannerDismissScript, bannerThemeColorScript, bannerTopColor, bannerVisible } from "./site-banner-script"
 import { Tooltips } from "./tooltip"
 import { SiteSearch } from "./search"
 import { preloadVisibleLinks } from "./preload-visible"
@@ -105,6 +104,12 @@ export {
 const SettingsPanel = import.meta.env.DEV ? lazy(() => import("./settings-panel")) : undefined
 const DesignMode = import.meta.env.DEV ? lazy(() => import("./design-mode")) : undefined
 const DevicePreview = import.meta.env.DEV ? lazy(() => import("./device-preview")) : undefined
+// The announcement's "banner" style, where it can open: production renders the default settings, so
+// while they keep it off the banner, its scripts and its CSS leave the build.
+const SiteBanner =
+  import.meta.env.DEV || (siteSettings.homeAnnouncement === "on" && siteSettings.announcementStyle === "banner")
+    ? lazy(() => import("./site-banner").then((module) => ({ default: module.SiteBanner })))
+    : undefined
 
 // A nav item as the nav renders it: a known one (links.ts) or a custom link (nav-order.tsx).
 type NavItemView = { id: string; label: string; href: string; arrow: boolean; external: boolean; company: boolean }
@@ -626,12 +631,15 @@ export function Site(props: {
   })
 
   onMount(() => {
-    // Hydration keeps the server's attributes (theme "system"), so the toggle would show the wrong
-    // option. Flip the signal away and back so every theme binding re-applies the saved value; the
-    // second set waits a microtask, or the batched updates cancel out and nothing re-renders.
+    // Hydration keeps the server's attributes (theme "system"), so for a saved light or dark theme
+    // the toggle would show the wrong option. Flip the signal away and back so every theme binding
+    // re-applies the saved value; the second set waits a microtask, or the batched updates cancel out
+    // and nothing re-renders.
     const saved = theme()
-    setTheme(saved === "system" ? "light" : "system")
-    queueMicrotask(() => setTheme(saved))
+    if (saved !== "system") {
+      setTheme("system")
+      queueMicrotask(() => setTheme(saved))
+    }
     loadSiteSettings()
     // The settings store now drives the same rules, so the pre-paint copy can go.
     document.getElementById("site-settings-preload")?.remove()
@@ -1321,15 +1329,15 @@ export function Site(props: {
           theme first. The theme script also sets the theme-color and color-scheme tags. */}
       {import.meta.env.DEV && <script innerHTML={preloadSettings} />}
       {/* After the settings: closes the banner again before first paint if its message was dismissed. */}
-      <script innerHTML={bannerDismissScript} />
+      {SiteBanner && <script innerHTML={bannerDismissScript} />}
       <script innerHTML={themeScript(import.meta.env.DEV)} />
       {/* Card stills and product hero posters fade in as soon as their image loads, long before the
           page's code has loaded: load events reach a capturing listener on the document (added once,
           though the script runs again when a client navigation renders it). One already decoded when
           it first paints (preloaded, or cached) is marked data-instant and shows at once instead: a
-          check each frame, before paint, while the page loads. */}
+          check in the frame after the page gains elements, before paint, while the page loads. */}
       <script
-        innerHTML={`if(!document.posterLoads){document.posterLoads=1;document.addEventListener("load",(e)=>{const t=e.target;if(t instanceof HTMLImageElement&&t.hasAttribute("data-poster"))t.setAttribute("data-loaded","")},true);const scan=()=>{document.querySelectorAll("img[data-poster]:not([data-seen])").forEach((i)=>{i.setAttribute("data-seen","");if(i.complete&&i.naturalWidth){i.setAttribute("data-instant","");i.setAttribute("data-loaded","")}});if(document.readyState!=="complete")requestAnimationFrame(scan)};requestAnimationFrame(scan)}`}
+        innerHTML={`if(!document.posterLoads){document.posterLoads=1;document.addEventListener("load",(e)=>{const t=e.target;if(t instanceof HTMLImageElement&&t.hasAttribute("data-poster"))t.setAttribute("data-loaded","")},true);let f=0;const scan=()=>{f=0;document.querySelectorAll("img[data-poster]:not([data-seen])").forEach((i)=>{i.setAttribute("data-seen","");if(i.complete&&i.naturalWidth){i.setAttribute("data-instant","");i.setAttribute("data-loaded","")}})};const o=new MutationObserver(()=>{f||(f=requestAnimationFrame(scan))});o.observe(document,{childList:true,subtree:true});addEventListener("load",()=>o.disconnect(),{once:true})}`}
       />
       <script type="speculationrules" innerHTML={speculationRules} />
       <Show when={props.markdown?.href}>{(href) => <Link rel="alternate" type="text/markdown" href={href()} />}</Show>
@@ -1346,8 +1354,12 @@ export function Site(props: {
         {i18n.t("site.skipToContent")}
       </a>
       {/* The announcement's "banner" style, above everything on every page (site-banner.tsx). */}
-      <SiteBanner />
-      <script innerHTML={bannerThemeColorScript} />
+      {SiteBanner && (
+        <>
+          <SiteBanner />
+          <script innerHTML={bannerThemeColorScript} />
+        </>
+      )}
       {/* Hide the page before first paint when the Markdown view will replace it on mount. */}
       <script
         innerHTML={`(()=>{try{if(sessionStorage.getItem("${markdownKey}")==="1")document.currentScript.parentElement.dataset.markdownBoot=""}catch{}})()`}

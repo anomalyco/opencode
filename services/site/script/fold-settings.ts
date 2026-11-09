@@ -13,11 +13,11 @@ import { transformSync, types, type NodePath, type PluginObj } from "@babel/core
 import type { Plugin } from "vite"
 import defaults from "../src/component/site/settings-defaults.json"
 
-// Settings that production pages change at runtime, so they stay live: ⇧A and ⇧N turn the home
-// announcement on and off on any page (site-banner.tsx). Production reads and writes them in a store
-// of their own (liveModule), so the Settings store and everything it needs leave the bundle. The
-// build fails if production code writes any other setting (see generateBundle below).
-const live = new Set(["homeAnnouncement"])
+// Settings that production pages change at runtime, so they stay live (none today; ⇧A and ⇧N, which
+// turn the announcement on and off, are development only). Production reads and writes them in a
+// store of their own (liveModule), so the Settings store and everything it needs leave the bundle.
+// The build fails if production code writes any other setting (see generateBundle below).
+const live = new Set<string>()
 const liveModule = "virtual:fold-settings-live"
 
 // Design mode's reordering and renaming, which save only while Design mode is on.
