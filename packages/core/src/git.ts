@@ -785,12 +785,15 @@ const layer = Layer.effect(
       const result = yield* withTemporaryIndex(input.repository, (index) =>
         Effect.gen(function* () {
           const scanned = yield* indexFingerprint(index)
+          const last = lastCaptures.get(input.repository.gitDirectory)
+          // A previously written tree has no unmerged entries. A newly seeded or externally replaced
+          // index can have conflict stages that match the worktree and are invisible to ls-files -m.
+          const known = scanned !== undefined && last?.fingerprint === scanned.key
           const changes = yield* Effect.forEach(
             input.scopes,
-            (scope) => listChanges(input.repository, scope, index, excludeFrom, scanned?.bytes),
+            (scope) => listChanges(input.repository, scope, index, excludeFrom, known ? scanned.bytes : undefined),
             { concurrency: "unbounded" },
           )
-          const last = lastCaptures.get(input.repository.gitDirectory)
           const untracked = changes.flatMap((change) => change.untracked)
           const oversized = oversizedFiles.get(input.repository.gitDirectory)
           const stillOversized = new Set(
@@ -807,7 +810,7 @@ const layer = Layer.effect(
           )
           // Paths the source ignores are listed as untracked on every scan; they leave the index unchanged.
           const excluded =
-            scanned && last?.fingerprint === scanned.key && changes.every((change) => !change.tracked.length)
+            known && changes.every((change) => !change.tracked.length)
               ? input.ignores
                 ? yield* ignored({
                     repository: input.ignores,

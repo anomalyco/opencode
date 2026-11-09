@@ -509,6 +509,23 @@ describe("Git capture", () => {
     }),
   )
 
+  it.live("resolves unmerged stages in a replaced index even when their blobs match the worktree", () =>
+    Effect.gen(function* () {
+      const { project, repository, capture } = yield* captureSetup
+      const before = yield* capture()
+      yield* Effect.promise(async () => {
+        const blob = (await $`git rev-parse HEAD:a.txt`.cwd(project).text()).trim()
+        const input =
+          [`0 ${"0".repeat(blob.length)}\ta.txt`, ...[1, 2, 3].map((i) => `100644 ${blob} ${i}\ta.txt`)].join("\n") +
+          "\n"
+        await $`git --git-dir ${repository.gitDirectory} update-index --index-info < ${Buffer.from(input)}`
+          .cwd(project)
+          .quiet()
+      })
+      expect(yield* capture()).toBe(before)
+    }),
+  )
+
   it.live("skips repeat ignore checks for oversized and info/exclude-only untracked files", () =>
     Effect.gen(function* () {
       const { root, project, capture } = yield* captureSetup
