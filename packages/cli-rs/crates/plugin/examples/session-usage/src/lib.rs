@@ -13,8 +13,8 @@ mod usage;
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -53,8 +53,12 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         None => Render::Hide,
     });
     let mounted = state.clone();
+    let phase = flags.mounted.clone();
     setup.on_mount(at, move |host, input, mount| {
         let Some(session) = input.session_id.clone() else { return };
+        if mount {
+            *phase.lock().unwrap_or_else(PoisonError::into_inner) = Some(Instant::now());
+        }
         mounted.borrow_mut().mount(host, session, mount);
     });
     let woken = state.clone();
@@ -91,6 +95,8 @@ struct State {
     /// they are loaded, and the messages are dropped then, as TS drops its `messageSets`.
     priced: Option<Priced>,
     total: Option<f64>,
+    /// Messages the Rust types rejected; they are left out of the total.
+    skipped: usize,
 }
 
 struct Priced {
@@ -151,6 +157,7 @@ impl State {
             queued: None,
             priced: None,
             total: None,
+            skipped: 0,
         }
     }
 
@@ -372,8 +379,14 @@ impl State {
                 *at += 1;
             }
             (Want::Messages { index, page }, Stage::Price { ids, open, sessions, .. }) => {
-                let Ok(messages_page) = serde_json::from_value::<Vec<SessionMessageInfo>>(data) else { return false };
-                sessions[index].extend(messages_page);
+                let Value::Array(page_messages) = data else { return false };
+                // TS prices whatever a page holds; the API has no log for a plugin, so the panel counts what it skips.
+                for message in page_messages {
+                    match serde_json::from_value(message) {
+                        Ok(message) => sessions[index].push(message),
+                        Err(_) => self.skipped += 1,
+                    }
+                }
                 if let Some(cursor) = cursor.filter(|_| page + 1 < MAX_PAGES) {
                     let fetch = messages(&ids[index], Some(cursor));
                     run.waiting.push((host.fetch(fetch), Want::Messages { index, page: page + 1 }));
@@ -504,14 +517,42 @@ fn now() -> f64 {
     SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0.0, |since| since.as_millis() as f64)
 }
 
+/// When the clock ticks: a period after the latest mount, then every period, as TS's `setInterval` in a component.
+struct Phase {
+    due: Instant,
+    period: Duration,
+}
+
+impl Phase {
+    fn new(now: Instant, period: Duration) -> Self {
+        Self { due: now + period, period }
+    }
+
+    /// Whether the clock ticks at `now`, after a mount at `mounted` if one came since the last call.
+    fn tick(&mut self, now: Instant, mounted: Option<Instant>) -> bool {
+        if let Some(mounted) = mounted {
+            self.due = mounted + self.period;
+        }
+        if now < self.due {
+            return false;
+        }
+        while self.due <= now {
+            self.due += self.period;
+        }
+        true
+    }
+}
+
 /// What the clock's thread tells the UI thread.
 #[derive(Clone, Default)]
 struct Flags {
     tick: Arc<AtomicBool>,
     config: Arc<AtomicBool>,
+    /// When a claim mounted last, until the clock's thread starts its period there.
+    mounted: Arc<Mutex<Option<Instant>>>,
 }
 
-/// Ticks every [`usage::TICK_MS`] and watches the config file, on its own thread, and wakes the host for either. It
+/// Ticks every [`usage::TICK_MS`] from the latest mount and watches the config file, on its own thread, and wakes the host for either. It
 /// stops and joins the thread when dropped, at dispose.
 struct Clock {
     stop: Arc<AtomicBool>,
@@ -524,15 +565,18 @@ impl Clock {
         let stopped = stop.clone();
         let stamp = |path: &PathBuf| std::fs::metadata(path).ok().map(|meta| (meta.modified().ok(), meta.len()));
         let thread = std::thread::spawn(move || {
-            let (mut ticked, mut seen) = (Instant::now(), stamp(&path));
+            let mut phase = Phase::new(Instant::now(), Duration::from_millis(usage::TICK_MS));
+            let mut seen = stamp(&path);
             loop {
-                std::thread::park_timeout(Duration::from_millis(500));
+                // A mount only moves the tick later, so the thread may sleep until the tick it knows.
+                let poll = Duration::from_millis(500).min(phase.due.saturating_duration_since(Instant::now()));
+                std::thread::park_timeout(poll);
                 if stopped.load(Ordering::Acquire) {
                     return;
                 }
                 let mut wake = false;
-                if ticked.elapsed() >= Duration::from_millis(usage::TICK_MS) {
-                    ticked = Instant::now();
+                let mounted = flags.mounted.lock().unwrap_or_else(PoisonError::into_inner).take();
+                if phase.tick(Instant::now(), mounted) {
                     flags.tick.store(true, Ordering::Release);
                     wake = true;
                 }
@@ -603,27 +647,59 @@ mod tests {
         fn copy(&self, _text: &str, _then: Option<Action>) {}
     }
 
+    /// The panel on `ses_p`, which has no children and one page of `messages`, after the replies.
+    fn after_one_page(host: &Fake, messages: Vec<Value>) -> State {
+        let mut state = State::new(Value::Null, config::load(&Value::Null));
+        state.mount(host, "ses_p".to_owned(), true);
+        assert_eq!(host.fetches.borrow()[0].path, "/api/session");
+        state.reply(host, RequestId(1), Ok(json!({ "data": [], "cursor": {} })));
+        let page = RequestId(host.fetches.borrow().len() as u64);
+        assert_eq!(host.fetches.borrow().last().unwrap().path, "/api/session/ses_p/message");
+        state.reply(host, page, Ok(json!({ "data": messages, "cursor": {} })));
+        state
+    }
+
+    fn assistant(id: &str, cost: f64) -> Value {
+        json!({
+            "id": id, "type": "assistant", "agent": "build", "model": { "providerID": "p", "id": "m" },
+            "time": { "created": 1 }, "content": [], "cost": cost,
+        })
+    }
+
     // Expected: once the panel has its total, it keeps no message, as TS's `costOfSessions` returns a number and lets
     // its `messageSets` go.
     #[test]
     fn a_priced_run_keeps_no_messages() {
         let host = Fake::default();
-        let mut state = State::new(Value::Null, config::load(&Value::Null));
-        state.mount(&host, "ses_p".to_owned(), true);
-        let children = RequestId(1);
-        assert_eq!(host.fetches.borrow()[0].path, "/api/session");
-        state.reply(&host, children, Ok(json!({ "data": [], "cursor": {} })));
-        let messages = RequestId(host.fetches.borrow().len() as u64);
-        assert_eq!(host.fetches.borrow().last().unwrap().path, "/api/session/ses_p/message");
-        let message = json!({
-            "id": "msg_1", "type": "assistant", "agent": "build", "model": { "providerID": "p", "id": "m" },
-            "time": { "created": 1 }, "content": [], "cost": 0.25,
-        });
-        state.reply(&host, messages, Ok(json!({ "data": [message], "cursor": {} })));
+        let mut state = after_one_page(&host, vec![assistant("msg_1", 0.25)]);
         assert!(state.run.is_none() && state.priced.is_some());
 
         state.render(&host, &Changed { all: true, ..Changed::default() });
         assert_eq!(state.total, Some(0.25));
         assert!(state.priced.is_none() && state.run.is_none());
+    }
+
+    // Expected: a message the Rust types reject is skipped and counted, and the others are priced, as TS prices
+    // whatever the page holds.
+    #[test]
+    fn a_malformed_message_is_skipped_and_the_rest_priced() {
+        let host = Fake::default();
+        let broken = json!({ "id": "msg_2", "type": "assistant", "model": 5, "cost": 9 });
+        let mut state = after_one_page(&host, vec![assistant("msg_1", 0.25), broken, assistant("msg_3", 0.5)]);
+        state.render(&host, &Changed { all: true, ..Changed::default() });
+        assert_eq!((state.total, state.skipped), (Some(0.75), 1));
+    }
+
+    // Expected: as TS's `setInterval` in a component, the first tick comes a period after the mount, then every
+    // period; a mount during the period starts it again.
+    #[test]
+    fn the_tick_starts_again_at_a_mount() {
+        let (start, second) = (Instant::now(), Duration::from_secs(1));
+        let mut phase = Phase::new(start, 15 * second);
+        let ticks: Vec<bool> = [(9, None), (15, Some(10)), (24, None), (25, None), (39, None), (40, None)]
+            .into_iter()
+            .map(|(at, mounted)| phase.tick(start + at * second, mounted.map(|at| start + at * second)))
+            .collect();
+        assert_eq!(ticks, [false, false, false, true, false, true]);
     }
 }
