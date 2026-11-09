@@ -29,10 +29,14 @@ export function ModelDetails(props: {
   usage?: ModelUsageLabel
 }) {
   const language = useLanguage()
-  const input = () => inputs.filter((type) => props.model.capabilities.input[type])
+  const input = () => inputs.filter((type) => props.model.capabilities?.input[type])
+  const context = () => props.model.limit?.context ?? 0
+  const output = () => props.model.limit?.output ?? 0
 
   const modalities = () =>
-    inputs.filter((type) => props.model.capabilities.input[type] || props.model.capabilities.output[type])
+    inputs.filter(
+      (type) => props.model.capabilities?.input[type] || props.model.capabilities?.output[type],
+    )
 
   const label = (type: Input) => language.t(`model.details.input.${type}`)
 
@@ -67,8 +71,16 @@ export function ModelDetails(props: {
                 <dt class="min-w-0 flex-1 truncate font-[530] text-v2-text-text-faint">
                   {language.t("model.tooltip.context.label")}
                 </dt>
-                <dd class="shrink-0">{props.model.limit.context.toLocaleString(language.intl())}</dd>
+                <dd class="shrink-0">{context().toLocaleString(language.intl())}</dd>
               </div>
+              <Show when={output() > 0}>
+                <div class="flex h-6 min-w-0 items-center gap-2 px-2">
+                  <dt class="min-w-0 flex-1 truncate font-[530] text-v2-text-text-faint">
+                    {language.t("model.details.output")}
+                  </dt>
+                  <dd class="shrink-0">{output().toLocaleString(language.intl())}</dd>
+                </div>
+              </Show>
             </dl>
             <Show when={props.usage}>
               {(usage) => (

@@ -31,6 +31,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { TextInput } from "@opencode/ui/text-input"
 import { ModelTooltip } from "./tooltip"
 import { ModelDetails } from "./details"
+import { ModelCapabilityTags, hasCapabilityTags } from "./capability-tags"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { useData } from "@/runtime/server/current"
@@ -219,6 +220,11 @@ const ModelList: Component<{
                   </Show>
                   <Show when={usage(item)}>{(value) => <ModelUsageTag usage={value()} />}</Show>
                 </div>
+                <Show when={hasCapabilityTags(item)}>
+                  <div data-slot="settings-row-description" class="flex items-center gap-1">
+                    <ModelCapabilityTags model={item} />
+                  </div>
+                </Show>
               </div>
               <div data-slot="settings-row-control" class="size-4">
                 <Show when={controller.current() === modelKey(item)}>
@@ -965,6 +971,11 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
           </Show>
           <Show when={item().latest}>
             <Badge class="shrink-0">{language.t("model.tag.latest")}</Badge>
+          </Show>
+          <Show when={hasCapabilityTags(item())}>
+            <span class="flex shrink-0 items-center gap-1">
+              <ModelCapabilityTags model={item()} compact />
+            </span>
           </Show>
         </span>
         <Show when={usage(item())}>{(value) => <ModelUsageTag usage={value()} />}</Show>

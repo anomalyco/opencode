@@ -12,7 +12,7 @@ import { modelPreferenceKey } from "../model-preference"
 import { useLocation } from "../context/location"
 import { useNewDesigns } from "../config"
 import { DialogFreeModels } from "./dialog-model-free"
-import { FavoriteMarker, ModelDetail, isFreeModel, prioritizeFavorites, sortModelOptions } from "./model-options"
+import { FavoriteMarker, ModelDetail, isFreeModel, modelLimits, prioritizeFavorites, sortModelOptions } from "./model-options"
 import { DialogUsage, useUsageLimits } from "./usage"
 import { formatDollars, usageLevel } from "../util/usage-limits"
 
@@ -85,7 +85,11 @@ function DialogConnectedModels(props: {
   // Under new designs the detail row shows the price, so the trailing slot only marks favorites.
   const trailing = (model: ModelInfo, favorite: boolean) => {
     if (newDesigns()) return favorite ? <FavoriteMarker /> : undefined
-    return isFreeModel(model) ? "Free" : undefined
+    const parts: string[] = []
+    if (isFreeModel(model)) parts.push("Free")
+    const limits = modelLimits(model)
+    if (limits) parts.push(limits)
+    return parts.length ? parts.join(" ") : undefined
   }
   // OpenCode's own free models get their own group at the end of the list instead of joining "OpenCode".
   const freeGroup = (model: ModelInfo) =>
