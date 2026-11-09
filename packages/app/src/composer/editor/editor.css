@@ -2,6 +2,11 @@
   content: "\200B";
 }
 
+/* Ligature fonts can repaint truncated while typing on macOS: MonoLisa's "..." shows as "  .". */
+[data-component="composer-editor"] {
+  font-variant-ligatures: none;
+}
+
 [data-component="composer-editor"] [data-mention="session"] {
   color: var(--v2-text-text-muted);
 }
