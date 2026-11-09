@@ -59,6 +59,11 @@ impl Connected {
     pub fn is_service(&self) -> bool {
         matches!(self._connection.source, connect::Source::Service { .. })
     }
+
+    /// True for a private server started for this command alone (`Resolved.standalone` in TS).
+    pub fn is_standalone(&self) -> bool {
+        matches!(self._connection.source, connect::Source::Standalone(_))
+    }
 }
 
 async fn connect_in(
