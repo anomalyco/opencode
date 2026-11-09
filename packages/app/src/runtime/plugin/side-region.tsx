@@ -229,6 +229,15 @@ export function PaneTabs(props: {
     }),
   )
 
+  const after = createMemo(() => {
+    const keys = props.pane.keys()
+    const index = keys.indexOf(tabMenu.key)
+
+    if (index === -1) return []
+
+    return keys.slice(index + 1).filter((key) => closable().includes(key))
+  })
+
   // Without a new tab item, "+" opens a host-owned new tab view listing the launchers, as ⌘T does inside the region.
   const current = createMemo(() => props.region.shownNewTab(props.pane.id))
   const add = () => props.region.openNewTab(props.pane.id)
@@ -388,6 +397,9 @@ export function PaneTabs(props: {
                 }}
               >
                 {language.t("session.tab.closeOthers")}
+              </Menu.Item>
+              <Menu.Item disabled={after().length === 0} onSelect={() => after().forEach(props.region.close)}>
+                {language.t(language.direction() === "rtl" ? "common.closeTabsToLeft" : "common.closeTabsToRight")}
               </Menu.Item>
             </Menu.Content>
           </Menu.Portal>

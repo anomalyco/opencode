@@ -221,7 +221,7 @@ test("New tabs stay when a launcher in another one opens a tab, or when the tab 
   await expect(toggle).toHaveAttribute("aria-expanded", "false")
 })
 
-test("tabs in a narrow side strip shrink to keep their close buttons, and a tab's menu closes the others", async ({
+test("tabs in a narrow side strip shrink to keep their close buttons, and a tab's menu closes the others or those to its right", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1000, height: 700 })
@@ -257,16 +257,21 @@ test("tabs in a narrow side strip shrink to keep their close buttons, and a tab'
     expect(box.x + box.width).toBeLessThanOrEqual(end)
   }
 
-  await side.getByRole("tab", { name: "b.md", exact: true }).click({ button: "right" })
+  await side.getByRole("tab", { name: files[1], exact: true }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Close tabs to the right", exact: true }).click()
+  await expect(side.getByRole("tab")).toHaveText(["a.md", files[1]])
+
+  await side.getByRole("tab", { name: "a.md", exact: true }).click({ button: "right" })
   await page.getByRole("menuitem", { name: "Close other tabs", exact: true }).click()
   await expect(side.getByRole("tab")).toHaveCount(1)
-  await expect(side.getByRole("tab", { name: "b.md", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(side.getByRole("tab", { name: "a.md", exact: true })).toHaveAttribute("aria-selected", "true")
 
   // With nothing else to close, the menu offers only the tab itself.
-  await side.getByRole("tab", { name: "b.md", exact: true }).click({ button: "right" })
+  await side.getByRole("tab", { name: "a.md", exact: true }).click({ button: "right" })
   await expect(page.getByRole("menuitem", { name: "Close other tabs", exact: true })).toBeDisabled()
+  await expect(page.getByRole("menuitem", { name: "Close tabs to the right", exact: true })).toBeDisabled()
   await page.getByRole("menuitem", { name: "Close tab", exact: true }).click()
-  await expect(side.getByRole("tab", { name: "b.md", exact: true })).toHaveCount(0)
+  await expect(side.getByRole("tab", { name: "a.md", exact: true })).toHaveCount(0)
 })
 
 async function expectTreeSentinel(page: Page) {
