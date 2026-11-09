@@ -97,3 +97,42 @@ async fn answers_the_first_session_after_a_cold_location_activates_its_plugins()
     );
     assert_eq!(current_value(&selected, "model"), "test/second-model");
 }
+
+// Expected: models and commands that arrive after the session opened reach the client through their `*.updated`
+// events, as config options and available commands.
+#[tokio::test]
+async fn updated_events_refresh_an_open_session() {
+    let acp = start_wire(WireOptions::default()).await;
+    let commands = {
+        let mut state = acp.server.state();
+        state.models.truncate(1);
+        std::mem::take(&mut state.commands)
+    };
+    acp.initialize(json!({})).await;
+    let session = acp.new_session("/workspace", json!([])).await.unwrap();
+    acp.wait_for_update("the first commands", |item| item["update"]["sessionUpdate"] == "available_commands_update")
+        .await;
+    {
+        let mut state = acp.server.state();
+        state.models.push(second_model());
+        state.commands.extend(commands);
+    }
+    let location = json!({ "directory": "/workspace" });
+    acp.server.send(&[
+        json!({ "id": "", "created": 0, "type": "model.updated", "location": location, "data": {} }),
+        json!({ "id": "", "created": 0, "type": "command.updated", "location": location, "data": {} }),
+    ]);
+
+    let update = acp
+        .wait_for_update("the new model", |item| {
+            item["update"]["sessionUpdate"] == "config_option_update"
+                && item["update"]["configOptions"].to_string().contains("test/second-model")
+        })
+        .await;
+    assert_eq!(update["sessionId"], session["sessionId"]);
+    acp.wait_for_update("the new commands", |item| {
+        item["update"]["sessionUpdate"] == "available_commands_update"
+            && item["update"]["availableCommands"].to_string().contains("review")
+    })
+    .await;
+}
