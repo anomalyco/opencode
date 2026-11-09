@@ -330,6 +330,8 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
         );
     }
     paint();
+    // The buttons' handlers reach the buttons through `paint`; letting go of them ends that cycle.
+    cx.on_close(opentui::keymap::Disposer::new(move || buttons.borrow_mut().clear()));
     root
 }
 

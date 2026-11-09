@@ -2,7 +2,7 @@
 //! right-clicked file heading or tree row that marks the file complete or incomplete. It holds the `menu` input
 //! mode while open, so the viewer's keys wait; Escape, Ctrl+C, or a click elsewhere close it.
 
-use std::rc::Weak;
+use std::rc::{Rc, Weak};
 
 use opencode_ui::bind;
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
@@ -20,6 +20,9 @@ const Z_INDEX: i32 = 2600;
 pub struct Menu {
     app: App,
     overlay: View,
+    /// The row its hover handler restyles. The handler holds it weakly: a widget whose handler holds the widget is
+    /// never freed.
+    _row: Rc<View>,
     // The layer goes before the mode.
     _layer: Option<Disposer>,
     _mode: Disposer,
@@ -64,10 +67,13 @@ pub fn open(viewer: &Viewer, file: usize, x: u16, y: u16) {
         .child(&row);
 
     let weak = viewer.weak();
-    let painted = row.clone();
+    let row = Rc::new(row);
+    let painted = Rc::downgrade(&row);
     row.on_hover(move |cx, over| {
-        painted.bg(if over { hovered } else { base });
-        cx.request_redraw();
+        if let Some(row) = painted.upgrade() {
+            row.bg(if over { hovered } else { base });
+            cx.request_redraw();
+        }
     });
     let menu = weak.clone();
     row.mouse_pointer(MousePointer::POINTER).on_mouse(move |cx, event| match event.kind {
@@ -112,7 +118,7 @@ pub fn open(viewer: &Viewer, file: usize, x: u16, y: u16) {
         )
         .inspect_err(|error| log::error!("{ID} file menu layer: {error}"))
         .ok();
-    *viewer.menu.borrow_mut() = Some(Menu { app: app.clone(), overlay, _layer: layer, _mode: mode });
+    *viewer.menu.borrow_mut() = Some(Menu { app: app.clone(), overlay, _row: row, _layer: layer, _mode: mode });
     app.request_redraw();
 }
 

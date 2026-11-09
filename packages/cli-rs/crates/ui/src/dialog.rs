@@ -628,13 +628,14 @@ fn footer_item(cx: &DialogCx, action: FooterAction, primary: bool) -> AnyWidget 
         spans.push(format!(" {key}").fg(key_fg));
     }
     let text = Text::new(&cx.app, spans);
-    let item = View::new(&cx.app).padding_x(1).shrink(0.0).child(&text);
+    let band = View::new(&cx.app).padding_x(1).shrink(0.0).child(&text);
+    // The hover handler holds the child it paints, not its own widget, which it would keep alive forever.
+    let item = View::new(&cx.app).shrink(0.0).child(&band);
     let hovered =
         if primary { theme.background.action.primary.hovered } else { theme.background.action.secondary.hovered };
-    let hover_item = item.clone();
     let enabled = !action.disabled;
     item.on_hover(move |_cx, over| {
-        hover_item.bg(if over && enabled { hovered } else { Color::TRANSPARENT });
+        band.bg(if over && enabled { hovered } else { Color::TRANSPARENT });
     });
     item.mouse_pointer(crate::click_pointer(enabled));
     item.on_mouse(move |_cx, event| {
