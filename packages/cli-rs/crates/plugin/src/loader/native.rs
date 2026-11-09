@@ -48,7 +48,7 @@ use super::Backend;
 use crate::activation::{Activation, Drawn, Wake};
 use crate::node::{Fences, Scroll, SlotRender, lines_widget, theme_color};
 use crate::slot::placement;
-use crate::{Definition, ErrorFn, Host, Setup, Slotted, defer, tui_command};
+use crate::{Definition, ErrorFn, Host, Setup, Slotted, defer, next_request, route, tui_command};
 
 /// The host's minor version: it serves every entry and request up to it.
 pub const HOST_MINOR: u32 = ABI_MINOR;
@@ -254,6 +254,10 @@ enum Effect {
     Attention(abi::Attention),
     /// A storage write, which the host already shows to reads, for the claims to hear of.
     Stored,
+    Navigate(abi::Route),
+    Fetch(abi::RequestId, abi::Fetch),
+    Dialog(abi::Dialog),
+    Copy(String, Option<abi::Action>),
 }
 
 /// One plugin instance; dropping it destroys the instance in the plugin.
@@ -468,6 +472,14 @@ fn handle<H: Host>(ctx: &mut Ctx<H>, request: HostRequest) -> Result<serde_json:
         HostRequest::Route => return read(ctx, |read| serde_json::to_value(read.route())),
         HostRequest::Dispatch { name, input } => ctx.effects.push(Effect::Dispatch(name, input)),
         HostRequest::Attention(attention) => ctx.effects.push(Effect::Attention(attention)),
+        HostRequest::Navigate { route } => ctx.effects.push(Effect::Navigate(route)),
+        HostRequest::Fetch(fetch) => {
+            let id = next_request();
+            ctx.effects.push(Effect::Fetch(id, fetch));
+            return Ok(serde_json::to_value(id).unwrap_or_default());
+        }
+        HostRequest::Dialog { dialog } => ctx.effects.push(Effect::Dialog(dialog)),
+        HostRequest::Copy { text, then } => ctx.effects.push(Effect::Copy(text, then)),
     }
     Ok(serde_json::Value::Null)
 }
@@ -503,7 +515,7 @@ struct Guest<H: Host> {
 
 impl<H: Host> Guest<H> {
     /// Sends one request. A failed or destroyed plugin is not called; a panic fails it, and its claims draw empty.
-    fn request<T: DeserializeOwned>(&self, export: &str, request: &Request) -> Option<T> {
+    fn request<T: DeserializeOwned>(self: &Rc<Self>, export: &str, request: &Request) -> Option<T> {
         if self.failure.borrow().is_some() {
             return None;
         }
@@ -544,7 +556,7 @@ impl<H: Host> Guest<H> {
     }
 
     /// Sends a request to a handler, then invalidates the claims, whose state it may have changed.
-    fn handle(&self, export: &str, request: &Request) {
+    fn handle(self: &Rc<Self>, export: &str, request: &Request) {
         self.request::<serde_json::Value>(export, request);
         self.activation.invalidate();
     }
@@ -559,11 +571,12 @@ impl<H: Host> Guest<H> {
     }
 
     /// Queues the effects of a call on the effect queue, as the host would for a built-in.
-    fn apply(&self, effects: Vec<Effect>) {
+    fn apply(self: &Rc<Self>, effects: Vec<Effect>) {
         if effects.is_empty() {
             return;
         }
         let id = self.id.clone();
+        let guest = Rc::downgrade(self);
         defer(&self.host, move |host| {
             for effect in effects {
                 match effect {
@@ -572,9 +585,30 @@ impl<H: Host> Guest<H> {
                     Effect::Dispatch(name, input) => host.dispatch(&name, input.as_deref()),
                     Effect::Attention(attention) => host.attention(&attention),
                     Effect::Stored => host.storage_changed(),
+                    Effect::Navigate(route) => host.navigate(&id, &route),
+                    Effect::Fetch(request, fetch) => Guest::fetch(&guest, host, request, fetch),
+                    Effect::Dialog(dialog) => host.dialog(&id, dialog),
+                    Effect::Copy(text, then) => crate::copy(host, &text, then),
                 }
             }
         });
+    }
+
+    /// Sends `fetch` unless the instance is destroyed; its reply goes to the instance on the effect queue, unless the
+    /// instance is destroyed by then.
+    fn fetch(guest: &Weak<Self>, host: &H, request: abi::RequestId, fetch: abi::Fetch) {
+        let Some(live) = guest.upgrade().filter(|guest| guest.instance.borrow().is_some()) else { return };
+        let (guest, owner) = (guest.clone(), live.host.clone());
+        host.fetch(
+            fetch,
+            Box::new(move |result| {
+                defer(&owner, move |_| {
+                    if let Some(guest) = guest.upgrade() {
+                        guest.handle("on-reply", &Request::Reply { id: request, result });
+                    }
+                });
+            }),
+        );
     }
 }
 
@@ -587,17 +621,19 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
         let instance = disposed.instance.borrow_mut().take();
         drop(instance);
     });
-    let commands: Vec<TuiCommand> = manifest
+    let commands: Vec<(abi::Scope, TuiCommand)> = manifest
         .commands
         .iter()
         .map(|command| {
             let guest = guest.clone();
             let name = command.name.clone();
-            tui_command(command, move |input| {
+            let run = tui_command(command, move |input| {
                 guest.handle("run-command", &Request::Command { name: name.clone(), input: input.map(str::to_owned) });
-            })
+            });
+            (command.scope.clone(), run)
         })
         .collect();
+    let (commands, scoped) = route::split(commands);
     if !commands.is_empty() {
         match setup.host().keymap().layer(KeymapLayer::global(commands)) {
             Ok(disposer) => {
@@ -664,6 +700,15 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
     }
     for name in &manifest.routes {
         let guest = guest.clone();
+        if manifest.render >= abi::RENDER && manifest.render_routes.contains(name) {
+            let (request, activation) = (name.clone(), guest.activation.clone());
+            let render: SlotRender<H> = Rc::new(move |_, _, changed| {
+                let request = Request::RenderRoute { name: request.clone(), changed: changed.clone() };
+                guest.request("render-route", &request).unwrap_or(abi::Render::Hide)
+            });
+            setup.view_route(name, render, route::commands(&scoped, name), &activation);
+            continue;
+        }
         let request = Request::Route { name: name.clone() };
         setup.route(name.clone(), move |host| Box::new(Claim::mount(host, &guest, "render-route", request.clone())));
     }
