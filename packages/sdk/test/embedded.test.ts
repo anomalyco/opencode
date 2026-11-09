@@ -37,9 +37,14 @@ const sessionID = (fixture: Fixture) => fixture.sdk.Session.ID.create()
 const location = (fixture: Fixture) =>
   fixture.sdk.Location.Ref.make({ directory: fixture.sdk.AbsolutePath.make(fixture.directory) })
 
-// Reads don't wait for plugins, so callers wait for the plugin-provided entry they need.
-const eventually = <A, E, R>(read: Effect.Effect<A, E, R>, ready: (value: A) => boolean) =>
-  read.pipe(Effect.filterOrFail(ready), Effect.retry(Schedule.spaced("10 millis")), Effect.timeout("5 seconds"))
+// The server doesn't wait for plugins, so an SDK caller waits until the plugin-provided entry it needs is loaded.
+// Activation takes milliseconds here; the cap stays well inside the 5s test timeout so a miss fails with its name.
+const loaded = <A, E, R>(name: string, read: Effect.Effect<A, E, R>, ready: (value: A) => boolean) =>
+  read.pipe(
+    Effect.repeat({ until: ready, schedule: Schedule.spaced("10 millis") }),
+    Effect.timeoutOrElse({ duration: "3 seconds", orElse: () => Effect.die(new Error(`${name} never loaded`)) }),
+    Effect.andThen(read),
+  )
 
 for (const selection of ["explicit", "default"] as const) {
   it.live(`generate.text uses configured providers with ${selection} model selection`, () =>
@@ -71,7 +76,7 @@ for (const selection of ["explicit", "default"] as const) {
             overrides: [llmClient.replace(Layer.succeed(LLMClient.Service, llm))],
           },
         )
-        yield* eventually(opencode.model.list({ location: location(fixture) }), (models) =>
+        yield* loaded("custom/fictional-chat", opencode.model.list({ location: location(fixture) }), (models) =>
           models.data.some((model) => model.providerID === "custom" && model.id === "fictional-chat"),
         )
 
@@ -143,7 +148,8 @@ it.live("seeds host plugins from CreateOptions and loads delayed model plugins w
         },
       )
 
-      const defaultModel = yield* eventually(
+      const defaultModel = yield* loaded(
+        "seeded model",
         opencode.model.default({ location: location(fixture) }),
         (model) => model.data?.providerID === "seeded",
       )
@@ -192,7 +198,8 @@ it.live("OpenCodeWorkerd seeds plugins before cold model resolution", () =>
         ],
       })
 
-      const selected = yield* eventually(
+      const selected = yield* loaded(
+        "workerd-seeded model",
         opencode.model.default({
           location: fixture.sdk.Location.Ref.make({ directory: fixture.sdk.AbsolutePath.make("/workspace") }),
         }),
@@ -234,16 +241,8 @@ it.live(
         })
         const context = yield* opencode.sessions.context({ sessionID: id })
         const pendingAfterAdmit = yield* opencode.sessions.inbox.list({ sessionID: id })
-        yield* opencode.experimental.session.instructions.entry.put({
-          sessionID: id,
-          key: "deploy-target",
-          value: "production",
-        })
-        yield* opencode.experimental.session.instructions.entry.put({
-          sessionID: id,
-          key: "flags",
-          value: { beta: true },
-        })
+        yield* opencode.experimental.session.instructions.entry.put({ sessionID: id, key: "deploy-target", value: "production" })
+        yield* opencode.experimental.session.instructions.entry.put({ sessionID: id, key: "flags", value: { beta: true } })
         const contextEntries = yield* opencode.experimental.session.instructions.entry.list({ sessionID: id })
         yield* opencode.experimental.session.instructions.entry.remove({ sessionID: id, key: "flags" })
         const remainingContextEntries = yield* opencode.experimental.session.instructions.entry.list({ sessionID: id })
@@ -276,9 +275,7 @@ it.live(
           [
             opencode.experimental.session.log({ sessionID: missingSessionID }).pipe(Stream.runHead, Effect.flip),
             opencode.sessions.interrupt({ sessionID: missingSessionID }).pipe(Effect.flip),
-            opencode.sessions.message
-              .get({ sessionID: missingSessionID, messageID: modelMessage.id })
-              .pipe(Effect.flip),
+            opencode.sessions.message.get({ sessionID: missingSessionID, messageID: modelMessage.id }).pipe(Effect.flip),
             opencode.experimental.session.instructions.entry.list({ sessionID: missingSessionID }).pipe(Effect.flip),
             opencode.sessions.inbox.list({ sessionID: missingSessionID }).pipe(Effect.flip),
           ],
@@ -341,8 +338,10 @@ it.live("embedded client exposes plugin-backed web search", () =>
             })
           }),
       })
-      yield* eventually(opencode.websearch.providers({ location: location(fixture) }), (providers) =>
-        providers.data.some((provider) => provider.id === providerID),
+      yield* loaded(
+        "embedded-websearch provider",
+        opencode.websearch.providers({ location: location(fixture) }),
+        (providers) => providers.data.some((provider) => provider.id === providerID),
       )
 
       const result = yield* opencode.websearch.query({

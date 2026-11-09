@@ -2,11 +2,12 @@ import { expect } from "bun:test"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Rpc } from "@opencode/schema/rpc"
-import { Context, Effect, Layer, Schedule, Schema } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { HttpEffect, HttpRouter, HttpServer } from "effect/http"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { createEmbeddedRoutes } from "../src/routes"
+import { pluginsLoaded } from "./fixture/routes"
 
 const Broken = Rpc.define({
   id: "broken",
@@ -52,9 +53,9 @@ for (const method of ["handler", "schema"] as const) {
       const handler = Context.get(context, HttpRouter.HttpRouter)
         .asHttpEffect()
         .pipe(HttpEffect.toWebHandlerWith(context))
+      yield* pluginsLoaded(context, directory.path)
       const url = new URL(`/api/rpc/broken/${method}`, "http://opencode.local")
       url.searchParams.set("location[directory]", directory.path)
-      // RPC calls don't wait for plugins, so retry until the plugin has registered its RPC.
       const response = yield* Effect.promise(() =>
         handler(
           new Request(url, {
@@ -63,11 +64,8 @@ for (const method of ["handler", "schema"] as const) {
             body: JSON.stringify({ input: "hello" }),
           }),
         ),
-      ).pipe(
-        Effect.filterOrFail((response) => response.status === 500),
-        Effect.retry(Schedule.spaced("10 millis")),
-        Effect.timeout("4 seconds"),
       )
+      expect(response.status).toBe(500)
       expect(yield* Effect.promise(() => response.json())).toEqual({
         _tag: "RpcInternalError",
         type: "rpc.internal",

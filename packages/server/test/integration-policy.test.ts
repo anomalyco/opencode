@@ -1,9 +1,10 @@
 import { expect } from "bun:test"
-import { Context, Effect, Layer, Schedule } from "effect"
+import { Context, Effect, Layer } from "effect"
 import { HttpEffect, HttpRouter, HttpServer } from "effect/http"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { createRoutes } from "../src/routes"
+import { pluginsLoaded } from "./fixture/routes"
 
 it.live("integration policy filters /connect and blocks denied integrations and providers", () =>
   Effect.gen(function* () {
@@ -58,17 +59,9 @@ it.live("integration policy filters /connect and blocks denied integrations and 
         return { status: response.status, body: response.status === 204 ? undefined : await response.json() }
       })
 
-    // The list doesn't wait for plugins, so a cold Location fills in after activation.
-    const integrations = yield* request("GET", "/api/integration").pipe(
-      Effect.filterOrFail(
-        (response) =>
-          response.status === 200 &&
-          response.body.data.some((item: { id: string }) => item.id === "opencode") &&
-          response.body.data.some((item: { metadata?: { source?: string } }) => item.metadata?.source === "mcp"),
-      ),
-      Effect.retry(Schedule.spaced("10 millis")),
-      Effect.timeout("4 seconds"),
-    )
+    yield* pluginsLoaded(context, tmp.path)
+    const integrations = yield* request("GET", "/api/integration")
+    expect(integrations.status).toBe(200)
     // MCP sign-ins are outside integration policy; `mcp.use` governs MCP servers.
     const listed: { id: string; metadata?: { source?: string } }[] = integrations.body.data
     expect(listed.filter((integration) => integration.metadata?.source !== "mcp").map((item) => item.id)).toEqual([

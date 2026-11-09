@@ -208,13 +208,11 @@ export const makeArtifact = Effect.gen(function* () {
             })
           }
           const subpath = extractViewSubpath(request.url, artifactID)
-          const file = yield* artifacts
-            .readLocalFile(artifactID, subpath)
-            .pipe(
-              Effect.catchTag("Artifact.FileMissingError", (error) =>
-                Effect.fail(new FileNotFoundError({ path: error.path, message: error.message })),
-              ),
-            )
+          const file = yield* artifacts.readLocalFile(artifactID, subpath).pipe(
+            Effect.catchTag("Artifact.FileMissingError", (error) =>
+              Effect.fail(new FileNotFoundError({ path: error.path, message: error.message })),
+            ),
+          )
           return HttpServerResponse.uint8Array(file.bytes, {
             status: 200,
             contentType: file.mime,
