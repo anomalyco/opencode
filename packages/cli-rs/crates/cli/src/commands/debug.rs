@@ -33,6 +33,7 @@ pub fn run(context: &Context, args: &DebugArgs) -> error::Result<()> {
 fn agents(context: &Context) -> error::Result<()> {
     let response = block_on(async {
         let server = connect(context).await?;
+        super::client::wait_for_plugins(&server.client, Some(here()?)).await;
         let input = AgentListInput { location: Some(here()?) };
         Ok::<_, error::Error>(server.client.json::<Value>(Client::agent_list_call(&input)?).await?)
     })??;

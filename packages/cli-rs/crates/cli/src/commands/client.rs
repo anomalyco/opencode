@@ -96,6 +96,20 @@ pub fn here() -> error::Result<LocationQueryInput> {
     Ok(LocationQueryInput { directory: Some(std::env::current_dir()?.to_string_lossy().into_owned()) })
 }
 
+/// `waitForPlugins`: catalog reads return whatever is loaded, and a cold location lists no plugins until its first
+/// activation, so one-shot commands poll the plugin list every 25 ms, for up to 5 s, until it has one. A failed
+/// read stops the wait.
+pub async fn wait_for_plugins(client: &Client, location: Option<LocationQueryInput>) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let input = opencode_api::generated::types::PluginListInput { location };
+    while let Ok(plugins) = client.plugin_list(&input).await {
+        if !plugins.data.is_empty() || std::time::Instant::now() >= deadline {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+}
+
 /// `JSON.stringify(value, null, 2)` plus a newline.
 pub fn pretty(value: &Value) -> error::Result<String> {
     Ok(serde_json::to_string_pretty(value)? + "\n")
