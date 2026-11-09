@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Effect, Option, Stream } from "effect"
 import { HttpClient } from "effect/http"
 import { define } from "@opencode/plugin/effect/plugin"
 import { IntegrationConnection } from "../../integration/connection.js"
@@ -17,50 +17,74 @@ export const ModalPlugin = define({
     const providers = yield* Provider.Service
     const cache = yield* SharedCache.Service
     const http = yield* HttpClient.HttpClient
-    const discovered = yield* ProviderRefresh.start({
+    const discovered: {
+      baseURL?: string
+      models?: ModalModels.Snapshot
+      connection?: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
+    } = {}
+
+    yield* ProviderRefresh.follow({
       integrationID: "modal",
-      initial: {} as {
-        readonly baseURL?: string
-        readonly models?: ModalModels.Snapshot
-        readonly connection?: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
-      },
-      active: ctx.integration.connection.active("modal"),
-      reload: ctx.provider.reload(),
-      load: Effect.fn("ModalPlugin.load")(function* (_, options) {
+      select: Effect.gen(function* () {
         const { connection, credential } = yield* activeCredential(ctx, "modal")
         const apiKey = credential?.type === "key" ? credential.key : process.env.MODAL_PROXY_TOKEN
         const provider = yield* providers.get(providerID)
         const baseURL = typeof provider?.settings?.baseURL === "string" ? provider.settings.baseURL : undefined
-        if (!apiKey || !baseURL) return { connection, value: {} }
-        const models = yield* cache
-          .get({
-            key: modelsKey(connection, apiKey, baseURL),
-            ...options,
-            load: (connection ? ctx.integration.connection.resolve(connection) : Effect.undefined).pipe(
-              Effect.map((current) =>
-                current?.type === "key" ? current.key : connection ? undefined : process.env.MODAL_PROXY_TOKEN,
-              ),
-              Effect.flatMap((key) =>
-                key ? ModalModels.load(http, baseURL, key) : Effect.fail(new Error("Modal connection has no API key")),
-              ),
-              Effect.map((models) => models.toSorted((a, b) => a.id.localeCompare(b.id))),
-            ),
-          })
-          .pipe(Effect.orElseSucceed(() => undefined))
-        return { connection, value: { baseURL, models, connection } }
+        if (!apiKey || !baseURL)
+          return { key: `none:${IntegrationConnection.key(connection)}`, acquire: () => apply({ connection }) }
+        const key = modelsKey(connection, apiKey, baseURL)
+        return {
+          key,
+          acquire: (current: () => boolean) =>
+            Effect.gen(function* () {
+              const models = yield* cache.source({
+                key,
+                load: (connection ? ctx.integration.connection.resolve(connection) : Effect.undefined).pipe(
+                  Effect.map((current) =>
+                    current?.type === "key" ? current.key : connection ? undefined : process.env.MODAL_PROXY_TOKEN,
+                  ),
+                  Effect.flatMap((key) =>
+                    key
+                      ? ModalModels.load(http, baseURL, key)
+                      : Effect.fail(new Error("Modal connection has no API key")),
+                  ),
+                  Effect.map((models) => models.toSorted((a, b) => a.id.localeCompare(b.id))),
+                ),
+              })
+              yield* models.changes.pipe(
+                Stream.runForEach((state) =>
+                  current() ? apply({ baseURL, models: Option.getOrUndefined(state.value), connection }) : Effect.void,
+                ),
+                Effect.forkScoped({ startImmediately: true }),
+              )
+            }),
+        }
       }),
     })
 
+    // Reloads providers only when what the transform reads changed.
+    function apply(next: typeof discovered) {
+      if (
+        next.baseURL === discovered.baseURL &&
+        next.models === discovered.models &&
+        IntegrationConnection.key(next.connection) === IntegrationConnection.key(discovered.connection)
+      )
+        return Effect.void
+      discovered.baseURL = next.baseURL
+      discovered.models = next.models
+      discovered.connection = next.connection
+      return ctx.provider.reload()
+    }
+
     yield* ctx.provider.transform((evt) => {
       const item = evt.get(providerID)
-      const loaded = discovered.current
-      if (!item || !loaded.models || !loaded.baseURL) return
+      if (!item || !discovered.models || !discovered.baseURL) return
       evt.add({
         info: item.provider,
         models: Array.from(
-          ModalModels.derive(loaded.baseURL, loaded.models, Array.from(item.models.values())).values(),
+          ModalModels.derive(discovered.baseURL, discovered.models, Array.from(item.models.values())).values(),
         ),
-        sourceConnection: loaded.connection,
+        sourceConnection: discovered.connection,
       })
     })
   }),

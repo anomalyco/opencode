@@ -1,7 +1,7 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import type { SessionRequestKind, SessionTitle } from "@opencode/plugin/effect/session"
 import { isRecord } from "@opencode/util/record"
-import { Effect, Option, Schema } from "effect"
+import { Effect, Option, Schema, Stream } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Credential } from "../../credential.js"
@@ -164,76 +164,89 @@ export const GithubCopilotPlugin = define({
     const cache = yield* SharedCache.Service
     const http = yield* HttpClient.HttpClient
     const outbound = yield* FetchHttpClient.Fetch
-    const discovered = yield* ProviderRefresh.start({
+    const discovered: {
+      key?: string
+      baseURL?: string
+      models?: CopilotModels.Snapshot
+      connection?: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
+    } = {}
+    const apply = (next: typeof discovered) => {
+      if (next.key === discovered.key && next.baseURL === discovered.baseURL && next.models === discovered.models)
+        return Effect.void
+      Object.assign(discovered, { key: undefined, baseURL: undefined, models: undefined, connection: undefined }, next)
+      return ctx.provider.reload()
+    }
+    yield* ProviderRefresh.follow({
       integrationID: "github-copilot",
-      initial: {} as {
-        readonly baseURL?: string
-        readonly token?: string
-        readonly models?: CopilotModels.Snapshot
-        readonly connection?: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
-      },
-      active: ctx.integration.connection.active("github-copilot"),
-      reload: ctx.provider.reload(),
-      load: Effect.fn("GithubCopilotPlugin.load")(function* (_, options) {
+      select: Effect.gen(function* () {
         const { connection, credential } = yield* activeCredential(ctx, "github-copilot")
-        if (!connection || credential?.type !== "oauth") return { connection, value: {} }
-        // The account's API endpoint changes with its plan, so read it again on every refresh; the one stored at
-        // login is the fallback.
-        const endpoint = yield* cache
-          .get({
-            key: `github-copilot-endpoint:${IntegrationConnection.key(connection)}`,
-            ...options,
-            load: ctx.integration.connection.resolve(connection).pipe(
-              Effect.flatMap((current) =>
-                current?.type === "oauth"
-                  ? HttpClient.filterStatusOk(http)
-                      .execute(
-                        HttpClientRequest.get(
-                          userURL(
-                            typeof current.metadata?.enterpriseUrl === "string"
-                              ? current.metadata.enterpriseUrl
-                              : undefined,
-                          ),
-                        ).pipe(
-                          HttpClientRequest.setHeaders({
-                            Accept: "application/json",
-                            Authorization: `Bearer ${current.refresh}`,
-                            "User-Agent": App.useragent(ctx.app),
-                            "X-GitHub-Api-Version": userApiVersion,
-                          }),
-                        ),
-                      )
-                      .pipe(
-                        Effect.flatMap(HttpClientResponse.schemaBodyJson(User)),
-                        Effect.map((user) => user.endpoints?.api?.replace(/\/+$/, "")),
-                        Effect.timeout("5 seconds"),
-                      )
-                  : Effect.fail(new Error("GitHub Copilot connection has no OAuth credential")),
-              ),
-            ),
-          })
-          .pipe(Effect.orElseSucceed(() => undefined))
-        const url = endpoint || copilotBaseURL(credential.metadata)
+        if (!connection || credential?.type !== "oauth")
+          return { key: `none:${IntegrationConnection.key(connection)}`, acquire: () => apply({ connection }) }
         const headers = (yield* providers.get(Provider.ID.githubCopilot))?.headers ?? {}
-        const models = yield* cache
-          .get({
-            key: modelsKey(connection, url, headers),
-            ...options,
-            load: ctx.integration.connection.resolve(connection).pipe(
-              Effect.flatMap((current) =>
-                current?.type === "oauth"
-                  ? CopilotModels.load(http, url, {
+        const key = modelsKey(connection, headers)
+        // The endpoint stored at login serves until the account's current one is known.
+        const stored = copilotBaseURL(credential.metadata)
+        return {
+          key,
+          acquire: (current: () => boolean) =>
+            Effect.gen(function* () {
+              const models = yield* cache.source({
+                key,
+                load: Effect.gen(function* () {
+                  const latest = yield* ctx.integration.connection.resolve(connection)
+                  if (latest?.type !== "oauth")
+                    return yield* Effect.fail(new Error("GitHub Copilot connection has no OAuth credential"))
+                  // The account's API endpoint changes with its plan, so every refresh reads it again.
+                  const endpoint = yield* HttpClient.filterStatusOk(http)
+                    .execute(
+                      HttpClientRequest.get(
+                        userURL(
+                          typeof latest.metadata?.enterpriseUrl === "string"
+                            ? latest.metadata.enterpriseUrl
+                            : undefined,
+                        ),
+                      ).pipe(
+                        HttpClientRequest.setHeaders({
+                          Accept: "application/json",
+                          Authorization: `Bearer ${latest.refresh}`,
+                          "User-Agent": App.useragent(ctx.app),
+                          "X-GitHub-Api-Version": userApiVersion,
+                        }),
+                      ),
+                    )
+                    .pipe(
+                      Effect.flatMap(HttpClientResponse.schemaBodyJson(User)),
+                      Effect.map((user) => user.endpoints?.api?.replace(/\/+$/, "")),
+                      Effect.timeout("5 seconds"),
+                      Effect.orElseSucceed(() => undefined),
+                    )
+                  const baseURL = endpoint || copilotBaseURL(latest.metadata)
+                  return {
+                    baseURL,
+                    models: yield* CopilotModels.load(http, baseURL, {
                       ...headers,
-                      Authorization: `Bearer ${current.refresh}`,
+                      Authorization: `Bearer ${latest.refresh}`,
                       "User-Agent": App.useragent(ctx.app),
                       "X-GitHub-Api-Version": apiVersion,
-                    })
-                  : Effect.fail(new Error("GitHub Copilot connection has no OAuth credential")),
-              ),
-            ),
-          })
-          .pipe(Effect.orElseSucceed(() => undefined))
-        return { connection, value: { baseURL: url, token: credential.refresh, models, connection } }
+                    }),
+                  }
+                }),
+              })
+              yield* models.changes.pipe(
+                Stream.runForEach((state) =>
+                  current()
+                    ? apply({
+                        key,
+                        connection,
+                        baseURL: Option.match(state.value, { onNone: () => stored, onSome: (value) => value.baseURL }),
+                        models: Option.getOrUndefined(state.value)?.models,
+                      })
+                    : Effect.void,
+                ),
+                Effect.forkScoped({ startImmediately: true }),
+              )
+            }),
+        }
       }),
     })
 
@@ -244,7 +257,7 @@ export const GithubCopilotPlugin = define({
     yield* ctx.provider.transform((evt) => {
       const item = evt.get(Provider.ID.githubCopilot)
       if (!item) return
-      const loaded = discovered.current
+      const loaded = discovered
       if (loaded.models) {
         evt.add({
           info: item.provider,
@@ -318,8 +331,10 @@ export const GithubCopilotPlugin = define({
       "title",
       (evt) =>
         Effect.gen(function* () {
-          const loaded = discovered.current
-          if (!loaded.baseURL || !loaded.token || !loaded.models) return
+          const loaded = { ...discovered }
+          if (!loaded.baseURL || !loaded.models) return
+          const { credential } = yield* activeCredential(ctx, "github-copilot")
+          if (credential?.type !== "oauth") return
           const agent = yield* ctx.agent
             .get({ agentID: Agent.ID.make("title") })
             .pipe(Effect.orElseSucceed(() => undefined))
@@ -327,7 +342,7 @@ export const GithubCopilotPlugin = define({
           const model = utilityTitleModels.find((id) => loaded.models?.has(id))
           if (!model) return
           evt.result = yield* utilityTitle(
-            { baseURL: loaded.baseURL, token: loaded.token, model, app: ctx.app, fetch: outbound },
+            { baseURL: loaded.baseURL, token: credential.refresh, model, app: ctx.app, fetch: outbound },
             evt,
           ).pipe(
             Effect.tapError((cause) => Effect.logDebug("Copilot utility title failed", { model, cause })),
@@ -379,13 +394,9 @@ export const GithubCopilotPlugin = define({
   }),
 } satisfies PluginInternal.InternalPlugin)
 
-function modelsKey(
-  connection: Parameters<typeof IntegrationConnection.key>[0],
-  url: string,
-  headers: Record<string, string>,
-) {
+function modelsKey(connection: Parameters<typeof IntegrationConnection.key>[0], headers: Record<string, string>) {
   const fingerprint = SharedCache.fingerprint(JSON.stringify(Object.entries(headers).toSorted()))
-  return `github-copilot:${IntegrationConnection.key(connection)}:${url}:${fingerprint}`
+  return `github-copilot:${IntegrationConnection.key(connection)}:${fingerprint}`
 }
 
 function normalizeDomain(input: string) {

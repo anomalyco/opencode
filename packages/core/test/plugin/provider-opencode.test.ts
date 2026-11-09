@@ -898,7 +898,7 @@ describe("OpencodePlugin", () => {
     ),
   )
 
-  it.effect("explains rejected Console inference from at most one config check per 30 seconds", () =>
+  it.effect("explains rejected Console inference from the latest config refresh without asking Console", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
         const state = { sso: false, requests: 0 }
@@ -945,7 +945,6 @@ describe("OpencodePlugin", () => {
                 Effect.flatMap((event) =>
                   Effect.promise(async () => ({ status: event.response.status, body: await event.response.json() })),
                 ),
-                inProcess(server),
               )
           const denied = { status: 403, body: { error: { message: "Workspace access denied" } } }
           const explained = {
@@ -957,27 +956,69 @@ describe("OpencodePlugin", () => {
           expect(yield* rejected(Provider.ID.make("remote"))).toEqual(denied)
           expect(state.requests).toBe(1)
 
+          // The periodic refresh learns that Console wants SSO again; rejected inference only reads that.
           state.sso = true
-          yield* TestClock.adjust("30 seconds")
+          yield* TestClock.adjust("1 minute")
+          yield* drain
+          expect(state.requests).toBe(2)
           expect(
             yield* Effect.all(
               Array.from({ length: 10 }, () => rejected(Provider.ID.make("remote"))),
               { concurrency: "unbounded" },
             ),
           ).toEqual(Array.from({ length: 10 }, () => explained))
-          expect(state.requests).toBe(2)
-
-          expect(
-            yield* Effect.forEach(Array.from({ length: 20 }), () =>
-              TestClock.adjust("1 second").pipe(Effect.andThen(rejected(Provider.ID.make("remote")))),
-            ),
-          ).toEqual(Array.from({ length: 20 }, () => explained))
           expect(yield* rejected(Provider.ID.opencode)).toEqual(explained)
           expect(yield* rejected(Provider.ID.anthropic)).toEqual(denied)
           expect(state.requests).toBe(2)
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
+  )
+
+  it.effect("explains rejected Console inference at once while Console hangs", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const hooks = yield* PluginHooks.Service
+      const state = { hang: false, requests: 0 }
+      const server = {
+        fetch: (request: Request) => {
+          if (new URL(request.url).pathname !== "/api/v2/config") return new Response(null, { status: 404 })
+          state.requests++
+          if (state.hang) return new Promise<Response>(() => {})
+          return Response.json({ _tag: "SsoRequired", orgId: "org_acme", connectionId: "ssoconn_1" }, { status: 403 })
+        },
+      }
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({
+          type: "key",
+          key: "secret",
+          metadata: { server: "https://console.test", orgID: "org_acme", orgName: "Acme" },
+        }),
+      })
+      yield* addPlugin().pipe(inProcess(server))
+      yield* drain
+      expect(state.requests).toBe(1)
+
+      // A refresh now hangs. TestClock never reaches its timeout, so a rewrite that waited on Console never returns.
+      state.hang = true
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+      expect(state.requests).toBe(2)
+      const event = yield* hooks.trigger("session", "http.response", {
+        sessionID: Session.ID.make("ses_console"),
+        agent: Agent.ID.make("build"),
+        model: Model.Ref.make({ providerID: Provider.ID.opencode, id: Model.ID.make("model") }),
+        kind: "primary",
+        request: new Request("https://inference.example/v1/responses"),
+        response: new Response(null, { status: 401 }),
+      })
+      expect(event.response.status).toBe(401)
+      expect(yield* Effect.promise(() => event.response.json())).toEqual({
+        error: { type: "authentication_error", message: "Sign in with SSO again to use Acme." },
+      })
+      expect(state.requests).toBe(2)
+    }),
   )
 
   it.effect("ignores 403 responses that are not a Console SSO error", () =>
@@ -1683,56 +1724,58 @@ describe("OpencodePlugin", () => {
     }),
   )
 
-  it.effect("applies Console policies while its instructions and skills fail, and keeps a list over a malformed one", () =>
-    Effect.gen(function* () {
-      const credentials = yield* Credential.Service
-      const config = yield* Config.Service
-      const discovery = yield* InstructionDiscovery.Service
-      const sudo: ConfigPolicy.Info = { action: "tool.use", resource: "shell:sudo *", effect: "deny" }
-      const state: { lists: "down" | "ok" | "malformed" } = { lists: "down" }
-      const server = {
-        fetch: (request: Request) => {
-          const path = new URL(request.url).pathname
-          if (path === "/api/v2/config") return Response.json({ providers: {}, policies: [sudo] })
-          if (path !== "/api/v2/instructions" && path !== "/api/v2/skills") return new Response(null, { status: 404 })
-          if (state.lists === "down") return new Response("Unavailable", { status: 503 })
-          if (path === "/api/v2/skills") return Response.json({ skills: [] })
-          if (state.lists === "malformed") return Response.json({ instructions: [{ id: "style" }] })
-          return Response.json({ instructions: [{ id: "style", content: "Use tabs." }] })
-        },
-      }
-      const instructions = discovery
-        .list()
-        .pipe(
-          Effect.map((files) =>
-            Array.isArray(files)
-              ? files.filter((file) => file.path.startsWith("OpenCode Console")).map((file) => file.content)
-              : [],
-          ),
-        )
-      yield* credentials.create({
-        integrationID: Integration.ID.make("opencode"),
-        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
-      })
+  it.effect(
+    "applies Console policies while its instructions and skills fail, and keeps a list over a malformed one",
+    () =>
+      Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        const config = yield* Config.Service
+        const discovery = yield* InstructionDiscovery.Service
+        const sudo: ConfigPolicy.Info = { action: "tool.use", resource: "shell:sudo *", effect: "deny" }
+        const state: { lists: "down" | "ok" | "malformed" } = { lists: "down" }
+        const server = {
+          fetch: (request: Request) => {
+            const path = new URL(request.url).pathname
+            if (path === "/api/v2/config") return Response.json({ providers: {}, policies: [sudo] })
+            if (path !== "/api/v2/instructions" && path !== "/api/v2/skills") return new Response(null, { status: 404 })
+            if (state.lists === "down") return new Response("Unavailable", { status: 503 })
+            if (path === "/api/v2/skills") return Response.json({ skills: [] })
+            if (state.lists === "malformed") return Response.json({ instructions: [{ id: "style" }] })
+            return Response.json({ instructions: [{ id: "style", content: "Use tabs." }] })
+          },
+        }
+        const instructions = discovery
+          .list()
+          .pipe(
+            Effect.map((files) =>
+              Array.isArray(files)
+                ? files.filter((file) => file.path.startsWith("OpenCode Console")).map((file) => file.content)
+                : [],
+            ),
+          )
+        yield* credentials.create({
+          integrationID: Integration.ID.make("opencode"),
+          value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+        })
 
-      // Once the lists' retries run out, startup still applies the config's policies, just without the lists.
-      const started = yield* addPlugin().pipe(inProcess(server), Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("10 seconds")
-      yield* Fiber.join(started)
-      expect(yield* consolePolicies(config)).toEqual([sudo])
-      expect(yield* instructions).toEqual([])
+        // Once the lists' retries run out, startup still applies the config's policies, just without the lists.
+        const started = yield* addPlugin().pipe(inProcess(server), Effect.forkChild({ startImmediately: true }))
+        yield* TestClock.adjust("10 seconds")
+        yield* Fiber.join(started)
+        expect(yield* consolePolicies(config)).toEqual([sudo])
+        expect(yield* instructions).toEqual([])
 
-      state.lists = "ok"
-      yield* TestClock.adjust("1 minute")
-      yield* drain
-      expect(yield* instructions).toEqual(["Use tabs."])
+        state.lists = "ok"
+        yield* TestClock.adjust("1 minute")
+        yield* drain
+        expect(yield* instructions).toEqual(["Use tabs."])
 
-      state.lists = "malformed"
-      yield* TestClock.adjust("1 minute")
-      yield* drain
-      expect(yield* instructions).toEqual(["Use tabs."])
-      expect(yield* consolePolicies(config)).toEqual([sudo])
-    }),
+        state.lists = "malformed"
+        yield* TestClock.adjust("1 minute")
+        yield* drain
+        expect(yield* instructions).toEqual(["Use tabs."])
+        expect(yield* consolePolicies(config)).toEqual([sudo])
+      }),
   )
 
   it.effect("forgets the saved Console config of a removed login", () =>

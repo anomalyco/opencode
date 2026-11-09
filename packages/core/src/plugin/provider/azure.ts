@@ -1,4 +1,4 @@
-import { Clock, Effect, Equal, FiberHandle, Option, Schema, Semaphore, Stream } from "effect"
+import { Clock, Effect, Equal, Option, Schema, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ChildProcess } from "effect/process"
 import { define } from "@opencode/plugin/effect/plugin"
@@ -73,8 +73,6 @@ export function make(
       const tokens = new Map<string, { access: string; expires: number }>()
       // A resource keeps its Azure Resource Manager ID until it is deleted, so discovery looks it up once.
       const resourceIDs = new Map<string, string>()
-      const loading = Semaphore.makeUnsafe(1)
-      const discovery = yield* FiberHandle.make<void, never>()
       const loaded: {
         resource?: string
         url?: string
@@ -266,92 +264,36 @@ export function make(
             )
           : resourceDeployments(url, credential)
 
-      // Local and quick, so a switch rebinds the provider before discovery for the new connection calls Azure.
-      const rebind = () =>
-        loading.withPermit(
-          Effect.gen(function* () {
-            const current = yield* load()
-            if (
-              IntegrationConnection.key(current.connection) === IntegrationConnection.key(loaded.connection) &&
-              current.resource === loaded.resource
-            )
-              return
-            Object.assign(loaded, current, { url: undefined, deployments: undefined })
-            yield* ctx.provider.reload()
-          }),
-        )
-
-      const discover = Effect.fn("AzurePlugin.discover")(function* (options: ProviderRefresh.Options) {
-        const connection = loaded.connection
-        const settings = (yield* providers.get(Provider.ID.azure))?.settings
-        const name = loaded.resource ?? resolveResourceName(settings)
-        // A custom endpoint may expose other deployments than the resource does, so it keeps the catalog.
-        const url =
-          connection && name !== undefined && resourcePattern.test(name) && typeof settings?.baseURL !== "string"
-            ? `${endpoints.resource(name)}/deployments?api-version=2022-12-01`
-            : undefined
-        if (loaded.connection !== connection) return
-        // Keep the last inventory through transient failures only for the same connection and resource.
-        if (loaded.url !== url) {
-          loaded.url = url
-          if (loaded.deployments) {
-            loaded.deployments = undefined
-            yield* ctx.model.reload()
-          }
-        }
-        if (!connection || !name || !url) return
-        const credential = yield* ctx.integration.connection
-          .resolve(connection)
-          .pipe(Effect.orElseSucceed(() => undefined))
-        if (!usable(credential)) return
-        const found = yield* cache
-          .get({
-            key: deploymentsKey(connection, credential, url),
-            ...options,
-            load: ctx.integration.connection.resolve(connection).pipe(
-              Effect.flatMap((current) =>
-                usable(current)
-                  ? deployments(url, name, current)
-                  : Effect.fail(new Error("Azure connection has no usable credential")),
-              ),
-              // Azure promises no order; normalize it so a reordered response does not rebuild the model list.
-              Effect.map((list) => list.toSorted((a, b) => a.name.localeCompare(b.name))),
-            ),
-          })
-          .pipe(Effect.orElseSucceed(() => undefined))
-        return found && { connection, found }
-      })
-
-      const apply = (next: { connection: typeof loaded.connection; found: readonly Deployment[] } | undefined) =>
-        next ? loading.withPermit(publish(next.connection, next.found)).pipe(Effect.uninterruptible) : Effect.void
+      // A new resource or endpoint drops the inventory; transient failures keep it only for the same one.
+      const discoverAt = (url: string | undefined) => {
+        if (loaded.url === url) return Effect.void
+        loaded.url = url
+        if (!loaded.deployments) return Effect.void
+        loaded.deployments = undefined
+        return ctx.model.reload()
+      }
 
       const publish = Effect.fn("AzurePlugin.publish")(function* (
+        current: () => boolean,
         connection: typeof loaded.connection,
         found: readonly Deployment[],
       ) {
-        if (
-          loaded.connection !== connection ||
-          IntegrationConnection.key(connection) !==
-            IntegrationConnection.key(yield* ctx.integration.connection.active(Provider.ID.azure))
-        )
-          return
-        if (Equal.equals(found, loaded.deployments)) return
         const catalog = new Map(
           Array.from((yield* providers.snapshot()).records.get(Provider.ID.azure)?.models.keys() ?? [], (id) => [
             id.toLowerCase(),
             id,
           ]),
         )
+        // A switch rebinds `loaded` before it replaces the selection, so both must still be this one.
+        if (!current() || loaded.connection !== connection || Equal.equals(found, loaded.deployments)) return
+        loaded.deployments = found
         const unmatched = found.filter((deployment) => !catalogModel(catalog, deployment))
         if (unmatched.length > 0)
           yield* Effect.logWarning("Azure deployments of models outside the catalog need explicit configuration", {
             deployments: unmatched.map((deployment) => deployment.name),
           })
-        loaded.deployments = found
         yield* ctx.model.reload()
       })
-
-      const refresh = discover({}).pipe(Effect.flatMap(apply))
 
       // The connection's resource wins over configured settings for Azure itself.
       const resourceFor = (provider: Provider.Info) =>
@@ -418,18 +360,61 @@ export function make(
         }
       })
 
-      // A switch interrupts discovery for the previous connection instead of waiting for its Azure calls.
-      yield* ProviderRefresh.onSwitch(
-        "azure",
-        rebind().pipe(Effect.andThen(FiberHandle.run(discovery, ProviderRefresh.switched(discover, apply)))),
-      )
       // Deployments load in the background so startup never waits on Azure; the catalog serves until they arrive.
-      yield* rebind().pipe(Effect.andThen(FiberHandle.run(discovery, refresh)), Effect.forkScoped)
-      yield* Effect.sleep(SharedCache.interval).pipe(
-        Effect.andThen(FiberHandle.run(discovery, refresh, { onlyIfMissing: true })),
-        Effect.forever,
-        Effect.forkScoped,
-      )
+      yield* ProviderRefresh.follow({
+        integrationID: "azure",
+        select: Effect.gen(function* () {
+          const current = yield* load()
+          // Local and quick, so a switch rebinds the provider before discovery for the new connection calls Azure.
+          if (
+            IntegrationConnection.key(current.connection) !== IntegrationConnection.key(loaded.connection) ||
+            current.resource !== loaded.resource
+          ) {
+            Object.assign(loaded, current, { url: undefined, deployments: undefined })
+            yield* ctx.provider.reload()
+          }
+          const connection = loaded.connection
+          const settings = (yield* providers.get(Provider.ID.azure))?.settings
+          const name = loaded.resource ?? resolveResourceName(settings)
+          // A custom endpoint may expose other deployments than the resource does, so it keeps the catalog.
+          const url =
+            connection && name !== undefined && resourcePattern.test(name) && typeof settings?.baseURL !== "string"
+              ? `${endpoints.resource(name)}/deployments?api-version=2022-12-01`
+              : undefined
+          const credential =
+            connection && url
+              ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
+              : undefined
+          if (!connection || !name || !url || !usable(credential))
+            return { key: `none:${IntegrationConnection.key(connection)}:${url}`, acquire: () => discoverAt(url) }
+          const key = deploymentsKey(connection, credential, url)
+          return {
+            key,
+            acquire: (current: () => boolean) =>
+              Effect.gen(function* () {
+                yield* discoverAt(url)
+                const found = yield* cache.source({
+                  key,
+                  load: ctx.integration.connection.resolve(connection).pipe(
+                    Effect.flatMap((latest) =>
+                      usable(latest)
+                        ? deployments(url, name, latest)
+                        : Effect.fail(new Error("Azure connection has no usable credential")),
+                    ),
+                    // Azure promises no order; normalize it so a reordered response does not rebuild the model list.
+                    Effect.map((list) => list.toSorted((a, b) => a.name.localeCompare(b.name))),
+                  ),
+                })
+                yield* found.changes.pipe(
+                  Stream.runForEach((state) =>
+                    Option.isSome(state.value) ? publish(current, connection, state.value.value) : Effect.void,
+                  ),
+                  Effect.forkScoped({ startImmediately: true }),
+                )
+              }),
+          }
+        }),
+      })
 
       // Entra bearer tokens are minted per request from the target URL's scope, so they are injected
       // at the transport hooks rather than stored as a credential.
