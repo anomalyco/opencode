@@ -2,7 +2,11 @@ import { Overlay, Portal, Root, Trigger } from "@kobalte/core/dialog"
 import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle, DialogTitleGroup } from "./dialog"
 import { Button } from "@opencode/ui/button"
 import { useDialog, useDialogLayer } from "@opencode/ui/context/dialog"
-import { onMount, type JSX, type ParentProps } from "solid-js"
+import { Menu } from "@opencode/ui/menu"
+import { Select } from "@opencode/ui/select"
+import { Toast, showToast } from "@opencode/ui/toast"
+import { Tooltip } from "@opencode/ui/tooltip"
+import { createSignal, onMount, type JSX, type ParentProps } from "solid-js"
 
 const docs = `### Overview
 Dialog content wrapper built on Kobalte's dialog primitive with v2 styling.
@@ -282,4 +286,59 @@ function StackedDialogs() {
 
 export const Stacked = {
   render: () => <StackedDialogs />,
+}
+
+// Each of these portals its content outside the dialog, which a modal dialog hides from assistive tech.
+function PopupsDialog() {
+  const [fruit, setFruit] = createSignal<string>()
+
+  return (
+    <Dialog>
+      {dialogHeader("Popups", "A select, a menu, a tooltip and a toast opened from a dialog")}
+      <DialogBody>
+        <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
+          <Select
+            appearance="base"
+            placeholder="Pick a fruit"
+            options={["Apple", "Banana", "Cherry"]}
+            current={fruit()}
+            onSelect={(value) => setFruit(value ?? undefined)}
+          />
+          <Menu gutter={6} modal={false}>
+            <Menu.Trigger as={Button} variant="neutral">
+              Actions
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Content>
+                <Menu.Item>Rename</Menu.Item>
+                <Menu.Sub>
+                  <Menu.SubTrigger>Move to</Menu.SubTrigger>
+                  <Menu.Portal>
+                    <Menu.SubContent>
+                      <Menu.Item>Archive</Menu.Item>
+                    </Menu.SubContent>
+                  </Menu.Portal>
+                </Menu.Sub>
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu>
+          <Tooltip value="Copy the link">
+            <Button variant="neutral">Copy</Button>
+          </Tooltip>
+          <Button variant="neutral" onClick={() => showToast({ title: "Saved", persistent: true })}>
+            Save
+          </Button>
+        </div>
+      </DialogBody>
+    </Dialog>
+  )
+}
+
+export const WithPopups = {
+  render: () => (
+    <>
+      <Toast.Region />
+      <OpenStoryDialog render={() => <PopupsDialog />} />
+    </>
+  ),
 }
