@@ -6,7 +6,7 @@ import { usePluginServers } from "@/runtime/plugin/servers"
 import { createProjectSessionActions } from "@/shell/tabs/project-sessions"
 import { batch, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { pathKey } from "@/workspaces/path-key"
-import { addProjects } from "./projects/add"
+import { addProjects } from "@/shell/projects/add"
 import {
   INITIAL_HOME_SELECTION_STATE,
   sameHomeSelection,
