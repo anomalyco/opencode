@@ -204,10 +204,9 @@ const table = sqliteTable("session", {
 
 ## Plugin Loading
 
-- Plugins load in the background, and everything that reads plugin-provided state must tolerate that. Do not wait for a Location's plugins to finish activating (`Plugin.awaitActivation`) in server handlers, and never turn slow plugins into a timeout or 503.
-- Reads return what is loaded now. Clients refresh on the matching `*.updated` event (`model.updated`, `agent.updated`, `skill.updated`, `integration.updated`, `plugin.updated`, ...). An empty or partial list on a cold Location is expected, not a bug to fix on the server.
-- One-shot clients that read once and exit (CLI commands, ACP, SDK callers) wait on their side for the specific entry they need, for example by polling `plugin.list` or the list they read. See `packages/cli/src/services/plugin-startup.ts`.
-- When an operation needs one specific plugin-provided thing, wait for that thing (its hook, its MCP server), not for every plugin.
+- Plugins load asynchronously. Server handlers never wait for them (`Plugin.awaitActivation`), never retry until something appears, and never turn slow plugins into a timeout or 503. This applies to reads and to actions such as `generate.*`, `rpc.call`, `vcs.init` and `websearch.query`.
+- The server answers with what is loaded now: lists may be empty or partial on a cold Location, and an action whose model, provider or RPC hasn't loaded yet fails with not-found. That is expected, not a bug to fix on the server.
+- Clients are responsible for making sure what they need is loaded before they call. Long-lived clients refresh on the matching `*.updated` event (`model.updated`, `agent.updated`, `skill.updated`, `integration.updated`, `plugin.updated`, ...). One-shot clients (CLI commands, ACP, SDK callers) wait on their side, for example by polling `plugin.list` or the entry they need. See `packages/cli/src/services/plugin-startup.ts`.
 
 ## Session Core
 
