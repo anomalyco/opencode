@@ -21,3 +21,13 @@ test("preserves permission roots and self-contained metadata", () => {
     },
   )
 })
+
+test("subagent presentation includes explicit launch/run line", () => {
+  const presentation = permissionPresentation({
+    action: "subagent",
+    resources: [],
+    input: { agent: "General", description: "Audit..." },
+  })
+  expect(presentation.title).toBe("General Subagent")
+  expect(presentation.lines).toContainEqual(expect.stringMatching(/launch|run/i))
+})
