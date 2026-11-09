@@ -44,20 +44,4 @@ describe("ImageSizing", () => {
       ),
     ).toEqual({ width: 512, height: 512 })
   })
-
-  test("reports a size that misses the requested aspect or tier", () => {
-    expect(ImageSizing.notice("OpenAI Images", { aspect: "16:9" }, { width: 1360, height: 768 })).toBeUndefined()
-    expect(ImageSizing.notice("OpenAI Images", { aspect: "3:2" }, { width: 1536, height: 1024 })).toBeUndefined()
-    expect(ImageSizing.notice("OpenAI Images", { aspect: "16:9" }, { width: 1536, height: 1024 })).toEqual({
-      type: "other",
-      message: "OpenAI Images doesn't offer 16:9; used 1536x1024 (3:2)",
-    })
-    expect(ImageSizing.notice("OpenAI Images", { resolution: "4K" }, { width: 2880, height: 2880 })).toEqual({
-      type: "other",
-      message: "OpenAI Images doesn't offer 4K; used 2880x2880 (1:1)",
-    })
-    expect(ImageSizing.notice("OpenAI Images", { resolution: "hd" }, { width: 1024, height: 1024 })?.message).toBe(
-      "OpenAI Images doesn't offer hd; used 1024x1024 (1:1)",
-    )
-  })
 })

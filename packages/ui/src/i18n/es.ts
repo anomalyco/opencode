@@ -119,10 +119,6 @@ export const dict = {
   "dialog.usageExceeded.freeTier.description":
     "Suscríbete a OpenCode Go por 10 USD al mes para acceder de forma fiable a los mejores modelos de código abierto.",
   "dialog.usageExceeded.freeTier.actionLabel": "Suscribirse",
-  "dialog.usageExceeded.accountRateLimit.title": "Límite de Go alcanzado",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Límite de uso alcanzado. Para seguir usando este modelo ahora, habilita el uso desde tu saldo disponible",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Abrir ajustes",
 
   "ui.sessionTurn.status.delegating": "Delegando trabajo",
   "ui.sessionTurn.status.planning": "Planificando siguientes pasos",
@@ -247,7 +243,6 @@ export const dict = {
   "ui.question.answer.none": "(sin respuesta)",
   "ui.question.review.notAnswered": "(no respondida)",
   "ui.question.multiHint": "Selecciona todas las que correspondan",
-  "ui.question.singleHint": "Selecciona una respuesta",
   "ui.question.custom.placeholder": "Escribe tu respuesta…",
 
   "ui.fileSearch.placeholder": "Buscar",

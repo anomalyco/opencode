@@ -1,10 +1,11 @@
 import { Context, Effect, Layer } from "effect"
 import type {
   DecisionAnswer,
+  DecisionModel,
   DecisionOptions,
   DecisionQuestion,
   DecisionQuestions,
-  DecisionRequestFor,
+  DecisionRequest,
   DecisionResponseFor,
 } from "./decision.js"
 import { RequestExecutor } from "./route/executor.js"
@@ -14,14 +15,14 @@ export type Execute = RequestExecutor.Interface["execute"]
 
 export interface Interface {
   readonly generate: <Options extends DecisionOptions, const Questions extends DecisionQuestions>(
-    request: DecisionRequestFor<Options, Questions>,
+    request: DecisionRequest<DecisionModel<Options>, Questions>,
   ) => Effect.Effect<DecisionResponseFor<Questions>, AIError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/AI/DecisionClient") {}
 
 export const generate = <Options extends DecisionOptions, const Questions extends DecisionQuestions>(
-  request: DecisionRequestFor<Options, Questions>,
+  request: DecisionRequest<DecisionModel<Options>, Questions>,
 ): Effect.Effect<DecisionResponseFor<Questions>, AIError, Service> =>
   Effect.flatMap(Service, (client) => client.generate(request))
 

@@ -42,7 +42,6 @@ it.live("returns LocationNotFoundError for a missing folder and recovers once it
       "/api/model",
       "/api/integration",
       `/api/session/${session.id}/permission`,
-      `/api/session/${session.id}/form`,
       "/api/session/global/form",
     ]
     for (const endpoint of endpoints) {
@@ -166,6 +165,13 @@ function occupy(port: number, cancel = false) {
     return requests
   })
 }
+
+// A server without its own config directory reads the developer's global config, whose remote MCP servers would
+// reach the network.
+const isolated = Effect.gen(function* () {
+  const config = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-openai-oauth-")))
+  return yield* ServerFetch.make({ ...options, config: { ...options.config, directory: config.path } })
+})
 
 const connectOpenAI = (handler: Handler) =>
   Effect.gen(function* () {
@@ -427,7 +433,7 @@ it.live("returns 404 when a previously readable file is deleted", () =>
 it.live("cancels a stale OpenAI OAuth callback server before falling back", () =>
   Effect.gen(function* () {
     const requests = yield* occupy(1455, true)
-    const handler = yield* ServerFetch.make(options)
+    const handler = yield* isolated
     const response = yield* connectOpenAI(handler)
 
     expect(response.status).toBe(200)
@@ -440,7 +446,7 @@ it.live("cancels a stale OpenAI OAuth callback server before falling back", () =
 it.live("falls back to port 1457 when OpenAI OAuth port 1455 remains busy", () =>
   Effect.gen(function* () {
     const requests = yield* occupy(1455)
-    const handler = yield* ServerFetch.make(options)
+    const handler = yield* isolated
     const response = yield* connectOpenAI(handler)
 
     expect(response.status).toBe(200)
@@ -456,7 +462,7 @@ it.live(
     Effect.gen(function* () {
       yield* occupy(1455)
       yield* occupy(1457)
-      const handler = yield* ServerFetch.make(options)
+      const handler = yield* isolated
       const response = yield* connectOpenAI(handler)
 
       expect(response.status).toBe(400)

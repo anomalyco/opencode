@@ -1,0 +1,105 @@
+/* Design mode: reordering the home sections. */
+
+[data-site] {
+  [data-component="section-handle"] {
+    position: fixed;
+    top: 0;
+    inset-inline-start: 0;
+    z-index: 19;
+    width: 1.25rem;
+    height: 1.75rem;
+    display: grid;
+    place-items: center;
+    color: var(--link);
+    background: var(--bg);
+    border: 1px solid color-mix(in srgb, var(--link) 40%, var(--border));
+    cursor: grab;
+    touch-action: none;
+    opacity: 0;
+    pointer-events: none;
+
+    &[data-visible],
+    &:focus-visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    &[data-dragging] {
+      cursor: grabbing;
+      color: #fff;
+      background: var(--link);
+      border-color: var(--link);
+    }
+  }
+
+  /* The lifted section rides above the others. */
+  [data-lifted] {
+    position: relative;
+    z-index: 5;
+    background: var(--bg);
+    box-shadow: var(--popover-shadow);
+    outline: 2px solid var(--link);
+    outline-offset: 4px;
+  }
+
+  /* Where the section will land. */
+  [data-component="section-drop"] {
+    position: fixed;
+    top: 0;
+    z-index: 18;
+    height: 2px;
+    margin-top: -1px;
+    background: var(--link);
+    pointer-events: none;
+
+    &::before,
+    &::after {
+      content: "";
+      position: absolute;
+      top: -3px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--link);
+    }
+
+    &::before {
+      inset-inline-start: -4px;
+    }
+
+    &::after {
+      inset-inline-end: -4px;
+    }
+  }
+
+  [data-component="section-announcer"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    [data-component="section-handle"] {
+      transition: opacity 120ms ease;
+    }
+  }
+}
+
+/* No text selection while dragging. */
+html:has([data-component="section-handle"][data-dragging]) {
+  user-select: none;
+  cursor: grabbing;
+}
+
+/* While the page streams in, the logo row (before the carousel in the markup, after it on screen)
+   waits until the whole carousel has arrived, which the section after it marks. Painted earlier, it
+   would sit right under the hero and then be pushed down as the cards stream in above it. */
+[data-site][data-page="home"]
+  [data-component="content"]
+  > [data-slot="page"]
+  > :is([data-component="logo-wall"], [data-section="logos"]):not(:has(~ [data-component="products"] ~ *)) {
+  display: none;
+}

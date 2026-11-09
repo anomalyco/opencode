@@ -9,10 +9,9 @@
   border: 0;
   border-radius: 6px;
   outline: 1px solid transparent;
-  outline-offset: 0;
-  background:
-    linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
-  box-shadow: var(--v2-elevation-button-neutral);
+  outline-offset: -1px;
+  background: var(--v2-background-bg-base);
+  box-shadow: var(--v2-elevation-input);
   flex: none;
   align-self: stretch;
   transition:
@@ -21,10 +20,16 @@
     box-shadow 85ms ease-out;
 }
 
-[data-component="textarea-v2"]:where(:hover):not([data-disabled], [data-invalid]):not(:focus-within) {
-  background:
-    linear-gradient(0deg, var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover)),
-    linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
+[data-component="textarea-v2"][data-surface="layer-1"] {
+  background: var(--v2-background-bg-layer-01);
+}
+
+@media (hover: hover) {
+  [data-component="textarea-v2"]:where(:hover):not([data-disabled], [data-invalid]):not(:focus-within) {
+    box-shadow:
+      inset 0 0 0 100vmax var(--v2-overlay-simple-overlay-hover),
+      var(--v2-elevation-input);
+  }
 }
 
 [data-component="textarea-v2"]:where(:focus-within):not([data-disabled], [data-invalid]) {

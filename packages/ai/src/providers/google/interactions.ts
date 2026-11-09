@@ -1,21 +1,13 @@
 import { configure } from "../google.js"
 import type { ProviderPackage } from "../../provider-package.js"
 import type { GoogleInteractions } from "../../protocols/google-interactions.js"
+import { toConfig } from "../settings.js"
 
 export type Settings = ProviderPackage.Settings &
   GoogleInteractions.ProviderOptionsInput & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly baseURL?: string
   }
 
-export const model: ProviderPackage.Definition<Settings, GoogleInteractions.ProviderOptionsInput>["model"] = (
-  modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions },
-) =>
-  configure({
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }).interactions(modelID)
+export const model: ProviderPackage.Model<Settings, GoogleInteractions.ProviderOptionsInput> = (modelID, settings) =>
+  configure(toConfig(settings)).interactions(modelID)

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { provider, sessionHref } from "../utils/app"
+import { project, provider, sessionHref } from "../utils/app"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible } from "../utils/waits"
 import { openSession } from "../utils/workspace"
@@ -11,15 +11,16 @@ test("creates a session in a new project and selects its model", async ({ page }
   await page.route(/(?:\/_assets\/file-(?!icon-)[^/]+\.js|\/session-ui\/src\/components\/file\.tsx)(?:\?|$)/, (route) =>
     route.abort(),
   )
+  const created = project({ id: "proj_model_selection_flow", directory, name: "NewProject" })
+  // The server knows no project until the user adds this one.
+  const projects: unknown[] = []
   await mockOpenCodeServer(page, {
     directory,
-    project: {
-      id: "proj_model_selection_flow",
-      worktree: directory,
-      vcs: "git",
-      name: "NewProject",
-      time: { created: 1_700_000_000_000, updated: 1_700_000_000_000 },
-      sandboxes: [],
+    project: created,
+    projects: () => projects,
+    // The picker answers with the platform's separators; the server resolves them to its own.
+    onLocationGet: (requested) => {
+      if (requested.replaceAll("\\", "/") === directory && !projects.includes(created)) projects.push(created)
     },
     provider: () => ({
       all: [
@@ -57,7 +58,6 @@ test("creates a session in a new project and selects its model", async ({ page }
     fileList: (path) => (path === "C:/OpenCode" ? [{ path: "./", type: "directory", ignored: false }] : []),
   })
   await page.addInitScript(() => {
-    localStorage.setItem("opencode.global.dat:server", JSON.stringify({ projects: { local: [] } }))
     localStorage.setItem(
       "opencode.global.dat:model",
       JSON.stringify({
@@ -76,7 +76,7 @@ test("creates a session in a new project and selects its model", async ({ page }
   await expectAppVisible(addProject)
   await addProject.click()
   const picker = page.getByRole("dialog", { name: "Open project", exact: true })
-  await expect(picker.getByRole("combobox")).toHaveValue("C:\\OpenCode\\NewProject")
+  await expect(picker.getByRole("combobox")).toHaveValue("")
 
   const listing = page.waitForRequest((request) => {
     const url = new URL(request.url())
@@ -164,4 +164,51 @@ test("restores each existing session's model and variant when switching tabs", a
   await expect(page).toHaveURL(hrefA)
   await expect(modelControl).toHaveText("Model A")
   await expect(variant).toHaveText("high")
+})
+
+test("keeps a variant picked in another directory's session with that session across a reload", async ({ page }) => {
+  // The session view stays mounted while its tabs switch between sessions in different directories.
+  const sessions = [
+    { name: "Home", directory: "C:/OpenCode/ModelHome" },
+    { name: "Away", directory: "C:/OpenCode/ModelAway" },
+  ].map((item) => ({
+    id: `ses_model_${item.name.toLowerCase()}`,
+    title: `${item.name} session`,
+    directory: item.directory,
+    model: { id: `model-${item.name.toLowerCase()}`, providerID: "opencode", variant: "balanced" },
+  }))
+
+  await openSession(page, {
+    name: "ModelHome",
+    sessions,
+    provider: provider(
+      ...sessions.map((session) => ({
+        id: session.model.id,
+        name: session.title,
+        variants: { balanced: {}, high: {} },
+      })),
+    ),
+  })
+
+  const [home, away] = sessions.map((session) => sessionHref(session.id))
+  const composer = page.locator('[data-component="composer"]')
+  const modelControl = composer.locator('[data-action="composer-model"]')
+  const variant = composer.getByRole("button", { name: "Choose model variant", exact: true })
+  await expect(modelControl).toHaveText("Home session")
+  await page.locator(`[data-titlebar-tab-link][href="${away}"]`).click()
+  await expect(page).toHaveURL(away!)
+  await expect(modelControl).toHaveText("Away session")
+  await expect(variant).toHaveText("balanced")
+  await variant.click()
+  await page.getByRole("menuitemradio", { name: "high", exact: true }).click()
+  await expect(variant).toHaveText("high")
+
+  await page.reload()
+  await expect(modelControl).toHaveText("Away session")
+  await expect(variant).toHaveText("high")
+
+  await page.locator(`[data-titlebar-tab-link][href="${home}"]`).click()
+  await expect(page).toHaveURL(home!)
+  await expect(modelControl).toHaveText("Home session")
+  await expect(variant).toHaveText("balanced")
 })

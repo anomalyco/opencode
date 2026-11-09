@@ -20,6 +20,7 @@ import {
   onCleanup,
   onMount,
   Show,
+  untrack,
   type Accessor,
   type JSX,
 } from "solid-js"
@@ -28,16 +29,57 @@ import { createMediaQuery } from "@solid-primitives/media"
 import type { createTimelineProjection } from "./projection"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { filterVirtualIndexes } from "./virtual-items"
+import {
+  ACTIVATED,
+  CHECK_REQUESTED,
+  COLD_REVEAL_TIMEOUT,
+  coldMountFlushing,
+  coldMountHidden,
+  coldMountTailOnly,
+  createColdMountState,
+  DEACTIVATED,
+  DISPOSED,
+  SIZES_FLUSHED,
+  SIZES_FLUSHING,
+  transitionColdMount,
+  type ColdMountEffect,
+  type ColdMountEvent,
+  type ColdMountSample,
+} from "./cold-mount"
+import { prefersReducedMotion } from "@opencode/ui/motion"
+import { holdLandingWidth } from "@/shell/panel-motion"
+import type { TimelineFollow } from "./follow"
+import {
+  CONTACT_LOST_EVENT,
+  defersAdjustments,
+  END_EPSILON,
+  isTouchHeld,
+  MIN_OVERFLOW,
+  needsEndProbe,
+  ZOOM_SLACK,
+} from "./machine"
 
 const fallbackItemSize = 60
 
 const pendingMarkdown = '[data-component="markdown"]:not([data-markdown-ready])'
 
-// Distance from the bottom that counts as "at the end". Deliberately tight: a collapse clamps
-// exactly to the end, while a one-pixel nudge upward is a deliberate move away from it.
-const endEpsilon = 0.5
-
 const upwardKeys = new Set(["up", "page-up", "home"])
+
+const settledEvent = { type: "scroll.settled", atReachableEnd: false } as const
+
+const settledAtEndEvent = { type: "scroll.settled", atReachableEnd: true } as const
+
+const touchStartEvent = { type: "touch.start", nested: false } as const
+
+const nestedTouchStartEvent = { type: "touch.start", nested: true } as const
+
+const touchEndEvent = { type: "touch.end", scrolling: false } as const
+
+const touchMomentumEvent = { type: "touch.end", scrolling: true } as const
+
+const pointerDownEvent = { type: "pointer.down" } as const
+
+const pointerUpEvent = { type: "pointer.up" } as const
 
 const cache = new Map<
   string,
@@ -60,16 +102,17 @@ type Input = {
   presentationKey?: Accessor<string>
   projection: Projection
   showHeader: Accessor<boolean>
-  /** True while the timeline follows the newest content. Drives every anchoring decision. */
-  pinned: Accessor<boolean>
+  /** Whether the timeline follows the newest content. Drives every anchoring decision. */
+  follow: TimelineFollow
   scroll: Accessor<{ overflow: boolean; jump: boolean }>
-  onResumeScroll: () => void
+  onResumeScroll: (behavior?: ScrollBehavior) => void
   setScrollRef: (element: HTMLDivElement | undefined) => void
-  setContentRef: (element: HTMLDivElement) => void
+  /** The rows' content changed height. */
+  onContentResize: () => void
+  /** Height of the composer region floating over the timeline's bottom edge, where the timeline fades out. */
+  bottomInset?: Accessor<number>
+  setVisibleRef?: (element: HTMLDivElement | undefined) => void
   onScheduleScrollState: (element: HTMLDivElement) => void
-  onPin: () => void
-  onUnpin: () => void
-  onSelectionInteraction: (event: MouseEvent) => void
   onUserScroll: (target?: EventTarget | null) => void
   onHistoryScroll: () => void
   canRenderImmediately?: (
@@ -77,15 +120,22 @@ type Input = {
     disclosure: Readonly<Record<string, boolean | undefined>>,
   ) => boolean
   setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
-  setScrollToEnd?: (fn: () => void) => void
-  /** A tool call the route asks this timeline to open on; `done` clears it once revealed. */
-  reveal?: { target: () => string | undefined; done: () => void }
+  setRevealPart?: (fn: (target: string) => boolean) => void
+  setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
+  /** Pages the timeline for keys pressed outside it, such as PageUp in the composer. */
+  setPage?: (fn: (direction: 1 | -1) => void) => void
+  reveal?: TimelineRouteReveal
+}
+
+/** A tool call the route asks this timeline to open on; `consume` marks its history entry attempted. */
+export type TimelineRouteReveal = {
+  pending: () => { readonly entryKey: string; readonly target: string } | undefined
+  consume: (entryKey: string) => void
 }
 
 type ViewProps = {
   header: JSX.Element
   bottomSpacer?: JSX.Element
-  workspaceSession: Accessor<boolean>
   deferred: (row: TimelineRow.TimelineRow) => boolean
   renderRow: (row: Accessor<TimelineRow.TimelineRow>, onSizeChange?: () => void) => JSX.Element
 }
@@ -95,28 +145,41 @@ export function createTimelineVirtualizer(input: Input) {
   const active = () => input.active?.() !== false
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const topOffset = () => (input.showHeader() ? 64 : isDesktop() ? 0 : 16)
+  // Reserved below the last row: a 36px lane for the live status row and its background hint, a 14px gap, then the
+  // activity pill and its 10px composer gap. Without hover the pill grows from 32px to its 44px touch size
+  // (composer-lane.css), and the tail grows with it. Both come and go inside it, so neither moves the rows above.
+  const touch = createMediaQuery("(hover: none)")
+  const tailSize = () => (touch() ? 104 : 92)
   const ownerSessionKey = input.sessionKey()
   const entry = cache.get(ownerSessionKey)
   const cached = entry?.presentationKey === input.presentationKey?.() ? entry : undefined
   const initialMeasurements = cached?.measurements
-  const coldBottomMount = !initialMeasurements?.length && input.pinned()
+
+  const [coldMount, setColdMount] = createSignal(
+    createColdMountState(!initialMeasurements?.length && input.follow.following()),
+  )
+
+  // Each flips once per mount, so the many hidden-phase transitions do not reach the rows or the range.
+  const coldHidden = createMemo(() => coldMountHidden(coldMount()))
+  const coldTailOnly = createMemo(() => coldMountTailOnly(coldMount()))
   const [listRoot, setListRoot] = createSignal<HTMLDivElement>()
+  const [visibleArea, setVisibleArea] = createSignal<HTMLDivElement>()
+  const [viewRoot, setViewRoot] = createSignal<HTMLDivElement>()
+  const bottomInset = () => input.bottomInset?.() ?? 0
   const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>(cached?.toolOpen ?? {})
   const patchGroupKeys = cached?.patchGroupKeys ?? new Map<string, string>()
   createEffect(
     on(
       () => input.presentationKey?.(),
-      () => setToolOpen(reconcile({})),
+      () => {
+        patchGroupKeys.clear()
+        setToolOpen(reconcile({}))
+      },
       { defer: true },
     ),
   )
 
-  const [rendering, setRendering] = createStore<{
-    initialTail: boolean
-    scrollAdjustment: number
-    /** A revealed tool whose top edge stays put until the user scrolls. */
-    anchor?: { key: string; partID: string }
-  }>({ initialTail: coldBottomMount, scrollAdjustment: 0 })
+  const [rendering, setRendering] = createStore({ scrollAdjustment: 0 })
 
   const rows = input.projection.rows
   const rowByKey = input.projection.rowByKey
@@ -143,8 +206,9 @@ export function createTimelineVirtualizer(input: Input) {
   const rangeExtractor = createMemo(() => {
     const id = input.projection.activeMessageID()
     const active = id ? (input.projection.messageLastRowIndex().get(id) ?? -1) : -1
-    const initialTail = rendering.initialTail && input.pinned()
-    const anchored = rendering.anchor ? rowKeys().indexOf(rendering.anchor.key) : -1
+    const initialTail = coldTailOnly() && input.follow.following()
+    const anchor = input.follow.anchor()
+    const anchored = anchor ? rowKeys().indexOf(anchor.key) : -1
 
     return (range: Range) => {
       // Batch a bounded cheap suffix, but stop before unknown/large content.
@@ -179,29 +243,59 @@ export function createTimelineVirtualizer(input: Input) {
   })
 
   const measuredElements = new WeakSet<Element>()
-  let touchStart: number | undefined
+  // The finger's last position, a measurement only: whether it is down is the follow machine's `isTouchHeld`.
+  let lastTouchY = 0
   let touchTarget: EventTarget | null = null
-  let touchNested = false
-  let touchScrolling = false
+  // Size compensation deferred during one resize delivery, committed or dropped before the delivery ends.
   let touchAdjustment = 0
-  let pointerHeld = false
   let maxScroll = 0
   let virtualContent: HTMLDivElement | undefined
+  let rowLayer: HTMLDivElement | undefined
+  // While a sidebar's spring moves the timeline's edge, rows keep the width they land at, centred on the timeline, so
+  // their text wraps once instead of on every frame. The first column in view (turn gaps span the row) keeps its start
+  // edge where it was.
+  holdLandingWidth(
+    () => rowLayer,
+    () => {
+      const top = listRoot()?.getBoundingClientRect().top ?? 0
+
+      return [
+        ...(rowLayer?.querySelectorAll<HTMLElement>(
+          '[data-timeline-key] [data-timeline-row]:not([data-timeline-row="TurnGap"])',
+        ) ?? []),
+      ].find((row) => row.getBoundingClientRect().bottom > top)
+    },
+  )
   let scrollTop = 0
+  // Reused for every scroll: the transition only reads it, so a scroll allocates nothing.
+  const scrollEvent = { type: "scroll" as const, scrollTop: 0, previousTop: 0, maxScroll: 0, previousMaxScroll: 0 }
+  const intentEvent = { type: "scroll.intent" as const, upward: false, overflow: false }
+  const touchDragEvent = { type: "touch.drag" as const, overflow: false }
   let reportOffset: ((offset: number, scrolling: boolean) => void) | undefined
   let reportRect: ((rect: { width: number; height: number }) => void) | undefined
-  let batchingColdSizes = false
+  const [headerHeight, setHeaderHeight] = createSignal(48)
 
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
     get count() {
       return rows().length
     },
     getScrollElement: () => listRoot() ?? null,
+    // The viewport runs on under the composer region. The virtualizer sees only the part above it, which the
+    // inset spacer below the rows keeps consistent with the native scroll range.
     observeElementRect: (instance, callback) => {
-      reportRect = callback
+      reportRect = (rect) => {
+        const root = listRoot()
+        batch(() => {
+          // The container-responsive header can be 48px or 80px.
+          setHeaderHeight(
+            root ? parseFloat(getComputedStyle(root).getPropertyValue("--session-header-height")) || 48 : 48,
+          )
+          callback({ width: rect.width, height: Math.max(0, rect.height - bottomInset()) })
+        })
+      }
 
       return observeElementRect(instance, (rect) => {
-        if (active()) callback(rect)
+        if (active()) reportRect?.(rect)
       })
     },
     // Route navigation detaches and reattaches the scroll element, which drops its offset.
@@ -221,24 +315,29 @@ export function createTimelineVirtualizer(input: Input) {
           if (
             rendering.scrollAdjustment !== 0 &&
             root &&
-            (logicalOffset <= 0 || offset <= 0 || (touchStart !== undefined && offset <= root.clientHeight))
+            (logicalOffset <= 0 || offset <= 0 || (isTouchHeld(input.follow.peek()) && offset <= root.clientHeight))
           )
             flushTouchAdjustment()
 
-          if (!scrolling && touchStart === undefined) finishTouchScroll()
+          if (scrolling) return
+
+          if (!isTouchHeld(input.follow.peek())) flushTouchAdjustment()
+          input.follow.dispatch(
+            root && needsEndProbe(input.follow.peek()) && atReachableEnd(root) ? settledAtEndEvent : settledEvent,
+          )
         })
-        settleColdBottom()
+        dispatchCold(CHECK_REQUESTED)
       }
 
       return observeElementOffsetReconnectAware(instance, reportOffset, () => {
         if (!active()) return
         virtualContent?.querySelectorAll<HTMLDivElement>("[data-index]").forEach(virtualizer.measureElement)
 
-        if (input.pinned()) virtualizer.scrollToEnd()
-        settleColdBottom()
+        if (input.follow.following()) virtualizer.scrollToEnd()
+        dispatchCold(CHECK_REQUESTED)
       })
     },
-    initialOffset: () => (input.pinned() ? Number.MAX_SAFE_INTEGER : 0),
+    initialOffset: () => (input.follow.following() ? Number.MAX_SAFE_INTEGER : 0),
     initialMeasurementsCache: initialMeasurements,
     estimateSize: () => fallbackItemSize,
     // A newly observed element gets a real ResizeObserver box before paint. Reuse
@@ -259,7 +358,7 @@ export function createTimelineVirtualizer(input: Input) {
       if (initial) {
         const size = instance.itemSizeCache.get(instance.options.getItemKey(instance.indexFromElement(element)))
 
-        if (size !== undefined || coldPending) return size ?? fallbackItemSize
+        if (size !== undefined || untrack(coldHidden)) return size ?? fallbackItemSize
       }
 
       return element.offsetHeight
@@ -267,7 +366,8 @@ export function createTimelineVirtualizer(input: Input) {
     scrollToFn: (offset, options, instance) => {
       if (!active()) return
 
-      if (batchingColdSizes && input.pinned()) return
+      if (coldMountFlushing(untrack(coldMount)) && input.follow.following()) return
+      touchAdjustment = 0
       setRendering("scrollAdjustment", 0)
 
       if (virtualContent) virtualContent.style.height = `${instance.getTotalSize()}px`
@@ -277,17 +377,23 @@ export function createTimelineVirtualizer(input: Input) {
       return getItemKey()
     },
     get anchorTo() {
-      return input.pinned() ? "end" : "start"
+      return input.follow.following() ? "end" : "start"
     },
     get followOnAppend() {
-      return input.pinned()
+      return input.follow.following()
     },
     scrollEndThreshold: 80,
     get scrollMargin() {
       // Empty projections still need the bottom spacer for running status.
       return rows().length > 0 ? topOffset() : 0
     },
-    paddingEnd: 64,
+    get paddingEnd() {
+      return tailSize()
+    },
+    // Revealed prompts sit below the solid header and its 16px fade.
+    get scrollPaddingStart() {
+      return input.showHeader() ? headerHeight() + 16 : 0
+    },
     get rangeExtractor() {
       return rangeExtractor()
     },
@@ -322,10 +428,15 @@ export function createTimelineVirtualizer(input: Input) {
       const sizes = [...pendingSizes]
       pendingSizes.clear()
 
-      if (!active()) return
+      if (!active()) {
+        touchAdjustment = 0
+
+        return
+      }
+
       // The hidden pinned mount needs one bottom write after the whole batch,
       // not a layout-forcing scroll adjustment for every measured row.
-      batchingColdSizes = coldPending && input.pinned()
+      dispatchCold(SIZES_FLUSHING)
       batch(() => {
         sizes.forEach(([index, value]) => {
           const row = rows()[index]
@@ -336,27 +447,28 @@ export function createTimelineVirtualizer(input: Input) {
           // TanStack recalculates its range after each resize. Advance the
           // logical fold before deciding whether the next row needs anchoring.
           if (!touchAdjustment) return
-          setRendering("scrollAdjustment", (value) => value + touchAdjustment)
+          const delta = touchAdjustment
           touchAdjustment = 0
+
+          // A delta deferred under momentum that has since ended is dropped rather than translating the rows.
+          if (!defersAdjustments(input.follow.peek())) return
+          setRendering("scrollAdjustment", (value) => value + delta)
           const root = listRoot()
 
           if (root) reportOffset?.(root.scrollTop, virtualizer.isScrolling)
         })
       })
-      batchingColdSizes = false
+      dispatchCold(SIZES_FLUSHED)
       pinAnchor()
 
-      if (coldPending) pinColdBottom()
-      settleColdBottom()
+      if (untrack(coldHidden)) pinColdBottom()
+      dispatchCold(CHECK_REQUESTED)
 
-      if (coldPending) return
-
-      if (!input.pinned()) return
+      if (untrack(coldHidden) || !input.follow.following()) return
       const root = listRoot()
 
       // Reopening a settled scroll-to-end operation can fight subsequent keyboard scrolling.
-      if (root && Math.abs(root.scrollHeight - root.clientHeight - root.scrollTop) > endEpsilon)
-        virtualizer.scrollToEnd()
+      if (root && !atReachableEnd(root)) virtualizer.scrollToEnd()
     })
   }
 
@@ -370,18 +482,13 @@ export function createTimelineVirtualizer(input: Input) {
       ? item.end <= (instance.scrollOffset ?? 0) + instance.scrollAdjustments + instance.options.scrollMargin
       : first !== undefined && item.index < first
 
-    if (!touchScrolling || input.pinned()) return adjust
+    if (!defersAdjustments(input.follow.peek())) return adjust
 
     // iOS defers native scroll writes until momentum ends. Keep the same visual
     // anchor now, rather than moving rows now and snapping the viewport back later.
     if (adjust) touchAdjustment += delta
 
     return false
-  }
-
-  function finishTouchScroll() {
-    touchScrolling = false
-    flushTouchAdjustment()
   }
 
   // Scrolls to a tool call, named by its ID or by the shell ID a backgrounded shell call reports, and expands it and
@@ -420,30 +527,42 @@ export function createTimelineVirtualizer(input: Input) {
           ? { [`context:${key}`]: true, [`${key}:tool:${found.partID}`]: true }
           : { [key]: true },
       )
-      setRendering("anchor", { key: TimelineRow.key(rows()[found.index]!), partID: found.partID })
+      input.follow.dispatch({
+        type: "anchor",
+        anchor: { key: TimelineRow.key(rows()[found.index]!), partID: found.partID },
+      })
     })
     // Until its ResizeObserver delivers, the opened row keeps its collapsed size, so the timeline may not scroll yet
-    // (and cannot unpin) or ends above the tool. Commit the real size first.
+    // or ends above the tool. Commit the real size first.
     const opened = virtualContent?.querySelector<HTMLElement>(`[data-index="${found.index}"]`)
 
     if (opened) resizeItem(found.index, opened.offsetHeight)
-    input.onUnpin()
     pinAnchor()
 
     return true
   }
 
-  // Puts the anchored tool's top edge at its scroll margin, just below the headers that stick above it. Its own
+  // Puts the anchored row's top edge at its scroll margin, just below the headers that stick above it. Its own
   // growth extends downward, so only size changes at or above its row can move it; each of those calls this again.
   function pinAnchor() {
-    const anchor = rendering.anchor
+    const anchor = input.follow.anchor()
     const root = listRoot()
 
-    if (!anchor || !root) return
-    const element = virtualContent?.querySelector<HTMLElement>(`[data-timeline-part-id="${CSS.escape(anchor.partID)}"]`)
+    if (!anchor || !root || !active()) return
 
-    // Following the end is a different position to hold.
-    if (!element || !active() || input.pinned()) return releaseAnchor()
+    if (!rowByKey().has(anchor.key)) return input.follow.dispatch({ type: "release" })
+    const row = virtualContent?.querySelector<HTMLElement>(`[data-timeline-key="${CSS.escape(anchor.key)}"]`)
+
+    // A row that has not mounted yet pins once its first measurement lands.
+    if (!row) return
+
+    // A tool inside a group of several names them all on the group; pin the group, or else the row.
+    const element =
+      row.querySelector<HTMLElement>(`[data-timeline-part-id="${CSS.escape(anchor.partID)}"]`) ??
+      [...row.querySelectorAll<HTMLElement>("[data-timeline-part-ids]")].find((group) =>
+        group.dataset.timelinePartIds!.split(",").includes(anchor.partID),
+      ) ??
+      row
 
     const offset = Math.min(
       root.scrollHeight - root.clientHeight,
@@ -456,21 +575,25 @@ export function createTimelineVirtualizer(input: Input) {
       ),
     )
 
-    if (Math.abs(offset - root.scrollTop) > 1) virtualizer.scrollToOffset(offset)
+    // Hand over every pin, even one the scroll already reaches: TanStack lands exactly on its last target once the
+    // scroll is within a pixel of it, which would undo a compensation for a row above that resized since.
+    virtualizer.scrollToOffset(offset)
   }
 
-  function releaseAnchor() {
-    if (rendering.anchor) setRendering("anchor", undefined)
-  }
+  // An anchored row that leaves the list lets its anchor go. Reads the rows only while anchored, never while scrolling.
+  createEffect(() => {
+    const anchor = input.follow.anchor()
+
+    if (anchor && active() && !rowByKey().has(anchor.key)) input.follow.dispatch({ type: "release" })
+  })
 
   function prepareNavigation() {
-    releaseAnchor()
-
-    if (touchStart === undefined) touchScrolling = false
+    input.follow.dispatch({ type: "release" })
     flushTouchAdjustment()
   }
 
   function flushTouchAdjustment() {
+    touchAdjustment = 0
     const adjustment = rendering.scrollAdjustment
     const root = listRoot()
 
@@ -495,8 +618,7 @@ export function createTimelineVirtualizer(input: Input) {
     const root = listRoot()
 
     if (root) input.setScrollRef(root)
-
-    if (virtualContent) input.setContentRef(virtualContent)
+    input.setVisibleRef?.(visibleArea())
     queueMicrotask(() => {
       if (!active() || !root?.isConnected) return
       // A detached view can miss its nonzero ResizeObserver delivery. Publish
@@ -504,14 +626,18 @@ export function createTimelineVirtualizer(input: Input) {
       reportRect?.({ width: root.offsetWidth, height: root.offsetHeight })
 
       // A route can open this timeline on a tool call, e.g. a shell picked from inside a subagent, instead of its end.
-      const target = input.reveal?.target()
+      // It is attempted once per history entry: a call that is not in the list is not looked for again on reattach.
+      const reveal = input.reveal?.pending()
+      const revealed = !!reveal && revealPart(reveal.target)
 
-      if (target && revealPart(target)) input.reveal?.done()
-      else if (input.pinned()) virtualizer.scrollToEnd()
+      if (reveal) input.reveal?.consume(reveal.entryKey)
+
+      if (!revealed && input.follow.following()) virtualizer.scrollToEnd()
 
       reportOffset?.(root.scrollTop, false)
-      settleColdBottom()
+      dispatchCold(CHECK_REQUESTED)
     })
+    input.setRevealPart?.(revealPart)
     input.setRevealMessage?.((id, partID) => {
       if (!active()) return
 
@@ -522,38 +648,103 @@ export function createTimelineVirtualizer(input: Input) {
           )
         : -1
 
-      const index = partIndex >= 0 ? partIndex : input.projection.messageRowIndex().get(id)
+      const promptIndex = rows().findIndex((row) => Predicate.isTagged(row, "UserMessage") && row.userMessageID === id)
+
+      const index =
+        partIndex >= 0 ? partIndex : promptIndex >= 0 ? promptIndex : input.projection.messageRowIndex().get(id)
 
       if (index === undefined) return
       prepareNavigation()
-      virtualizer.scrollToIndex(index, { align: "center" })
+      virtualizer.scrollToIndex(index, { align: partIndex >= 0 ? "center" : "start" })
     })
-    input.setScrollToEnd?.(() => {
-      if (!active() || !listRoot()?.isConnected) return
+    input.setScrollToEnd?.((behavior) => {
+      const root = listRoot()
+
+      if (!active() || !root?.isConnected) return
+      flushTouchAdjustment()
+      input.follow.dispatch({ type: "follow" })
+
+      // Glide only the final screen. Crossing the whole history smoothly would stream every row through the virtualizer.
+      if (behavior === "smooth")
+        virtualizer.scrollToOffset(Math.max(root.scrollTop, root.scrollHeight - root.clientHeight * 2))
+      virtualizer.scrollToEnd({ behavior })
+    })
+    input.setPage?.((direction) => {
+      const root = listRoot()
+
+      if (!active() || !root?.isConnected) return
       prepareNavigation()
-      input.onPin()
-      virtualizer.scrollToEnd()
+      input.onUserScroll(root)
+      dispatchIntent(direction < 0)
+      // Like the timeline's own PageUp: 80% of a page, measured above the composer that covers its bottom. The scroll
+      // event then pins at the end or loads older history near the top, as a wheel scroll does.
+      virtualizer.scrollToOffset(root.scrollTop + direction * (visibleArea()?.clientHeight || root.clientHeight) * 0.8)
     })
   })
 
-  let coldPending = coldBottomMount
-  let settleQueued = false
+  createEffect(
+    on(
+      bottomInset,
+      () => {
+        const root = listRoot()
+
+        if (active() && root?.isConnected) reportRect?.({ width: root.offsetWidth, height: root.offsetHeight })
+      },
+      { defer: true },
+    ),
+  )
+
+  // The content is as tall as the rows the virtualizer sizes, so it reports that height rather than the session
+  // observing the element. A ResizeObserver there sees the height a row's own observer commits during its delivery, and
+  // Chrome reports every such frame as "ResizeObserver loop completed with undelivered notifications."
+  createEffect(
+    on([active, () => virtualizer.getTotalSize() - rendering.scrollAdjustment], () => {
+      if (active()) input.onContentResize()
+    }),
+  )
+
+  // Only the viewport carries the inset as a variable, for its fade and scroll padding. The variable does not inherit
+  // (see index.css): the inset changes on every frame while the composer region grows, and an inherited variable would
+  // restyle every rendered row each time.
+  createEffect(() => listRoot()?.style.setProperty("--session-timeline-inset", `${bottomInset()}px`))
+
   let contentObserver: MutationObserver | undefined
   let viewportObserver: ResizeObserver | undefined
+  let revealTimer: ReturnType<typeof setTimeout> | undefined
 
+  // Within the zoom slack only a write finds the end the browser reaches: one that does not move proves the view is
+  // already there, and one that does is undone before anything paints.
+  function atReachableEnd(root: HTMLDivElement) {
+    const top = root.scrollTop
+    const distance = root.scrollHeight - root.clientHeight - top
+
+    if (distance <= END_EPSILON) return true
+
+    if (distance > ZOOM_SLACK) return false
+    root.scrollTop = root.scrollHeight
+
+    if (root.scrollTop === top) return true
+    root.scrollTop = top
+
+    return false
+  }
+
+  // Returns whether the view now rests at its end with that offset reported.
   const pinColdBottom = () => {
-    if (!active()) return
+    if (!active()) return false
     const root = listRoot()
 
-    if (!input.pinned() || !virtualContent || !root) return
+    if (!input.follow.following() || !virtualContent || !root) return false
     // scrollToEnd computes its target from the DOM, not the new size cache.
     virtualContent.style.height = `${virtualizer.getTotalSize()}px`
 
-    if (Math.abs(root.scrollHeight - root.clientHeight - root.scrollTop) > endEpsilon) virtualizer.scrollToEnd()
+    if (!atReachableEnd(root)) virtualizer.scrollToEnd()
 
     // Report after core size adjustments finish so they cannot apply a delta
     // twice. This avoids waiting a frame for the native scroll event.
     if (virtualizer.scrollOffset !== root.scrollTop) reportOffset?.(root.scrollTop, false)
+
+    return true
   }
 
   const pendingMeasurements = () => {
@@ -565,64 +756,123 @@ export function createTimelineVirtualizer(input: Input) {
     )
   }
 
-  const settleColdBottom = () => {
-    if (!active() || !coldPending || settleQueued) return
-    settleQueued = true
-    queueMicrotask(() => {
-      settleQueued = false
-      const root = listRoot()
+  // The machine decides; this only runs what it asks for. Its state is set before any effect runs, so a check
+  // requested again from inside a pin joins the running one.
+  function dispatchCold(event: ColdMountEvent) {
+    const current = untrack(coldMount)
+    const next = transitionColdMount(current, event)
 
-      if (!coldPending || !virtualContent?.isConnected || !root) return
-
-      if (virtualContent.querySelector(pendingMarkdown)) return
-
-      if (!root.clientHeight) return
-      // Markdown can finish before ResizeObserver delivers its new box. The
-      // normal measureElement path skips reads while scrolling; this gate needs
-      // current boxes before expanding the estimated range or revealing it.
-      virtualizer.elementsCache.forEach((element) => {
-        if (element.isConnected) virtualizer.resizeItem(virtualizer.indexFromElement(element), element.offsetHeight)
-      })
-
-      if (pendingSizes.size || pendingMeasurements()) return
-      pinColdBottom()
-
-      if (input.pinned() && Math.abs(root.scrollHeight - root.clientHeight - root.scrollTop) > 1) return
-
-      // The scroll event must update the range before newly exposed rows can reveal.
-      if (root.scrollHeight > root.clientHeight && Math.abs((virtualizer.scrollOffset ?? 0) - root.scrollTop) > 1)
-        return
-
-      if (rendering.initialTail) {
-        setRendering("initialTail", false)
-        settleColdBottom()
-
-        return
-      }
-
-      if (pendingSizes.size || pendingMeasurements() || virtualContent.querySelector(pendingMarkdown)) return
-      coldPending = false
-      contentObserver?.disconnect()
-      viewportObserver?.disconnect()
-      virtualContent.style.removeProperty("visibility")
-    })
+    if (next.state !== current) setColdMount(next.state)
+    next.effects.forEach(runColdEffect)
   }
 
-  onMount(() => {
-    if (!coldPending || !virtualContent) return
-    contentObserver = new MutationObserver(settleColdBottom)
-    contentObserver.observe(virtualContent, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["data-markdown-ready"],
-    })
-    viewportObserver = new ResizeObserver(settleColdBottom)
+  function runColdEffect(effect: ColdMountEffect) {
+    if (effect.type === "observe") {
+      if (!virtualContent) return
+      contentObserver = new MutationObserver(() => dispatchCold(CHECK_REQUESTED))
+      contentObserver.observe(virtualContent, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["data-markdown-ready"],
+      })
+      viewportObserver = new ResizeObserver(() => dispatchCold(CHECK_REQUESTED))
+      const root = listRoot()
+
+      if (root) viewportObserver.observe(root)
+
+      return
+    }
+
+    if (effect.type === "timer.start") {
+      clearTimeout(revealTimer)
+      revealTimer = setTimeout(() => dispatchCold({ type: "timeout", attempt: effect.attempt }), COLD_REVEAL_TIMEOUT)
+
+      return
+    }
+
+    if (effect.type === "timer.cancel") {
+      clearTimeout(revealTimer)
+
+      return
+    }
+
+    if (effect.type === "check.schedule") {
+      queueMicrotask(() => dispatchCold({ type: "check.ready", attempt: effect.attempt }))
+
+      return
+    }
+
+    if (effect.type === "check.sample") {
+      dispatchCold({ type: "check.sampled", attempt: effect.attempt, sample: sampleColdMount() })
+
+      return
+    }
+
+    // The fallback reveals whatever has rendered, at the end a pinned view follows.
+    if (effect.type === "pin") {
+      pinColdBottom()
+
+      return
+    }
+
+    clearTimeout(revealTimer)
+    contentObserver?.disconnect()
+    viewportObserver?.disconnect()
+  }
+
+  function sampleColdMount(): ColdMountSample {
     const root = listRoot()
 
-    if (root) viewportObserver.observe(root)
-    settleColdBottom()
-  })
+    if (!virtualContent?.isConnected || !root || virtualContent.querySelector(pendingMarkdown) || !root.clientHeight)
+      return "waiting"
+    // Markdown can finish before ResizeObserver delivers its new box. The
+    // normal measureElement path skips reads while scrolling; this gate needs
+    // current boxes before expanding the estimated range or revealing it.
+    virtualizer.elementsCache.forEach((element) => {
+      if (element.isConnected) virtualizer.resizeItem(virtualizer.indexFromElement(element), element.offsetHeight)
+    })
+
+    if (pendingSizes.size || pendingMeasurements()) return "waiting"
+    const pinned = input.follow.following()
+
+    // A pinned view rests at the end pinColdBottom reaches. Under page zoom that end can be more than a pixel short
+    // of scrollHeight - clientHeight, and TanStack keeps the offset it wrote rather than the one reached. Waiting
+    // for either distance to close never ends: each pass reported the offset again, which queued the next pass as
+    // a microtask, and the renderer froze.
+    if (pinned && !pinColdBottom()) return "waiting"
+
+    // The scroll event must update the range before newly exposed rows can reveal.
+    if (
+      !pinned &&
+      root.scrollHeight > root.clientHeight &&
+      Math.abs((virtualizer.scrollOffset ?? 0) - root.scrollTop) > 1
+    )
+      return "waiting"
+
+    if (pendingSizes.size || pendingMeasurements() || virtualContent.querySelector(pendingMarkdown)) return "pinned"
+
+    return "settled"
+  }
+
+  onMount(() => dispatchCold({ type: "mounted", active: active() }))
+  createEffect(
+    on(
+      active,
+      (value) => {
+        dispatchCold(value ? ACTIVATED : DEACTIVATED)
+
+        if (value) return
+        // A view that goes inactive mid-touch never sees its finger lift; its translation would outlive the gesture.
+        clearTouchTarget()
+        flushTouchAdjustment()
+        setRendering("scrollAdjustment", 0)
+
+        if (input.sessionKey() === ownerSessionKey) input.follow.dispatch(CONTACT_LOST_EVENT)
+      },
+      { defer: true },
+    ),
+  )
 
   let measuredSessionKey = input.sessionKey()
   createEffect(() => {
@@ -644,7 +894,7 @@ export function createTimelineVirtualizer(input: Input) {
 
     if (active()) input.setScrollRef(root)
     viewportObserver?.observe(root)
-    settleColdBottom()
+    dispatchCold(CHECK_REQUESTED)
     // The scrollbar thumb sits beside the viewport and stops its pointerdown from propagating, so
     // listen on the ScrollView root in the capture phase: thumb drags are user scrolls too.
     const scrollView = root.parentElement
@@ -656,22 +906,34 @@ export function createTimelineVirtualizer(input: Input) {
 
   // Upward input is the one intent geometry cannot recover: nudging up while still a pixel from
   // the end must stop following, even though the resulting position still looks like the end.
-  const handleListWheel = (event: WheelEvent & { currentTarget: HTMLDivElement }) => {
-    releaseAnchor()
-    input.onUserScroll(event.target)
+  // Only an upward intent reads the scroll range, as content that does not overflow cannot move.
+  function dispatchIntent(upward: boolean) {
+    const root = listRoot()
+    intentEvent.upward = upward
+    intentEvent.overflow = upward && !!root && root.scrollHeight - root.clientHeight > MIN_OVERFLOW
+    input.follow.dispatch(intentEvent)
+  }
 
-    if (event.deltaY < 0) input.onUnpin()
+  const handleListWheel = (event: WheelEvent) => {
+    if (!active()) return
+    input.onUserScroll(event.target)
+    dispatchIntent(event.deltaY < 0)
   }
 
   const handleListTouchStart = (event: TouchEvent) => {
     clearTouchTarget()
-    releaseAnchor()
+
+    const touch = event.touches[0]
+
+    if (!active() || !touch) return
     input.onUserScroll(event.target)
-    touchScrolling = true
-    touchStart = event.touches[0]?.clientY
+    lastTouchY = touch.clientY
     const root = listRoot()
     const nested = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-scrollable]") : null
-    touchNested = !!nested && nested !== root && nested.scrollHeight > nested.clientHeight
+
+    input.follow.dispatch(
+      nested && nested !== root && nested.scrollHeight > nested.clientHeight ? nestedTouchStartEvent : touchStartEvent,
+    )
     // Native touch events keep their original target, even when streaming or
     // virtualization detaches it. Listen there instead of relying on bubbling.
     touchTarget = event.target
@@ -686,28 +948,29 @@ export function createTimelineVirtualizer(input: Input) {
     if (!(event instanceof TouchEvent)) return
     const current = event.touches[0]?.clientY
 
-    if (current === undefined || touchStart === undefined) return
-    const previous = touchStart
-    touchStart = current
+    if (current === undefined) return
+    const previous = lastTouchY
+    lastTouchY = current
 
-    // A retained target can outlive its whole session view. Only the active
-    // timeline may change the shared follow state; release still cleans up below.
-    if (!active()) return
+    // A retained target can outlive its whole session view. Only the active timeline may change the shared follow
+    // state, and only while the finger it started with is still down; release still cleans up below.
+    if (!active() || !isTouchHeld(input.follow.peek())) return
 
     // Dragging the content downward reveals earlier messages.
     if (current <= previous) return
-
-    // A nested scrollport owns the intent. If it chains into the timeline at a
-    // boundary, the resulting native timeline scroll below will unpin instead.
-    if (touchNested) return
-    input.onUnpin()
+    const root = listRoot()
+    touchDragEvent.overflow = !!root && root.scrollHeight - root.clientHeight > MIN_OVERFLOW
+    input.follow.dispatch(touchDragEvent)
   }
 
   const handleListTouchEnd = () => {
     clearTouchTarget()
-    touchStart = undefined
+    touchAdjustment = 0
 
-    if (!virtualizer.isScrolling) finishTouchScroll()
+    if (!active()) return
+    input.follow.dispatch(virtualizer.isScrolling ? touchMomentumEvent : touchEndEvent)
+
+    if (!virtualizer.isScrolling) flushTouchAdjustment()
   }
 
   function clearTouchTarget() {
@@ -721,23 +984,43 @@ export function createTimelineVirtualizer(input: Input) {
 
   // Drag-selecting past the edge and dragging the scrollbar both scroll without a wheel or key,
   // so a held pointer is what separates those from the virtualizer's own measurement adjustments.
+  // Not the secondary button: it opens a context menu that can swallow its release. The middle button stays, as its
+  // drag autoscrolls on Windows and Linux.
   const handleListPointerDown = (event: PointerEvent) => {
-    releaseAnchor()
+    if (!active() || event.button === 2) return
     input.onUserScroll(event.target)
-    pointerHeld = true
+    input.follow.dispatch(pointerDownEvent)
   }
 
-  const releasePointer = () => {
-    pointerHeld = false
+  // A release only ends a pointer gesture, so every view may report it, including one that went inactive mid-press.
+  // On touch devices it also fires beside touchend, which owns the touch gesture.
+  const releasePointer = () => input.follow.dispatch(pointerUpEvent)
+
+  // A window that loses focus or hides mid-press may never see the release, of a pointer or of a finger. Every view may
+  // report it, as the window lost all contact.
+  const loseContact = () => {
+    clearTouchTarget()
+    touchAdjustment = 0
+
+    if (active()) flushTouchAdjustment()
+    input.follow.dispatch(CONTACT_LOST_EVENT)
+  }
+
+  const loseHiddenContact = () => {
+    if (document.visibilityState === "hidden") loseContact()
   }
 
   onMount(() => {
     window.addEventListener("pointerup", releasePointer)
     window.addEventListener("pointercancel", releasePointer)
+    window.addEventListener("blur", loseContact)
+    document.addEventListener("visibilitychange", loseHiddenContact)
   })
   onCleanup(() => {
     window.removeEventListener("pointerup", releasePointer)
     window.removeEventListener("pointercancel", releasePointer)
+    window.removeEventListener("blur", loseContact)
+    document.removeEventListener("visibilitychange", loseHiddenContact)
   })
 
   const handleListKeyDown = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
@@ -748,29 +1031,21 @@ export function createTimelineVirtualizer(input: Input) {
     if (!isScrollKeyTarget(event.target, key)) return
 
     if (scrollKeyOwner(event.currentTarget, event.target, key) !== event.currentTarget) return
-    releaseAnchor()
     input.onUserScroll(event.currentTarget)
-
-    if (upwardKeys.has(key)) input.onUnpin()
+    dispatchIntent(upwardKeys.has(key))
   }
 
-  // Following resumes by arriving at the end, either by scrolling there or by content shrinking
-  // under a viewport that was already there. Merely resting near the end is not enough, otherwise
-  // a later scroll would overwrite an upward intent expressed a pixel short of the bottom.
   const handleListScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
     if (!active()) return
     const root = event.currentTarget
-    const previousTop = scrollTop
-    const previousMaxScroll = maxScroll
+    scrollEvent.previousTop = scrollTop
+    scrollEvent.previousMaxScroll = maxScroll
     scrollTop = root.scrollTop
     maxScroll = root.scrollHeight - root.clientHeight
-    const atEnd = maxScroll - scrollTop <= endEpsilon
-    const arrived = scrollTop > previousTop + endEpsilon || maxScroll < previousMaxScroll
-
-    // An anchor holds its tool even when reaching it lands at the end; only the user's own scroll lets it go.
-    if (maxScroll <= 1 || (atEnd && arrived && !rendering.anchor)) input.onPin()
-    else if ((pointerHeld || touchScrolling) && scrollTop < previousTop - endEpsilon) input.onUnpin()
-    settleColdBottom()
+    scrollEvent.scrollTop = scrollTop
+    scrollEvent.maxScroll = maxScroll
+    input.follow.dispatch(scrollEvent)
+    dispatchCold(CHECK_REQUESTED)
     input.onScheduleScrollState(root)
     input.onHistoryScroll()
   }
@@ -813,14 +1088,14 @@ export function createTimelineVirtualizer(input: Input) {
               if (
                 !Predicate.isTagged(row(), "UserMessage") ||
                 !addedKeys.has(rowProps.rowKey) ||
-                !input.pinned() ||
-                coldPending
+                !input.follow.following() ||
+                coldHidden()
               )
                 return
               // The optimistic row can paint before ResizeObserver corrects the tail estimates.
               // Measure the mounted tail and pin it in this render's microtask instead.
               queueMicrotask(() => {
-                if (!input.pinned() || !virtualContent?.isConnected) return
+                if (!input.follow.following() || !virtualContent?.isConnected) return
                 virtualizer.elementsCache.forEach((item) => {
                   if (item.isConnected) virtualizer.resizeItem(virtualizer.indexFromElement(item), item.offsetHeight)
                 })
@@ -848,29 +1123,27 @@ export function createTimelineVirtualizer(input: Input) {
     }
 
     return (
-      <div
-        class="relative w-full h-full min-w-0"
-        data-workspace-session={props.workspaceSession() ? "" : undefined}
-        data-local-session={!props.workspaceSession() ? "" : undefined}
-      >
+      <div ref={setViewRoot} class="relative w-full h-full min-w-0">
         <div
-          class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-all duration-200 ease-out"
+          class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-[opacity,translate]"
           classList={{
-            "bottom-8": true,
-            "opacity-100 translate-y-0 scale-100": input.scroll().overflow && input.scroll().jump,
-            "opacity-0 translate-y-2 pointer-events-none": !input.scroll().overflow || !input.scroll().jump,
-            "scale-[0.8]": !input.scroll().overflow || !input.scroll().jump,
+            "opacity-100 translate-y-0 duration-150 ease-[cubic-bezier(.2,.8,.2,1)]":
+              input.scroll().overflow && input.scroll().jump,
+            "opacity-0 translate-y-1 motion-reduce:translate-y-0 duration-[110ms] ease-[cubic-bezier(.4,0,1,1)]":
+              !input.scroll().overflow || !input.scroll().jump,
           }}
+          style={{ bottom: `${bottomInset() + 32}px` }}
+          inert={!input.scroll().overflow || !input.scroll().jump}
         >
           <button
             type="button"
             aria-label={language.t("session.messages.jumpToLatest")}
-            class="pointer-events-auto flex items-center justify-center w-8 h-7 px-2 py-1.5 rounded-lg border-none cursor-pointer text-v2-text-text-base backdrop-blur-[2px]"
+            class="pointer-events-auto flex items-center justify-center w-8 h-7 px-2 py-1.5 rounded-lg border-none cursor-pointer text-v2-text-text-base backdrop-blur-[2px] outline-none hover:bg-[linear-gradient(var(--v2-overlay-simple-overlay-hover),var(--v2-overlay-simple-overlay-hover))] active:bg-[linear-gradient(var(--v2-overlay-simple-overlay-pressed),var(--v2-overlay-simple-overlay-pressed))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus"
             style={{
-              background: "color-mix(in srgb, var(--v2-background-bg-base) 92%, transparent)",
+              "background-color": "color-mix(in srgb, var(--v2-background-bg-base) 92%, transparent)",
               "box-shadow": "var(--v2-elevation-raised), 0px 2px 8px var(--v2-background-bg-base)",
             }}
-            onClick={input.onResumeScroll}
+            onClick={() => input.onResumeScroll(prefersReducedMotion() ? "auto" : "smooth")}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path
@@ -884,43 +1157,65 @@ export function createTimelineVirtualizer(input: Input) {
         <ScrollView
           data-slot="session-timeline-scroll"
           viewportRef={bindListRoot}
+          thumbContainer={visibleArea()}
+          thumbHoverTarget={viewRoot()}
           onBeforeScroll={prepareNavigation}
           verticalScrollAdjustment={rendering.scrollAdjustment}
           onWheel={handleListWheel}
           onTouchStart={handleListTouchStart}
           onKeyDown={handleListKeyDown}
           onScroll={handleListScroll}
-          onClick={input.onSelectionInteraction}
+          onClick={() => {
+            // Following would scroll a selection away.
+            if (window.getSelection()?.toString()) input.follow.dispatch({ type: "detach" })
+          }}
           class="relative min-w-0 w-full h-full"
-          style={{ "--sticky-accordion-top": input.showHeader() ? "48px" : "0px" }}
+          style={{ "--sticky-accordion-top": input.showHeader() ? "var(--session-header-height, 48px)" : "0px" }}
         >
           <Show when={input.showHeader()} fallback={<div aria-hidden="true" class="h-4 md:hidden" />}>
             {props.header}
           </Show>
           <div
             data-timeline-virtual-content
-            ref={(element) => {
-              virtualContent = element
-
-              if (active()) input.setContentRef(element)
-            }}
+            ref={virtualContent}
             style={{
               height: `${virtualizer.getTotalSize() - rendering.scrollAdjustment}px`,
               position: "relative",
               width: "100%",
-              visibility: coldBottomMount ? "hidden" : undefined,
+              // Rows held wider than the timeline mid-flight don't scroll it sideways.
+              "overflow-x": "clip",
+              visibility: coldHidden() ? "hidden" : undefined,
             }}
           >
-            <For each={virtualRowKeys()}>{(rowKey) => <VirtualRow rowKey={rowKey} />}</For>
+            <div
+              ref={rowLayer}
+              class="absolute inset-y-0"
+              style={{
+                left: "calc((100% - var(--panel-hold-width, 100%)) / 2)",
+                width: "var(--panel-hold-width, 100%)",
+              }}
+            >
+              <For each={virtualRowKeys()}>{(rowKey) => <VirtualRow rowKey={rowKey} />}</For>
+            </div>
             <div
               data-timeline-row="bottom-spacer"
-              class="h-16 absolute top-0 left-0 w-full"
-              style={{ transform: `translateY(${virtualizer.getTotalSize() - 64 - rendering.scrollAdjustment}px)` }}
+              class="absolute top-0 left-0 w-full"
+              style={{
+                height: `${tailSize()}px`,
+                transform: `translateY(${virtualizer.getTotalSize() - tailSize() - rendering.scrollAdjustment}px)`,
+              }}
             >
               {props.bottomSpacer}
             </div>
           </div>
+          <div aria-hidden="true" data-timeline-inset class="shrink-0" style={{ height: `${bottomInset()}px` }} />
         </ScrollView>
+        <div
+          ref={setVisibleArea}
+          data-slot="session-timeline-visible"
+          class="pointer-events-none absolute inset-x-0 top-0"
+          style={{ bottom: `${bottomInset()}px` }}
+        />
       </div>
     )
   }
@@ -935,14 +1230,14 @@ export function createTimelineVirtualizer(input: Input) {
     })
 
     while (cache.size > 16) cache.delete(cache.keys().next().value!)
-    coldPending = false
-    contentObserver?.disconnect()
-    viewportObserver?.disconnect()
+    dispatchCold(DISPOSED)
 
     if (active()) {
       input.setScrollRef(undefined)
       input.setRevealMessage?.(() => {})
+      input.setRevealPart?.(() => false)
       input.setScrollToEnd?.(() => {})
+      input.setPage?.(() => {})
     }
   })
 
@@ -950,7 +1245,11 @@ export function createTimelineVirtualizer(input: Input) {
     disclosure: {
       patchGroupKeys,
       value: (key: string) => toolOpen[key],
-      set: (key: string, open: boolean) => setToolOpen(key, open),
+      set: (key: string, open: boolean) => {
+        // Following the end would scroll an opened user message's top away; it stays where it was pressed.
+        if (open && key.startsWith("user-expanded:")) input.follow.dispatch({ type: "detach" })
+        setToolOpen(key, open)
+      },
     },
     revealPart,
     View,

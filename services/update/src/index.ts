@@ -206,9 +206,13 @@ async function selectArtifacts(
     rows
       .filter((row) => row.active === 1)
       .map(async (active) => {
-        const minimum = rows.find(
-          (row) => row.minimum === 1 && row.name === active.name && row.distribution === active.distribution,
-        )
+        // Preview build numbers reset, so a minimum outside latest can send clients back to a build they passed.
+        const minimum =
+          active.channel === "latest"
+            ? rows.find(
+                (row) => row.minimum === 1 && row.name === active.name && row.distribution === active.distribution,
+              )
+            : undefined
         const floor = minimum && releaseVersion(minimum.version)
         if (current !== undefined && minimum && (!floor || !caller || semver.lt(caller, floor))) return minimum
         if (active.time_created <= cutoff) return active
@@ -335,14 +339,18 @@ async function admin(request: Request, env: Env, prefix: string) {
                   <button class="btn" data-size="sm" data-variant="outline" type="submit">Activate</button>
                 </form>`
           }
-          <form action="${prefix}/admin/minimum" method="post">
-            <input type="hidden" name="channel" value="${escape(artifact.channel)}">
-            <input type="hidden" name="name" value="${escape(artifact.name)}">
-            <input type="hidden" name="distribution" value="${escape(artifact.distribution)}">
-            <input type="hidden" name="version" value="${escape(artifact.version)}">
-            <input type="hidden" name="enabled" value="${artifact.minimum ? "0" : "1"}">
-            <button class="btn" data-size="sm" data-variant="outline" type="submit">${artifact.minimum ? "Clear minimum" : "Set minimum"}</button>
-          </form>
+          ${
+            artifact.channel === "latest" || artifact.minimum
+              ? `<form action="${prefix}/admin/minimum" method="post">
+                  <input type="hidden" name="channel" value="${escape(artifact.channel)}">
+                  <input type="hidden" name="name" value="${escape(artifact.name)}">
+                  <input type="hidden" name="distribution" value="${escape(artifact.distribution)}">
+                  <input type="hidden" name="version" value="${escape(artifact.version)}">
+                  <input type="hidden" name="enabled" value="${artifact.minimum ? "0" : "1"}">
+                  <button class="btn" data-size="sm" data-variant="outline" type="submit">${artifact.minimum ? "Clear minimum" : "Set minimum"}</button>
+                </form>`
+              : ""
+          }
         </td>
       </tr>`,
     )
@@ -425,7 +433,7 @@ async function publishArtifact(request: Request, env: Env) {
   const input: unknown = await request.json().catch(() => undefined)
   const artifact = parseArtifact(isRecord(input) ? input : {})
   if (artifact instanceof Response) return artifact
-  if (!channelsForRef(claims.ref).includes(artifact.channel)) return json({ error: "Channel is not allowed" }, 403)
+  if (!allowedChannels(claims).includes(artifact.channel)) return json({ error: "Channel is not allowed" }, 403)
   if (!isRecord(artifact.metadata)) return json({ error: "Metadata must be an object" }, 400)
   await activate(env.DB, [
     {
@@ -457,6 +465,9 @@ async function markArtifact(request: Request, env: Env, flag: "active" | "minimu
   })
   if (key instanceof Response) return key
   const enabled = flag === "minimum" && form.get("enabled") === "0" ? 0 : 1
+  if (flag === "minimum" && enabled && key.channel !== "latest") {
+    return json({ error: "Minimum is only supported on the latest channel" }, 400)
+  }
   if (flag === "minimum" && enabled && !releaseVersion(key.version)) {
     return json({ error: "Minimum must have a comparable release version" }, 400)
   }
@@ -572,6 +583,8 @@ type GitHubClaims = JWTPayload & {
   repository_owner_id: string
   workflow_ref: string
   ref: string
+  event_name: string
+  environment: string
   sha: string
   run_id: string
   run_attempt: string
@@ -583,14 +596,17 @@ export function validGitHubClaims(claims: JWTPayload): claims is GitHubClaims {
   if (claims.repository_id !== "975734319") return false
   if (claims.repository_owner_id !== "66570915") return false
   if (typeof claims.workflow_ref !== "string" || typeof claims.ref !== "string") return false
-  if (claims.workflow_ref !== `anomalyco/opencode/.github/workflows/publish.yml@${claims.ref}`) return false
-  if (!channelsForRef(claims.ref).length) return false
+  if (claims.workflow_ref !== `anomalyco/opencode/.github/workflows/release.yml@${claims.ref}`) return false
+  // Only publish jobs run in the release environment, and they never execute repository code.
+  if (claims.environment !== "release") return false
+  if (typeof claims.event_name !== "string") return false
   return [claims.sha, claims.run_id, claims.run_attempt, claims.actor].every((value) => typeof value === "string")
 }
 
-export function channelsForRef(ref: string) {
-  if (ref === "refs/heads/dev") return ["dev", "latest"]
-  if (ref === "refs/heads/beta") return ["beta"]
+// Pushes to dev ship dev builds. Only a manual dispatch of a versioned release may ship to latest.
+export function allowedChannels(claims: Pick<GitHubClaims, "ref" | "event_name">) {
+  if (claims.ref === "refs/heads/dev") return claims.event_name === "workflow_dispatch" ? ["dev", "latest"] : ["dev"]
+  if (claims.ref === "refs/heads/beta") return ["beta"]
   return []
 }
 

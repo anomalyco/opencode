@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.common.fileCount.one": "{{count}} file",
   "ui.common.fileCount.other": "{{count}} file",
   "ui.common.fileCount.many": "{{count}} file",
@@ -117,10 +117,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Abbonati a OpenCode Go per 10 $ al mese e accedi in modo affidabile ai migliori modelli open source.",
   "dialog.usageExceeded.freeTier.actionLabel": "Iscriviti",
-  "dialog.usageExceeded.accountRateLimit.title": "Limite Go raggiunto",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Limite di utilizzo raggiunto. Per continuare a utilizzare questo modello adesso, abilita l'utilizzo dal saldo disponibile",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Apri le impostazioni",
   "ui.sessionTurn.status.delegating": "Delega del lavoro",
   "ui.sessionTurn.status.planning": "Pianificazione dei prossimi passi",
   "ui.sessionTurn.status.gatheringContext": "Esplorazione",
@@ -241,7 +237,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(nessuna risposta)",
   "ui.question.review.notAnswered": "(senza risposta)",
   "ui.question.multiHint": "Seleziona tutte le risposte pertinenti",
-  "ui.question.singleHint": "Seleziona una risposta",
   "ui.question.custom.placeholder": "Digita la tua risposta…",
 
   "ui.messagePart.context.match.one": "(corrispondenza {{count}})",

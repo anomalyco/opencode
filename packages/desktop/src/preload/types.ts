@@ -5,6 +5,6 @@ export type ElectronNative = {
   windowID: string
   bootstrap: WindowBootstrap
   storageSnapshot: Promise<StorageSnapshot>
-  extensions: Promise<WindowSnapshot["extensions"]>
+  plugins: Promise<WindowSnapshot["plugins"]>
   getPathForFile(file: File): string
 }

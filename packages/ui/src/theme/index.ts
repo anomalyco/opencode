@@ -21,60 +21,15 @@ export {
   oklchToRgb,
   generateScale,
   generateNeutralScale,
-  generateAlphaScale,
   fitOklch,
   blend,
   mixColors,
   shift,
-  lighten,
-  darken,
   withAlpha,
 } from "./color"
 
-export { resolveThemeVariant, resolveTheme, themeToCss } from "./resolve"
+export { resolveThemeVariant, themeToCss } from "./resolve"
 
 export { resolveThemeVariantV2, resolveThemeV2, themeV2ToCss, generateV2Primitives } from "./v2/resolve"
 
-export { applyTheme, loadThemeFromUrl, getActiveTheme, removeTheme, setColorScheme } from "./loader"
-
 export { ThemeProvider, useTheme, type ColorScheme } from "./context"
-
-export {
-  DEFAULT_THEMES,
-  oc2Theme,
-  amoledTheme,
-  auraTheme,
-  ayuTheme,
-  carbonfoxTheme,
-  catppuccinTheme,
-  catppuccinFrappeTheme,
-  catppuccinMacchiatoTheme,
-  cobalt2Theme,
-  cursorTheme,
-  draculaTheme,
-  everforestTheme,
-  flexokiTheme,
-  githubTheme,
-  gruvboxTheme,
-  kanagawaTheme,
-  lucentOrngTheme,
-  materialTheme,
-  matrixTheme,
-  mercuryTheme,
-  monokaiTheme,
-  nightowlTheme,
-  nordTheme,
-  oneDarkTheme,
-  oneDarkProTheme,
-  orngTheme,
-  osakaJadeTheme,
-  palenightTheme,
-  rosepineTheme,
-  shadesOfPurpleTheme,
-  solarizedTheme,
-  synthwave84Theme,
-  tokyonightTheme,
-  vercelTheme,
-  vesperTheme,
-  zenburnTheme,
-} from "./default-themes"

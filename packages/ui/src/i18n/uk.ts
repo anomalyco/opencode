@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.messagePart.tools.used.few": "Використано {{count}} рази: {{tools}}",
   "ui.messagePart.tools.used.many": "Використано {{count}} разів: {{tools}}",
   "ui.common.fileCount.few": "{{count}} файли",
@@ -105,10 +105,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Підпишіться на OpenCode Go за $10 на місяць для надійного доступу до найкращих моделей із відкритим кодом.",
   "dialog.usageExceeded.freeTier.actionLabel": "Підписатися",
-  "dialog.usageExceeded.accountRateLimit.title": "Ліміт Go вичерпано",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Ліміт використання вичерпано. Щоб і надалі користуватися цією моделлю, увімкніть оплату з доступного балансу",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Відкрити налаштування",
 
   "ui.sessionTurn.status.delegating": "Делегування роботи",
   "ui.sessionTurn.status.planning": "Планування наступних кроків",
@@ -124,8 +120,8 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.status.consideringNextSteps": "Розгляд наступних кроків",
 
   "ui.messagePart.diagnostic.error": "Помилка",
-  "ui.messagePart.title.edit": "Редагувати",
-  "ui.messagePart.title.write": "Написати",
+  "ui.messagePart.title.edit": "Редагування",
+  "ui.messagePart.title.write": "Запис",
   "ui.messagePart.option.typeOwnAnswer": "Введіть власну відповідь",
   "ui.messagePart.review.title": "Перевірте свої відповіді",
   "ui.messagePart.questions.dismissed": "Запитання відхилено",
@@ -241,11 +237,10 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(немає відповіді)",
   "ui.question.review.notAnswered": "(не відповіли)",
   "ui.question.multiHint": "Виберіть усі відповідні варіанти",
-  "ui.question.singleHint": "Виберіть одну відповідь",
   "ui.question.custom.placeholder": "Введіть свою відповідь…",
   "ui.messagePart.context.match.one": "({{count}} збіг)",
   "ui.messagePart.context.match.other": "({{count}} збігу)",
-  "ui.tool.execute": "Виконати",
+  "ui.tool.execute": "Виконання",
   "ui.tool.loadedFile": "Завантажено файл {{path}}",
   "ui.tool.loadedSkill": "Завантажено навичку {{name}}",
   "ui.tool.shell.writingCommand": "Записування команди...",

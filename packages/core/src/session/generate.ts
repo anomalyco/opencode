@@ -14,6 +14,7 @@ import { SessionModelRequest } from "./model-request.js"
 import { ModelRetry } from "../model-retry.js"
 import type { SessionRunnerModel } from "./runner/model.js"
 import type { SessionSchema } from "./schema.js"
+import { SessionUsage } from "./usage.js"
 
 export type Error =
   | AgentNotFoundError
@@ -22,7 +23,9 @@ export type Error =
   | AIError
   | FileSystem.DirectoryNotFoundError
 
-/** Generates text from current Session context without mutating the Session. */
+export type Result = SessionUsage.Recorded & { readonly text: string }
+
+/** Generates text from current Session context without mutating the Session. Usage is reported like a step's. */
 export const generate = Effect.fn("SessionGenerate.generate")(function* (input: {
   session: SessionSchema.Info
   prompt: string
@@ -62,7 +65,6 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       modelID: model.ref.id,
     })
     const response = yield* llm.generate(prepared.request, prepared.options).pipe(ModelRetry.retry)
-    yield* Effect.logInfo("session generation usage diagnostic", { usage: response.usage })
-    return response.text
+    return { text: response.text, ...SessionUsage.record(response.usage, model.cost) }
   }).pipe(instances.provide(input.session))
 })

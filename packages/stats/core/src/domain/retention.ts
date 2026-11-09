@@ -54,28 +54,23 @@ export class RetentionStatRepo extends Context.Service<RetentionStatRepo, Retent
       ) {
         if (scope.cohortDates.length === 0) return
 
+        // Readers never see a cohort emptied by an interrupted replace.
         yield* Effect.tryPromise({
           try: () =>
-            db
-              .delete(modelRetention)
-              .where(
-                and(
-                  inArray(modelRetention.cohort_date, scope.cohortDates),
-                  eq(modelRetention.dataset, scope.dataset),
-                  eq(modelRetention.tier, scope.tier),
-                ),
-              ),
+            db.transaction(async (tx) => {
+              await tx
+                .delete(modelRetention)
+                .where(
+                  and(
+                    inArray(modelRetention.cohort_date, scope.cohortDates),
+                    eq(modelRetention.dataset, scope.dataset),
+                    eq(modelRetention.tier, scope.tier),
+                  ),
+                )
+              for (const chunk of chunks(rows, UPSERT_CHUNK_SIZE)) await tx.insert(modelRetention).values(chunk)
+            }),
           catch: (cause) => DatabaseError.make({ cause }),
         })
-        yield* Effect.forEach(
-          chunks(rows, UPSERT_CHUNK_SIZE),
-          (chunk) =>
-            Effect.tryPromise({
-              try: () => db.insert(modelRetention).values(chunk),
-              catch: (cause) => DatabaseError.make({ cause }),
-            }),
-          { discard: true },
-        )
       })
 
       return RetentionStatRepo.of({ available, replace })

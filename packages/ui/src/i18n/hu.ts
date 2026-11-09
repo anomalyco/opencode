@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.sessionReview.title": "Munkamenet változások",
   "ui.sessionReview.title.git": "Git változások",
   "ui.sessionReview.title.branch": "Ágak változásai",
@@ -73,10 +73,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Iratkozzon fel az OpenCode Go szolgáltatásra havi 10 dollárért, hogy megbízható hozzáférést kapjon a legjobb nyílt forráskódú modellekhez.",
   "dialog.usageExceeded.freeTier.actionLabel": "Iratkozz fel",
-  "dialog.usageExceeded.accountRateLimit.title": "Elérte a Go korlátját",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Elérte a használati korlátot. A modell használatának folytatásához engedélyezze a használatot a rendelkezésre álló egyenlegéből",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Beállítások megnyitása",
   "ui.sessionTurn.status.delegating": "Munka delegálása",
   "ui.sessionTurn.status.planning": "A következő lépések tervezése",
   "ui.sessionTurn.status.gatheringContext": "Feltárása",
@@ -195,7 +191,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(nincs válasz)",
   "ui.question.review.notAnswered": "(nem válaszolt)",
   "ui.question.multiHint": "Válassza ki az összes megfelelő választ",
-  "ui.question.singleHint": "Válasszon ki egy választ",
   "ui.question.custom.placeholder": "Írja be a választ…",
   "ui.tool.loadedFile": "{{path}} betöltve",
   "ui.tool.loadedSkill": "A(z) {{name}} készség betöltve",

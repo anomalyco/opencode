@@ -9,6 +9,8 @@ export function TimelineSeparator(props: {
   providerID?: string
   variant?: string
 }) {
+  const gradient =
+    "linear-gradient(90deg, color-mix(in srgb, var(--v2-border-border-base) 0%, transparent) 0%, color-mix(in srgb, var(--v2-border-border-strong) 100%, transparent) 70%)"
   const label = () => (
     <bdi
       data-slot="session-timeline-notice-label"
@@ -23,7 +25,7 @@ export function TimelineSeparator(props: {
 
   return (
     <div class="flex h-8 w-full items-center gap-3 text-v2-text-text-faint">
-      <span class="h-px min-w-0 flex-1 bg-v2-border-border-strong" />
+      <span class="h-px min-w-0 flex-1" style={{ "background-image": gradient }} />
       <span class="flex min-w-0 items-center gap-1 text-[13px] font-[440] leading-text-compact tracking-[-0.04px]">
         <Show when={props.providerID}>
           {(providerID) => <ProviderIcon id={providerID()} class="text-v2-icon-icon-faint" aria-hidden="true" />}
@@ -63,7 +65,7 @@ export function TimelineSeparator(props: {
           </Show>
         </span>
       </span>
-      <span class="h-px min-w-0 flex-1 bg-v2-border-border-strong" />
+      <span class="h-px min-w-0 flex-1 -scale-x-100" style={{ "background-image": gradient }} />
     </div>
   )
 }

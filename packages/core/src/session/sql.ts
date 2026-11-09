@@ -14,7 +14,7 @@ import type { Workspace } from "@opencode/schema/workspace"
 import { Timestamps } from "../database/schema.sql.js"
 import type { Instruction } from "@opencode/schema/instruction"
 import type { Session } from "@opencode/schema/session"
-import type { CompactionPayload, MovePayload, SyntheticPayload, UserPayload } from "@opencode/schema/session-inbox"
+import type { CompactionPayload, MovePayload, SyntheticPayload } from "@opencode/schema/session-inbox"
 import type { RevertV1 } from "@opencode/schema/session-revert"
 import type { Schema } from "effect"
 
@@ -23,6 +23,7 @@ type SessionMessageData = DistributiveOmit<
   Exclude<(typeof SessionMessage.Info)["Encoded"], { readonly type: "user" }> | (typeof SessionStored.User)["Encoded"],
   "type" | "id"
 >
+export type SessionPartData = SessionMessage.AssistantContentEncoded
 
 export const SessionTable = sqliteTable(
   "session_v2",
@@ -62,6 +63,7 @@ export const SessionTable = sqliteTable(
       variant?: string
     }>(),
     ...Timestamps,
+    time_busy: integer(),
     time_idle: integer(),
     time_viewed: integer(),
     idle_outcome: text().$type<NonNullable<Session.Info["outcome"]>>(),
@@ -102,28 +104,26 @@ export const SessionMessageTable = sqliteTable(
   ],
 )
 
-export const SessionPendingTable = sqliteTable(
-  "session_pending",
+export const SessionPartTable = sqliteTable(
+  "session_part",
   {
-    id: text().$type<SessionMessage.ID>().primaryKey(),
+    message_id: text()
+      .$type<SessionMessage.ID>()
+      .notNull()
+      .references(() => SessionMessageTable.id, { onDelete: "cascade" }),
     session_id: text()
       .$type<SessionSchema.ID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
-    type: text().$type<SessionInbox.Info["type"]>().notNull(),
-    data: text({ mode: "json" }).$type<UserPayload | SyntheticPayload | Record<string, never>>().notNull(),
-    delivery: text().$type<SessionInbox.Delivery>(),
-    admitted_seq: integer().notNull(),
-    time_created: integer()
-      .notNull()
-      .$default(() => Date.now()),
+    ordinal: integer().notNull(),
+    type: text().$type<SessionMessage.AssistantContent["type"]>().notNull(),
+    call_id: text(),
+    ...Timestamps,
+    data: text({ mode: "json" }).notNull().$type<SessionPartData>(),
   },
   (table) => [
-    index("session_pending_session_delivery_seq_idx").on(table.session_id, table.delivery, table.admitted_seq),
-    uniqueIndex("session_pending_session_compaction_idx")
-      .on(table.session_id)
-      .where(sql`${table.type} = 'compaction'`),
-    uniqueIndex("session_pending_session_admitted_seq_idx").on(table.session_id, table.admitted_seq),
+    primaryKey({ columns: [table.message_id, table.ordinal] }),
+    index("session_part_session_message_idx").on(table.session_id, table.message_id, table.ordinal),
   ],
 )
 

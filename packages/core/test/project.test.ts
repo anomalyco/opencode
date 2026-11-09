@@ -14,7 +14,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Hash } from "@opencode/util/hash"
 import { initGit } from "./fixture/git"
 import { countingSpawner } from "./fixture/spawn"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Project.node, Database.node, Bus.node])))
@@ -174,10 +174,7 @@ describe("Project archiving", () => {
 
   it.live("archives projects whose directories are gone and unarchives them on resolve", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       const kept = path.join(tmp.path, "kept")
       const removed = path.join(tmp.path, "removed")
       yield* Effect.promise(() => Promise.all([fs.mkdir(kept), fs.mkdir(removed)]))
@@ -219,10 +216,7 @@ describe("Project archiving", () => {
 
   it.live("moves the canonical directory to a surviving clone instead of archiving", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       const main = path.join(tmp.path, "repo")
       const clone = path.join(tmp.path, "clone")
       const linked = path.join(tmp.path, "linked")
@@ -340,10 +334,7 @@ async function rootCommit(dir: string) {
 describe("Project.resolve", () => {
   it.live("creates distinct deterministic projects for exact markerless directories", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       const project = yield* Project.Service
       const nested = path.join(tmp.path, "notes", "drafts")
       yield* Effect.promise(() => fs.mkdir(nested, { recursive: true }))
@@ -365,10 +356,7 @@ describe("Project.resolve", () => {
 
   it.live("repository markers override markerless directory projects", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       const nested = path.join(tmp.path, "packages", "app")
       yield* Effect.promise(() => fs.mkdir(nested, { recursive: true }))
       const project = yield* Project.Service
@@ -388,10 +376,7 @@ describe("Project.resolve", () => {
 
   it.live("does not publish project updates for first or repeated resolutions", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
       const project = yield* Project.Service
       const bus = yield* Bus.Service
@@ -411,10 +396,7 @@ describe("Project.resolve", () => {
 
   it.live("publishes preserved project metadata when its canonical directory is renamed", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       const before = path.join(tmp.path, "before")
       const after = path.join(tmp.path, "after")
       yield* Effect.promise(() => fs.mkdir(before))
@@ -447,10 +429,7 @@ describe("Project.resolve", () => {
 
   it.live("keeps the canonical project directory when opening another clone", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       const main = path.join(tmp.path, "repo")
       const clone = path.join(tmp.path, "other-clone")
       const linked = path.join(tmp.path, "linked")
@@ -485,10 +464,7 @@ describe("Project.resolve", () => {
 
   it.live("returns git global for repo with no commits and no remote", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(tmp.path))
       const project = yield* Project.Service
 
@@ -504,10 +480,7 @@ describe("Project.resolve", () => {
 
   it.live("falls back to root commit when origin is missing", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(tmp.path, { commit: true }))
       const project = yield* Project.Service
 
@@ -523,10 +496,7 @@ describe("Project.resolve", () => {
 
   it.live("prefers normalized origin over root commit", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:Acme/App.git" }))
       const project = yield* Project.Service
 
@@ -541,14 +511,8 @@ describe("Project.resolve", () => {
 
   it.live("normalizes ssh and https remotes to the same id", () =>
     Effect.gen(function* () {
-      const ssh = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
-      const https = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const ssh = yield* tmpdirScoped()
+      const https = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(ssh.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
       yield* Effect.promise(() => initRepo(https.path, { commit: true, remote: "https://github.com/owner/repo.git" }))
       const project = yield* Project.Service
@@ -563,10 +527,7 @@ describe("Project.resolve", () => {
 
   it.live("ignores file remotes and falls back to root commit", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: `file://${tmp.path}` }))
       const project = yield* Project.Service
 
@@ -578,10 +539,7 @@ describe("Project.resolve", () => {
 
   it.live("returns previous cached id from common dir", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
       yield* Effect.promise(() => Bun.write(path.join(tmp.path, ".git", "opencode"), "old-id"))
       const project = yield* Project.Service
@@ -595,10 +553,7 @@ describe("Project.resolve", () => {
 
   it.live("does not write the cache while resolving", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
       const project = yield* Project.Service
 
@@ -610,10 +565,7 @@ describe("Project.resolve", () => {
 
   it.live("resolves from nested directories to repo root", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(tmp.path, { commit: true }))
       yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "a", "b"), { recursive: true }))
       const project = yield* Project.Service
@@ -626,10 +578,7 @@ describe("Project.resolve", () => {
 
   it.live("prefers git when both git and mercurial metadata exist", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(tmp.path, { commit: true }))
       yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, ".hg")))
       const project = yield* Project.Service
@@ -642,10 +591,7 @@ describe("Project.resolve", () => {
 
   it.live("prefers the nearest mercurial marker over an outer git repository", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       const nested = path.join(tmp.path, "nested")
       yield* Effect.promise(async () => {
         await initRepo(tmp.path, { commit: true })
@@ -663,10 +609,7 @@ describe("Project.resolve", () => {
 
   it.live("prefers the nearest git marker over an outer mercurial repository", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       const nested = path.join(tmp.path, "nested")
       yield* Effect.promise(async () => {
         await fs.mkdir(path.join(tmp.path, ".hg"))
@@ -684,10 +627,7 @@ describe("Project.resolve", () => {
 
   it.live("returns global id for unreadable mercurial metadata", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, ".hg")))
       const project = yield* Project.Service
 
@@ -700,10 +640,7 @@ describe("Project.resolve", () => {
 
   it.live("linked worktree returns opened worktree directory and previous from common dir", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       const worktree = `${tmp.path}-worktree`
       yield* Effect.addFinalizer(() =>
         Effect.promise(() => $`rm -rf ${worktree}`.quiet().nothrow()).pipe(Effect.ignore),
@@ -759,10 +696,7 @@ describe("Project.resolve", () => {
 
   testEffect(Layer.empty).live("reuses git discovery until git metadata changes", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       const nested = path.join(tmp.path, "packages", "app")
       yield* Effect.promise(async () => {
         await initRepo(tmp.path, { commit: true })
@@ -789,10 +723,7 @@ describe("Project.resolve", () => {
 
   testEffect(Layer.empty).live("does not cache a transient git failure", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
       let failRemote = true
       const { layer } = counted((args) => {
@@ -813,10 +744,7 @@ describe("Project.resolve", () => {
 
   testEffect(Layer.empty).live("sees the first commit in a reftable repository", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       const supported = yield* Effect.promise(
         async () => (await $`git init -q --ref-format=reftable ${tmp.path}`.nothrow().quiet()).exitCode === 0,
       )

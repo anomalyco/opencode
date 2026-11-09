@@ -540,6 +540,44 @@ describe("SessionRestart background recovery", () => {
     }),
   )
 
+  it.effect("delivers an image outcome persisted before its notification, and cancels one still running", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const jobs = yield* Job.Service
+      const sessionID = Session.ID.make("ses_background_image")
+      yield* seedSessions(database, [sessionID])
+      const recovery = (path: string) => ({ kind: "image" as const, sessionID, path, model: "test/painter" })
+      yield* jobs.start({
+        id: "image_done",
+        type: "experimental_image_generate",
+        recovery: recovery("/tmp/done.png"),
+        run: Effect.succeed("Image request finished. Saved image: /tmp/done.png (test/painter)."),
+      })
+      yield* jobs.background("image_done")
+      yield* jobs.wait({ id: "image_done" })
+      yield* jobs.start({
+        id: "image_running",
+        type: "experimental_image_generate",
+        recovery: recovery("/tmp/running.png"),
+        run: Effect.never,
+      })
+      yield* jobs.background("image_running")
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const restarted = yield* Job.make.pipe(Effect.provideService(Scope.Scope, scope))
+      const context = yield* buildExecution(scope, () => Effect.void, undefined, restarted)
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+
+      const inbox = yield* SessionInbox.list(database.db, sessionID)
+      expect(inbox.map((item) => (item.type === "synthetic" ? item.payload.text : undefined)).toSorted()).toEqual([
+        '<image id="image_done" state="completed">\nImage request finished. Saved image: /tmp/done.png (test/painter).\n</image>',
+        '<image id="image_running" state="cancelled">\nImage request for /tmp/running.png was cancelled because the server restarted.\n</image>',
+      ])
+      expect(yield* restarted.pendingBackground).toEqual([])
+    }),
+  )
+
   for (const delivered of [false, true]) {
     it.effect(`does not duplicate a shell notification already ${delivered ? "delivered" : "admitted"}`, () =>
       Effect.gen(function* () {
