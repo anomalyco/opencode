@@ -74,7 +74,8 @@ impl Transport for Server {
                 ("POST", path) if path.ends_with("/generate") => {
                     gate.acquire().await.map_err(|error| error.to_string())?.forget();
                     let question = seen.body["prompt"].as_str().unwrap_or_default().lines().last().unwrap_or_default();
-                    (200, json!({ "data": { "text": answer(question) } }))
+                    let tokens = json!({ "input": 1, "output": 1, "reasoning": 0, "cache": { "read": 0, "write": 0 } });
+                    (200, json!({ "data": { "text": answer(question), "tokens": tokens, "cost": 0 } }))
                 }
                 _ => support::base(&seen, DIRECTORY),
             };

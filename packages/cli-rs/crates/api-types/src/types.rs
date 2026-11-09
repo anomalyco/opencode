@@ -2706,6 +2706,9 @@ pub struct SessionGenerateInput {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionGenerateOutput {
     pub text: String,
+    pub tokens: TokenUsageInfo,
+    #[serde(serialize_with = "crate::ser::number")]
+    pub cost: MoneyUSD,
 }
 
 /// Input of `Client::session_interrupt`.
