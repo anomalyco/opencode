@@ -1,0 +1,765 @@
+{
+  "scenario": "E.6b/right-padding",
+  "width": 60,
+  "height": 50,
+  "directory": "/tmp/opencode/packages/tui",
+  "config": {
+    "session": {
+      "grouping": "none"
+    },
+    "animations": false,
+    "experimental": {
+      "new-designs": true
+    }
+  },
+  "args": {
+    "sessionID": "ses_pad"
+  },
+  "routes": [
+    {
+      "path": "/api/session/ses_pad",
+      "json": {
+        "data": {
+          "id": "ses_pad",
+          "title": "Pad the blocks",
+          "projectID": "proj_test",
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "time": {
+            "created": 2,
+            "updated": 2
+          },
+          "location": {
+            "directory": "/tmp/opencode/packages/tui"
+          },
+          "revert": {
+            "messageID": "msg_3",
+            "files": [
+              {
+                "file": "src/components/navigation/sidebar/sections/project-tree/expanded-folder-row.tsx",
+                "patch": "",
+                "additions": 12,
+                "deletions": 3,
+                "status": "modified"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "path": "/api/session/ses_pad/message",
+      "json": {
+        "data": [
+          {
+            "id": "msg_3",
+            "type": "user",
+            "text": "Undo this one",
+            "time": {
+              "created": 3000
+            }
+          },
+          {
+            "id": "msg_2",
+            "type": "assistant",
+            "agent": "build",
+            "model": {
+              "providerID": "provider",
+              "id": "model"
+            },
+            "content": [
+              {
+                "type": "tool",
+                "id": "call_1",
+                "name": "write",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "filePath": "/tmp/opencode/packages/tui/src/components/navigation/sidebar/sections/project-tree/expanded-folder-row.tsx",
+                    "content": "export {}\n"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Wrote"
+                    }
+                  ],
+                  "metadata": {}
+                },
+                "time": {
+                  "created": 1600,
+                  "completed": 1700
+                }
+              },
+              {
+                "type": "tool",
+                "id": "call_2",
+                "name": "apply_patch",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "patchText": "*** Begin Patch"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Applied"
+                    }
+                  ],
+                  "metadata": {
+                    "files": [
+                      {
+                        "file": "src/components/navigation/sidebar/sections/project-tree/expanded-folder-row.tsx",
+                        "filePath": "/tmp/opencode/packages/tui/src/components/navigation/sidebar/sections/project-tree/expanded-folder-row.tsx",
+                        "type": "delete",
+                        "patch": "",
+                        "additions": 0,
+                        "deletions": 12
+                      }
+                    ]
+                  }
+                },
+                "time": {
+                  "created": 1600,
+                  "completed": 1700
+                }
+              }
+            ],
+            "time": {
+              "created": 2000,
+              "completed": 2500
+            }
+          },
+          {
+            "id": "msg_1",
+            "type": "user",
+            "text": "Rename every expanded folder row in the project tree so that the sidebar and the file picker share one component",
+            "time": {
+              "created": 1000
+            }
+          }
+        ],
+        "cursor": {}
+      }
+    },
+    {
+      "path": "/api/session/ses_pad/inbox",
+      "json": {
+        "data": []
+      }
+    }
+  ],
+  "steps": [
+    {
+      "checkpoint": "open",
+      "until": "message reverted",
+      "fixture": "E.6b/right-padding/open"
+    }
+  ],
+  "requests": {
+    "writes": [],
+    "reads": [
+      {
+        "method": "GET",
+        "path": "/api/agent",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/command",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/config",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": []
+      },
+      {
+        "method": "GET",
+        "path": "/api/experimental/migration/v1",
+        "query": {},
+        "status": 200,
+        "json": {
+          "status": "completed"
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/experimental/session/ses_pad/terminal",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/form",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/fs/list",
+        "query": {
+          "location[directory]": [
+            "<cwd>"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/info",
+        "query": {},
+        "status": 200,
+        "json": {
+          "version": "test",
+          "pid": 0,
+          "urls": [],
+          "paths": {
+            "tmp": "/tmp"
+          },
+          "capabilities": {
+            "persistentPty": true
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/integration",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/location",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "directory": "/tmp/opencode/packages/tui",
+          "project": {
+            "id": "proj_test",
+            "directory": "/tmp/opencode",
+            "canonical": "/tmp/opencode"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/mcp",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/mcp/resource",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": {
+            "resources": [],
+            "templates": []
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/model",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/plugin",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/project",
+        "query": {},
+        "status": 200,
+        "json": []
+      },
+      {
+        "method": "GET",
+        "path": "/api/provider",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/reference",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode/packages/tui",
+              "canonical": "/tmp/opencode/packages/tui"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session",
+        "query": {
+          "limit": [
+            "200"
+          ],
+          "order": [
+            "desc"
+          ],
+          "parentID": [
+            "ses_pad"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "data": [],
+          "cursor": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/active",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_pad",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": {
+            "id": "ses_pad",
+            "title": "Pad the blocks",
+            "projectID": "proj_test",
+            "cost": 0,
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            },
+            "time": {
+              "created": 2,
+              "updated": 2
+            },
+            "location": {
+              "directory": "/tmp/opencode/packages/tui"
+            },
+            "revert": {
+              "messageID": "msg_3",
+              "files": [
+                {
+                  "file": "src/components/navigation/sidebar/sections/project-tree/expanded-folder-row.tsx",
+                  "patch": "",
+                  "additions": 12,
+                  "deletions": 3,
+                  "status": "modified"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_pad/form",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_pad/inbox",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_pad/message",
+        "query": {
+          "limit": [
+            "20"
+          ],
+          "order": [
+            "desc"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "data": [
+            {
+              "id": "msg_3",
+              "type": "user",
+              "text": "Undo this one",
+              "time": {
+                "created": 3000
+              }
+            },
+            {
+              "id": "msg_2",
+              "type": "assistant",
+              "agent": "build",
+              "model": {
+                "providerID": "provider",
+                "id": "model"
+              },
+              "content": [
+                {
+                  "type": "tool",
+                  "id": "call_1",
+                  "name": "write",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "filePath": "/tmp/opencode/packages/tui/src/components/navigation/sidebar/sections/project-tree/expanded-folder-row.tsx",
+                      "content": "export {}\n"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Wrote"
+                      }
+                    ],
+                    "metadata": {}
+                  },
+                  "time": {
+                    "created": 1600,
+                    "completed": 1700
+                  }
+                },
+                {
+                  "type": "tool",
+                  "id": "call_2",
+                  "name": "apply_patch",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "patchText": "*** Begin Patch"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Applied"
+                      }
+                    ],
+                    "metadata": {
+                      "files": [
+                        {
+                          "file": "src/components/navigation/sidebar/sections/project-tree/expanded-folder-row.tsx",
+                          "filePath": "/tmp/opencode/packages/tui/src/components/navigation/sidebar/sections/project-tree/expanded-folder-row.tsx",
+                          "type": "delete",
+                          "patch": "",
+                          "additions": 0,
+                          "deletions": 12
+                        }
+                      ]
+                    }
+                  },
+                  "time": {
+                    "created": 1600,
+                    "completed": 1700
+                  }
+                }
+              ],
+              "time": {
+                "created": 2000,
+                "completed": 2500
+              }
+            },
+            {
+              "id": "msg_1",
+              "type": "user",
+              "text": "Rename every expanded folder row in the project tree so that the sidebar and the file picker share one component",
+              "time": {
+                "created": 1000
+              }
+            }
+          ],
+          "cursor": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_pad/permission",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/shell",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/skill",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/vcs",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": {
+            "branch": {
+              "current": "main",
+              "default": "main"
+            }
+          }
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/api/rpc/opencode.goal/get",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "body": {
+          "input": {
+            "sessionID": "ses_pad"
+          }
+        },
+        "status": 200,
+        "json": {
+          "output": null
+        }
+      }
+    ]
+  }
+}
