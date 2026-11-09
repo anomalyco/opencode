@@ -167,6 +167,12 @@ export type Event =
       readonly embed: string
     }
   | {
+      readonly type: "pane.unembed"
+      readonly sessionKey: string
+      readonly attempt: number
+      readonly tabID: Browser.TabID
+    }
+  | {
       readonly type: "pane.focus"
       readonly sessionKey: string
       readonly attempt: number
@@ -412,13 +418,22 @@ function ipcChanged(state: Open, ipc: Ipc): Transition {
   return listed(state.sessions).reduce<Transition & { state: Open }>(
     (result, [key, attachment]) => {
       const phase = attachment.phase
-      const bound = phase.status === "registering" || phase.status === "ready" || phase.status === "backoff"
+
+      const bound =
+        phase.status === "registering" ||
+        phase.status === "ready" ||
+        phase.status === "backoff" ||
+        phase.status === "reconnecting"
+
       const lost = phase.status === "suspended" && phase.reason === "ipc"
 
       if (ipc.status !== "active") {
-        if (!bound) return result
+        // The native pages go with the pane, so no attachment keeps an embed across the reload, locked ones included.
+        const cleared = Object.keys(attachment.embeds).length ? { ...attachment, embeds: {} } : attachment
 
-        return put(result.state, key, suspend(attachment, "ipc"), [...result.effects, ...stop(key, phase)])
+        if (!bound) return cleared === attachment ? result : put(result.state, key, cleared)
+
+        return put(result.state, key, suspend(cleared, "ipc"), [...result.effects, ...stop(key, phase)])
       }
 
       if (!lost && !(restarted && bound)) return result
@@ -540,7 +555,8 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
 
       if (event.unavailable) return put(state, key, suspend(attachment, "ipc"), stop(key, phase))
 
-      if (event.locked) return put({ ...state, locked: true }, key, hold(attachment, "locked"), stop(key, phase))
+      if (event.locked)
+        return state.locked ? put(state, key, hold(attachment, "locked"), stop(key, phase)) : backoff(state, key, attachment, phase)
 
       // Main closed a binding it took; its closed-state event decides, and the register timeout bounds the wait.
       if (event.closed) return { state, effects: [] }
@@ -586,6 +602,15 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
       return put(state, key, { ...attachment, embeds: { ...attachment.embeds, [event.tabID]: event.embed } })
     }
 
+    case "pane.unembed": {
+      if (!current(phase, event.attempt) || !(event.tabID in attachment.embeds)) return { state, effects: [] }
+
+      const embeds = { ...attachment.embeds }
+      delete embeds[event.tabID]
+
+      return put(state, key, { ...attachment, embeds })
+    }
+
     case "pane.focus": {
       if (!current(phase, event.attempt)) return { state, effects: [] }
 
@@ -626,11 +651,19 @@ function located(state: Open, key: string, attachment: Attachment, value: boolea
 function locked(state: Open): Transition {
   return listed(state.sessions).reduce<Transition & { state: Open }>(
     (result, [key, attachment]) => {
-      if (attachment.phase.status === "blocked") return result
+      const phase = attachment.phase
+
+      if (
+        phase.status !== "registering" &&
+        phase.status !== "ready" &&
+        phase.status !== "backoff" &&
+        phase.status !== "reconnecting"
+      )
+        return result
 
       return put(result.state, key, hold(attachment, "locked", attachment.browser), [
         ...result.effects,
-        ...stop(key, attachment.phase),
+        ...stop(key, phase),
       ])
     },
     { state: { ...state, locked: true }, effects: [] },
@@ -681,7 +714,12 @@ function wake(state: Open, key: string, attachment: Attachment, created: boolean
 
   if (state.locked) return { state, effects: [] }
 
-  if (phase.status === "registering" || phase.status === "ready" || phase.status === "backoff")
+  if (
+    phase.status === "registering" ||
+    phase.status === "ready" ||
+    phase.status === "backoff" ||
+    phase.status === "reconnecting"
+  )
     return { state, effects: [] }
 
   if (phase.status === "blocked" && (phase.reason === "replaced" || !created)) return { state, effects: [] }
@@ -737,7 +775,7 @@ function command(
       request,
     )
 
-  if (phase.status === "backoff" || phase.status === "blocked") {
+  if (phase.status === "backoff" || phase.status === "blocked" || phase.status === "reconnecting") {
     const error =
       phase.status === "blocked" && phase.reason === "replaced" ? "browser.pane.replaced" : "browser.pane.unavailable"
 
@@ -882,12 +920,10 @@ function paneState(
     const next =
       event.error === "browser.pane.locked" ? hold(attachment, reason, browser) : suspend(attachment, reason, browser)
 
-    return put(
-      event.error === "browser.pane.locked" ? { ...state, locked: true } : state,
-      key,
-      { ...next, strip: mirrored?.strip ?? attachment.strip },
-      [...stop(key, phase), ...(mirrored?.effects ?? [])],
-    )
+    return put(state, key, { ...next, strip: mirrored?.strip ?? attachment.strip }, [
+      ...stop(key, phase),
+      ...(mirrored?.effects ?? []),
+    ])
   }
 
   const mirrored = mirror(key, attachment.strip, event.state, true)

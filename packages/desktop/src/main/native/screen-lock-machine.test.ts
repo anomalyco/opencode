@@ -58,6 +58,14 @@ describe("screen lock machine", () => {
     ).toEqual([true, true, false])
   })
 
+  test("a resume whose idle state is unknown keeps a probed lock", () => {
+    expect(replay([{ type: "probed", idle: "locked" }, { type: "suspended" }, { type: "resumed", idle: "unknown" }])).toEqual([
+      true,
+      true,
+      true,
+    ])
+  })
+
   test("an explicit unlock clears a stale probe", () => {
     expect(
       replay([

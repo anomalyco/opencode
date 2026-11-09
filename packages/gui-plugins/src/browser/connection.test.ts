@@ -25,6 +25,7 @@ function fixture(reject?: Error) {
 
       if (reject) throw reject
     },
+    release: async () => undefined,
     load: async () => undefined,
     command: async () => undefined,
     inspect: async () => undefined,

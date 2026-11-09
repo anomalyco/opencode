@@ -35,6 +35,8 @@ export const PaneEvent = Schema.Union([
   }),
   // A tab's page exists; the renderer lays it out through this host embed.
   Schema.Struct({ type: Schema.Literal("embed"), tabID: Browser.TabID, embed: text(256) }),
+  // The tab's page is gone; the renderer drops its stale native view.
+  Schema.Struct({ type: Schema.Literal("unembed"), tabID: Browser.TabID }),
   // The page's element picker started, stopped, or picked an element.
   Schema.Struct({
     type: Schema.Literal("inspect"),
@@ -101,6 +103,8 @@ export type PaneCloseReason = typeof PaneCloseReason.Type
  */
 export const BrowserPane = Ipc.define({
   id: "browser.pane",
+  // The authoritative lock snapshot; main pushes it with provider.changed().
+  state: Schema.Struct({ locked: Schema.Boolean }),
   methods: {
     register: {
       input: Schema.Struct({
@@ -130,10 +134,15 @@ export const BrowserPane = Ipc.define({
     // Deletes the cookies the page's address can read and its origin's stored data, then reloads the page.
     clearSite: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
     close: { input: Schema.Struct({ binding }) },
+    // The renderer detached a session: release its window record even when it has no active binding.
+    release: {
+      input: Schema.Struct({
+        server: text(16_384),
+        session: text(256).check(Schema.isStartingWith("ses")),
+      }),
+    },
   },
   events: {
     event: Schema.Struct({ binding: Schema.String, event: PaneEvent }),
-    // The screen locked or unlocked, to every window.
-    screen: Schema.Struct({ locked: Schema.Boolean }),
   },
 })

@@ -41,7 +41,12 @@ export function transitionScreenLock(state: ScreenLockState, event: ScreenLockEv
 
   if (event.type === "suspended") return state.sleeping ? state : { ...state, sleeping: true }
 
-  if (event.type === "resumed") return same(state, { ...state, sleeping: false, probed: event.idle === "locked" })
+  if (event.type === "resumed")
+    return same(state, {
+      ...state,
+      sleeping: false,
+      probed: event.idle === "unknown" ? state.probed : event.idle === "locked",
+    })
 
   if (event.idle === "unknown") return state
 

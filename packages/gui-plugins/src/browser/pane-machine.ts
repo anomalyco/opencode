@@ -102,6 +102,13 @@ export type BindingEvent =
       readonly tab: Browser.Tab
       readonly error?: string
     }
+  /** A page that was already live when a binding adopted it is dead; report its tab as unloaded. */
+  | {
+      readonly type: "tab.failed"
+      readonly tabID: Browser.TabID
+      readonly tab: Browser.Tab
+      readonly error: string
+    }
   /** The page's renderer crashed, its debugger detached, or it failed to become ready. */
   | {
       readonly type: "tab.crashed"
@@ -398,6 +405,26 @@ function transitionAttached(state: AttachedBinding, event: BindingEvent): Bindin
     const focusedTabID = state.focusedTabID === event.tabID ? (tabs.keys().next().value ?? null) : state.focusedTabID
 
     return withoutTab({ ...state, tabs, focusedTabID }, event.tabID, closed, undefined)
+  }
+
+  if (event.type === "tab.failed") {
+    const slot = state.tabs.get(event.tabID)
+
+    if (!slot) return { state, effects: [] }
+
+    const tabs = new Map(state.tabs).set(event.tabID, {
+      status: "unloaded",
+      tab: {
+        ...event.tab,
+        loading: false,
+        loadError: event.error,
+        canGoBack: false,
+        canGoForward: false,
+        generation: Math.max(slot.tab.generation, event.tab.generation) + 1,
+      },
+    })
+
+    return publish({ ...state, tabs }, event.error)
   }
 
   if (event.type !== "tab.published" && event.type !== "tab.crashed") return { state, effects: [] }

@@ -1,5 +1,5 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
-import electron, { type BrowserWindow, type WebContents } from "electron"
+import electron, { type BrowserWindow, type WebContents, type WebContentsView } from "electron"
 import type { Protocol } from "devtools-protocol"
 import { Schema } from "effect"
 import type { Embeds } from "@opencode/plugin/gui/main"
@@ -171,6 +171,183 @@ function runStopError(reason: RunStopReason) {
       return new Error(
         "Browser tab was closed. Call browser.tabs.list({}) and choose an existing tabID; do not reuse the closed tab's refs.",
       )
+  }
+}
+
+/** A floating pill in a click-through child window, above the page's native view without freezing it. */
+function createDisconnectedPill(win: BrowserWindow, page: WebContentsView) {
+  const pill = new electron.BrowserWindow({
+    parent: win,
+    frame: false,
+    transparent: true,
+    backgroundColor: "#00000000",
+    show: false,
+    focusable: false,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    closable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      devTools: false,
+      backgroundThrottling: false,
+    },
+  })
+
+  pill.setIgnoreMouseEvents(true)
+  pill.setBackgroundColor("#00000000")
+  pill.setMenuBarVisibility(false)
+
+  let width = 144
+  let height = 44
+  let wanted = false
+  let pageVisible = false
+  let shown = false
+
+  const hide = () => {
+    if (!shown) return
+    shown = false
+
+    if (!pill.isDestroyed()) pill.hide()
+  }
+
+  // Linux window transparency needs a compositor. Where there is none, shape the window to the pill so the
+  // transparent padding never paints as a black box; the border carries the raised edge instead of the clipped shadow.
+  const clipPill = () => {
+    if (process.platform !== "linux" || pill.isDestroyed()) return
+    const bodyWidth = Math.max(1, width - 12)
+    const bodyHeight = Math.max(1, height - 12)
+    const radius = 8
+    const rects: Electron.Rectangle[] = []
+
+    for (let row = 0; row < bodyHeight; row++) {
+      const edge = Math.min(row, bodyHeight - 1 - row)
+      const inset = edge >= radius ? 0 : Math.round(radius - Math.sqrt(radius * radius - (radius - edge - 0.5) ** 2))
+      rects.push({ x: 6 + inset, y: 6 + row, width: Math.max(1, bodyWidth - inset * 2), height: 1 })
+    }
+
+    try {
+      pill.setShape(rects)
+    } catch {
+      // A compositor or platform that cannot shape keeps the transparent window.
+    }
+  }
+
+  const layout = () => {
+    if (!wanted || !pageVisible || win.isDestroyed() || pill.isDestroyed()) return
+    const bounds = page.getBounds()
+
+    if (bounds.width <= 0 || bounds.height <= 0) return
+    const actual = Math.min(width, Math.max(96, bounds.width - 16))
+    const content = win.getContentBounds()
+    pill.setBounds({
+      x: content.x + bounds.x + Math.round((bounds.width - actual) / 2),
+      y: content.y + bounds.y + 2,
+      width: actual,
+      height,
+    })
+    clipPill()
+
+    if (!shown) {
+      shown = true
+      pill.showInactive()
+    }
+  }
+
+  const sync = () => {
+    if (wanted && pageVisible) layout()
+    else hide()
+  }
+
+  const paint = () => {
+    const dark = electron.nativeTheme.shouldUseDarkColors
+    const background = dark ? "#242424" : "#ffffff"
+    const text = dark ? "#fafafa" : "#161616"
+    const muted = dark ? "#aeaeae" : "#5c5c5c"
+    const ring = dark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.12)"
+
+    const shadow = dark
+      ? "0 0 0 0.5px rgba(255,255,255,0.16), 0 2px 4px rgba(0,0,0,0.30), 0 1px 2px rgba(0,0,0,0.30)"
+      : "0 0 0 0.5px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.10)"
+
+    const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+      html,body{margin:0;background:transparent;overflow:hidden}
+      body{width:max-content;font-family:"Inter Variable",Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+      .frame{display:inline-block;padding:6px}
+      .pill{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:0.5px solid ${ring};border-radius:8px;background:${background};color:${text};box-shadow:${shadow};font-size:13px;font-weight:440;line-height:16px;letter-spacing:-0.04px;white-space:nowrap}
+      svg{display:block;flex:none;color:${muted}}
+    </style></head><body><div class="frame" id="frame"><div class="pill" role="status">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.45 12.2h6.95a2.7 2.7 0 0 0 .35-5.38 3.85 3.85 0 0 0-7.3-1.02 3 3 0 0 0-.1 6.4Z"/><path d="m2.3 2.3 11.4 11.4"/></svg>
+      <span>Disconnected</span>
+    </div></div></body></html>`
+
+    if (process.platform === "linux") pill.setBackgroundColor(background)
+    void pill.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`).catch(() => undefined)
+  }
+
+  const measure = () => {
+    void pill.webContents
+      .executeJavaScript(
+        `(() => {
+          const el = document.getElementById("frame")
+          if (!el) return undefined
+          const rect = el.getBoundingClientRect()
+          return { width: Math.ceil(rect.width), height: Math.ceil(rect.height) }
+        })()`,
+        true,
+      )
+      .then((size: { width?: number; height?: number } | undefined) => {
+        if (!size?.width || !size.height) return
+        width = Math.max(96, size.width)
+        height = Math.max(32, size.height)
+        clipPill()
+        layout()
+      })
+      .catch(() => undefined)
+  }
+
+  const moved = () => layout()
+  const shownWindow = () => sync()
+  const hiddenWindow = () => hide()
+
+  pill.webContents.on("did-finish-load", measure)
+  page.on("bounds-changed", moved)
+  win.on("move", moved)
+  win.on("resize", moved)
+  win.on("show", shownWindow)
+  win.on("restore", shownWindow)
+  win.on("hide", hiddenWindow)
+  win.on("minimize", hiddenWindow)
+  electron.nativeTheme.on("updated", paint)
+  paint()
+
+  return {
+    setDisconnected(visible: boolean) {
+      wanted = visible
+      sync()
+    },
+    setPageVisible(visible: boolean) {
+      pageVisible = visible
+      sync()
+    },
+    dispose() {
+      electron.nativeTheme.off("updated", paint)
+      page.off("bounds-changed", moved)
+      win.off("move", moved)
+      win.off("resize", moved)
+      win.off("show", shownWindow)
+      win.off("restore", shownWindow)
+      win.off("hide", hiddenWindow)
+      win.off("minimize", hiddenWindow)
+      hide()
+
+      if (!pill.isDestroyed()) pill.destroy()
+    },
   }
 }
 
@@ -553,9 +730,12 @@ export function createBrowserPage(
   // Hidden tabs keep a desktop-sized viewport until the renderer lays the embed out.
   view.setBounds({ x: 0, y: 0, width: 1000, height: 700 })
   const embed = options.embeds.create(view, win)
+  const disconnected = createDisconnectedPill(win, view)
   // A hidden page cannot be picked from, and a comment's frozen still already shows the
   // picked element, so hiding ends the picker, any pick in progress, and the highlight.
   embed.on("visible", (visible) => {
+    disconnected.setPageVisible(visible)
+
     if (!visible) void dispatchPicker({ type: "embed.hidden" })
   })
 
@@ -605,6 +785,10 @@ export function createBrowserPage(
     ready,
     /** The host embed the renderer lays this page out with. */
     embed: embed.id,
+    /** Shows the floating disconnected pill above this page; hidden while the page itself is hidden. */
+    setDisconnected(visible: boolean) {
+      disconnected.setDisconnected(visible)
+    },
     async inspect(enabled: boolean) {
       if (closed()) return
       await ready
@@ -684,6 +868,7 @@ export function createBrowserPage(
       cdp.dispose()
       refs.clear()
       picked.clear()
+      disconnected.dispose()
       embed.dispose()
 
       if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false })

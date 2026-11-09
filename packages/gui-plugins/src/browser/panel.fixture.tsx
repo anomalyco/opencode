@@ -330,7 +330,8 @@ export function mountBrowserPane(input: PaneHost) {
           if (tab) emit(value.session, { type: "embed", tabID: tab.id, embed: `embed-${tab.title}` })
         })
       },
-      load: async () => undefined,
+      release: async () => undefined,
+    load: async () => undefined,
       command: async (value) => {
         const command = value.command
         // Main refuses what it does not open before anything happens, naming why.
@@ -957,7 +958,8 @@ export function mountBrowserRegion(input: RegionHost) {
           { binding: value.binding, session: value.session, restore: value.restore?.tabs.length ?? 0 },
         ])
       },
-      load: async () => undefined,
+      release: async () => undefined,
+    load: async () => undefined,
       command: async (value) => {
         if (value.command.type === "tabs.open") setStore("opens", (count) => count + 1)
 

@@ -81,6 +81,7 @@ const setup: Plugin.MainSetup = (ctx) => {
   }
 
   const provider = ctx.provide(BrowserPane, {
+    state: () => ({ locked: screenLock.locked() }),
     register: async (input, caller) => {
       // Refused before the pane loads, so a locked screen starts no browser.
       if (screenLock.locked()) throw new Error("browser.pane.locked")
@@ -95,6 +96,7 @@ const setup: Plugin.MainSetup = (ctx) => {
     site: async (input, caller) => (await pane()).site(caller.window, input.binding, input.tabID),
     clearSite: async (input, caller) => (await pane()).clearSite(caller.window, input.binding, input.tabID),
     close: async (input, caller) => (await pane()).close(caller.window, input.binding),
+    release: async (input, caller) => (await pane()).release(caller.window, input.server, input.session),
   })
 
   // A locked screen ends every attachment, which drops this desktop's browser tools from the server's sessions. Windows
@@ -103,8 +105,11 @@ const setup: Plugin.MainSetup = (ctx) => {
     screenLock.on((locked) => {
       const lookup = selectPane(paneState)
 
+      // The authoritative state reaches the windows before the pane's locked events, so a late lock close reads as
+      // stale only when the screen really is unlocked.
+      provider.changed()
+
       if (locked && lookup.kind === "ready") lookup.pane.lock()
-      provider.emit("screen", { locked })
     }),
   )
 

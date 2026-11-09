@@ -44,10 +44,18 @@ type Target = { readonly server: string; readonly session: string; readonly rest
 type PageOwner = { binding: string; attempt: number }
 
 /** A page kept for a session across bindings. The same WebContents and partition serve every reconnection. */
-type PageEntry = { readonly tabID: Browser.TabID; readonly page: BrowserPage; owner: PageOwner }
+type PageEntry = {
+  readonly tabID: Browser.TabID
+  readonly page: BrowserPage
+  owner: PageOwner
+  /** A crash or debugger detach seen while unbound; checked again when a binding adopts the page. */
+  failure?: string
+}
 
-/** A session's browser, kept while the app runs so a reconnect adopts its live pages. */
+/** A window's browser for one session. Pages stay with the window that created them across bindings. */
 type SessionRecord = {
+  readonly liveKey: string
+  /** Tab URLs are saved per session, not per window. */
   readonly storageKey: string
   readonly partition: string
   readonly pages: Map<Browser.TabID, PageEntry>
@@ -57,6 +65,8 @@ type SessionRecord = {
   upstream?: BrowserNetworkUpstream
   /** The binding currently allowed to use this record. */
   binding?: string
+  /** Window destroy/navigation listeners belong to the record, so unbound records cannot leak. */
+  cleanup: () => void
 }
 
 /** The Electron and Effect handles of one binding; its phase lives in the pane machine. */
@@ -94,7 +104,7 @@ export function createBrowserPane(input: {
   const machine: PaneMachine = { state: createPaneState() }
   const handles = new Map<string, Handle>()
   const records = new Map<string, SessionRecord>()
-  /** One createRecord per session at a time; concurrent registrations share the same record. */
+  /** One createRecord per window and session at a time; concurrent registrations share the same record. */
   const creating = new Map<string, Promise<SessionRecord>>()
   let disposed = false
   const restore = createBrowserRestoreStore(input.storage)
@@ -124,7 +134,8 @@ export function createBrowserPane(input: {
       if (win.isDestroyed() || win.webContents.isDestroyed()) throw new Error("browser.pane.owner.unavailable")
       const sessionID = SessionID.make(target.session)
       const storageKey = `${target.server}\n${sessionID}`
-      const existing = records.get(storageKey)
+      const liveKey = `${window}\n${storageKey}`
+      const existing = records.get(liveKey)
       // One window owns a session's pages at a time. A disconnected record has no binding, so the next register adopts it.
 
       if (existing?.binding && selectBinding(machine.state, existing.binding))
@@ -155,14 +166,14 @@ export function createBrowserPane(input: {
       let record: SessionRecord
 
       try {
-        record = existing ?? (await createRecordOnce(storageKey))
+        record = existing ?? (await createRecordOnce(liveKey, storageKey, win))
       } catch (cause) {
         // The owner listeners were installed before the record existed; a failed create must not leave them behind.
         cleanup()
         throw cause
       }
 
-      if (disposed || isPaneDisposed(machine.state) || records.get(storageKey) !== record) {
+      if (disposed || isPaneDisposed(machine.state) || records.get(liveKey) !== record) {
         cleanup()
 
         if (!claimed(record)) await discardRecord(record)
@@ -181,7 +192,7 @@ export function createBrowserPane(input: {
         // Let the other continuations of the same create promise claim the record first. Only an unowned record is
         // discarded; a concurrent register that won keeps it.
         queueMicrotask(() => {
-          if (records.get(storageKey) === record && !claimed(record)) void discardLater(record)
+          if (records.get(liveKey) === record && !claimed(record)) void discardLater(record)
         })
         throw new Error("browser.pane.registration.closed")
       }
@@ -451,6 +462,10 @@ export function createBrowserPane(input: {
       owned(window, binding)
       dispatchBinding(binding, { type: "client.closed" })
     },
+    /** The renderer detached a session; release its window record even if no binding is active. */
+    release(window: number, server: string, session: string) {
+      releaseKey(`${window}\n${server}\n${session}`)
+    },
     /** The screen locked: every attachment ends, so the server drops this desktop's browser tools until it unlocks. */
     lock() {
       // The pages stay live behind the local proxy, but it has no upstream to tunnel through while locked.
@@ -567,23 +582,35 @@ export function createBrowserPane(input: {
     void settled.finally(() => releasing.delete(settled))
   }
 
-  function createRecordOnce(storageKey: string) {
-    const existing = records.get(storageKey)
+  function createRecordOnce(liveKey: string, storageKey: string, win: BrowserWindow) {
+    const existing = records.get(liveKey)
 
     if (existing) return Promise.resolve(existing)
-    const pending = creating.get(storageKey)
+    const pending = creating.get(liveKey)
 
     if (pending) return pending
     let promise: Promise<SessionRecord>
-    promise = createRecord(storageKey).finally(() => {
-      if (creating.get(storageKey) === promise) creating.delete(storageKey)
-    })
-    creating.set(storageKey, promise)
+    promise = createRecord(liveKey, storageKey, win)
+      .then((record) => {
+        // A release while the record was being built took it out of `creating`; do not resurrect it.
+        if (creating.get(liveKey) !== promise) {
+          void discardRecord(record)
+          throw new Error("browser.pane.registration.closed")
+        }
+
+        records.set(liveKey, record)
+
+        return record
+      })
+      .finally(() => {
+        if (creating.get(liveKey) === promise) creating.delete(liveKey)
+      })
+    creating.set(liveKey, promise)
 
     return promise
   }
 
-  async function createRecord(storageKey: string) {
+  async function createRecord(liveKey: string, storageKey: string, win: BrowserWindow) {
     const partition = `opencode-browser-${crypto.randomUUID()}`
 
     let upstream: BrowserNetworkUpstream | undefined
@@ -594,16 +621,19 @@ export function createBrowserPane(input: {
     )
 
     const record: SessionRecord = {
+      liveKey,
       storageKey,
       partition,
       pages: new Map(),
       scoped,
       network,
+      cleanup: () => undefined,
       get upstream() {
         return upstream
       },
       set upstream(value) {
         upstream = value
+        record.pages.forEach((entry) => entry.page.setDisconnected(!value))
       },
     }
 
@@ -617,7 +647,25 @@ export function createBrowserPane(input: {
         }),
       )
 
-    records.set(storageKey, record)
+    // The record owns its window lifecycle. This covers a disconnected or suspended record with no active handle. A
+    // window that went away while the record was being created has no lifecycle left to watch; the registering call
+    // sees its owner gone and discards the record.
+    if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+      const closed = () => releaseKey(liveKey)
+
+      const navigate = (event: Electron.Event<{ isMainFrame: boolean; isSameDocument: boolean }>) => {
+        if (event.isMainFrame && !event.isSameDocument) closed()
+      }
+
+      win.webContents.once("destroyed", closed)
+      win.webContents.on("did-start-navigation", navigate)
+
+      record.cleanup = () => {
+        if (win.isDestroyed()) return
+        win.webContents.off("destroyed", closed)
+        win.webContents.off("did-start-navigation", navigate)
+      }
+    }
 
     return record
   }
@@ -627,9 +675,10 @@ export function createBrowserPane(input: {
 
     if (pending) return pending
 
-    if (records.get(record.storageKey) === record) records.delete(record.storageKey)
+    if (records.get(record.liveKey) === record) records.delete(record.liveKey)
 
     const done = (async () => {
+      record.cleanup()
       record.upstream = undefined
       await record.network.disconnect().catch(() => undefined)
       record.pages.forEach((entry) => release(entry.page))
@@ -645,8 +694,8 @@ export function createBrowserPane(input: {
     return done
   }
 
-  async function releaseRecord(storageKey: string) {
-    const record = records.get(storageKey)
+  async function releaseRecord(liveKey: string) {
+    const record = records.get(liveKey)
 
     if (!record) return
     await discardRecord(record)
@@ -656,8 +705,22 @@ export function createBrowserPane(input: {
     return discardRecord(record)
   }
 
-  function releaseLater(storageKey: string) {
-    const done = releaseRecord(storageKey)
+  function releaseKey(liveKey: string) {
+    const record = records.get(liveKey)
+    const pending = creating.get(liveKey)
+
+    if (pending) {
+      // The record does not exist yet: a register waiting on it sees `registration.closed`, and a later register
+      // starts a fresh record instead of adopting this one.
+      creating.delete(liveKey)
+      void pending.then(discardRecord, () => undefined)
+    }
+
+    if (record) void releaseLater(liveKey)
+  }
+
+  function releaseLater(liveKey: string) {
+    const done = releaseRecord(liveKey)
     releasingRecords.add(done)
     void done.finally(() => releasingRecords.delete(done))
 
@@ -676,9 +739,23 @@ export function createBrowserPane(input: {
     const tabs = new Set(entry.tabs.keys())
 
     record.pages.forEach((page, tabID) => {
-      if (tabs.has(tabID) && !page.page.contents.isDestroyed()) return
+      const dead =
+        page.failure !== undefined ||
+        page.page.contents.isDestroyed() ||
+        page.page.contents.isCrashed() ||
+        !page.page.contents.debugger.isAttached()
+
+      if (tabs.has(tabID) && !dead) return
+
+      const tab = dead
+        ? (entry.tabs.get(tabID)?.tab ?? (page.page.contents.isDestroyed() ? undefined : page.page.state()))
+        : undefined
+
       record.pages.delete(tabID)
       release(page.page)
+      emit(binding, { type: "unembed", tabID })
+
+      if (tab) dispatchBinding(binding, { type: "tab.failed", tabID, tab, error: "page_crashed" })
     })
 
     let attempt = selectNextAttempt(machine.state, binding)
@@ -767,13 +844,16 @@ export function createBrowserPane(input: {
     const focused = () => current() && isFocusedPage(machine.state, owner.binding, id, owner.attempt)
 
     const fail = () => {
-      if (current())
-        dispatchBinding(owner.binding, {
-          type: "tab.crashed",
-          tabID: id,
-          attempt: owner.attempt,
-          tab: page.contents.isDestroyed() ? undefined : page.state(),
-        })
+      if (live) live.failure = "page_crashed"
+
+      if (!current()) return
+      emit(owner.binding, { type: "unembed", tabID: id })
+      dispatchBinding(owner.binding, {
+        type: "tab.crashed",
+        tabID: id,
+        attempt: owner.attempt,
+        tab: page.contents.isDestroyed() ? undefined : page.state(),
+      })
     }
 
     page = createBrowserPage(win, {
@@ -805,7 +885,7 @@ export function createBrowserPane(input: {
       detail: (value) => {
         if (current()) emit(owner.binding, { type: "page", tabID: id, ...value })
       },
-      zoomed: () => handle.pages.forEach((item) => item.page.detail()),
+      zoomed: () => handle.record.pages.forEach((item) => item.page.detail()),
       shortcut: (shortcut) => {
         if (!focused() || win.isDestroyed()) return
 
@@ -828,6 +908,7 @@ export function createBrowserPane(input: {
     live = { tabID: id, page, owner }
     handle.record.pages.set(id, live)
     handle.pages.set(attempt, live)
+    page.setDisconnected(!handle.record.upstream)
     dispatchBinding(binding, { type: "tab.opened", tabID: id, attempt, tab: options.restore ?? page.state() })
     // Straight to the window, not through the server report: the embed is local to this desktop.
     emit(binding, { type: "embed", tabID: id, embed: page.embed })

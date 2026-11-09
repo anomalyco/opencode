@@ -276,6 +276,26 @@ describe("binding close reason", () => {
     expect(locked.effects.map((effect) => effect.type)).not.toContain("remove-restore")
   })
 
+  test("a dead adopted page returns its tab to unloaded with a load error", () => {
+    const failed = play(
+      attached({ tabs: [tab(tabA, dashboard, "Dashboard")], focusedTabID: tabA }),
+      on({ type: "tab.failed", tabID: tabA, tab: tab(tabA, dashboard, "Dashboard", 1), error: "page_crashed" }),
+    )
+
+    expect(entry(failed.state).tabs.get(tabA)).toMatchObject({
+      status: "unloaded",
+      tab: { id: tabA, url: dashboard, loadError: "page_crashed" },
+    })
+    expect(failed.effects).toContainEqual(
+      expect.objectContaining({
+        type: "report",
+        event: expect.objectContaining({
+          state: expect.objectContaining({ tabs: [expect.objectContaining({ id: tabA, loadError: "page_crashed" })] }),
+        }),
+      }),
+    )
+  })
+
   test("the registration timeout closes only a binding still connecting", () => {
     const timedOut = play(createPaneState(), registered(), on({ type: "register.timed-out" }))
     expect(closeEvents(timedOut.effects)).toEqual([{ state: null, error: "browser.pane.registration.closed" }])
