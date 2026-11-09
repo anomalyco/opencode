@@ -208,6 +208,10 @@ fn by_update() -> Vec<(String, String, &'static str)> {
 fn subagents_lists_ten_children_newest_first_and_opens_them() {
     let h = open("subagents-sidebar", 170, subagents);
     h.wait_for("+2 more");
+    // The running status comes from the `session.active` read after the event stream connects.
+    h.wait("Child 03 runs", || {
+        h.sidebar(120).iter().any(|row| row.starts_with("• Child 03") && row.ends_with(" running"))
+    });
     let rows = h.sidebar(120);
     let start = rows.iter().position(|row| row == "▼ Subagents").unwrap_or_else(|| panic!("{rows:#?}"));
     let listed: Vec<(String, String)> = rows[start + 1..start + 11]
