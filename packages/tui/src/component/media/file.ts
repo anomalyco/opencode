@@ -1,4 +1,4 @@
-import { mediaHashFromUri, type LocationRef } from "@opencode/client"
+import { isFileNotFoundError, mediaHashFromUri, type LocationRef } from "@opencode/client"
 import { mkdir, rename, rm, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -95,8 +95,11 @@ export async function serverFileExists(file: string, location: LocationRef, sour
     )
   const relative = locationPath(file, location.directory)
   if (relative === undefined || !sources.listFiles) return false
-  const name = relative.split("/").at(-1)
-  const entries = await sources.listFiles({ path: path.posix.dirname(relative), location })
+  const name = path.posix.basename(relative)
+  // A missing directory holds no file; another failure leaves the answer unknown.
+  const entries = await sources
+    .listFiles({ path: path.posix.dirname(relative), location })
+    .catch((error) => (isFileNotFoundError(error) ? [] : Promise.reject(error)))
   return entries.some((entry) => entry.type === "file" && entry.path.split(/[\\/]/).at(-1) === name)
 }
 
@@ -111,10 +114,11 @@ async function readServerFile(item: MediaItem, sources: MediaSources) {
   return sources.readFile({ path: relative, location })
 }
 
-// The `/`-separated path of a server file inside `directory`.
+// The `/`-separated path of a server file inside `directory`. On a POSIX server, a backslash is part of a name.
 function locationPath(file: string, directory: string) {
   const flavor = pathFlavor(directory)
-  const relative = flavor.relative(directory, file).replaceAll("\\", "/")
-  if (!relative || relative === ".." || relative.startsWith("../") || flavor.isAbsolute(relative)) return undefined
-  return relative
+  const relative = flavor.relative(directory, file)
+  if (!relative || relative === ".." || relative.startsWith(`..${flavor.sep}`) || flavor.isAbsolute(relative))
+    return undefined
+  return relative.replaceAll(flavor.sep, "/")
 }

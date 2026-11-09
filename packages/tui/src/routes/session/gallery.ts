@@ -19,30 +19,29 @@ export function createSessionGallery(
   location: Accessor<LocationRef | undefined>,
   files?: ServerFiles,
 ) {
-  // One check per file at a time. A file found stays found; one missing is checked again only when another reply
-  // names it, as when a reply plans an output that a later step renders, or when the session opens again.
-  const checks = new Map<string, { found: Signal<boolean>; asked: Set<string>; pending: boolean }>()
-  const mentioned: MentionedFiles | undefined = files && {
-    home: files.home,
-    exists(file, location, messageID) {
-      const check = checks.get(file) ?? { found: createSignal(false), asked: new Set<string>(), pending: false }
-      checks.set(file, check)
-      const [found, setFound] = check.found
-      if (!check.asked.has(messageID) && !check.pending && !found()) {
-        check.pending = true
-        files
-          .exists(file, location)
-          .catch(() => false)
-          .then((exists) => {
-            check.pending = false
-            setFound(exists)
-          })
-      }
-      check.asked.add(messageID)
-      return found()
-    },
-  }
-  const media = mapArray(messages, (message) => createMemo(() => collectSessionMedia([message], location(), mentioned)))
+  // One check per file at a time. A file found stays found. A reply asks about each file it names once while it is
+  // shown, and again only when its check failed without an answer; an ask during another reply's check waits for it,
+  // then checks again if that found nothing, as when a reply plans an output that a later step renders.
+  const checks = new Map<string, { found: Signal<boolean>; queue: Promise<unknown> }>()
+  const media = mapArray(messages, (message) => {
+    const asked = new Set<string>()
+    const mentioned: MentionedFiles | undefined = files && {
+      home: files.home,
+      exists(file, location) {
+        const check = checks.get(file) ?? { found: createSignal(false), queue: Promise.resolve() }
+        checks.set(file, check)
+        const [found, setFound] = check.found
+        if (!found() && !asked.has(file)) {
+          asked.add(file)
+          check.queue = check.queue
+            .then(() => found() || files.exists(file, location))
+            .then(setFound, () => asked.delete(file))
+        }
+        return found()
+      },
+    }
+    return createMemo(() => collectSessionMedia([message], location(), mentioned))
+  })
   const items = () => media().flatMap((memo) => memo())
   return createMemo<readonly MediaItem[]>((previous) => keepMediaItems(previous, items()), [])
 }

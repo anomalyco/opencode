@@ -30,21 +30,26 @@ const reply = (id: string, time: { created: number; completed?: number }, conten
 })
 
 /**
- * Opens a session whose finished reply names `video` and `missing` around a tool's video, after a reply still
- * streaming that names `video` too. `fs/list` lists `files`, and each listed path is logged in `listed`.
+ * Opens a session whose finished reply names `video` and the `missing` files in its second text part, above a tool's
+ * video, after a reply still streaming that names `video` too. `fs/list` lists `files`, and each listed path is logged
+ * in `listed`.
  */
 async function openSession(input: {
   config: Config.Info
   localServer?: boolean
   video: string
-  missing: string
+  missing: string[]
   files?: { path: string; type: "file" | "directory" }[]
 }) {
   const listed: string[] = []
   const messages = [
     reply("msg_streaming", { created: 3 }, [{ type: "text", text: `Streaming \`${input.video}\`` }]),
     reply("msg_done", { created: 2, completed: 3 }, [
-      { type: "text", text: `Rendered \`${input.video}\`, but \`${input.missing}\` failed.` },
+      { type: "text", text: "Rendering the clip." },
+      {
+        type: "text",
+        text: `Rendered \`${input.video}\`, but ${input.missing.map((file) => `\`${file}\``).join(" and ")} failed.`,
+      },
       {
         type: "tool",
         id: "call_render",
@@ -101,7 +106,8 @@ async function openSession(input: {
 
 type App = Awaited<ReturnType<typeof openSession>>
 
-// The text's tile sits right under its text, above the tool's, and opens first of the session's two videos.
+// The text's tile sits right under the text that names it, above the tool's, and opens first of the session's two
+// videos.
 async function openTextTile(app: App) {
   await app.until(() => app.videos().length === 2)
   const tile = app.videos().toSorted((a, b) => a.y - b.y)[0]!
@@ -116,51 +122,38 @@ test("a local server's finished reply shows the existing video it names, which o
     config: richMedia,
     localServer: true,
     video: videoFixture,
-    missing: "gone.mp4",
+    missing: ["gone.mp4"],
   })
   await openTextTile(app)
   expect(app.captureCharFrame()).toContain("video-only.mp4")
 
-  // Neither the missing file nor the streaming reply's mention got a tile.
+  // Neither the missing file, whose check ended long before the viewer closed, nor the streaming reply's mention got a
+  // tile.
   app.mockInput.pressEscape()
   await app.waitForFrame(() => !app.viewer())
-  await Bun.sleep(100)
-  await app.renderOnce()
   expect(app.videos()).toHaveLength(2)
   expect(app.listed).toEqual([])
 }, 20000)
 
-test("a remote server's files are found through fs.list, only inside the session's directory", async () => {
+test("a remote server's files are found through one fs.list per directory, only inside the session's directory", async () => {
   await using app = await openSession({
     config: richMedia,
     video: `${directory}/out/demo.mp4`,
-    missing: "/elsewhere/clip.mp4",
+    missing: ["out/gone.mp4", "/elsewhere/clip.mp4"],
     files: [
       { path: "out/demo.mp4.part", type: "file" },
       { path: "out/demo.mp4", type: "file" },
+      { path: "out/gone.mp4", type: "directory" },
     ],
   })
+  // The one listing answered both files in `out`, so the missing one's answer is in by the time the other's tile shows.
   await openTextTile(app)
   expect(app.captureCharFrame()).toContain("demo.mp4")
   expect(app.listed).toEqual(["out"])
 }, 20000)
 
-test("a remote server's missing file gets no tile", async () => {
-  await using app = await openSession({
-    config: richMedia,
-    video: "out/demo.mp4",
-    missing: "/elsewhere/clip.mp4",
-    files: [{ path: "out/demo.mp4", type: "directory" }],
-  })
-  await app.until(() => app.listed.length === 1)
-  await app.until(() => app.videos().length === 1)
-  await Bun.sleep(100)
-  await app.renderOnce()
-  expect(app.videos()).toHaveLength(1)
-}, 20000)
-
 test("with rich media off, a reply's named video gets no tile and is not looked for", async () => {
-  await using app = await openSession({ config: {}, video: "out/demo.mp4", missing: "gone.mp4" })
+  await using app = await openSession({ config: {}, video: "out/demo.mp4", missing: ["gone.mp4"] })
   await Bun.sleep(100)
   await app.renderOnce()
   expect(app.videos()).toEqual([])
