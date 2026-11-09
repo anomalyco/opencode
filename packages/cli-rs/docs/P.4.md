@@ -100,8 +100,9 @@ The slots the TUI mounts, and what their `SlotInput` carries:
 | `prompt.footer`, `prompt.footer.status`, `prompt.footer.file` | the prompt's footer row | the session, if any, and `prompt { shell, show_details }` |
 | `session.composer.top` | above the session's prompt | the session |
 | `sidebar.content`, `sidebar.footer` | the session sidebar, while it shows | the session |
+| `app` | under the route, on every route | none |
 
-`app` and `session.panel` are published paths, but the TUI mounts no slot there yet, so claims on them draw nothing.
+`session.panel` is a published path, but the TUI mounts no slot there (neither does TS), so claims on it draw nothing.
 `SlotKind` places a claim `before` or `after` the slot, or `prepend`s or `append`s it inside, in plugin order; a
 `replace` claim replaces the slot's content and suppresses every claim inside it, and the last one per path wins. Another claim on
 a child path that is not mounted is appended to the nearest mounted ancestor. A slot mounts its claims again when its
