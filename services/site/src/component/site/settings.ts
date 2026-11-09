@@ -1130,7 +1130,7 @@ const defaults = siteSettingsDefaults
  */
 // Production reads every setting as its default's constant (script/fold-settings.ts, which fails the
 // build on any other read), so its store starts empty and the defaults stay out of the bundle.
-export const [siteSettings, setStore] = createStore<SiteSettings>(
+export const [siteSettings, setStore] = /* @__PURE__ */ createStore<SiteSettings>(
   import.meta.env.DEV ? structuredClone(defaults) : ({} as SiteSettings),
 )
 

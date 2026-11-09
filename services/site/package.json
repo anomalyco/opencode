@@ -34,7 +34,6 @@
     "@textjs/react": "1.6.1",
     "fuzzysort": "3.1.0",
     "nitro": "3.0.260903-beta",
-    "number-flow": "0.6.2",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "solid-js": "catalog:",

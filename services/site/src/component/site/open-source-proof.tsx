@@ -5,7 +5,6 @@ import { useI18n } from "~/context/i18n"
 import { rich } from "~/i18n/rich"
 import type { Contributor, RepoStats } from "~/lib/github"
 import { ExternalArrow, NewTab } from "./icons"
-import { forkUrl } from "./open-source-fork"
 import { createWash, revealMotion, washStep } from "./reveal"
 import { siteSettings } from "./settings"
 
@@ -14,6 +13,7 @@ const links = {
   license: `${repo}/blob/HEAD/LICENSE`,
   contributing: `${repo}/blob/HEAD/CONTRIBUTING.md`,
   contributors: `${repo}/graphs/contributors`,
+  fork: `${repo}/fork`,
   anomaly: "https://anoma.ly",
 }
 
@@ -87,19 +87,22 @@ export function OpenSourceProof(props: {
           <span data-slot="sr-only">{i18n.t("home.openSource.starCount", { count: stars() })}</span>
           <NewTab />
         </a>
-        {/* Shown only in Settings › Open source variant "fork" (open-source-fork.css). */}
-        <a
-          href={forkUrl}
-          target="_blank"
-          rel="noopener"
-          data-component="site-button"
-          data-variant="neutral"
-          data-slot="fork-button"
-        >
-          {i18n.t("home.fork.button")}
-          <ExternalArrow />
-          <NewTab />
-        </a>
+        {/* Shown only in Settings › Open source variant "fork" (open-source-fork.css), like the fork
+            block in index.tsx. */}
+        <Show when={import.meta.env.DEV || siteSettings.ossVariant === "fork"}>
+          <a
+            href={links.fork}
+            target="_blank"
+            rel="noopener"
+            data-component="site-button"
+            data-variant="neutral"
+            data-slot="fork-button"
+          >
+            {i18n.t("home.fork.button")}
+            <ExternalArrow />
+            <NewTab />
+          </a>
+        </Show>
         <a href={links.contributing} target="_blank" rel="noopener" data-component="site-button" data-variant="neutral">
           {i18n.t("home.openSource.contribute")}
           <ExternalArrow />

@@ -1372,7 +1372,7 @@ html:has([data-site][data-theme="dark"]) {
   }
 
   /* The label (Design mode can swap in longer wording) stays on one line beside the bars. */
-  [data-component="status"] [data-design-copy] {
+  [data-component="status"] [data-slot="status-label"] {
     white-space: nowrap;
   }
 
