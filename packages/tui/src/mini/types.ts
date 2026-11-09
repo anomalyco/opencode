@@ -122,6 +122,8 @@ export type RunInput = {
 
 export type MiniHost = {
   version: string
+  /** The build channel, such as `local`, `dev` or `latest`; feature flags default on in local and dev builds. */
+  channel: string
   terminal: {
     stdin: NodeJS.ReadStream
   }

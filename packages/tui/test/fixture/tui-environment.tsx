@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import {
+  TuiAppProvider,
   TuiPathsProvider,
   TuiStartupProvider,
   TuiTerminalEnvironmentProvider,
@@ -36,11 +37,13 @@ export function TestTuiContexts(
           ...props.paths,
         }}
       >
-        <TuiTerminalEnvironmentProvider value={{ platform: "linux" }}>
-          <TuiStartupProvider value={{ skipInitialLoading: false }}>
-            <ClipboardProvider value={props.clipboard ?? clipboard}>{props.children}</ClipboardProvider>
-          </TuiStartupProvider>
-        </TuiTerminalEnvironmentProvider>
+        <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
+          <TuiTerminalEnvironmentProvider value={{ platform: "linux" }}>
+            <TuiStartupProvider value={{ skipInitialLoading: false }}>
+              <ClipboardProvider value={props.clipboard ?? clipboard}>{props.children}</ClipboardProvider>
+            </TuiStartupProvider>
+          </TuiTerminalEnvironmentProvider>
+        </TuiAppProvider>
       </TuiPathsProvider>
     </LogProvider>
   )

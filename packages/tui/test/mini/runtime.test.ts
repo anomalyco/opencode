@@ -22,6 +22,7 @@ function ok<T>(data: T) {
 function host(): MiniHost {
   return {
     version: "local",
+    channel: "test",
     terminal: { stdin: process.stdin },
     platform: "linux",
     stdout: { write() {} },
@@ -499,7 +500,7 @@ describe("run interactive runtime", () => {
     let runtimeConfig: LifecycleInput["tuiConfig"] | undefined
     const tuiConfig = createTuiResolvedConfig({
       keybinds: { "variant.cycle": "ctrl+g" },
-      experimental: { "rich-media": true },
+      experimental: { rich_media: true },
     })
     const catalogs = stubCatalogLists(sdk, {
       location: { directory: "/session", workspaceID: "work-1" },

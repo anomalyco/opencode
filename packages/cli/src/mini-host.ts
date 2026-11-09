@@ -4,7 +4,7 @@ import fs from "node:fs"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { ReadStream } from "node:tty"
-import { OPENCODE_VERSION } from "./version"
+import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
 
 export const INTERACTIVE_INPUT_ERROR = "opencode mini requires a controlling terminal for input"
 
@@ -139,6 +139,7 @@ export function createMiniHost(input: {
   }
   return {
     version: OPENCODE_VERSION,
+    channel: OPENCODE_CHANNEL,
     terminal: { stdin: input.terminal.stdin },
     platform: process.platform,
     stdout: {

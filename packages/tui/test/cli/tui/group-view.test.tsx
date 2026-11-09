@@ -205,7 +205,7 @@ test("expanded instructions stay adjacent to their summary and each other", asyn
 
 // With rich media, its media strip stays the same strip as its tools change.
 test("a low activity group with nothing finished stays collapsed behind a status", async () => {
-  const config = createTuiResolvedConfig({ animations: false, experimental: { "rich-media": true } })
+  const config = createTuiResolvedConfig({ animations: false, experimental: { rich_media: true } })
   const shell = (id: string) => ({
     type: "tool" as const,
     id,
@@ -263,7 +263,7 @@ test("a low activity group with nothing finished stays collapsed behind a status
 
 // A collapsed summary shows its tools' media with rich media; expanded, each tool shows its own.
 test.each([false, true])("failed low activity has a disclosure icon and expandable details %p", async (rich) => {
-  const config = createTuiResolvedConfig({ animations: false, experimental: { "rich-media": rich } })
+  const config = createTuiResolvedConfig({ animations: false, experimental: { rich_media: rich } })
   const anchors = createTimelineAnchors()
   const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
   const message: SessionMessageAssistant = {

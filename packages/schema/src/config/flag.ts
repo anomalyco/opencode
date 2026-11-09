@@ -32,6 +32,8 @@ export const registry = {
     "Build an SQLite full-text index of session titles and message text in the background, and enable the opencode.session.search and opencode.session.read tools. The index covers every session in the database and starts while any loaded location enables it; SQLite keeps it current from then on, also after this is turned off.",
   browser_stream_tunnel:
     "Stream remote desktop browser TCP traffic over one prewarmed, ticket-authenticated binary WebSocket per live browser attachment instead of per-chunk RPC.",
+  rich_media:
+    "Send attached videos to models that accept video input. In the TUI, also show videos inline, in a fullscreen viewer and in picture-in-picture.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 

@@ -33,11 +33,6 @@ export const experiments: Experiment[] = [
     title: "Find in session",
     description: "Search the open session's messages with /find or <leader>f",
   },
-  {
-    id: "rich-media",
-    title: "Rich media",
-    description: "Inline video, a fullscreen media viewer, and picture-in-picture",
-  },
 ]
 
 export function DialogExperiments() {
