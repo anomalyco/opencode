@@ -1,0 +1,232 @@
+[
+  {
+    "filetype": "python",
+    "wasm": "python/tree-sitter-python.wasm",
+    "queries": {
+      "highlights": [
+        "python/highlights-0-highlights.scm"
+      ],
+      "locals": [
+        "python/locals-0-locals.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "rust",
+    "wasm": "rust/tree-sitter-rust.wasm",
+    "queries": {
+      "highlights": [
+        "rust/highlights-0-highlights.scm"
+      ],
+      "locals": [
+        "rust/locals-0-locals.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "go",
+    "wasm": "go/tree-sitter-go.wasm",
+    "queries": {
+      "highlights": [
+        "go/highlights-0-highlights.scm"
+      ],
+      "locals": [
+        "go/locals-0-locals.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "cpp",
+    "wasm": "cpp/tree-sitter-cpp.wasm",
+    "queries": {
+      "highlights": [
+        "cpp/highlights-0-highlights.scm"
+      ],
+      "locals": [
+        "cpp/locals-0-locals.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "csharp",
+    "wasm": "csharp/tree-sitter-c_sharp.wasm",
+    "queries": {
+      "highlights": [
+        "csharp/highlights-0-highlights.scm"
+      ],
+      "locals": [
+        "csharp/locals-0-locals.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "bash",
+    "wasm": "bash/tree-sitter-bash.wasm",
+    "queries": {
+      "highlights": [
+        "bash/highlights-0-highlights.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "c",
+    "wasm": "c/tree-sitter-c.wasm",
+    "queries": {
+      "highlights": [
+        "c/highlights-0-highlights.scm"
+      ],
+      "locals": [
+        "c/locals-0-locals.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "java",
+    "wasm": "java/tree-sitter-java.wasm",
+    "queries": {
+      "highlights": [
+        "java/highlights-0-highlights.scm"
+      ],
+      "locals": [
+        "java/locals-0-locals.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "kotlin",
+    "wasm": "kotlin/tree-sitter-kotlin.wasm",
+    "queries": {
+      "highlights": [
+        "kotlin/highlights-0-highlights.scm"
+      ],
+      "locals": [
+        "kotlin/locals-0-locals.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "ruby",
+    "wasm": "ruby/tree-sitter-ruby.wasm",
+    "queries": {
+      "highlights": [
+        "ruby/highlights-0-highlights.scm"
+      ],
+      "locals": [
+        "ruby/locals-0-locals.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "php",
+    "wasm": "php/tree-sitter-php_only.wasm",
+    "queries": {
+      "highlights": [
+        "php/highlights-0-highlights.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "html",
+    "wasm": "html/tree-sitter-html.wasm",
+    "queries": {
+      "highlights": [
+        "html/highlights-0-highlights.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "vue",
+    "wasm": "vue/tree-sitter-vue.wasm",
+    "queries": {
+      "highlights": [
+        "vue/highlights-0-highlights.scm",
+        "vue/highlights-1-highlights.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "json",
+    "wasm": "json/tree-sitter-json.wasm",
+    "queries": {
+      "highlights": [
+        "json/highlights-0-highlights.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "yaml",
+    "wasm": "yaml/tree-sitter-yaml.wasm",
+    "queries": {
+      "highlights": [
+        "yaml/highlights-0-highlights.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "css",
+    "wasm": "css/tree-sitter-css.wasm",
+    "queries": {
+      "highlights": [
+        "css/highlights-0-highlights.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "swift",
+    "wasm": "swift/tree-sitter-swift.wasm",
+    "queries": {
+      "highlights": [
+        "swift/highlights-0-highlights.scm"
+      ],
+      "locals": [
+        "swift/locals-0-locals.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "toml",
+    "wasm": "toml/tree-sitter-toml.wasm",
+    "queries": {
+      "highlights": [
+        "toml/highlights-0-highlights.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "diff",
+    "aliases": [
+      "udiff",
+      "patch"
+    ],
+    "wasm": "diff/tree-sitter-diff.wasm",
+    "queries": {
+      "highlights": [
+        "diff/highlights-0-highlights.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "make",
+    "aliases": [
+      "makefile"
+    ],
+    "wasm": "make/tree-sitter-make.wasm",
+    "queries": {
+      "highlights": [
+        "make/highlights-0-highlights.scm"
+      ]
+    }
+  },
+  {
+    "filetype": "xml",
+    "wasm": "xml/tree-sitter-xml.wasm",
+    "queries": {
+      "highlights": [
+        "xml/highlights-0-highlights.scm"
+      ],
+      "locals": [
+        "xml/locals-0-locals.scm"
+      ]
+    }
+  }
+]

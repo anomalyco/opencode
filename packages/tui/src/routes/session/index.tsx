@@ -77,7 +77,8 @@ import { UsageLimitNotice, useLimitNotice, useUsageAlerts } from "../../componen
 import { useStorage } from "../../context/storage"
 import { Composer } from "./composer"
 import { filetype } from "../../util/filetype"
-import parsers from "../../parsers-config"
+// local-only: lokal mitgelieferte Grammatiken statt der GitHub-URLs aus parsers-config.ts (script/vendor-parsers.mjs)
+import { parsers } from "#tree-sitter-parsers"
 import { errorMessage } from "../../util/error"
 import { useToast } from "../../ui/toast"
 import stripAnsi from "strip-ansi"
@@ -136,7 +137,7 @@ import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
 export { InlineToolRow } from "./message-parts"
 export { toolDisplay } from "./message-parts"
 
-addDefaultParsers(parsers.parsers)
+addDefaultParsers(parsers)
 
 // Exclude temporary bottom space when measuring the real transcript height.
 const NAVIGATION_SLACK_ID = "session-navigation-slack"

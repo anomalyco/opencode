@@ -1,0 +1,26 @@
+{
+  "//": "local-only: Sprachen aus src/parsers-config.ts, die lokal mitgeliefert werden. TypeScript, JavaScript und Markdown bringt opentui selbst mit. Nach Änderung: node packages/tui/script/vendor-parsers.mjs",
+  "languages": [
+    "python",
+    "java",
+    "kotlin",
+    "go",
+    "rust",
+    "c",
+    "cpp",
+    "csharp",
+    "bash",
+    "php",
+    "ruby",
+    "swift",
+    "html",
+    "vue",
+    "css",
+    "json",
+    "yaml",
+    "toml",
+    "xml",
+    "make",
+    "diff"
+  ]
+}

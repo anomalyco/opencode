@@ -8,6 +8,7 @@ import { collectFiles } from "./files"
 import { resolveOpencodePty } from "./opencode-pty"
 
 const dir = path.resolve(import.meta.dirname, "..")
+const treeSitterRoot = path.resolve(dir, "../tui/assets/tree-sitter")
 
 // Bun's compiler discovers file imports and embeds them in its virtual filesystem. Vite only bundles the JavaScript
 // portion of the Node executable, while SEA embeds only the assets explicitly listed in its build configuration.
@@ -43,6 +44,13 @@ export async function collectNodeAssets(target: NodeTarget) {
       key,
       source: path.resolve(dir, "../ui/src/assets/audio", path.basename(key)),
     })),
+    // local-only: lokal mitgelieferte Tree-sitter-Grammatiken (packages/tui/src/parsers-local.node.ts)
+    ...(await collectFiles(treeSitterRoot))
+      .filter((relative) => !relative.endsWith(".json"))
+      .map((relative) => ({
+        key: `@opencode/tui/tree-sitter/${relative.replaceAll(path.sep, "/")}`,
+        source: path.join(treeSitterRoot, relative),
+      })),
     ...(opencodePty && target.opencodePtyAsset ? [{ key: target.opencodePtyAsset, source: opencodePty.source }] : []),
     ...(await collectFiles(ptyRoot))
       .filter((relative) => !relative.endsWith(".map") && !relative.endsWith(".pdb"))

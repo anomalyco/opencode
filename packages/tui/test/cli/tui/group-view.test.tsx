@@ -3,7 +3,7 @@ import { testRender } from "@opentui/solid"
 import type { JSX } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { addDefaultParsers, type TextRenderable } from "@opentui/core"
-import parsers from "../../../src/parsers-config"
+import { parsers } from "#tree-sitter-parsers"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
 import { ConfigProvider } from "../../../src/config"
 import { ThemeProvider } from "../../../src/context/theme"
@@ -16,7 +16,7 @@ import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 test("retains nested expansion state and registers exact headers and parts", async () => {
-  addDefaultParsers(parsers.parsers)
+  addDefaultParsers(parsers)
   const anchors = createTimelineAnchors()
   const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
   const config = createTuiResolvedConfig({ animations: false })
