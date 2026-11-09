@@ -4,7 +4,13 @@ import type { TimelineDetail } from "./detail"
 
 type Content = SessionMessageAssistant["content"][number]
 
-export type TimelineStatus = "waitingApproval" | "waitingAnswer" | "waitingShell" | "waitingAgent" | "working"
+export type TimelineStatus =
+  | "waitingApproval"
+  | "waitingAnswer"
+  | "waitingShell"
+  | "waitingAgent"
+  | "waitingAgents"
+  | "working"
 
 /**
  * What the status line below a working turn says. It names what the turn waits on, the user or a command or subagent
@@ -26,9 +32,17 @@ export function timelineStatus(input: {
 
   if (name === "shell") return "waitingShell"
 
-  if (name === "subagent") return "waitingAgent"
+  if (name !== "subagent") return "working"
 
-  return "working"
+  // Subagents started together run side by side, so the line counts every one still running.
+  const running = input.content.filter(
+    (item) =>
+      item.type === "tool" &&
+      canonicalToolName(item.name) === "subagent" &&
+      (item.state.status === "running" || item.state.status === "streaming"),
+  )
+
+  return running.length > 1 ? "waitingAgents" : "waitingAgent"
 }
 
 /** Whether the model is writing a thought that shows, which then stands in for the status line's Working. */
