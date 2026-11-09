@@ -34,6 +34,8 @@ export type CliCase = {
   server?: Options
   env?: Record<string, string>
   stdin?: string
+  // Leaves stdin an open pipe that never sends data, as spawn's default stdio gives a child.
+  stdinOpen?: boolean
   timeout?: number
   // Rust lacks the command so far: the case runs only with `--sides ts,ts`.
   tsOnly?: boolean
@@ -71,7 +73,7 @@ export async function runCli(side: Side, value: CliCase) {
   const proc = Bun.spawn(value.command?.(side) ?? command(side, withServer(value.args, server?.url)), {
     cwd: box.cwd,
     env: box.env,
-    stdin: value.stdin === undefined ? "ignore" : new TextEncoder().encode(value.stdin),
+    stdin: value.stdinOpen ? "pipe" : value.stdin === undefined ? "ignore" : new TextEncoder().encode(value.stdin),
     stdout: "pipe",
     stderr: "pipe",
     timeout: value.timeout ?? 30_000,

@@ -1,9 +1,8 @@
-// The prompt never reaches the message list: once the stream ends the execution, "Prompt was not
-// promoted", exit 1. (Without an event after the wait, TS waits forever; so does Rust.)
+// The execution ends but the prompt never reaches the message list: "Prompt was not promoted", exit 1.
 import { defineCli } from "../../cli/run"
-import { server, succeeded } from "./fixture"
+import { server } from "./fixture"
 
 export default defineCli({
   args: ["run", "hello"],
-  server: server({ delivered: false, listed: false, end: null, late: [succeeded()] }),
+  server: server({ listed: false }),
 })
