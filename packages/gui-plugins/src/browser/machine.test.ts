@@ -118,6 +118,7 @@ describe("browser pane machine", () => {
       attempt: attempt(first.state),
       unavailable: false,
       closed: false,
+      locked: false,
     })
 
     expect(failed.effects).toContainEqual(expect.objectContaining({ type: "schedule-retry", delayMs: 1_000 }))
@@ -144,6 +145,7 @@ describe("browser pane machine", () => {
       attempt: attempt(state),
       unavailable: false,
       closed: false,
+      locked: false,
     })
 
     const once = transition(first, fail(first)).state
@@ -218,6 +220,7 @@ describe("browser pane machine", () => {
       attempt: registering,
       unavailable: false,
       closed: true,
+      locked: false,
     })
 
     expect(rejected.state).toBe(start)
@@ -505,7 +508,16 @@ describe("browser pane machine", () => {
     const start = replay(attach()).state
 
     const rejected: Event[] = rejectedFirst
-      ? [{ type: "register.failed", sessionKey: key, attempt: attempt(start), unavailable: false, closed: true }]
+      ? [
+          {
+            type: "register.failed",
+            sessionKey: key,
+            attempt: attempt(start),
+            unavailable: false,
+            closed: true,
+            locked: false,
+          },
+        ]
       : []
 
     const blocked = replay([...rejected, paneState(start, null, error)], start)
@@ -611,5 +623,43 @@ describe("browser pane machine", () => {
       { type: "detach", sessionKey: key },
     ])
     expect(transition(start, { type: "session.removed", sessionKeys: [other] }).state).toBe(start)
+  })
+
+  test("a locked screen keeps the tabs and registers again only once it unlocks", () => {
+    const start = ready()
+    const locked = transition(start, paneState(start, inventory(tab(tabA)), "browser.pane.locked")).state
+    expect(phase(locked)).toEqual({ status: "suspended", reason: "locked" })
+    expect(attachment(locked)?.browser?.tabs.map((item) => item.id)).toEqual([tabA])
+
+    // An edge while still locked registers, main refuses it, and the pane waits without a retry timer.
+    const woken = transition(locked, { type: "session.wake", sessionKey: key })
+    expect(types(woken.effects)).toEqual(["open-registration", "schedule-register-timeout"])
+
+    const refused = transition(woken.state, {
+      type: "register.failed",
+      sessionKey: key,
+      attempt: attempt(woken.state),
+      unavailable: false,
+      closed: false,
+      locked: true,
+    })
+
+    expect(phase(refused.state)).toEqual({ status: "suspended", reason: "locked" })
+    expect(types(refused.effects)).not.toContain("schedule-retry")
+
+    const unlocked = transition(refused.state, { type: "screen.unlocked" })
+    expect(phase(unlocked.state)).toMatchObject({ status: "registering" })
+    expect(unlocked.effects).toContainEqual(
+      expect.objectContaining({ type: "open-registration", restore: inventory(tab(tabA)) }),
+    )
+  })
+
+  test("unlocking leaves panes the lock did not suspend alone", () => {
+    const start = ready()
+    const idle = transition(start, paneState(start, inventory(tab(tabA)), "browser.pane.suspended")).state
+
+    const unlocked = transition(idle, { type: "screen.unlocked" })
+    expect(unlocked.state).toBe(idle)
+    expect(unlocked.effects).toEqual([])
   })
 })

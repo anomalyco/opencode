@@ -233,7 +233,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
     if (!drive) return
 
-    if (!current) return dispatch({ type: "register.failed", sessionKey, attempt, unavailable: true, closed: false })
+    if (!current)
+      return dispatch({ type: "register.failed", sessionKey, attempt, unavailable: true, closed: false, locked: false })
     registrations.get(sessionKey)?.registration.close()
     const target = { server: drive.ref.server.id, session: drive.ref.id }
 
@@ -255,6 +256,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
             attempt,
             unavailable: unavailable(cause),
             closed: cause instanceof Error && cause.message === "browser.pane.registration.closed",
+            locked: cause instanceof Error && cause.message === "browser.pane.locked",
           }),
         listener: (event) => receive(drive, attempt, event),
       }),
@@ -408,6 +410,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   // The SDK removes the listener when the Ipc's generation ends.
   createKeyed(pane, (current) => current.on("event", (value) => listeners.get(value.binding)?.(value.event)))
+  createKeyed(pane, (current) =>
+    current.on("screen", (value) => {
+      if (!value.locked) dispatch({ type: "screen.unlocked" })
+    }),
+  )
 
   const wakeCurrent = () => {
     if (document.visibilityState !== "visible") return

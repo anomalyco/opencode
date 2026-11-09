@@ -68,6 +68,8 @@ export function createBrowserPane(input: {
   /** The declared store of reserved element refs. */
   readonly refs: Persisted<number, number>
   readonly embeds: Embeds
+  /** The screen is locked: no attachment may start. */
+  readonly locked: () => boolean
   readonly emit: (window: number, value: { readonly binding: string; readonly event: PaneEvent }) => void
 }) {
   const machine: PaneMachine = { state: createPaneState() }
@@ -83,6 +85,7 @@ export function createBrowserPane(input: {
 
   return {
     async register(window: number, binding: string, target: Target) {
+      if (input.locked()) throw new Error("browser.pane.locked")
       const server = input.serverEndpoints.get(target.server)
 
       if (isPaneDisposed(machine.state) || !server || !destinationOrigin(server.url))
@@ -347,6 +350,10 @@ export function createBrowserPane(input: {
     async close(window: number, binding: string) {
       owned(window, binding)
       dispatchBinding(binding, { type: "client.closed" })
+    },
+    /** The screen locked: every attachment ends, so the server drops this desktop's browser tools until it unlocks. */
+    lock() {
+      dispatch({ type: "locked" })
     },
     /**
      * The plugin is going away (reload, disable, or quit). Windows keep each pane's tabs as a

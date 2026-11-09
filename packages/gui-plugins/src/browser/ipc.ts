@@ -75,6 +75,8 @@ export type PaneEvent = typeof PaneEvent.Type
  * - `"browser.pane.replaced"`: another window attached to the same session. The event carries no tabs.
  * - `"browser.pane.suspended"`: the server dropped an attached binding (idle eviction), or main's plugin is going away.
  *   The event carries the tabs the binding had.
+ * - `"browser.pane.locked"`: the screen is locked, so main ends every attachment and refuses new ones until it unlocks.
+ *   The event carries the tabs the binding had; the window registers again on the `screen` event that reports unlock.
  * - `"browser.pane.missing"`: the session no longer exists. The event carries no tabs, and main forgot its saved tabs.
  * - `"browser.pane.registration.closed"`: the stream or attachment ended, registration timed out, the window navigated
  *   or closed, or the window closed the binding. The event carries no tabs; the window may register again.
@@ -83,6 +85,7 @@ export const PaneCloseReason = Schema.Literals([
   "browser.pane.unsupported",
   "browser.pane.replaced",
   "browser.pane.suspended",
+  "browser.pane.locked",
   "browser.pane.missing",
   "browser.pane.registration.closed",
 ])
@@ -127,5 +130,7 @@ export const BrowserPane = Ipc.define({
   },
   events: {
     event: Schema.Struct({ binding: Schema.String, event: PaneEvent }),
+    // The screen locked or unlocked, to every window.
+    screen: Schema.Struct({ locked: Schema.Boolean }),
   },
 })

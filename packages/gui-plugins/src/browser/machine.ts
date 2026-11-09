@@ -22,15 +22,18 @@ export type Ipc =
  * - `ready`: main took the binding.
  * - `backoff`: main closed or refused the binding; a timer registers again.
  * - `suspended`: the tabs stay without a binding. `idle`: the server evicted it, and a user or agent wakes it. `ipc`:
- *   the pane's Ipc is gone, and it registers again once the Ipc is back.
+ *   the pane's Ipc is gone, and it registers again once the Ipc is back. `locked`: the screen is locked, and it
+ *   registers again once it unlocks.
  * - `blocked`: another window took the session (`replaced`), or the server lacks it (`missing`).
  */
+type SuspendReason = "idle" | "ipc" | "locked"
+
 export type Phase =
   | { readonly status: "idle" }
   | { readonly status: "registering"; readonly attempt: number; readonly attempts: number }
   | { readonly status: "ready"; readonly attempt: number }
   | { readonly status: "backoff"; readonly attempt: number; readonly attempts: number }
-  | { readonly status: "suspended"; readonly reason: "idle" | "ipc" }
+  | { readonly status: "suspended"; readonly reason: SuspendReason }
   | { readonly status: "blocked"; readonly reason: "replaced" | "missing" }
 
 /** How the session's side-panel strip follows the desktop's tab inventory. */
@@ -90,6 +93,8 @@ export type State =
 export type Event =
   | { readonly type: "disposed" }
   | { readonly type: "ipc.changed"; readonly ipc: Ipc }
+  /** The screen unlocked: attachments the lock ended register again. */
+  | { readonly type: "screen.unlocked" }
   /** An unsupported server reconnected, restarted, or is no longer listed: it may have the browser RPC now. */
   | { readonly type: "server.changed"; readonly serverID: string }
   | {
@@ -133,6 +138,8 @@ export type Event =
       readonly unavailable: boolean
       /** Main closed the binding it took; its closed-state event decides why. */
       readonly closed: boolean
+      /** Main refused the binding because the screen is locked. */
+      readonly locked: boolean
     }
   | { readonly type: "register.timed-out"; readonly sessionKey: string; readonly attempt: number }
   | { readonly type: "retry.due"; readonly sessionKey: string; readonly attempt: number }
@@ -221,7 +228,16 @@ type Bound = Extract<Phase, { status: "registering" | "ready" }>
 
 type SessionEvent = Exclude<
   Event,
-  { type: "disposed" | "ipc.changed" | "server.changed" | "session.attached" | "session.removed" | "session.routed" }
+  {
+    type:
+      | "disposed"
+      | "ipc.changed"
+      | "server.changed"
+      | "screen.unlocked"
+      | "session.attached"
+      | "session.removed"
+      | "session.routed"
+  }
 >
 
 // No attachment shares an object with another, not even an empty one: the model reconciles the state into its store,
@@ -240,6 +256,8 @@ export function transition(state: State, event: Event): Transition {
   if (event.type === "ipc.changed") return ipcChanged(state, event.ipc)
 
   if (event.type === "server.changed") return serverChanged(state, event.serverID)
+
+  if (event.type === "screen.unlocked") return unlocked(state)
 
   if (event.type === "session.attached") return attached(state, event)
 
@@ -485,6 +503,8 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
 
       if (event.unavailable) return put(state, key, suspend(attachment, "ipc"), stop(key, phase))
 
+      if (event.locked) return put(state, key, suspend(attachment, "locked"), stop(key, phase))
+
       // Main closed a binding it took; its closed-state event decides, and the register timeout bounds the wait.
       if (event.closed) return { state, effects: [] }
 
@@ -561,9 +581,22 @@ function located(state: Open, key: string, attachment: Attachment, value: boolea
   )
 }
 
+// Every attachment the locked screen ended registers again. One woken before the unlock already did.
+function unlocked(state: Open): Transition {
+  return listed(state.sessions).reduce<Transition & { state: Open }>(
+    (result, [key, attachment]) => {
+      if (attachment.phase.status !== "suspended" || attachment.phase.reason !== "locked") return result
+      const next = wake(result.state, key, attachment, false)
+
+      return { state: next.state, effects: [...result.effects, ...next.effects] }
+    },
+    { state, effects: [] },
+  )
+}
+
 // Passive edges wake an idle or suspended pane without bypassing transport backoff or duplicating a binding. Only the
 // server creating the session lifts `missing`; nothing lifts `replaced` but the user's next session visit elsewhere.
-function wake(state: Open, key: string, attachment: Attachment, created: boolean): Transition {
+function wake(state: Open, key: string, attachment: Attachment, created: boolean): Transition & { state: Open } {
   const phase = attachment.phase
 
   if (phase.status === "registering" || phase.status === "ready" || phase.status === "backoff")
@@ -736,12 +769,13 @@ function paneState(
   // Main closed the binding, or never took it. Keep the tabs and register again with backoff.
   if (event.error === "browser.pane.registration.closed") return backoff(state, key, attachment, phase)
 
-  // Idle eviction has no retry timer: a user or Session execution wakes it on demand.
-  if (event.error === "browser.pane.suspended") {
+  // Idle eviction has no retry timer: a user or Session execution wakes it on demand. A locked screen's ends at unlock.
+  if (event.error === "browser.pane.suspended" || event.error === "browser.pane.locked") {
     const browser = event.state ?? attachment.browser
     const mirrored = event.state ? mirror(key, attachment.strip, browser, false) : undefined
+    const reason = event.error === "browser.pane.locked" ? "locked" : "idle"
 
-    return put(state, key, { ...suspend(attachment, "idle", browser), strip: mirrored?.strip ?? attachment.strip }, [
+    return put(state, key, { ...suspend(attachment, reason, browser), strip: mirrored?.strip ?? attachment.strip }, [
       ...stop(key, phase),
       ...(mirrored?.effects ?? []),
     ])
@@ -852,7 +886,7 @@ function blank(tab: Browser.Tab) {
   return !tab.url || tab.url === "about:blank"
 }
 
-function suspend(attachment: Attachment, reason: "idle" | "ipc", browser = attachment.browser): Attachment {
+function suspend(attachment: Attachment, reason: SuspendReason, browser = attachment.browser): Attachment {
   return {
     ...attachment,
     phase: { status: "suspended", reason },

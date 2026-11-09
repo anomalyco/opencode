@@ -207,6 +207,31 @@ describe("binding close reason", () => {
     expect(transitionPane(disposed.state, registered())).toEqual({ state: disposed.state, effects: [] })
   })
 
+  test("locking the screen ends every binding with its tabs and aborts its agent requests", () => {
+    const restore = { tabs: [tab(tabA, dashboard)], focusedTabID: tabA }
+
+    const locked = play(
+      createPaneState(),
+      registered(restore, "b1"),
+      on({ type: "server.attached", fileRoots: [] }, "b1"),
+      on({ type: "request.started", requestID: "r1" }, "b1"),
+      registered(undefined, "b2"),
+      { type: "locked" },
+    )
+
+    expect(locked.state).toEqual({ status: "active", bindings: new Map() })
+    expect(closeEvents(locked.effects)).toEqual([
+      { state: { tabs: [tab(tabA, dashboard, "", 1)], focusedTabID: tabA }, error: "browser.pane.locked" },
+      { state: { tabs: [], focusedTabID: null }, error: "browser.pane.locked" },
+    ])
+    expect(locked.effects).toContainEqual({ type: "abort-requests", binding: "b1", requestIDs: ["r1"] })
+    expect(locked.effects.filter((effect) => effect.type === "teardown")).toEqual([
+      { type: "teardown", binding: "b1" },
+      { type: "teardown", binding: "b2" },
+    ])
+    expect(locked.effects.map((effect) => effect.type)).not.toContain("remove-restore")
+  })
+
   test("the registration timeout closes only a binding still connecting", () => {
     const timedOut = play(createPaneState(), registered(), on({ type: "register.timed-out" }))
     expect(closeEvents(timedOut.effects)).toEqual([{ state: null, error: "browser.pane.registration.closed" }])

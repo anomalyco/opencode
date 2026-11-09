@@ -87,6 +87,8 @@ export type BindingEvent =
   /** The window closed the binding; its saved tabs are forgotten. */
   | { readonly type: "client.closed" }
   | { readonly type: "pane.disposed" }
+  /** The screen locked: the attachment ends and its tabs wait in the window. */
+  | { readonly type: "screen.locked" }
   | { readonly type: "request.started"; readonly requestID: string }
   | { readonly type: "request.targeted"; readonly requestID: string; readonly tabID: Browser.TabID }
   | { readonly type: "request.cancelled"; readonly requestID: string }
@@ -121,6 +123,8 @@ export type PaneMachineEvent =
       readonly saved: StoredRestore
     }
   | { readonly type: "binding"; readonly binding: string; readonly event: BindingEvent }
+  /** The screen locked: every binding closes. */
+  | { readonly type: "locked" }
   | { readonly type: "disposed" }
 
 type StateEvent = Extract<PaneEvent, { readonly type: "state" }>
@@ -200,6 +204,14 @@ export function transitionPane(state: PaneState, event: PaneMachineEvent): PaneT
       ),
     }
 
+  if (event.type === "locked")
+    return {
+      state: { status: "active", bindings: new Map() },
+      effects: Array.from(state.bindings.values()).flatMap(
+        (binding) => transitionBinding(binding, { type: "screen.locked" }).effects,
+      ),
+    }
+
   if (event.type === "registered") {
     if (state.bindings.has(event.binding)) return { state, effects: [] }
 
@@ -258,6 +270,8 @@ function closeReason(state: ActiveBinding, event: BindingEvent): PaneCloseReason
 
   if (event.type === "pane.disposed") return "browser.pane.suspended"
 
+  if (event.type === "screen.locked") return "browser.pane.locked"
+
   if (event.type === "register.timed-out")
     return state.status === "connecting" ? "browser.pane.registration.closed" : undefined
 
@@ -285,13 +299,13 @@ function close(state: ActiveBinding, reason: PaneCloseReason, forget: boolean): 
   if (forget) effects.push({ type: "remove-restore", storageKey: state.storageKey })
 
   if (requestIDs.length) effects.push({ type: "abort-requests", binding: state.binding, requestIDs })
-  // A suspended binding hands its tabs to the window, which keeps them until it registers again.
+  // A suspended or locked binding hands its tabs to the window, which keeps them until it registers again.
   effects.push({
     type: "emit",
     binding: state.binding,
     event: {
       type: "state",
-      state: reason === "browser.pane.suspended" ? selectInventory(state) : null,
+      state: reason === "browser.pane.suspended" || reason === "browser.pane.locked" ? selectInventory(state) : null,
       error: reason,
     },
   })
