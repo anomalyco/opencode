@@ -61,10 +61,21 @@ export function npmOnPath() {
   return result.status === 0
 }
 
+/**
+ * Whether `process.execPath` can run a JavaScript file. A compiled Bun binary cannot: it
+ * starts its own entrypoint and ignores the script argument, which is exactly what made
+ * the Git preparation fail. `process.versions.node` is not a usable test — Bun reports it
+ * too, compiled or not.
+ */
+export function scriptCapable() {
+  if (typeof Bun !== "undefined") return Bun.embeddedFiles.length === 0
+  return !!process.versions?.node
+}
+
 export function resolveNpmBin(
   env: NodeJS.ProcessEnv = process.env,
   exists: (file: string) => boolean = existsSync,
-  node: boolean = !!process.versions?.node,
+  node: boolean = scriptCapable(),
 ) {
   // pacote builds a Git dependency by running `npm install` inside it, and takes the
   // binary from `npmBin`: when the name ends in `.js` it spawns `process.execPath`
@@ -72,9 +83,8 @@ export function resolveNpmBin(
   // into Bun's embedded filesystem, so the child was opencode itself — which runs its
   // own CLI and never that script — and every Git plugin with a build step died with
   // "git dep preparation failed". Only trust a path that exists outside the bundle.
-  // pacote spawns `process.execPath` with this script, so it is only usable when the
-  // current runtime can run a JavaScript file at all. Inside the compiled binary that is
-  // opencode itself, whose entrypoint ignores the argument.
+  // pacote spawns `process.execPath` with this script, so a `.js` path is only usable when
+  // that executable can run one.
   const exec = env.npm_execpath
   if (node && exec && exec.endsWith(".js") && !exec.includes("$bunfs") && exists(exec)) return exec
   return "npm"
