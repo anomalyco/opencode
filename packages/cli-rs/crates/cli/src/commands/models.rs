@@ -11,6 +11,7 @@ use super::client::{block_on, connect, here, locale_compare};
 pub fn run(context: &Context) -> error::Result<()> {
     let response = block_on(async {
         let server = connect(context).await?;
+        super::client::wait_for_plugins(&server.client, Some(here()?)).await;
         let input = ModelListInput { location: Some(here()?), types: None };
         Ok::<_, error::Error>(server.client.json::<Value>(Client::model_list_call(&input)?).await?)
     })??;
