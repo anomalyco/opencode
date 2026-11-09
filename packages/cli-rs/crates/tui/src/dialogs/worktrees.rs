@@ -10,8 +10,8 @@
 //! filter and the selection, so the list's lock and current marker follow it (TS props are reactive).
 
 use opencode_api::generated::{
-    AbsolutePath, LocationGetInput, LocationQueryInput, ProjectID, SessionMoveInput, V2Event, VcsStatusInput,
-    WorktreeDirectory, WorktreeListInput, WorktreeRefreshInput, WorktreeRemoveInput,
+    AbsolutePath, LocationGetInput, LocationQueryInput, ProjectID, SessionMoveInput, VcsStatusInput, WorktreeDirectory,
+    WorktreeListInput, WorktreeRefreshInput, WorktreeRemoveInput,
 };
 use opencode_store::Location;
 use opencode_ui::bind;
@@ -27,6 +27,7 @@ use std::rc::{Rc, Weak};
 use super::file_changes::{self, Choice};
 use super::session_list::dialog_theme;
 use crate::app::Tui;
+use crate::features::events::Handled;
 use crate::routes::Route;
 
 /// The dialog's key, so a rebuild only replaces this dialog.
@@ -75,8 +76,8 @@ pub fn show(tui: &Tui, props: Props) {
 }
 
 /// `worktree.updated` of the open dialog's project reads the list again.
-pub(crate) fn event(event: &V2Event) {
-    let V2Event::WorktreeUpdated(event) = event else {
+pub(crate) fn event(event: &Handled) {
+    let Handled::WorktreeUpdated(event) = event else {
         return;
     };
     let Some(workspaces) = OPEN.with(|open| open.borrow().upgrade()) else {

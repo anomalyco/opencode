@@ -39,28 +39,52 @@ pub struct Events {
 #[derive(Clone)]
 pub(crate) struct Signal(pub Arc<V2Event>);
 
-/// The event types [`handle`] acts on, which the store therefore passes on. Keep in step with [`handle`] and the
-/// handlers it calls.
-const HANDLED: [&str; 12] = [
-    "server.connected",
-    "session.deleted",
-    "session.inbox.enqueued",
-    "session.execution.succeeded",
-    "worktree.updated",
-    "persistent-pty.added",
-    "persistent-pty.removed",
-    "persistent-pty.updated",
-    "tui.command.execute",
-    "tui.toast.show",
-    "tui.prompt.append",
-    "tui.session.select",
-];
+/// Declares [`Handled`], the events [`handle`] and the handlers it calls act on, and [`HANDLED`], their tags, which the
+/// store passes on. The handlers match on [`Handled`], so acting on a type means adding it here.
+macro_rules! handled {
+    ($($tag:literal => $variant:ident($payload:ident)),* $(,)?) => {
+        /// An event [`handle`] acts on.
+        #[allow(dead_code, reason = "a handler may match a variant without reading its payload")]
+        pub(crate) enum Handled<'a> {
+            $($variant(&'a opencode_api::generated::$payload),)*
+        }
+
+        impl<'a> Handled<'a> {
+            fn of(event: &'a V2Event) -> Option<Self> {
+                match event {
+                    $(V2Event::$variant(event) => Some(Self::$variant(event)),)*
+                    _ => None,
+                }
+            }
+        }
+
+        /// Each tag of [`Handled`], with its variant.
+        const HANDLED: &[(&str, &str)] = &[$(($tag, stringify!($variant))),*];
+    };
+}
+
+handled! {
+    "server.connected" => ServerConnected(V2EventServerConnected),
+    "session.deleted" => SessionDeleted(SessionDeleted),
+    "session.inbox.enqueued" => SessionInboxEnqueued(SessionInboxEnqueued),
+    "session.execution.succeeded" => SessionExecutionSucceeded(SessionExecutionSucceeded),
+    "worktree.updated" => WorktreeUpdated(WorktreeUpdated),
+    "persistent-pty.added" => PersistentPtyAdded(PersistentPtyAdded),
+    "persistent-pty.removed" => PersistentPtyRemoved(PersistentPtyRemoved),
+    "persistent-pty.updated" => PersistentPtyUpdated(PersistentPtyUpdated),
+    "tui.command.execute" => TuiCommandExecute(TuiCommandExecute),
+    "tui.toast.show" => TuiToastShow(TuiToastShow),
+    "tui.prompt.append" => TuiPromptAppend(TuiPromptAppend),
+    "tui.session.select" => TuiSessionSelect(TuiSessionSelect),
+}
 
 pub fn install(tui: &Tui) {
     // For the TUI's lifetime.
-    std::mem::forget(tui.data.listen(HANDLED));
+    std::mem::forget(tui.data.listen(HANDLED.iter().map(|(tag, _)| *tag)));
     tui.app.on_message(bind!(tui, |tui, _, Signal(event)| {
-        handle(&tui, event);
+        if let Some(event) = Handled::of(event) {
+            handle(&tui, &event);
+        }
         let subscribers: Vec<_> =
             tui.events.subscribers.borrow().iter().map(|(_, subscriber)| subscriber.clone()).collect();
         for subscriber in subscribers {
@@ -97,15 +121,15 @@ pub fn sync(tui: &Tui, changes: &Changes) {
     crate::dialogs::model::usage_alerts(&tui.local);
 }
 
-fn handle(tui: &Tui, event: &V2Event) {
+fn handle(tui: &Tui, event: &Handled) {
     // Pins and the worktrees dialog see every event, tabs or not (E.11b).
     crate::features::quick_switch::event(tui, event);
     crate::dialogs::worktrees::event(event);
     // Every connection, also one the connection status coalesced (`context/location.tsx`).
-    if let V2Event::ServerConnected(_) = event {
+    if let Handled::ServerConnected(_) = event {
         crate::features::location::reconnected(tui);
     }
-    if let V2Event::SessionDeleted(event) = event {
+    if let Handled::SessionDeleted(event) = event {
         tui.local.forget(&event.data.session_id);
     }
     // The tab strip sees `session.deleted` first; with tabs on it leaves the deleted tab without a toast.
@@ -115,33 +139,33 @@ fn handle(tui: &Tui, event: &V2Event) {
     crate::terminal::event(tui, event);
     crate::client_mcp::event(tui, event);
     match event {
-        V2Event::TuiCommandExecute(event) if here(tui, event.location.as_ref()) => {
+        Handled::TuiCommandExecute(event) if here(tui, event.location.as_ref()) => {
             tui.keymap.dispatch(&event.data.command, None);
         }
-        V2Event::TuiToastShow(event) if here(tui, event.location.as_ref()) => {
+        Handled::TuiToastShow(event) if here(tui, event.location.as_ref()) => {
             let data = &event.data;
             let mut toast = ToastOptions::new(variant(data.variant.as_str()), data.message.clone());
             toast.title = data.title.clone();
             toast.duration = data.duration.map(|duration| Duration::from_millis(duration.max(0) as u64));
             tui.toasts.show(toast);
         }
-        V2Event::TuiPromptAppend(event) if here(tui, event.location.as_ref()) => {
+        Handled::TuiPromptAppend(event) if here(tui, event.location.as_ref()) => {
             let prompt = tui.prompt.current.borrow().upgrade();
             if let Some(prompt) = prompt {
                 prompt.textarea.insert(&event.data.text);
                 prompt.textarea.set_cursor_offset(prompt.text_end());
             }
         }
-        V2Event::SessionExecutionSucceeded(event)
+        Handled::SessionExecutionSucceeded(event)
             if tui.route() == (Route::Session { id: event.data.session_id.clone() })
                 && matches!(tui.local.usage(), Some(Some(_))) =>
         {
             tui.local.load_usage(true);
         }
-        V2Event::TuiSessionSelect(event) if here(tui, event.location.as_ref()) => {
+        Handled::TuiSessionSelect(event) if here(tui, event.location.as_ref()) => {
             tui.navigate(Route::Session { id: event.data.session_id.clone() });
         }
-        V2Event::SessionDeleted(event) => {
+        Handled::SessionDeleted(event) => {
             let Route::Session { id } = tui.route() else {
                 return;
             };
@@ -221,5 +245,17 @@ fn mcp_toasts(tui: &Tui) {
                 tui.keymap.dispatch("mcp.list", None);
             }),
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // Expected: each tag the store passes on for `handle` is the tag of the variant `handle` matches on.
+    #[test]
+    fn each_handled_tag_names_its_variant() {
+        for (tag, variant) in super::HANDLED {
+            let name: String = tag.split(['.', '-']).map(|part| part[..1].to_uppercase() + &part[1..]).collect();
+            assert_eq!(&name, variant, "{tag}");
+        }
     }
 }
