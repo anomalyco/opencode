@@ -302,6 +302,9 @@ function createPillHost(win: BrowserWindow, label: () => string) {
     if (!pill || pill.isDestroyed() || !ready || closed) return
     const generation = ++measureGeneration
 
+    // Without a compositor the window's own background shows at the shaped edge, so match the pill surface.
+    if (process.platform === "linux") pill.setBackgroundColor(data.background)
+
     try {
       const size: unknown = await pill.webContents.executeJavaScript(
         `(() => {
