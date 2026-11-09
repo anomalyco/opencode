@@ -10,6 +10,7 @@ import type { ClaudeSessions } from "../claude/sessions.js"
 import type { EffortLevel } from "@anthropic-ai/claude-agent-sdk"
 import { Provider } from "@opencode/schema/provider"
 import { ConvertClaudeStream } from "./convert-claude-stream.js"
+import { ConvertToClaudeMessage } from "./convert-to-claude-message.js"
 import { RequestKind } from "./request-kind.js"
 import { ClaudeSystemPrompt } from "./system-prompt.js"
 
@@ -75,7 +76,7 @@ export class Model implements LanguageModelV3 {
               maxOutputTokens: options.maxOutputTokens,
               connection: this.connection,
               system,
-              prompt: options.prompt,
+              prompt: ConvertToClaudeMessage.liftInstructionUpdates(options.prompt),
               tools: offered,
               emit: (message) => {
                 if (cancelled) return

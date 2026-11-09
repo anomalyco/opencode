@@ -72,6 +72,40 @@ describe("Claude conversions", () => {
     ])
   })
 
+  test("lifts an instruction update appended mid-conversation to user content and keeps the system prompt", () => {
+    const prompt: LanguageModelV3Prompt = [
+      { role: "system", content: "Base prompt" },
+      { role: "system", content: "Initial instructions" },
+      { role: "user", content: [{ type: "text", text: "Hi" }] },
+      { role: "assistant", content: [{ type: "text", text: "Hello" }] },
+      { role: "system", content: "The value is now B." },
+      { role: "user", content: [{ type: "text", text: "What is the value?" }] },
+    ]
+    const lifted = ConvertToClaudeMessage.liftInstructionUpdates(prompt)
+    // Leading system messages are the prompt and stay put; the later one becomes a user turn.
+    expect(lifted).toEqual([
+      { role: "system", content: "Base prompt" },
+      { role: "system", content: "Initial instructions" },
+      { role: "user", content: [{ type: "text", text: "Hi" }] },
+      { role: "assistant", content: [{ type: "text", text: "Hello" }] },
+      { role: "user", content: [{ type: "text", text: "The value is now B." }] },
+      { role: "user", content: [{ type: "text", text: "What is the value?" }] },
+    ])
+    // The update rides into the conversation, and the system prompt never sees it.
+    expect(ClaudeSystemPrompt.utility(lifted)).toBe("Base prompt\n\nInitial instructions")
+    const blocks = ConvertToClaudeMessage.content(lifted)
+    expect(blocks).toContainEqual({ type: "text", text: "The value is now B." })
+    expect(blocks).not.toContainEqual({ type: "text", text: "Base prompt" })
+  })
+
+  test("leaves a prompt without instruction updates unchanged", () => {
+    const prompt: LanguageModelV3Prompt = [
+      { role: "system", content: "Only prompt" },
+      { role: "user", content: [{ type: "text", text: "Question" }] },
+    ]
+    expect(ConvertToClaudeMessage.liftInstructionUpdates(prompt)).toEqual(prompt)
+  })
+
   test("preserves byte/base64/URL image and PDF attachments", () => {
     const bytes = new Uint8Array([1, 2, 3])
     const blocks = ConvertToClaudeMessage.content([

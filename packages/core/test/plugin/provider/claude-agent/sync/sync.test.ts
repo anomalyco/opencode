@@ -3,6 +3,7 @@ import type { LanguageModelV3Prompt } from "@ai-sdk/provider"
 import { Fingerprint } from "@opencode/core/plugin/provider/claude-agent/sync/fingerprint"
 import { SyncDecision } from "@opencode/core/plugin/provider/claude-agent/sync/decide"
 import { CatchUp } from "@opencode/core/plugin/provider/claude-agent/sync/catch-up"
+import { ConvertToClaudeMessage } from "@opencode/core/plugin/provider/claude-agent/language-model/convert-to-claude-message"
 
 const user = (text: string): LanguageModelV3Prompt[number] => ({ role: "user", content: [{ type: "text", text }] })
 const assistant = (text: string): LanguageModelV3Prompt[number] => ({
@@ -79,6 +80,24 @@ describe("history reconciliation", () => {
     expect(SyncDecision.decide([past[0]!], record).kind).toBe("changed")
     expect(SyncDecision.decide([user("Compacted summary"), user("Next")], record).kind).toBe("fresh")
     expect(SyncDecision.decide([...past, user("Next")], { claudeSessionID: "old" }).kind).toBe("fresh")
+  })
+
+  test("a keyed instruction update appended after the first turn is caught up as conversation content", () => {
+    const synced = [...past, user("Start"), assistant("First answer")]
+    const saved = { claudeSessionID: "claude-a", history: Fingerprint.groups(synced) }
+    // The plugin appends an instruction update at the step boundary, then the next question arrives.
+    const raw: LanguageModelV3Prompt = [
+      ...synced,
+      { role: "system", content: "The value is now B." },
+      user("What is the value?"),
+    ]
+    const lifted = ConvertToClaudeMessage.liftInstructionUpdates(raw)
+    const decision = SyncDecision.decide(lifted, saved)
+    expect(decision).toEqual({ kind: "continue", start: 4 })
+    const text = CatchUp.content(lifted, decision.start)
+      .filter((block) => block.type === "text")
+      .map((block) => (block as { text: string }).text)
+    expect(text).toContain("The value is now B.")
   })
 
   test("ignores thinking, metadata and reordered user notes, but notices changed visible text", () => {

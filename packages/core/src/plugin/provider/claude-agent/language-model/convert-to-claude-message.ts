@@ -5,6 +5,21 @@ import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 
 export type ContentBlock = Exclude<SDKUserMessage["message"]["content"], string>[number]
 
+// A running Claude process won't take a new system message without restarting. OpenCode only adds
+// system messages after the first turn for instruction updates, so hand those over as user content and
+// leave the leading system prompt alone.
+export function liftInstructionUpdates(prompt: LanguageModelV3Prompt): LanguageModelV3Prompt {
+  let started = false
+  return prompt.map((message) => {
+    if (message.role !== "system") {
+      started = true
+      return message
+    }
+    if (!started) return message
+    return { role: "user", content: [{ type: "text", text: message.content }] }
+  })
+}
+
 // Claude can't be given earlier turns, so their roles become text tags. Attachments stay real content blocks.
 export function content(prompt: LanguageModelV3Prompt): ContentBlock[] {
   const blocks: ContentBlock[] = []
