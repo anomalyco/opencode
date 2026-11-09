@@ -1834,7 +1834,7 @@ impl Mini {
                 } else {
                     title.to_owned()
                 };
-                self.app.set_title(&format!("OC | {short}"));
+                self.app.set_title(&opencode_ui::terminal_title(&format!("OC | {short}")));
             }
         }
     }
