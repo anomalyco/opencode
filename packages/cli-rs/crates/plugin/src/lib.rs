@@ -112,6 +112,10 @@ pub trait Host: 'static {
     }
     /// Shows plugin `id`'s `dialog` ([`abi::Host::dialog`]). Called outside every plugin callback.
     fn dialog(&self, _id: &str, _dialog: abi::Dialog) {}
+    /// Whether plugin `id`'s panel `key` is open ([`abi::Read::dialog_open`]).
+    fn dialog_open(&self, _id: &str, _key: &str) -> bool {
+        false
+    }
     /// Copies `text` to the clipboard, and returns whether it did; a host tells the user when it did not. Called
     /// outside every plugin callback.
     fn copy(&self, text: &str) -> bool {
@@ -241,14 +245,25 @@ impl<H: Host> From<abi::Plugin> for Definition<H> {
                 });
                 setup.registration.code_blocks.push((language.clone(), render));
             }
-            for (claim, render) in api.renders() {
+            for (index, claim, render) in api.renders() {
                 let (render, scope) = (render.clone(), scope.clone());
+                let mounts: Vec<abi::MountFn> =
+                    api.mounts().iter().filter(|(claim, _)| *claim == index).map(|(_, run)| run.clone()).collect();
+                let mount = (!mounts.is_empty()).then(|| {
+                    let scope = scope.clone();
+                    // A claim may unmount after its plugin was disposed; the plugin hears of it no more.
+                    Rc::new(move |_: &H, input: &abi::SlotInput, mounted: bool| {
+                        if !scope.activation.disposed() {
+                            scope.run(|host| mounts.iter().for_each(|run| run(host, input, mounted)));
+                        }
+                    }) as node::MountFn<H>
+                });
                 let render: node::SlotRender<H> = Rc::new(move |host: &H, input, changed| {
                     let mut out = abi::Render::Keep;
                     host.read(&mut |read| out = render(&Scoped { read, host, scope: &scope }, input, changed));
                     out
                 });
-                setup.claim(slot::placement(claim), render, &activation);
+                setup.claim(slot::placement(claim), render, mount, &activation);
             }
             for (types, run) in api.events() {
                 let (types, run, scope) = (types.to_vec(), run.clone(), scope.clone());
@@ -419,6 +434,18 @@ impl<H: Host> abi::Read for Scoped<'_, H> {
     fn route(&self) -> abi::Route {
         self.read.route()
     }
+
+    fn interactive(&self) -> bool {
+        self.read.interactive()
+    }
+
+    fn shortcut(&self, name: &str) -> Option<String> {
+        self.read.shortcut(name)
+    }
+
+    fn dialog_open(&self, key: &str) -> bool {
+        self.host.dialog_open(&self.scope.id, key)
+    }
 }
 
 impl<H: Host> abi::Host for Scoped<'_, H> {
@@ -557,13 +584,19 @@ impl<H: Host> Setup<'_, H> {
     }
 
     /// Claims a place in the slot tree with a render of the one API, on either path; `activation` renders its mounts
-    /// again.
-    pub(crate) fn claim(&mut self, placement: Placement, render: node::SlotRender<H>, activation: &Rc<Activation<H>>) {
+    /// again, and `mount` hears of each mount and unmount.
+    pub(crate) fn claim(
+        &mut self,
+        placement: Placement,
+        render: node::SlotRender<H>,
+        mount: Option<node::MountFn<H>>,
+        activation: &Rc<Activation<H>>,
+    ) {
         let owner = Rc::downgrade(self.host);
         let path = placement.target.clone();
         let activation = activation.clone();
         self.slot(placement, move |host, input| {
-            let mount = node::Mount::new(host, owner.clone(), &path, input, render.clone());
+            let mount = node::Mount::new(host, owner.clone(), &path, input, render.clone(), mount.clone());
             activation.track(Rc::downgrade(&mount) as Weak<dyn Drawn<H>>);
             Box::new(mount)
         });

@@ -27,6 +27,8 @@ pub struct Live {
     scroll: ScrollBox,
     /// The most rows the body takes: 60% of the screen.
     max: u32,
+    /// The rows of the body's padding.
+    padding: u32,
     footer: View,
     body: RefCell<abi::Node>,
     binds: Rc<RefCell<Option<Disposer>>>,
@@ -39,7 +41,17 @@ pub fn show(tui: &Tui, id: &str, dialog: abi::Dialog) {
     match dialog {
         abi::Dialog::Prompt { title, placeholder, action } => ask(tui, id, title, placeholder, action),
         abi::Dialog::Panel(panel) => self::panel(tui, id, panel),
+        abi::Dialog::Close { key } => {
+            if open(tui, id, &key) {
+                tui.dialogs.clear();
+            }
+        }
     }
+}
+
+/// Whether plugin `id`'s panel `key` is open.
+pub fn open(tui: &Tui, id: &str, key: &str) -> bool {
+    tui.dialogs.key().is_some_and(|open| open.strip_prefix(id).and_then(|rest| rest.strip_prefix('/')) == Some(key))
 }
 
 fn ask(tui: &Tui, id: &str, title: String, placeholder: Option<String>, action: abi::Action) {
@@ -70,6 +82,7 @@ fn ask(tui: &Tui, id: &str, title: String, placeholder: Option<String>, action: 
 
 fn panel(tui: &Tui, id: &str, panel: abi::Panel) {
     let key = format!("{id}/{}", panel.key);
+    let centered = panel.centered;
     let size = match panel.size {
         abi::PanelSize::Medium => DialogSize::Medium,
         abi::PanelSize::Large => DialogSize::Large,
@@ -79,6 +92,7 @@ fn panel(tui: &Tui, id: &str, panel: abi::Panel) {
         if let Some(live) = live.filter(|live| live.key == key) {
             live.update(tui, panel);
             tui.dialogs.set_size(size);
+            tui.dialogs.set_centered(centered);
             *tui.reads.panel.borrow_mut() = Some(live);
             tui.app.request_redraw();
             return;
@@ -98,7 +112,7 @@ fn panel(tui: &Tui, id: &str, panel: abi::Panel) {
         None,
         options,
     );
-    tui.dialogs.set_centered(true);
+    tui.dialogs.set_centered(centered);
     *tui.reads.panel.borrow_mut() = built.borrow_mut().take();
 }
 
@@ -109,12 +123,15 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, page: &Theme, key: String, plugin: String
     let header =
         dialog::header(cx, HeaderProps { gap: Some(2), title_view: Some(title.as_any()), ..HeaderProps::default() });
     let scroll = ScrollBox::new(app).scrollbars(false).height(1);
-    let content = View::new(app).shrink(0.0).padding_x(DIALOG_INSET).padding_y(1);
+    let content = View::new(app).shrink(0.0);
     scroll.add(&content);
-    // `DialogBleed`: the body's background reaches the dialog's edges.
+    // `DialogBleed`: the body's background reaches the dialog's edges, and its padding is inside it.
     let body = match panel.bleed {
-        true => View::new(app).margin_x(-(DIALOG_INSET as i32)).bg(page.background.raised.high).child(&scroll),
-        false => View::new(app).margin_x(-(DIALOG_INSET as i32)).child(&scroll),
+        true => {
+            content.padding_x(DIALOG_INSET).padding_y(1);
+            View::new(app).margin_x(-(DIALOG_INSET as i32)).bg(page.background.raised.high).child(&scroll)
+        }
+        false => View::new(app).child(&scroll),
     };
     let footer = View::new(app);
     let layout = dialog::layout_view(cx, &header, &body, Some(&footer), DIALOG_INSET, 1);
@@ -150,6 +167,7 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, page: &Theme, key: String, plugin: String
         content,
         scroll: scroll.clone(),
         max,
+        padding: if panel.bleed { 2 } else { 0 },
         footer,
         body: RefCell::new(panel.body.clone()),
         binds,
@@ -253,10 +271,10 @@ impl Live {
         *self.hovers.borrow_mut() = hovers;
         // `maxHeight`: the box is as high as the body and its padding, up to 60% of the screen.
         for child in self.content.children() {
-            let (fit, content, max) = (self.scroll.clone(), self.content.clone(), self.max);
+            let (fit, content, max, padding) = (self.scroll.clone(), self.content.clone(), self.max, self.padding);
             child.on_resize(move |cx, _| {
                 let height: f32 = content.children().iter().map(|child| child.rect().height).sum();
-                fit.height((height.ceil() as u32 + 2).clamp(1, max));
+                fit.height((height.ceil() as u32 + padding).clamp(1, max));
                 cx.app().request_redraw();
             });
         }

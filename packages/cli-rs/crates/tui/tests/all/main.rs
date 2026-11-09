@@ -28,6 +28,7 @@ mod permission;
 mod plugin_fetch;
 mod plugins;
 mod prompt;
+mod prompt_footer;
 mod queue;
 mod reconnect;
 mod resize;

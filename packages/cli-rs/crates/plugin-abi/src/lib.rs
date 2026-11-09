@@ -65,7 +65,9 @@ pub const ABI_MAJOR: u32 = 1;
 /// [`Request::Render`], [`Request::Event`], [`HostRequest::Color`], the session and catalog reads,
 /// [`HostRequest::Info`], [`HostRequest::Route`], [`HostRequest::Dispatch`], [`HostRequest::Attention`], and the
 /// requests of routes, replies, dialogs, navigation and the clipboard ([`Request::RenderRoute`], [`Request::Reply`],
-/// [`HostRequest::Fetch`], [`HostRequest::Navigate`], [`HostRequest::Dialog`], [`HostRequest::Copy`]).
+/// [`HostRequest::Fetch`], [`HostRequest::Navigate`], [`HostRequest::Dialog`], [`HostRequest::Copy`]), and of mounts and
+/// the prompt ([`Request::Mount`], [`HostRequest::Interactive`], [`HostRequest::Shortcut`],
+/// [`HostRequest::DialogOpen`]).
 pub const ABI_MINOR: u32 = 4;
 
 /// The symbol every plugin exports, of type [`EntryFn`].
@@ -341,6 +343,9 @@ pub struct SlotClaim {
     /// The claim answers [`Request::Render`] (ABI 1.4), not [`Request::Slot`]. Absent in a 1.3 plugin.
     #[serde(default, skip_serializing_if = "is_false")]
     pub render: bool,
+    /// 1.4: the claim has a [`Setup::on_mount`] handler, which [`Request::Mount`] runs.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub mount: bool,
 }
 
 /// Where a slot claim of [`Setup::slot`] goes.
@@ -879,6 +884,18 @@ pub struct SlotInput {
     /// `prompt.footer*`, `session.composer.top`, `session.panel` and `sidebar.*`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
+    /// `prompt.footer*`: the prompt's mode and whether its details show.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<PromptInput>,
+}
+
+/// What the prompt passes to the claims of `prompt.footer*`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PromptInput {
+    /// The prompt is in shell mode.
+    pub shell: bool,
+    /// The footer has room for its details: the usage and the shortcuts.
+    pub show_details: bool,
 }
 
 /// What changed since a claim last rendered. A claim that has not rendered yet gets `all`.
@@ -961,6 +978,10 @@ pub struct Family {
     pub members: Vec<Member>,
     /// A child's own cost, or a root's cost with every known descendant's.
     pub cost: f64,
+    /// The shells the session runs, in any location. Claims render again with the locations in
+    /// [`Changed::locations`] when they change.
+    #[serde(default, skip_serializing_if = "is_zero_usize")]
+    pub shells: usize,
 }
 
 /// The host, from [`Read::info`].
@@ -1037,6 +1058,13 @@ pub enum Request {
     Reply {
         id: RequestId,
         result: Result<serde_json::Value, String>,
+    },
+    /// 1.4: runs the [`Setup::on_mount`] handlers of the slot claim [`Manifest::slots`] names by index: `mounted` as the
+    /// host mounts the claim with `input`, before it first renders, and not as it unmounts it.
+    Mount {
+        claim: usize,
+        input: SlotInput,
+        mounted: bool,
     },
 }
 
@@ -1152,6 +1180,16 @@ pub enum HostRequest {
         text: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         then: Option<Action>,
+    },
+    /// 1.4: [`Read::interactive`].
+    Interactive,
+    /// 1.4: [`Read::shortcut`].
+    Shortcut {
+        name: String,
+    },
+    /// 1.4: [`Read::dialog_open`].
+    DialogOpen {
+        key: String,
     },
 }
 
@@ -1293,6 +1331,10 @@ pub enum Dialog {
         action: Action,
     },
     Panel(Panel),
+    /// Closes the plugin's [`Panel`] `key` if it is open.
+    Close {
+        key: String,
+    },
 }
 
 /// A dialog that shows a node, live: a panel shown again while its `key` is open changes in place and keeps where its
@@ -1318,6 +1360,9 @@ pub struct Panel {
     /// The body is on the raised background, edge to edge, at most 60% of the screen high.
     #[serde(default, skip_serializing_if = "is_false")]
     pub bleed: bool,
+    /// The panel sits in the middle of the screen, rather than near its top as a dialog does.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub centered: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -1418,6 +1463,19 @@ pub trait Read {
     /// What the host shows.
     fn route(&self) -> Route {
         Route::Home
+    }
+    /// Whether the session pane owns the input (TS `useInteractivity`): no side pane has it and no panel is full
+    /// screen. Claims render again with [`Changed::all`] when it changes; a claim stays mounted.
+    fn interactive(&self) -> bool {
+        true
+    }
+    /// The first key of command `name`, as the host shows keys, such as `ctrl+p`; `None` while it has none.
+    fn shortcut(&self, _name: &str) -> Option<String> {
+        None
+    }
+    /// Whether the plugin's [`Panel`] `key` is open.
+    fn dialog_open(&self, _key: &str) -> bool {
+        false
     }
 }
 
@@ -1598,6 +1656,18 @@ impl Read for HostHandle {
     fn route(&self) -> Route {
         self.read(&HostRequest::Route).unwrap_or_default()
     }
+
+    fn interactive(&self) -> bool {
+        self.read(&HostRequest::Interactive).unwrap_or(true)
+    }
+
+    fn shortcut(&self, name: &str) -> Option<String> {
+        self.read(&HostRequest::Shortcut { name: name.to_owned() })
+    }
+
+    fn dialog_open(&self, key: &str) -> bool {
+        self.read(&HostRequest::DialogOpen { key: key.to_owned() }).unwrap_or(false)
+    }
 }
 
 impl Host for HostHandle {
@@ -1707,6 +1777,8 @@ pub type ReplyFn = Rc<dyn Fn(&dyn Host, RequestId, Result<serde_json::Value, Str
 pub type CommandFn = Rc<dyn Fn(&dyn Host, Option<&str>)>;
 /// A registered event handler.
 pub type EventFn = Rc<dyn Fn(&dyn Host, &V2Event)>;
+/// A registered mount handler of [`Setup::on_mount`].
+pub type MountFn = Rc<dyn Fn(&dyn Host, &SlotInput, bool)>;
 /// A registered dispose callback.
 pub type DisposeFn = Box<dyn FnOnce(&dyn Host)>;
 
@@ -1749,6 +1821,8 @@ pub struct Setup {
     commands: Vec<CommandFn>,
     events: Vec<EventFn>,
     replies: Vec<ReplyFn>,
+    /// The mount handlers, with the index of their claim in [`Manifest::slots`].
+    mounts: Vec<(usize, MountFn)>,
     disposers: Vec<DisposeFn>,
 }
 
@@ -1809,14 +1883,35 @@ impl Setup {
     /// what changed since it last rendered, and runs again with each change batch, each change of the host's own
     /// state, and each wake.
     pub fn slot(&mut self, at: Placement, render: impl Fn(&dyn Read, &SlotInput, &Changed) -> Render + 'static) {
-        self.manifest.slots.push(SlotClaim { kind: at.kind, path: at.path, render: true });
+        self.manifest.slots.push(SlotClaim { kind: at.kind, path: at.path, render: true, mount: false });
         self.slots.push(SlotFn::Render(Rc::new(render)));
+    }
+
+    /// Calls `run` for each mount of the claim registered last at `at` (by [`Setup::slot`]): with `true` and the slot's
+    /// input as the host mounts it, before it first renders, and with `false` as it unmounts it. A plugin keeps state
+    /// per mount here, such as a request a mount starts. A slot mounts its claims again when its input changes, and
+    /// the next mount may come before the last one goes. Without a claim at `at`, it registers one that draws nothing.
+    pub fn on_mount(&mut self, at: Placement, run: impl Fn(&dyn Host, &SlotInput, bool) + 'static) {
+        let found = self
+            .manifest
+            .slots
+            .iter()
+            .rposition(|claim| claim.render && claim.kind == at.kind && claim.path == at.path);
+        let claim = match found {
+            Some(claim) => claim,
+            None => {
+                self.slot(at, |_, _, _| Render::Hide);
+                self.manifest.slots.len() - 1
+            }
+        };
+        self.manifest.slots[claim].mount = true;
+        self.mounts.push((claim, Rc::new(run)));
     }
 
     /// Claims a place in the slot tree with rows, as ABI 1.3 did; `render` receives the slot's session ID, if it
     /// has one.
     pub fn slot_lines(&mut self, kind: SlotKind, path: &str, render: impl Fn(Option<&str>) -> Vec<Line> + 'static) {
-        self.manifest.slots.push(SlotClaim { kind, path: path.to_owned(), render: false });
+        self.manifest.slots.push(SlotClaim { kind, path: path.to_owned(), render: false, mount: false });
         self.slots.push(SlotFn::Lines(Box::new(render)));
     }
 
@@ -1870,13 +1965,19 @@ impl Setup {
         &self.fences
     }
 
-    /// The slot claims of [`Setup::slot`], with their renders.
+    /// The slot claims of [`Setup::slot`], with their index in [`Manifest::slots`] and their renders.
     #[doc(hidden)]
-    pub fn renders(&self) -> impl Iterator<Item = (&SlotClaim, &RenderFn)> {
-        self.manifest.slots.iter().zip(&self.slots).filter_map(|(claim, render)| match render {
-            SlotFn::Render(render) => Some((claim, render)),
+    pub fn renders(&self) -> impl Iterator<Item = (usize, &SlotClaim, &RenderFn)> {
+        self.manifest.slots.iter().zip(&self.slots).enumerate().filter_map(|(index, (claim, render))| match render {
+            SlotFn::Render(render) => Some((index, claim, render)),
             SlotFn::Lines(_) => None,
         })
+    }
+
+    /// The mount handlers, with the index of their claim in [`Manifest::slots`].
+    #[doc(hidden)]
+    pub fn mounts(&self) -> &[(usize, MountFn)] {
+        &self.mounts
     }
 
     /// The commands, with their runs.
@@ -1917,6 +2018,7 @@ impl Setup {
             commands: Vec::new(),
             events: Vec::new(),
             replies: Vec::new(),
+            mounts: Vec::new(),
             disposers: Vec::new(),
         }
     }
@@ -1966,6 +2068,11 @@ impl Setup {
             }
             Request::Reply { id, result } => {
                 self.replies.iter().for_each(|run| run(&self.host, id, result.clone()));
+                Ok(serde_json::Value::Null)
+            }
+            Request::Mount { claim, input, mounted } => {
+                let runs = self.mounts.iter().filter(|(index, _)| *index == claim);
+                runs.for_each(|(_, run)| run(&self.host, &input, mounted));
                 Ok(serde_json::Value::Null)
             }
         }
@@ -2345,7 +2452,11 @@ mod tests {
     #[test]
     fn the_1_4_slot_render_round_trips() {
         let changed = Changed { lists: vec!["ses_1".into()], local: true, ..Changed::default() };
-        let request = Request::Render { claim: 1, input: SlotInput { session_id: Some("ses_1".into()) }, changed };
+        let request = Request::Render {
+            claim: 1,
+            input: SlotInput { session_id: Some("ses_1".into()), ..SlotInput::default() },
+            changed,
+        };
         let json =
             r#"{"type":"render","claim":1,"input":{"session_id":"ses_1"},"changed":{"lists":["ses_1"],"local":true}}"#;
         assert_eq!(serde_json::to_string(&request).unwrap(), json);
@@ -2356,7 +2467,7 @@ mod tests {
         assert_eq!(serde_json::to_string(&render).unwrap(), json);
         assert_eq!(serde_json::from_str::<Render>(json).unwrap(), render);
         assert_eq!(serde_json::to_string(&Render::Keep).unwrap(), r#"{"type":"keep"}"#);
-        let old = SlotClaim { kind: SlotKind::Append, path: "home.footer".into(), render: false };
+        let old = SlotClaim { kind: SlotKind::Append, path: "home.footer".into(), render: false, mount: false };
         assert_eq!(serde_json::to_string(&old).unwrap(), r#"{"kind":"append","path":"home.footer"}"#);
         assert_eq!(serde_json::to_string(&HostRequest::Model).unwrap(), r#"{"type":"model"}"#);
 
@@ -2481,6 +2592,7 @@ mod tests {
             }],
             binds: vec![PanelBind { key: "c".into(), title: "C".into(), action: action.clone() }],
             bleed: true,
+            centered: true,
         };
         let requests = [
             HostRequest::Fetch(fetch),
@@ -2488,6 +2600,10 @@ mod tests {
             HostRequest::Dialog { dialog: Dialog::Panel(panel) },
             HostRequest::Dialog { dialog: Dialog::Prompt { title: "p".into(), placeholder: None, action } },
             HostRequest::Copy { text: "x".into(), then: None },
+            HostRequest::Dialog { dialog: Dialog::Close { key: "k".into() } },
+            HostRequest::Interactive,
+            HostRequest::Shortcut { name: "agent.cycle".into() },
+            HostRequest::DialogOpen { key: "k".into() },
         ];
         for request in requests {
             let json = serde_json::to_string(&request).unwrap();
@@ -2552,5 +2668,36 @@ mod tests {
             assert_eq!(status, ERROR);
             assert!(instance.is_null());
         }
+    }
+
+    // Expected: a mount handler attaches to the claim registered last at its placement, which the manifest marks, and
+    // a `Mount` request runs it with the input and whether the claim mounted; without such a claim it registers a
+    // hidden one. The prompt input and the requests of step 7 keep their JSON optional.
+    #[test]
+    fn mounts_and_the_prompt_input_round_trip() {
+        let mut setup = Setup::in_process("new", None);
+        setup.slot(Placement::append("prompt.footer"), |_, _, _| Render::Hide);
+        let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
+        let into = seen.clone();
+        setup.on_mount(Placement::append("prompt.footer"), move |_, input, mounted| {
+            into.borrow_mut().push((input.clone(), mounted));
+        });
+        setup.on_mount(Placement::append("home.footer"), |_, _, _| {});
+        let marks: Vec<_> = setup.manifest().slots.iter().map(|claim| (claim.path.as_str(), claim.mount)).collect();
+        assert_eq!(marks, [("prompt.footer", true), ("home.footer", true)]);
+        assert_eq!(setup.renders().count(), 2);
+        let input = SlotInput {
+            session_id: Some("ses_1".into()),
+            prompt: Some(PromptInput { shell: false, show_details: true }),
+        };
+        let json = r#"{"type":"mount","claim":0,"input":{"session_id":"ses_1","prompt":{"shell":false,"show_details":true}},"mounted":true}"#;
+        let request = Request::Mount { claim: 0, input: input.clone(), mounted: true };
+        assert_eq!(serde_json::to_string(&request).unwrap(), json);
+        setup.handle(serde_json::from_str(json).unwrap()).unwrap();
+        setup.handle(Request::Mount { claim: 0, input: input.clone(), mounted: false }).unwrap();
+        setup.handle(Request::Mount { claim: 1, input: SlotInput::default(), mounted: true }).unwrap();
+        assert_eq!(*seen.borrow(), [(input.clone(), true), (input, false)]);
+        assert_eq!(serde_json::to_string(&SlotInput::default()).unwrap(), "{}");
+        assert_eq!(serde_json::to_string(&Family::default()).unwrap(), r#"{"members":[],"cost":0.0}"#);
     }
 }

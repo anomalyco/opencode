@@ -38,6 +38,8 @@ pub(super) struct TestHost {
     /// The fetches sent, with their replies, which [`TestHost::reply`] delivers.
     pub fetches: RefCell<Vec<(abi::Fetch, Reply)>>,
     pub dialogs: RefCell<Vec<(String, abi::Dialog)>>,
+    /// What [`abi::Read::interactive`] answers.
+    pub interactive: Cell<bool>,
 }
 
 /// A fetch's reply.
@@ -72,6 +74,14 @@ impl abi::Read for Fixture<'_> {
 
     fn model(&self) -> Option<ModelRef> {
         Some(ModelRef { id: "big".to_owned(), provider_id: "opencode".into(), variant: None })
+    }
+
+    fn interactive(&self) -> bool {
+        self.host.interactive.get()
+    }
+
+    fn shortcut(&self, name: &str) -> Option<String> {
+        (name == "command.palette.show").then(|| "ctrl+p".to_owned())
     }
 }
 
@@ -181,6 +191,7 @@ pub(super) fn host() -> Rc<TestHost> {
         messages: RefCell::default(),
         fetches: RefCell::default(),
         dialogs: RefCell::default(),
+        interactive: Cell::new(true),
     })
 }
 

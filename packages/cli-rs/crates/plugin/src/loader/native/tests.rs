@@ -894,7 +894,7 @@ fn the_sample_fetch_and_panel_act_the_same_in_process_and_through_the_library() 
         .iter()
         .map(|dialog| match dialog {
             abi::Dialog::Panel(panel) => (panel.key.clone(), panel.body.clone()),
-            abi::Dialog::Prompt { .. } => unreachable!(),
+            _ => unreachable!(),
         })
         .collect();
     let body = |count: u64| abi::Node::text([abi::Span::new(format!("shown {count} times"))]);
@@ -951,4 +951,74 @@ fn a_slow_reply_across_a_disable_delivers_nothing() {
         host.app.advance(Duration::from_millis(1));
         assert!(host.toasts.borrow().is_empty(), "{:?}", host.toasts.borrow());
     }
+}
+
+/// The sample's prompt footer claim, compiled in rather than loaded.
+#[path = "../../../examples/sample/src/prompt.rs"]
+mod sample_prompt;
+
+/// The sample's prompt row as `registry` mounts `prompt.footer` for `ses_1`: as mounted, after its fetch is answered,
+/// once the session pane lost the input, and as mounted again beside the first mount and then alone; with the fetches.
+fn prompted(host: &Rc<TestHost>, registry: &Registry<TestHost>) -> (Vec<String>, Vec<abi::Fetch>) {
+    host.interactive.set(true);
+    let input = SlotInput {
+        session_id: Some("ses_1".to_owned()),
+        prompt: Some(slot::PromptFooter { shell: false, show_details: true }),
+        ..SlotInput::default()
+    };
+    let row = |host: &TestHost, parent: &View| {
+        host.app().root().clear();
+        host.app().root().add(parent);
+        host.app.advance(Duration::from_millis(1));
+        host.app.render();
+        host.app.text().lines().find(|line| line.contains("sample prompt:")).unwrap_or_default().trim_end().to_owned()
+    };
+    let mut fetches = Vec::new();
+    let mut take = |host: &TestHost| fetches.extend(host.fetches.borrow().iter().map(|(fetch, _)| fetch.clone()));
+    let parent = View::new(host.app()).column();
+    let first = registry.mount(&**host, &parent, "prompt.footer", &input, |_| {});
+    let mut rows = vec![row(host, &parent)];
+    take(host);
+    host.reply();
+    rows.push(row(host, &parent));
+    host.interactive.set(false);
+    first.sync(host, &());
+    rows.push(row(host, &parent));
+    // A remount mounts the next before the last goes.
+    let again = View::new(host.app()).column();
+    let second = registry.mount(&**host, &again, "prompt.footer", &input, |_| {});
+    rows.push(row(host, &again));
+    drop(first);
+    second.sync(host, &());
+    rows.push(row(host, &again));
+    take(host);
+    host.reply();
+    drop(second);
+    (rows, fetches)
+}
+
+// Expected: each mount of the sample's prompt claim runs its `on_mount`, which fetches, and an unmount runs it again;
+// the claim reads whether the session pane owns the input and a command's key; the same in process and from the
+// library, where the mounts cross the C ABI as requests.
+#[test]
+fn the_sample_prompt_mounts_fetch_and_read_the_same_in_process_and_through_the_library() {
+    let host = host();
+    let in_process = Registry::new(vec![abi::Plugin { id: "sample", setup: sample_prompt::setup }.into()], []);
+    in_process.activate(&host);
+    let direct = prompted(&host, &in_process);
+    assert_eq!(
+        direct.0,
+        [
+            "sample prompt: 1 mounts, waiting, on, ctrl+p",
+            "sample prompt: 1 mounts, /api/sample/ses_1, on, ctrl+p",
+            "sample prompt: 1 mounts, /api/sample/ses_1, off, ctrl+p",
+            "sample prompt: 2 mounts, /api/sample/ses_1, off, ctrl+p",
+            "sample prompt: 1 mounts, /api/sample/ses_1, off, ctrl+p",
+        ]
+    );
+    let fetch = abi::Fetch { method: "GET".into(), path: "/api/sample/ses_1".into(), ..abi::Fetch::default() };
+    assert_eq!(direct.1, [fetch.clone(), fetch]);
+    in_process.set_active(&host, "sample", false);
+    let library = active(&host, &build("still"));
+    assert_eq!(prompted(&host, &library), direct);
 }

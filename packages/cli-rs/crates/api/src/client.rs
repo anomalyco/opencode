@@ -183,6 +183,22 @@ impl Client {
         self.json::<Data<T>>(call).await.map(|value| value.data)
     }
 
+    /// Sends `call` and accepts any 2xx status: the JSON body, or `null` without one. For a caller that does not know
+    /// which status a call answers with, such as a plugin's fetch.
+    pub async fn reply(&self, call: Call) -> Result<Value, Error> {
+        let declared = call.declared_statuses;
+        let request = self.prepare(call)?;
+        let response = self.transport.send(request).await.map_err(Error::Transport)?;
+        if !(200..300).contains(&response.status) {
+            return Err(response_error(response, declared).await);
+        }
+        let bytes = response.bytes().await.map_err(Error::Transport)?;
+        if bytes.is_empty() {
+            return Ok(Value::Null);
+        }
+        serde_json::from_slice(&bytes).map_err(|error| Error::MalformedResponse(error.to_string()))
+    }
+
     /// Sends `call` and expects no body. Public so a caller can send a body with its own key order.
     pub async fn empty(&self, call: Call) -> Result<(), Error> {
         self.execute(call).await.map(|_| ())

@@ -1,29 +1,37 @@
-//! The goal `/goal` set on a session (E.14, rows F02 and DLG45, `feature-plugins/prompt/goal.tsx`): the
-//! goal plugin's RPC read, the status under the prompt, and the goal dialog.
+//! The goal `/goal` set on a session (E.14, rows F02 and DLG45, `feature-plugins/prompt/goal.tsx`): the goal plugin's
+//! RPC read, the status under the prompt, and the goal panel, for the prompt footer plugin.
 //!
-//! [`Goals`] forwards `rpc.opencode.goal.changed` and `server.connected` to every live [`Tracker`]. A tracker
-//! reads its session's goal when it starts and after each reconnect, since changes published meanwhile were
-//! missed, and follows the `changed` events.
+//! [`Goals`] keeps the goal of each session a mounted footer shows. The first footer of a session reads its goal, and
+//! every tracked session is read again after a reconnect, since changes published meanwhile were missed; the `changed`
+//! events keep them current. A change that arrives while a read is in flight is newer than its reply, so each read and
+//! change takes a turn, and a reply of an older turn is dropped.
 
-use opencode_api::generated::{LocationQueryInput, RpcCallInput, SessionCommandInput, SessionID, V2Event};
-use opencode_ui::bind;
-use opencode_ui::dialog::{self, DialogOptions, FooterAction, FooterProps, HeaderProps};
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
-use opencode_ui::theme::Theme;
-use opencode_ui::toast::{ToastOptions, Variant};
-use opentui::keymap::{Condition, Disposer};
-use opentui::prelude::*;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
+use std::rc::Rc;
+
+use opencode_api::client::Client;
+use opencode_api::generated::{
+    LocationQueryInput, RpcCallInput, RpcCallOutput, SessionCommandInput, SessionID, V2Event,
+};
+use opencode_plugin::abi::{
+    self, Action, Click, Command, Dialog, Host, Layout, Node, Panel, PanelAction, PanelBind, PanelSize, RequestId,
+    Span, Toast, Variant, Wrap,
+};
 use serde::Deserialize;
 use serde_json::json;
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
 
-use crate::app::Tui;
+use super::fetch::fetch_of;
 
 const RPC: &str = "opencode.goal";
 const CHANGED: &str = "rpc.opencode.goal.changed";
-/// [`dialog::DialogOptions::key`] of the goal dialog.
-const DIALOG: &str = "goal";
+/// The key of the goal panel.
+const PANEL: &str = "goal";
+/// The hidden commands of the status and the panel. Each takes the session as its input.
+const SHOW: &str = "prompt.goal.show";
+const PAUSE: &str = "prompt.goal.pause";
+const RESUME: &str = "prompt.goal.resume";
+const CLEAR: &str = "prompt.goal.clear";
 
 /// `Goal.State`, the fields the TUI shows.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -42,135 +50,184 @@ pub enum Status {
     Complete,
 }
 
-/// The live trackers, and the event forwarding they share. One per plugin activation.
+/// The goals of the sessions the mounted footers show (TS `createGoal`, once per session).
 #[derive(Default)]
 pub struct Goals {
-    trackers: RefCell<Vec<Weak<Tracker>>>,
-    subscription: RefCell<Option<Disposer>>,
+    sessions: RefCell<HashMap<String, Tracked>>,
+    pending: RefCell<HashMap<RequestId, Pending>>,
+    turns: Cell<u64>,
+    /// The session whose goal the panel shows.
+    shown: RefCell<Option<String>>,
+}
+
+#[derive(Default)]
+struct Tracked {
+    mounts: usize,
+    goal: Option<Rc<Goal>>,
+    turn: u64,
+}
+
+enum Pending {
+    Read { session: String, turn: u64 },
+    Command,
 }
 
 impl Goals {
-    /// Forwards the store's goal events to the trackers until [`Goals::dispose`].
-    pub fn install(self: &Rc<Self>, tui: &Tui) {
-        let subscription = crate::features::events::subscribe(tui, bind!(self, |goals, _, event| goals.event(event)));
-        self.subscription.replace(Some(subscription));
-    }
-
-    pub fn dispose(&self) {
-        self.subscription.take();
-    }
-
-    /// Starts following `session`'s goal; `changed` runs after each change of it.
-    pub fn track(&self, tui: &Tui, session: SessionID, changed: impl Fn(&Tui) + 'static) -> Rc<Tracker> {
-        let tracker = Rc::new_cyclic(|this| Tracker {
-            tui: tui.weak(),
-            session,
-            goal: RefCell::new(None),
-            turn: Cell::new(0),
-            changed: Box::new(changed),
-            this: this.clone(),
-        });
-        let mut trackers = self.trackers.borrow_mut();
-        trackers.retain(|tracker| tracker.strong_count() > 0);
-        trackers.push(Rc::downgrade(&tracker));
-        drop(trackers);
-        tracker.load(tui);
-        tracker
-    }
-
-    fn event(&self, event: &V2Event) {
-        let trackers: Vec<Rc<Tracker>> = self.trackers.borrow().iter().filter_map(Weak::upgrade).collect();
-        for tracker in trackers {
-            let Some(tui) = tracker.tui.upgrade() else {
-                continue;
-            };
-            match event {
-                V2Event::ServerConnected(_) => tracker.load(&tui),
-                V2Event::Rpc(event) if event.r#type == CHANGED => {
-                    if event.data.get("sessionID").and_then(|id| id.as_str()) != Some(tracker.session.0.as_str()) {
-                        continue;
-                    }
-                    // A change that arrives while a read is in flight is newer than its reply.
-                    tracker.turn.set(tracker.turn.get() + 1);
-                    let goal = event.data.get("goal").and_then(|goal| Goal::deserialize(goal).ok());
-                    tracker.set(&tui, goal);
+    /// Registers the events, replies and hidden commands the goals follow.
+    pub fn register(self: &Rc<Self>, setup: &mut abi::Setup) {
+        let goals = self.clone();
+        setup.on_event(&[CHANGED, "server.connected"], move |host, event| goals.event(host, event));
+        let goals = self.clone();
+        setup.on_reply(move |host, id, result| goals.reply(host, id, result));
+        for (name, text) in [(SHOW, None), (PAUSE, Some("pause")), (RESUME, Some("resume")), (CLEAR, Some("clear"))] {
+            let goals = self.clone();
+            setup.command(Command { name: name.to_owned(), ..Command::default() }, move |host, session| {
+                let Some(session) = session else { return };
+                match text {
+                    None => goals.show(host, session),
+                    Some(text) => goals.command(host, session, text),
                 }
-                _ => {}
+            });
+        }
+    }
+
+    pub fn goal(&self, session: &str) -> Option<Rc<Goal>> {
+        self.sessions.borrow().get(session).and_then(|tracked| tracked.goal.clone())
+    }
+
+    /// A footer of `session` mounted, or went: the first one reads the goal, and the last one forgets it.
+    pub fn mounted(&self, host: &dyn Host, session: &str, mounted: bool) {
+        let mut sessions = self.sessions.borrow_mut();
+        if mounted {
+            let tracked = sessions.entry(session.to_owned()).or_default();
+            tracked.mounts += 1;
+            let first = tracked.mounts == 1;
+            drop(sessions);
+            if first {
+                self.load(host, session);
+            }
+            return;
+        }
+        if let Some(tracked) = sessions.get_mut(session) {
+            tracked.mounts -= 1;
+            if tracked.mounts == 0 {
+                sessions.remove(session);
             }
         }
     }
-}
-
-/// The goal of one session (TS `createGoal`).
-pub struct Tracker {
-    tui: Weak<Tui>,
-    session: SessionID,
-    goal: RefCell<Option<Goal>>,
-    turn: Cell<u64>,
-    changed: Box<dyn Fn(&Tui)>,
-    this: Weak<Tracker>,
-}
-
-impl Tracker {
-    pub fn goal(&self) -> Option<Goal> {
-        self.goal.borrow().clone()
-    }
-
-    pub fn session(&self) -> &SessionID {
-        &self.session
-    }
 
     /// Reads the goal; a server without the goal plugin answers with an error, and the session shows none.
-    fn load(&self, tui: &Tui) {
-        let turn = self.turn.get() + 1;
-        self.turn.set(turn);
-        let directory =
-            tui.data.read(|state| state.session(&self.session).map(|session| session.location.directory.0.clone()));
+    fn load(&self, host: &dyn Host, session: &str) {
+        let turn = self.turn(session);
+        let directory = host.session(session).map(|session| session.info.location.directory.0);
         let input = RpcCallInput {
             rpc_id: RPC.to_owned(),
             method: "get".to_owned(),
             location: directory.map(|directory| LocationQueryInput { directory: Some(directory) }),
-            input: Some(json!({ "sessionID": self.session.0 })),
+            input: Some(json!({ "sessionID": session })),
         };
-        let client = tui.data.client().clone();
-        let weak = self.this.clone();
-        tui.app.spawn(
-            async move { client.rpc_call(&input).await },
-            bind!(weak, |tracker, _, result| {
-                let Some(tui) = tracker.tui.upgrade() else {
-                    return;
-                };
-                let Ok(output) = result else { return };
-                if tracker.turn.get() != turn {
-                    return;
-                }
-                let goal = output.output.and_then(|goal| Goal::deserialize(goal).ok());
-                tracker.set(&tui, goal);
-            }),
-        );
+        let call = Client::rpc_call_call(&input).expect("the goal read encodes");
+        let read = Pending::Read { session: session.to_owned(), turn };
+        self.pending.borrow_mut().insert(host.fetch(fetch_of(call)), read);
     }
 
-    fn set(&self, tui: &Tui, goal: Option<Goal>) {
-        if *self.goal.borrow() == goal {
-            return;
+    /// A new turn of `session`, which outdates the reads in flight.
+    fn turn(&self, session: &str) -> u64 {
+        let turn = self.turns.get() + 1;
+        self.turns.set(turn);
+        if let Some(tracked) = self.sessions.borrow_mut().get_mut(session) {
+            tracked.turn = turn;
         }
-        *self.goal.borrow_mut() = goal;
-        (self.changed)(tui);
-        // An open goal dialog follows the goal, as the TS dialog's accessor does.
-        if tui.dialogs.key().as_deref() == Some(DIALOG) {
-            match self.goal() {
-                Some(_) => show(tui, self),
-                None => tui.dialogs.clear(),
+        turn
+    }
+
+    fn event(&self, host: &dyn Host, event: &V2Event) {
+        match event {
+            V2Event::ServerConnected(_) => {
+                let sessions: Vec<String> = self.sessions.borrow().keys().cloned().collect();
+                sessions.iter().for_each(|session| self.load(host, session));
+            }
+            V2Event::Rpc(event) if event.r#type == CHANGED => {
+                let Some(session) = event.data.get("sessionID").and_then(|id| id.as_str()) else { return };
+                if !self.sessions.borrow().contains_key(session) {
+                    return;
+                }
+                self.turn(session);
+                let goal = event.data.get("goal").and_then(|goal| Goal::deserialize(goal).ok());
+                self.set(host, session, goal);
+            }
+            _ => {}
+        }
+    }
+
+    fn reply(&self, host: &dyn Host, id: RequestId, result: Result<serde_json::Value, String>) {
+        let Some(pending) = self.pending.borrow_mut().remove(&id) else { return };
+        match pending {
+            Pending::Command => {
+                if let Err(error) = result {
+                    host.toast(Toast::new(Variant::Error, error).title("Failed to update the goal"));
+                }
+            }
+            Pending::Read { session, turn } => {
+                let Ok(value) = result else { return };
+                if self.sessions.borrow().get(&session).is_none_or(|tracked| tracked.turn != turn) {
+                    return;
+                }
+                let output = serde_json::from_value::<RpcCallOutput>(value).ok().and_then(|output| output.output);
+                self.set(host, &session, output.and_then(|goal| Goal::deserialize(goal).ok()));
             }
         }
     }
+
+    fn set(&self, host: &dyn Host, session: &str, goal: Option<Goal>) {
+        {
+            let mut sessions = self.sessions.borrow_mut();
+            let Some(tracked) = sessions.get_mut(session) else { return };
+            if tracked.goal.as_deref() == goal.as_ref() {
+                return;
+            }
+            tracked.goal = goal.map(Rc::new);
+        }
+        // An open goal panel follows the goal, as the TS dialog's accessor does.
+        if self.shown.borrow().as_deref() == Some(session) && host.dialog_open(PANEL) {
+            match self.goal(session) {
+                Some(goal) => host.dialog(Dialog::Panel(panel(session, &goal))),
+                None => host.dialog(Dialog::Close { key: PANEL.to_owned() }),
+            }
+        }
+    }
+
+    /// `showGoal`: the panel, or how to start a goal.
+    fn show(&self, host: &dyn Host, session: &str) {
+        let Some(goal) = self.goal(session) else {
+            host.toast(Toast::new(Variant::Info, "No goal is set. Start one with /goal <objective>."));
+            return;
+        };
+        *self.shown.borrow_mut() = Some(session.to_owned());
+        host.dialog(Dialog::Panel(panel(session, &goal)));
+    }
+
+    /// `/goal pause`, `/goal resume`, or `/goal clear` through `session.command`; clear closes the panel first.
+    fn command(&self, host: &dyn Host, session: &str, text: &str) {
+        if text == "clear" {
+            host.dialog(Dialog::Close { key: PANEL.to_owned() });
+        }
+        let input = SessionCommandInput {
+            session_id: SessionID(session.to_owned()),
+            name: "goal".to_owned(),
+            text: text.to_owned(),
+            ..SessionCommandInput::default()
+        };
+        let call = Client::session_command_call(&input).expect("the goal command encodes");
+        self.pending.borrow_mut().insert(host.fetch(fetch_of(call)), Pending::Command);
+    }
 }
 
-fn color(theme: &Theme, goal: &Goal) -> Color {
+fn color(goal: &Goal) -> &'static str {
     match goal.status {
-        Status::Paused => theme.text.feedback.warning.base,
-        Status::Complete => theme.text.feedback.success.base,
-        Status::Active => theme.text.muted,
+        Status::Paused => "text.feedback.warning.base",
+        Status::Complete => "text.feedback.success.base",
+        Status::Active => "text.muted",
     }
 }
 
@@ -182,120 +239,67 @@ fn label(goal: &Goal) -> &'static str {
     }
 }
 
-/// `GoalStatus`: `◎ goal` under the prompt; it brightens under the pointer, and a click opens the dialog.
-pub fn status(tui: &Tui, tracker: &Rc<Tracker>, goal: &Goal) -> View {
-    let theme = tui.page();
-    let rest = color(&theme, goal);
-    let text = Text::new(&tui.app, format!("◎ {}", label(goal))).fg(rest).wrap(WrapMode::None);
-    let hover = text.clone();
-    let base = theme.text.base;
-    text.on_hover(move |cx, hovered| {
-        hover.fg(if hovered { base } else { rest });
-        cx.app().request_redraw();
-    });
-    let weak = Rc::downgrade(tracker);
-    text.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
-        if !matches!(event.kind, MouseEventKind::Up(_)) {
-            return;
-        }
-        let Some(tracker) = weak.upgrade() else {
-            return;
-        };
-        let Some(tui) = tracker.tui.upgrade() else {
-            return;
-        };
-        open(&tui, &tracker);
-    });
-    View::new(&tui.app).shrink(0.0).child(&text)
-}
-
-/// `showGoal`: the dialog, or how to start a goal.
-pub fn open(tui: &Tui, tracker: &Tracker) {
-    if tracker.goal().is_none() {
-        tui.toasts.show(ToastOptions::new(Variant::Info, "No goal is set. Start one with /goal <objective>."));
-        return;
-    }
-    show(tui, tracker);
+/// `GoalStatus`: `◎ goal` under the prompt; it brightens under the pointer, and a click opens the panel.
+pub fn status(session: &str, goal: &Goal) -> Node {
+    Node::text([Span::new(format!("◎ {}", label(goal)))])
+        .fg(color(goal))
+        .hover_fg("text.base")
+        .wrap(Wrap::None)
+        .layout(Layout::default().shrink(false))
+        .on_click(Click::command(SHOW, Some(session.to_owned())))
 }
 
 /// `GoalDialog`: the objective, the status and its reason, and pause, resume, and clear.
-fn show(tui: &Tui, tracker: &Tracker) {
-    let Some(goal) = tracker.goal() else { return };
-    let session = tracker.session.clone();
-    let weak = tui.weak();
-    let run = move |text: &'static str| {
-        let session = session.clone();
-        Rc::new(bind!(weak, |tui| command(&tui, &session, text))) as Rc<dyn Fn()>
-    };
-    let (pause, resume, clear) = (run("pause"), run("resume"), run("clear"));
-    tui.dialogs.replace(
-        move |cx| {
-            let theme = &cx.theme;
-            let app = &cx.app;
-            let action = |title: &str, key: &str, run: &Rc<dyn Fn()>| {
-                let run = run.clone();
-                FooterAction::new(title).key(key).on_trigger(move || run())
-            };
-            let mut primary = Vec::new();
-            if goal.status == Status::Active {
-                primary.push(action("pause", "p", &pause));
-            }
-            if goal.status == Status::Paused {
-                primary.push(action("resume", "r", &resume));
-            }
-            primary.push(action("clear", "x", &clear));
-            let bind = |key: &str, title: &str, enabled: bool, run: &Rc<dyn Fn()>| {
-                let run = run.clone();
-                TuiCommand::inline(key, move |_, _| run()).title(title).group("Dialog").enabled(if enabled {
-                    Condition::Always
-                } else {
-                    Condition::Never
-                })
-            };
-            cx.layer(KeymapLayer::new(vec![
-                bind("p", "Pause goal", goal.status == Status::Active, &pause),
-                bind("r", "Resume goal", goal.status == Status::Paused, &resume),
-                bind("x", "Clear goal", true, &clear),
-            ]));
-            let state = match goal.status {
-                Status::Active => "Active",
-                Status::Paused => "Paused",
-                Status::Complete => "Met",
-            };
-            let details = View::new(app)
-                .child(&Text::new(app, format!("◎ {state}")).fg(color(theme, &goal)).wrap(WrapMode::None));
-            if let Some(reason) = &goal.reason {
-                details.add(&Text::new(app, reason.clone()).fg(theme.text.muted));
-            }
-            let body = View::new(app)
-                .gap(1)
-                .child(&Text::new(app, goal.objective.clone()).fg(theme.text.base))
-                .child(&details);
-            let header = dialog::header(cx, HeaderProps::new("Goal"));
-            dialog::layout(cx, &header, &body, Some(FooterProps { primary, ..FooterProps::default() }))
-        },
-        None,
-        DialogOptions::default().key(DIALOG),
-    );
-}
-
-/// `/goal pause`, `/goal resume`, or `/goal clear` through `session.command`; clear closes the dialog first.
-fn command(tui: &Tui, session: &SessionID, text: &str) {
-    if text == "clear" {
-        tui.dialogs.clear();
+fn panel(session: &str, goal: &Goal) -> Panel {
+    let run = |name: &str| Action::Command { name: name.to_owned(), input: Some(session.to_owned()) };
+    let mut keys = Vec::new();
+    if goal.status == Status::Active {
+        keys.push(("pause", "p", "Pause goal", PAUSE));
     }
-    let client = tui.data.client().clone();
-    let input = SessionCommandInput {
-        session_id: session.clone(),
-        name: "goal".to_owned(),
-        text: text.to_owned(),
-        ..SessionCommandInput::default()
+    if goal.status == Status::Paused {
+        keys.push(("resume", "r", "Resume goal", RESUME));
+    }
+    keys.push(("clear", "x", "Clear goal", CLEAR));
+    let actions = keys
+        .iter()
+        .map(|(title, key, _, name)| PanelAction {
+            title: (*title).to_owned(),
+            key: Some((*key).to_owned()),
+            color: None,
+            close: false,
+            action: run(name),
+        })
+        .collect();
+    let binds = keys
+        .iter()
+        .map(|(_, key, title, name)| PanelBind {
+            key: (*key).to_owned(),
+            title: (*title).to_owned(),
+            action: run(name),
+        })
+        .collect();
+    let state = match goal.status {
+        Status::Active => "Active",
+        Status::Paused => "Paused",
+        Status::Complete => "Met",
     };
-    let weak = tui.weak();
-    tui.app.spawn(async move { client.session_command(&input).await }, move |_, result| {
-        let (Err(error), Some(tui)) = (result, weak.upgrade()) else {
-            return;
-        };
-        tui.toasts.show(ToastOptions::new(Variant::Error, error.to_string()).title("Failed to update the goal"));
-    });
+    let mut details = vec![Node::text([Span::new(format!("◎ {state}"))]).fg(color(goal)).wrap(Wrap::None)];
+    if let Some(reason) = &goal.reason {
+        details.push(Node::text([Span::new(reason.clone())]).fg("text.muted"));
+    }
+    Panel {
+        key: PANEL.to_owned(),
+        size: PanelSize::Medium,
+        title: vec![Span::new("Goal")],
+        subtitle: None,
+        body: Node::column(vec![
+            Node::text([Span::new(goal.objective.clone())]).fg("text.base"),
+            Node::column(details),
+        ])
+        .gap(1),
+        actions,
+        binds,
+        bleed: false,
+        centered: false,
+    }
 }
