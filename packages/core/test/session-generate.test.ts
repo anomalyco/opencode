@@ -53,6 +53,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Tool } from "@opencode/core/tool"
+import { Money } from "@opencode/schema/money"
 import { asc, eq } from "drizzle-orm"
 import { Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
@@ -78,7 +79,13 @@ const client = Layer.mock(LLMClient.Service)({
         LLMEvent.stepFinish({
           index: 0,
           reason: { normalized: "stop" },
-          usage: { inputTokens: 100, outputTokens: 10 },
+          usage: {
+            inputTokens: 100,
+            outputTokens: 10,
+            nonCachedInputTokens: 60,
+            cacheReadInputTokens: 30,
+            cacheWriteInputTokens: 10,
+          },
         }),
         LLMEvent.finish({ reason: { normalized: "stop" } }),
       ])
@@ -91,7 +98,13 @@ const models = Layer.mock(SessionRunnerModel.Service)({
     Effect.succeed(
       SessionRunnerModel.resolved(model, {
         capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
-        cost: [],
+        cost: [
+          {
+            input: Money.USDPerMillionTokens.make(1),
+            output: Money.USDPerMillionTokens.make(2),
+            cache: { read: Money.USDPerMillionTokens.make(0.1), write: Money.USDPerMillionTokens.make(0.5) },
+          },
+        ],
         limit: { context: 200_000, output: 32_000 },
       }),
     ),
@@ -331,7 +344,9 @@ it.effect(
         Effect.provideService(Instance.Service, instances),
       )
 
-      expect(result).toBe("Transient answer")
+      expect(result.text).toBe("Transient answer")
+      expect(result.tokens).toEqual({ input: 60, output: 10, reasoning: 0, cache: { read: 30, write: 10 } })
+      expect(result.cost).toBeCloseTo(0.000088)
       expect(requests).toHaveLength(1)
       expect(requests[0]?.model).toBe(model)
       expect(requests[0]?.system.map((part) => part.text)).toContain("Initial context")
@@ -422,7 +437,7 @@ it.effect("regenerates a failed partial answer without mutating Session history"
     )
     yield* llm.wait(1)
     yield* TestClock.adjust("3 seconds")
-    expect(yield* Fiber.join(result)).toBe("Fresh answer")
+    expect((yield* Fiber.join(result)).text).toBe("Fresh answer")
     const requests = yield* llm.requests()
     expect(requests).toHaveLength(2)
     expect(requests[1]).toBe(requests[0])

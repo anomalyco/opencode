@@ -9,7 +9,7 @@ import { ProviderShared } from "../protocols/shared.js"
 import { gatewayProtocol } from "../protocols/utils/gateway-protocol.js"
 import type { ProviderPackage } from "../provider-package.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { MediaRoute } from "../route/media.js"
@@ -21,6 +21,7 @@ import {
   ProviderMetadata,
   ReasoningEffort,
   type ProviderOptions,
+  type RequestOptions,
 } from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 import { bearerRouteDefaults, toConfig } from "./settings.js"
@@ -100,7 +101,7 @@ export type ProviderOptionsInput = OpenResponsesProviderOptionsInput &
     readonly cacheAnchorItems?: number
   }
 
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: ProviderOptionsInput
@@ -174,7 +175,7 @@ const route = <Body, Event, State>(input: {
   readonly api: "messages" | "responses" | "chat"
   readonly path: string
   readonly framing: Framing.Definition<string>
-  readonly defaults?: RouteDefaultsInput
+  readonly options?: RequestOptions
 }) =>
   Route.make({
     id: input.id,
@@ -185,7 +186,7 @@ const route = <Body, Event, State>(input: {
     framing: input.framing,
     headers: ({ request }): Record<string, string> =>
       request.promptCacheKey ? { "x-session-affinity": request.promptCacheKey } : {},
-    defaults: input.defaults,
+    options: input.options,
   })
 
 const messagesRoute = route({
@@ -194,7 +195,7 @@ const messagesRoute = route({
   api: "messages",
   path: "/messages",
   framing: AnthropicMessages.framing,
-  defaults: { headers: { "anthropic-version": "2023-06-01" } },
+  options: { headers: { "anthropic-version": "2023-06-01" } },
 })
 const responsesRoute = route({
   id: "vercel-ai-gateway-responses",
@@ -202,7 +203,7 @@ const responsesRoute = route({
   api: "responses",
   path: "/responses",
   framing: Framing.sse,
-  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 const chatRoute = route({
   id: "vercel-ai-gateway-chat",

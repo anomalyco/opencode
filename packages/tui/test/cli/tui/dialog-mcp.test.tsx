@@ -34,6 +34,19 @@ test.each(["enter", "space"])("starts OAuth with %s for an MCP server requiring 
   }
 })
 
+test("returns to the MCP server list after OAuth completes", async () => {
+  const fixture = await renderMcp({ complete: true })
+
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("Sign in required"))
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitForFrame((frame) => frame.includes("Waiting for authorization"))
+    await fixture.app.waitForFrame((frame) => frame.includes("MCP servers"))
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
 test("opens an investigation draft for a failed MCP server at its originating location", async () => {
   const location = { directory: "/projects/example", workspaceID: "workspace_example" }
   const fixture = await renderMcp({ failed: true, location })
@@ -86,6 +99,7 @@ test.each([
 async function renderMcp(options?: {
   failed?: boolean
   status?: { status: string; error?: string }
+  complete?: boolean
   location?: { directory: string; workspaceID?: string }
 }) {
   const events = createEventStream()
@@ -93,6 +107,7 @@ async function renderMcp(options?: {
   let connect = 0
   let disconnect = 0
   const waiters = { connect: Promise.withResolvers<void>(), disconnect: Promise.withResolvers<void>() }
+  let polls = 0
   let route!: ReturnType<typeof useRoute>
   const calls = createFetch((url, request) => {
     const location = {
@@ -141,7 +156,8 @@ async function renderMcp(options?: {
     }
     if (url.pathname === "/api/integration/mcp_linear/connect/oauth/attempt_linear") {
       if (request.method === "DELETE") return new Response(null, { status: 204 })
-      return json({ location, data: { status: "pending" } })
+      polls++
+      return json({ location, data: { status: options?.complete && polls > 1 ? "complete" : "pending" } })
     }
     if (url.pathname === "/api/experimental/mcp/linear/connect" && request.method === "POST") {
       connect++

@@ -22,7 +22,7 @@ export function TerminalTab(props: {
 
   const label = () => terminalTabLabel({ title: props.terminal.title, t: plugin.t })
 
-  const close = () => void props.session.close(props.terminal.id)
+  const close = () => props.session.close(props.terminal.id)
 
   const focus = () => {
     if (rename.editing()) return

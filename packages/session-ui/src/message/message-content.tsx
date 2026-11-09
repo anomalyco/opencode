@@ -4,10 +4,12 @@ import {
   createSignal,
   For,
   Index,
+  Match,
   on,
   onCleanup,
   onMount,
   Show,
+  Switch,
   untrack,
   type ComponentProps,
   type JSX,
@@ -56,6 +58,23 @@ import { agentLabel } from "./agent-label"
 import { isInterruptedError } from "../timeline/turn-phase-machine"
 import { attached, imageAttachmentPlaceholderStyle, typeLabel } from "../components/message-file"
 import {
+  DISPOSED_ATTACHMENT_MEDIA_EVENT,
+  INITIAL_ATTACHMENT_MEDIA_STATE,
+  resolveAttachmentMediaTarget,
+  transitionAttachmentMedia,
+  viewAttachmentMedia,
+  type AttachmentMediaEvent,
+} from "./attachment-media-machine"
+import {
+  createCompactionEntranceState,
+  DISPOSED_COMPACTION_ENTRANCE_EVENT,
+  GRACE_ELAPSED_EVENT,
+  selectCompactionEnter,
+  transitionCompactionEntrance,
+  type CompactionEntranceEffect,
+  type CompactionEntranceEvent,
+} from "./compaction-entrance-machine"
+import {
   createMessageActionState,
   transitionMessageAction,
   viewMessageActions,
@@ -78,13 +97,12 @@ type MetaItem = { label: string; variant?: boolean }
 function modelItems(data: ReturnType<typeof useData>, model: SessionMessageAssistant["model"]): MetaItem[] {
   const name = data.store.provider?.all?.get(model.providerID)?.models?.[model.id]?.name ?? model.id
 
+  // A prompt held for its Location's catalog names no model yet.
+  if (!name) return []
+
   if (!model.variant || model.variant === "default") return [{ label: name }]
 
   return [{ label: name }, { label: model.variant[0]?.toUpperCase() + model.variant.slice(1), variant: true }]
-}
-
-function sameModel(a: SessionMessageAssistant["model"], b: SessionMessageAssistant["model"]) {
-  return a.providerID === b.providerID && a.id === b.id && (a.variant ?? "default") === (b.variant ?? "default")
 }
 
 function MetaItems(props: { items: MetaItem[]; slot: "user-message" | "text-part" }) {
@@ -112,7 +130,7 @@ function MetaItems(props: { items: MetaItem[]; slot: "user-message" | "text-part
 
 function MessageActionButton(
   props: Pick<ComponentProps<"button">, "disabled" | "onMouseDown" | "onClick" | "aria-label"> & {
-    icon: "check" | "copy" | "reset" | "fork" | "arrow-down-to-line" | "outline-trash"
+    icon: "check" | "copy"
     label: JSX.Element
     size?: "small" | "normal"
   },
@@ -238,13 +256,19 @@ export function CurrentUserMessageDisplay(props: {
   text: string
   agent: string
   model: SessionMessageAssistant["model"]
-  /** The agent and model the previous prompt chose; a waiting steer names only what it changes. */
-  previousSelection?: { agent: string; model: SessionMessageAssistant["model"] }
   actions?: SessionUserActions
   comments?: SessionUserComment[]
   references?: SessionUserAttachmentReference[]
   voice?: boolean
   run?: UserRun
+  /** The newest delivered prompt, whose revert undoes the last turn. */
+  latest?: boolean
+  /** Whether run changes snap now, while a message arrives, rather than spring. Omitted, folding always snaps. */
+  runSnaps?: () => boolean
+  /** The pointer is somewhere in this message's run, so its last bubble shows the run's meta line. */
+  runHovered?: boolean
+  /** An open menu keeps its run's meta line in view while the pointer is on the menu. */
+  onMenuOpenChange?: (open: boolean) => void
   /** Folds a long message to its first lines with a Read more toggle. Omitted, the message always shows in full. */
   fold?: boolean
   /** Whether a folded message is open. The timeline owns it so it survives row recycling. */
@@ -264,8 +288,10 @@ export function CurrentUserMessageDisplay(props: {
   const setExpanded = fold.setOpen
 
   const status = createMemo(() => props.actions?.pending?.status(props.message.id))
-  const pending = createMemo(() => status() !== undefined && status() !== "queued")
-  const waiting = createMemo(() => status() === "steering" || status() === "stranded")
+  // A prompt still `sending` has no server row yet, so nothing can move, delete, revert or fork it.
+  const sending = createMemo(() => status() === "sending")
+  const pending = createMemo(() => status() !== undefined && status() !== "queued" && !sending())
+  const waiting = createMemo(() => status() === "steering" || status() === "stranded" || sending())
   // SAFETY: opted-in reads leave stored files as `media:` refs, a PromptAttachment variant the generated message type does not list.
   const files = createMemo(() => (props.message.files ?? []) as PromptAttachment[])
   const attachments = createMemo(() => files().filter(attached))
@@ -273,12 +299,7 @@ export function CurrentUserMessageDisplay(props: {
   const inlineFiles = createMemo(() => files().filter((file) => !!file.mention))
   const agents = createMemo(() => props.message.agents ?? [])
   const comments = createMemo(() => props.comments ?? [])
-
-  const sent = createMemo(() =>
-    new Intl.DateTimeFormat(i18n.locale(), { dateStyle: "medium", timeStyle: "short" }).format(
-      props.message.time.created,
-    ),
-  )
+  const copyText = () => (props.voice ? props.text : props.message.text)
 
   // Mobile shows the current agent and model in the composer and switch notices, so repeating them per message is noise.
   const mobile = createMediaQuery("(max-width: 767px)")
@@ -289,27 +310,35 @@ export function CurrentUserMessageDisplay(props: {
     return agent ? [{ label: agent }] : []
   })
 
-  // A waiting steer joins the running turn, so its agent and model only say something when it changes them.
-  const changedLabels = createMemo<MetaItem[]>(() => {
-    const previous = props.previousSelection
+  // The menu names the day relatively: Today and Yesterday, then the date this year, then the date with its year.
+  const sent = createMemo(() => {
+    const created = new Date(props.message.time.created)
+    const now = new Date()
+    const midnight = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+    const days = Math.round((midnight(now) - midnight(created)) / 86_400_000)
+    const time = new Intl.DateTimeFormat(i18n.locale(), { timeStyle: "short" }).format(created)
 
-    if (!previous) return [...agentItems(), ...modelItems(data, props.model)]
+    if (days === 0 || days === 1) {
+      const day = new Intl.RelativeTimeFormat(i18n.locale(), { numeric: "auto" }).format(-days, "day")
 
-    return [
-      ...(previous.agent === props.agent ? [] : agentItems()),
-      ...(sameModel(previous.model, props.model) ? [] : modelItems(data, props.model)),
-    ]
+      return `${day[0]?.toLocaleUpperCase(i18n.locale())}${day.slice(1)}, ${time}`
+    }
+
+    if (created.getFullYear() === now.getFullYear())
+      return new Intl.DateTimeFormat(i18n.locale(), {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(created)
+
+    return new Intl.DateTimeFormat(i18n.locale(), { dateStyle: "medium", timeStyle: "short" }).format(created)
   })
 
-  const metaLabels = createMemo(() => {
-    if (mobile()) return []
+  // A waiting steer reads agent · model · Pending; mobile shows the agent and model in the composer instead.
+  const metaLabels = createMemo(() => (mobile() ? [] : [...agentItems(), ...modelItems(data, props.model)]))
 
-    if (waiting()) return changedLabels()
-
-    return [...agentItems(), ...modelItems(data, props.model)]
-  })
-
-  // In a run, only the last message keeps the meta line; the others offer their actions beside the bubble.
+  // In a run, only the last message keeps the meta line; every bubble offers its actions from its own chevron.
   // Bubble corners tighten where two bubbles meet, as in the iOS app's grouped corners.
   const folded = createMemo(() => !!props.run?.below && !!props.text)
 
@@ -336,8 +365,9 @@ export function CurrentUserMessageDisplay(props: {
       el.style.setProperty("--user-run-bottom", `${value.bottom}`)
       el.toggleAttribute("data-run-meta-hidden", value.meta === 0)
     },
-    // Folding a meta line away is instant; the next message's line takes its place as that message grows in.
-    { ...userRunSpring, snap: folded },
+    // Folding a meta line away is instant while the next message grows in to take its place; otherwise it springs in step
+    // with the line that replaces it.
+    { ...userRunSpring, snap: () => folded() && (props.runSnaps?.() ?? true) },
   )
 
   // Delivery drops the Pending footer at once rather than fading it like the hover reveal.
@@ -393,88 +423,83 @@ export function CurrentUserMessageDisplay(props: {
 
   onCleanup(() => dispatch({ type: "disposed" }))
 
-  const renderActions = () => (
-    <span data-slot="user-message-actions">
-      <Show when={props.actions?.pending}>
-        <UserMessageTransition active={pending()}>
-          <MessageActionButton
-            icon="arrow-down-to-line"
-            size="small"
-            label={i18n.t("ui.message.moveToQueue")}
-            disabled={actionView().disabled.queue}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={(event) => {
-              event.stopPropagation()
-              request("queue")
-            }}
-            aria-label={i18n.t("ui.message.moveToQueue")}
-          />
-          <MessageActionButton
-            icon="outline-trash"
-            size="small"
-            label={i18n.t("ui.message.deletePending")}
-            disabled={actionView().disabled.remove}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={(event) => {
-              event.stopPropagation()
-              request("remove")
-            }}
-            aria-label={i18n.t("ui.message.deletePending")}
-          />
-        </UserMessageTransition>
-      </Show>
-      <Show when={props.actions?.revert}>
-        <UserMessageTransition active={!pending()}>
-          <MessageActionButton
-            icon="reset"
-            size="small"
-            label={i18n.t("ui.message.revertMessage")}
-            disabled={actionView().disabled.revert}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={(event) => {
-              event.stopPropagation()
-              request("revert")
-            }}
-            aria-label={i18n.t("ui.message.revertMessage")}
-          />
-        </UserMessageTransition>
-      </Show>
-      <Menu gutter={4} placement="bottom-end">
-        <Tooltip appearance="compact" value={i18n.t("ui.message.moreActions")} placement="top" gutter={4}>
+  const renderMenu = () => (
+    <Show when={!sending()}>
+      <span data-slot="user-message-menu">
+        <Menu gutter={4} placement="top-end" onOpenChange={(open) => props.onMenuOpenChange?.(open)}>
+          {/* The chevron explains itself, so it carries only an accessible name, no tooltip. */}
           <Menu.Trigger
             as={IconButton}
-            icon={<Icon name="outline-dots" size="small" />}
+            icon={<Icon name="chevron-down" size="small" />}
             size="small"
             variant="ghost-muted"
             onMouseDown={(event: MouseEvent) => event.preventDefault()}
             onClick={(event: MouseEvent) => event.stopPropagation()}
             aria-label={i18n.t("ui.message.moreActions")}
           />
-        </Tooltip>
-        <Menu.Portal>
-          <Menu.Content>
-            <Menu.Group>
-              <Menu.GroupLabel>
-                <time dateTime={new Date(props.message.time.created).toISOString()}>{sent()}</time>
-              </Menu.GroupLabel>
-            </Menu.Group>
-            <Menu.Separator />
-            <Menu.Item disabled={actionView().disabled.fork} onSelect={() => request("fork")}>
-              {i18n.t("ui.message.forkMessage")}
-            </Menu.Item>
-            <Menu.Item disabled={!props.text} onSelect={() => void writeClipboard(props.text)}>
-              {i18n.t("ui.message.copyMessage")}
-            </Menu.Item>
-            {/* Like the iOS app, a Voice message also offers the full prompt the session received. */}
-            <Show when={props.voice}>
-              <Menu.Item onSelect={() => void writeClipboard(props.message.text)}>
-                {i18n.t("ui.message.copyFullMessage")}
+          <Menu.Portal>
+            <Menu.Content>
+              <Menu.Group>
+                <Menu.GroupLabel>
+                  <Show when={!waiting()} fallback={i18n.t("ui.message.pending")}>
+                    <time dateTime={new Date(props.message.time.created).toISOString()}>{sent()}</time>
+                  </Show>
+                </Menu.GroupLabel>
+              </Menu.Group>
+              <Menu.Separator />
+              <Show when={pending() && props.actions?.pending}>
+                <Menu.Item disabled={actionView().disabled.queue} onSelect={() => request("queue")}>
+                  <Icon name="bullet-list" size="small" />
+                  {i18n.t("ui.message.moveToQueue")}
+                </Menu.Item>
+              </Show>
+              <Menu.Item disabled={!copyText()} onSelect={() => void writeClipboard(copyText())}>
+                <Icon name="outline-copy" size="small" />
+
+                {i18n.t("ui.message.copyMessage")}
               </Menu.Item>
-            </Show>
-          </Menu.Content>
-        </Menu.Portal>
-      </Menu>
-    </span>
+              {/* Like the iOS app, a Voice message also offers the full prompt the session received. */}
+              <Show when={props.voice}>
+                <Menu.Item onSelect={() => void writeClipboard(props.message.text)}>
+                  <Icon name="outline-copy" size="small" />
+                  {i18n.t("ui.message.copyFullMessage")}
+                </Menu.Item>
+              </Show>
+              {/* A pending steer has no history to fork from yet. */}
+              <Show when={!pending()}>
+                <Menu.Item disabled={actionView().disabled.fork} onSelect={() => request("fork")}>
+                  <Icon name="fork" size="small" />
+                  {i18n.t("ui.message.forkMessage")}
+                </Menu.Item>
+              </Show>
+              {/* A pending steer is withdrawn rather than reverted; a sent message reverts only where the host allows it. */}
+              <Show
+                when={pending() && props.actions?.pending}
+                fallback={
+                  <Show when={props.actions?.revert}>
+                    <Menu.Separator />
+                    <Menu.Item disabled={actionView().disabled.revert} onSelect={() => request("revert")}>
+                      <Icon name={props.latest ? "outline-undo" : "reset"} size="small" />
+                      {props.latest ? i18n.t("ui.message.undoMessage") : i18n.t("ui.message.revertMessage")}
+                    </Menu.Item>
+                  </Show>
+                }
+              >
+                <Menu.Separator />
+                <Menu.Item
+                  data-variant="critical"
+                  disabled={actionView().disabled.remove}
+                  onSelect={() => request("remove")}
+                >
+                  <Icon name="outline-trash" size="small" />
+                  {i18n.t("ui.message.deletePending")}
+                </Menu.Item>
+              </Show>
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu>
+      </span>
+    </Show>
   )
 
   const renderAttachments = () => (
@@ -489,54 +514,53 @@ export function CurrentUserMessageDisplay(props: {
         </For>
         <Index each={attachments()}>
           {(file) => {
-            const directUrl = () => {
-              const current = file()
-              const source = current.source
+            const mediaTarget = createMemo(() =>
+              resolveAttachmentMediaTarget(file(), { peekMedia: data.peekMedia, hasReader: !!data.readMedia }),
+            )
 
-              if (source?.type === "uri") return source.uri
+            const [mediaState, setMediaState] = createSignal(INITIAL_ATTACHMENT_MEDIA_STATE)
+            let mediaController: AbortController | undefined
+            let mediaTimer: ReturnType<typeof setTimeout> | undefined
 
-              if ("data" in current && current.data !== undefined) {
-                return `data:${current.mime};base64,${current.data}`
-              }
+            const dispatchMedia = (event: AttachmentMediaEvent) => {
+              const step = transitionAttachmentMedia(untrack(mediaState), event)
+              setMediaState(step.state)
+              step.effects.forEach((effect) => {
+                if (effect.type === "cancel") {
+                  clearTimeout(mediaTimer)
+                  mediaTimer = undefined
+                  mediaController?.abort()
+                  mediaController = undefined
 
-              if ("uri" in current && current.uri) return data.peekMedia?.(current.uri, current.mime)
+                  return
+                }
 
-              return undefined
+                const controller = new AbortController()
+                const readMedia = data.readMedia
+                mediaController = controller
+                mediaTimer = setTimeout(
+                  () => dispatchMedia({ type: "read.timed-out", attempt: effect.attempt }),
+                  effect.timeoutMs,
+                )
+                // A read that resolves, rejects or throws settles its attempt.
+                void Promise.resolve()
+                  .then(() => readMedia?.(effect.uri, effect.mime, controller.signal))
+                  .then(
+                    (loaded) =>
+                      dispatchMedia(
+                        loaded
+                          ? { type: "read.succeeded", attempt: effect.attempt, src: loaded }
+                          : { type: "read.failed", attempt: effect.attempt },
+                      ),
+                    () => dispatchMedia({ type: "read.failed", attempt: effect.attempt }),
+                  )
+              })
             }
 
-            const [resolvedUrl, setResolvedUrl] = createSignal<string | undefined>(directUrl())
+            createEffect(() => dispatchMedia({ type: "target.synced", target: mediaTarget() }))
+            onCleanup(() => dispatchMedia(DISPOSED_ATTACHMENT_MEDIA_EVENT))
 
-            createEffect(() => {
-              const current = file()
-              const direct = directUrl()
-
-              if (direct !== undefined) {
-                setResolvedUrl(direct)
-
-                return
-              }
-
-              const uri = "uri" in current ? current.uri : undefined
-
-              if (!uri || !data.readMedia) {
-                setResolvedUrl(uri)
-
-                return
-              }
-
-              const controller = new AbortController()
-              onCleanup(() => controller.abort())
-              void data
-                .readMedia(uri, current.mime, controller.signal)
-                .then((loaded) => {
-                  if (!controller.signal.aborted) setResolvedUrl(loaded)
-                })
-                .catch(() => {
-                  if (!controller.signal.aborted) setResolvedUrl(undefined)
-                })
-            })
-
-            const url = () => directUrl() ?? resolvedUrl()
+            const mediaView = createMemo(() => viewAttachmentMedia(mediaState(), mediaTarget()))
             const name = () => file().name ?? i18n.t("ui.message.attachment.alt")
             const image = () => file().mime.startsWith("image/")
 
@@ -556,7 +580,7 @@ export function CurrentUserMessageDisplay(props: {
               imageAttachmentPlaceholderStyle({
                 width: width(),
                 height: height(),
-                loaded: Boolean(url()),
+                loaded: mediaView().status === "ready",
               })
 
             return (
@@ -566,29 +590,44 @@ export function CurrentUserMessageDisplay(props: {
                   <div
                     data-slot="user-message-attachment"
                     data-type="image"
-                    data-clickable={url() ? "true" : undefined}
-                    data-placeholder={url() ? undefined : "true"}
+                    data-clickable={mediaView().clickable ? "true" : undefined}
+                    data-placeholder={mediaView().placeholder ? "true" : undefined}
                     data-width={width()}
                     data-height={height()}
                     style={placeholderStyle()}
                     onClick={(event) => {
-                      const src = url()
+                      const src = mediaView().src
                       const origin = event.currentTarget
 
-                      if (src) dialog.show(() => <ImagePreview src={src} alt={name()} origin={origin} />)
+                      if (src) return dialog.show(() => <ImagePreview src={src} alt={name()} origin={origin} />)
+
+                      if (mediaView().canRetry) dispatchMedia({ type: "retry.requested", target: mediaTarget() })
                     }}
                   >
-                    <Show when={url()}>
-                      {(src) => (
-                        <img
-                          data-slot="user-message-attachment-image"
-                          src={src()}
-                          width={width()}
-                          height={height()}
-                          alt={name()}
-                        />
-                      )}
-                    </Show>
+                    <Switch>
+                      <Match when={mediaView().src}>
+                        {(src) => (
+                          <img
+                            data-slot="user-message-attachment-image"
+                            src={src()}
+                            width={width()}
+                            height={height()}
+                            alt={name()}
+                          />
+                        )}
+                      </Match>
+                      <Match when={mediaView().status === "failed"}>
+                        <div
+                          data-slot="user-message-attachment-icon"
+                          role="img"
+                          aria-label={i18n.t("ui.fileMedia.state.error", {
+                            kind: i18n.t("ui.fileMedia.kind.image"),
+                          })}
+                        >
+                          <Icon name="outline-photo" size="small" />
+                        </div>
+                      </Match>
+                    </Switch>
                   </div>
                 }
               >
@@ -614,6 +653,8 @@ export function CurrentUserMessageDisplay(props: {
       data-component="user-message"
       data-pending={waiting() ? "true" : undefined}
       data-run-folded={folded() ? "" : undefined}
+      data-run-above={meetsAbove() ? "" : undefined}
+      data-run-hovered={props.runHovered ? "" : undefined}
       data-run-meta-hidden={restingPose.meta === 0 ? "" : undefined}
       style={{
         "--user-run-meta": `${restingPose.meta}`,
@@ -656,10 +697,8 @@ export function CurrentUserMessageDisplay(props: {
             <Show when={comments().length > 0}>
               <UserMessageComments comments={comments()} bounded />
             </Show>
+            {renderMenu()}
           </div>
-          <Show when={folded()}>
-            <div data-slot="user-message-run-actions">{renderActions()}</div>
-          </Show>
         </div>
       </Show>
       {/* Like the TUI, a pending steer of only attachments still offers its actions. */}
@@ -667,22 +706,23 @@ export function CurrentUserMessageDisplay(props: {
         <div data-slot="user-message-copy-wrapper">
           <span data-slot="user-message-meta-wrap">
             <span data-slot="user-message-meta">
-              <UserMessageTransition active={waiting()}>
-                <span data-slot="user-message-pending">{i18n.t("ui.message.pending")}</span>
-                <Show when={metaLabels().length > 0}>
-                  <span data-slot="user-message-meta-separator" aria-hidden="true">
-                    {"\u00B7"}
-                  </span>
-                </Show>
-              </UserMessageTransition>
               <Show when={metaLabels().length > 0}>
                 <span data-slot="user-message-meta-label">
                   <MetaItems items={metaLabels()} slot="user-message" />
                 </span>
               </Show>
+              {/* Pending closes the line and stays in view; the agent and model before it show on hover. */}
+              <UserMessageTransition active={waiting()}>
+                <Show when={metaLabels().length > 0}>
+                  <span data-slot="user-message-pending-separator" aria-hidden="true">
+                    {"\u00B7"}
+                  </span>
+                </Show>
+                <span data-slot="user-message-pending">{i18n.t("ui.message.pending")}</span>
+              </UserMessageTransition>
             </span>
           </span>
-          {renderActions()}
+          <Show when={!props.text}>{renderMenu()}</Show>
         </div>
       </Show>
     </div>
@@ -980,25 +1020,36 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
 function QuietCompaction(props: { id: string; created: number; running: boolean; summary: string; usage: string }) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
-  // A new one waits out the grace (400 ms, matched in session-compaction.css) before showing Compacting; one that
-  // ends inside it, as a precomputed summary does, only fades in as Compacted. One already running or finished when
-  // the history loads shows without an entrance.
-  const mounted = performance.now()
-  const age = Date.now() - props.created
+  // A new one waits out the grace before showing Compacting; one that ends inside it, as a precomputed summary does,
+  // only fades in as Compacted. One already running or finished when the history loads shows without an entrance.
+  const initial = createCompactionEntranceState({ ageMs: Date.now() - props.created, running: props.running })
+  const [entrance, setEntrance] = createSignal(initial.state)
+  const enter = createMemo(() => selectCompactionEnter(entrance()))
+  let graceTimer: ReturnType<typeof setTimeout> | undefined
 
-  const [enter, setEnter] = createSignal(
-    props.running ? (age < 400 ? "grace" : undefined) : age < 1_000 ? "now" : undefined,
-  )
+  const runEntrance = (effect: CompactionEntranceEffect) => {
+    clearTimeout(graceTimer)
+    graceTimer = undefined
+
+    if (effect.type === "schedule-grace")
+      graceTimer = setTimeout(() => dispatchEntrance(GRACE_ELAPSED_EVENT), effect.delayMs)
+  }
+
+  const dispatchEntrance = (event: CompactionEntranceEvent) => {
+    const result = transitionCompactionEntrance(untrack(entrance), event)
+    setEntrance(result.state)
+    result.effects.forEach(runEntrance)
+  }
+
+  initial.effects.forEach(runEntrance)
+  createEffect(() => dispatchEntrance({ type: "running.changed", running: props.running }))
+  onCleanup(() => dispatchEntrance(DISPOSED_COMPACTION_ENTRANCE_EVENT))
 
   const expandable = () => !props.running && !!props.summary.trim()
 
   const label = createMemo(() =>
     splitEnding(i18n.t("ui.messagePart.compaction.running"), i18n.t("ui.messagePart.compaction.done")),
   )
-
-  createEffect(() => {
-    if (!props.running && enter() === "grace" && performance.now() - mounted < 400) setEnter("now")
-  })
 
   return (
     <div data-component="session-compaction-message" data-quiet="" data-enter={enter()}>

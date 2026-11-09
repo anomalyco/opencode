@@ -1,6 +1,27 @@
+import type { BuiltinCatalog } from "@opencode/plugin/gui/builtin"
+import type { Messages } from "@opencode/plugin/gui/main"
+import { Predicate } from "effect"
+
 export const WATCH_RETRY_MS = 1_000
 
 export const LIST_TIMEOUT_MS = 30_000
+
+/** How long a locale's catalog may load before the plugin falls back to English. */
+export const CATALOG_TIMEOUT_MS = 5_000
+
+export type HostCatalogLoader = () => Promise<{ readonly default: Messages }>
+
+// A plugin instance's copy in the app locale. While a locale loads the instance keeps the copy it had; `ready` is the
+// instance's setup waiting for its first copy, and is undefined once the instance runs.
+export type HostCatalog =
+  | {
+      readonly status: "loading"
+      readonly catalog: BuiltinCatalog | undefined
+      readonly messages: Messages
+      readonly attempt: number
+      readonly ready: (() => void) | undefined
+    }
+  | { readonly status: "ready"; readonly catalog: BuiltinCatalog | undefined; readonly messages: Messages }
 
 /** The app's own server as main reaches it. */
 export type HostEndpoint = {
@@ -20,19 +41,25 @@ export type HostList =
   | { readonly status: "listing"; readonly attempt: number; readonly queued: boolean }
 
 // `menubarQueued` is a menubar publish waiting for its microtask, in either phase: quitting keeps the menu as it is.
-export type HostState =
-  | { readonly status: "stopped"; readonly nextAttempt: number; readonly menubarQueued: boolean }
-  | {
+// Plugin instances run in either phase too, so their catalogs follow the app locale in both.
+type HostShared<Owner> = {
+  readonly nextAttempt: number
+  readonly menubarQueued: boolean
+  readonly locale: string
+  readonly catalogs: ReadonlyMap<Owner, HostCatalog>
+}
+
+export type HostState<Owner = unknown> =
+  | ({ readonly status: "stopped" } & HostShared<Owner>)
+  | ({
       readonly status: "following"
-      readonly nextAttempt: number
-      readonly menubarQueued: boolean
       readonly endpoint: HostEndpoint | undefined
       readonly watch: HostWatch
       readonly list: HostList
-    }
+    } & HostShared<Owner>)
 
 // `quitting` is the app lifecycle's answer when the event happened.
-export type HostEvent<Listing> =
+export type HostEvent<Listing, Owner = unknown> =
   | { readonly type: "started"; readonly endpoint: HostEndpoint | undefined; readonly quitting: boolean }
   | { readonly type: "resumed"; readonly endpoint: HostEndpoint | undefined; readonly quitting: boolean }
   | { readonly type: "stopped" }
@@ -45,8 +72,20 @@ export type HostEvent<Listing> =
   | { readonly type: "list.timed-out"; readonly attempt: number; readonly quitting: boolean }
   | { readonly type: "menubar.scheduled" }
   | { readonly type: "menubar.flushed"; readonly quitting: boolean }
+  | { readonly type: "locale.changed"; readonly locale: string }
+  /** A plugin instance was created; `reply` lets its setup run once its copy is in the app locale. */
+  | {
+      readonly type: "catalog.registered"
+      readonly owner: Owner
+      readonly catalog: BuiltinCatalog | undefined
+      readonly reply: () => void
+    }
+  | { readonly type: "catalog.unregistered"; readonly owner: Owner }
+  | { readonly type: "catalog.loaded"; readonly owner: Owner; readonly attempt: number; readonly messages: Messages }
+  | { readonly type: "catalog.failed"; readonly owner: Owner; readonly attempt: number }
+  | { readonly type: "catalog.timed-out"; readonly owner: Owner; readonly attempt: number }
 
-export type HostCommand<Listing> =
+export type HostCommand<Listing, Owner = unknown> =
   | { readonly type: "subscribe-credentials" }
   | { readonly type: "unsubscribe-credentials" }
   | { readonly type: "start-watch"; readonly attempt: number; readonly endpoint: HostEndpoint }
@@ -63,20 +102,40 @@ export type HostCommand<Listing> =
   | { readonly type: "log-list-error"; readonly cause: unknown }
   | { readonly type: "queue-menubar" }
   | { readonly type: "publish-menubar" }
+  | {
+      readonly type: "load-catalog"
+      readonly owner: Owner
+      readonly attempt: number
+      readonly load: HostCatalogLoader
+      readonly timeoutMs: number
+    }
+  | { readonly type: "cancel-catalog-timer"; readonly owner: Owner }
+  | { readonly type: "resolve-catalog-ready"; readonly replies: readonly (() => void)[] }
 
-export type HostTransition<Listing> = {
-  readonly state: HostState
-  readonly commands: readonly HostCommand<Listing>[]
+export type HostTransition<Listing, Owner = unknown> = {
+  readonly state: HostState<Owner>
+  readonly commands: readonly HostCommand<Listing, Owner>[]
 }
 
-type Following = Extract<HostState, { status: "following" }>
+type Following<Owner> = Extract<HostState<Owner>, { status: "following" }>
 
-export function createHostState(): HostState {
-  return { status: "stopped", nextAttempt: 1, menubarQueued: false }
+export function createHostState<Owner = unknown>(locale: string): HostState<Owner> {
+  return { status: "stopped", nextAttempt: 1, menubarQueued: false, locale, catalogs: new Map() }
 }
 
-export function transitionHost<Listing>(state: HostState, event: HostEvent<Listing>): HostTransition<Listing> {
+export function transitionHost<Listing, Owner = unknown>(
+  state: HostState<Owner>,
+  event: HostEvent<Listing, Owner>,
+): HostTransition<Listing, Owner> {
   switch (event.type) {
+    case "locale.changed":
+    case "catalog.registered":
+    case "catalog.unregistered":
+    case "catalog.loaded":
+    case "catalog.failed":
+    case "catalog.timed-out":
+      return transitionCatalogs(state, event)
+
     case "menubar.scheduled":
       if (state.menubarQueued) return unchanged(state)
 
@@ -92,8 +151,8 @@ export function transitionHost<Listing>(state: HostState, event: HostEvent<Listi
       }
 
     case "resumed": {
-      const queued = transitionHost<Listing>(state, { type: "menubar.scheduled" })
-      const started = transitionHost<Listing>(queued.state, { ...event, type: "started" })
+      const queued = transitionHost<Listing, Owner>(state, { type: "menubar.scheduled" })
+      const started = transitionHost<Listing, Owner>(queued.state, { ...event, type: "started" })
 
       return { state: started.state, commands: [...queued.commands, ...started.commands] }
     }
@@ -104,14 +163,7 @@ export function transitionHost<Listing>(state: HostState, event: HostEvent<Listi
       if (event.quitting) return unchanged(state)
 
       return follow(
-        {
-          status: "following",
-          nextAttempt: state.nextAttempt,
-          menubarQueued: state.menubarQueued,
-          endpoint: undefined,
-          watch: IDLE_WATCH,
-          list: IDLE_LIST,
-        },
+        { ...state, status: "following", endpoint: undefined, watch: IDLE_WATCH, list: IDLE_LIST },
         event.endpoint,
         false,
         [{ type: "subscribe-credentials" }],
@@ -121,8 +173,14 @@ export function transitionHost<Listing>(state: HostState, event: HostEvent<Listi
       if (state.status === "stopped") return unchanged(state)
 
       return {
-        state: { status: "stopped", nextAttempt: state.nextAttempt, menubarQueued: state.menubarQueued },
-        commands: [{ type: "unsubscribe-credentials" }, ...cancelled<Listing>(state)],
+        state: {
+          status: "stopped",
+          nextAttempt: state.nextAttempt,
+          menubarQueued: state.menubarQueued,
+          locale: state.locale,
+          catalogs: state.catalogs,
+        },
+        commands: [{ type: "unsubscribe-credentials" }, ...cancelled<Listing, Owner>(state)],
       }
   }
 
@@ -196,7 +254,7 @@ export function transitionHost<Listing>(state: HostState, event: HostEvent<Listi
 }
 
 /** Whether a watch started with `attempt` is still the one to run. */
-export function isCurrentHostWatch(state: HostState, attempt: number) {
+export function isCurrentHostWatch<Owner>(state: HostState<Owner>, attempt: number) {
   return state.status === "following" && state.watch.status === "streaming" && state.watch.attempt === attempt
 }
 
@@ -208,25 +266,25 @@ const IDLE_WATCH: HostWatch = Object.freeze({ status: "idle" })
 
 const IDLE_LIST: HostList = Object.freeze({ status: "idle" })
 
-function currentList(state: Following, attempt: number) {
+function currentList<Owner>(state: Following<Owner>, attempt: number) {
   return state.list.status === "listing" && state.list.attempt === attempt
 }
 
 // Every credential change follows the server anew, as each connection and reconnect publishes one. A listing keeps
 // running only while the endpoint stays the same; one from a superseded endpoint never applies.
-function follow<Listing>(
-  state: Following,
+function follow<Listing, Owner>(
+  state: Following<Owner>,
   endpoint: HostEndpoint | undefined,
   quitting: boolean,
-  before: readonly HostCommand<Listing>[] = [],
-): HostTransition<Listing> {
+  before: readonly HostCommand<Listing, Owner>[] = [],
+): HostTransition<Listing, Owner> {
   const same = sameHostEndpoint(state.endpoint, endpoint)
 
   if (quitting && same && state.watch.status === "idle" && state.list.status === "idle" && before.length === 0)
     return unchanged(state)
   const stopsList = quitting || !same
 
-  const commands: HostCommand<Listing>[] = [
+  const commands: HostCommand<Listing, Owner>[] = [
     ...before,
     ...(state.watch.status === "idle" ? [] : [{ type: "cancel-watch" as const }]),
     ...(stopsList && state.list.status !== "idle" ? [{ type: "cancel-list" as const }] : []),
@@ -243,11 +301,11 @@ function follow<Listing>(
   }
 }
 
-function list<Listing>(
-  state: Following,
+function list<Listing, Owner>(
+  state: Following<Owner>,
   endpoint: HostEndpoint,
-  before: readonly HostCommand<Listing>[],
-): HostTransition<Listing> {
+  before: readonly HostCommand<Listing, Owner>[],
+): HostTransition<Listing, Owner> {
   const attempt = state.nextAttempt
 
   return {
@@ -257,24 +315,208 @@ function list<Listing>(
 }
 
 // Ends the current listing and starts the queued one, if a change arrived meanwhile and the app is not quitting.
-function settleList<Listing>(
-  state: Following,
-  commands: readonly HostCommand<Listing>[],
+function settleList<Listing, Owner>(
+  state: Following<Owner>,
+  commands: readonly HostCommand<Listing, Owner>[],
   quitting: boolean,
-): HostTransition<Listing> {
+): HostTransition<Listing, Owner> {
   if (!quitting && state.list.status === "listing" && state.list.queued && state.endpoint)
     return list(state, state.endpoint, commands)
 
   return { state: { ...state, list: IDLE_LIST }, commands }
 }
 
-function cancelled<Listing>(state: Following): HostCommand<Listing>[] {
+function cancelled<Listing, Owner>(state: Following<Owner>): HostCommand<Listing, Owner>[] {
   return [
     ...(state.watch.status === "idle" ? [] : [{ type: "cancel-watch" as const }]),
     ...(state.list.status === "idle" ? [] : [{ type: "cancel-list" as const }]),
   ]
 }
 
-function unchanged<Listing>(state: HostState): HostTransition<Listing> {
+function unchanged<Listing, Owner>(state: HostState<Owner>): HostTransition<Listing, Owner> {
   return { state, commands: [] }
+}
+
+/** The plugin instance's copy in the app locale; English while its locale loads for the first time. */
+export function selectCatalogMessages<Owner>(state: HostState<Owner>, owner: Owner): Messages {
+  return state.catalogs.get(owner)?.messages ?? {}
+}
+
+type CatalogEvent<Owner> = Extract<
+  HostEvent<unknown, Owner>,
+  {
+    type:
+      | "locale.changed"
+      | "catalog.registered"
+      | "catalog.unregistered"
+      | "catalog.loaded"
+      | "catalog.failed"
+      | "catalog.timed-out"
+  }
+>
+
+// Each locale load carries an attempt, so a load a newer locale superseded (even one that switched back) never
+// applies. A load that fails or hangs leaves English, and the instance's setup waits for its first copy either way.
+function transitionCatalogs<Listing, Owner>(
+  state: HostState<Owner>,
+  event: CatalogEvent<Owner>,
+): HostTransition<Listing, Owner> {
+  switch (event.type) {
+    case "catalog.registered": {
+      const source = catalogSource(event.catalog, state.locale)
+
+      if (source.kind === "sync")
+        return {
+          state: {
+            ...state,
+            catalogs: put(state.catalogs, event.owner, {
+              status: "ready",
+              catalog: event.catalog,
+              messages: source.messages,
+            }),
+          },
+          commands: [{ type: "resolve-catalog-ready", replies: [event.reply] }],
+        }
+      const attempt = state.nextAttempt
+
+      return {
+        state: {
+          ...state,
+          nextAttempt: attempt + 1,
+          catalogs: put(state.catalogs, event.owner, {
+            status: "loading",
+            catalog: event.catalog,
+            messages: event.catalog?.en ?? {},
+            attempt,
+            ready: event.reply,
+          }),
+        },
+        commands: [loadCatalog(event.owner, attempt, source.load)],
+      }
+    }
+
+    case "catalog.unregistered": {
+      const entry = state.catalogs.get(event.owner)
+
+      if (!entry) return unchanged(state)
+      const catalogs = new Map(state.catalogs)
+      catalogs.delete(event.owner)
+
+      if (entry.status === "ready") return { state: { ...state, catalogs }, commands: [] }
+
+      return publishWhenLoaded(
+        {
+          state: { ...state, catalogs },
+          commands: [{ type: "cancel-catalog-timer", owner: event.owner }, ...waiting<Listing, Owner>(entry)],
+        },
+        !entry.ready,
+      )
+    }
+
+    case "catalog.loaded":
+    case "catalog.failed":
+    case "catalog.timed-out": {
+      const entry = state.catalogs.get(event.owner)
+
+      if (entry?.status !== "loading" || entry.attempt !== event.attempt) return unchanged(state)
+      const english = entry.catalog?.en ?? {}
+
+      return publishWhenLoaded(
+        {
+          state: {
+            ...state,
+            catalogs: put(state.catalogs, event.owner, {
+              status: "ready",
+              catalog: entry.catalog,
+              messages: event.type === "catalog.loaded" ? { ...english, ...event.messages } : english,
+            }),
+          },
+          commands: [{ type: "cancel-catalog-timer", owner: event.owner }, ...waiting<Listing, Owner>(entry)],
+        },
+        !entry.ready,
+      )
+    }
+
+    case "locale.changed": {
+      if (event.locale === state.locale) return publishWhenLoaded({ state, commands: [] }, true)
+      const commands: HostCommand<Listing, Owner>[] = []
+      const replies: (() => void)[] = []
+      const first = state.nextAttempt
+
+      const catalogs = new Map(
+        [...state.catalogs].map(([owner, entry], index): [Owner, HostCatalog] => {
+          const source = catalogSource(entry.catalog, event.locale)
+          const ready = entry.status === "loading" ? entry.ready : undefined
+
+          if (source.kind === "async") {
+            const attempt = first + index
+            commands.push(loadCatalog(owner, attempt, source.load))
+
+            // A running instance keeps its copy until the new locale loads.
+            return [owner, { status: "loading", catalog: entry.catalog, messages: entry.messages, attempt, ready }]
+          }
+
+          if (entry.status === "loading") commands.push({ type: "cancel-catalog-timer", owner })
+
+          if (ready) replies.push(ready)
+
+          return [owner, { status: "ready", catalog: entry.catalog, messages: source.messages }]
+        }),
+      )
+
+      return publishWhenLoaded(
+        {
+          state: { ...state, nextAttempt: first + state.catalogs.size, locale: event.locale, catalogs },
+          commands: [...commands, ...(replies.length ? [{ type: "resolve-catalog-ready" as const, replies }] : [])],
+        },
+        true,
+      )
+    }
+  }
+}
+
+type CatalogSource =
+  | { readonly kind: "sync"; readonly messages: Messages }
+  | { readonly kind: "async"; readonly load: HostCatalogLoader }
+
+function catalogSource(catalog: BuiltinCatalog | undefined, locale: string): CatalogSource {
+  const english = catalog?.en ?? {}
+  const source = locale === "en" ? undefined : catalog?.[locale]
+
+  if (!source) return { kind: "sync", messages: english }
+
+  if (Predicate.isFunction(source)) return { kind: "async", load: source }
+
+  return { kind: "sync", messages: { ...english, ...source } }
+}
+
+function loadCatalog<Listing, Owner>(
+  owner: Owner,
+  attempt: number,
+  load: HostCatalogLoader,
+): HostCommand<Listing, Owner> {
+  return { type: "load-catalog", owner, attempt, load, timeoutMs: CATALOG_TIMEOUT_MS }
+}
+
+/** Lets an instance's setup run once its first copy settled, or once it went away. */
+function waiting<Listing, Owner>(entry: HostCatalog): HostCommand<Listing, Owner>[] {
+  return entry.status === "loading" && entry.ready ? [{ type: "resolve-catalog-ready", replies: [entry.ready] }] : []
+}
+
+function put<Owner>(catalogs: ReadonlyMap<Owner, HostCatalog>, owner: Owner, entry: HostCatalog) {
+  return new Map(catalogs).set(owner, entry)
+}
+
+// The menubar shows running instances' copy, so it publishes once none of them still loads a locale. Instances whose
+// setup waits for their first copy contribute no items yet.
+function publishWhenLoaded<Listing, Owner>(
+  next: HostTransition<Listing, Owner>,
+  running: boolean,
+): HostTransition<Listing, Owner> {
+  if (!running) return next
+
+  if ([...next.state.catalogs.values()].some((entry) => entry.status === "loading" && !entry.ready)) return next
+  const queued = transitionHost<Listing, Owner>(next.state, { type: "menubar.scheduled" })
+
+  return { state: queued.state, commands: [...next.commands, ...queued.commands] }
 }

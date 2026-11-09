@@ -14,6 +14,8 @@ import { displayName } from "@opencode/ui/project-avatar"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import type { SessionInfo } from "@opencode/client/promise"
 import { showToast } from "@/shell/notifications/toast"
+import { createSessionExporter } from "@/session/commands/export-session"
+import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { sessionTabTitle } from "./tab-title"
 import { TabPreviewPopover } from "./tab-popover"
 import {
@@ -103,18 +105,25 @@ export function TabNavItem(
   const servers = useServers()
   const serverCtx = useServerCtx(() => servers.list.find((item) => ServerConnection.key(item) === props.server))
 
+  const exporter = createSessionExporter()
+
   // The project icon stays put; status shows where the close button appears on hover.
   const status = () => {
     if (props.preparing || props.loading) return "busy"
 
-    if (!props.session || props.active) return
+    if (!props.session) return
+
+    if (props.active && !serverCtx()?.notification.session.manuallyUnread(props.session.id)) return
 
     if (props.attention) return "attention"
 
-    if (props.unread) return "unread"
+    if (!props.unread) return
+
+    // As in the inbox, an unread run that ended in failure gets the danger dot instead of the accent one.
+    return props.session.outcome === "failed" ? "failed" : "unread"
   }
 
-  const dotted = () => status() === "attention" || status() === "unread"
+  const dotted = () => status() === "attention" || status() === "unread" || status() === "failed"
 
   const project = createMemo(() => {
     const session = props.session
@@ -509,6 +518,7 @@ export function TabNavItem(
           <ActivityRing data-mark="busy" />
           <span data-mark="attention" data-slot="tab-status-dot" />
           <span data-mark="unread" data-slot="tab-status-dot" />
+          <span data-mark="failed" data-slot="tab-status-dot" />
         </span>
         <IconButton
           size="small"
@@ -567,6 +577,18 @@ export function TabNavItem(
           <Menu.Item disabled={!props.session} onSelect={() => startRename("menu")}>
             {language.t("common.rename")}
           </Menu.Item>
+          <Menu.Item
+            disabled={!props.session || exporter.exporting({ server: props.server, sessionID: props.session.id })}
+            onSelect={() => {
+              const session = props.session
+
+              if (session) exporter.export({ server: props.server, sessionID: session.id })
+            }}
+          >
+            {language.t("common.export")}…
+          </Menu.Item>
+          <SessionReadMenuItem server={props.server} session={props.session} />
+          <Menu.Separator />
           <TabCloseMenuItems
             orientation={props.orientation}
             onClose={props.onClose}
@@ -574,8 +596,8 @@ export function TabNavItem(
             onCloseAfter={props.onCloseAfter}
           />
           <Menu.Separator />
-          <Menu.Item data-variant="critical" disabled={!props.session} onSelect={props.onDelete}>
-            {language.t("session.delete.title")}…
+          <Menu.Item disabled={!props.session} onSelect={props.onDelete}>
+            {language.t("common.delete")}…
           </Menu.Item>
         </Menu.Context.Content>
       </Menu.Context.Portal>
