@@ -102,13 +102,18 @@ const ATTEMPT = {
   time: { created: 1, expires: 2 },
 }
 
+// What the next OAuth attempt asks for: `code` (OAuthCode), or `paste` for an automatic attempt that also takes the
+// redirect URL (OAuthAuto with a field).
+let mode: "auto" | "code" | "paste" = "auto"
+const attempt = () => (mode === "paste" ? { ...ATTEMPT, paste: true } : { ...ATTEMPT, mode })
+
 const calls = createFetch((url, request) => {
   if (url.pathname === "/api/location") return json(location)
   if (url.pathname === "/api/integration") return json({ location, data: INTEGRATIONS })
   if (url.pathname === "/api/model") return json({ location, data: [] })
   if (url.pathname === "/api/provider") return json({ location, data: [] })
   if (request.method === "DELETE") return new Response(null, { status: 204 })
-  if (request.method === "POST" && url.pathname.endsWith("/connect/oauth")) return json({ location, data: ATTEMPT })
+  if (request.method === "POST" && url.pathname.endsWith("/connect/oauth")) return json({ location, data: attempt() })
   if (url.pathname.includes("/connect/oauth/"))
     return json({ location, data: { status: "pending", time: { created: 1, expires: 2 } } })
   return undefined
@@ -224,3 +229,15 @@ await render(
     await Bun.sleep(200)
   },
 )
+// OpenAI's ChatGPT sign-in: the instructions sit in the description, under a blank row, not under the title.
+const signIn = async (setup: Parameters<NonNullable<Act>>[0]) => {
+  await down(setup, 1)
+  setup.mockInput.pressEnter()
+  await Bun.sleep(100)
+  setup.mockInput.pressEnter()
+  await Bun.sleep(200)
+}
+mode = "code"
+await render("E.17a/oauth-code", (frame) => listed(frame) || frame.includes("Authorization code"), signIn)
+mode = "paste"
+await render("E.17a/oauth-paste", (frame) => listed(frame) || frame.includes("Redirect URL"), signIn)

@@ -249,8 +249,8 @@ fn integrations_match_typescript() {
     kit.app.wait_until(Duration::from_millis(200), || false);
     assert_fixture(&kit.app.render(), "E.17a/list-end");
 
-    let open = |keys: &[&str], text: &str, fixture: &str| {
-        let kit = Kit::new();
+    let open_with = |mode: &'static str, keys: &[&str], text: &str, fixture: &str| {
+        let kit = Kit::with(integrations(), mode);
         kit.connect();
         for key in keys {
             kit.app.press(key);
@@ -259,11 +259,15 @@ fn integrations_match_typescript() {
         kit.only_dialog();
         assert_fixture(&kit.app.render(), fixture);
     };
+    let open = |keys: &[&str], text: &str, fixture: &str| open_with("auto", keys, text, fixture);
     open(&["return"], "Connected accounts", "E.17a/accounts");
     open(&["down", "return"], "Connect OpenAI", "E.17a/methods");
     open(&["down", "return", "down", "return"], "submit", "E.17a/key");
     open(&["down", "down", "return"], "Deployment", "E.17a/form");
     open(&["down", "down", "return", "return"], "Waiting for authorization", "E.17a/oauth");
+    // The OpenAI sign-in's prompts: the instructions sit in the description, under a blank row.
+    open_with("code", &["down", "return", "return"], "Authorization code", "E.17a/oauth-code");
+    open_with("paste", &["down", "return", "return"], "Redirect URL", "E.17a/oauth-paste");
 }
 
 #[test]

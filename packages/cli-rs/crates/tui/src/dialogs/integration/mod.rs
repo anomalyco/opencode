@@ -1015,7 +1015,8 @@ impl Oauth {
                 )
                 .fg(cx.theme.text.muted);
                 let error = Text::new(app, "").fg(cx.theme.text.feedback.error.base).visible(false);
-                let description = View::new(app).gap(1).child(&link).child(&waiting).child(&error);
+                let instructions = Text::new(app, me.attempt.instructions.clone()).fg(cx.theme.text.muted);
+                let description = View::new(app).gap(1).child(&instructions).child(&link).child(&waiting).child(&error);
                 let on_confirm = Rc::new(bind!(me, |me, value: &str| {
                     if value.trim().is_empty() {
                         me.open();
@@ -1043,7 +1044,6 @@ impl Oauth {
                     cx,
                     PromptProps {
                         title: me.title.clone(),
-                        subtitle: Some(me.attempt.instructions.clone()),
                         placeholder: Some("Redirect URL".into()),
                         description: Some(Rc::new(move |_| description.as_any())),
                         on_confirm: Some(on_confirm),
@@ -1077,7 +1077,8 @@ impl Oauth {
                 let (errors, set_error) = error_slot(cx, false);
                 let open = Rc::downgrade(&me);
                 let link = link(cx, &me.attempt.url, Some(Rc::new(bind!(open, |me| me.open()))));
-                let description = View::new(&cx.app).gap(1).child(&link).child(&errors);
+                let instructions = Text::new(&cx.app, me.attempt.instructions.clone()).fg(cx.theme.text.muted);
+                let description = View::new(&cx.app).gap(1).child(&instructions).child(&link).child(&errors);
                 let on_confirm = Rc::new(bind!(me, |me, code: &str| {
                     if code.is_empty() {
                         return;
@@ -1105,7 +1106,6 @@ impl Oauth {
                     cx,
                     PromptProps {
                         title: me.title.clone(),
-                        subtitle: Some(me.attempt.instructions.clone()),
                         placeholder: Some("Authorization code".into()),
                         description: Some(Rc::new(move |_| description.as_any())),
                         on_confirm: Some(on_confirm),
