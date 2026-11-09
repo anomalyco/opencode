@@ -1801,9 +1801,6 @@ ToolRegistry.register({
         class="flex w-full min-w-0 items-center gap-1.5 py-1 text-13-regular leading-text-compact text-v2-text-text-faint"
         classList={{ "cursor-pointer hover:text-v2-text-text-base": clickable() }}
       >
-        <Show when={view().running}>
-          <SessionProgressIndicatorV2 />
-        </Show>
         <span class="min-w-0 truncate">
           <bdi dir="auto" data-component="task-tool-title" class="font-[530] text-v2-text-text-code-accent">
             {i18n.t("ui.sessionTimeline.notice.started", { actor: title() })}
