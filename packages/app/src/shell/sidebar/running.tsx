@@ -63,6 +63,7 @@ export function RunningSessions() {
     branches.load(
       entries().flatMap((entry) => {
         const session = entry.ctx.data.session.get(entry.id)
+
         return session ? [{ server: entry.server, ctx: entry.ctx, session }] : []
       }),
     )
@@ -72,6 +73,7 @@ export function RunningSessions() {
   createEffect(() => {
     entries().forEach((entry) => {
       const root = entry.ctx.data.session.root(entry.id)
+
       if (root === entry.id || entry.ctx.data.session.get(root)) return
       void entry.ctx.data.session.sync(root).catch(() => undefined)
     })
@@ -115,30 +117,40 @@ export function RunningSessions() {
                 })
 
                 const projectName = () => displayName(project() ?? { worktree: session()?.location.directory ?? "" })
+
                 const branch = () => {
                   const value = session()
+
                   return value
                     ? branches.branch({ server: entry().server, ctx: entry().ctx, session: value })
                     : undefined
                 }
+
                 const worktree = () => {
                   const root = project()?.worktree
                   const directory = session()?.location.directory
+
                   return !!root && !!directory && pathKey(root) !== pathKey(directory)
                 }
+
                 const duration = () => {
                   const value = session()
+
                   const starts = [
                     ...(entry().ctx.data.session.status(entry().id) === "running" ? [value?.time.busy ?? 0] : []),
                     ...shells().map((shell) => shell.time.started),
                   ].filter((time) => time > 0)
+
                   return starts.length
                     ? workingDuration({ time: { busy: Math.min(...starts) } }, clock.now, language)
                     : undefined
                 }
+
                 const shells = () => sessionBackgroundShells(entry().ctx.data, entry().id)
+
                 const background = () =>
                   entry().ctx.data.session.status(entry().id) !== "running" && shells().length > 0
+
                 const summary = () =>
                   shells().length ? language.plural("sidebar.running.shells", shells().length) : undefined
 

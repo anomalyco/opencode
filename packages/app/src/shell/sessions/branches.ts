@@ -35,6 +35,7 @@ export function createSessionBranches() {
     load: (entries: Entry[]) => {
       entries.forEach((entry) => {
         const key = locationKey(entry)
+
         if (queued.has(key)) return
         queued.add(key)
         queue.push(entry)
