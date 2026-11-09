@@ -1935,7 +1935,11 @@ fn open_url(url: &str) -> bool {
     } else {
         "xdg-open"
     };
-    std::process::Command::new(program)
+    let mut command = std::process::Command::new(program);
+    // `open` detaches `xdg-open`, so a browser it starts does not stop with this client's group on Ctrl+Z.
+    #[cfg(all(unix, not(target_os = "macos")))]
+    std::os::unix::process::CommandExt::process_group(&mut command, 0);
+    command
         .arg(url)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
