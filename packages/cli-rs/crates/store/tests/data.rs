@@ -941,13 +941,16 @@ async fn message_load_more_reports_only_the_published_page() {
     assert!(!data.read(|state| state.messages_loading(&session) || state.has_more_messages(&session)));
 }
 
-// Expected: every event but a streaming delta reaches the signals after its batch, so a plugin's `on_event` gets any
-// type it subscribes to.
+// Expected: each event of a listened type reaches the signals after its batch, a streaming delta never does, and a
+// type stops once its last listener drops.
 #[tokio::test]
-async fn signals_carry_every_event_but_the_deltas() {
+async fn signals_carry_the_listened_events_but_no_deltas() {
     let data = data(handler(|_req: Req| async { ok(json!({ "data": [] })) }), Options::default());
     data.remember(info(session(0)));
     let mut signals = data.signals();
+    let _steps = data.listen(["session.step.started", "session.text.delta"]);
+    let renamed = data.listen(["session.renamed"]);
+    let again = data.listen(["session.renamed"]);
     let step = json!({
         "sessionID": SESSION, "assistantMessageID": "msg_a", "agent": "build",
         "model": { "providerID": "p", "id": "m" }, "started": 1,
@@ -962,7 +965,17 @@ async fn signals_carry_every_event_but_the_deltas() {
         )),
         event(durable("session.renamed", "evt_renamed", 1, json!({ "sessionID": SESSION, "title": "Renamed" }))),
     ]);
-    let tags: Vec<String> =
-        std::iter::from_fn(|| signals.try_recv().ok()).map(|event| event.tag().to_owned()).collect();
-    assert_eq!(tags, ["session.step.started", "session.renamed"]);
+    let mut tags = || -> Vec<String> {
+        std::iter::from_fn(|| signals.try_recv().ok()).map(|event| event.tag().to_owned()).collect()
+    };
+    assert_eq!(tags(), ["session.step.started", "session.renamed"]);
+
+    let renamed_again =
+        || event(durable("session.renamed", "evt_renamed_2", 2, json!({ "sessionID": SESSION, "title": "Again" })));
+    drop(renamed);
+    data.apply(&[renamed_again()]);
+    assert_eq!(tags(), ["session.renamed"], "another listener still wants it");
+    drop(again);
+    data.apply(&[renamed_again()]);
+    assert_eq!(tags(), Vec::<String>::new());
 }

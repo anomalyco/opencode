@@ -79,8 +79,9 @@ pub trait Host: 'static {
     }
     /// Asks for the user's attention. Called outside every plugin callback.
     fn attention(&self, _attention: &abi::Attention) {}
-    /// Calls `run` with each server event, after the host has applied it, until the disposer is dropped.
-    fn on_event(&self, _run: Rc<dyn Fn(&abi::types::V2Event)>) -> Option<Disposer> {
+    /// Calls `run` with each server event, after the host has applied it, until the disposer is dropped. `run` gets at
+    /// least the events whose type is in `types`, and may get others.
+    fn on_event(&self, _types: &[String], _run: Rc<dyn Fn(&abi::types::V2Event)>) -> Option<Disposer> {
         None
     }
     /// Mounts slot `path` with `input` into `parent`, for a claim's [`abi::Node::Slot`].
@@ -293,12 +294,15 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             setup.claim(slot::placement(claim), render, mount, &activation);
         }
         for (types, run) in api.events() {
-            let (types, run, scope) = (types.to_vec(), run.clone(), scope.clone());
-            let subscription = setup.host().on_event(Rc::new(move |event| {
-                if types.iter().any(|kind| kind == event.tag()) {
-                    scope.run(|host| run(host, event));
-                }
-            }));
+            let (kinds, run, scope) = (types.to_vec(), run.clone(), scope.clone());
+            let subscription = setup.host().on_event(
+                types,
+                Rc::new(move |event| {
+                    if kinds.iter().any(|kind| kind == event.tag()) {
+                        scope.run(|host| run(host, event));
+                    }
+                }),
+            );
             setup.registration.disposers.extend(subscription);
         }
         let commands: Vec<(abi::Scope, TuiCommand)> = api

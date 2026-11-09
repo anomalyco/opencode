@@ -53,11 +53,14 @@ impl Data {
         for follow in follows {
             self.follow(follow);
         }
-        // Every event but a streaming delta, so a plugin's `on_event` gets each type it subscribes to; a delta, the hot
-        // path, is neither cloned nor sent.
+        // Each event of a type someone listens to; a delta, the hot path, is neither looked up, cloned nor sent.
+        let mut listened = None;
         for event in events.iter().filter(|event| !is_delta(event)) {
-            // No receiver is not an error: views subscribe when they need to.
-            let _ = self.inner.signals.send(event.clone());
+            let listened = listened.get_or_insert_with(|| crate::state::lock(&self.inner.listened));
+            if listened.contains_key(event.tag()) {
+                // No receiver is not an error: views subscribe when they need to.
+                let _ = self.inner.signals.send(std::sync::Arc::new(event.clone()));
+            }
         }
     }
 
