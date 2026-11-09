@@ -412,6 +412,65 @@ fn a_build_refused_for_a_taken_id_loads_once_the_id_is_free() {
     );
 }
 
+// Expected (bigboi-4): a rebuild refused for a taken ID, while its previous build keeps running, loads once the owner of
+// the ID is removed.
+#[test]
+fn a_running_plugin_takes_the_id_it_waited_for_once_the_owner_is_removed() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let config = root.path().join("config");
+    let file = |name: &str| config.join(format!("plugins/{name}/{}", entry_file()));
+    write(&file("a"), "id=x");
+    write(&file("b"), "id=y");
+    let host = host();
+    let registry = Registry::define(Vec::new(), []);
+    let loader =
+        Loader::new(Rc::new(Fake::default()) as Rc<dyn Backend>, config.clone(), root.path().to_path_buf(), Vec::new());
+    loader.reconcile(&dynamic(&host), &registry);
+    write(&file("b"), "id=x");
+    loader.reconcile(&dynamic(&host), &registry);
+    let target = config.join("plugins/b").to_string_lossy().into_owned();
+    let b = || {
+        let entries = registry.entries();
+        let b = entry(&entries, &target);
+        (b.id.clone(), b.status.clone())
+    };
+    assert_eq!(
+        b(),
+        (
+            "y".to_owned(),
+            Status::Failed("plugin ID x is already registered (previous version still active)".to_owned())
+        )
+    );
+    fs::remove_dir_all(config.join("plugins/a")).unwrap();
+    assert!(loader.reconcile(&dynamic(&host), &registry));
+    assert_eq!(b(), ("x".to_owned(), Status::Active));
+}
+
+// Expected (bigboi-4): a build refused for a taken ID loads once the owner's rebuild takes another ID.
+#[test]
+fn a_refused_build_loads_once_the_owner_takes_another_id() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let config = root.path().join("config");
+    let file = |name: &str| config.join(format!("plugins/{name}/{}", entry_file()));
+    write(&file("a"), "id=x");
+    write(&file("b"), "id=x");
+    let host = host();
+    let registry = Registry::define(Vec::new(), []);
+    let loader =
+        Loader::new(Rc::new(Fake::default()) as Rc<dyn Backend>, config.clone(), root.path().to_path_buf(), Vec::new());
+    loader.reconcile(&dynamic(&host), &registry);
+    write(&file("a"), "id=other");
+    assert!(loader.reconcile(&dynamic(&host), &registry));
+    let entries = registry.entries();
+    let status = |name: &str| {
+        let target = config.join("plugins").join(name).to_string_lossy().into_owned();
+        let entry = entry(&entries, &target);
+        (entry.id.clone(), entry.status.clone())
+    };
+    assert_eq!(status("a"), ("other".to_owned(), Status::Active));
+    assert_eq!(status("b"), ("x".to_owned(), Status::Active));
+}
+
 #[cfg(target_os = "linux")]
 const ONE: &str = "./one.so";
 #[cfg(target_os = "macos")]
