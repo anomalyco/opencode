@@ -245,23 +245,6 @@ export const make = Effect.fnUntraced(function* (input: {
     }
   })
 
-  const submitInput = Effect.fnUntraced(function* (
-    attached: Attached,
-    prompt: ACPPrompt.Prepared,
-    options?: { readonly resume: false },
-  ) {
-    yield* input.client.session
-      .prompt({
-        sessionID: attached.id,
-        id: prompt.start.id,
-        text: prompt.text,
-        files: prompt.files,
-        delivery: "steer",
-        ...options,
-      })
-      .pipe(Effect.catch(ACPClient.classify))
-  })
-
   const submit = Effect.fnUntraced(function* (attached: Attached, prompt: ACPPrompt.Prepared) {
     const sessionID = attached.id
     yield* submitSynthetic(attached, prompt)
@@ -282,7 +265,9 @@ export const make = Effect.fnUntraced(function* (input: {
         .pipe(Effect.catch(ACPClient.classify))
       return
     }
-    yield* submitInput(attached, prompt)
+    yield* input.client.session
+      .prompt({ sessionID, id: prompt.start.id, text: prompt.text, files: prompt.files, delivery: "steer" })
+      .pipe(Effect.catch(ACPClient.classify))
   })
 
   const windDown = Effect.fnUntraced(function* (
@@ -425,7 +410,16 @@ export const make = Effect.fnUntraced(function* (input: {
       const prompt = yield* ACPPrompt.prepare(yield* input.catalog.get(attached.cwd), params.prompt)
       yield* submitSynthetic(attached, prompt)
       // Without resume, a session that went idle after the check keeps the steer queued instead of starting a turn.
-      yield* submitInput(attached, prompt, { resume: false })
+      yield* input.client.session
+        .prompt({
+          sessionID: attached.id,
+          id: prompt.start.id,
+          text: prompt.text,
+          files: prompt.files,
+          delivery: "steer",
+          resume: false,
+        })
+        .pipe(Effect.catch(ACPClient.classify))
       return { outcome: "injected" } as const
     }),
     cancel: Effect.fnUntraced(function* (params) {
