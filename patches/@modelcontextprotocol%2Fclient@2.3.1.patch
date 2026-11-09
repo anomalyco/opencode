@@ -1,8 +1,19 @@
 diff --git a/dist/index.cjs b/dist/index.cjs
-index 71cf63076b073284aa14f63cd41efa653e8def0f..90e2a8778c4a0981aa57d3b5c6657d9c7c0e3562 100644
+index 71cf63076b073284aa14f63cd41efa653e8def0f..19abbc96276dfcf077a04456a3f25c5d86d00aab 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
-@@ -1038,7 +1038,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
+@@ -618,7 +618,9 @@ async function parseErrorResponse(input) {
+ 	const statusCode = input instanceof Response ? input.status : void 0;
+ 	const body = input instanceof Response ? await input.text() : input;
+ 	try {
+-		const result = _modelcontextprotocol_core_internal.OAuthErrorResponseSchema.parse(JSON.parse(body));
++		const json = JSON.parse(body);
++		const nested = json !== null && typeof json === "object" && typeof json.error !== "string" && json.detail !== null && typeof json.detail === "object" && typeof json.detail.error === "string";
++		const result = _modelcontextprotocol_core_internal.OAuthErrorResponseSchema.parse(nested ? json.detail : json);
+ 		return require_src.OAuthError.fromResponse(result);
+ 	} catch (error) {
+ 		const errorMessage = `${statusCode ? `HTTP ${statusCode}: ` : ""}Invalid OAuth error response: ${error}. Raw body: ${body}`;
+@@ -1038,7 +1040,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
  	else {
  		const wellKnownPath = buildWellKnownPath(wellKnownType, issuer.pathname);
  		url = new URL(wellKnownPath, opts?.metadataServerUrl ?? issuer);
@@ -10,7 +21,7 @@ index 71cf63076b073284aa14f63cd41efa653e8def0f..90e2a8778c4a0981aa57d3b5c6657d9c
  	}
  	let response = await tryMetadataDiscovery(url, protocolVersion, fetchFn);
  	if (!opts?.metadataUrl && shouldAttemptFallback(response, issuer.pathname)) response = await tryMetadataDiscovery(new URL(`/.well-known/${wellKnownType}`, issuer), protocolVersion, fetchFn);
-@@ -1222,7 +1221,6 @@ async function startAuthorization(authorizationServerUrl, { metadata, clientInfo
+@@ -1222,7 +1223,6 @@ async function startAuthorization(authorizationServerUrl, { metadata, clientInfo
  	authorizationUrl.searchParams.set("redirect_uri", String(redirectUrl));
  	if (state) authorizationUrl.searchParams.set("state", state);
  	if (scope) authorizationUrl.searchParams.set("scope", scope);
@@ -18,7 +29,7 @@ index 71cf63076b073284aa14f63cd41efa653e8def0f..90e2a8778c4a0981aa57d3b5c6657d9c
  	if (resource) authorizationUrl.searchParams.set("resource", resourceIndicatorToString(resource));
  	return {
  		authorizationUrl,
-@@ -3206,7 +3204,16 @@ var Client = class extends require_src.Protocol {
+@@ -3206,7 +3206,16 @@ var Client = class extends require_src.Protocol {
  		}));
  		return require_src.runInputRequiredFlow({
  			getRequestHandler: (method) => this._getRequestHandler(method),
@@ -36,7 +47,7 @@ index 71cf63076b073284aa14f63cd41efa653e8def0f..90e2a8778c4a0981aa57d3b5c6657d9c
  			sessionId: this.transport?.sessionId
  		}, this._inputRequiredDriverConfig, decoded, flow);
  	}
-@@ -4350,7 +4357,7 @@ var Client = class extends require_src.Protocol {
+@@ -4350,7 +4359,7 @@ var Client = class extends require_src.Protocol {
  	_excludeInvalidXMcpHeaderTools(result) {
  		if (this.getProtocolEra() !== "modern" || !this.transport || detectProbeTransportKind(this.transport) === "stdio") return;
  		const filtered = result.tools.filter((tool) => {
@@ -46,10 +57,21 @@ index 71cf63076b073284aa14f63cd41efa653e8def0f..90e2a8778c4a0981aa57d3b5c6657d9c
  				console.warn(`[mcp-sdk] excluding tool '${tool.name}' from tools/list: invalid x-mcp-header declaration — ${scan.reason}`);
  				return false;
 diff --git a/dist/index.mjs b/dist/index.mjs
-index c1a09a82b8121d6a1b038ccc6d02bae46d55dbcf..0adaa1f8ef80f1bd29581e896add283258a57918 100644
+index c1a09a82b8121d6a1b038ccc6d02bae46d55dbcf..bb0772a98991a4901f17e3e69d351aab24be424c 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
-@@ -1035,7 +1035,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
+@@ -615,7 +615,9 @@ async function parseErrorResponse(input) {
+ 	const statusCode = input instanceof Response ? input.status : void 0;
+ 	const body = input instanceof Response ? await input.text() : input;
+ 	try {
+-		const result = OAuthErrorResponseSchema.parse(JSON.parse(body));
++		const json = JSON.parse(body);
++		const nested = json !== null && typeof json === "object" && typeof json.error !== "string" && json.detail !== null && typeof json.detail === "object" && typeof json.detail.error === "string";
++		const result = OAuthErrorResponseSchema.parse(nested ? json.detail : json);
+ 		return OAuthError.fromResponse(result);
+ 	} catch (error) {
+ 		const errorMessage = `${statusCode ? `HTTP ${statusCode}: ` : ""}Invalid OAuth error response: ${error}. Raw body: ${body}`;
+@@ -1035,7 +1037,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
  	else {
  		const wellKnownPath = buildWellKnownPath(wellKnownType, issuer.pathname);
  		url = new URL(wellKnownPath, opts?.metadataServerUrl ?? issuer);
@@ -57,7 +79,7 @@ index c1a09a82b8121d6a1b038ccc6d02bae46d55dbcf..0adaa1f8ef80f1bd29581e896add2832
  	}
  	let response = await tryMetadataDiscovery(url, protocolVersion, fetchFn);
  	if (!opts?.metadataUrl && shouldAttemptFallback(response, issuer.pathname)) response = await tryMetadataDiscovery(new URL(`/.well-known/${wellKnownType}`, issuer), protocolVersion, fetchFn);
-@@ -1219,7 +1218,6 @@ async function startAuthorization(authorizationServerUrl, { metadata, clientInfo
+@@ -1219,7 +1220,6 @@ async function startAuthorization(authorizationServerUrl, { metadata, clientInfo
  	authorizationUrl.searchParams.set("redirect_uri", String(redirectUrl));
  	if (state) authorizationUrl.searchParams.set("state", state);
  	if (scope) authorizationUrl.searchParams.set("scope", scope);
@@ -65,7 +87,7 @@ index c1a09a82b8121d6a1b038ccc6d02bae46d55dbcf..0adaa1f8ef80f1bd29581e896add2832
  	if (resource) authorizationUrl.searchParams.set("resource", resourceIndicatorToString(resource));
  	return {
  		authorizationUrl,
-@@ -3203,7 +3201,16 @@ var Client = class extends Protocol {
+@@ -3203,7 +3203,16 @@ var Client = class extends Protocol {
  		}));
  		return runInputRequiredFlow({
  			getRequestHandler: (method) => this._getRequestHandler(method),
@@ -83,7 +105,7 @@ index c1a09a82b8121d6a1b038ccc6d02bae46d55dbcf..0adaa1f8ef80f1bd29581e896add2832
  			sessionId: this.transport?.sessionId
  		}, this._inputRequiredDriverConfig, decoded, flow);
  	}
-@@ -4347,7 +4354,7 @@ var Client = class extends Protocol {
+@@ -4347,7 +4356,7 @@ var Client = class extends Protocol {
  	_excludeInvalidXMcpHeaderTools(result) {
  		if (this.getProtocolEra() !== "modern" || !this.transport || detectProbeTransportKind(this.transport) === "stdio") return;
  		const filtered = result.tools.filter((tool) => {
