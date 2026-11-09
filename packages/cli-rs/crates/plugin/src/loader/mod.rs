@@ -84,6 +84,9 @@ pub struct Loader {
     failed: RefCell<HashMap<String, String>>,
     /// The targets logged as skipped.
     skipped: RefCell<HashSet<String>>,
+    /// The targets whose last build was refused for an ID another plugin has, with that ID; each loads again once it is
+    /// free.
+    waiting: RefCell<HashMap<String, String>>,
 }
 
 impl Loader {
@@ -97,6 +100,7 @@ impl Loader {
             listed: RefCell::default(),
             failed: RefCell::default(),
             skipped: RefCell::default(),
+            waiting: RefCell::default(),
         }
     }
 
@@ -176,19 +180,33 @@ impl Loader {
         for target in stale.into_iter().chain(removed) {
             self.seen.borrow_mut().remove(&target);
             self.failed.borrow_mut().remove(&target);
+            self.waiting.borrow_mut().remove(&target);
             registry.unload(host, &target);
             registry.set_unloaded(&target, None);
             changed = true;
         }
-        if changed {
-            // A build that did not load, such as one refused for an ID the removed plugin had, loads again.
-            let retry: Vec<String> =
-                self.failed.borrow().keys().filter(|target| !registry.loaded(target)).cloned().collect();
-            retry.iter().for_each(|target| drop(self.seen.borrow_mut().remove(target)));
-        }
         self.listed.replace(targets.iter().map(|target| target.target.clone()).collect());
         for target in &targets {
             changed |= self.reconcile_target(host, registry, target);
+        }
+        // A build refused for an ID loads again once its owner was removed or took another ID; a refused one waits
+        // again, so this ends.
+        loop {
+            let mut free = Vec::new();
+            self.waiting.borrow_mut().retain(|target, id| {
+                let taken = registry.id_taken(id, target);
+                if !taken {
+                    free.push(target.clone());
+                }
+                taken
+            });
+            if free.is_empty() {
+                break;
+            }
+            for target in targets.iter().filter(|target| free.contains(&target.target)) {
+                self.seen.borrow_mut().remove(&target.target);
+                changed |= self.reconcile_target(host, registry, target);
+            }
         }
         if changed {
             host.remount();
@@ -230,11 +248,13 @@ impl Loader {
         if self.seen.borrow().get(name).is_some_and(|seen| seen.digest == digest) {
             return false;
         }
+        self.waiting.borrow_mut().remove(name);
         let loaded = self.backend.load(host, &bytes, target.options.as_deref()).and_then(|loaded| {
-            match registry.id_taken(&loaded.0.id, name) {
-                true => Err(format!("plugin ID {} is already registered", loaded.0.id)),
-                false => Ok(loaded),
+            if !registry.id_taken(&loaded.0.id, name) {
+                return Ok(loaded);
             }
+            self.waiting.borrow_mut().insert(name.to_owned(), loaded.0.id.clone());
+            Err(format!("plugin ID {} is already registered", loaded.0.id))
         });
         let (definition, error) = match loaded {
             Ok(loaded) => loaded,
