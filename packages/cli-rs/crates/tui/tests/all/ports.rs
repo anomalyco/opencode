@@ -1,7 +1,7 @@
 //! Three real TypeScript TUI plugins, ported to native plugins on the public SDK alone (`crates/plugin/examples`):
 //! each is built as a library, found in a `plugins` directory and loaded into the real TUI over a fake server. The
 //! expected rows follow the original's TS rendering logic for the same data. `Dialog::Select`, which the subagents
-//! port picks with, is proven on both paths here too.
+//! port picks with, is proven on both paths here too, and the SDK's author fixture loads.
 
 use crate::support::{self, DIRECTORY, Harness, Log, Reply, Seen, deref_harness};
 
@@ -451,6 +451,23 @@ fn session_usage_pages_the_children_one_parent_at_a_time() {
         .map(|seen| seen.param("cursor"))
         .collect();
     assert_eq!(cursors, ["", "more"]);
+}
+
+// Expected: the author's fixture loads into the TUI: its sidebar counter shows and counts a click, and its toast follows
+// a finished session.
+#[test]
+fn the_author_fixture_counts_and_toasts_a_finished_session() {
+    let h = open("author", 170, |_| None);
+    h.wait_for("Counted 0");
+    let (x, y) = h.find("Counted 0");
+    h.app.click(x, y);
+    h.wait_for("Counted 1");
+    h.events.emit(&json!({
+        "id": "evt_done", "created": 2, "type": "session.execution.succeeded",
+        "durable": { "aggregateID": "ses_p", "seq": 1, "version": 1 },
+        "location": { "directory": DIRECTORY }, "data": { "sessionID": "ses_p" },
+    }));
+    h.wait_for("A session finished");
 }
 
 // --- Dialog::Select on both paths
