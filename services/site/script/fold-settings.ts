@@ -4,7 +4,8 @@
 // reads every `siteSettings.<key>` as the default's literal, `designMode()` as false and
 // `import.meta.env.DEV` as false, then folds what that decides (`<Show>`, `<Switch>`/`<Match>`,
 // ternaries, `&&`/`||`, `if`), so the branches production never takes, and everything only they
-// import, leave the bundle. The server and the browser builds fold the same way, so hydration keys
+// import, leave the bundle. It also drops the data-design and data-design-copy attributes, which
+// only Design mode reads. The server and the browser builds fold the same way, so hydration keys
 // still match. The development server is untouched.
 import { existsSync } from "node:fs"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
@@ -41,7 +42,7 @@ const designModules = [
 const ogModule = path.join(root, "lib/og.ts")
 const ogCards = path.join(root, "lib/og-images.json")
 const candidate =
-  /\b(siteSettings|siteSettingsDefaults|setSiteSetting|designMode|designEditing|designCopy|ogImage|import\.meta\.env\.(DEV|PROD))\b/
+  /\b(siteSettings|siteSettingsDefaults|setSiteSetting|designMode|designEditing|designCopy|ogImage|data-design|import\.meta\.env\.(DEV|PROD))\b/
 
 export function foldSettingsForProduction(): Plugin {
   let cards: Record<string, unknown> = {}
@@ -154,6 +155,11 @@ function foldSettings(file: string, cards: Record<string, unknown>, trimImports:
         let liveStore: types.Identifier | undefined
         const store = () => (liveStore ??= program.scope.generateUidIdentifier("live"))
         program.traverse({
+          JSXAttribute(attribute) {
+            const name = attribute.node.name
+            if (types.isJSXIdentifier(name) && ["data-design", "data-design-copy"].includes(name.name))
+              attribute.remove()
+          },
           MetaProperty(meta) {
             const env = meta.parentPath.parentPath
             if (!env?.isMemberExpression() || !meta.parentPath.isMemberExpression()) return

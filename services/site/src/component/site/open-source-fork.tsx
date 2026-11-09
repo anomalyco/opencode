@@ -3,7 +3,6 @@ import { rich } from "~/i18n/rich"
 import { useI18n } from "~/context/i18n"
 import "./open-source-fork.css"
 import { createSignal, For, onCleanup } from "solid-js"
-import { config } from "~/config"
 import { docsUrl } from "~/lib/docs"
 import { designCopy } from "./design-copy"
 import { createWash, revealMotion } from "./reveal"
@@ -24,11 +23,6 @@ const transcript = [
   { kind: "comment", text: "# runs the CLI and TUI from your fork" },
 ] as const
 
-const commands = transcript
-  .filter((line) => line.kind === "command")
-  .map((line) => line.text)
-  .join("\n")
-
 /**
  * Settings › Open source variant "fork": a "fork it" block under the open source proof. A short
  * terminal transcript of forking and running OpenCode types in, line by line, the first time it
@@ -46,7 +40,8 @@ export function OpenSourceFork() {
   onCleanup(() => clearTimeout(timer))
 
   const copy = () => {
-    void navigator.clipboard.writeText(commands).then(() => {
+    const commands = transcript.filter((line) => line.kind === "command").map((line) => line.text)
+    void navigator.clipboard.writeText(commands.join("\n")).then(() => {
       clearTimeout(timer)
       setCopied(true)
       timer = setTimeout(() => setCopied(false), 1500)
@@ -131,6 +126,3 @@ export function OpenSourceFork() {
     </div>
   )
 }
-
-/** "Fork on GitHub", beside "Star on GitHub" in the open source proof (fork variant only). */
-export const forkUrl = `${config.github.repoUrl}/fork`

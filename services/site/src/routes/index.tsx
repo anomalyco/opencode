@@ -66,10 +66,16 @@ import { repoStats, type RepoStats } from "~/lib/github"
 import { inlineKey } from "~/lib/direction"
 import { copyOnClick } from "~/lib/clipboard"
 
+// Settings › Hero text and Stats pick these in development; production shows the static title and
+// the slot stats, so the rolling chunk isn't built.
+const HeroTitle = import.meta.env.DEV
+  ? lazy(() => import("~/component/site/rolling").then((module) => ({ default: module.HeroTitle })))
+  : () => undefined
+const RollingStat = import.meta.env.DEV
+  ? lazy(() => import("~/component/site/rolling").then((module) => ({ default: module.RollingStat })))
+  : () => undefined
 // Only rendered inside the settings panel, so it loads with it.
 // Settings rows are a development tool (component/site/settings-panel.tsx), left out of production.
-const HeroTitle = lazy(() => import("~/component/site/rolling").then((module) => ({ default: module.HeroTitle })))
-const RollingStat = lazy(() => import("~/component/site/rolling").then((module) => ({ default: module.RollingStat })))
 const PageSettings = import.meta.env.DEV ? lazy(() => import("~/component/site/page-settings")) : () => undefined
 
 export default function Home() {

@@ -22,7 +22,9 @@ export const monoFontLatin = regularLatin
 export const monoFontDefault = "OpenTUI Mono"
 export const monoFontsBuiltIn = [monoFontDefault, "IBM Plex Mono"] as const
 
-export const monoFontPreloads: Partial<Record<string, string>> = { "IBM Plex Mono": plexMonoLatin }
+export const monoFontPreloads: Partial<Record<string, string>> = import.meta.env.PROD
+  ? {}
+  : { "IBM Plex Mono": plexMonoLatin }
 
 /**
  * OpenTUI Mono's faces (font-display: swap), and its stand-ins while it loads: the system's
