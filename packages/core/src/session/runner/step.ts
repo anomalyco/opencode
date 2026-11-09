@@ -182,6 +182,14 @@ export const make = Effect.gen(function* () {
         // Read each tool's exit once all have ended, so what they raised while stopping (a decline, a defect) counts.
         const exits = Exit.isSuccess(joined) ? joined.value : yield* Fiber.awaitAll(fibers)
         const tools = classifyToolExits(exits, toolRuns, Exit.hasInterrupts(joined))
+        // A server shutting down leaves the step as a crash would: unsettled calls and no step end. The next server
+        // settles them when the Session resumes, and takes over the shell commands still running for them.
+        if (
+          (streamInterrupted || tools.interrupted) &&
+          tools.declines.length === 0 &&
+          input.interruption?.() === "shutdown"
+        )
+          return yield* Effect.interrupt
 
         if (
           !publisher.record().outputStarted &&

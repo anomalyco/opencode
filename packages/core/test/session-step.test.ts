@@ -392,17 +392,17 @@ it.live("classifies what a tool raises while the user's stop settles it: a defec
   }),
 )
 
-it.live("interrupts every tool on a server shutdown", () =>
+it.live("leaves an interrupted step as a crash would when the server shuts down", () =>
   Effect.gen(function* () {
     const { exit, data, requests } = yield* stopTwoTools({ reason: "shutdown", locationClosed: false })
     expect(Exit.hasInterrupts(exit)).toBe(true)
     expect(requests).toBe(1)
-    const generic = { status: "error", error: { type: "aborted", message: "Tool execution interrupted" } }
+    // No step end and no settled call: the next server finds the calls unsettled.
+    expect(data).not.toHaveProperty("error")
     expect(data).toMatchObject({
-      error: { type: "aborted", message: "Step interrupted" },
       content: [
-        { type: "tool", id: "call-cooperative", state: generic },
-        { type: "tool", id: "call-stuck", state: generic },
+        { type: "tool", id: "call-cooperative", state: { status: "running" } },
+        { type: "tool", id: "call-stuck", state: { status: "running" } },
       ],
     })
   }),

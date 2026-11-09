@@ -252,6 +252,73 @@ describe("Shell on the process daemon", () => {
       )
     }))
 
+  test("takes its commands back after a restart and leaves other Locations' alone", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      env.daemon.trap.add(4)
+      const before = yield* env.withShell(env.directory, (shell) =>
+        Effect.gen(function* () {
+          const running = yield* shell.create({ shell: "/bin/sh", command: "running", metadata: { tag: "a" } })
+          const finished = yield* shell.create({ shell: "/bin/sh", command: "finished" })
+          env.daemon.output(2, "done\n")
+          env.daemon.exit(2, 3)
+          const exited = yield* shell.wait(finished.id)
+          const expiring = yield* shell.create({ shell: "/bin/sh", command: "expiring", timeout: 60_000 })
+          const stopping = yield* shell.create({ shell: "/bin/sh", command: "stopping" })
+          yield* shell.stop(stopping.id, "killed")
+          yield* until(() => env.signals(4).length > 0)
+          // A call waits on this one: a restart moves it to the background, so its timeout is not kept.
+          const waited = yield* shell.create({ shell: "/bin/sh", command: "waited", timeout: 60_000, waited: true })
+          return { running, exited, expiring, stopping, waited }
+        }),
+      )
+      // Closing the Location only detached from its commands.
+      expect(env.daemon.ops).not.toContain("terminate")
+      expect(env.signals(1)).toEqual([])
+      expect(env.signals(4)).toEqual(["SIGTERM"])
+      // The expiring command's deadline passes while no server runs.
+      const expiring = env.daemon.processes.find((process) => process.id === 3)?.pipe
+      if (expiring) expiring.metadata = { ...expiring.metadata, timeoutDeadline: Date.now() - 1 }
+
+      const other = (yield* tmpdirScoped()).path
+      yield* env.withShell(other, (shell) =>
+        Effect.gen(function* () {
+          expect(yield* shell.get(before.running.id).pipe(Effect.flip)).toBeInstanceOf(Shell.NotFoundError)
+          expect(yield* shell.list()).toEqual([])
+        }),
+      )
+
+      yield* env.withShell(env.directory, (shell) =>
+        Effect.gen(function* () {
+          expect(yield* shell.get(before.running.id)).toMatchObject({
+            status: "running",
+            command: "running",
+            shell: "/bin/sh",
+            file: before.running.file,
+            metadata: { tag: "a" },
+            pid: before.running.pid,
+          })
+          expect(yield* shell.get(before.exited.id)).toEqual({ ...before.exited, cwd: env.directory })
+          expect((yield* shell.result(before.exited)).capture).toMatchObject({ output: "done\n" })
+          // The deadline passed during the restart, and the interrupted stop goes straight to SIGKILL.
+          expect((yield* shell.wait(before.expiring.id)).status).toBe("timeout")
+          expect(env.signals(3)).toEqual(["SIGTERM"])
+          expect((yield* shell.wait(before.stopping.id)).status).toBe("killed")
+          expect(env.signals(4)).toEqual(["SIGTERM", "SIGKILL"])
+
+          expect(env.daemon.processes.find((process) => process.id === 5)?.pipe?.metadata).not.toHaveProperty(
+            "timeoutDeadline",
+          )
+          expect((yield* shell.get(before.waited.id)).status).toBe("running")
+          expect(env.signals(5)).toEqual([])
+
+          env.daemon.exit(1, 0)
+          expect(yield* shell.wait(before.running.id)).toMatchObject({ status: "exited", exit: 0 })
+        }),
+      )
+    }))
+
+  // A reload or an eviction closes a Location while the server keeps running.
   timed("a Location closed while the server runs keeps enforcing its commands' timeouts", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()

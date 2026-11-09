@@ -2313,6 +2313,25 @@ describe("ShellTool stopped", () => {
     { timeout: 15_000 },
   )
 
+  fakeDaemonIt.live("records which call waits on a daemon command, and keeps no timeout for a restart", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const { shellID } = yield* stopCall(registry, "sleep 60", "call-recorded", "interrupt", false)
+          const request = fake?.requests.find((item) => item.op === "create_pipe")
+          expect(request?.metadata).toMatchObject({
+            id: shellID,
+            toolCall: { sessionID, callID: "call-recorded" },
+          })
+          // The call's timeout applies to this server only: a restart moves the command to the background.
+          expect(request?.metadata).not.toHaveProperty("timeoutDeadline")
+          expect(fake?.ops).not.toContain("signal")
+        }),
+      )
+    }),
+  )
+
   test("lets an execute.after hook replace a stopped call's failure", () =>
     withTempDir((tmp) => {
       reset()
@@ -2341,18 +2360,21 @@ describe("ShellTool stopped", () => {
       )
     }))
 
-  test("leaves a call a shutdown interrupted to the step", () =>
+  test("leaves a call a shutdown interrupted, and its command, for the next server", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
         Effect.gen(function* () {
           const shell = yield* Shell.Service
+          const jobs = yield* Job.Service
           const { shellID, exit } = yield* stopCall(registry, "printf ready; sleep 60", "call-teardown", "interrupt")
           expect(Exit.hasInterrupts(exit)).toBe(true)
-          // The job is cancelled as before, which stops the command; its file stays.
-          const info = yield* shell.wait(shellID)
-          expect(info.status).toBe("killed")
-          expect(yield* Effect.promise(() => fs.readFile(info.file, "utf8"))).toBe("ready")
+          // Nothing stops the command or ends its job: the next server takes the call over.
+          expect((yield* shell.get(shellID)).status).toBe("running")
+          expect((yield* jobs.get(shellID))?.status).toBe("running")
+          // Only an explicit cancel stops it.
+          yield* jobs.cancel(shellID)
+          expect((yield* shell.wait(shellID)).status).toBe("killed")
         }),
       )
     }))

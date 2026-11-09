@@ -52,21 +52,35 @@ const LOST = "Command was killed: the process daemon stopped"
 
 type Info = Shell.Info
 export type StopReason = "timeout" | "killed"
+/** The tool call that started a command, so a server that took over can settle it. */
+export const ToolCall = Schema.Struct({
+  sessionID: Schema.String,
+  assistantMessageID: Schema.String,
+  callID: Schema.String,
+})
+export type ToolCall = typeof ToolCall.Type
+
 type CreateInput = Shell.CreateInput & {
   shell?: string
+  toolCall?: ToolCall
+  // A call waits on the command. A server that takes the command over moves it to the background, which clears
+  // its timeout, so its deadline is not kept for a restart.
+  waited?: boolean
 }
 
-// What the server records about a daemon-run command in the daemon itself.
+// What a server needs to take a daemon-run command back after a restart, kept in the daemon's metadata.
 const Stored = Schema.Struct({
   id: Shell.ID,
   command: Schema.String,
   shell: Schema.String,
   location: Schema.Struct({ directory: Schema.String, workspaceID: Schema.optionalKey(Schema.String) }),
   metadata: Shell.Metadata,
+  toolCall: Schema.optional(ToolCall),
   timeoutDeadline: Schema.optional(Schema.Number),
   stopReason: Schema.optional(Schema.Literals(["timeout", "killed"])),
 })
 type Stored = typeof Stored.Type
+const decodeStored = Schema.decodeUnknownOption(Stored)
 
 // A command this server spawned itself. It dies with its Location.
 type Spawned = {
@@ -91,6 +105,9 @@ type Run = {
   kind: "daemon"
   info: Info
   process: number
+  toolCall?: ToolCall
+  // A call waits on it, until it moves to the background.
+  waited: boolean
   timeoutDeadline?: number
   stopReason?: StopReason
   // From the exit: newlines in the file, and why the daemon stopped writing it early.
@@ -121,8 +138,9 @@ type Ended = {
  * file-backed output by cursor. No session, message, or permission state lives
  * here; callers (e.g. `ShellTool`) own that association and store the shell ID.
  *
- * Local commands run in the process daemon when it is available (`Daemon`); remote workspaces, Windows and an
- * unavailable daemon keep spawning them from the server.
+ * Local commands run in the process daemon when it is available (`Daemon`), so they outlive a planned server
+ * restart: the next server takes them back. Remote workspaces, Windows and an unavailable daemon keep spawning
+ * them from the server.
  */
 export interface Interface {
   readonly create: <E = never, R = never>(
@@ -148,6 +166,8 @@ export interface Interface {
   // with the given status and stays observable, file included, until retention evicts it. Returns at
   // once; `wait` observes the exit. Ignored once the command has ended or is already stopping.
   readonly stop: (id: Shell.ID, reason: StopReason) => Effect.Effect<Shell.Info, NotFoundError>
+  // The daemon command a tool call started, while it is known here (including one taken back after a restart).
+  readonly byToolCall: (call: ToolCall) => Effect.Effect<Shell.Info | undefined>
   readonly output: (id: Shell.ID, input?: Shell.OutputInput) => Effect.Effect<Shell.Output, NotFoundError>
   readonly remove: (id: Shell.ID) => Effect.Effect<void, NotFoundError>
 }
@@ -226,6 +246,8 @@ interface Runs {
     readonly args: readonly string[]
     readonly env: Readonly<Record<string, string>>
     readonly timeout: number
+    readonly toolCall: ToolCall | undefined
+    readonly waited: boolean
   }) => Effect.Effect<Info, PersistentPty.UnavailableError | PersistentPty.RequestError>
   readonly timeout: (run: Run, duration: number) => Effect.Effect<void>
   readonly stop: (run: Run, reason: StopReason) => Effect.Effect<void>
@@ -233,7 +255,7 @@ interface Runs {
 }
 
 export interface DaemonInterface {
-  /** A Location's daemon commands. */
+  /** A Location's daemon commands. The first call for a Location in this server takes its commands back from the daemon. */
   readonly at: (location: Location.Interface) => Effect.Effect<Runs>
   /** Runs `effect` until it ends or the server stops, outliving the caller's Location (e.g. a job's completion notice). */
   readonly watch: (effect: Effect.Effect<void, unknown>) => Effect.Effect<void>
@@ -249,16 +271,21 @@ const daemonLayer = Layer.effect(
     const pty = yield* PersistentPty.Service
     const scope = yield* Effect.scope
     const context = yield* Effect.context()
+    const global = yield* Global.Service
     const { unlink } = yield* Effect.promise(() => import("fs/promises"))
-    const places = new Map<string, Runs>()
-    // Fibers run with the server's context in its scope, so a Location closing never interrupts them.
+    // Keyed by canonical Location. `recovered` resolves once the Location's commands were taken back.
+    const places = new Map<string, { runs: Runs; recovered: Deferred.Deferred<void> }>()
+    // Fibers run with the server's context in its scope, so a Location closing never interrupts them. On shutdown
+    // they end without settling anything: the commands keep running for the next server, and the jobs waiting on
+    // them are left to the job registry, which keeps their rows for it.
     const fork = (effect: Effect.Effect<void>) =>
       effect.pipe(Effect.forkIn(scope, { startImmediately: true }), Effect.setContext(context))
 
-    const place = (location: Location.Interface): Runs => {
+    const place = (location: Location.Interface) => {
       const runs = new Map<Shell.ID, Run>()
       const exitOrder: Shell.ID[] = []
       const ref = Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID })
+      const outputDir = path.join(global.data, DIRECTORY, location.project.id)
 
       const persisted = (run: Run): Stored => ({
         id: run.info.id,
@@ -269,11 +296,12 @@ const daemonLayer = Layer.effect(
           ...(location.workspaceID !== undefined ? { workspaceID: location.workspaceID } : {}),
         },
         metadata: run.info.metadata,
-        timeoutDeadline: run.timeoutDeadline,
+        toolCall: run.toolCall,
+        timeoutDeadline: run.waited ? undefined : run.timeoutDeadline,
         stopReason: run.stopReason,
       })
 
-      // Records the command's latest timeout and stop reason in the daemon.
+      // Records the command's latest timeout and stop reason in the daemon, so a restart sees them.
       const store = (run: Run) =>
         pty
           .setPipeMetadata(run.process, persisted(run))
@@ -365,6 +393,8 @@ const daemonLayer = Layer.effect(
         if (run.timeoutFiber) yield* Fiber.interrupt(run.timeoutFiber)
         run.timeoutFiber = undefined
         run.timeoutDeadline = duration === 0 ? undefined : Date.now() + duration
+        // Clearing the timeout is how a call moves its command to the background.
+        if (duration === 0) run.waited = false
         yield* store(run)
         if (duration !== 0) yield* arm(run, duration)
       })
@@ -405,6 +435,11 @@ const daemonLayer = Layer.effect(
             Effect.flatMap((outcome) => finish(run, outcome)),
           ),
         )
+        // A stop interrupted by a restart lost its grace period: kill now.
+        if (run.stopReason !== undefined) {
+          run.stopping = yield* fork(pty.signalPipe(run.process, "SIGKILL").pipe(Effect.ignore))
+          return
+        }
         if (duration === undefined) return
         if (duration > 0) return yield* arm(run, duration)
         yield* stop(run, "timeout")
@@ -415,6 +450,8 @@ const daemonLayer = Layer.effect(
           kind: "daemon",
           info: input.info,
           process: 0,
+          toolCall: input.toolCall,
+          waited: input.waited,
           timeoutDeadline: input.timeout > 0 ? input.info.time.started + input.timeout : undefined,
           done: Deferred.makeUnsafe<Info, NotFoundError>(),
         }
@@ -440,18 +477,104 @@ const daemonLayer = Layer.effect(
         return run.info
       })
 
-      return { get: (id) => runs.get(id), list: () => Array.from(runs.values()), create, timeout, stop, remove }
+      // Takes back this Location's commands, left by a previous server. Two Locations can share a project's output
+      // directory, so match the Location itself.
+      const recover = Effect.fnUntraced(function* () {
+        const processes = yield* pty
+          .listPipes()
+          .pipe(
+            Effect.catch((error) =>
+              Effect.logWarning("failed to list shell commands to recover", { error: error.message }).pipe(
+                Effect.as([]),
+              ),
+            ),
+          )
+        const finished: Run[] = []
+        for (const process of processes) {
+          const stored = Option.getOrUndefined(decodeStored(process.metadata))
+          if (
+            !stored ||
+            stored.location.directory !== location.directory ||
+            stored.location.workspaceID !== location.workspaceID ||
+            path.dirname(process.outputPath) !== outputDir ||
+            runs.has(stored.id)
+          )
+            continue
+          const running = process.lifecycle.status === "running"
+          const exited = process.lifecycle.status === "exited" ? process.lifecycle : undefined
+          const status = running ? "running" : (stored.stopReason ?? (exited ? "exited" : "killed"))
+          const run: Run = {
+            kind: "daemon",
+            info: {
+              id: stored.id,
+              status,
+              command: stored.command,
+              cwd: process.cwd,
+              shell: stored.shell,
+              file: process.outputPath,
+              ...(process.pid !== undefined ? { pid: process.pid } : {}),
+              ...(exited?.exitCode !== undefined ? { exit: exited.exitCode } : {}),
+              ...(exited?.signal !== undefined ? { signal: exited.signal } : {}),
+              metadata: stored.metadata,
+              time: {
+                started: process.startedAt,
+                ...(running ? {} : { completed: process.exitedAt ?? process.startedAt }),
+              },
+            },
+            process: process.id,
+            toolCall: stored.toolCall,
+            // No call waits on it any more: whatever waited died with the previous server.
+            waited: false,
+            timeoutDeadline: stored.timeoutDeadline,
+            stopReason: stored.stopReason,
+            ...(running ? {} : { outputLines: process.outputLines, outputError: process.outputError }),
+            ...(process.lifecycle.status === "failed" && !stored.stopReason
+              ? { killed: `Command was killed: ${process.lifecycle.message}` }
+              : {}),
+            done: Deferred.makeUnsafe<Info, NotFoundError>(),
+          }
+          runs.set(stored.id, run)
+          if (running) {
+            // A deadline that passed while no server ran fires at once.
+            const deadline = stored.timeoutDeadline
+            yield* attach(run, deadline === undefined ? undefined : Math.max(0, deadline - Date.now()))
+            continue
+          }
+          yield* Deferred.succeed(run.done, run.info)
+          finished.push(run)
+        }
+        exitOrder.push(
+          ...finished
+            .toSorted((a, b) => (a.info.time.completed ?? 0) - (b.info.time.completed ?? 0))
+            .map((run) => run.info.id),
+        )
+        yield* evict()
+      })
+
+      const handle: Runs = {
+        get: (id) => runs.get(id),
+        list: () => Array.from(runs.values()),
+        create,
+        timeout,
+        stop,
+        remove,
+      }
+      return { runs: handle, recover }
     }
 
-    const at = (location: Location.Interface) =>
-      Effect.sync(() => {
-        const key = `${location.directory}\0${location.workspaceID ?? ""}`
-        const existing = places.get(key)
-        if (existing) return existing
-        const runs = place(location)
-        places.set(key, runs)
-        return runs
-      })
+    const at = Effect.fnUntraced(function* (location: Location.Interface) {
+      const key = `${location.directory}\0${location.workspaceID ?? ""}`
+      const existing = places.get(key)
+      if (existing) {
+        yield* Deferred.await(existing.recovered)
+        return existing.runs
+      }
+      const placed = place(location)
+      const entry = { runs: placed.runs, recovered: Deferred.makeUnsafe<void>() }
+      places.set(key, entry)
+      yield* placed.recover().pipe(Effect.ensuring(Deferred.succeed(entry.recovered, undefined)))
+      return placed.runs
+    })
 
     return Daemon.of({
       at,
@@ -466,7 +589,7 @@ const daemonLayer = Layer.effect(
 export const daemonNode = makeGlobalNode({
   service: Daemon,
   layer: daemonLayer,
-  deps: [Bus.node, PersistentPty.node],
+  deps: [Bus.node, Global.node, PersistentPty.node],
 })
 
 const layer = () =>
@@ -487,7 +610,8 @@ const layer = () =>
       // Commands this server spawned for the Location; daemon commands live in `runs`, owned by the server.
       const commands = new Map<Shell.ID, Spawned>()
       const exitOrder: Shell.ID[] = []
-      // Remote workspaces and Windows keep spawning commands from the server.
+      // Remote workspaces and Windows keep spawning commands from the server. Taken back before the service is
+      // returned, so session restart recovery sees them.
       const runs =
         location.workspaceID === undefined && process.platform !== "win32" && PersistentPty.available
           ? yield* daemon.at(location)
@@ -574,6 +698,17 @@ const layer = () =>
         if (command.kind === "daemon") yield* runs?.stop(command, reason) ?? Effect.void
         if (command.kind === "spawned" && command.info.status === "running" && command.stop) yield* command.stop(reason)
         return command.info
+      })
+
+      const byToolCall = Effect.fn("Shell.byToolCall")(function* (call: ToolCall) {
+        return runs
+          ?.list()
+          .find(
+            (run) =>
+              run.toolCall?.sessionID === call.sessionID &&
+              run.toolCall.assistantMessageID === call.assistantMessageID &&
+              run.toolCall.callID === call.callID,
+          )?.info
       })
 
       const readRange = (file: string, start: number, length: number) =>
@@ -777,6 +912,8 @@ const layer = () =>
                 Object.entries(invocation.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
               ),
               timeout: invocation.timeout,
+              toolCall: input.toolCall,
+              waited: input.waited === true,
             })
             .pipe(
               Effect.map(Option.some),
@@ -952,7 +1089,7 @@ const layer = () =>
         return command.info
       })
 
-      return Service.of({ create, list, get, wait, result, timeout, stop, output, remove })
+      return Service.of({ create, list, get, wait, result, timeout, stop, byToolCall, output, remove })
     }),
   )
 
