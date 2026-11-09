@@ -127,11 +127,16 @@ describe("Npm.sanitize", () => {
 
 describe("Npm.resolveNpmBin", () => {
   test("never hands pacote a script from inside the compiled binary", () => {
-    expect(Npm.resolveNpmBin({ npm_execpath: "/$bunfs/bin/npm-cli.js" }, () => true)).toBe("npm")
-    expect(Npm.resolveNpmBin({ npm_execpath: "/usr/lib/node_modules/npm/bin/npm-cli.js" }, () => true)).toBe(
-      "/usr/lib/node_modules/npm/bin/npm-cli.js",
-    )
-    expect(Npm.resolveNpmBin({}, () => false)).toBe("npm")
+    expect(Npm.resolveNpmBin({ npm_execpath: "/$bunfs/bin/npm-cli.js" }, () => true, true)).toBe("npm")
+    expect(
+      Npm.resolveNpmBin({ npm_execpath: "/usr/lib/node_modules/npm/bin/npm-cli.js" }, () => true, true),
+    ).toBe("/usr/lib/node_modules/npm/bin/npm-cli.js")
+    // A script path is only usable when the current runtime can run one: pacote spawns
+    // process.execPath with it, and the compiled binary is not that runtime.
+    expect(
+      Npm.resolveNpmBin({ npm_execpath: "/usr/lib/node_modules/npm/bin/npm-cli.js" }, () => true, false),
+    ).toBe("npm")
+    expect(Npm.resolveNpmBin({}, () => false, true)).toBe("npm")
   })
 })
 

@@ -3,6 +3,7 @@ export * as Npm from "./npm.js"
 import path from "path"
 import { createHash, randomUUID } from "node:crypto"
 import { existsSync } from "node:fs"
+import { spawnSync } from "node:child_process"
 import { Clock, Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { FSUtil } from "./fs-util.js"
 import { Global } from "./global.js"
@@ -50,9 +51,20 @@ export function sanitize(pkg: string) {
   return Array.from(pkg, (char) => (illegal.has(char) || char.charCodeAt(0) < 32 ? "_" : char)).join("")
 }
 
+export function npmOnPath() {
+  // Windows cannot spawn a bare `npm` without a shell; the preparation would fail for a
+  // different reason than a missing tool, so ask the shell there.
+  const result = spawnSync("npm", ["--version"], {
+    stdio: "ignore",
+    shell: process.platform === "win32",
+  })
+  return result.status === 0
+}
+
 export function resolveNpmBin(
   env: NodeJS.ProcessEnv = process.env,
   exists: (file: string) => boolean = existsSync,
+  node: boolean = !!process.versions?.node,
 ) {
   // pacote builds a Git dependency by running `npm install` inside it, and takes the
   // binary from `npmBin`: when the name ends in `.js` it spawns `process.execPath`
@@ -60,8 +72,11 @@ export function resolveNpmBin(
   // into Bun's embedded filesystem, so the child was opencode itself — which runs its
   // own CLI and never that script — and every Git plugin with a build step died with
   // "git dep preparation failed". Only trust a path that exists outside the bundle.
+  // pacote spawns `process.execPath` with this script, so it is only usable when the
+  // current runtime can run a JavaScript file at all. Inside the compiled binary that is
+  // opencode itself, whose entrypoint ignores the argument.
   const exec = env.npm_execpath
-  if (exec && exec.endsWith(".js") && !exec.includes("$bunfs") && exists(exec)) return exec
+  if (node && exec && exec.endsWith(".js") && !exec.includes("$bunfs") && exists(exec)) return exec
   return "npm"
 }
 
@@ -233,6 +248,12 @@ const layer = Layer.effect(
       Effect.gen(function* () {
         const { Arborist } = yield* Effect.promise(() => import("@npmcli/arborist"))
         const add = input.add ?? []
+        // Building a Git dependency means running its install scripts. Say so: it is a
+        // policy decision, not something to discover from the process list.
+        const git = (yield* Effect.promise(() => Promise.all(add.map((pkg) => parse(pkg))))).some(
+          (target) => target?.type === "git",
+        )
+        if (git) yield* Effect.logWarning("preparing a git plugin runs its install scripts", { add })
         const options = {
           ...(yield* NpmConfig.load(input.config ?? input.dir)),
           npmBin: resolveNpmBin(),
@@ -258,12 +279,22 @@ const layer = Layer.effect(
               save: true,
               saveType: "prod",
             }),
-          catch: (cause) =>
-            new InstallFailedError({
-              cause,
-              add,
-              dir: input.dir,
-            }),
+          catch: (cause) => {
+            // A Git dependency is built by running `npm install` inside the clone; without
+            // npm the preparation fails with a bare "git dep preparation failed" that says
+            // nothing about the missing tool. Only pay for the check once it failed.
+            const message = cause instanceof Error ? cause.message : String(cause)
+            if (message.includes("git dep preparation failed") && !npmOnPath())
+              return new InstallFailedError({
+                add,
+                dir: input.dir,
+                cause: new Error(
+                  `${message}
+Git plugins are built with npm during install, and no npm was found on PATH. Install Node.js and npm, or use a release that ships the plugin already built.`,
+                ),
+              })
+            return new InstallFailedError({ cause, add, dir: input.dir })
+          },
         }) as Effect.Effect<ArboristTree, InstallFailedError>
       }).pipe(
         Effect.withSpan("Npm.reify", {
