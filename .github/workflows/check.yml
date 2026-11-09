@@ -3,9 +3,35 @@ name: check
 on:
   push:
     branches: [dev]
+    paths:
+      - packages/**
+      - services/**
+      - package.json
+      - package.json.workspaces
+      - bun.lockb
+      - turbo.json
+      - .npmrc
+      - .npmrc.local
+      - .eslint*
+      - .oxlintrc*
+      - tsconfig*.json
+      - .github/workflows/check.yml
   pull_request:
     branches: [dev, beta]
     types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - packages/**
+      - services/**
+      - package.json
+      - package.json.workspaces
+      - bun.lockb
+      - turbo.json
+      - .npmrc
+      - .npmrc.local
+      - .eslint*
+      - .oxlintrc*
+      - tsconfig*.json
+      - .github/workflows/check.yml
   workflow_dispatch:
 
 concurrency:
@@ -16,7 +42,7 @@ jobs:
   check:
     name: typecheck
     if: ${{ !github.event.pull_request.draft }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1

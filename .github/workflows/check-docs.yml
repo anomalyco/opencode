@@ -24,7 +24,7 @@ jobs:
   docs:
     name: docs build
     if: ${{ !github.event.pull_request.draft }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
       run:

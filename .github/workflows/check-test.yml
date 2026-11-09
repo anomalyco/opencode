@@ -5,8 +5,33 @@ on:
     branches:
       - dev
       - beta
+    paths:
+      - packages/**
+      - services/**
+      - package.json
+      - package.json.workspaces
+      - bun.lockb
+      - turbo.json
+      - .npmrc
+      - .github/workflows/check-test.yml
+      - '**/*.test.ts'
+      - '**/*.test.tsx'
+      - '**/*.spec.ts'
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - packages/**
+      - services/**
+      - package.json
+      - package.json.workspaces
+      - bun.lockb
+      - turbo.json
+      - .npmrc
+      - .github/workflows/check-test.yml
+      - '**/*.test.ts'
+      - '**/*.test.tsx'
+      - '**/*.spec.ts'
+      - e2e/**
   workflow_dispatch:
     inputs:
       quarantine:
@@ -31,7 +56,7 @@ jobs:
   affected:
     name: affected packages
     if: ${{ !github.event.pull_request.draft }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     outputs:
       e2e: ${{ steps.packages.outputs.app }}
     steps:
@@ -69,9 +94,9 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ubuntu-24.04
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: windows-2025
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
@@ -155,9 +180,9 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ubuntu-24.04
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: windows-2025
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
@@ -224,7 +249,7 @@ jobs:
       fail-fast: false
       matrix:
         # Beta PRs gate on Linux; Windows runs on pushes and manual runs (nightly-beta.yml dispatches beta).
-        settings: ${{ fromJSON(github.base_ref == 'beta' && '[{"name":"linux","host":"blacksmith-4vcpu-ubuntu-2404"}]' || '[{"name":"linux","host":"blacksmith-4vcpu-ubuntu-2404"},{"name":"windows","host":"blacksmith-4vcpu-windows-2025"}]') }}
+        settings: ${{ fromJSON(github.base_ref == 'beta' && '[{"name":"linux","host":"ubuntu-24.04"}]' || '[{"name":"linux","host":"ubuntu-24.04"},{"name":"windows","host":"windows-2025"}]') }}
         quarantine: ${{ fromJSON(inputs.quarantine && '[true]' || '[false]') }}
         # Playwright splits whole spec files across shards by test count, not duration. Every app-N
         # entry must use the same total, and the entries must cover 1..total. The service worker suite
@@ -336,7 +361,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [linux, windows]
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     steps:
       - name: Check browser test results
         env:
