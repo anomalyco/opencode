@@ -11,6 +11,7 @@ pub mod native;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::hash::{DefaultHasher, Hasher};
 use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
@@ -239,16 +240,18 @@ impl Loader {
                 let reload = reload.clone();
                 move |registering: &mut crate::Setup<'_>| {
                     reload.take();
-                    setup(registering);
+                    setup(registering)
                 }
             }),
             ..definition
         };
-        if let Some(error) = registry.load(host, definition.external(name, failure)) {
-            return self.fail(&**host, registry, name, digest, error);
+        match registry.load(host, definition.external(name, failure)) {
+            Some(failed) if failed.kept => return self.fail(&**host, registry, name, digest, failed.error),
+            // The plugin is listed as failed, and enabling it runs this build's setup again.
+            Some(failed) => self.tell(&**host, name, failed.error),
+            None => drop(self.failed.borrow_mut().remove(name)),
         }
         self.seen.borrow_mut().insert(name.to_owned(), Seen { digest, reload });
-        self.failed.borrow_mut().remove(name);
         true
     }
 
@@ -256,23 +259,25 @@ impl Loader {
     /// reports the failure; otherwise the target is listed as failed. A new failure tells the host.
     fn fail(&self, host: &dyn Host, registry: &Registry, target: &str, digest: u64, error: String) -> bool {
         log::error!("plugin {target} failed to load: {error}");
-        let new = self.failed.borrow_mut().insert(target.to_owned(), error.clone()).as_ref() != Some(&error);
-        let mut seen = self.seen.borrow_mut();
-        match seen.get_mut(target) {
-            Some(previous) => {
-                previous.digest = digest;
-                *previous.reload.borrow_mut() = Some(format!("{error} (previous version still active)"));
+        let reload = match self.seen.borrow_mut().entry(target.to_owned()) {
+            Entry::Occupied(mut seen) => {
+                seen.get_mut().digest = digest;
+                seen.get().reload.clone()
             }
-            None => {
-                seen.insert(target.to_owned(), Seen { digest, reload: Rc::default() });
-                registry.set_unloaded(target, Some(Status::Failed(error)));
-            }
+            Entry::Vacant(seen) => seen.insert(Seen { digest, reload: Rc::default() }).reload.clone(),
+        };
+        if registry.failed_load(target, &error) {
+            *reload.borrow_mut() = Some(format!("{error} (previous version still active)"));
         }
-        drop(seen);
-        if new {
+        self.tell(host, target, error);
+        true
+    }
+
+    /// Tells the host that `target` failed with `error`, unless it said so last.
+    fn tell(&self, host: &dyn Host, target: &str, error: String) {
+        if self.failed.borrow_mut().insert(target.to_owned(), error.clone()).as_ref() != Some(&error) {
             host.failed(target);
         }
-        true
     }
 }
 
