@@ -4370,6 +4370,24 @@
      ]
     },
     {
+     "command": "dialog.integration.copy",
+     "keys": [
+      "\u001b[9u"
+     ],
+     "commands": [
+      "dialog.integration.copy"
+     ]
+    },
+    {
+     "command": "dialog.integration.copy",
+     "keys": [
+      "\t"
+     ],
+     "commands": [
+      "dialog.integration.copy"
+     ]
+    },
+    {
      "command": "dialog.worktree.generate",
      "keys": [
       "\u001b[9u"
@@ -5510,7 +5528,7 @@
       "\t"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
      ]
     },
     {
@@ -8792,7 +8810,7 @@
       "\u001b[9u"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
      ]
     },
     {
@@ -8800,7 +8818,23 @@
       "\t"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[9u"
+     ],
+     "commands": [
+      "dialog.integration.copy"
+     ]
+    },
+    {
+     "keys": [
+      "\t"
+     ],
+     "commands": [
+      "dialog.integration.copy"
      ]
     },
     {
@@ -8944,7 +8978,7 @@
       "\u001b[9u"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
      ]
     },
     {
@@ -8952,7 +8986,7 @@
       "\t"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
      ]
     },
     {
@@ -9973,7 +10007,7 @@
       "\t"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
      ]
     },
     {
@@ -13281,7 +13315,7 @@
       "\u001b[9u"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
      ]
     },
     {
@@ -13289,7 +13323,23 @@
       "\t"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[9u"
+     ],
+     "commands": [
+      "dialog.integration.copy"
+     ]
+    },
+    {
+     "keys": [
+      "\t"
+     ],
+     "commands": [
+      "dialog.integration.copy"
      ]
     },
     {
@@ -13433,7 +13483,7 @@
       "\u001b[9u"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
      ]
     },
     {
@@ -13441,7 +13491,7 @@
       "\t"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
      ]
     },
     {
@@ -14507,7 +14557,7 @@
       "\t"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
      ]
     },
     {
@@ -17719,7 +17769,7 @@
       "\u001b[9u"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
      ]
     },
     {
@@ -17727,7 +17777,23 @@
       "\t"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[9u"
+     ],
+     "commands": [
+      "dialog.integration.copy"
+     ]
+    },
+    {
+     "keys": [
+      "\t"
+     ],
+     "commands": [
+      "dialog.integration.copy"
      ]
     },
     {
@@ -17871,7 +17937,7 @@
       "\u001b[9u"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
      ]
     },
     {
@@ -17879,7 +17945,7 @@
       "\t"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
      ]
     },
     {
@@ -18882,7 +18948,7 @@
       "\t"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
      ]
     },
     {
@@ -22122,7 +22188,7 @@
       "\u001b[9u"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
      ]
     },
     {
@@ -22130,7 +22196,23 @@
       "\t"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[9u"
+     ],
+     "commands": [
+      "dialog.integration.copy"
+     ]
+    },
+    {
+     "keys": [
+      "\t"
+     ],
+     "commands": [
+      "dialog.integration.copy"
      ]
     },
     {
@@ -22274,7 +22356,7 @@
       "\u001b[9u"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
      ]
     },
     {
@@ -22282,7 +22364,7 @@
       "\t"
      ],
      "commands": [
-      "dialog.worktree.generate"
+      "dialog.integration.copy"
      ]
     },
     {
@@ -26129,6 +26211,22 @@
      ],
      "commands": [
       "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[9u"
+     ],
+     "commands": [
+      "session.tab.next"
+     ]
+    },
+    {
+     "keys": [
+      "\t"
+     ],
+     "commands": [
+      "session.tab.next"
      ]
     },
     {
@@ -30221,6 +30319,22 @@
      ],
      "commands": [
       "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[9u"
+     ],
+     "commands": [
+      "session.tab.next"
+     ]
+    },
+    {
+     "keys": [
+      "\t"
+     ],
+     "commands": [
+      "session.tab.next"
      ]
     },
     {
