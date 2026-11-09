@@ -858,8 +858,13 @@ export function createPluginAttachment(apis: HostApis) {
     const item = provider(key)
     const placement = options?.tab ?? "open"
 
-    // An append adds the tab quietly: no selection, no region change, no preview replacement.
-    if (placement === "append") return layout.panel.append(value, key)
+    // An append adds the tab quietly: no selection, no region change, no preview replacement. A panel listing a tab whose
+    // close waits for the region to slide shut, such as a terminal not yet ended, doesn't bring it back.
+    if (placement === "append") {
+      if (mountedSession(session) && region()?.closing(key, session.key)) return
+
+      return layout.panel.append(value, key)
+    }
 
     // A select keeps the narrow-screen view, as a background open does, and shows the tab's pane too.
     if (placement === "select")
@@ -894,9 +899,16 @@ export function createPluginAttachment(apis: HostApis) {
     withLocated(session, (value) => openAt(key, session, value, options, "open"))
 
   const closeAt = (key: string, session: SessionRef, value: string) => {
+    const mounted = mountedSession(session) ? region() : undefined
+
+    // The routed session's region closes the tab as its strip would: New tabs keep it open, focus goes back, and the tab
+    // stays drawn while the region slides shut.
+    if (mounted && !narrow()) return mounted.close(key)
     const item = provider(key)
     const tab = listed(session, value).find((entry) => entry.key === key)?.tab
-    const all = layout.panel.state(value).all
+    const panel = layout.panel.state(value)
+    // Closing the last tab closes the side region, which opens with a new tab next time. A bottom tab isn't in it.
+    const last = panel.all.length === 1 && panel.all[0] === key && sessionTabPane(panel, key) !== "bottom"
     const view = mountedSession(session)
     const currentScreen = screen()
 
@@ -911,8 +923,7 @@ export function createPluginAttachment(apis: HostApis) {
     batch(() => {
       layout.panel.close(value, key)
 
-      // Closing the last tab closes the side region, which opens with a new tab next time.
-      if (all.length === 1 && all[0] === key) tabs.setRegion(shellTab(session), "side", false)
+      if (last) tabs.setRegion(shellTab(session), "side", false)
     })
 
     if (view && tab && currentScreen) item?.value.close?.({ tab, session: view, screen: currentScreen })

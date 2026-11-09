@@ -32,6 +32,7 @@ export function useFile() {
       return tab.slice(5)
     },
     load: async () => undefined,
+    within: (_directory: string, run: () => void) => run(),
     async searchFilesAndDirectories(query: string) {
       const text = query.trim().toLowerCase()
       if (!text) return pool

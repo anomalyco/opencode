@@ -147,7 +147,8 @@ const setup: Plugin.Setup<typeof Terminal> = (ctx) => {
         const target = current()
         const id = target?.terminal.active()
 
-        if (target && id) target.terminal.close(id)
+        // Closes the tab as the strip does, so closing the last one closes the panel; its close ends the terminal.
+        if (target && id) layout.close(key(id), target.session)
       },
     }),
   )
@@ -216,7 +217,7 @@ const setup: Plugin.Setup<typeof Terminal> = (ctx) => {
           title={info()?.title ?? ""}
           // A tab shown for a list that failed has no terminal to rename yet.
           rename={info() ? (title) => terminal().rename(id, title) : undefined}
-          close={() => terminal().close(id)}
+          close={() => layout.close(key(id), session)}
         />
       ),
     }

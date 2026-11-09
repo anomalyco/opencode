@@ -27,6 +27,7 @@ import { same } from "@/runtime/persistence/equality"
 import { sessionTabPane, type SessionPane, type SessionTabs } from "@/shell/state/session-tabs"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
+import { useFile } from "@/workspaces/files/model"
 import { usePluginHost } from "./host"
 import { Contribution } from "./render"
 import { usePluginAttachment } from "./attachment"
@@ -130,6 +131,7 @@ export function createRegion(input: {
   // The text field focus left when the user opened the side region, which a close from inside it returns to.
   let returnFocus: HTMLElement | undefined
   const host = usePluginHost()
+  const file = useFile()
   const stored = () => input.tabs().all()
   const providers = createMemo(() => host.items(BuiltinPanel).filter((item) => item.value.region === input.region))
 
@@ -359,7 +361,9 @@ export function createRegion(input: {
   }
 
   // Feeds the machine the region's tabs each time they change: a tab that selects itself replaces the New tab its pane
-  // shows, a split or bottom pane takes its New tabs when it closes, and an open, empty side region opens one.
+  // shows, a split or bottom pane takes its New tabs when it closes, and an open, empty side region opens one. The side
+  // region reports itself open after this runs, so a close that empties the strip reads the layout too: the region is
+  // closing, and opens no New tab on its way out.
   createRenderEffect(() =>
     dispatchNewTabs({
       type: "sync",
@@ -367,7 +371,7 @@ export function createRegion(input: {
         session: input.view().key,
         empty: empty(),
         regionActive: active(),
-        sideOpen: sideOpen(),
+        sideOpen: sideOpen() && input.side().opened(),
         panes: {
           side: { active: panes.side.active(), keys: panes.side.keys() },
           split: { active: panes.split.active(), keys: panes.split.keys() },
@@ -383,6 +387,24 @@ export function createRegion(input: {
 
   // Closing the last New tab of a strip with no tabs closes the region, as closing its last tab does.
   const dismissNewTab = (id: string) => batch(() => dispatchNewTabs({ type: "dismiss", id, empty: untrack(empty) }))
+
+  // A close that empties the region holds back the panel's own close, such as a terminal ending its process, while a
+  // pane still draws the tab as the region slides shut (`PaneTabs`). It runs once no pane holds the tab: the slide
+  // lands, the region opens again, another session routes in, or the pane unmounts.
+  const holds = new Map<string, number>()
+  const pending = new Map<string, { session: string; run: () => void }>()
+
+  const settle = (key: string) =>
+    untrack(() => {
+      const close = pending.get(key)
+
+      if (!close || holds.has(key)) return
+      pending.delete(key)
+
+      // A tab opened again before its close ran stays open.
+      if (input.view().key === close.session && stored().includes(key)) return
+      close.run()
+    })
 
   return {
     /** Whether a key event belongs to the side region rather than the session around it. */
@@ -468,25 +490,49 @@ export function createRegion(input: {
     },
     close(key: string) {
       const entry = byKey().get(key)
-      const last = stored().length === 1 && stored()[0] === key
-      const closed = entry && closedEntry(key, entry.provider, panelInput(input.view, input.screen, { tab: entry.tab }))
+      const session = untrack(input.view)
+      const screen = input.screen
+      const root = untrack(() => screen.file.root)
+      const closed = entry && closedEntry(key, entry.provider, panelInput(input.view, screen, { tab: entry.tab }))
 
-      if (closed) input.closed.push(input.view(), closed)
-      // New tabs left in the strip keep the region open.
+      // Closing the last tab closes the region, unless it was a bottom tab or New tabs are left in the side strip.
+      const empties =
+        stored().length === 1 &&
+        stored()[0] === key &&
+        paneOfKey(key) !== "bottom" &&
+        selectPaneNewTabs(untrack(newTabsState), "side").length === 0
+
+      if (closed) input.closed.push(session, closed)
       batch(() => {
         input.tabs().close(key)
 
-        // The strip is empty now, so a split or bottom pane closed and only the side pane's New tabs remain.
-        if (last && selectPaneNewTabs(untrack(newTabsState), "side").length === 0) emptied()
+        if (empties) emptied()
       })
 
-      if (entry)
-        entry.provider.close?.(
-          panelInput(input.view, input.screen, {
-            tab: entry.tab,
-          }),
-        )
+      if (!entry?.provider.close) return
+
+      // Another workspace may be routed by the time it runs; the tab's files are still the one it closed in.
+      const run = () => file.within(root, () => entry.provider.close?.({ session, screen, tab: entry.tab }))
+
+      if (!empties) return run()
+      pending.set(key, { session: session.key, run })
+      // A pane that draws the tab through the slide holds it by now; otherwise the close runs at once.
+      queueMicrotask(() => settle(key))
     },
+    /** Holds back the panel's close of a closed tab a pane still draws, until the returned release. */
+    hold(key: string) {
+      holds.set(key, (holds.get(key) ?? 0) + 1)
+
+      return () => {
+        const count = (holds.get(key) ?? 1) - 1
+
+        if (count > 0) holds.set(key, count)
+        else holds.delete(key)
+        settle(key)
+      }
+    },
+    /** A tab closed in `session` whose panel's close still waits for the slide. */
+    closing: (key: string, session: string) => pending.get(key)?.session === session,
     /**
      * The session's closed files that are not open again, newest first, as "Recently closed" lists them. ⌘⇧T still
      * reopens the newest closed tab of any kind.

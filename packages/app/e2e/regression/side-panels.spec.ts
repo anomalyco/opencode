@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
 import { fileDiff, openSession } from "../utils/workspace"
-import { openReviewLauncher } from "../utils/side-panel"
+import { openReviewLauncher, probeClose } from "../utils/side-panel"
 import { base64Encode } from "@opencode/util/encode"
 
 test("review content stays aligned with the side region in both directions", async ({ page }) => {
@@ -171,6 +171,157 @@ test("closing the last New tab closes the side region, and only a New tab lists 
     await expect(toggle).toHaveAttribute("aria-expanded", "true")
     await expect(newTab).toHaveCount(1)
   }
+})
+
+test("closing the last tab slides the side region shut showing that tab, and it reopens on a New tab", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" })
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/LastTabClose"
+  const key = `local\u0000${base64Encode(directory)}/ses_lasttabclose`
+
+  await openSession(page, {
+    name: "LastTabClose",
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { ses_lasttabclose: { review: true } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: { [key]: { all: ["file://README.md"], active: "file://README.md" } },
+        },
+      },
+    },
+  })
+
+  const panel = page.locator("#review-panel")
+  const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
+  const readme = panel.getByRole("tab", { name: "README.md", exact: true })
+  await expect(readme).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByText("contents:README.md")).toBeVisible()
+
+  const frames = await probeClose(page, { text: "contents:README.md" })
+  await readme.hover()
+  await readme.locator("..").getByRole("button", { name: "Close tab", exact: true }).click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+
+  // It slides rather than snapping, and every frame of the slide shows the closed tab, never a New tab in its place.
+  expect(await frames()).toEqual(["file://README.md* | content"])
+
+  // Reopening shows a New tab, which lists the closed tab first.
+  await toggle.click()
+  await expect(panel.getByRole("tab")).toHaveText(["New tab"])
+  await expect(panel.getByRole("tab", { name: "New tab", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(
+    panel
+      .getByRole("region", { name: "Recently closed", exact: true })
+      .locator('[data-slot="side-recently-closed-row"]'),
+  ).toContainText(["README.md"])
+})
+
+test("a plugin closing the last tab slides the side region shut showing that tab", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" })
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/PluginTabClose"
+  const key = `local\u0000${base64Encode(directory)}/ses_plugintabclose`
+
+  await openSession(page, {
+    name: "PluginTabClose",
+    seed: {
+      panes: { ses_plugintabclose: { review: true } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: { [key]: { all: ["context:main"], active: "context:main" } },
+        },
+      },
+    },
+  })
+
+  const panel = page.locator("#review-panel")
+  const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
+  const context = panel.getByRole("tab", { name: "Context", exact: true })
+  await expect(context).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByText("Raw messages")).toBeVisible()
+
+  // The header's context button closes its tab through the plugin API, not the strip.
+  const frames = await probeClose(page, { text: "Raw messages" })
+  await page.getByRole("button", { name: "Toggle session context", exact: true }).click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  expect(await frames()).toEqual(["context:main* | content"])
+
+  await toggle.click()
+  await expect(panel.getByRole("tab")).toHaveText(["New tab"])
+})
+
+test("closing the split pane's last tab slides the side region shut showing that tab in its pane", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" })
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/SplitTabClose"
+  const key = `local\u0000${base64Encode(directory)}/ses_splittabclose`
+
+  await openSession(page, {
+    name: "SplitTabClose",
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { ses_splittabclose: { review: true } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: {
+            [key]: {
+              all: ["file://notes.md"],
+              active: "file://notes.md",
+              panes: { "file://notes.md": "split" },
+              selected: { split: "file://notes.md" },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  const panel = page.locator("#review-panel")
+  const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
+  const notes = panel.locator('[data-pane-content="split"]').getByRole("tab", { name: "notes.md", exact: true })
+  await expect(notes).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByText("contents:notes.md")).toBeVisible()
+
+  // The pane doesn't give way to an empty side pane's "Select a file to open" while the region slides shut.
+  const frames = await probeClose(page, { text: "contents:notes.md" })
+  await notes.hover()
+  await notes.locator("..").getByRole("button", { name: "Close tab", exact: true }).click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  expect(await frames()).toEqual(["file://notes.md* | content"])
+})
+
+test("a plugin closing its tab keeps the side region open on the New tab beside it", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/PluginCloseNewTab"
+  const key = `local\u0000${base64Encode(directory)}/ses_pluginclosenewtab`
+
+  await openSession(page, {
+    name: "PluginCloseNewTab",
+    seed: {
+      panes: { ses_pluginclosenewtab: { review: true } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: { [key]: { all: ["context:main"], active: "context:main" } },
+        },
+      },
+    },
+  })
+
+  const panel = page.locator("#review-panel")
+  const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
+  const newTab = panel.getByRole("tab", { name: "New tab", exact: true })
+  await expect(panel.getByRole("tab", { name: "Context", exact: true })).toHaveAttribute("aria-selected", "true")
+  await panel.getByRole("button", { name: "Add tab", exact: true }).click()
+  await expect(newTab).toHaveAttribute("aria-selected", "true")
+
+  // The header's context button closes its tab through the plugin API, as the strip's close would.
+  await page.getByRole("button", { name: "Toggle session context", exact: true }).click()
+  await expect(panel.getByRole("tab")).toHaveText(["New tab"])
+  await expect(newTab).toHaveAttribute("aria-selected", "true")
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
 })
 
 test("New tabs stay when a launcher in another one opens a tab, or when the tab before them closes", async ({
