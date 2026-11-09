@@ -151,7 +151,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { target: linux-arm64, host: ubuntu-24.04 }
+          - { target: linux-arm64, host: ubuntu-24.04-arm }
           - { target: linux-x64, host: ubuntu-24.04 }
           - { target: darwin-arm64, host: macos-26 }
           - { target: windows-arm64, host: windows-2025 }
@@ -268,10 +268,13 @@ jobs:
             host: macos-26
             install: --os=darwin --cpu=x64
           - { target: darwin-arm64, host: macos-26, install: --os=darwin --cpu=arm64 }
-          - { target: windows-arm64, host: windows-2025, install: --cpu=* }
+          # github-hosted: blacksmith lacks the ARM64 MSVC cross-compilation toolchain
+          - target: windows-arm64
+            host: ${{ (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && 'windows-2025' || 'windows-2025' }}
+            install: --cpu=*
           - { target: windows-x64, host: windows-2025 }
           - { target: linux-x64, host: ubuntu-24.04 }
-          - { target: linux-arm64, host: ubuntu-24.04 }
+          - { target: linux-arm64, host: ubuntu-24.04-arm }
     runs-on: ${{ matrix.host }}
     env: *env
     steps:
@@ -327,7 +330,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { target: windows-arm64, host: windows-2025, install: --cpu=* }
+          - target: windows-arm64
+            host: ${{ (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && 'windows-2025' || 'windows-2025' }}
+            install: --cpu=*
           - { target: windows-x64, host: windows-2025 }
     runs-on: ${{ matrix.host }}
     env: *env
