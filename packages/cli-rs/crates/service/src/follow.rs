@@ -222,6 +222,11 @@ mod tests {
                 (NEW.to_owned(), basic("new")),
             ]
         );
+        // A request is checked against the origin the client was built for, and the transport reroutes it after.
+        let call = |path: &str| opencode_api::client::Call::new("GET", path.to_owned(), 200, &[]);
+        let request = client.prepare(call("/api/info")).unwrap();
+        assert_eq!(client.transport().route(request.url).as_str(), NEW);
+        assert!(client.prepare(call("/http://127.0.0.1:5000/api/info")).is_err());
     }
 
     #[tokio::test]
