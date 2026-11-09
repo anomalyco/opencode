@@ -229,6 +229,47 @@ fn a_replacement_drops_the_content_and_inside_claims() {
     assert_eq!(host.app.render().text().lines().next().unwrap().trim_end(), "b0");
 }
 
+// Expected: as in TS, an external plugin with a built-in's ID replaces the built-in in its place among the claims, a
+// second plugin with that ID is refused, and unloading the plugin brings the built-in back in the same place.
+#[test]
+fn an_external_plugin_replaces_a_built_in_of_its_id_in_place() {
+    let host = host();
+    let footer = || vec![Placement::append("home.footer")];
+    let registry = Registry::new(vec![claiming("a", footer()), claiming("b", footer()), claiming("c", footer())], []);
+    registry.activate(&host);
+    let rows = |registry: &Registry<TestHost>| {
+        let parent = View::new(host.app()).column();
+        let _mount = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+        host.app().root().clear();
+        host.app().root().add(&parent);
+        let text = host.app.render().text();
+        text.lines().map(str::trim_end).filter(|line| !line.is_empty()).map(str::to_owned).collect::<Vec<_>>()
+    };
+    assert_eq!(rows(&registry), ["a0", "b0", "c0"]);
+    let external = |label: &str| {
+        let label = label.to_owned();
+        Definition::new("b", move |cx: &mut Setup<'_, TestHost>| {
+            let label = label.clone();
+            cx.slot(Placement::append("home.footer"), move |host, _| {
+                Box::new(View::new(host.app()).child(&Text::new(host.app(), label.clone())))
+            });
+        })
+        .external("b.so", Rc::new(|| None))
+    };
+    assert!(!registry.id_taken("b", "b.so"));
+    assert_eq!(registry.load(&host, external("ext")), None);
+    assert_eq!(rows(&registry), ["a0", "ext", "c0"]);
+    let entries = registry.entries();
+    assert_eq!((entries[1].source, entries[1].target.as_deref()), (Source::External, Some("b.so")));
+    assert!(registry.id_taken("b", "other.so"));
+    // A rebuild keeps the place too.
+    assert_eq!(registry.load(&host, external("ext2")), None);
+    assert_eq!(rows(&registry), ["a0", "ext2", "c0"]);
+    registry.unload(&host, "b.so");
+    assert_eq!(rows(&registry), ["a0", "b0", "c0"]);
+    assert_eq!((registry.entries()[1].source, registry.entries()[1].status.clone()), (Source::Builtin, Status::Active));
+}
+
 #[test]
 fn deactivation_undoes_every_registration() {
     let host = host();

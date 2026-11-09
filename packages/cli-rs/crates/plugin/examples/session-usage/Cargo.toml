@@ -1,0 +1,17 @@
+# A port of `opencode-session-usage` 0.1.8 (npm, MIT, Chromiell) to a native plugin on `opencode-plugin-abi`
+# alone. The TUI's tests build it with `cargo build` and load the library. Not a workspace member.
+[package]
+name = "opencode-session-usage"
+version = "0.1.8"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+opencode-plugin-abi = { path = "../../../plugin-abi" }
+serde_json = "1"
+
+[workspace]

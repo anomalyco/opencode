@@ -39,6 +39,8 @@ pub(crate) struct Activation<H: Host> {
     handler: HandlerId,
     /// The plugin was disposed: its pending replies are dropped.
     disposed: Cell<bool>,
+    /// Runs the plugin's wake handlers, which invalidate its claims; without, a wake only redraws them.
+    on_wake: RefCell<Option<Rc<dyn Fn()>>>,
 }
 
 impl<H: Host> Activation<H> {
@@ -47,7 +49,7 @@ impl<H: Host> Activation<H> {
             let (this, id) = (this.clone(), wake.id);
             let handler = host.app().on_message(move |_, message: &Woken| {
                 if let Some(activation) = this.upgrade().filter(|_| message.0 == id) {
-                    activation.redraw();
+                    activation.woken();
                 }
             });
             Self {
@@ -57,6 +59,7 @@ impl<H: Host> Activation<H> {
                 queued: Cell::new(false),
                 handler,
                 disposed: Cell::new(false),
+                on_wake: RefCell::default(),
             }
         })
     }
@@ -70,10 +73,29 @@ impl<H: Host> Activation<H> {
 
     pub fn dispose(&self) {
         self.disposed.set(true);
+        // The wake handlers hold what holds the activation.
+        self.on_wake.borrow_mut().take();
     }
 
     pub fn disposed(&self) -> bool {
         self.disposed.get()
+    }
+
+    /// Sets what a wake runs before the claims render again: the plugin's wake handlers, which invalidate them.
+    pub fn on_wake(&self, run: Rc<dyn Fn()>) {
+        *self.on_wake.borrow_mut() = Some(run);
+    }
+
+    /// A wake arrived: runs the plugin's wake handlers, or renders the claims again at once.
+    fn woken(&self) {
+        let run = self.on_wake.borrow().clone();
+        match run.filter(|_| !self.disposed()) {
+            Some(run) => {
+                self.wake.pending.store(false, Ordering::Release);
+                run();
+            }
+            None => self.redraw(),
+        }
     }
 
     pub fn track(&self, claim: Weak<dyn Drawn<H>>) {

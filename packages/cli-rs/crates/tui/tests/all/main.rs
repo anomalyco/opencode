@@ -27,6 +27,7 @@ mod navigate;
 mod permission;
 mod plugin_fetch;
 mod plugins;
+mod ports;
 mod prompt;
 mod prompt_footer;
 mod queue;

@@ -67,7 +67,7 @@ pub const ABI_MAJOR: u32 = 1;
 /// requests of routes, replies, dialogs, navigation and the clipboard ([`Request::RenderRoute`], [`Request::Reply`],
 /// [`HostRequest::Fetch`], [`HostRequest::Navigate`], [`HostRequest::Dialog`], [`HostRequest::Copy`]), and of mounts and
 /// the prompt ([`Request::Mount`], [`HostRequest::Interactive`], [`HostRequest::Shortcut`],
-/// [`HostRequest::DialogOpen`]).
+/// [`HostRequest::DialogOpen`]), [`Dialog::Select`] and [`Request::Wake`].
 pub const ABI_MINOR: u32 = 4;
 
 /// The symbol every plugin exports, of type [`EntryFn`].
@@ -281,6 +281,9 @@ pub struct Manifest {
     /// The routes of [`Setup::route`], which answer [`Request::RenderRoute`]; [`Manifest::routes`] lists them too.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub render_routes: Vec<String>,
+    /// The plugin has [`Setup::on_wake`] handlers, which [`Request::Wake`] runs.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub wake: bool,
 }
 
 /// What [`Manifest::render`] is for the render requests of ABI 1.4.
@@ -1066,6 +1069,8 @@ pub enum Request {
         input: SlotInput,
         mounted: bool,
     },
+    /// 1.4: runs the [`Setup::on_wake`] handlers after the plugin woke the host, before its claims render again.
+    Wake,
 }
 
 /// A fence for the render of [`Setup::code_block`] that [`Manifest::fences`] names by `index`. The host matches a fence
@@ -1335,6 +1340,52 @@ pub enum Dialog {
     Close {
         key: String,
     },
+    /// A list to pick from, with a filter. Enter or a click closes it and runs its `action` with the option's value as
+    /// the input; escape closes it.
+    Select(Select),
+}
+
+/// A [`Dialog::Select`] (TS `dialog.select`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Select {
+    pub title: String,
+    /// The filter's placeholder.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placeholder: Option<String>,
+    pub options: Vec<SelectOption>,
+    /// The value of the option that is marked and selected as the list opens.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current: Option<String>,
+    /// What picking an option runs, with its value as the input.
+    pub action: Action,
+}
+
+/// An option of a [`Select`].
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct SelectOption {
+    pub title: String,
+    pub value: String,
+    /// Muted text after the title.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Text at the right of the row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub footer: Option<String>,
+    /// The heading the option is listed under.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub disabled: bool,
+}
+
+impl SelectOption {
+    pub fn new(title: impl Into<String>, value: impl Into<String>) -> Self {
+        Self { title: title.into(), value: value.into(), ..Self::default() }
+    }
+
+    pub fn description(self, description: impl Into<String>) -> Self {
+        Self { description: Some(description.into()), ..self }
+    }
 }
 
 /// A dialog that shows a node, live: a panel shown again while its `key` is open changes in place and keeps where its
@@ -1721,8 +1772,8 @@ impl HostHandle {
 }
 
 /// Wakes the host from any thread, from [`Setup::waker`] (over the C ABI, a 1.3 host's [`HostApi::wake`]): the host
-/// then renders the plugin's mounted slot claims and routes again, with [`Changed::woken`], so a plugin that works on
-/// its own thread can show the result.
+/// then runs the plugin's [`Setup::on_wake`] handlers and renders its mounted slot claims and routes again, with
+/// [`Changed::woken`], so a plugin that works on its own thread can show the result.
 ///
 /// A wake is a redraw hint, not a message: it delivers nothing and drains nothing. Many wakes may become one redraw,
 /// so a render must show every result that is ready, not one per wake. The host never loses the last wake, even when
@@ -1779,6 +1830,8 @@ pub type CommandFn = Rc<dyn Fn(&dyn Host, Option<&str>)>;
 pub type EventFn = Rc<dyn Fn(&dyn Host, &V2Event)>;
 /// A registered mount handler of [`Setup::on_mount`].
 pub type MountFn = Rc<dyn Fn(&dyn Host, &SlotInput, bool)>;
+/// A registered wake handler of [`Setup::on_wake`].
+pub type WakeFn = Rc<dyn Fn(&dyn Host)>;
 /// A registered dispose callback.
 pub type DisposeFn = Box<dyn FnOnce(&dyn Host)>;
 
@@ -1823,6 +1876,7 @@ pub struct Setup {
     replies: Vec<ReplyFn>,
     /// The mount handlers, with the index of their claim in [`Manifest::slots`].
     mounts: Vec<(usize, MountFn)>,
+    wakes: Vec<WakeFn>,
     disposers: Vec<DisposeFn>,
 }
 
@@ -1930,6 +1984,14 @@ impl Setup {
         self.routes.push((name.to_owned(), Box::new(render)));
     }
 
+    /// Calls `run` on the UI thread after the plugin's [`Waker`] woke the host, before its claims and routes render
+    /// again with [`Changed::woken`]: a plugin whose thread keeps time asks the host for what a render cannot, such as
+    /// a [`Host::fetch`]. Wakes that arrive together run it once.
+    pub fn on_wake(&mut self, run: impl Fn(&dyn Host) + 'static) {
+        self.manifest.wake = true;
+        self.wakes.push(Rc::new(run));
+    }
+
     /// Calls `run` with each reply to the plugin's [`Host::fetch`]es, on the UI thread, with the request's ID. A reply
     /// that arrives after the plugin was disposed is dropped.
     pub fn on_reply(&mut self, run: impl Fn(&dyn Host, RequestId, Result<serde_json::Value, String>) + 'static) {
@@ -1992,6 +2054,12 @@ impl Setup {
         &self.views
     }
 
+    /// The wake handlers.
+    #[doc(hidden)]
+    pub fn wakes(&self) -> &[WakeFn] {
+        &self.wakes
+    }
+
     /// The reply handlers.
     #[doc(hidden)]
     pub fn replies(&self) -> &[ReplyFn] {
@@ -2019,6 +2087,7 @@ impl Setup {
             events: Vec::new(),
             replies: Vec::new(),
             mounts: Vec::new(),
+            wakes: Vec::new(),
             disposers: Vec::new(),
         }
     }
@@ -2073,6 +2142,10 @@ impl Setup {
             Request::Mount { claim, input, mounted } => {
                 let runs = self.mounts.iter().filter(|(index, _)| *index == claim);
                 runs.for_each(|(_, run)| run(&self.host, &input, mounted));
+                Ok(serde_json::Value::Null)
+            }
+            Request::Wake => {
+                self.wakes.iter().for_each(|run| run(&self.host));
                 Ok(serde_json::Value::Null)
             }
         }
@@ -2604,6 +2677,15 @@ mod tests {
             HostRequest::Interactive,
             HostRequest::Shortcut { name: "agent.cycle".into() },
             HostRequest::DialogOpen { key: "k".into() },
+            HostRequest::Dialog {
+                dialog: Dialog::Select(Select {
+                    title: "s".into(),
+                    placeholder: None,
+                    options: vec![SelectOption::new("A", "a").description("d"), SelectOption::new("B", "b")],
+                    current: Some("b".into()),
+                    action: Action::Command { name: "x.pick".into(), input: None },
+                }),
+            },
         ];
         for request in requests {
             let json = serde_json::to_string(&request).unwrap();
@@ -2699,5 +2781,33 @@ mod tests {
         assert_eq!(*seen.borrow(), [(input.clone(), true), (input, false)]);
         assert_eq!(serde_json::to_string(&SlotInput::default()).unwrap(), "{}");
         assert_eq!(serde_json::to_string(&Family::default()).unwrap(), r#"{"members":[],"cost":0.0}"#);
+    }
+
+    // Expected: a select keeps its JSON small; a wake handler marks the manifest, and `wake` runs every handler, while a
+    // plugin without one keeps the 1.4 manifest it had.
+    #[test]
+    fn selects_and_wakes_round_trip() {
+        let select = Dialog::Select(Select {
+            title: "Subagents".into(),
+            placeholder: None,
+            options: vec![SelectOption::new("Child", "ses_1").description("running")],
+            current: None,
+            action: Action::Command { name: "x.open".into(), input: None },
+        });
+        let json = r#"{"type":"select","title":"Subagents","options":[{"title":"Child","value":"ses_1","description":"running"}],"action":{"type":"command","name":"x.open"}}"#;
+        assert_eq!(serde_json::to_string(&select).unwrap(), json);
+        assert_eq!(serde_json::from_str::<Dialog>(json).unwrap(), select);
+        assert_eq!(serde_json::to_string(&Request::Wake).unwrap(), r#"{"type":"wake"}"#);
+
+        let mut setup = Setup::in_process("new", None);
+        assert!(!serde_json::to_string(setup.manifest()).unwrap().contains("wake"));
+        let runs = Rc::new(std::cell::Cell::new(0));
+        for _ in 0..2 {
+            let runs = runs.clone();
+            setup.on_wake(move |_| runs.set(runs.get() + 1));
+        }
+        assert!(setup.manifest().wake);
+        assert_eq!(setup.handle(serde_json::from_str(r#"{"type":"wake"}"#).unwrap()).unwrap(), serde_json::Value::Null);
+        assert_eq!(runs.get(), 2);
     }
 }
