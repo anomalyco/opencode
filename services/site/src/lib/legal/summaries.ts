@@ -17,7 +17,9 @@ export const legalSummaries: Record<string, LegalNode[][]> = {
       ["a", { href: "#categories-of-personal-data" }, "What we collect"],
     ],
     [
-      "Prompts are passed through to the upstream model provider to provide the services and are not stored. ",
+      "Prompts are passed through to the upstream model provider to provide the services and are not stored, except by hosted agents, which keep sessions until 30 days without activity and email records until the inbox is disconnected (see ",
+      ["a", { href: "#integrations" }, "Integrations with Third-Party Services"],
+      "). ",
       ["a", { href: "#categories-of-personal-data" }, "What we collect"],
     ],
     [
