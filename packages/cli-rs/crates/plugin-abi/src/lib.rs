@@ -2072,8 +2072,9 @@ impl Setup<'_> {
         self.registered.wakes.push(Rc::new(run));
     }
 
-    /// Calls `run` with the [`Fence::key`] of each block the host no longer shows, once nothing replaced it: the plugin
-    /// drops the state it kept for that block. It runs on the UI thread, after the event that freed the block.
+    /// Calls `run` once with the [`Fence::key`] of each block whose output ([`Fenced::Lines`] or [`Fenced::Keep`]) the
+    /// host no longer shows, as the block goes or falls back to the code view: the plugin drops the state it kept for
+    /// that block. A key whose render returned [`Fenced::Code`] without output shown before does not come back here. It runs on the UI thread, after the event that freed the block.
     pub fn on_fence_gone(&mut self, run: impl Fn(u64) + 'static) {
         self.registered.manifest.fence_gone = true;
         self.registered.fence_gone.push(Rc::new(run));

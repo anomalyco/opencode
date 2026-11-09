@@ -503,6 +503,28 @@ fn a_plugin_hears_of_the_fences_that_go_on_both_paths() {
     }
 }
 
+// Expected: a fence that falls back to the code view and streams on there tells the plugin its key went once, not
+// once per delta, in process and through the library.
+#[test]
+fn a_fence_that_stays_in_the_code_view_goes_once_on_both_paths() {
+    let host = host();
+    let plugin = abi::Plugin { id: "sample", setup: sample_fence::setup };
+    let in_process = Registry::define(vec![plugin.into()], []);
+    in_process.activate(&dynamic(&host));
+    let library = active(&host, &build(""));
+    for registry in [&in_process, &library] {
+        let mut chunks = vec!["```sample\nx", "~"];
+        chunks.extend(std::iter::repeat_n("y", 50));
+        let frames = stream(&host, registry, &chunks);
+        assert!(frames[0].text().contains("SAMPLE v1 X"), "{}", frames[0].text());
+        assert!(!frames[2].text().contains("SAMPLE"), "{}", frames[2].text());
+        host.app().root().clear();
+        host.app.advance(Duration::from_millis(1));
+        let screen = markdown(&host, registry, "```sample-gone\nx\n```\n");
+        assert!(screen.contains("sample gone 1"), "{screen}");
+    }
+}
+
 /// Streams `chunks` into one Markdown view with the registry's renderers, returning the frame after each.
 fn stream(host: &Rc<TestHost>, registry: &Registry, chunks: &[&str]) -> Vec<Capture> {
     let theme = host.theme();
