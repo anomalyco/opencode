@@ -230,8 +230,21 @@ impl Mcp {
             && let Some(integration) = server.integration_id.clone()
         {
             let weak = self.tui.clone();
+            // After the sign-in, back to the list on this server (#62245).
+            let back: super::integration::OnConnected = Rc::new({
+                let (weak, name) = (weak.clone(), name.to_owned());
+                move |_, _| {
+                    if let Some(tui) = weak.upgrade() {
+                        show_server(&tui, Some(name.clone()), false);
+                    }
+                }
+            });
             if let Some(tui) = self.tui.upgrade() {
-                tui.app.defer(bind!(weak, |tui, _| super::integration::show_auto_connect(&tui, &integration)));
+                tui.app.defer(bind!(weak, |tui, _| super::integration::show_auto_connect(
+                    &tui,
+                    &integration,
+                    Some(back.clone())
+                )));
             }
             return;
         }
