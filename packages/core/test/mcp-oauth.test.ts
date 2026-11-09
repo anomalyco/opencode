@@ -1,5 +1,11 @@
 import { afterAll, describe, expect, test } from "bun:test"
-import { auth, OAuthError, refreshAuthorization, type FetchLike } from "@modelcontextprotocol/client"
+import {
+  auth,
+  OAuthError,
+  parseErrorResponse,
+  refreshAuthorization,
+  type FetchLike,
+} from "@modelcontextprotocol/client"
 import path from "path"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Credential } from "@opencode/core/credential"
@@ -902,5 +908,102 @@ describe("MCP OAuth refresh across processes", () => {
     const tokens = await refresh(endpoint.server, current.fetchFn, "r1").finally(() => endpoint.server.stop(true))
     expect([tokens.access_token, tokens.refresh_token]).toEqual(["a2", "r2"])
     expect(await stored(processes.second)).toEqual({ access: "a2", refresh: "r2" })
+  })
+})
+
+describe("MCP OAuth rejected refresh on connect", () => {
+  // An MCP server that always answers 401 and an authorization server that rejects every refresh with `body`.
+  const revokedServer = (body: unknown) => {
+    const refreshes: string[] = []
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url)
+        if (url.pathname === "/.well-known/oauth-protected-resource")
+          return Response.json({ resource: `${url.origin}/mcp`, authorization_servers: [url.origin] })
+        if (url.pathname === "/.well-known/oauth-authorization-server")
+          return Response.json({
+            issuer: url.origin,
+            authorization_endpoint: `${url.origin}/authorize`,
+            token_endpoint: `${url.origin}/token`,
+            response_types_supported: ["code"],
+          })
+        if (url.pathname === "/token") {
+          refreshes.push(new URLSearchParams(await request.text()).get("refresh_token") ?? "")
+          return Response.json(body, { status: 400 })
+        }
+        if (url.pathname === "/mcp")
+          return new Response(null, {
+            status: 401,
+            headers: {
+              "www-authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource"`,
+            },
+          })
+        return new Response(null, { status: 404 })
+      },
+    })
+    return { server, refreshes }
+  }
+
+  // Connects three times with the stored credential, as separate Location starts and reconnects do.
+  const connectThrice = async (body: unknown, protocol?: ConfigMCP.Protocol) => {
+    const endpoint = revokedServer(body)
+    await using tmp = await tmpdir()
+    const runtime = ManagedRuntime.make(
+      AppNodeBuilder.build(Credential.node, [
+        Database.node.replace(Database.configured({ path: path.join(tmp.path, "opencode.db") })),
+      ]),
+    )
+    const url = `${endpoint.server.url.origin}/mcp`
+    const config = new ConfigMCP.Remote({ type: "remote", url, oauth: { client_id: "client" }, protocol })
+    const stored = credential({ access: "revoked", refresh: "revoked", url })
+    await runtime.runPromise(Credential.Service.use((credentials) => credentials.create(stored)))
+    const connect = () =>
+      runtime.runPromise(
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const authProvider = yield* McpOAuth.connectProvider({
+            config,
+            credential: yield* credentials.get(stored.id),
+          })
+          return yield* Effect.scoped(
+            McpClient.connect({ server: "test", config, directory: import.meta.dir, authProvider }),
+          )
+        }).pipe(Effect.provide(hostEnvironmentLayer), Effect.exit),
+      )
+    const errors = []
+    for (const _ of [0, 1, 2]) {
+      const exit = await connect()
+      errors.push(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined)
+    }
+    const remaining = await runtime.runPromise(Credential.Service.use((credentials) => credentials.get(stored.id)))
+    await runtime.dispose()
+    endpoint.server.stop(true)
+    return { errors, refreshes: endpoint.refreshes, kept: remaining !== undefined }
+  }
+
+  const revoked = { error: "invalid_grant", error_description: "Invalid refresh token" }
+
+  test.each([
+    ["a top-level error", revoked, undefined],
+    // FastAPI servers such as ElevenLabs nest the error under `detail`.
+    ["an error nested under detail", { detail: revoked }, undefined],
+    ["an error nested under detail with protocol auto", { detail: revoked }, "auto" as const],
+  ])("discards the credential after one refresh rejected with %s", async (_, body, protocol) => {
+    const result = await connectThrice(body, protocol)
+
+    expect(result.errors.every((error) => error instanceof McpClient.NeedsAuthError)).toBe(true)
+    expect(result.refreshes).toEqual(["revoked"])
+    expect(result.kept).toBe(false)
+  })
+
+  test("keeps the credential when the rejection names no OAuth error", async () => {
+    expect((await parseErrorResponse(JSON.stringify({ detail: "oops" }))).code).toBe("server_error")
+
+    const result = await connectThrice({ detail: "oops" })
+
+    expect(result.errors.every((error) => error instanceof McpClient.NeedsAuthError)).toBe(true)
+    expect(result.refreshes).toEqual(["revoked", "revoked", "revoked"])
+    expect(result.kept).toBe(true)
   })
 })
