@@ -9,7 +9,7 @@ export type OgAssets = {
   layout: WebAssembly.Module
   resvg: WebAssembly.Module
   fonts: { name: string; data: ArrayBuffer; weight: 400 | 700 }[]
-  // @opencode/ui's provider icon sprite.
+  // @Mackery6969/ui's provider icon sprite.
   sprite: string
 }
 

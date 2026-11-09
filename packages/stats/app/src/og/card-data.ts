@@ -1,4 +1,4 @@
-import { statModel } from "@opencode/stats-core/domain/model-normalization"
+import { statModel } from "@Mackery6969/stats-core/domain/model-normalization"
 import { formatTokens, fromFirstUsage, isoDay } from "../lib/format"
 import { baseUrl } from "../lib/language"
 import { publicModelName } from "../lib/model-name"

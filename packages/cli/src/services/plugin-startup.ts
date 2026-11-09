@@ -1,4 +1,4 @@
-import type { OpenCodeClient } from "@opencode/client"
+import type { OpenCodeClient } from "@Mackery6969/client"
 import { Effect, Schedule } from "effect"
 
 // Catalog reads return whatever is loaded, and a cold Location lists no plugins until its first activation.
