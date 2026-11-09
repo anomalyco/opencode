@@ -32,6 +32,7 @@ import { sessionTabTitle } from "./tab-title"
 import { sessionTitle } from "@/session/title"
 import { createSessionInbox, inboxArchived, type InboxEntry, type InboxStatus } from "./inbox-model"
 import { compareWorking, workingSince } from "./inbox-working"
+import { elapsedTime } from "@/shell/sessions/duration"
 
 const RECENT_LIMIT = 10
 
@@ -563,14 +564,6 @@ export function InboxSessionCard(props: {
 
   const status = () => props.status
 
-  const compact = (seconds: number) => {
-    if (seconds < 3600) return language.plural("sidebar.inbox.elapsed.minutes", Math.floor(seconds / 60))
-
-    if (seconds < 86_400) return language.plural("sidebar.inbox.elapsed.hours", Math.floor(seconds / 3600))
-
-    return language.plural("sidebar.inbox.elapsed.days", Math.floor(seconds / 86_400))
-  }
-
   const statusLabel = (value: InboxStatus) =>
     value === "ready" ? undefined : language.t(`sidebar.inbox.status.${value}`)
 
@@ -579,9 +572,9 @@ export function InboxSessionCard(props: {
 
     const seconds = Math.max(0, Math.floor((props.now - props.since) / 1000))
 
-    if (status() === "working" && seconds < 60) return language.plural("sidebar.inbox.elapsed.seconds", seconds)
-
-    return seconds < 60 ? language.t("sidebar.inbox.time.now") : compact(seconds)
+    return status() !== "working" && seconds < 60
+      ? language.t("sidebar.inbox.time.now")
+      : elapsedTime(seconds, language)
   }
 
   return (

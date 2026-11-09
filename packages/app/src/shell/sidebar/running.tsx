@@ -1,40 +1,39 @@
-import { createEffect, createMemo, createUniqueId, For, onCleanup, Show, startTransition } from "solid-js"
+import { createEffect, createMemo, createUniqueId, For, on, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ActivityRing } from "@opencode/ui/activity-ring"
 import { Icon } from "@opencode/ui/icon"
 import { displayName } from "@opencode/ui/project-avatar"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, serverName } from "@/runtime/server/registry"
-import { useGlobal } from "@/runtime/server/runtime"
+import type { ServerCtx } from "@/runtime/server/runtime"
 import { projectSettingsKey, useSettings } from "@/settings/model"
 import { sessionRequests } from "@/shell/layout/project-avatar-state"
-import { sessionBackgroundShells } from "@/shell/sessions/activity"
-import { useLayout } from "@/shell/state/layout"
-import { useTabs } from "@/shell/tabs/tabs"
 import { sessionTabTitle } from "@/shell/titlebar/tab-title"
-import { sessionLastRunLabel } from "@/shell/sessions/labels"
-import { workingDuration } from "@/shell/sessions/duration"
+import { elapsedTime } from "@/shell/sessions/duration"
 import { createSessionBranches } from "@/shell/sessions/branches"
 import { pathKey } from "@/workspaces/path-key"
 import "./running.css"
 
 /** Execution and collected Shell activity include sessions without an open tab, including child sessions. */
-export function RunningSessions() {
-  const global = useGlobal()
+export function RunningSessions(props: {
+  connections: { conn: ServerConnection.Any; ctx: ServerCtx | undefined }[]
+  selected?: { server: ServerConnection.Key; sessionID: string }
+  onOpen: (server: ServerConnection.Key, sessionID: string) => void
+}) {
   const language = useLanguage()
   const settings = useSettings()
-  const layout = useLayout()
-  const tabs = useTabs()
   const heading = createUniqueId()
-  const branches = createSessionBranches()
-  const [clock, setClock] = createStore({ now: Date.now() })
 
-  const connections = createMemo(() =>
-    global.servers.list().map((conn) => ({ conn, ctx: global.serverCtx(ServerConnection.key(conn)) })),
+  const branches = createSessionBranches(() =>
+    props.connections.flatMap((item) =>
+      item.ctx?.sdk.connection.status() === "connected" ? [ServerConnection.key(item.conn)] : [],
+    ),
   )
 
+  const [clock, setClock] = createStore({ now: Date.now() })
+
   const entries = createMemo(() =>
-    connections().flatMap((item) => {
+    props.connections.flatMap((item) => {
       const ctx = item.ctx
 
       if (!ctx || ctx.sdk.connection.status() !== "connected") return []
@@ -50,7 +49,7 @@ export function RunningSessions() {
   )
 
   const byKey = createMemo(() => new Map(entries().map((entry) => [entry.key, entry])))
-  const disconnected = () => connections().some((item) => item.ctx?.sdk.connection.status() !== "connected")
+  const disconnected = () => props.connections.some((item) => item.ctx?.sdk.connection.status() !== "connected")
 
   createEffect(() => {
     if (!entries().length) return
@@ -69,27 +68,6 @@ export function RunningSessions() {
     )
   })
 
-  // A running child can belong to a parent that this window has never opened.
-  createEffect(() => {
-    entries().forEach((entry) => {
-      const root = entry.ctx.data.session.root(entry.id)
-
-      if (root === entry.id || entry.ctx.data.session.get(root)) return
-      void entry.ctx.data.session.sync(root).catch(() => undefined)
-    })
-  })
-
-  // Read metadata and requests for active IDs only; this overview never loads transcripts or historical indexes.
-  createEffect(() => {
-    entries().forEach((entry) => {
-      void Promise.allSettled([
-        entry.ctx.data.session.sync(entry.id),
-        entry.ctx.data.session.permission.sync(entry.id),
-        entry.ctx.data.session.form.sync(entry.id),
-      ])
-    })
-  })
-
   return (
     <section data-component="active-sessions" aria-labelledby={heading}>
       <div data-slot="active-sessions-header">
@@ -106,6 +84,28 @@ export function RunningSessions() {
           {(key) => (
             <Show when={byKey().get(key)}>
               {(entry) => {
+                // A keyed row survives other sessions and shells changing. Refresh only on arrival or a new connection.
+                const context = createMemo(() => entry().ctx)
+
+                createEffect(
+                  on(context, (ctx) => {
+                    void Promise.allSettled([
+                      ctx.data.session.sync(entry().id),
+                      ctx.data.session.permission.sync(entry().id),
+                      ctx.data.session.form.sync(entry().id),
+                    ])
+                  }),
+                )
+
+                // A running child can belong to a parent that this window has never opened.
+                createEffect(() => {
+                  const value = entry()
+                  const root = value.ctx.data.session.root(value.id)
+
+                  if (root === value.id || value.ctx.data.session.get(root)) return
+                  void value.ctx.data.session.sync(root).catch(() => undefined)
+                })
+
                 const session = createMemo(() => entry().ctx.data.session.get(entry().id))
 
                 const project = createMemo(() => {
@@ -142,11 +142,14 @@ export function RunningSessions() {
                   ].filter((time) => time > 0)
 
                   return starts.length
-                    ? workingDuration({ time: { busy: Math.min(...starts) } }, clock.now, language)
+                    ? elapsedTime(Math.max(0, Math.floor((clock.now - Math.min(...starts)) / 1000)), language)
                     : undefined
                 }
 
-                const shells = () => sessionBackgroundShells(entry().ctx.data, entry().id)
+                const shells = () =>
+                  entry()
+                    .ctx.data.shell.listBySession(entry().id)
+                    .filter((shell) => shell.status === "running")
 
                 const background = () =>
                   entry().ctx.data.session.status(entry().id) !== "running" && shells().length > 0
@@ -171,10 +174,20 @@ export function RunningSessions() {
                   return "working"
                 })
 
-                const selected = () => {
-                  const route = layout.route()
+                const selected = () =>
+                  props.selected?.server === entry().server && props.selected.sessionID === entry().id
 
-                  return route.type === "session" && route.server === entry().server && route.sessionId === entry().id
+                const lastRun = () => {
+                  const idle = session()?.time.idle
+
+                  return idle === undefined
+                    ? undefined
+                    : language.t("sidebar.session.lastRun", {
+                        time: new Intl.DateTimeFormat(language.intl(), {
+                          dateStyle: "medium",
+                          timeStyle: "medium",
+                        }).format(idle),
+                      })
                 }
 
                 return (
@@ -188,7 +201,7 @@ export function RunningSessions() {
                       projectName(),
                       branch(),
                       session()?.location.directory,
-                      sessionLastRunLabel(session()?.time, language),
+                      lastRun(),
                       summary(),
                       ...shells().map((shell) => shell.command),
                     ]
@@ -196,12 +209,10 @@ export function RunningSessions() {
                       .join("\n")}
                     onClick={() => {
                       const value = entry()
-                      void startTransition(() => {
-                        tabs.select(tabs.addSessionTab({ server: value.server, sessionId: value.id }))
-                        const directory = project()?.worktree
+                      props.onOpen(value.server, value.id)
+                      const directory = project()?.worktree
 
-                        if (directory) value.ctx.projects.touch(directory)
-                      })
+                      if (directory) value.ctx.projects.touch(directory)
                     }}
                   >
                     <span data-slot="active-session-mark" aria-hidden="true">
@@ -253,7 +264,7 @@ export function RunningSessions() {
                           </span>
                         </span>
                       </Show>
-                      <Show when={connections().length > 1}>
+                      <Show when={props.connections.length > 1}>
                         <span class="ms-1.5">{serverName(entry().conn)}</span>
                       </Show>
                     </span>

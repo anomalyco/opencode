@@ -17,13 +17,7 @@ import { notifySessionTabsRemoved } from "./session-events"
 import { errorMessage } from "@/shell/layout/helpers"
 import { showToast } from "@/shell/notifications/toast"
 import { workingSince } from "./inbox-working"
-import {
-  INITIAL_INBOX_BRANCH_STATE,
-  selectBranchLoading,
-  transitionInboxBranch,
-  type InboxBranchEffect,
-  type InboxBranchEvent,
-} from "./inbox-branch-machine"
+import { createSessionBranches } from "@/shell/sessions/branches"
 import {
   INITIAL_INBOX_SETTLE_STATE,
   selectInboxLoading,
@@ -302,90 +296,11 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
     return route.sessionId === entry.session.id || entry.ctx.data.session.root(route.sessionId) === entry.session.id
   }
 
-  // Git info is not stored on the session, so load it for the rows a view shows. `branchTargets` keeps the latest row
-  // per location for the lookup; the machine owns each location's phase.
-  const [branchState, setBranchState] = createSignal(INITIAL_INBOX_BRANCH_STATE)
-  const branchTargets = new Map<string, InboxEntry>()
-  const branchTimers = new Map<number, ReturnType<typeof setTimeout>>()
-
-  const dispatchBranch = (event: InboxBranchEvent) =>
-    untrack(() => {
-      const previous = branchState()
-      const next = transitionInboxBranch(previous, event)
-
-      if (next.state !== previous) setBranchState(next.state)
-      next.effects.forEach(runBranchEffect)
-    })
-
-  const runBranchEffect = (effect: InboxBranchEffect) => {
-    if (effect.type === "timers.clear") {
-      branchTimers.forEach(clearTimeout)
-      branchTimers.clear()
-      branchTargets.clear()
-
-      return
-    }
-
-    if (effect.type === "timer.clear") {
-      clearTimeout(branchTimers.get(effect.attempt))
-      branchTimers.delete(effect.attempt)
-
-      return
-    }
-
-    if (effect.type === "retry.schedule") {
-      branchTimers.set(
-        effect.attempt,
-        setTimeout(() => {
-          branchTimers.delete(effect.attempt)
-          dispatchBranch({ type: "retry.due", key: effect.key, attempt: effect.attempt })
-        }, effect.delayMs),
-      )
-
-      return
-    }
-
-    branchTimers.set(
-      effect.attempt,
-      setTimeout(() => {
-        branchTimers.delete(effect.attempt)
-        dispatchBranch({ type: "load.timed-out", key: effect.key, attempt: effect.attempt })
-      }, effect.timeoutMs),
-    )
-    // A synchronous throw rejects too, so every attempt settles into an event.
-    void Promise.try(() => {
-      const entry = branchTargets.get(effect.key)
-
-      if (!entry) throw new Error(`No inbox row for location ${effect.key}`)
-      const location = entry.ctx.data.location
-
-      return (
-        location.info(entry.session.location) ? Promise.resolve() : location.syncInfo(entry.session.location)
-      ).then(() => location.vcs.sync(entry.session.location))
-    }).then(
-      () => dispatchBranch({ type: "load.succeeded", key: effect.key, attempt: effect.attempt }),
-      () => dispatchBranch({ type: "load.failed", key: effect.key, attempt: effect.attempt }),
-    )
-  }
-
-  createEffect(() =>
-    dispatchBranch({
-      type: "connections.changed",
-      connected: connections().flatMap((item) =>
-        item.ctx.sdk.connection.status() === "connected" ? [ServerConnection.key(item.conn)] : [],
-      ),
-    }),
+  const branches = createSessionBranches(() =>
+    connections().flatMap((item) =>
+      item.ctx.sdk.connection.status() === "connected" ? [ServerConnection.key(item.conn)] : [],
+    ),
   )
-
-  onCleanup(() => dispatchBranch({ type: "disposed" }))
-
-  const loadBranches = (list: InboxEntry[]) => {
-    list.forEach((entry) => branchTargets.set(locationKey(entry), entry))
-    dispatchBranch({
-      type: "enqueue",
-      targets: list.map((entry) => ({ key: locationKey(entry), server: entry.server })),
-    })
-  }
 
   const open = (entry: InboxEntry) => {
     const directory = entry.ctx.projects.forSession(entry.session)?.worktree ?? entry.session.location.directory
@@ -432,12 +347,9 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
     byKey,
     selected,
     open,
-    loadBranches,
-    branchLoading: (entry: InboxEntry) =>
-      !entry.ctx.data.location.vcs.info(entry.session.location) &&
-      selectBranchLoading(branchState(), locationKey(entry)),
-    branch: (entry: InboxEntry) =>
-      entry.ctx.data.location.vcs.info(entry.session.location)?.branch.current ?? undefined,
+    loadBranches: branches.load,
+    branchLoading: branches.loading,
+    branch: branches.branch,
     inWorktree: inboxInWorktree,
     permission: (entry: InboxEntry) =>
       sessionPermissionRequest(family(entry), entry.ctx.data.session.permission.list, entry.session.id),
@@ -504,10 +416,6 @@ export function inboxArchived(entry: InboxEntry) {
 
 export function inboxBusy(status: InboxStatus) {
   return status === "working" || status === "approval" || status === "input"
-}
-
-function locationKey(entry: InboxEntry) {
-  return `${entry.server}\0${pathKey(entry.session.location.directory)}`
 }
 
 export function inboxInWorktree(entry: InboxEntry) {

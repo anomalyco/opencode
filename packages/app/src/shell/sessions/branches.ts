@@ -1,49 +1,106 @@
 import type { SessionInfo } from "@opencode/client/promise"
-import { createStore } from "solid-js/store"
+import { createEffect, createSignal, onCleanup, untrack, type Accessor } from "solid-js"
 import type { ServerCtx } from "@/runtime/server/runtime"
 import { pathKey } from "@/workspaces/path-key"
+import {
+  INITIAL_BRANCH_STATE,
+  selectBranchLoading,
+  transitionBranch,
+  type BranchEffect,
+  type BranchEvent,
+} from "./branch-machine"
 
 type Entry = { server: string; ctx: ServerCtx; session: SessionInfo }
 
-/** Share the location cache without loading the inbox's historical session indexes. */
-export function createSessionBranches() {
-  const [state, setState] = createStore<{ settled: Record<string, true> }>({ settled: {} })
-  const queued = new Set<string>()
-  const queue: Entry[] = []
-  const drain = { running: false }
+export function createSessionBranches(connected: Accessor<readonly string[]>) {
+  // Git info is not stored on the session, so load it for the rows a view shows. `branchTargets` keeps the latest row
+  // per location for the lookup; the machine owns each location's phase.
+  const [branchState, setBranchState] = createSignal(INITIAL_BRANCH_STATE)
+  const branchTargets = new Map<string, Entry>()
+  const branchTimers = new Map<number, ReturnType<typeof setTimeout>>()
 
-  const run = async () => {
-    if (drain.running) return
-    drain.running = true
+  const dispatchBranch = (event: BranchEvent) =>
+    untrack(() => {
+      const previous = branchState()
+      const next = transitionBranch(previous, event)
 
-    while (queue.length) {
-      // Each lookup runs git on the server; keep the existing inbox concurrency limit.
-      await Promise.all(
-        queue.splice(0, 4).map((entry) =>
-          entry.ctx.data.location.vcs
-            .sync(entry.session.location)
-            .catch(() => undefined)
-            .then(() => setState("settled", locationKey(entry), true)),
-        ),
-      )
+      if (next.state !== previous) setBranchState(next.state)
+      next.effects.forEach(runBranchEffect)
+    })
+
+  const runBranchEffect = (effect: BranchEffect) => {
+    if (effect.type === "timers.clear") {
+      branchTimers.forEach(clearTimeout)
+      branchTimers.clear()
+      branchTargets.clear()
+
+      return
     }
 
-    drain.running = false
+    if (effect.type === "timer.clear") {
+      clearTimeout(branchTimers.get(effect.attempt))
+      branchTimers.delete(effect.attempt)
+
+      return
+    }
+
+    if (effect.type === "retry.schedule") {
+      branchTimers.set(
+        effect.attempt,
+        setTimeout(() => {
+          branchTimers.delete(effect.attempt)
+          dispatchBranch({ type: "retry.due", key: effect.key, attempt: effect.attempt })
+        }, effect.delayMs),
+      )
+
+      return
+    }
+
+    branchTimers.set(
+      effect.attempt,
+      setTimeout(() => {
+        branchTimers.delete(effect.attempt)
+        dispatchBranch({ type: "load.timed-out", key: effect.key, attempt: effect.attempt })
+      }, effect.timeoutMs),
+    )
+    // A synchronous throw rejects too, so every attempt settles into an event.
+    void Promise.try(() => {
+      const entry = branchTargets.get(effect.key)
+
+      if (!entry) throw new Error(`No session row for location ${effect.key}`)
+      const location = entry.ctx.data.location
+
+      return (
+        location.info(entry.session.location) ? Promise.resolve() : location.syncInfo(entry.session.location)
+      ).then(() => location.vcs.sync(entry.session.location))
+    }).then(
+      () => dispatchBranch({ type: "load.succeeded", key: effect.key, attempt: effect.attempt }),
+      () => dispatchBranch({ type: "load.failed", key: effect.key, attempt: effect.attempt }),
+    )
+  }
+
+  createEffect(() =>
+    dispatchBranch({
+      type: "connections.changed",
+      connected: connected(),
+    }),
+  )
+
+  onCleanup(() => dispatchBranch({ type: "disposed" }))
+
+  const loadBranches = (list: Entry[]) => {
+    list.forEach((entry) => branchTargets.set(locationKey(entry), entry))
+    dispatchBranch({
+      type: "enqueue",
+      targets: list.map((entry) => ({ key: locationKey(entry), server: entry.server })),
+    })
   }
 
   return {
-    load: (entries: Entry[]) => {
-      entries.forEach((entry) => {
-        const key = locationKey(entry)
-
-        if (queued.has(key)) return
-        queued.add(key)
-        queue.push(entry)
-      })
-      void run()
-    },
+    load: loadBranches,
     loading: (entry: Entry) =>
-      !state.settled[locationKey(entry)] && !entry.ctx.data.location.vcs.info(entry.session.location),
+      !entry.ctx.data.location.vcs.info(entry.session.location) &&
+      selectBranchLoading(branchState(), locationKey(entry)),
     branch: (entry: Entry) => entry.ctx.data.location.vcs.info(entry.session.location)?.branch.current ?? undefined,
   }
 }
