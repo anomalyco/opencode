@@ -4,6 +4,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use opencode_plugin_abi::{Color, Fenced, Plugin, Rgba, Setup, Span};
 
@@ -18,9 +19,17 @@ pub fn plugin() -> Plugin {
 }
 
 /// The `mermaid` fence render. It remembers the kind each block shows, by fence key, so a fence whose newest text
-/// does not parse keeps its last diagram of the same kind while it streams.
+/// does not parse keeps its last diagram of the same kind while it streams, and forgets it once the block goes.
 fn setup(setup: &mut Setup) -> Result<(), String> {
-    let kinds: RefCell<HashMap<u64, Kind>> = RefCell::default();
+    register(setup, Rc::default());
+    Ok(())
+}
+
+fn register(setup: &mut Setup, kinds: Rc<RefCell<HashMap<u64, Kind>>>) {
+    let forget = kinds.clone();
+    setup.on_fence_gone(move |key| {
+        forget.borrow_mut().remove(&key);
+    });
     setup.code_block("mermaid", move |read, fence| {
         let mut kinds = kinds.borrow_mut();
         let previous = kinds.remove(&fence.key);
@@ -41,7 +50,6 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         kinds.insert(fence.key, diagram.kind);
         fenced(&diagram)
     });
-    Ok(())
 }
 
 /// A diagram's rows as the host draws them. TS sets one row of top margin, which Core's Markdown uses as the gap
@@ -63,4 +71,49 @@ pub fn fenced(diagram: &Diagram) -> Fenced {
         .collect();
     // TS `TextRenderable`'s default fg, which unstyled cells (blank interiors, run gaps) keep.
     Fenced::Lines { lines, fg: Some(Color::Rgba(Rgba::new(255, 255, 255, 255))), drag: true }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use opencode_plugin::node::{Fences, Reader};
+    use opencode_ui::markdown::CodeBlockRenderers;
+    use opencode_ui::theme::{Catalog, ThemeMode};
+    use opentui::prelude::*;
+    use opentui::testing::TestApp;
+
+    // Expected (bigboi notes): the kind each diagram showed goes once the host frees its block, so N diagrams drawn
+    // and removed leave nothing.
+    #[test]
+    fn removed_diagrams_leave_no_kinds() {
+        let app = TestApp::new(80, 200);
+        let theme = Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme;
+        let kinds: Rc<RefCell<HashMap<u64, Kind>>> = Rc::default();
+        let mut registered = opencode_plugin_abi::Registered::new(ID, None);
+        register(&mut registered.setup(), kinds.clone());
+        let registered = Rc::new(registered);
+        let gone = registered.clone();
+        let fences = Fences::new(Some(Rc::new(move |key| gone.fence_gone().iter().for_each(|run| run(key)))));
+        let (render, reader_theme) = (registered.fences()[0].1.clone(), theme.clone());
+        let mut renderers = CodeBlockRenderers::default();
+        renderers.register(
+            "mermaid",
+            Rc::new(move |block| {
+                fences
+                    .render(block, &reader_theme, |fence| render(&Reader::new(&reader_theme, ThemeMode::Dark), &fence))
+            }),
+        );
+        let syntax = opencode_ui::code::syntax_theme(&theme);
+        let view = opencode_ui::markdown::view(&app, &theme, &syntax, &renderers, true, false);
+        app.root().add(&view);
+        let diagrams =
+            (0..5).map(|at| format!("```mermaid\nflowchart LR\n  A{at} --> B{at}\n```\n")).collect::<String>();
+        view.set_markdown(&diagrams);
+        app.render();
+        assert_eq!(kinds.borrow().len(), 5);
+        app.root().clear();
+        drop(view);
+        app.render();
+        assert!(kinds.borrow().is_empty(), "{:?}", kinds.borrow());
+    }
 }
