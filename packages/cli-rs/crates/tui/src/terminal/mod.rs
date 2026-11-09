@@ -15,7 +15,7 @@ use std::sync::{Arc, OnceLock};
 
 use indexmap::IndexMap;
 use opencode_api::generated::{
-    ExperimentalPersistentPtyCreateInput, ExperimentalPersistentPtyListInput, PersistentPtyInfo, SessionID, V2Event,
+    ExperimentalPersistentPtyCreateInput, ExperimentalPersistentPtyListInput, PersistentPtyInfo, SessionID,
 };
 use opencode_api::pty::{Connector, Tungstenite};
 use opencode_local::serial::Serial;
@@ -25,6 +25,7 @@ use opentui::keymap::{Condition, Disposer};
 use serde_json::{Value, json};
 
 use crate::app::Tui;
+use crate::features::events::Handled;
 
 const SELECTION: &str = "session-terminal-selection";
 
@@ -191,12 +192,12 @@ pub fn install_keys(tui: &Rc<Tui>) {
 }
 
 /// Server events: support on every `server.connected`, and fresh lists when a session's terminals change.
-pub fn event(tui: &Tui, event: &V2Event) {
+pub(crate) fn event(tui: &Tui, event: &Handled) {
     let session = match event {
-        V2Event::ServerConnected(_) => return check(tui),
-        V2Event::PersistentPtyAdded(event) => &event.data.session_id,
-        V2Event::PersistentPtyRemoved(event) => &event.data.session_id,
-        V2Event::PersistentPtyUpdated(event) => &event.data.session_id,
+        Handled::ServerConnected(_) => return check(tui),
+        Handled::PersistentPtyAdded(event) => &event.data.session_id,
+        Handled::PersistentPtyRemoved(event) => &event.data.session_id,
+        Handled::PersistentPtyUpdated(event) => &event.data.session_id,
         _ => return,
     };
     if tui.terminals.available() && tui.terminals.lists.borrow().contains_key(&session.0) {

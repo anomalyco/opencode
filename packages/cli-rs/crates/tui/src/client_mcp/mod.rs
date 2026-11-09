@@ -11,12 +11,13 @@ use std::sync::{Arc, Mutex};
 
 use opencode_api::client::Auth;
 use opencode_api::client_mcp::{self, Connection, Connector, Options, Tool, ToolResult, Tungstenite};
-use opencode_api::generated::{SessionID, V2Event};
+use opencode_api::generated::SessionID;
 use opencode_ui::bind;
 use serde_json::{Map, Value, json};
 use tokio::sync::oneshot;
 
 use crate::app::Tui;
+use crate::features::events::Handled;
 use crate::routes::Route;
 
 const EXPERIMENT: &str = "client-mcp";
@@ -92,8 +93,8 @@ pub fn install(tui: &Rc<Tui>) {
 }
 
 /// `server.connected` (TS `client.event.on("server.connected", sync)`).
-pub fn event(tui: &Tui, event: &V2Event) {
-    if matches!(event, V2Event::ServerConnected(_)) {
+pub(crate) fn event(tui: &Tui, event: &Handled) {
+    if matches!(event, Handled::ServerConnected(_)) {
         sync(tui);
     }
 }
