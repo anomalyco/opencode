@@ -1287,7 +1287,7 @@ fn a_failed_external_setup_is_failed_and_inactive_and_a_reload_error_replaces_it
     let (_root, target, registry, loader) = configured("{\"fail\":true}", &[]);
     assert!(loader.reconcile(&dynamic(&host), &registry));
     let failed = abi::Toast::new(abi::Variant::Error, "Run /plugins to view details.");
-    assert_eq!(*host.toasts.borrow(), [failed.clone().title(format!("Plugin failed: {target}"))]);
+    assert_eq!(*host.toasts.borrow(), [failed.clone().title("Plugin failed: sample")]);
     let sample = entry(&registry.entries(), &target).clone();
     assert_eq!((sample.status, sample.active), (Status::Failed("sample setup failed".to_owned()), false));
 
@@ -1295,10 +1295,21 @@ fn a_failed_external_setup_is_failed_and_inactive_and_a_reload_error_replaces_it
     assert!(loader.reconcile(&dynamic(&host), &registry));
     let sample = entry(&registry.entries(), &target).clone();
     assert_eq!((sample.status, sample.active), (Status::Failed(MAJOR_2.to_owned()), false));
-    assert_eq!(host.toasts.borrow().len(), 2);
+    assert_eq!(host.toasts.borrow()[1], failed.clone().title("Plugin failed: sample"));
     assert!(registry.set_active(&dynamic(&host), "sample", true));
     let sample = entry(&registry.entries(), &target).clone();
     assert_eq!((sample.status, sample.active), (Status::Failed(MAJOR_2.to_owned()), false));
+}
+
+// Expected (plugin-live R2-3): a build that never described an ID is named by its target in the failure toast.
+#[test]
+fn a_failed_load_without_an_id_is_named_by_its_target() {
+    let host = host();
+    let (_root, target, registry, loader) = configured("{}", &[]);
+    fs::write(&target, build("major-2")).unwrap();
+    assert!(loader.reconcile(&dynamic(&host), &registry));
+    let failed = abi::Toast::new(abi::Variant::Error, "Run /plugins to view details.");
+    assert_eq!(*host.toasts.borrow(), [failed.title(format!("Plugin failed: {target}"))]);
 }
 
 // Expected (carbon-2): a broken build of a plugin that `cli.json` disabled is listed as failed with its error, not as
@@ -1312,7 +1323,7 @@ fn a_broken_build_of_an_inactive_plugin_is_failed_and_enabling_it_starts_nothing
     fs::write(&target, build("major-2")).unwrap();
     assert!(loader.reconcile(&dynamic(&host), &registry));
     let failed = abi::Toast::new(abi::Variant::Error, "Run /plugins to view details.");
-    assert_eq!(*host.toasts.borrow(), [failed.title(format!("Plugin failed: {target}"))]);
+    assert_eq!(*host.toasts.borrow(), [failed.title("Plugin failed: sample")]);
     assert_eq!(entry(&registry.entries(), &target).status, Status::Failed(MAJOR_2.to_owned()));
     assert!(registry.set_active(&dynamic(&host), "sample", true));
     let sample = entry(&registry.entries(), &target).clone();
