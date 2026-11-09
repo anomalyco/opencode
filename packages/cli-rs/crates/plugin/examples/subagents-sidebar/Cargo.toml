@@ -1,0 +1,17 @@
+# A port of `opencode-subagents-sidebar` 0.1.6 (npm, MIT, Ger Moran) to a native plugin on `opencode-plugin-abi`
+# alone. The TUI's tests build it with `cargo build` and load the library. Not a workspace member.
+[package]
+name = "opencode-subagents-sidebar"
+version = "0.1.6"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+opencode-plugin-abi = { path = "../../../plugin-abi" }
+serde_json = "1"
+
+[workspace]

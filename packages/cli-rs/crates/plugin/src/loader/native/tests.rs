@@ -254,7 +254,7 @@ fn setup_runs_on_activation_and_the_instance_is_destroyed_after() {
     assert_eq!(stored("destroyed").as_deref(), Some("{\"destroyed\":true}"));
     assert!(registry.set_active(&host, "sample", true));
     assert_eq!(stored("destroyed"), None);
-    registry.unload("sample.so");
+    registry.unload(&host, "sample.so");
     assert_eq!(stored("destroyed").as_deref(), Some("{\"destroyed\":true}"));
 }
 
@@ -745,7 +745,7 @@ fn the_instance_is_destroyed_at_once_while_its_route_is_mounted() {
     assert!(!host.app.text().contains("Sample route hello"), "{}", host.app.text());
 
     let _route = registry.route(&*host, "sample", "hello").unwrap();
-    registry.unload("sample.so");
+    registry.unload(&host, "sample.so");
     assert_eq!(destroyed().as_deref(), Some("{\"destroyed\":true}"));
 }
 
@@ -1021,4 +1021,72 @@ fn the_sample_prompt_mounts_fetch_and_read_the_same_in_process_and_through_the_l
     in_process.set_active(&host, "sample", false);
     let library = active(&host, &build("still"));
     assert_eq!(prompted(&host, &library), direct);
+}
+
+/// A thread that wakes the host once its claim drew, a wake handler that counts the wakes it ran for and fetches each time, and
+/// a claim that shows the count.
+fn waking(setup: &mut abi::Setup) -> Result<(), String> {
+    use std::sync::atomic::AtomicBool;
+    let waker = setup.waker().ok_or("no waker")?;
+    let (go, stop) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicBool::new(false)));
+    let thread = {
+        let (go, stop) = (go.clone(), stop.clone());
+        std::thread::spawn(move || {
+            while !go.load(Ordering::Acquire) && !stop.load(Ordering::Acquire) {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            waker.wake();
+        })
+    };
+    setup.on_dispose(move |_| {
+        stop.store(true, Ordering::Release);
+        let _ = thread.join();
+    });
+    let runs = Rc::new(std::cell::Cell::new(0));
+    let ran = runs.clone();
+    setup.on_wake(move |host| {
+        ran.set(ran.get() + 1);
+        host.fetch(abi::Fetch { method: "GET".into(), path: "/api/woken".into(), ..abi::Fetch::default() });
+    });
+    setup.slot(abi::Placement::append("home.footer"), move |_, _, changed| {
+        go.store(true, Ordering::Release);
+        abi::Render::Show(abi::Node::text([abi::Span::new(format!("wakes {} {}", runs.get(), changed.woken))]))
+    });
+    Ok(())
+}
+
+unsafe extern "C" fn waking_create(
+    host: *const HostApi,
+    options: Bytes,
+    instance: *mut *mut c_void,
+    out: *mut Owned,
+) -> i32 {
+    // SAFETY: the loader passes what `PluginApi::create` documents.
+    unsafe { abi::runtime::create("waking", waking, host, options, instance, out) }
+}
+
+// Expected: a wake from the plugin's thread runs its wake handler on the UI thread, whose effects go out, and then its
+// claim renders again with `woken`; the same in process and through the C ABI's byte shims (`Loopback`).
+#[test]
+fn a_wake_runs_the_wake_handlers_then_renders_on_both_paths() {
+    let host = host();
+    let registries =
+        [Registry::new(vec![abi::Plugin { id: "waking", setup: waking }.into()], []), loopback(&host, waking_create)];
+    for registry in registries {
+        host.fetches.borrow_mut().clear();
+        registry.activate(&host);
+        let parent = View::new(host.app());
+        let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+        host.app().root().clear();
+        host.app().root().add(&parent);
+        let woken = host.app.wait_until(Duration::from_secs(10), || {
+            host.app.render();
+            host.app.text().contains("wakes 1 true")
+        });
+        assert!(woken, "{}", host.app.text());
+        let paths: Vec<String> = host.fetches.borrow().iter().map(|(fetch, _)| fetch.path.clone()).collect();
+        assert_eq!(paths, ["/api/woken"]);
+        drop(_mounted);
+        registry.set_active(&host, "waking", false);
+    }
 }
