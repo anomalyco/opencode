@@ -43,7 +43,7 @@ export function filename(channel = OPENCODE_CHANNEL) {
   return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
-export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platform) {
+export function defaultPort(channel = OPENCODE_CHANNEL) {
   const port = channelPort(channel)
   // Keep every channel below 32768 so the managed service never asks for a port the
   // OS may already have handed to an outgoing connection.

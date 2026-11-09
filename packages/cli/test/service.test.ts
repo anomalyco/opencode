@@ -21,45 +21,24 @@ import { testEffect } from "../../core/test/lib/effect"
 const it = testEffect(NodeFileSystem.layer)
 
 test("managed service ports are stable per installation channel", () => {
-  expect(ServiceConfig.defaultPort("latest", "linux")).toBe(0x70de)
-  expect(ServiceConfig.defaultPort("dev", "linux")).toBe(0x70de)
-  expect(ServiceConfig.defaultPort("beta", "linux")).toBe(0x70de)
-  expect(ServiceConfig.defaultPort("next", "linux")).toBe(0x70de)
-  expect(ServiceConfig.defaultPort("local", "linux")).toBe(0x70df)
-  expect(ServiceConfig.defaultPort("latest", "darwin")).toBe(0x70de)
-  expect(ServiceConfig.defaultPort("preview-a", "linux")).toBe(ServiceConfig.defaultPort("preview-a", "linux"))
-  expect(ServiceConfig.defaultPort("preview-a", "linux")).not.toBe(ServiceConfig.defaultPort("preview-b", "linux"))
+  expect(ServiceConfig.defaultPort("latest")).toBe(0x70de)
+  expect(ServiceConfig.defaultPort("dev")).toBe(0x70de)
+  expect(ServiceConfig.defaultPort("beta")).toBe(0x70de)
+  expect(ServiceConfig.defaultPort("next")).toBe(0x70de)
+  expect(ServiceConfig.defaultPort("local")).toBe(0x70df)
+  expect(ServiceConfig.defaultPort("preview-a")).toBe(ServiceConfig.defaultPort("preview-a"))
+  expect(ServiceConfig.defaultPort("preview-a")).not.toBe(ServiceConfig.defaultPort("preview-b"))
 })
 
 test("managed service ports stay below every platform's ephemeral range", () => {
   // An outgoing connection can hold a port inside the ephemeral range with nothing
   // listening on it, which makes the managed service refuse to start. Linux hands out
-  // 32768-60999 and macOS 49152-65535 by default, so every channel must land below 32768.
-  for (const platform of ["linux", "darwin", "win32"] as const) {
-    expect(ServiceConfig.defaultPort("latest", platform)).toBeLessThan(0x8000)
-    expect(ServiceConfig.defaultPort("local", platform)).toBeLessThan(0x8000)
-  }
-  const ports = Array.from({ length: 200 }, (_, index) => ({
-    linux: ServiceConfig.defaultPort(`preview-${index}`, "linux"),
-    darwin: ServiceConfig.defaultPort(`preview-${index}`, "darwin"),
-    win32: ServiceConfig.defaultPort(`preview-${index}`, "win32"),
-  }))
-  expect(ports.every((port) => port.linux >= 10_000 && port.linux < 0x8000)).toBe(true)
-  expect(ports.every((port) => port.darwin >= 10_000 && port.darwin < 0x8000)).toBe(true)
-  expect(ports.every((port) => port.linux === port.win32 && port.darwin === port.win32)).toBe(true)
-})
-
-test("managed service ports on Windows stay below the ranges Windows and WSL reserve", () => {
-  expect(ServiceConfig.defaultPort("latest", "win32")).toBe(0x70de)
-  expect(ServiceConfig.defaultPort("dev", "win32")).toBe(0x70de)
-  expect(ServiceConfig.defaultPort("local", "win32")).toBe(0x70df)
-  const ports = Array.from({ length: 200 }, (_, index) => ({
-    windows: ServiceConfig.defaultPort(`preview-${index}`, "win32"),
-    linux: ServiceConfig.defaultPort(`preview-${index}`, "linux"),
-  }))
-  expect(ports.some((port) => port.windows >= 0x8000)).toBe(false)
-  expect(ports.every((port) => port.windows >= 10_000 && port.windows < 0x8000)).toBe(true)
-  expect(ports.filter((port) => port.linux < 0x8000 && port.windows !== port.linux)).toEqual([])
+  // 32768-60999, macOS 49152-65535 and Windows 0xC000-0xFFFF by default, so every
+  // channel must land below 32768.
+  expect(ServiceConfig.defaultPort("latest")).toBeLessThan(0x8000)
+  expect(ServiceConfig.defaultPort("local")).toBeLessThan(0x8000)
+  const ports = Array.from({ length: 200 }, (_, index) => ServiceConfig.defaultPort(`preview-${index}`))
+  expect(ports.every((port) => port >= 10_000 && port < 0x8000)).toBe(true)
 })
 
 test("service disabled accepts only booleans without changing configuration on invalid input", async () => {
