@@ -27,8 +27,11 @@ export const ACK_LIMIT = 1000
 const POLL_WAIT = 25
 /** How long the client polls before it tries the WebSocket again. */
 const POLL_RETRY_WEBSOCKET = Duration.minutes(10)
-/** Watch-triggered wakes in a row before the next event waits for a person, so two agents can't loop unattended. */
-export const STREAK_LIMIT = 5
+/** Wakes in 10 minutes, and since the user's last prompt, before updates wait for a person, so agents can't loop. */
+export const WINDOW_LIMIT = 5
+export const PROMPT_LIMIT = 20
+// The stored wakes since the prompt and their times; a count stored before the window reads as none.
+const decodeWakes = Schema.decodeUnknownOption(Schema.Struct({ count: Schema.Number, at: Schema.Array(Schema.Number) }))
 const DELETED_RETENTION = Duration.hours(72)
 const namespace = "console_watch"
 
@@ -124,8 +127,16 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
       yield* cancelSession(member, sessionID).pipe(Effect.ignore)
       return ids
     }
-    const streak = yield* ctx.storage.get(streakKey(sessionID))
-    const previous = typeof streak === "number" ? streak : 0
+    const now = yield* Clock.currentTimeMillis
+    // The member's own words count from zero, as a prompt does.
+    const own = events.some((event) => event.actor.self === true && !event.actor.bot)
+    const kept = own ? undefined : Option.getOrUndefined(decodeWakes(yield* ctx.storage.get(streakKey(sessionID))))
+    const recent = (kept?.at ?? []).filter((at) => now - at < Duration.toMillis(Duration.minutes(10)))
+    const count = kept?.count ?? 0
+    // CI runs pace themselves, so their updates count toward 20 since the prompt but not the 10-minute window.
+    const ci = events.every((event) => event.kind === "workflow_run" || event.kind === "workflow_job")
+    const resume = (ci || recent.length < WINDOW_LIMIT) && count < PROMPT_LIMIT
+    const paused = !resume || (!ci && recent.length + 1 >= WINDOW_LIMIT) || count + 1 >= PROMPT_LIMIT
     // The same events delivered again, after a lost acknowledgement, conflict with the message they already made:
     // they were delivered, so they're acknowledged without another wake.
     const delivered = yield* ctx.session
@@ -133,16 +144,19 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
         sessionID,
         id: SessionMessage.ID.make(`msg_watch_${Hash.sha256(ids.join(",")).slice(0, 26)}`),
         text: wakeText(events),
-        description: events.length === 1 ? title(events[0]) : `${title(events[0])} and ${events.length - 1} more`,
+        description:
+          (events.length === 1 ? title(events[0]) : `${title(events[0])} and ${events.length - 1} more`) +
+          (paused ? " (further updates wait for your next prompt)" : ""),
         metadata: { source: "console.watch", events: ids },
         delivery: "steer",
-        resume: previous < STREAK_LIMIT,
+        resume,
       })
       .pipe(
         Effect.as(true),
         Effect.catchIf(Predicate.isTagged("Session.SyntheticConflictError"), () => Effect.succeed(false)),
       )
-    if (delivered) yield* ctx.storage.set(streakKey(sessionID), previous + 1)
+    if (delivered && resume)
+      yield* ctx.storage.set(streakKey(sessionID), { count: count + 1, at: ci ? recent : [...recent, now] })
     return ids
   })
 
@@ -231,7 +245,7 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
       editor.add({
         name: "watch",
         description:
-          "Wake this session when a Slack thread or a GitHub pull request, issue, commit or Actions run gets a reply or changes status, or one of the workspace's MCP servers sends an event `events` lists. Use it for work started outside OpenCode Console's MCP servers, such as `gh workflow run` or a link the user shared; Console's Slack and GitHub tools, `gh pr create` and `git push` already watch what they start. People often answer a Slack post in the channel rather than its thread, so after each top-level post the channel's new top-level messages are watched for 15 minutes too. The session wakes with the update, so don't poll.",
+          "Wake this session when a Slack thread or a GitHub pull request, issue, commit or Actions run gets a reply or changes status, or one of the workspace's MCP servers sends an event `events` lists. Slack and GitHub writes through OpenCode Console, `gh pr create` and `git push` are already watched, so don't watch what you just made. Use it for anything else, such as `gh workflow run` or a link the user shared. People often answer a Slack post in the channel rather than its thread, so after each top-level post the channel's new top-level messages are watched for 15 minutes too. The session wakes with the update, so don't poll.",
         input: Schema.Struct({
           target: Schema.optional(
             Schema.String.annotate({
@@ -281,7 +295,8 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
       })
       editor.add({
         name: "unwatch",
-        description: "Stop a watch this session keeps, by the ID `watches` lists.",
+        description:
+          "Stop a watch this session keeps, by the ID `watches` lists, when the user asks. Watches end on their own and finished pull requests wind down by themselves, so don't unwatch to tidy up or quiet updates.",
         input: Schema.Struct({ id: Schema.String }),
         output: Schema.Struct({ id: Schema.String, removed: Schema.Boolean }),
         options: { namespace, codemode: true },
