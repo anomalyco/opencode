@@ -36,8 +36,10 @@ export function hasCapabilityTags(model: ModelInfo) {
   )
 }
 
-/** The model's input modalities, tool support, token limits and price, for a picker row. */
-export const ModelCapabilityTags: Component<{ model: ModelInfo }> = (props) => {
+/** The model's input modalities, tool support, token limits and price, for a picker row.
+ *  `compact` keeps the large dialog's single-line row from crowding: limits and price only,
+ *  the rest already live in the hover flyout (ModelDetails). */
+export const ModelCapabilityTags: Component<{ model: ModelInfo; compact?: boolean }> = (props) => {
   const language = useLanguage()
   const compact = createMemo(() =>
     new Intl.NumberFormat(language.intl(), {
@@ -61,11 +63,13 @@ export const ModelCapabilityTags: Component<{ model: ModelInfo }> = (props) => {
 
   return (
     <Show when={hasCapabilityTags(props.model)}>
-      <For each={MODALITIES.filter((modality) => props.model.capabilities?.input[modality] === true)}>
-        {(modality) => <Badge class="shrink-0">{language.t(MODALITY_KEYS[modality])}</Badge>}
-      </For>
-      <Show when={props.model.capabilities?.toolcall}>
-        <Badge class="shrink-0">{language.t("model.details.tools")}</Badge>
+      <Show when={!props.compact}>
+        <For each={MODALITIES.filter((modality) => props.model.capabilities?.input[modality] === true)}>
+          {(modality) => <Badge class="shrink-0">{language.t(MODALITY_KEYS[modality])}</Badge>}
+        </For>
+        <Show when={props.model.capabilities?.toolcall}>
+          <Badge class="shrink-0">{language.t("model.details.tools")}</Badge>
+        </Show>
       </Show>
       <Show when={limits()}>
         {(value) => <Badge class="shrink-0 tabular-nums">{value()}</Badge>}

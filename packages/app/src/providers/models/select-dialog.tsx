@@ -974,7 +974,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
           </Show>
           <Show when={hasCapabilityTags(item())}>
             <span class="flex shrink-0 items-center gap-1">
-              <ModelCapabilityTags model={item()} />
+              <ModelCapabilityTags model={item()} compact />
             </span>
           </Show>
         </span>
