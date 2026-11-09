@@ -5,8 +5,20 @@ import { Flag } from "@opencode/core/flag"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { ConfigFlag } from "@opencode/schema/config/flag"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Effect, Layer, Record } from "effect"
 import { testEffect } from "./lib/effect"
+
+const typeGuards = () => {
+  // @ts-expect-error Flag.enabled requires Flag.Service in context
+  Flag.enabled("todo") satisfies Effect.Effect<boolean, never, never>
+  // @ts-expect-error Flag.all requires Flag.Service in context
+  Flag.all satisfies Effect.Effect<Record<Flag.Key, Flag.State>, never, never>
+  // @ts-expect-error A location node using App.Service must declare App.node in deps
+  makeLocationNode({ service: App.Service, layer: Layer.effect(App.Service, App.Service), deps: [] })
+  makeLocationNode({ service: App.Service, layer: Layer.effect(App.Service, App.Service), deps: [App.node] })
+}
+void typeGuards
 
 const document = (experimental?: ConstructorParameters<typeof ConfigExperimental.Info>[0]) =>
   new Document({
@@ -103,20 +115,24 @@ describe("Flag.resolve", () => {
 })
 
 const it = testEffect(
-  Layer.mergeAll(
-    Config.testLayer([document({ artifacts: true })]),
-    App.layer({ channel: "latest" }),
-    Layer.succeed(Flag.Overrides, "schedules"),
-  ),
+  Flag.testLayer([document({ artifacts: true })], {
+    app: { channel: "latest" },
+    overrides: "schedules",
+  }),
 )
 
 describe("Flag.enabled", () => {
-  it.effect("reads the Config, channel and OPENCODE_FLAGS in scope", () =>
+  it.effect("reads the Config, channel and OPENCODE_FLAGS in scope and follows config updates", () =>
     Effect.gen(function* () {
+      const config = yield* Config.Test
       expect(yield* Flag.enabled("artifacts")).toBe(true)
       expect(yield* Flag.enabled("schedules")).toBe(true)
       expect(yield* Flag.enabled("todo")).toBe(false)
       expect((yield* Flag.all).schedules).toEqual({ enabled: true, source: "env" })
+
+      yield* config.setEntries([document({ artifacts: false, todo: true })])
+      expect(yield* Flag.enabled("artifacts")).toBe(false)
+      expect(yield* Flag.enabled("todo")).toBe(true)
     }),
   )
 })

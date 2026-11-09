@@ -110,10 +110,6 @@ on("click", (event) => {
 
   const section = target.closest("[data-slot=section-toggle]")
   if (section) return toggleSection()
-
-  if (target.closest('[data-component="menu-toggle"]'))
-    return toggleMenu(!site.querySelector("[data-component=site-menu-sheet][data-open]"))
-  if (target.closest('[data-component="site-menu-sheet"] :is([data-slot=backdrop], a)')) return toggleMenu(false)
 })
 
 // Code tabs, and plan tabs (which switch together across the page by their sync key and are remembered).
@@ -140,7 +136,7 @@ $$("[data-plan-tabs]").forEach((tabs) => {
   if (tab) selectTab(tab)
 })
 
-// The phone section menu (the sidebar folded into a button) and the phone menu sheet.
+// The phone section menu (the sidebar folded into a button).
 function toggleSection(open?: boolean) {
   const nav = $("[data-component=section-nav]")!
   const next = open ?? !nav.hasAttribute("data-open")
@@ -159,17 +155,7 @@ document.addEventListener(
   true,
 )
 
-function toggleMenu(open: boolean) {
-  const toggle = $('[data-component="menu-toggle"]')!
-  $("[data-component=site-menu-sheet]")!.toggleAttribute("data-open", open)
-  toggle.setAttribute("aria-expanded", String(open))
-  toggle.setAttribute("aria-label", open ? "Close menu" : "Open menu")
-  for (const part of [$("[data-slot=frame]")!, $("[data-component=site-footer]")!]) part.inert = open
-  html.style.overflow = open ? "hidden" : ""
-}
-
 phone.addEventListener("change", () => {
-  toggleMenu(false)
   toggleSection(false)
   closeLockup()
 })
@@ -208,10 +194,10 @@ function openLockup(root: HTMLElement, focus?: "first" | "last" | "current") {
   closeNavMenus()
   lockup = root
   const menu = menuOf(root)
-  // Phones: the labels start at the bar's logo mark and the "›" centres on its menu button, from the inline
-  // start and end edges (docs-lockup.css).
+  // Phones: the labels start at the bar's logo mark and the "›" centres on the bar's last mark (the
+  // GitHub mark, on the menu column), from the inline start and end edges (docs-lockup.css).
   const logo = $("[data-component=topbar] [data-slot=logo] [data-slot=icon]")?.getBoundingClientRect()
-  const button = $("[data-component=menu-toggle]")?.getBoundingClientRect()
+  const button = $("[data-component=topbar] [data-component=github-link]")?.getBoundingClientRect()
   if (logo?.width && button?.width) {
     const rtl = html.dir === "rtl"
     const centre = button.left + button.width / 2
@@ -371,10 +357,6 @@ on("keydown", (event) => {
       contents.open = false
       $("summary", contents)?.focus()
     }
-    if ($("[data-component=site-menu-sheet][data-open]")) {
-      toggleMenu(false)
-      $('[data-component="menu-toggle"]')?.focus()
-    }
     if ($("[data-component=section-nav][data-open]")) {
       toggleSection(false)
       $("[data-slot=section-toggle]")?.focus()
@@ -424,6 +406,49 @@ const headings = [...new Set(links.map((link) => decodeURIComponent(link.hash.sl
   const heading = document.getElementById(id)
   return heading ? [heading] : []
 })
+// The phone Contents bar names the section being read. A new name replaces
+// the old within the label's own line: the old leaves upward (4px, fading out, 150ms) as the new comes
+// up from 4px below (fading in, 200ms), both on the strong ease-out, transform and opacity only. A swap
+// mid-swap starts from where the words are; swaps closer together than 120ms (a fast scroll) cut
+// straight to the latest name, so nothing queues. The first name and reduced motion swap at once. The
+// accessible name follows ("Contents: <section>"); it isn't a live region, so scrolling announces nothing.
+const contentsBar = $<HTMLElement>("[data-docs-contents]")
+const ease = "cubic-bezier(0.23, 1, 0.32, 1)"
+let swappedAt = -Infinity
+function nameSection(title: string, animate: boolean) {
+  const label = contentsBar && $("[data-slot=label]", contentsBar)
+  if (!label) return
+  $("summary", contentsBar!)!.setAttribute("aria-label", `Contents: ${title}`)
+  const current = label.querySelector<HTMLElement>("[data-slot=word]:not([data-leaving])")!
+  if (current.textContent === title) return
+  const word = document.createElement("span")
+  word.dataset.slot = "word"
+  word.textContent = title
+  const now = performance.now()
+  const instant = !animate || now - swappedAt < 120 || matchMedia("(prefers-reduced-motion: reduce)").matches
+  swappedAt = now
+  $$("[data-leaving]", label).forEach((leaving) => leaving.remove())
+  if (instant) return current.replaceWith(word)
+  const style = getComputedStyle(current)
+  const from = { opacity: style.opacity, transform: style.transform === "none" ? "translateY(0)" : style.transform }
+  current.getAnimations().forEach((animation) => animation.cancel())
+  current.dataset.leaving = ""
+  label.append(word)
+  current
+    .animate([from, { opacity: 0, transform: "translateY(-4px)" }], { duration: 150, easing: ease, fill: "forwards" })
+    .finished.then(
+      () => current.remove(),
+      () => undefined,
+    )
+  word.animate(
+    [
+      { opacity: 0, transform: "translateY(4px)" },
+      { opacity: 1, transform: "translateY(0)" },
+    ],
+    { duration: 200, easing: ease },
+  )
+}
+
 let spied = ""
 function spy() {
   const tops = headings.map((heading) => ({ id: heading.id, top: heading.getBoundingClientRect().top }))
@@ -438,6 +463,10 @@ function spy() {
       scrollY > 0 && contents.getBoundingClientRect().top <= parseFloat(getComputedStyle(contents).top) + 0.5,
     )
   if (id === spied) return
+  const named = links.find(
+    (link) => link.closest("[data-docs-contents]") && decodeURIComponent(link.hash.slice(1)) === id,
+  )
+  if (named) nameSection(named.textContent ?? "", spied !== "")
   spied = id ?? ""
   links.forEach((link) =>
     decodeURIComponent(link.hash.slice(1)) === id

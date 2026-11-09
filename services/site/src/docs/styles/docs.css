@@ -6,7 +6,6 @@
 @import "../../component/site/site.css";
 @import "../../component/site/rtl.css";
 @import "../../component/site/github-link.css";
-@import "../../component/site/phone-menu.css";
 @import "../../component/site/tap-targets.css";
 @import "../../component/site/docs-lockup.css";
 @import "../../component/site/nav-menus.css";
@@ -154,6 +153,53 @@
       display: none;
     }
 
+    /* No menu button (the two bars are the docs' navigation); the GitHub mark takes its column. */
+    [data-component="topbar"] [data-component="github-link"] {
+      margin-inline-end: -0.75rem;
+    }
+
+    /* The Contents bar sits right under the section row from load (it follows the sidebar in the
+       frame), so both rows are stuck from the start and draw their lines from the start. An open row
+       and its list are one surface: the line between them goes, and the list's bottom edge stays. */
+    [data-docs-contents] {
+      margin: 0 var(--edge);
+
+      summary::after {
+        opacity: 1;
+        transition: none;
+      }
+
+      &[open] summary::after {
+        display: none;
+      }
+
+      /* The section's name, swapped in place (client.ts): each word is one line that ends in "…",
+         and the label clips the swap to its own line box. The leaving word lies over the new one. */
+      summary [data-slot="label"] {
+        position: relative;
+        flex: 1 1 auto;
+        min-width: 0;
+        margin-inline-end: 1rem;
+        overflow: clip;
+      }
+
+      [data-slot="word"] {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+
+        &[data-leaving] {
+          position: absolute;
+          inset: 0;
+        }
+      }
+    }
+
+    [data-component="section-nav"][data-open] [data-slot="section-toggle"]::after {
+      display: none;
+    }
+
     /* The bar's bottom line is the Contents bar's top join too, so the Contents bar only fades in
        its own bottom line when it pins: one line at each join, through the moment it sticks. */
     [data-component="contents-menu"] summary::before {
@@ -164,11 +210,6 @@
     [data-component="contents-menu"] :is(summary, a) {
       font-family: var(--font-mono);
       font-size: var(--mono-size);
-    }
-
-    /* The open list's current-item bar sits on the screen's edge; the labels stay on the content edge. */
-    [data-component="contents-menu"] a::before {
-      inset-inline-start: calc(-1 * var(--edge));
     }
 
     [data-component="sidebar"][data-section-nav] {
@@ -186,14 +227,19 @@
     [data-component="section-nav"] {
       position: relative;
 
+      /* The row spans the screen, its padding putting the label and chevron back in place, so its
+         press fill reaches both edges (on-this-page.css says why a painted outset isn't enough). */
       [data-slot="section-toggle"] {
         position: relative;
+        width: calc(100% + 2 * var(--edge));
+        margin-inline: calc(-1 * var(--edge));
+        padding-inline: var(--edge);
 
         &::before,
         &::after {
           content: "";
           position: absolute;
-          inset-inline: calc(-1 * var(--edge));
+          inset-inline: 0;
           height: 1px;
           background: var(--border);
           pointer-events: none;
@@ -239,6 +285,16 @@
         overscroll-behavior: contain;
         background: var(--bg);
         border-bottom: 1px solid var(--border);
+
+        /* Each page is a row across the whole list, filled edge to edge while pressed. */
+        [data-component="docs-nav"] a {
+          margin-inline: calc(-1 * var(--edge));
+          padding-inline: var(--edge);
+
+          &:active {
+            background: var(--row-press);
+          }
+        }
       }
     }
   }
