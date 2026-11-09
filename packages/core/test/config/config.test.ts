@@ -740,6 +740,47 @@ describe("Config", () => {
     ),
   )
 
+  it.live("keeps the last good config when a reload reads a partially written file", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          const file = path.join(global, "opencode.json")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(project, { recursive: true })
+            await fs.writeFile(file, JSON.stringify({ shell: "one" }))
+          })
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const bus = yield* Bus.Service
+            const watcher = yield* Watcher.Test
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
+            yield* Effect.sleep("10 millis")
+
+            // A concurrent, non-atomic writer is observed mid-write: the file is briefly truncated and unparseable.
+            yield* Effect.promise(() => fs.writeFile(file, '{ "shell": "two"'))
+            yield* watcher.emit({ type: "update", path: file })
+            yield* Effect.sleep("50 millis")
+            // The bad read does not drop the whole config: the last good value survives.
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
+
+            // Once the file parses again, the new value applies.
+            const changed = yield* bus
+              .subscribe(Event.Updated)
+              .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+            yield* Effect.sleep("10 millis")
+            yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "three" })))
+            yield* watcher.emit({ type: "update", path: file })
+            expect(yield* Fiber.join(changed)).toHaveLength(1)
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("three")
+          }).pipe(Effect.provide(testLayer(project, global, project, undefined, Watcher.testLayer)))
+        }),
+      ),
+    ),
+  )
+
   it.live("excludes missing files under symlinked global roots when global is disabled", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) => {

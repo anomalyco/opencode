@@ -170,13 +170,27 @@ export const layer = (options?: Options) =>
         })
       })
 
+      // Keeps the last document each file parsed cleanly into, keyed by path. A concurrent, non-atomic
+      // writer (an editor autosave, a script, a plugin touching the file) can be observed mid-write, so
+      // a reload reads a truncated, unparseable file. Without this, parseInfo fails, the document is
+      // dropped, the provider catalog empties, and every running session dies at its next step. Keeping
+      // the last good document mirrors the well-known refresh policy below, which keeps the last resolved
+      // config "so remote providers and allowlists do not disappear".
+      const lastGoodDocuments = new Map<string, Document>()
+
       const loadFile = Effect.fnUntraced(function* (filepath: string) {
         const text = yield* fs.readFileStringSafe(filepath)
-        if (text === undefined) return
+        if (text === undefined) {
+          // The file is absent, not merely unparseable: honor the removal and forget its last-good document.
+          lastGoodDocuments.delete(filepath)
+          return
+        }
         const substituted = yield* ConfigVariable.substitute({ type: "path", path: filepath, text })
         const info = yield* parseInfo(substituted, filepath)
-        if (!info) return
-        return new Document({ type: "document", path: AbsolutePath.make(filepath), info })
+        if (!info) return lastGoodDocuments.get(filepath)
+        const document = new Document({ type: "document", path: AbsolutePath.make(filepath), info })
+        lastGoodDocuments.set(filepath, document)
+        return document
       })
 
       const loadWellknownEntry = Effect.fnUntraced(function* (entry: WellKnown.Entry) {
