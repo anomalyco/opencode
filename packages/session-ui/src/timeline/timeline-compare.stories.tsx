@@ -118,6 +118,23 @@ export const Compare = {
       return active ? nextRowSpacingAfter(projection.rows, active, projection.messageByID) : undefined
     })
 
+    // As in the app: a shell or subagent call still running in the step the agent is on blocks the turn.
+    const blocking = createMemo(() => {
+      if (!busy()) return false
+      const last = replay().document.messages.findLast((message) => message.type === "assistant")
+
+      return (
+        last?.type === "assistant" &&
+        last.time.completed === undefined &&
+        last.content.some(
+          (part) =>
+            part.type === "tool" &&
+            part.state.status === "running" &&
+            (part.name === "shell" || part.name === "subagent"),
+        )
+      )
+    })
+
     const headCollapsed = createMemo(() => {
       if (!busy() || !state.activity) return false
       const last = replay().document.messages.findLast((message) => message.type === "assistant")
@@ -143,6 +160,8 @@ export const Compare = {
           lane: side === "head" && state.activity ? "activity" : "legacy",
           collapsed: side === "head" && headCollapsed(),
           spacing: side === "head" ? laneSpacing() : undefined,
+          hint: blocking(),
+          hintDelay: side === "head" && state.activity ? 300 : 0,
         },
         "*",
       )

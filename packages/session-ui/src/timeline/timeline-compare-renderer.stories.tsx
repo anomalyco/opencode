@@ -1,5 +1,6 @@
 import { TextShimmer } from "@opencode/ui/text-shimmer"
-import { Show, onCleanup, onMount, type Component, type JSX } from "solid-js"
+import { Show, createEffect, createSignal, onCleanup, onMount, type Component, type JSX } from "solid-js"
+import { BackgroundMoveHint } from "../../../app/src/session/timeline/message-timeline"
 import { createStore, reconcile } from "solid-js/store"
 import type { SessionDocument } from "../document"
 import { CurrentSessionProviders } from "../storybook/current-session-story"
@@ -28,6 +29,10 @@ type Render = {
   lane: "activity" | "legacy"
   collapsed?: boolean
   spacing?: "tool" | "content"
+  /** A shell or subagent call blocks the turn, so the lane offers to move it to the background. */
+  hint?: boolean
+  /** How long the call runs before that offer shows, as the build comparing it waits. */
+  hintDelay?: number
 }
 
 // A build that has the Activity timeline's lane renders it as the app does; an older one draws the lane it had.
@@ -50,6 +55,24 @@ type ScrollTo = { type: "timeline-compare:scroll-to"; anchor: string; offset: nu
 export const Renderer = {
   render: () => {
     const [state, setState] = createStore<{ render?: Render }>({})
+    const [hint, setHint] = createSignal(false)
+
+    // The offer shows once the call has blocked the turn for the build's delay, counted from when the playhead got here.
+    createEffect(() => {
+      const render = state.render
+
+      if (!render?.hint) return setHint(false)
+      const timer = setTimeout(() => setHint(true), render.hintDelay ?? 0)
+      onCleanup(() => clearTimeout(timer))
+    })
+
+    const move = () => (
+      <Show when={hint()}>
+        <div data-component="session-background-hint-row">
+          <BackgroundMoveHint keybind={["Ctrl", "B"]} />
+        </div>
+      </Show>
+    )
     let scroller: HTMLDivElement | undefined
     // A scroll this frame made to follow the other side is not reported back, so the two never chase each other.
     let following = 0
@@ -123,6 +146,7 @@ export const Renderer = {
                         </div>
                       )}
                     </Show>
+                    {move()}
                   </div>
                 }
               >
@@ -133,9 +157,11 @@ export const Renderer = {
                     <Current
                       class={padding}
                       label={render().status}
-                      collapsed={render().collapsed}
+                      collapsed={render().collapsed && !hint()}
                       spacing={render().spacing}
-                    />
+                    >
+                      {move()}
+                    </Current>
                   )
                 }}
               </Show>
