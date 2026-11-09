@@ -506,3 +506,18 @@ fn an_external_field_and_the_progress_line_match_typescript() {
     harness.wait_for("completed");
     assert_panel(&harness, "E.9b/progress");
 }
+
+// Expected (bigboi-3): a plugin toggled in `/plugins` mounts the session again with its form; once the manager closes,
+// the form's editor takes typing, as TS refocuses it (`form.tsx:232-243`).
+#[test]
+fn the_form_editor_takes_typing_after_a_plugin_manager_toggle() {
+    let harness = session_form(json!([{ "key": "notes", "type": "string" }]));
+    harness.wait_for("Type your answer");
+    harness.app.type_text("initial");
+    harness.wait_for("initial");
+    crate::system::toggle_a_plugin(&harness);
+    harness.app.press("escape");
+    harness.wait_gone("enable enter");
+    harness.app.type_text("-more");
+    harness.wait_for("initial-more");
+}

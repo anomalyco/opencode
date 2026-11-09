@@ -182,6 +182,8 @@ impl Tui {
     /// Replaces the route view and syncs the new one with everything.
     pub fn navigate(&self, route: Route) {
         let remount = self.view.borrow().is_some() && self.route() == route;
+        // Mounting may move the focus (a docked panel, a pending permission); an open dialog keeps it.
+        let dialog = self.dialogs.is_open().then(|| self.app.focused());
         if let Some(view) = self.view.borrow_mut().take() {
             view.root().detach();
         }
@@ -198,19 +200,21 @@ impl Tui {
         view.sync(self, &opencode_store::Changes::everything());
         // A remount under an open dialog (a theme change, a plugin toggled in `/plugins`) must not take the dialog's
         // focus; the new view takes it once the dialog closes, as the old one would have.
-        if !self.dialogs.is_open() {
-            view.focus(self);
-        } else {
-            let dialog = self.app.focused();
-            view.focus(self);
-            if let Some(widget) =
-                self.app.focused().filter(|widget| dialog.as_ref().is_none_or(|d| d.id() != widget.id()))
-            {
-                self.dialogs.refocus(&widget);
+        let target = view.focus_target();
+        match dialog {
+            None => {
+                if let Some(widget) = target {
+                    widget.focus();
+                }
             }
-            match dialog {
-                Some(widget) => widget.focus(),
-                None => self.app.blur(),
+            Some(dialog) => {
+                if let Some(widget) = target {
+                    self.dialogs.refocus(&widget);
+                }
+                match dialog {
+                    Some(widget) => widget.focus(),
+                    None => self.app.blur(),
+                }
             }
         }
         *self.view.borrow_mut() = Some(view);

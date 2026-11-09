@@ -250,8 +250,10 @@ impl Inner {
                 Ok(disposer) => *self.layer.borrow_mut() = Some(disposer),
                 Err(error) => log::error!("permission keymap layer: {error}"),
             }
-            // The session prompt hides; it must not keep the keys.
-            tui.app.blur();
+            // The session prompt hides; it must not keep the keys. An open dialog keeps its own.
+            if !tui.dialogs.is_open() {
+                tui.app.blur();
+            }
         }
         self.render();
         if let Some(field) = self.reject.borrow().as_ref() {
