@@ -19,7 +19,7 @@ use opencode_api::generated::{
     IntegrationCommandConnectInput, IntegrationCommandStatusInput, IntegrationConnectExternalInput,
     IntegrationConnectKeyInput, IntegrationInfo, IntegrationListInput, IntegrationMethod, IntegrationOAuthMethod,
     IntegrationOauthCancelInput, IntegrationOauthCompleteInput, IntegrationOauthConnectInput,
-    IntegrationOauthStatusInput, LocationQueryInput, ModelDefaultInput, SessionMessageShellExit,
+    IntegrationOauthStatusInput, LocationQueryInput, SessionMessageShellExit,
 };
 use opencode_api::js::{UrlError, number_to_string, parse_number, parse_url};
 use opencode_ui::form;
@@ -112,12 +112,11 @@ pub(super) fn location() -> error::Result<Option<LocationQueryInput>> {
     Ok(Some(here()?))
 }
 
-/// `loadIntegrations`: the default model first (the readiness boundary of the plugins that add
-/// integrations), then the integrations, OpenCode Go first.
+/// `loadIntegrations`: waits for the plugins that add integrations, then the integrations, OpenCode Go first.
 pub(super) fn load_integrations(server: &Server) -> error::Result<Vec<IntegrationInfo>> {
     let location = location()?;
     let mut integrations = server.run(async {
-        server.client().model_default(&ModelDefaultInput { location: location.clone() }).await?;
+        super::client::wait_for_plugins(server.client(), location.clone()).await;
         let list = server.client().integration_list(&IntegrationListInput { location }).await?;
         Ok::<_, error::Error>(list.data)
     })?;

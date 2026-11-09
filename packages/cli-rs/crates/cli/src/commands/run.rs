@@ -56,12 +56,7 @@ impl<T: std::fmt::Display> From<T> for Failure {
     }
 }
 
-async fn execute(
-    args: &RunArgs,
-    server: &Connected,
-    json: bool,
-    exit: &Rc<Cell<u8>>,
-) -> Result<(), Failure> {
+async fn execute(args: &RunArgs, server: &Connected, json: bool, exit: &Rc<Cell<u8>>) -> Result<(), Failure> {
     if args.fork && !args.continue_ && args.session.is_none() {
         return Err("--fork requires --continue or --session".into());
     }
