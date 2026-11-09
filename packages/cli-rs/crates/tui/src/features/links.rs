@@ -83,7 +83,11 @@ fn open(target: &str) -> Result<(), String> {
         command.args(["/c", "start", ""]);
         command
     } else {
-        std::process::Command::new("xdg-open")
+        let mut command = std::process::Command::new("xdg-open");
+        // `open` detaches `xdg-open`, so a browser it starts does not stop with this client's group on Ctrl+Z.
+        #[cfg(unix)]
+        std::os::unix::process::CommandExt::process_group(&mut command, 0);
+        command
     };
     command
         .arg(target)
