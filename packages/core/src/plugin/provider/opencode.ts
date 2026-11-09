@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util"
-import { Duration, Effect, Equal, FiberHandle, Option, Schema, Scope, Semaphore, Stream } from "effect"
+import { Duration, Effect, Equal, FiberHandle, Option, Schema, Scope, Stream } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHttpResponse } from "@opencode/plugin/effect/session"
@@ -72,10 +72,9 @@ const SkillBundle = Schema.Struct({
   files: Schema.Array(Schema.Struct({ path: Schema.String, content: Schema.String })),
 })
 type ConsoleSkill = { readonly skill: Skill.Info; readonly files: Record<string, string> }
-type ConsoleConfig = NonNullable<Effect.Success<ReturnType<typeof fetchConfig>>> & {
-  readonly instructions: (typeof ConsoleInstructions.Type)["instructions"]
-  readonly skills: (typeof ConsoleSkills.Type)["skills"]
-}
+const ConsoleRemote = Schema.Struct({ ...ConfigIntegration.Remote.fields, watches: Schema.Boolean })
+// Everything a workspace's Console delivers.
+type ConsoleConfig = typeof ConsoleRemote.Type & typeof ConsoleInstructions.Type & typeof ConsoleSkills.Type
 const signedOutMessage = "Reconnect OpenCode Console to continue"
 const ssoMessage = (organization: string | undefined) =>
   `Sign in with SSO again to use ${organization ?? "your OpenCode Console organization"}`
@@ -179,6 +178,7 @@ export const OpencodePlugin = define<
   | HttpClient.HttpClient
   | Bus.Service
   | Config.Service
+  | Credential.Service
   | InstructionDiscovery.Service
   | SharedCache.Service
   | Skill.Service
@@ -195,20 +195,21 @@ export const OpencodePlugin = define<
     const discovery = yield* InstructionDiscovery.Service
     const skills = yield* Skill.Service
     const cache = yield* SharedCache.Service
+    const bus = yield* Bus.Service
+    const credentials = yield* Credential.Service
     const scope = yield* Scope.Scope
-    const loading = Semaphore.makeUnsafe(1)
     type ActiveConnection = Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
-    let snapshot: {
+    type Snapshot = {
       // The Console's regular OpenCode config, merged as an integration config layer.
-      remote: ConsoleConfig | undefined
-      connection: ActiveConnection
-      organization: string | undefined
-    } = { remote: undefined, connection: undefined, organization: undefined }
+      readonly remote?: ConsoleConfig
+      readonly connection: ActiveConnection
+      readonly organization?: string
+      // The server, sign-in and organization `remote` belongs to.
+      readonly workspace?: string
+    }
     let instructions: InstructionDiscovery.File[] = []
-    // Tagged with the account and workspace they were downloaded for, so a switch hides them right away.
-    let consoleSkills: { owner: string; items: ConsoleSkill[] } = { owner: "", items: [] }
-    const owner = (from: typeof snapshot) =>
-      `${IntegrationConnection.key(from.connection) ?? ""}:${from.organization ?? ""}`
+    // Tagged with the workspace they were downloaded for, so a switch hides them right away.
+    let consoleSkills: { workspace: string | undefined; items: ConsoleSkill[] } = { workspace: undefined, items: [] }
     // A newer config's skill download replaces one still in flight.
     const skillDownload = yield* FiberHandle.make<void, never>()
     // Status last reported for the active connection, so inference failures can name the fix.
@@ -216,122 +217,103 @@ export const OpencodePlugin = define<
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
     const watches = yield* OpencodeWatches.make(ctx, http)
 
-    // Every project signed in to the same workspace shares one fetch, reused while it is younger than `maxAge`.
-    const load = Effect.fn("OpencodePlugin.load")(function* (maxAge: Duration.Input = Duration.minutes(1)) {
+    // Every project signed in to the same workspace shares one fetch of each resource while it is fresh. The last
+    // good copy of each is saved, so a restart, a newly opened project or a Console outage, including one that wants
+    // the user to sign in again, keeps the organization's policies.
+    const load = Effect.fn("OpencodePlugin.load")(function* (current: Snapshot, options: ProviderRefresh.Options) {
       const connection = yield* ctx.integration.connection.active("opencode")
       if (!connection) {
         reported = undefined
-        return { remote: undefined, connection, organization: undefined }
+        return { connection }
       }
-      const status = (status: IntegrationConnection.Status | undefined) => {
-        reported = status
-        return ctx.integration.connection.status({ integrationID: "opencode", connection, status })
+      const status = (cause: unknown) => {
+        // Only well-formed Console errors change the connection status; anything else may be transient.
+        const next = cause === undefined ? undefined : connectionStatus(cause)
+        if (cause !== undefined && !next) return Effect.void
+        reported = next
+        return ctx.integration.connection.status({ integrationID: "opencode", connection, status: next })
       }
-      return yield* ctx.integration.connection.resolve(connection).pipe(
-        Effect.flatMap((credential) => {
-          if (!credential || credential.type === "external")
-            return Effect.succeed({ remote: undefined, connection, organization: undefined })
-          const workspace = workspaceKey(connection, credential)
-          // Each list has its own cache entry, so a failing or malformed one keeps its last copy, or none, and never
-          // holds back the config and its policies. `SharedCache` already logs the failure.
-          const list = <A>(name: string, load: Effect.Effect<ReadonlyArray<A>, unknown>) =>
-            cache
-              .get({ key: `opencode-console-${name}:${workspace}`, interval: maxAge, load })
-              .pipe(Effect.orElseSucceed((): ReadonlyArray<A> => []))
-          return cache
-            .get({
-              key: `opencode-console:${workspace}`,
-              interval: maxAge,
-              // A sign-in error is Console's answer for this sign-in, so it is shared like a config rather than
-              // replaced by the last config, as a network failure is.
-              load: fetchConfig(http, credential).pipe(
-                Effect.map((remote) => ({ remote })),
-                Effect.catch((cause) =>
-                  connectionStatus(cause) ? Effect.succeed({ failed: cause }) : Effect.fail(cause),
-                ),
-              ),
-            })
-            .pipe(
-              Effect.flatMap((result) =>
-                "failed" in result ? Effect.fail(result.failed) : Effect.succeed(result.remote),
-              ),
-              Effect.flatMap((remote) =>
-                remote
-                  ? Effect.all(
-                      {
-                        instructions: list(
-                          "instructions",
-                          fetchList(http, credential, "/api/v2/instructions", ConsoleInstructions).pipe(
-                            Effect.map((body) => body?.instructions ?? []),
-                          ),
-                        ),
-                        skills: list(
-                          "skills",
-                          fetchList(http, credential, "/api/v2/skills", ConsoleSkills).pipe(
-                            Effect.map((body) => body?.skills ?? []),
-                          ),
-                        ),
-                      },
-                      { concurrency: 2 },
-                    ).pipe(Effect.map((lists): ConsoleConfig => ({ ...remote, ...lists })))
-                  : Effect.succeed(undefined),
-              ),
-              Effect.map((remote) => ({
-                remote,
-                connection,
-                organization: organizationName(credential),
-              })),
-            )
-        }),
-        Effect.tap(() => status(undefined)),
-        Effect.catch((cause) =>
-          Effect.gen(function* () {
-            // Only well-formed Console errors change the connection status; anything else may be transient.
-            const next = connectionStatus(cause)
-            if (next) yield* status(next)
-            yield* Effect.logWarning("failed to load OpenCode provider config", { cause })
-            // A load that fails for the connection already in place keeps its last config: dropping it
-            // would lift organization policy while personal credentials keep working.
-            return IntegrationConnection.key(connection) === IntegrationConnection.key(snapshot.connection)
-              ? { remote: snapshot.remote, connection, organization: snapshot.organization }
-              : { remote: undefined, connection, organization: undefined }
-          }),
-        ),
+      const credential = yield* ctx.integration.connection.resolve(connection).pipe(
+        Effect.tapError((cause) => Effect.logWarning("failed to sign in to OpenCode Console", { cause })),
+        Effect.tapError(status),
+        Effect.orElseSucceed(() => null),
       )
+      // The sign-in itself failed, such as a revoked refresh token, so the workspace is unknown.
+      if (credential === null)
+        return IntegrationConnection.key(connection) === IntegrationConnection.key(current.connection)
+          ? { ...current, connection }
+          : { connection }
+      if (!credential || credential.type === "external") return { connection }
+      const workspace = workspaceKey(connection, credential)
+      const config = yield* cache.lookup({
+        key: `opencode-console:${workspace}:config`,
+        ...options,
+        persist: Schema.toCodecJson(Schema.NullOr(ConsoleRemote)),
+        load: fetchConfig(http, credential),
+      })
+      yield* status(Option.getOrUndefined(config.failure))
+      // Each list has its own cache entry, so a failing or malformed one keeps its last copy, or none, and never
+      // holds back the config and its policies. `SharedCache` already logs the failure.
+      const list = <A>(name: string, schema: Schema.Codec<A, unknown>, empty: A) =>
+        cache
+          .get({
+            key: `opencode-console:${workspace}:${name}`,
+            ...options,
+            persist: Schema.toCodecJson(schema),
+            load: fetchList(http, credential, `/api/v2/${name}`, schema).pipe(Effect.map((body) => body ?? empty)),
+          })
+          .pipe(Effect.orElseSucceed(() => empty))
+      const lists = Effect.all(
+        [
+          list("instructions", ConsoleInstructions, { instructions: [] }),
+          list("skills", ConsoleSkills, { skills: [] }),
+        ],
+        { concurrency: 2 },
+      ).pipe(Effect.map(([instructions, skills]) => ({ ...instructions, ...skills })))
+      const remote = Option.getOrUndefined(config.value)
+      return {
+        remote: remote ? { ...remote, ...(yield* lists) } : undefined,
+        connection,
+        organization: organizationName(credential),
+        workspace,
+      }
     })
     // The Console document as config layered it. Its providers apply at this plugin's position in the provider chain,
     // while the rest of the document merges through config.
     let integrated: ConfigIntegration.Document | undefined
-    const integrate = Effect.fnUntraced(function* (document: ConfigIntegration.Document | undefined) {
+    // Whether config took the whole document. Managed `integration.use: deny` makes config layer a policies-only copy,
+    // which withholds instructions, skills and event watches too.
+    let allowed = false
+    // Policies and providers ride on the snapshot, so a credential switch, disconnect, or 404 replaces them too.
+    const publish = Effect.fnUntraced(function* () {
+      // The config merges as one integration document, which config loads right after managed policies.
+      const document =
+        snapshot.remote &&
+        snapshot.connection &&
+        ConfigIntegration.make({
+          integrationID: Integration.ID.make("opencode"),
+          connection:
+            snapshot.connection.type === "credential"
+              ? { ...snapshot.connection, id: Credential.ID.make(snapshot.connection.id) }
+              : snapshot.connection,
+          organization: snapshot.organization,
+          // `make` keeps only the standard config keys, so instructions and skills stay here.
+          info: snapshot.remote,
+        })
       yield* config.integration?.(Integration.ID.make("opencode"), document) ?? Effect.void
       integrated = (yield* config.entries()).find(
         (entry): entry is ConfigIntegration.Document =>
           entry instanceof ConfigIntegration.Document && entry.integrationID === Integration.ID.make("opencode"),
       )
-    })
-    // Policies and providers ride on the snapshot, so a credential switch, disconnect, or 404 replaces them too.
-    const publish = Effect.fnUntraced(function* (next: typeof snapshot) {
-      // The config merges as one integration document, which config loads right after managed policies.
-      const document =
-        next.remote &&
-        next.connection &&
-        ConfigIntegration.make({
-          integrationID: Integration.ID.make("opencode"),
-          connection:
-            next.connection.type === "credential"
-              ? { ...next.connection, id: Credential.ID.make(next.connection.id) }
-              : next.connection,
-          organization: next.organization,
-          // `make` keeps only the standard config keys, so instructions and skills stay here.
-          info: next.remote,
-        })
-      yield* integrate(document)
-      // Managed `integration.use: deny` makes config layer a policies-only copy, which withholds instructions,
-      // skills and event watches too. Config keeps the document it holds when handed a deep-equal one, so compare by
-      // content.
-      const allowed = document !== undefined && (!config.integration || isDeepStrictEqual(integrated, document))
-      yield* syncInstructionsAndSkills(next, allowed)
-      yield* syncWatches(allowed && next.remote?.watches === true ? next.connection : undefined)
+      // Config keeps the document it holds when handed a deep-equal one, so compare by content.
+      allowed = document !== undefined && (!config.integration || isDeepStrictEqual(integrated, document))
+      instructions = ((allowed && snapshot.remote?.instructions) || []).map(
+        (item) =>
+          new InstructionDiscovery.File({ path: `OpenCode Console instruction ${item.id}`, content: item.content }),
+      )
+      if (!allowed) consoleSkills = { workspace: undefined, items: [] }
+      yield* syncSkills()
+      yield* syncWatches(allowed && snapshot.remote?.watches === true ? snapshot.connection : undefined)
     })
     // Watching starts when the Console's config says the workspace has event watches, and stops when it no longer does.
     const syncWatches = Effect.fnUntraced(
@@ -354,22 +336,19 @@ export const OpencodePlugin = define<
       },
       Effect.catch((cause) => Effect.logWarning("failed to start Console event watches", { cause })),
     )
-    const syncInstructionsAndSkills = (next: typeof snapshot, allowed: boolean) => {
-      const remote = allowed ? next.remote : undefined
-      instructions = (remote?.instructions ?? []).map(
-        (item) =>
-          new InstructionDiscovery.File({ path: `OpenCode Console instruction ${item.id}`, content: item.content }),
-      )
-      if (!allowed) consoleSkills = { owner: "", items: [] }
-      // Skills download in the background, so startup and config changes never wait on them. The current ones stay
-      // until the download replaces them.
+    // Skills download in the background, so startup and config changes never wait on them. The current ones stay
+    // until the download replaces them.
+    const syncSkills = () => {
+      const next = snapshot
       return FiberHandle.run(
         skillDownload,
-        loadSkills(next.connection, remote?.skills ?? []).pipe(
+        loadSkills(next.connection, (allowed && next.remote?.skills) || []).pipe(
           Effect.flatMap((loaded) => {
             // A failed load keeps the skills already shown.
             if (!loaded) return Effect.void
-            consoleSkills = { owner: owner(next), items: loaded }
+            if (consoleSkills.workspace === next.workspace && Equal.equals(loaded, consoleSkills.items))
+              return Effect.void
+            consoleSkills = { workspace: next.workspace, items: loaded }
             return skills.reload()
           }),
         ),
@@ -387,27 +366,16 @@ export const OpencodePlugin = define<
         const workspace = workspaceKey(connection, credential)
         const loaded = yield* Effect.forEach(
           listed,
-          (item) => {
-            const input = {
-              key: `opencode-console-skill:${workspace}:${item.slug}`,
-              interval: Duration.infinity,
-              load: downloadSkill(http, server, item.slug, ConsoleAccess.headers(credential)).pipe(
-                Effect.map((skill) => ({ version: item.version, skill })),
-              ),
-            }
-            // Every project shares one download per skill. Any other version, or a failure, downloads again; a failed
-            // download keeps the last copy that loaded.
-            return cache.get(input).pipe(
-              Effect.filterOrFail((cached) => cached.version === item.version),
-              Effect.catch(() => cache.get({ ...input, force: true })),
-              Effect.map((cached) => cached.skill),
-              Effect.catch((cause) =>
-                Effect.logWarning("failed to load Console skill", { slug: item.slug, cause }).pipe(
-                  Effect.as(undefined),
-                ),
-              ),
-            )
-          },
+          (item) =>
+            // Every project shares one download per skill version. A failed one downloads again on a later check.
+            cache
+              .get({
+                key: `opencode-console:${workspace}:skill:${item.slug}@${item.version}`,
+                interval: Duration.infinity,
+                failureInterval: Duration.seconds(30),
+                load: downloadSkill(http, server, item.slug, ConsoleAccess.headers(credential)),
+              })
+              .pipe(Effect.orElseSucceed(() => undefined)),
           { concurrency: 8 },
         )
         return loaded.filter((item) => item !== undefined)
@@ -463,8 +431,9 @@ export const OpencodePlugin = define<
       editor.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
     })
 
-    snapshot = yield* load()
-    yield* publish(snapshot)
+    // Startup applies the workspace's last config at once. Only without one does it wait for the Console.
+    let snapshot: Snapshot = yield* load({ connection: undefined }, { interval: Duration.infinity })
+    yield* publish()
     yield* ctx.provider.transform((providers) => {
       if (integrated) ConfigProviderPlugin.integrate(providers, integrated)
     })
@@ -505,28 +474,9 @@ export const OpencodePlugin = define<
     })
     yield* discovery.transform((editor) => instructions.forEach((file) => editor.add(file)))
     yield* skills.transform((editor) => {
-      if (consoleSkills.owner !== owner(snapshot)) return
+      if (consoleSkills.workspace !== snapshot.workspace) return
       consoleSkills.items.forEach((item) => editor.add(item.skill, item.files))
     })
-
-    const apply = Effect.fn("OpencodePlugin.apply")(function* (next: typeof snapshot) {
-      snapshot = next
-      yield* publish(next)
-      yield* guard(next)
-      yield* Effect.all(
-        [ctx.provider.reload(), ctx.websearch.reload(), ctx.mcp.reload(), discovery.reload(), skills.reload()],
-        { concurrency: 5, discard: true },
-      )
-    })
-    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(apply)))
-    // Annotated: `apply` re-registers the hooks that call `check`, which would otherwise make inference circular.
-    const check = (maxAge?: Duration.Input): Effect.Effect<void> =>
-      loading.withPermit(
-        Effect.gen(function* () {
-          const next = yield* load(maxAge)
-          if (!Equal.equals(snapshot, next)) yield* apply(next)
-        }),
-      )
 
     // Console inference rejects a missing SSO sign-in with a generic 401/403. Re-check the Console config, which
     // reports the reason, and replace the response with instructions when the connection needs the user.
@@ -534,7 +484,7 @@ export const OpencodePlugin = define<
     const explain = (event: SessionHttpResponse) =>
       Effect.gen(function* () {
         if (event.response.status !== 401 && event.response.status !== 403) return
-        yield* check(Duration.seconds(30))
+        yield* load(snapshot, { interval: Duration.seconds(30) })
         const status = reported
         if (!status) return
         void event.response.body?.cancel()
@@ -549,27 +499,55 @@ export const OpencodePlugin = define<
         )
       })
     // Hooks are scoped per provider so requests to unrelated providers skip the HTTP hook path.
-    const guard = Effect.fn("OpencodePlugin.guard")(function* (next: typeof snapshot) {
+    const guard = Effect.fn("OpencodePlugin.guard")(function* () {
       yield* Effect.forEach(explainers, (registration) => registration.dispose, { discard: true })
       explainers = yield* Effect.forEach(
-        next.connection ? new Set([Provider.ID.opencode, ...Object.keys(next.remote?.providers ?? {})]) : [],
+        snapshot.connection ? new Set([Provider.ID.opencode, ...Object.keys(snapshot.remote?.providers ?? {})]) : [],
         (providerID) => ctx.session.hook("http.response", explain, { providerID }).pipe(Scope.provide(scope)),
       )
     })
-    yield* guard(snapshot)
+    yield* guard()
 
-    // Console config can change independently of local credential activity, so re-fetch
-    // periodically and only rebuild the catalog and search providers when the snapshot differs.
-    // Only while connected: a signed-out location runs no timer and no credential lookups.
-    const polling = yield* FiberHandle.make<void, never>()
-    const poll = Effect.fnUntraced(function* () {
-      if (!snapshot.connection) return yield* FiberHandle.clear(polling)
-      yield* FiberHandle.run(polling, Effect.sleep(Duration.minutes(1)).pipe(Effect.andThen(check()), Effect.forever), {
-        onlyIfMissing: true,
-      })
+    // Console config can change independently of local credential activity, so it is checked every minute, on an
+    // account switch, and in the background right after startup.
+    const refreshed = yield* ProviderRefresh.start({
+      integrationID: "opencode",
+      initial: snapshot,
+      interval: Duration.minutes(1),
+      active: ctx.integration.connection.active("opencode"),
+      // Each check also retries the skill downloads that failed; the ones already loaded cost no request.
+      load: (current, options) =>
+        load(current, options).pipe(
+          Effect.tap(() => syncSkills()),
+          Effect.map((value) => ({ connection: value.connection, value })),
+        ),
+      reload: Effect.suspend(() => {
+        snapshot = refreshed.current
+        return publish().pipe(
+          Effect.andThen(guard()),
+          Effect.andThen(
+            Effect.all(
+              [ctx.provider.reload(), ctx.websearch.reload(), ctx.mcp.reload(), discovery.reload(), skills.reload()],
+              { concurrency: 5, discard: true },
+            ),
+          ),
+        )
+      }),
     })
-    yield* ProviderRefresh.onSwitch("opencode", refresh().pipe(Effect.andThen(poll())))
-    yield* poll()
+
+    // A removed login's saved Console config is of no further use.
+    yield* bus.subscribe(Credential.Event.Updated).pipe(
+      Stream.filter((event) => event.data.integrationID === "opencode"),
+      Stream.runForEach(
+        Effect.fnUntraced(function* (event) {
+          if (yield* credentials.get(event.data.credentialID)) return
+          yield* cache.forget(
+            `opencode-console:${IntegrationConnection.key({ type: "credential", id: event.data.credentialID })}:`,
+          )
+        }),
+      ),
+      Effect.forkScoped({ startImmediately: true }),
+    )
   }),
 })
 
@@ -585,7 +563,7 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
     .pipe(
       Effect.flatMap((response) =>
         Effect.gen(function* () {
-          if (response.status === 404) return undefined
+          if (response.status === 404) return null
           if (response.status === 401) {
             const body = yield* HttpClientResponse.schemaBodyJson(Unauthorized)(response).pipe(Effect.option)
             if (Option.isSome(body)) return yield* new SignedOutError()
@@ -672,11 +650,7 @@ function workspaceKey(
   connection: NonNullable<Parameters<typeof IntegrationConnection.key>[0]>,
   credential: Credential.Key | Credential.OAuth,
 ) {
-  return JSON.stringify([
-    ConsoleAccess.server(credential),
-    IntegrationConnection.key(connection),
-    credential.metadata?.orgID,
-  ])
+  return `${IntegrationConnection.key(connection)}:${JSON.stringify([ConsoleAccess.server(credential), credential.metadata?.orgID])}`
 }
 
 function organizationName(credential: Credential.Value) {

@@ -18,6 +18,7 @@ import { ConfigWebSearchPlugin } from "@opencode/core/config/plugin/websearch"
 import { Credential } from "@opencode/core/credential"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Integration } from "@opencode/core/integration"
+import { KV } from "@opencode/core/kv"
 import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
@@ -1731,6 +1732,150 @@ describe("OpencodePlugin", () => {
       yield* drain
       expect(yield* instructions).toEqual(["Use tabs."])
       expect(yield* consolePolicies(config)).toEqual([sudo])
+    }),
+  )
+
+  it.effect("forgets the saved Console config of a removed login", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const kv = yield* KV.Service
+      const server = {
+        fetch: (request: Request) =>
+          new URL(request.url).pathname === "/api/v2/config"
+            ? Response.json({ providers: {} })
+            : new Response(null, { status: 404 }),
+      }
+      const login = () =>
+        credentials.create({
+          integrationID: Integration.ID.make("opencode"),
+          value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+        })
+      const saved = (id: string) =>
+        kv
+          .scan({ prefix: `shared-cache:opencode-console:credential:${id}:` })
+          .pipe(Effect.map((page) => page.entries.length))
+      const first = yield* login()
+      yield* addPlugin().pipe(inProcess(server))
+      const second = yield* login()
+      yield* drain
+      expect(yield* saved(first.id)).toBeGreaterThan(0)
+      expect(yield* saved(second.id)).toBeGreaterThan(0)
+
+      yield* credentials.update(second.id, { label: "renamed" })
+      yield* credentials.remove(first.id)
+      yield* drain
+      expect(yield* saved(first.id)).toBe(0)
+      expect(yield* saved(second.id)).toBeGreaterThan(0)
+    }),
+  )
+
+  it.effect("gives a project opened while Console wants SSO again the workspace's last policies", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const config = yield* Config.Service
+      const sudo: ConfigPolicy.Info = { action: "tool.use", resource: "shell:sudo *", effect: "deny" }
+      const state = { sso: false }
+      const server = {
+        fetch: (request: Request) => {
+          if (new URL(request.url).pathname !== "/api/v2/config") return new Response(null, { status: 404 })
+          if (state.sso)
+            return Response.json({ _tag: "SsoRequired", orgId: "org_acme", connectionId: "ssoconn" }, { status: 403 })
+          return Response.json({ providers: {}, policies: [sudo] })
+        },
+      }
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({
+          type: "key",
+          key: "secret",
+          metadata: { server: "https://console.test", orgID: "org_acme", orgName: "Acme" },
+        }),
+      })
+      yield* addPlugin().pipe(inProcess(server))
+      yield* drain
+      expect(yield* consolePolicies(config)).toEqual([sudo])
+
+      state.sso = true
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+      expect(yield* consolePolicies(config)).toEqual([sudo])
+
+      // A project opened now starts from the workspace's saved config instead of the cached sign-in error.
+      yield* addPlugin().pipe(inProcess(server))
+      yield* drain
+      expect(yield* consolePolicies(config)).toEqual([sudo])
+    }),
+  )
+
+  it.effect("drops an organization's policies when the sign-in moves to another whose config fails", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const config = yield* Config.Service
+      const sudo: ConfigPolicy.Info = { action: "tool.use", resource: "shell:sudo *", effect: "deny" }
+      const server = {
+        fetch: (request: Request) => {
+          if (new URL(request.url).pathname !== "/api/v2/config") return new Response(null, { status: 404 })
+          if (request.headers.get("x-org-id") === "org_acme") return Response.json({ providers: {}, policies: [sudo] })
+          return new Response("Bad request", { status: 400 })
+        },
+      }
+      const key = (orgID: string) =>
+        Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test", orgID } })
+      const credential = yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: key("org_acme"),
+      })
+      yield* addPlugin().pipe(inProcess(server))
+      yield* drain
+      expect(yield* consolePolicies(config)).toEqual([sudo])
+
+      yield* credentials.update(credential.id, { value: key("org_beta") })
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+      expect(yield* consolePolicies(config)).toEqual([])
+    }),
+  )
+
+  it.effect("retries a Console skill whose download failed once per check until it loads", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const skills = yield* Skill.Service
+      const state = { bundle: 400, downloads: 0 }
+      const server = {
+        fetch: (request: Request) => {
+          const path = new URL(request.url).pathname
+          if (path === "/api/v2/config") return Response.json({ providers: {} })
+          if (path === "/api/v2/skills") return Response.json({ skills: [{ slug: "deploy", version: "1" }] })
+          if (path !== "/api/v2/skills/deploy") return new Response(null, { status: 404 })
+          state.downloads++
+          if (state.bundle !== 200) return new Response(null, { status: state.bundle })
+          return Response.json(skillBundle)
+        },
+      }
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+      })
+      yield* addPlugin().pipe(inProcess(server))
+      yield* drain
+      // The check that runs right after startup keeps the failure startup just got.
+      expect(yield* skills.get(Skill.ID.make("deploy"))).toBeUndefined()
+      expect(state.downloads).toBe(1)
+
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+      expect(state.downloads).toBe(2)
+
+      state.bundle = 200
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+      expect((yield* skills.get(Skill.ID.make("deploy")))?.description).toBe("Deploys the service.")
+      expect(state.downloads).toBe(3)
+
+      // A downloaded version is never fetched again.
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+      expect(state.downloads).toBe(3)
     }),
   )
 
