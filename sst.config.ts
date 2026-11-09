@@ -26,7 +26,6 @@ export default $config({
     const stage = await import("./infra/stage.js")
     await import("./infra/app.js")
     const stats = stage.deployStats ? await import("./infra/stats.js") : undefined
-    await import("./infra/console.js")
 
     return {
       ...(stats ? { StatsUrl: stats.publicUrl } : {}),
