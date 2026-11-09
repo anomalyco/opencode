@@ -216,6 +216,7 @@ pub const KEYBIND_NAMES: &[&str] = &[
     "dialog.prompt.submit",
     "dialog.integration.rename",
     "dialog.integration.delete",
+    "dialog.integration.copy",
     "dialog.worktree.generate",
     "dialog.move_session.new",
     "dialog.move_session.move",

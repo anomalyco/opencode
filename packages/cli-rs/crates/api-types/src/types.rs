@@ -5881,10 +5881,20 @@ impl GenerateDecisionPart {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct GeneratePredicateQuestionCriteria {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub r#true: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub r#false: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GeneratePredicateQuestion {
     pub r#type: String,
     pub name: String,
     pub instructions: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub criteria: Option<GeneratePredicateQuestionCriteria>,
 }
 
 /// `Generate.ChoiceValue`
@@ -6802,6 +6812,8 @@ pub struct IntegrationAttempt {
     pub url: String,
     pub instructions: String,
     pub mode: IntegrationAttemptMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paste: Option<bool>,
     pub time: IntegrationAttemptTime,
 }
 
@@ -7227,6 +7239,8 @@ pub struct ExperimentalMcpAddInputConfigLocal {
     pub timeout: Option<ExperimentalMcpAddInputConfigLocalTimeout>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protocol: Option<McpProtocol>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pool: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -7283,6 +7297,8 @@ pub struct ExperimentalMcpAddInputConfigRemote {
     pub timeout: Option<ExperimentalMcpAddInputConfigLocalTimeout>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protocol: Option<McpProtocol>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pool: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -8040,7 +8056,12 @@ pub struct ModelsDevRefreshed {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct CredentialUpdatedData {}
+pub struct CredentialUpdatedData {
+    #[serde(rename = "integrationID")]
+    pub integration_id: IntegrationID,
+    #[serde(rename = "credentialID")]
+    pub credential_id: CredentialID,
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct CredentialUpdated {
@@ -12494,17 +12515,23 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub portable_shell_scanner: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub all_flags: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub todo: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background_compaction: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub media_blob: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub image_generate: Option<ConfigEntryDocumentInfoExperimentalImageGenerate>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub schedules: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifacts: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codemode_vm: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part_rows: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_generate: Option<ConfigEntryDocumentInfoExperimentalImageGenerate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagent_depth: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
