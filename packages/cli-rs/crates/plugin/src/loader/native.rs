@@ -97,27 +97,19 @@ fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Resul
     // (ABI 1.0) tells its ID only from setup, so for it setup runs once now, and that instance is destroyed.
     let id = match metadata.id {
         Some(id) => id,
-        None => Instance::create(&library, Rc::downgrade(host), "", options.as_deref())?.1.id,
+        // That instance only tells the ID: nothing it asks for happens.
+        None => Instance::create(&library, Rc::downgrade(host), "", options.as_deref(), true)?.1.id,
     };
+    // The failure of the running instance: a panic.
     let failure: Rc<RefCell<Option<String>>> = Rc::default();
-    let definition = Definition::new(id, {
+    let definition = Definition::fallible(id, {
         let failure = failure.clone();
         move |setup: &mut Setup<'_>| {
             let host = Rc::downgrade(setup.host());
-            let instance = Instance::create(&library, host.clone(), setup.id(), options.as_deref()).and_then(
-                |(instance, manifest)| match manifest.id == setup.id() {
-                    true => Ok((instance, manifest)),
-                    false => Err(format!("setup returned plugin ID {}, not {}", manifest.id, setup.id())),
-                },
-            );
-            let (instance, manifest) = match instance {
-                Ok(instance) => instance,
-                Err(error) => {
-                    log::error!("plugin {} failed: {error}", setup.id());
-                    *failure.borrow_mut() = Some(error);
-                    return;
-                }
-            };
+            let (instance, manifest) = Instance::create(&library, host.clone(), setup.id(), options.as_deref(), false)?;
+            if manifest.id != setup.id() {
+                return Err(format!("setup returned plugin ID {}, not {}", manifest.id, setup.id()));
+            }
             *failure.borrow_mut() = None;
             let activation = Activation::new(setup.host(), instance.shared.wake.clone());
             let guest = Rc::new(Guest {
@@ -140,6 +132,7 @@ fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Resul
             register(setup, &guest, &manifest);
             // What setup asked for (toasts, routes) happens now that the plugin is active.
             guest.apply(guest.effects());
+            Ok(())
         }
     });
     let error: ErrorFn = Rc::new(move || failure.borrow().clone());
@@ -252,6 +245,8 @@ struct Ctx {
     id: String,
     keys: Vec<String>,
     effects: Vec<Effect>,
+    /// What it asks for is dropped.
+    quiet: bool,
 }
 
 /// What [`HostApi::ctx`] points to: the context of the UI thread's callbacks, and what `wake` reads from any thread.
@@ -283,15 +278,17 @@ struct Instance {
 }
 
 impl Instance {
-    /// Runs setup. `id` is the plugin's ID, or empty while it is not known, so setup may use storage.
+    /// Runs setup. `id` is the plugin's ID, or empty while it is not known, so setup may use storage. What a `quiet`
+    /// instance asks for is dropped.
     fn create(
         library: &Rc<Library>,
         host: Weak<dyn Host>,
         id: &str,
         options: Option<&str>,
+        quiet: bool,
     ) -> Result<(Self, Manifest), String> {
         let wake = Arc::new(Wake::new(host.upgrade().map(|host| host.app().proxy())));
-        let ctx = RefCell::new(Ctx { host, id: id.to_owned(), keys: Vec::new(), effects: Vec::new() });
+        let ctx = RefCell::new(Ctx { host, id: id.to_owned(), keys: Vec::new(), effects: Vec::new(), quiet });
         let shared = Box::new(Shared { ctx, wake });
         let api = Box::new(HostApi {
             size: size_of::<HostApi>(),
@@ -314,6 +311,10 @@ impl Instance {
             (status, bytes)
         };
         let text = || String::from_utf8_lossy(&bytes).into_owned();
+        if status != abi::OK {
+            // What the failed setup and its disposal asked for still happens; its fetches reach no activation.
+            shared.drain();
+        }
         match status {
             abi::OK => {}
             abi::PANIC => return Err(format!("setup panicked: {}", text())),
@@ -361,6 +362,19 @@ impl Drop for Instance {
         if let Some(destroy) = self.library.destroy {
             // SAFETY: `handle` came from `create` and is destroyed once; the plugin catches its own panics.
             unsafe { destroy(self.handle) };
+        }
+        // What its dispose callbacks asked for still happens, as in process; their fetches reach no activation.
+        self.shared.drain();
+    }
+}
+
+impl Shared {
+    /// Queues the effects asked for so far, without an activation.
+    fn drain(&self) {
+        let mut ctx = self.ctx.borrow_mut();
+        let effects = std::mem::take(&mut ctx.effects);
+        if !ctx.quiet {
+            apply(&ctx.host, ctx.id.clone(), Weak::new(), effects);
         }
     }
 }
@@ -447,6 +461,12 @@ fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, Stri
             let stored = key(ctx, &name)?;
             let host = ctx.host.upgrade().ok_or("the host is gone")?;
             host.storage_write(&stored, &value)?;
+            ctx.effects.push(Effect::Stored);
+        }
+        HostRequest::StorageMerge { key: name, fields } => {
+            let stored = key(ctx, &name)?;
+            let host = ctx.host.upgrade().ok_or("the host is gone")?;
+            host.storage_merge(&stored, fields)?;
             ctx.effects.push(Effect::Stored);
         }
         HostRequest::OpenRoute { name } => ctx.effects.push(Effect::Route(name)),
@@ -591,26 +611,7 @@ impl Guest {
 
     /// Queues the effects of a call on the effect queue, as the host would for a built-in.
     fn apply(self: &Rc<Self>, effects: Vec<Effect>) {
-        if effects.is_empty() {
-            return;
-        }
-        let id = self.id.clone();
-        let guest = Rc::downgrade(self);
-        defer(&self.host, move |host| {
-            for effect in effects {
-                match effect {
-                    Effect::Toast(toast) => host.toast(&toast),
-                    Effect::Route(name) => host.open_route(&id, &name),
-                    Effect::Dispatch(name, input) => host.dispatch(&name, input.as_deref()),
-                    Effect::Attention(attention) => host.attention(&attention),
-                    Effect::Stored => host.storage_changed(),
-                    Effect::Navigate(route) => host.navigate(&id, &route),
-                    Effect::Fetch(request, fetch) => Guest::fetch(&guest, host, request, fetch),
-                    Effect::Dialog(dialog) => host.dialog(&id, dialog),
-                    Effect::Copy(text, then) => crate::copy(host, &text, then),
-                }
-            }
-        });
+        apply(&self.host, self.id.clone(), Rc::downgrade(self), effects);
     }
 
     /// Sends `fetch` unless the instance is destroyed; its reply goes to the instance on the effect queue, unless the
@@ -631,6 +632,28 @@ impl Guest {
     }
 }
 
+/// Queues `effects` of plugin `id` on the effect queue, as the host would for a built-in; a fetch replies to `guest`.
+fn apply(host: &Weak<dyn Host>, id: String, guest: Weak<Guest>, effects: Vec<Effect>) {
+    if effects.is_empty() {
+        return;
+    }
+    defer(host, move |host| {
+        for effect in effects {
+            match effect {
+                Effect::Toast(toast) => host.toast(&toast),
+                Effect::Route(name) => host.open_route(&id, &name),
+                Effect::Dispatch(name, input) => host.dispatch(&name, input.as_deref()),
+                Effect::Attention(attention) => host.attention(&attention),
+                Effect::Stored => host.storage_changed(),
+                Effect::Navigate(route) => host.navigate(&id, &route),
+                Effect::Fetch(request, fetch) => Guest::fetch(&guest, host, request, fetch),
+                Effect::Dialog(dialog) => host.dialog(&id, dialog),
+                Effect::Copy(text, then) => crate::copy(host, &text, then),
+            }
+        }
+    });
+}
+
 /// Registers what the manifest lists, each calling into `guest`.
 fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
     // Registered first, so it runs last: the instance is destroyed now, on deactivation, unload and reload, even while
@@ -639,6 +662,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
     setup.on_dispose(move || {
         let instance = disposed.instance.borrow_mut().take();
         drop(instance);
+        disposed.activation.dispose();
     });
     let commands: Vec<(abi::Scope, TuiCommand)> = manifest
         .commands
@@ -727,11 +751,17 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
         let guest = guest.clone();
         if manifest.render >= abi::RENDER && manifest.render_routes.contains(name) {
             let (request, activation) = (name.clone(), guest.activation.clone());
+            let mount = manifest.route_mounts.contains(name).then(|| {
+                let (guest, name) = (guest.clone(), name.clone());
+                Rc::new(move |_: &dyn Host, _: &abi::SlotInput, mounted: bool| {
+                    guest.handle("on-route-mount", &Request::RouteMount { name: name.clone(), mounted });
+                }) as MountFn
+            });
             let render: SlotRender = Rc::new(move |_, _, changed| {
                 let request = Request::RenderRoute { name: request.clone(), changed: changed.clone() };
                 guest.request("render-route", &request).unwrap_or(abi::Render::Hide)
             });
-            setup.view_route(name, render, route::commands(&scoped, name), &activation);
+            setup.view_route(name, render, route::commands(&scoped, name), mount, &activation);
             continue;
         }
         let request = Request::Route { name: name.clone() };

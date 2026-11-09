@@ -281,3 +281,30 @@ fn a_late_btw_copy_does_not_reopen_a_closed_answer() {
     h.app.wait_until(Duration::from_millis(100), || false);
     assert!(!h.app.text().contains("answer to one"), "{}", h.app.text());
 }
+
+// Expected (carbon-4, bigboi-7): the stats route asks for the stats as it mounts, however it opens, as TS's
+// `StatsPage` does: as the first route (`OPENCODE_ROUTE`), through another plugin's navigation, and afresh on each
+// visit; `/stats` while the route shows asks nothing more.
+#[test]
+fn the_stats_route_fetches_as_it_mounts_however_it_opens() {
+    let server = Server::new(true);
+    let stats = abi::Route::Plugin { id: "opencode.stats".into(), name: "stats".into() };
+    let deps = Deps {
+        config: support::config(support::still()),
+        route: Route::Plugin { id: "opencode.stats".into(), name: "stats".into() },
+        ..support::deps(Arc::new(server.clone()))
+    };
+    let h = support::mount(100, 40, deps);
+    h.wait_for("best streak");
+    assert_eq!(server.sent("/session/stats").len(), 1);
+    h.tui.keymap.dispatch("stats.open", None);
+    h.app.wait_until(Duration::from_millis(100), || false);
+    assert_eq!(server.sent("/session/stats").len(), 1, "/stats on the route asks again");
+    h.wait_for("best streak");
+
+    h.tui.navigate(support::session_route("ses_a"));
+    h.wait_for("Fix the parser");
+    opencode_plugin::Host::navigate(&*h.tui, "other.plugin", &stats);
+    h.wait_for("best streak");
+    assert_eq!(server.sent("/session/stats").len(), 2, "a revisit asks afresh");
+}

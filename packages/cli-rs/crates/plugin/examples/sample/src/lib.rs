@@ -34,12 +34,11 @@ use serde_json::json;
 const VERSION: &str = if cfg!(feature = "v2") { "v2" } else { "v1" };
 
 fn setup(setup: &mut Setup) -> Result<(), String> {
-    if cfg!(feature = "setup-fails") || setup.options().is_some_and(|options| options.contains("\"fail\":true")) {
-        return Err("sample setup failed".to_owned());
-    }
+    let has = |setup: &Setup, option: &str| setup.options().is_some_and(|options| options.contains(option));
     setup.storage_key("count");
-    // Setup itself uses the host: storage, the theme mode, and a toast. Disposal writes `destroyed`.
-    if setup.options().is_some_and(|options| options.contains("\"probe\":true")) {
+    // Setup itself uses the host: storage, the theme mode, and a toast. Disposal writes `destroyed`, also when setup
+    // fails after.
+    if has(setup, "\"probe\":true") {
         setup.storage_key("destroyed");
         setup.on_dispose(|host| host.storage_set("destroyed", json!({ "destroyed": true })));
         let host = setup.host();
@@ -47,6 +46,12 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         let mode = if host.theme_mode() == ThemeMode::Light { "light" } else { "dark" };
         host.storage_set("count", json!({ "count": count + 1 }));
         host.toast(Toast::new(Variant::Info, format!("sample setup: count {count}, {mode}, stored")));
+    }
+    if cfg!(feature = "setup-fails") || has(setup, "\"fail\":true") {
+        return Err("sample setup failed".to_owned());
+    }
+    if has(setup, "\"panic\":true") {
+        panic!("sample setup panicked");
     }
     // Hellos said by this instance, which the slot and the route show once the host draws them again.
     let hellos = Rc::new(Cell::new(0u64));

@@ -97,8 +97,8 @@ impl opencode_plugin_abi::Read for Dark {
 /// `TextPart`'s Markdown with the plugin's renderers for `latex` and `math`, through the host's fence adapter, as
 /// the plugin host registers them.
 fn markdown(app: &TestApp, theme: &Theme, streaming: bool) -> Markdown {
-    let mut setup = opencode_plugin_abi::Setup::in_process("opencode.latex", None);
-    (crate::plugin().setup)(&mut setup).unwrap();
+    let mut setup = opencode_plugin_abi::Registered::new("opencode.latex", None);
+    (crate::plugin().setup)(&mut setup.setup()).unwrap();
     let mut renderers = CodeBlockRenderers::default();
     for (language, render) in setup.fences() {
         let (render, theme, fences) = (render.clone(), theme.clone(), Fences::default());

@@ -50,6 +50,7 @@ use std::borrow::Cow;
 use std::ffi::c_void;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::Rc;
+use std::sync::{Arc, PoisonError, RwLock};
 
 pub use opencode_api_types as types;
 use serde::{Deserialize, Serialize};
@@ -67,7 +68,8 @@ pub const ABI_MAJOR: u32 = 1;
 /// requests of routes, replies, dialogs, navigation and the clipboard ([`Request::RenderRoute`], [`Request::Reply`],
 /// [`HostRequest::Fetch`], [`HostRequest::Navigate`], [`HostRequest::Dialog`], [`HostRequest::Copy`]), and of mounts and
 /// the prompt ([`Request::Mount`], [`HostRequest::Interactive`], [`HostRequest::Shortcut`],
-/// [`HostRequest::DialogOpen`]), [`Dialog::Select`] and [`Request::Wake`].
+/// [`HostRequest::DialogOpen`]), [`Dialog::Select`], [`Request::Wake`], [`Request::RouteMount`] and
+/// [`HostRequest::StorageMerge`].
 pub const ABI_MINOR: u32 = 4;
 
 /// The symbol every plugin exports, of type [`EntryFn`].
@@ -284,6 +286,9 @@ pub struct Manifest {
     /// The plugin has [`Setup::on_wake`] handlers, which [`Request::Wake`] runs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub wake: bool,
+    /// The routes with [`Setup::on_route_mount`] handlers, which [`Request::RouteMount`] runs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub route_mounts: Vec<String>,
 }
 
 /// What [`Manifest::render`] is for the render requests of ABI 1.4.
@@ -1071,6 +1076,12 @@ pub enum Request {
     },
     /// 1.4: runs the [`Setup::on_wake`] handlers after the plugin woke the host, before its claims render again.
     Wake,
+    /// 1.4: runs the [`Setup::on_route_mount`] handlers of route `name`, which [`Manifest::route_mounts`] lists:
+    /// `mounted` as the host mounts the route, before it first renders, and not as it unmounts it.
+    RouteMount {
+        name: String,
+        mounted: bool,
+    },
 }
 
 /// A fence for the render of [`Setup::code_block`] that [`Manifest::fences`] names by `index`. The host matches a fence
@@ -1195,6 +1206,12 @@ pub enum HostRequest {
     /// 1.4: [`Read::dialog_open`].
     DialogOpen {
         key: String,
+    },
+    /// 1.4: [`Host::storage_merge`], which the host sets in the latest stored object under the storage lock. A plugin
+    /// whose host does not know it sends [`HostRequest::StorageSet`] instead.
+    StorageMerge {
+        key: String,
+        fields: serde_json::Map<String, serde_json::Value>,
     },
 }
 
@@ -1564,6 +1581,9 @@ pub trait Host: Read {
     fn dialog(&self, dialog: Dialog);
     /// Copies `text` to the clipboard, then runs `then` once it is copied; a toast says so when it fails.
     fn copy(&self, text: &str, then: Option<Action>);
+    /// Declares storage key `key` of the plugin, for [`Setup::storage_key`].
+    #[doc(hidden)]
+    fn declare_storage_key(&self, _key: &str) {}
 }
 
 /// The host table, as the plugin calls it. It is valid until the host destroys the instance, so it is the plugin's
@@ -1640,7 +1660,9 @@ impl HostHandle {
         let core = self.covers(std::mem::offset_of!(HostApi, wake) + size_of::<Entry>())?;
         // SAFETY: `size` covers the entry.
         let wake = unsafe { std::ptr::addr_of!((*self.api).wake).read()? };
-        Some(Waker { data: core.ctx, wake })
+        let ctx = Ctx(core.ctx);
+        // SAFETY: `ctx` is valid until `destroy` returns, and `destroy` revokes the waker first.
+        Some(Waker::new(move || unsafe { wake(ctx.get()) }))
     }
 }
 
@@ -1729,6 +1751,19 @@ impl Host for HostHandle {
         }
     }
 
+    fn storage_merge(&self, key: &str, fields: serde_json::Map<String, serde_json::Value>) {
+        let request = HostRequest::StorageMerge { key: key.to_owned(), fields: fields.clone() };
+        if self.request(&request).is_err() {
+            // A host older than the request sets the whole object, as plugins built before it do.
+            let mut object = match self.storage_get(key) {
+                Some(serde_json::Value::Object(object)) => object,
+                _ => serde_json::Map::new(),
+            };
+            object.extend(fields);
+            self.storage_set(key, serde_json::Value::Object(object));
+        }
+    }
+
     fn dispatch(&self, name: &str, input: Option<&str>) {
         let _ = self.request(&HostRequest::Dispatch { name: name.to_owned(), input: input.map(str::to_owned) });
     }
@@ -1762,6 +1797,10 @@ impl Host for HostHandle {
     fn copy(&self, text: &str, then: Option<Action>) {
         let _ = self.request(&HostRequest::Copy { text: text.to_owned(), then });
     }
+
+    fn declare_storage_key(&self, key: &str) {
+        let _ = self.request(&HostRequest::StorageKey { key: key.to_owned() });
+    }
 }
 
 impl HostHandle {
@@ -1779,33 +1818,46 @@ impl HostHandle {
 /// so a render must show every result that is ready, not one per wake. The host never loses the last wake, even when
 /// its queue is full.
 ///
-/// A `Waker` is valid only until the plugin is disposed: until `destroy` returns over the C ABI, until the plugin's
-/// [`Setup::on_dispose`] callbacks have run in process. A thread that holds one must stop before then: stop and join
-/// it when the plugin's state drops or in [`Setup::on_dispose`], as the sample plugin's `Ticker` does. A detached
-/// task that may still run, such as a cancelled async task, is not enough.
-#[derive(Clone, Copy)]
-pub struct Waker {
-    data: *mut c_void,
-    wake: unsafe extern "C" fn(*mut c_void),
-}
+/// Disposing the plugin revokes every clone of the waker before its [`Setup::on_dispose`] callbacks run: it waits for
+/// the wakes in progress, and a later wake does nothing. A thread that holds one may outlive the plugin; stop it in
+/// [`Setup::on_dispose`] or when the plugin's state drops all the same, as the sample plugin's `Ticker` does.
+#[derive(Clone)]
+pub struct Waker(Arc<RwLock<Option<WakeCall>>>);
 
-// SAFETY: `wake` may be called from any thread with `data` while the plugin lives, as `Waker::new` requires.
-unsafe impl Send for Waker {}
-unsafe impl Sync for Waker {}
+/// What a [`Waker`] calls, until it is revoked.
+type WakeCall = Box<dyn Fn() + Send + Sync>;
 
 impl Waker {
-    /// A waker that calls `wake(data)`.
-    ///
-    /// # Safety
-    /// `wake(data)` must be callable from any thread until the plugin is disposed.
+    /// A waker that calls `wake` until it is revoked.
     #[doc(hidden)]
-    pub unsafe fn new(data: *mut c_void, wake: unsafe extern "C" fn(*mut c_void)) -> Self {
-        Self { data, wake }
+    pub fn new(wake: impl Fn() + Send + Sync + 'static) -> Self {
+        Self(Arc::new(RwLock::new(Some(Box::new(wake)))))
     }
 
     pub fn wake(&self) {
-        // SAFETY: as `Waker::new` requires; a plugin stops its threads before it is disposed.
-        unsafe { (self.wake)(self.data) }
+        if let Some(wake) = &*self.0.read().unwrap_or_else(PoisonError::into_inner) {
+            wake();
+        }
+    }
+
+    /// Makes every later wake of every clone do nothing, once the wakes in progress have returned.
+    #[doc(hidden)]
+    pub fn revoke(&self) {
+        self.0.write().unwrap_or_else(PoisonError::into_inner).take();
+    }
+}
+
+/// The host's `ctx` as a wake of the C ABI takes it, from any thread.
+#[derive(Clone, Copy)]
+struct Ctx(*mut c_void);
+
+// SAFETY: the host's `wake` may be called from any thread with its `ctx` until `destroy` returns ([`HostApi::wake`]).
+unsafe impl Send for Ctx {}
+unsafe impl Sync for Ctx {}
+
+impl Ctx {
+    fn get(self) -> *mut c_void {
+        self.0
     }
 }
 
@@ -1830,12 +1882,14 @@ pub type CommandFn = Rc<dyn Fn(&dyn Host, Option<&str>)>;
 pub type EventFn = Rc<dyn Fn(&dyn Host, &V2Event)>;
 /// A registered mount handler of [`Setup::on_mount`].
 pub type MountFn = Rc<dyn Fn(&dyn Host, &SlotInput, bool)>;
+/// A registered route mount handler of [`Setup::on_route_mount`].
+pub type RouteMountFn = Rc<dyn Fn(&dyn Host, bool)>;
 /// A registered wake handler of [`Setup::on_wake`].
 pub type WakeFn = Rc<dyn Fn(&dyn Host)>;
 /// A registered dispose callback.
 pub type DisposeFn = Box<dyn FnOnce(&dyn Host)>;
 
-/// What a plugin registers (the C-ABI form of P.1's `Setup`). The instance keeps it until the host destroys it.
+/// What a plugin's setup registers through, for the length of setup (the C-ABI form of P.1's `Setup`).
 ///
 /// A callback reaches the host only through the [`Read`] or [`Host`] it is called with, so a render cannot have
 /// effects. Setup itself reaches it through [`Setup::host`], which no callback can keep:
@@ -1852,6 +1906,21 @@ pub type DisposeFn = Box<dyn FnOnce(&dyn Host)>;
 /// }
 /// ```
 ///
+/// Nor can a callback keep the setup itself, which lends that host:
+///
+/// ```compile_fail,E0521
+/// # use opencode_plugin_abi::*;
+/// fn setup(setup: &mut Setup) -> Result<(), String> {
+///     let other = Box::leak(Box::new(Registered::new("x", None))).setup();
+///     let original = std::mem::replace(setup, other);
+///     setup.slot(Placement::append("home.footer"), move |_, _, _| {
+///         original.host().toast(Toast::new(Variant::Info, "from render"));
+///         Render::Hide
+///     });
+///     Ok(())
+/// }
+/// ```
+///
 /// ```
 /// # use opencode_plugin_abi::*;
 /// fn setup(setup: &mut Setup) -> Result<(), String> {
@@ -1862,7 +1931,147 @@ pub type DisposeFn = Box<dyn FnOnce(&dyn Host)>;
 ///     Ok(())
 /// }
 /// ```
-pub struct Setup {
+pub struct Setup<'a> {
+    registered: &'a mut Registered,
+    /// The host of setup; the registration's own without one.
+    host: Option<&'a dyn Host>,
+}
+
+impl Setup<'_> {
+    pub fn id(&self) -> &str {
+        &self.registered.manifest.id
+    }
+
+    /// The `options` of the plugin's `plugins` entry, as JSON text.
+    pub fn options(&self) -> Option<&str> {
+        self.registered.options.as_deref()
+    }
+
+    /// The host while setup runs: its reads, and effects that wait until setup has returned, on the host's one effect
+    /// queue.
+    pub fn host(&self) -> &dyn Host {
+        self.host.unwrap_or(&self.registered.host)
+    }
+
+    /// What wakes the host from the plugin's own threads; `None` from a host older than 1.3.
+    pub fn waker(&self) -> Option<Waker> {
+        self.registered.waker.clone()
+    }
+
+    /// Runs `run` when the host disposes the plugin: on deactivation, unload, reload, when setup fails after it was
+    /// registered, and when the host exits. Callbacks run in reverse order, before the plugin's state drops, each
+    /// whatever the others do. Stop the plugin's threads here or when its state drops.
+    pub fn on_dispose(&mut self, run: impl FnOnce(&dyn Host) + 'static) {
+        self.registered.disposers.push(Box::new(run));
+    }
+
+    /// Declares storage key `key`; [`Read::storage_get`] and [`Host::storage_set`] accept declared keys only.
+    pub fn storage_key(&mut self, key: &str) {
+        self.host().declare_storage_key(key);
+        self.registered.manifest.storage.push(key.to_owned());
+    }
+
+    /// Registers a command; `run` receives the input it was dispatched with, such as the slash command's text after
+    /// its name. A command without `palette` and `slash` is hidden: a click or [`Host::dispatch`] runs it.
+    pub fn command(&mut self, command: Command, run: impl Fn(&dyn Host, Option<&str>) + 'static) {
+        self.registered.commands.push(Rc::new(run));
+        self.registered.manifest.commands.push(command);
+    }
+
+    /// Calls `run` with each server event whose type is one of `types` (such as `session.execution.failed`), after
+    /// the host has applied it, as the HTTP API's [`V2Event`].
+    pub fn on_event(&mut self, types: &[&str], run: impl Fn(&dyn Host, &V2Event) + 'static) {
+        self.registered.manifest.events.push(types.iter().map(|kind| (*kind).to_owned()).collect());
+        self.registered.events.push(Rc::new(run));
+    }
+
+    /// Renders Markdown fences of `language`.
+    pub fn code_block(&mut self, language: &str, render: impl Fn(&dyn Read, &Fence) -> Fenced + 'static) {
+        self.registered.manifest.fences.push(language.to_owned());
+        self.registered.fences.push((language.to_owned(), Rc::new(render)));
+    }
+
+    /// Claims a place in the slot tree. `render` reads what it shows and returns it; it gets the slot's input and
+    /// what changed since it last rendered, and runs again with each change batch, each change of the host's own
+    /// state, and each wake.
+    pub fn slot(&mut self, at: Placement, render: impl Fn(&dyn Read, &SlotInput, &Changed) -> Render + 'static) {
+        self.registered.manifest.slots.push(SlotClaim { kind: at.kind, path: at.path, render: true, mount: false });
+        self.registered.slots.push(SlotFn::Render(Rc::new(render)));
+    }
+
+    /// Calls `run` for each mount of the claim registered last at `at` (by [`Setup::slot`]): with `true` and the slot's
+    /// input as the host mounts it, before it first renders, and with `false` as it unmounts it. A plugin keeps state
+    /// per mount here, such as a request a mount starts. A slot mounts its claims again when its input changes, and
+    /// the next mount may come before the last one goes. Without a claim at `at`, it registers one that draws nothing.
+    pub fn on_mount(&mut self, at: Placement, run: impl Fn(&dyn Host, &SlotInput, bool) + 'static) {
+        let found = self
+            .registered
+            .manifest
+            .slots
+            .iter()
+            .rposition(|claim| claim.render && claim.kind == at.kind && claim.path == at.path);
+        let claim = match found {
+            Some(claim) => claim,
+            None => {
+                self.slot(at, |_, _, _| Render::Hide);
+                self.registered.manifest.slots.len() - 1
+            }
+        };
+        self.registered.manifest.slots[claim].mount = true;
+        self.registered.mounts.push((claim, Rc::new(run)));
+    }
+
+    /// Claims a place in the slot tree with rows, as ABI 1.3 did; `render` receives the slot's session ID, if it
+    /// has one.
+    pub fn slot_lines(&mut self, kind: SlotKind, path: &str, render: impl Fn(Option<&str>) -> Vec<Line> + 'static) {
+        self.registered.manifest.slots.push(SlotClaim { kind, path: path.to_owned(), render: false, mount: false });
+        self.registered.slots.push(SlotFn::Lines(Box::new(render)));
+    }
+
+    /// Registers route `name`, which [`Host::navigate`] opens as [`Route::Plugin`]. The host draws what `render`
+    /// returns centered in a scroll box on the page background; `render` runs again with each change, as a slot
+    /// claim's does. Commands of [`Scope::Route`] run while it shows.
+    pub fn route(&mut self, name: &str, render: impl Fn(&dyn Read, &Changed) -> Render + 'static) {
+        self.registered.manifest.routes.push(name.to_owned());
+        self.registered.manifest.render_routes.push(name.to_owned());
+        self.registered.views.push((name.to_owned(), Rc::new(render)));
+    }
+
+    /// Calls `run` for each mount of route `name` (TS `onMount` of the route's page): with `true` as the host mounts
+    /// it, before it first renders, however it was opened, and with `false` as it unmounts it. A route starts its
+    /// requests here. The host may mount it again before the last mount goes.
+    pub fn on_route_mount(&mut self, name: &str, run: impl Fn(&dyn Host, bool) + 'static) {
+        if !self.registered.manifest.route_mounts.iter().any(|known| known == name) {
+            self.registered.manifest.route_mounts.push(name.to_owned());
+        }
+        self.registered.route_mounts.push((name.to_owned(), Rc::new(run)));
+    }
+
+    /// Registers a route of rows, as ABI 1.3 did.
+    pub fn route_lines(&mut self, name: &str, render: impl Fn() -> Vec<Line> + 'static) {
+        self.registered.manifest.routes.push(name.to_owned());
+        self.registered.routes.push((name.to_owned(), Box::new(render)));
+    }
+
+    /// Calls `run` on the UI thread after the plugin's [`Waker`] woke the host, before its claims and routes render
+    /// again with [`Changed::woken`]: a plugin whose thread keeps time asks the host for what a render cannot, such as
+    /// a [`Host::fetch`]. Wakes that arrive together run it once.
+    pub fn on_wake(&mut self, run: impl Fn(&dyn Host) + 'static) {
+        self.registered.manifest.wake = true;
+        self.registered.wakes.push(Rc::new(run));
+    }
+
+    /// Calls `run` with each reply to the plugin's [`Host::fetch`]es, on the UI thread, with the request's ID. A reply
+    /// that arrives after the plugin was disposed is dropped.
+    pub fn on_reply(&mut self, run: impl Fn(&dyn Host, RequestId, Result<serde_json::Value, String>) + 'static) {
+        self.registered.replies.push(Rc::new(run));
+    }
+}
+
+/// What a plugin registered, which the host keeps while the plugin is active; the plugin registers through a
+/// [`Setup`] it lends.
+#[doc(hidden)]
+pub struct Registered {
     manifest: Manifest,
     options: Option<String>,
     host: HostHandle,
@@ -1876,159 +2085,58 @@ pub struct Setup {
     replies: Vec<ReplyFn>,
     /// The mount handlers, with the index of their claim in [`Manifest::slots`].
     mounts: Vec<(usize, MountFn)>,
+    route_mounts: Vec<(String, RouteMountFn)>,
     wakes: Vec<WakeFn>,
     disposers: Vec<DisposeFn>,
 }
 
-impl Setup {
-    pub fn id(&self) -> &str {
-        &self.manifest.id
+impl Registered {
+    /// The registrations of a plugin the host runs in process: without an ABI host, so a [`Setup`] of its own
+    /// ([`Registered::setup`]) answers every request with an error.
+    pub fn new(id: &str, options: Option<String>) -> Self {
+        Self::with_host(id, options, std::ptr::null())
     }
 
-    /// The `options` of the plugin's `plugins` entry, as JSON text.
-    pub fn options(&self) -> Option<&str> {
-        self.options.as_deref()
+    /// The setup that registers here, with the registration's own host.
+    pub fn setup(&mut self) -> Setup<'_> {
+        Setup { registered: self, host: None }
     }
 
-    /// The host while setup runs: its reads, and effects that wait until setup has returned. In process it answers
-    /// nothing yet.
-    pub fn host(&self) -> &dyn Host {
-        &self.host
-    }
-
-    /// What wakes the host from the plugin's own threads; `None` from a host older than 1.3.
-    pub fn waker(&self) -> Option<Waker> {
-        self.waker
-    }
-
-    /// Runs `run` when the host disposes the plugin: on deactivation, unload and reload. Callbacks run in reverse
-    /// order, before the plugin's state drops. Stop the plugin's threads here or when its state drops.
-    pub fn on_dispose(&mut self, run: impl FnOnce(&dyn Host) + 'static) {
-        self.disposers.push(Box::new(run));
-    }
-
-    /// Declares storage key `key`; [`Read::storage_get`] and [`Host::storage_set`] accept declared keys only.
-    pub fn storage_key(&mut self, key: &str) {
-        let _ = self.host.request(&HostRequest::StorageKey { key: key.to_owned() });
-        self.manifest.storage.push(key.to_owned());
-    }
-
-    /// Registers a command; `run` receives the input it was dispatched with, such as the slash command's text after
-    /// its name. A command without `palette` and `slash` is hidden: a click or [`Host::dispatch`] runs it.
-    pub fn command(&mut self, command: Command, run: impl Fn(&dyn Host, Option<&str>) + 'static) {
-        self.commands.push(Rc::new(run));
-        self.manifest.commands.push(command);
-    }
-
-    /// Calls `run` with each server event whose type is one of `types` (such as `session.execution.failed`), after
-    /// the host has applied it, as the HTTP API's [`V2Event`].
-    pub fn on_event(&mut self, types: &[&str], run: impl Fn(&dyn Host, &V2Event) + 'static) {
-        self.manifest.events.push(types.iter().map(|kind| (*kind).to_owned()).collect());
-        self.events.push(Rc::new(run));
-    }
-
-    /// Renders Markdown fences of `language`.
-    pub fn code_block(&mut self, language: &str, render: impl Fn(&dyn Read, &Fence) -> Fenced + 'static) {
-        self.manifest.fences.push(language.to_owned());
-        self.fences.push((language.to_owned(), Rc::new(render)));
-    }
-
-    /// Claims a place in the slot tree. `render` reads what it shows and returns it; it gets the slot's input and
-    /// what changed since it last rendered, and runs again with each change batch, each change of the host's own
-    /// state, and each wake.
-    pub fn slot(&mut self, at: Placement, render: impl Fn(&dyn Read, &SlotInput, &Changed) -> Render + 'static) {
-        self.manifest.slots.push(SlotClaim { kind: at.kind, path: at.path, render: true, mount: false });
-        self.slots.push(SlotFn::Render(Rc::new(render)));
-    }
-
-    /// Calls `run` for each mount of the claim registered last at `at` (by [`Setup::slot`]): with `true` and the slot's
-    /// input as the host mounts it, before it first renders, and with `false` as it unmounts it. A plugin keeps state
-    /// per mount here, such as a request a mount starts. A slot mounts its claims again when its input changes, and
-    /// the next mount may come before the last one goes. Without a claim at `at`, it registers one that draws nothing.
-    pub fn on_mount(&mut self, at: Placement, run: impl Fn(&dyn Host, &SlotInput, bool) + 'static) {
-        let found = self
-            .manifest
-            .slots
-            .iter()
-            .rposition(|claim| claim.render && claim.kind == at.kind && claim.path == at.path);
-        let claim = match found {
-            Some(claim) => claim,
-            None => {
-                self.slot(at, |_, _, _| Render::Hide);
-                self.manifest.slots.len() - 1
-            }
-        };
-        self.manifest.slots[claim].mount = true;
-        self.mounts.push((claim, Rc::new(run)));
-    }
-
-    /// Claims a place in the slot tree with rows, as ABI 1.3 did; `render` receives the slot's session ID, if it
-    /// has one.
-    pub fn slot_lines(&mut self, kind: SlotKind, path: &str, render: impl Fn(Option<&str>) -> Vec<Line> + 'static) {
-        self.manifest.slots.push(SlotClaim { kind, path: path.to_owned(), render: false, mount: false });
-        self.slots.push(SlotFn::Lines(Box::new(render)));
-    }
-
-    /// Registers route `name`, which [`Host::navigate`] opens as [`Route::Plugin`]. The host draws what `render`
-    /// returns centered in a scroll box on the page background; `render` runs again with each change, as a slot
-    /// claim's does. Commands of [`Scope::Route`] run while it shows.
-    pub fn route(&mut self, name: &str, render: impl Fn(&dyn Read, &Changed) -> Render + 'static) {
-        self.manifest.routes.push(name.to_owned());
-        self.manifest.render_routes.push(name.to_owned());
-        self.views.push((name.to_owned(), Rc::new(render)));
-    }
-
-    /// Registers a route of rows, as ABI 1.3 did.
-    pub fn route_lines(&mut self, name: &str, render: impl Fn() -> Vec<Line> + 'static) {
-        self.manifest.routes.push(name.to_owned());
-        self.routes.push((name.to_owned(), Box::new(render)));
-    }
-
-    /// Calls `run` on the UI thread after the plugin's [`Waker`] woke the host, before its claims and routes render
-    /// again with [`Changed::woken`]: a plugin whose thread keeps time asks the host for what a render cannot, such as
-    /// a [`Host::fetch`]. Wakes that arrive together run it once.
-    pub fn on_wake(&mut self, run: impl Fn(&dyn Host) + 'static) {
-        self.manifest.wake = true;
-        self.wakes.push(Rc::new(run));
-    }
-
-    /// Calls `run` with each reply to the plugin's [`Host::fetch`]es, on the UI thread, with the request's ID. A reply
-    /// that arrives after the plugin was disposed is dropped.
-    pub fn on_reply(&mut self, run: impl Fn(&dyn Host, RequestId, Result<serde_json::Value, String>) + 'static) {
-        self.replies.push(Rc::new(run));
-    }
-
-    /// A setup for a plugin the host runs in process: it has no ABI host, so [`Setup::host`] answers every request
-    /// with an error. The host takes the registrations back with [`Setup::manifest`] and [`Setup::fences`].
-    #[doc(hidden)]
-    pub fn in_process(id: &str, options: Option<String>) -> Self {
-        Self::new(id, options, std::ptr::null())
+    /// The setup that registers here, with `host`.
+    pub fn setup_with<'a>(&'a mut self, host: &'a dyn Host) -> Setup<'a> {
+        Setup { registered: self, host: Some(host) }
     }
 
     /// Sets what [`Setup::waker`] returns, for a plugin the host runs in process.
-    #[doc(hidden)]
     pub fn set_waker(&mut self, waker: Waker) {
         self.waker = Some(waker);
     }
 
-    /// The dispose callbacks, in registration order, for a plugin the host runs in process.
-    #[doc(hidden)]
-    pub fn take_disposers(&mut self) -> Vec<DisposeFn> {
-        std::mem::take(&mut self.disposers)
+    /// Disposes the plugin: revokes its waker, waiting for the wakes in progress, then runs the dispose callbacks, last
+    /// registered first, with `host` (the registration's own without one). A callback that panics does not keep the
+    /// others from running.
+    pub fn dispose(&mut self, host: Option<&dyn Host>) {
+        if let Some(waker) = &self.waker {
+            waker.revoke();
+        }
+        let (disposers, own) = (std::mem::take(&mut self.disposers), self.host);
+        let host = host.unwrap_or(&own);
+        for run in disposers.into_iter().rev() {
+            if let Err(panic) = catch_unwind(AssertUnwindSafe(|| run(host))) {
+                own.log(Level::Error, &format!("a dispose callback panicked: {}", panic_message(&*panic)));
+            }
+        }
     }
 
-    #[doc(hidden)]
     pub fn manifest(&self) -> &Manifest {
         &self.manifest
     }
 
-    #[doc(hidden)]
     pub fn fences(&self) -> &[(String, FenceFn)] {
         &self.fences
     }
 
     /// The slot claims of [`Setup::slot`], with their index in [`Manifest::slots`] and their renders.
-    #[doc(hidden)]
     pub fn renders(&self) -> impl Iterator<Item = (usize, &SlotClaim, &RenderFn)> {
         self.manifest.slots.iter().zip(&self.slots).enumerate().filter_map(|(index, (claim, render))| match render {
             SlotFn::Render(render) => Some((index, claim, render)),
@@ -2037,42 +2145,41 @@ impl Setup {
     }
 
     /// The mount handlers, with the index of their claim in [`Manifest::slots`].
-    #[doc(hidden)]
     pub fn mounts(&self) -> &[(usize, MountFn)] {
         &self.mounts
     }
 
+    /// The route mount handlers, with their route.
+    pub fn route_mounts(&self) -> &[(String, RouteMountFn)] {
+        &self.route_mounts
+    }
+
     /// The commands, with their runs.
-    #[doc(hidden)]
     pub fn commands(&self) -> impl Iterator<Item = (&Command, &CommandFn)> {
         self.manifest.commands.iter().zip(&self.commands)
     }
 
     /// The routes of [`Setup::route`], with their renders.
-    #[doc(hidden)]
     pub fn routes(&self) -> &[(String, RouteFn)] {
         &self.views
     }
 
     /// The wake handlers.
-    #[doc(hidden)]
     pub fn wakes(&self) -> &[WakeFn] {
         &self.wakes
     }
 
     /// The reply handlers.
-    #[doc(hidden)]
     pub fn replies(&self) -> &[ReplyFn] {
         &self.replies
     }
 
     /// The event handlers, with the types each takes.
-    #[doc(hidden)]
     pub fn events(&self) -> impl Iterator<Item = (&[String], &EventFn)> {
         self.manifest.events.iter().map(Vec::as_slice).zip(&self.events)
     }
 
-    fn new(id: &str, options: Option<String>, host: *const HostApi) -> Self {
+    fn with_host(id: &str, options: Option<String>, host: *const HostApi) -> Self {
         let host = HostHandle { api: host };
         Self {
             manifest: Manifest { id: id.to_owned(), render: RENDER, ..Manifest::default() },
@@ -2087,15 +2194,10 @@ impl Setup {
             events: Vec::new(),
             replies: Vec::new(),
             mounts: Vec::new(),
+            route_mounts: Vec::new(),
             wakes: Vec::new(),
             disposers: Vec::new(),
         }
-    }
-
-    /// Runs the dispose callbacks, last registered first.
-    fn dispose(&mut self) {
-        let disposers = std::mem::take(&mut self.disposers);
-        disposers.into_iter().rev().for_each(|run| run(&self.host));
     }
 
     fn handle(&self, request: Request) -> Result<serde_json::Value, String> {
@@ -2146,6 +2248,11 @@ impl Setup {
             }
             Request::Wake => {
                 self.wakes.iter().for_each(|run| run(&self.host));
+                Ok(serde_json::Value::Null)
+            }
+            Request::RouteMount { name, mounted } => {
+                let runs = self.route_mounts.iter().filter(|(route, _)| *route == name);
+                runs.for_each(|(_, run)| run(&self.host, mounted));
                 Ok(serde_json::Value::Null)
             }
         }
@@ -2224,6 +2331,9 @@ macro_rules! export_plugin {
 pub mod runtime {
     use super::*;
 
+    /// Runs `setup`. When it fails or panics, the dispose callbacks it registered run before this returns, while the
+    /// host is still valid.
+    ///
     /// # Safety
     /// The host's pointers must be valid as [`PluginApi::create`] documents.
     pub unsafe fn create(
@@ -2241,12 +2351,22 @@ pub mod runtime {
         // SAFETY: the host passes valid pointers for the length of the call.
         let options = unsafe { options.as_slice() };
         guard(out, || {
-            let options = (!options.is_empty()).then(|| String::from_utf8_lossy(options).into_owned());
-            let mut registered = Setup::new(id, options, host);
             if instance.is_null() {
                 return Err("no instance pointer".to_owned());
             }
-            setup(&mut registered)?;
+            let options = (!options.is_empty()).then(|| String::from_utf8_lossy(options).into_owned());
+            let mut registered = Registered::with_host(id, options, host);
+            match catch_unwind(AssertUnwindSafe(|| setup(&mut registered.setup()))) {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    registered.dispose(None);
+                    return Err(error);
+                }
+                Err(panic) => {
+                    registered.dispose(None);
+                    std::panic::resume_unwind(panic);
+                }
+            }
             let manifest = serde_json::to_vec(&registered.manifest).map_err(|error| error.to_string())?;
             // SAFETY: `instance` is non-null and valid for writes during the call.
             unsafe { *instance = Box::into_raw(Box::new(registered)).cast() };
@@ -2267,11 +2387,11 @@ pub mod runtime {
     /// `instance` must come from [`create`] and not be destroyed, or be null.
     pub unsafe extern "C" fn call(instance: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
         // SAFETY: as documented.
-        let (setup, request) = unsafe { (instance.cast::<Setup>().as_ref(), request.as_slice()) };
+        let (registered, request) = unsafe { (instance.cast::<Registered>().as_ref(), request.as_slice()) };
         guard(out, || {
-            let setup = setup.ok_or("no instance")?;
+            let registered = registered.ok_or("no instance")?;
             let request: Request = serde_json::from_slice(request).map_err(|error| error.to_string())?;
-            let value = setup.handle(request)?;
+            let value = registered.handle(request)?;
             serde_json::to_vec(&value).map_err(|error| error.to_string())
         })
     }
@@ -2283,10 +2403,10 @@ pub mod runtime {
             return;
         }
         // SAFETY: as documented.
-        let mut setup = unsafe { Box::from_raw(instance.cast::<Setup>()) };
+        let mut registered = unsafe { Box::from_raw(instance.cast::<Registered>()) };
         let _ = catch_unwind(AssertUnwindSafe(move || {
-            setup.dispose();
-            drop(setup);
+            registered.dispose(None);
+            drop(registered);
         }));
     }
 
@@ -2326,6 +2446,15 @@ pub fn panic_message(panic: &(dyn std::any::Any + Send)) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The registrations a test's setup made.
+    impl std::ops::Deref for Setup<'_> {
+        type Target = Registered;
+
+        fn deref(&self) -> &Registered {
+            self.registered
+        }
+    }
 
     unsafe extern "C" fn call(_: *mut c_void, _: Bytes, out: *mut Owned) -> i32 {
         unsafe { *out = Owned::EMPTY };
@@ -2470,7 +2599,8 @@ mod tests {
         assert_eq!(old.render, 0);
         assert!(!serde_json::to_string(&old).unwrap().contains("render"));
 
-        let mut setup = Setup::in_process("new", None);
+        let mut registered = Registered::new("new", None);
+        let mut setup = registered.setup();
         setup.code_block("x", |_, fence| match fence.key {
             0 => Fenced::Code,
             _ => Fenced::Lines { lines: vec![vec![Span::new(fence.code.clone())]], fg: None, drag: false },
@@ -2544,7 +2674,8 @@ mod tests {
         assert_eq!(serde_json::to_string(&old).unwrap(), r#"{"kind":"append","path":"home.footer"}"#);
         assert_eq!(serde_json::to_string(&HostRequest::Model).unwrap(), r#"{"type":"model"}"#);
 
-        let mut setup = Setup::in_process("new", None);
+        let mut registered = Registered::new("new", None);
+        let mut setup = registered.setup();
         setup.slot_lines(SlotKind::Append, "home.footer", |_| Vec::new());
         setup.slot(Placement::append("sidebar.content"), |_, input, _| match &input.session_id {
             Some(_) => Render::Hide,
@@ -2571,7 +2702,8 @@ mod tests {
         let dispatch = HostRequest::Dispatch { name: "x.open".into(), input: None };
         assert_eq!(serde_json::to_string(&dispatch).unwrap(), r#"{"type":"dispatch","name":"x.open"}"#);
 
-        let mut setup = Setup::in_process("new", None);
+        let mut registered = Registered::new("new", None);
+        let mut setup = registered.setup();
         let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
         let into = seen.clone();
         setup.command(Command { name: "x.hidden".into(), ..Command::default() }, move |host, input| {
@@ -2615,7 +2747,8 @@ mod tests {
         assert_eq!(serde_json::to_string(&node).unwrap(), json);
         assert_eq!(serde_json::from_str::<Node>(json).unwrap(), node);
 
-        let mut setup = Setup::in_process("new", None);
+        let mut registered = Registered::new("new", None);
+        let mut setup = registered.setup();
         assert!(!serde_json::to_string(setup.manifest()).unwrap().contains("events"));
         let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
         let into = seen.clone();
@@ -2697,7 +2830,8 @@ mod tests {
         assert_eq!(serde_json::to_string(&node).unwrap(), json);
         assert_eq!(serde_json::from_str::<Node>(json).unwrap(), node);
 
-        let mut setup = Setup::in_process("new", None);
+        let mut registered = Registered::new("new", None);
+        let mut setup = registered.setup();
         setup.route("page", |_, changed| match changed.woken {
             true => Render::Hide,
             false => Render::Keep,
@@ -2752,12 +2886,180 @@ mod tests {
         }
     }
 
+    thread_local! {
+        /// The dispose callbacks that ran on this thread, in order.
+        static DISPOSED: std::cell::RefCell<Vec<&'static str>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    /// Registers three dispose callbacks, the middle one panicking, then fails as `options` says.
+    fn failing(setup: &mut Setup) -> Result<(), String> {
+        let disposed = |name: &'static str| move |_: &dyn Host| DISPOSED.with(|ran| ran.borrow_mut().push(name));
+        setup.on_dispose(disposed("first"));
+        setup.on_dispose(|_| panic!("a dispose callback panicked"));
+        setup.on_dispose(disposed("last"));
+        match setup.options() {
+            Some("error") => Err("setup failed".to_owned()),
+            Some("panic") => panic!("setup panicked"),
+            _ => Ok(()),
+        }
+    }
+
+    // Expected: a setup that fails or panics runs the dispose callbacks it registered before `create` returns, last
+    // first, and one that panics keeps none of the others from running; `destroy` runs them the same.
+    #[test]
+    fn a_failed_setup_disposes_what_it_registered() {
+        let hook = std::panic::take_hook();
+        for (options, status, message) in
+            [("error", ERROR, "setup failed"), ("panic", PANIC, "setup panicked"), ("", OK, "")]
+        {
+            let (mut instance, mut out) = (std::ptr::null_mut(), Owned::EMPTY);
+            // SAFETY: valid pointers for the call; `out` is freed by the same library.
+            let (got, bytes) = unsafe {
+                let got = runtime::create(
+                    "x",
+                    failing,
+                    std::ptr::null(),
+                    Bytes::new(options.as_bytes()),
+                    &mut instance,
+                    &mut out,
+                );
+                let bytes = out.to_vec();
+                runtime::free(out);
+                (got, bytes)
+            };
+            assert_eq!(got, status, "{options}");
+            if status != OK {
+                assert_eq!(String::from_utf8(bytes).unwrap(), message);
+                assert!(instance.is_null());
+            } else {
+                assert!(DISPOSED.with(|ran| ran.borrow().is_empty()));
+                // SAFETY: `instance` came from `create`.
+                unsafe { runtime::destroy(instance) };
+            }
+            assert_eq!(DISPOSED.with(|ran| ran.take()), ["last", "first"], "{options}");
+        }
+        std::panic::set_hook(hook);
+    }
+
+    // Expected: a route mount handler is listed in the manifest once per route, and `RouteMount` runs the handlers of
+    // its route with whether it mounted; a manifest without one leaves the field out.
+    #[test]
+    fn route_mounts_round_trip() {
+        let mut registered = Registered::new("new", None);
+        let mut setup = registered.setup();
+        assert!(!serde_json::to_string(setup.manifest()).unwrap().contains("route_mounts"));
+        let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
+        for tag in ["a", "b"] {
+            let into = seen.clone();
+            setup.on_route_mount("page", move |_, mounted| into.borrow_mut().push((tag, mounted)));
+        }
+        assert_eq!(setup.manifest().route_mounts, ["page"]);
+        let request: Request = serde_json::from_str(r#"{"type":"route-mount","name":"page","mounted":true}"#).unwrap();
+        assert_eq!(setup.handle(request).unwrap(), serde_json::Value::Null);
+        setup.handle(Request::RouteMount { name: "other".into(), mounted: true }).unwrap();
+        setup.handle(Request::RouteMount { name: "page".into(), mounted: false }).unwrap();
+        assert_eq!(*seen.borrow(), [("a", true), ("b", true), ("a", false), ("b", false)]);
+    }
+
+    thread_local! {
+        /// The requests the recording host got on this thread.
+        static REQUESTS: std::cell::RefCell<Vec<HostRequest>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    /// A host that records each request and refuses `storage-merge` when `ctx` is non-null, as a host older than it.
+    unsafe extern "C" fn record(ctx: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
+        // SAFETY: the plugin passes the request for the length of the call.
+        let request: HostRequest = serde_json::from_slice(unsafe { request.as_slice() }).unwrap();
+        let refused = !ctx.is_null() && matches!(request, HostRequest::StorageMerge { .. });
+        let answer = match &request {
+            HostRequest::StorageGet { .. } => serde_json::json!("{\"sibling\":1}"),
+            _ => serde_json::Value::Null,
+        };
+        REQUESTS.with(|requests| requests.borrow_mut().push(request));
+        let bytes = if refused { b"unknown variant".to_vec() } else { serde_json::to_vec(&answer).unwrap() };
+        // SAFETY: `out` is valid for writes during the call.
+        unsafe { *out = Owned::from_vec(bytes) };
+        if refused { ERROR } else { OK }
+    }
+
+    unsafe extern "C" fn release(owned: Owned) {
+        // SAFETY: `record` made it.
+        drop(unsafe { owned.into_vec() });
+    }
+
+    // Expected: `storage_merge` over the C ABI sends only the fields, for the host to set under its storage lock; a
+    // host that does not know the request gets the whole object through `storage-set`, as before.
+    #[test]
+    fn storage_merge_sends_the_fields_and_falls_back_on_an_older_host() {
+        let fields = serde_json::json!({ "open": false }).as_object().cloned().unwrap();
+        for ctx in [std::ptr::null_mut(), std::ptr::dangling_mut::<u8>().cast()] {
+            let api = HostApi {
+                size: size_of::<HostApi>(),
+                major: 1,
+                minor: 4,
+                ctx,
+                call: Some(record),
+                free: Some(release),
+                theme_mode: None,
+                wake: None,
+            };
+            HostHandle { api: &api }.storage_merge("view", fields.clone());
+        }
+        let merge = HostRequest::StorageMerge { key: "view".into(), fields };
+        assert_eq!(
+            REQUESTS.with(|requests| requests.take()),
+            [
+                merge.clone(),
+                merge,
+                HostRequest::StorageGet { key: "view".into() },
+                HostRequest::StorageSet { key: "view".into(), value: "{\"sibling\":1,\"open\":false}".into() },
+            ]
+        );
+    }
+
+    // Expected: revoking a waker waits for the wake in progress, and every clone's later wake does nothing.
+    #[test]
+    fn a_revoked_waker_waits_for_the_wake_in_progress_and_does_nothing_after() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::mpsc;
+        let (entered, enter) = mpsc::channel();
+        let (leave, left) = mpsc::channel::<()>();
+        let left = std::sync::Mutex::new(left);
+        let wakes = Arc::new(AtomicUsize::new(0));
+        let counted = wakes.clone();
+        let waker = Waker::new(move || {
+            entered.send(()).unwrap();
+            left.lock().unwrap().recv().unwrap();
+            counted.fetch_add(1, Ordering::SeqCst);
+        });
+        let thread = std::thread::spawn({
+            let waker = waker.clone();
+            move || waker.wake()
+        });
+        enter.recv().unwrap();
+        let revoked = std::thread::spawn({
+            let (waker, wakes) = (waker.clone(), wakes.clone());
+            move || {
+                waker.revoke();
+                wakes.load(Ordering::SeqCst)
+            }
+        });
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        assert!(!revoked.is_finished(), "revoke returned while a wake was in progress");
+        leave.send(()).unwrap();
+        assert_eq!(revoked.join().unwrap(), 1);
+        thread.join().unwrap();
+        waker.wake();
+        assert_eq!(wakes.load(Ordering::SeqCst), 1);
+    }
+
     // Expected: a mount handler attaches to the claim registered last at its placement, which the manifest marks, and
     // a `Mount` request runs it with the input and whether the claim mounted; without such a claim it registers a
     // hidden one. The prompt input and the requests of step 7 keep their JSON optional.
     #[test]
     fn mounts_and_the_prompt_input_round_trip() {
-        let mut setup = Setup::in_process("new", None);
+        let mut registered = Registered::new("new", None);
+        let mut setup = registered.setup();
         setup.slot(Placement::append("prompt.footer"), |_, _, _| Render::Hide);
         let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
         let into = seen.clone();
@@ -2799,7 +3101,8 @@ mod tests {
         assert_eq!(serde_json::from_str::<Dialog>(json).unwrap(), select);
         assert_eq!(serde_json::to_string(&Request::Wake).unwrap(), r#"{"type":"wake"}"#);
 
-        let mut setup = Setup::in_process("new", None);
+        let mut registered = Registered::new("new", None);
+        let mut setup = registered.setup();
         assert!(!serde_json::to_string(setup.manifest()).unwrap().contains("wake"));
         let runs = Rc::new(std::cell::Cell::new(0));
         for _ in 0..2 {

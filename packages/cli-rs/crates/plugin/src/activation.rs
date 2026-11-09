@@ -2,10 +2,7 @@
 //! host renders again with [`abi::Changed::woken`] when the plugin's thread wakes it, and after each of its commands
 //! and event handlers, whose state a render may show.
 
-#![allow(unsafe_code)]
-
 use std::cell::{Cell, RefCell};
-use std::ffi::c_void;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
@@ -64,11 +61,11 @@ impl Activation {
         })
     }
 
-    /// What wakes this activation from any thread, for a plugin that runs in process. It is valid while the
-    /// activation lives, which is past the plugin's dispose callbacks.
+    /// What wakes this activation from any thread, for a plugin that runs in process. It keeps the activation's `Wake`,
+    /// so it never reaches freed memory; disposing the plugin revokes it.
     pub fn waker(&self) -> abi::Waker {
-        // SAFETY: `wake_in_process` posts through `Wake`, which is `Sync`, and the activation keeps it alive.
-        unsafe { abi::Waker::new(Arc::as_ptr(&self.wake).cast_mut().cast(), wake_in_process) }
+        let wake = self.wake.clone();
+        abi::Waker::new(move || wake.post())
     }
 
     pub fn dispose(&self) {
@@ -89,7 +86,10 @@ impl Activation {
     /// A wake arrived: runs the plugin's wake handlers, or renders the claims again at once.
     fn woken(&self) {
         let run = self.on_wake.borrow().clone();
-        match run.filter(|_| !self.disposed()) {
+        if self.disposed() {
+            return self.wake.pending.store(false, Ordering::Release);
+        }
+        match run {
             Some(run) => {
                 self.wake.pending.store(false, Ordering::Release);
                 run();
@@ -143,6 +143,19 @@ pub(crate) struct Wake {
     proxy: Option<AppProxy>,
 }
 
+#[cfg(test)]
+thread_local! {
+    /// The wakes dropped on this thread, which tests compare across a disposal.
+    pub(crate) static FREED: Cell<usize> = const { Cell::new(0) };
+}
+
+#[cfg(test)]
+impl Drop for Wake {
+    fn drop(&mut self) {
+        FREED.with(|freed| freed.set(freed.get() + 1));
+    }
+}
+
 /// Posted by a wake: the activation whose claims draw again.
 struct Woken(u64);
 
@@ -181,13 +194,5 @@ impl Wake {
                 }
             }
         }));
-    }
-}
-
-/// The wake of an in-process plugin's [`abi::Waker`], on any thread.
-unsafe extern "C" fn wake_in_process(data: *mut c_void) {
-    // SAFETY: `data` is the activation's `Wake`, which lives while the plugin may wake it.
-    if let Some(wake) = unsafe { data.cast::<Wake>().as_ref() } {
-        wake.post();
     }
 }

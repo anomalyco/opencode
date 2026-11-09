@@ -1,7 +1,8 @@
 //! `/stats` (E.14, row F11, `feature-plugins/system/stats.tsx`, `stats-data.ts`,
 //! `@opencode/util/activity-calendar`): `stats.open` opens the `stats` plugin route, which reads this year's
-//! usage from `GET /api/experimental/session/stats` and shows it as a poster: the token total in large digits,
-//! a calendar of active days, the best streak, the active days, and the sessions. Escape goes back.
+//! usage from `GET /api/experimental/session/stats` each time it mounts, however it was opened, and shows it as a
+//! poster: the token total in large digits, a calendar of active days, the best streak, the active days, and the
+//! sessions. Escape goes back.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -30,6 +31,8 @@ pub fn plugin() -> abi::Plugin {
 struct State {
     /// The route `stats.open` left, which escape goes back to.
     previous: RefCell<abi::Route>,
+    /// The mounts of the route: a remount mounts the next before the last goes.
+    mounts: Cell<usize>,
     /// The request whose reply the route waits for.
     request: Cell<Option<RequestId>>,
     stats: RefCell<Option<Result<SessionStatsInfo, String>>>,
@@ -50,6 +53,20 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         };
         Render::Show(node)
     });
+    // As TS's `StatsPage` resource: each mount asks afresh, and a reply after the route went is dropped.
+    let mounted = state.clone();
+    setup.on_route_mount(ROUTE, move |host, mount| {
+        if mount {
+            mounted.mounts.set(mounted.mounts.get() + 1);
+            *mounted.stats.borrow_mut() = None;
+            mounted.request.set(Some(host.fetch(request())));
+            return;
+        }
+        mounted.mounts.set(mounted.mounts.get().saturating_sub(1));
+        if mounted.mounts.get() == 0 {
+            mounted.request.set(None);
+        }
+    });
     let (open, id) = (state.clone(), setup.id().to_owned());
     let command = Command {
         name: "stats.open".to_owned(),
@@ -65,8 +82,6 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             return;
         }
         *open.previous.borrow_mut() = current;
-        *open.stats.borrow_mut() = None;
-        open.request.set(Some(host.fetch(request())));
         host.navigate(abi::Route::Plugin { id: id.clone(), name: ROUTE.to_owned() });
     });
     let back = state.clone();
