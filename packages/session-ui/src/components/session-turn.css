@@ -326,7 +326,9 @@
   height: 22px;
   padding: 0 3px 0 6px;
   gap: 6px;
-  border: 0.5px solid var(--v2-border-border-muted);
+  /* An inset shadow rather than a border, so the line stays half a pixel on standard-density screens too. */
+  border: 0;
+  box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
   border-radius: 6px;
   cursor: default;
   font-family: var(--v2-font-family-sans);
