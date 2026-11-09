@@ -15,9 +15,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use opencode_api::generated::{
-    SessionID, SessionInboxInfo, SessionInboxItem, SessionInfoOutcome, SessionViewInput, V2Event,
-};
+use opencode_api::generated::{SessionID, SessionInboxInfo, SessionInboxItem, SessionInfoOutcome, SessionViewInput};
 use opencode_local::storage::Storage;
 use opencode_store::{Changes, SessionStatus, State};
 use opencode_ui::bind;
@@ -27,6 +25,7 @@ use opentui::keymap::Condition;
 use serde::{Deserialize, Serialize};
 
 use crate::app::Tui;
+use crate::features::events::Handled;
 use crate::routes::Route;
 use crate::routes::session::messages::list::ScrollAnchor;
 use model::{Closed, History, NEW_SESSION_TAB_TITLE, Tab, Unread};
@@ -416,16 +415,16 @@ fn title_of(tui: &Tui, session: &str, persisted: Option<String>, fallback: Optio
 }
 
 /// A server event the tabs follow. Returns whether it navigated away from a deleted session.
-pub fn event(tui: &Tui, event: &V2Event) -> bool {
+pub(crate) fn event(tui: &Tui, event: &Handled) -> bool {
     match event {
-        V2Event::SessionDeleted(event) => {
+        Handled::SessionDeleted(event) => {
             let target = tui.data.read(|state| state.root(&event.data.session_id)).0;
             tui.tabs.closed.borrow_mut().retain(|entry| entry.tab.session_id != target);
             let before = tui.route();
             remove(tui, &event.data.session_id.0, Tabs::enabled(tui));
             before != tui.route()
         }
-        V2Event::SessionInboxEnqueued(event) => {
+        Handled::SessionInboxEnqueued(event) => {
             if !Tabs::enabled(tui) || !matches!(event.data.item, SessionInboxItem::User(_)) {
                 return false;
             }

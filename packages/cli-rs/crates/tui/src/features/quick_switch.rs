@@ -4,13 +4,13 @@
 
 use std::rc::Rc;
 
-use opencode_api::generated::V2Event;
 use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opentui::keymap::Condition;
 
 use crate::app::Tui;
 use crate::dialogs::session_list::pins;
+use crate::features::events::Handled;
 use crate::routes::Route;
 
 pub fn install(tui: &Rc<Tui>) {
@@ -54,8 +54,8 @@ pub fn quick_switch(tui: &Tui, slot: usize) {
 }
 
 /// `session.deleted` prunes the session's pin (`prune`).
-pub(crate) fn event(tui: &Tui, event: &V2Event) {
-    if let V2Event::SessionDeleted(event) = event {
+pub(crate) fn event(tui: &Tui, event: &Handled) {
+    if let Handled::SessionDeleted(event) = event {
         // The file loses the pin even when only another client had it.
         pins::prune(tui, &event.data.session_id);
     }
