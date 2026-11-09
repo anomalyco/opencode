@@ -74,6 +74,10 @@ impl Handler for Agent {
                 let prompt = content_blocks(params)?;
                 Ok(service.prompt(id, prompt, &context.cancel, context.responded))
             }),
+            // Interim extension until ACP has native mid-turn steering.
+            "_session/steering" => steering(&params).map(|(id, prompt)| -> BoxFuture<'static, _> {
+                Box::pin(async move { service.steer(&id, &prompt).await })
+            }),
             _ => return None,
         };
         Some(match work {
@@ -211,6 +215,24 @@ fn config_value(params: &Value) -> Result<Value, RpcError> {
         Some(Value::String(value)) => Ok(json!(value)),
         Some(Value::Bool(value)) if params.get("type") == Some(&json!("boolean")) => Ok(json!(value)),
         other => Err(expected("value", "string", other)),
+    }
+}
+
+/// `parseSteering`: `{ sessionId: string, prompt: unknown[] }`, failing with Effect Schema's message as `details`.
+fn steering(params: &Value) -> Result<(String, Vec<Value>), RpcError> {
+    let fail = |message: &str| RpcError::invalid_params(json!({ "details": message }), "");
+    let Some(object) = params.as_object() else {
+        return Err(fail("Expected object"));
+    };
+    let id = match object.get("sessionId") {
+        None => return Err(fail("Missing key\n  at [\"sessionId\"]")),
+        Some(Value::String(id)) => id.clone(),
+        Some(_) => return Err(fail("Expected string\n  at [\"sessionId\"]")),
+    };
+    match object.get("prompt") {
+        None => Err(fail("Missing key\n  at [\"prompt\"]")),
+        Some(Value::Array(prompt)) => Ok((id, prompt.clone())),
+        Some(_) => Err(fail("Expected array\n  at [\"prompt\"]")),
     }
 }
 

@@ -324,6 +324,8 @@ pub struct State {
     pub agents: Vec<Value>,
     pub commands: Vec<Value>,
     pub plugins: Vec<Value>,
+    /// Sessions `/api/session/active` lists as running.
+    pub active: Vec<String>,
 }
 
 impl State {
@@ -458,6 +460,11 @@ impl Server {
                 }
                 self.state().sessions.insert(id, session.clone());
                 json_response(200, json!({ "data": session }))
+            }
+            ("GET", ["api", "session", "active"]) => {
+                let active: serde_json::Map<String, Value> =
+                    self.state().active.iter().map(|id| (id.clone(), json!({ "type": "running" }))).collect();
+                json_response(200, json!({ "data": active }))
             }
             ("GET", ["api", "session", id]) => match self.state().sessions.get(*id) {
                 Some(session) => json_response(200, json!({ "data": session })),
