@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test"
-import { auth, refreshAuthorization, type FetchLike } from "@modelcontextprotocol/client"
+import { auth, OAuthError, refreshAuthorization, type FetchLike } from "@modelcontextprotocol/client"
 import path from "path"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Credential } from "@opencode/core/credential"
@@ -852,5 +852,55 @@ describe("MCP OAuth refresh across processes", () => {
       "r2",
       endpoint.server.url.href,
     ])
+  })
+
+  test("hands a rejected refresh back to the SDK and keeps the credential", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch: () => Response.json({ error: "invalid_grant", error_description: "revoked" }, { status: 400 }),
+    })
+    await using processes = await setup(server.url.href)
+    const current = await connection(processes.first, server.url.href)
+
+    const error = await refresh(server, current.fetchFn, "r1")
+      .catch((error: unknown) => error)
+      .finally(() => server.stop(true))
+
+    expect(error).toBeInstanceOf(OAuthError)
+    expect(error instanceof OAuthError && [error.code, error.message]).toEqual(["invalid_grant", "revoked"])
+    expect(await stored(processes.second)).toEqual({ access: "a1", refresh: "r1" })
+  })
+
+  test("answers invalid_grant without a request when the credential was signed out", async () => {
+    const endpoint = rotatingServer()
+    endpoint.release()
+    await using processes = await setup(endpoint.server.url.href)
+    const current = await connection(processes.first, endpoint.server.url.href)
+    await processes.second.runPromise(Credential.Service.use((credentials) => credentials.remove(id)))
+
+    const error = await refresh(endpoint.server, current.fetchFn, "r1")
+      .catch((error: unknown) => error)
+      .finally(() => endpoint.server.stop(true))
+
+    expect(error instanceof OAuthError && error.code).toBe("invalid_grant")
+    expect(endpoint.sent).toEqual([])
+  })
+
+  test("releases the lock when the token endpoint is unreachable", async () => {
+    const endpoint = rotatingServer()
+    endpoint.release()
+    const unreachable = Bun.serve({ port: 0, fetch: () => new Response(null, { status: 404 }) })
+    unreachable.stop(true)
+    await using processes = await setup(endpoint.server.url.href)
+    const current = await connection(processes.first, endpoint.server.url.href)
+
+    const error = await refresh(unreachable, current.fetchFn, "r1").catch((error: unknown) => error)
+    expect(error).toBeInstanceOf(Error)
+    expect(error).not.toBeInstanceOf(OAuthError)
+    expect(await stored(processes.first)).toEqual({ access: "a1", refresh: "r1" })
+
+    const tokens = await refresh(endpoint.server, current.fetchFn, "r1").finally(() => endpoint.server.stop(true))
+    expect([tokens.access_token, tokens.refresh_token]).toEqual(["a2", "r2"])
+    expect(await stored(processes.second)).toEqual({ access: "a2", refresh: "r2" })
   })
 })
