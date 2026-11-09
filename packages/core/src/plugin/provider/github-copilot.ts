@@ -164,9 +164,12 @@ export const GithubCopilotPlugin = define({
     const cache = yield* SharedCache.Service
     const http = yield* HttpClient.HttpClient
     const outbound = yield* FetchHttpClient.Fetch
+    // Until the first load finishes, route to the endpoint stored at login so an Enterprise or data-residency
+    // credential is never sent to the default host.
+    const stored = (yield* activeCredential(ctx, "github-copilot")).credential
     const discovered = yield* ProviderRefresh.start({
       integrationID: "github-copilot",
-      initial: {} as {
+      initial: (stored?.type === "oauth" ? { baseURL: copilotBaseURL(stored.metadata) } : {}) as {
         readonly baseURL?: string
         readonly token?: string
         readonly models?: CopilotModels.Snapshot

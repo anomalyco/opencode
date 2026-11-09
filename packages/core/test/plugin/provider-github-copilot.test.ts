@@ -199,6 +199,29 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
+  it.effect("routes requests to the stored endpoint while the model list is still loading", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      yield* connect({ enterpriseUrl: "acme.ghe.com" })
+      yield* providers.transform((editor) => {
+        editor.models.update(Provider.ID.githubCopilot, Model.ID.make("gpt-4.1"), (model) => {
+          model.package = "@opencode/ai/providers/openai"
+        })
+      })
+      yield* addPlugin().pipe(
+        Effect.provideService(
+          HttpClient.HttpClient,
+          HttpClient.make(() => Effect.never),
+        ),
+      )
+
+      expect(required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-4.1"))).settings).toMatchObject({
+        baseURL: "https://copilot-api.acme.ghe.com",
+      })
+    }),
+  )
+
   it.effect("registers GitHub Copilot device OAuth", () =>
     Effect.gen(function* () {
       yield* addPlugin()
