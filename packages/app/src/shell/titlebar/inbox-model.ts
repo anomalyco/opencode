@@ -502,6 +502,11 @@ export function inboxArchived(entry: InboxEntry) {
   return entry.session.time.archived !== undefined
 }
 
+/** The rows the tab strip's unread dot covers: waiting on an answer, or holding a result nobody has read. */
+export function inboxUnread(entry: InboxEntry) {
+  return entry.status !== "ready" && entry.status !== "working"
+}
+
 export function inboxBusy(status: InboxStatus) {
   return status === "working" || status === "approval" || status === "input"
 }
