@@ -43,6 +43,7 @@ async fn initialize_advertises_capabilities_and_offers_terminal_auth_only_when_a
                 "_meta": { "opencode/child-session-updates": true },
             },
             "agentInfo": { "name": "OpenCode" },
+            "_meta": { "steering": { "supported": true } },
         }),
     );
     assert_eq!(
@@ -329,4 +330,34 @@ async fn answers_protocol_errors_and_unknown_methods() {
             "data": { "_errors": [], "cwd": { "_errors": ["Invalid input: expected string, received undefined"] } },
         })
     );
+}
+
+#[tokio::test]
+async fn close_removes_a_new_session_that_was_never_prompted_and_keeps_every_other_session() {
+    let acp = start_wire(WireOptions::default()).await;
+    acp.server.state().sessions.insert("ses_saved".to_owned(), make_session("ses_saved", "/workspace"));
+    acp.initialize(json!({})).await;
+    let mut ids = Vec::new();
+    for _ in 0..3 {
+        ids.push(acp.new_session("/workspace", json!([])).await.unwrap()["sessionId"].as_str().unwrap().to_owned());
+    }
+    let (unused, prompted, elsewhere) = (&ids[0], &ids[1], &ids[2]);
+    acp.prompt(prompted, "hello").await.unwrap();
+    acp.server.state().messages.insert(
+        elsewhere.clone(),
+        vec![json!({ "id": "msg_1", "type": "user", "text": "hi", "time": { "created": 1 } })],
+    );
+    acp.request("session/load", json!({ "cwd": "/workspace", "sessionId": "ses_saved", "mcpServers": [] }))
+        .await
+        .unwrap();
+
+    for id in [unused.as_str(), prompted, elsewhere, "ses_saved"] {
+        assert_eq!(acp.request("session/close", json!({ "sessionId": id })).await.unwrap(), json!({}));
+    }
+
+    let state = acp.server.state();
+    assert!(!state.sessions.contains_key(unused));
+    assert!(state.sessions.contains_key(prompted));
+    assert!(state.sessions.contains_key(elsewhere));
+    assert!(state.sessions.contains_key("ses_saved"));
 }
