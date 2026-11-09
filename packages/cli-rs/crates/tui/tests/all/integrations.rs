@@ -117,7 +117,11 @@ fn fake(integrations: Value, status: Arc<Mutex<Value>>, mode: &'static str) -> F
         }
         ("POST", path) if path.ends_with("/connect/oauth") => {
             let mut attempt = attempt();
-            attempt["mode"] = json!(mode);
+            // `paste`: an automatic attempt that also takes the redirect URL.
+            attempt["mode"] = json!(if mode == "paste" { "auto" } else { mode });
+            if mode == "paste" {
+                attempt["paste"] = json!(true);
+            }
             (200, list(DIRECTORY, attempt))
         }
         ("POST", path) if path.ends_with("/connect/command") => {
@@ -406,6 +410,36 @@ fn a_pasted_code_completes_the_oauth() {
             ),
         ]
     );
+}
+
+#[test]
+fn a_pasted_redirect_url_completes_an_automatic_oauth() {
+    let kit = Kit::with(integrations(), "paste");
+    kit.connect();
+    kit.down(1);
+    kit.app.press("return");
+    kit.wait_for("Connect OpenAI");
+    kit.app.press("return");
+    let screen = kit.wait_for("Redirect URL");
+    assert!(screen.contains("Waiting for authorization… Press enter to open the"), "{screen}");
+    assert!(screen.contains("copy link"), "{screen}");
+    // Enter on an empty field opens the link.
+    kit.app.press("return");
+    assert!(kit.app.wait_until(WAIT, || kit.opened.borrow().len() == 1), "{:?}", kit.opened.borrow());
+    kit.app.type_text("http://localhost:1455/cb?code=abc");
+    kit.app.press("return");
+    let writes = kit.wait_writes(2);
+    assert_eq!(
+        writes[1],
+        write(
+            "POST",
+            &format!("/api/integration/openai/connect/oauth/att_1/complete?{QUERY}"),
+            json!({ "code": "http://localhost:1455/cb?code=abc" })
+        )
+    );
+    // The attempt still settles through its status.
+    *kit.status.lock().unwrap() = json!({ "status": "complete", "time": { "created": 1, "expires": 2 } });
+    assert!(kit.poll_until(|| kit.app.text().contains("Connected OpenAI")), "{}", kit.app.text());
 }
 
 #[test]
