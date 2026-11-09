@@ -56,6 +56,10 @@ it.live("does not watch existing ancestors of a missing plugin import", () =>
     )
     // A later config activation can retry the source without a broad recovery watch.
     expect(yield* modules.load(operation)).toMatchObject({ id: "appeared" })
+    const count = targets.length
+    yield* Effect.promise(() => Bun.write(entry, 'export { default } from "../shared/missing.ts"'))
+    expect(Exit.isFailure(yield* modules.load(operation).pipe(Effect.exit))).toBe(true)
+    expect(targets).toHaveLength(count)
   }),
 )
 

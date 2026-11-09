@@ -65,11 +65,11 @@ export function source(target: string, version?: string): Source {
   return { type: "package", target, ...(version ? { version } : {}) }
 }
 
-// Missing imports may point outside the plugin, even under a filesystem root.
-// Retry on the next source/config activation without watching unrelated writes.
+// Dependency recovery directories may contain the engine log or unrelated work.
+// Watch source files only; retry missing imports on the next config activation.
 function watchTarget(file: string): Promise<Watcher.WatchInput | undefined> {
   return stat(file).then(
-    (info) => ({ path: file, type: info.isDirectory() ? "directory" : "file" }),
+    (info) => (info.isFile() ? { path: file, type: "file" } : undefined),
     (cause) => {
       if (cause.code === "ENOENT" || cause.code === "ENOTDIR") return undefined
       throw cause
