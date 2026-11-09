@@ -42,6 +42,9 @@ import { ShellTool } from "@opencode/core/tool/plugin/shell"
 import { ToolOutput } from "@opencode/core/tool-output"
 import { Tool } from "@opencode/core/tool"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { PersistentPty } from "@opencode/core/persistent-pty"
+import { disabledPersistentPtyLayer } from "./fixture/persistent-pty"
+import { fakeDaemon } from "./fixture/persistent-pty-daemon"
 import { tmpdir, tmpdirScoped, withTempDir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
@@ -142,12 +145,15 @@ const shellPluginSupervisor = makeLocationNode({
     Session.node,
     Job.node,
     Shell.node,
+    Shell.daemonNode,
     ShellSelect.node,
     Tool.node,
   ],
 })
 
 const nodes = LayerNode.group([
+  PersistentPty.node,
+  Shell.daemonNode,
   Database.node,
   Bus.node,
   Job.node,
@@ -158,21 +164,61 @@ const nodes = LayerNode.group([
   FSUtil.node,
   Global.node,
 ])
-const replacements = [
+const daemonReplacements = [
   SessionExecution.node.replace(executionNode),
   Permission.node.replace(permission),
   Global.node.replace(tempGlobalLayer),
   offlineModels,
 ] satisfies LayerNode.Replacements
+// Most suites spawn commands from the server, so CI starts no daemon for them; `parity` runs a subset on both.
+const replacements = [
+  ...daemonReplacements,
+  PersistentPty.node.replace(disabledPersistentPtyLayer),
+] satisfies LayerNode.Replacements
 const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
 const it = testEffect(
   AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(shellPluginSupervisor)]),
+)
+// On the real process daemon (when its binary is compatible; otherwise this falls back to spawning).
+const daemonIt = testEffect(
+  AppNodeBuilder.build(nodes, [...daemonReplacements, PluginSupervisor.node.replace(shellPluginSupervisor)]),
+)
+const parity = {
+  live: (name: string, body: Parameters<typeof it.live>[1], options?: Parameters<typeof it.live>[2]) => {
+    it.live(`${name} (spawned)`, body, options)
+    daemonIt.live(`${name} (daemon)`, body, options)
+  },
+  skip: (name: string, body: Parameters<typeof it.live>[1], options?: Parameters<typeof it.live>[2]) =>
+    it.live.skip(name, body, options),
+}
+// On an in-process fake daemon, so daemon-only behavior is covered without the real binary.
+let fake: Effect.Success<ReturnType<typeof fakeDaemon>> | undefined
+const fakeDaemonIt = testEffect(
+  AppNodeBuilder.build(nodes, [
+    ...daemonReplacements,
+    PluginSupervisor.node.replace(shellPluginSupervisor),
+    PersistentPty.node.replace(
+      makeGlobalNode({
+        service: PersistentPty.Service,
+        layer: Layer.unwrap(
+          fakeDaemon().pipe(
+            Effect.map((daemon) => {
+              fake = daemon
+              return PersistentPty.layerWith(daemon.options)
+            }),
+          ),
+        ),
+        deps: [Bus.node, Global.node],
+      }),
+    ),
+  ]),
 )
 const permissionIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([nodes, PermissionSaved.node]), [
     SessionExecution.node.replace(executionNode),
     Global.node.replace(tempGlobalLayer),
     PluginSupervisor.node.replace(shellPluginSupervisor),
+    PersistentPty.node.replace(disabledPersistentPtyLayer),
     offlineModels,
   ]),
 )
@@ -184,6 +230,19 @@ const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
 })
 
 const isWindows = process.platform === "win32"
+
+// The process daemon keeps a finished command's zombie until the command is forgotten.
+const running = (pid: number) => {
+  try {
+    process.kill(pid, 0)
+  } catch {
+    return false
+  }
+  return !Bun.spawnSync(["ps", "-o", "stat=", "-p", String(pid)])
+    .stdout.toString()
+    .trim()
+    .startsWith("Z")
+}
 const cwdCommand = isWindows ? "(Get-Location).Path; Start-Sleep -Milliseconds 100" : "pwd"
 const helloCommand = isWindows ? "[Console]::Out.Write('hello'); Start-Sleep -Milliseconds 100" : "printf hello"
 const stderrCommand = isWindows
@@ -1199,6 +1258,7 @@ describe("ShellTool", () => {
             Session.node,
             Job.node,
             Shell.node,
+            Shell.daemonNode,
             ShellSelect.node,
             Tool.node,
           ],
@@ -1268,7 +1328,7 @@ describe("ShellTool", () => {
     )
   }
 
-  it.live("keeps non-zero exits useful", () =>
+  parity.live("keeps non-zero exits useful", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
@@ -1558,7 +1618,7 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
-  it.live("uses configured line limits", () =>
+  parity.live("uses configured line limits", () =>
     withTempDir((tmp) => {
       reset()
       return Effect.gen(function* () {
@@ -1742,7 +1802,79 @@ describe("ShellTool", () => {
     }),
   )
 
-  it.live("returns the shell id and PID for a background command", () =>
+  fakeDaemonIt.live("keeps a background daemon command's job across a Location reload and reports how it ended", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        reset()
+        const sessions = yield* Session.Service
+        const jobs = yield* Job.Service
+        const bus = yield* Bus.Service
+        const locations = yield* LocationServiceMap.Service
+        const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
+        yield* sessions.create({ id: sessionID, title: "shell test", location, model: sessionModel })
+        const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+          Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
+          Stream.take(2),
+          Stream.runCollect,
+          Effect.forkScoped({ startImmediately: true }),
+        )
+        const started = yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          yield* plugins.awaitActivation
+          const registry = yield* Tool.Service
+          const shell = yield* Shell.Service
+          const run = (id: string) =>
+            Effect.gen(function* () {
+              const settled = yield* executeTool(registry, call({ command: "work", background: true }, id))
+              return yield* shell.get(ID.make(String(settled.metadata?.shellID)))
+            })
+          return { finishing: yield* run("call-finishing"), cancelled: yield* run("call-cancelled") }
+        }).pipe(Effect.provide(locations.get(location)))
+        const process = (info: { file: string }) => {
+          const found = fake?.processes.find((item) => item.pipe?.output_path === info.file)
+          if (!found) throw new Error("no daemon process for the command")
+          return found.id
+        }
+
+        // A reload closes the Location and boots its replacement, which takes the commands back.
+        yield* locations.invalidate(location)
+        const replacement = yield* Effect.gen(function* () {
+          return yield* Shell.Service
+        }).pipe(Effect.provide(locations.get(location)))
+        expect((yield* replacement.list()).map((info) => info.id).toSorted()).toEqual(
+          [started.finishing.id, started.cancelled.id].toSorted(),
+        )
+        expect((yield* jobs.get(started.finishing.id))?.status).toBe("running")
+
+        // Cancelling the session's job still stops its command.
+        yield* jobs.cancel(started.cancelled.id)
+        while (!fake?.ops.includes("signal")) yield* Effect.promise(() => Bun.sleep(2))
+        expect(fake?.requests).toContainEqual(
+          expect.objectContaining({ op: "signal", id: process(started.cancelled), signal: "SIGTERM" }),
+        )
+
+        fake?.output(process(started.finishing), "done\n")
+        fake?.exit(process(started.finishing), 0)
+        const notices = Array.from(yield* Fiber.join(admitted)).map((event) => event.data.item.payload)
+        expect(notices).toContainEqual(
+          expect.objectContaining({
+            text: expect.stringContaining("done"),
+            metadata: expect.objectContaining({ shellID: started.finishing.id, state: "completed", exit: 0 }),
+          }),
+        )
+        expect(notices).toContainEqual(
+          expect.objectContaining({
+            metadata: expect.objectContaining({ shellID: started.cancelled.id, state: "cancelled" }),
+          }),
+        )
+        expect((yield* jobs.get(started.finishing.id))?.status).toBe("completed")
+        expect((yield* replacement.get(started.finishing.id)).status).toBe("exited")
+        yield* locations.invalidate(location)
+      }),
+    ),
+  )
+
+  parity.live("returns the shell id and PID for a background command", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
@@ -1910,8 +2042,8 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
-  const signalTest = isWindows ? it.live.skip : it.live
-  signalTest(
+  const signalParity = isWindows ? parity.skip : parity.live
+  signalParity(
     "escalates a shell timeout when the ready process ignores SIGTERM",
     () =>
       Effect.gen(function* () {
@@ -1946,7 +2078,7 @@ describe("ShellTool", () => {
                   })
                   const pid = info.pid
                   if (pid === undefined) throw new Error("Expected shell PID")
-                  expect(() => process.kill(pid, 0)).toThrow()
+                  expect(running(pid)).toBe(false)
                 }),
               (info) =>
                 Effect.try(() => {
@@ -2009,7 +2141,7 @@ describe("ShellTool", () => {
     )
   }
 
-  it.live("backgrounds a foreground command when the session is signaled", () =>
+  parity.live("backgrounds a foreground command when the session is signaled", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
@@ -2089,7 +2221,7 @@ describe("ShellTool stopped", () => {
       return { shellID, exit, result: Exit.isSuccess(exit) ? exit.value : undefined }
     })
 
-  const test = isWindows ? it.live.skip : it.live
+  const test = isWindows ? parity.skip : parity.live
 
   test("stops a command the user stopped, keeps its file and fails the call with the tail, file and shell ID", () =>
     withTempDir((tmp) => {

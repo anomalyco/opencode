@@ -46,3 +46,20 @@ describe("ShellResult.interrupted", () => {
     })
   })
 })
+
+describe("ShellResult.output", () => {
+  test("reports a command killed without an exit code or signal of its own", () => {
+    const lost = ShellResult.output({
+      info: info("killed"),
+      capture: { output: "partial\n", truncated: false, killed: "Command was killed: the process daemon stopped" },
+    })
+    expect(ShellResult.notice(lost)).toBe("Command was killed: the process daemon stopped")
+    expect(ShellResult.metadata(lost)).toMatchObject({ killed: true })
+  })
+
+  test("keeps a removed command's result unchanged", () => {
+    const removed = ShellResult.output({ info: info("killed"), capture: undefined })
+    expect(removed).toEqual({ output: ShellResult.unavailable.output, truncated: false })
+    expect(ShellResult.notice(removed)).toBeUndefined()
+  })
+})
