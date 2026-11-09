@@ -194,7 +194,7 @@ fn view(cx: &Rc<DialogCx>, tui: Weak<Tui>, live: &Rc<Live>, page: Theme) -> View
         TuiCommand::inline("o", copy_command(Copied::Output)).title("Copy output").group("Execute"),
     ]));
 
-    opencode_ui::dialog::layout_view(cx, &head, &body, Some(&foot), DIALOG_INSET, 1)
+    opencode_ui::dialog::layout_view(cx, &head, &body, Some(&foot), DIALOG_INSET, 0)
 }
 
 /// What the dialog shows of a call.
