@@ -140,7 +140,12 @@ export const Plugin = define({
     // `last` is when the latest request or ping was sent, since a provider's cache lifetime starts when a request reads or
     // writes it, not when its response ends.
     // `overran` marks a loop resumed by a request that was still running when the ping came due.
-    const next = (current: { last: number; expires: number; settings: Settings }, now: number, sessionID: Session.ID, overran: boolean) => {
+    const next = (
+      current: { last: number; expires: number; settings: Settings },
+      now: number,
+      sessionID: Session.ID,
+      overran: boolean,
+    ) => {
       if (now >= current.expires) return Next.Expired()
       const due = Math.min(current.last + Duration.toMillis(current.settings.interval), current.expires)
       if (now < due) return Next.Wait({ until: due })
