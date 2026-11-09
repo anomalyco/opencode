@@ -7,6 +7,7 @@ import { Agent } from "../agent.js"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { CodeModeInstructions } from "../codemode/instructions.js"
 import { Database } from "../database/database.js"
+import { Flag } from "../flag.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Instructions } from "../instructions/index.js"
@@ -40,6 +41,8 @@ export interface Loaded {
   readonly initial: ReadonlyArray<Instructions.Rendered>
   readonly messages: ReadonlyArray<SessionMessage.Info>
   readonly tools: Tool.Snapshot
+  /** Whether attached videos reach the model, from the `rich_media` flag. */
+  readonly video: boolean
 }
 
 /**
@@ -53,6 +56,8 @@ export interface Interface {
   readonly select: (sessionID: SessionSchema.ID) => Effect.Effect<Selection, AgentNotFoundError>
   /** Resolves the model and active history for that selection. */
   readonly load: (selection: Selection) => Effect.Effect<Loaded, SessionRunnerModel.Error>
+  /** Whether attached videos reach the model, from the `rich_media` flag. */
+  readonly video: Effect.Effect<boolean>
   readonly resolveModel: (
     session: SessionSchema.Info,
     request: { readonly kind: SessionRequestKind; readonly agent: Agent.ID },
@@ -79,6 +84,8 @@ const layer = Layer.effect(
     const builtins = yield* InstructionBuiltIns.Service
     const model = yield* Model.Service
     const db = (yield* Database.Service).db
+    const flags = yield* Flag.Service
+    const video = flags.enabled("rich_media")
     const discovery = yield* InstructionDiscovery.Service
     const entries = yield* InstructionEntry.Service
     const location = yield* Location.Service
@@ -190,10 +197,11 @@ const layer = Layer.effect(
         initial: history.initial,
         messages: history.entries.map((entry) => entry.message),
         tools: selection.tools,
+        video: yield* video,
       }
     })
 
-    return Service.of({ select, load, resolveModel, selectTitle, request })
+    return Service.of({ select, load, video, resolveModel, selectTitle, request })
   }),
 )
 
@@ -219,6 +227,7 @@ export const node = makeLocationNode({
     Agent.node,
     Model.node,
     Database.node,
+    Flag.node,
     InstructionBuiltIns.node,
     InstructionDiscovery.node,
     InstructionEntry.node,

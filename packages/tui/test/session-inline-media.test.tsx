@@ -16,7 +16,7 @@ const videoBase64 = Buffer.from(await Bun.file(videoFixture).arrayBuffer()).toSt
 const imageBase64 = Buffer.from(await Bun.file(imageFixture).arrayBuffer()).toString("base64")
 const videoURI = `data:video/mp4;base64,${videoBase64}`
 const imageURI = `data:image/png;base64,${imageBase64}`
-const richMedia = { experimental: { "rich-media": true } }
+const richMedia = { experimental: { rich_media: true } }
 const time = { created: 1, completed: 2 }
 const location = { directory, project: { id: "proj_test", directory, canonical: directory } }
 // The revert hides the newest message.

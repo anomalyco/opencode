@@ -18,5 +18,7 @@ export const registry = {
   codemode_vm: "Run the Code Mode execute tool on the experimental bytecode VM instead of the legacy interpreter.",
   console_watches:
     "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console, and wake sessions when they change.",
+  rich_media:
+    "Send attached videos to models that accept video input. In the TUI, also show videos inline, in a fullscreen viewer and in picture-in-picture.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry

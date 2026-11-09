@@ -588,7 +588,7 @@ export const layer = Layer.effect(
         if (ai.canCompact(request, { mechanism: "trigger" })) {
           return Effect.gen(function* () {
             const history = yield* SessionHistory.load(db, context.session.id, "local").pipe(Effect.orDie)
-            const retained = recentUserMessages(history, context.model, keep)
+            const retained = recentUserMessages(history, context.model, keep, context.video)
             const response = yield* llm.compact(request, { ...prepared.options, mechanism: "trigger" })
             return yield* toResult([...retained, Message.assistant(response.checkpoint)], response.usage)
           })
@@ -1007,6 +1007,7 @@ const transcript = (context: SessionContext.Loaded, messages: ReadonlyArray<Sess
     tools: context.tools,
     initial: context.initial,
     messages,
+    video: context.video,
   })
 
 /**
@@ -1116,13 +1117,14 @@ export const recentUserMessages = (
   messages: ReadonlyArray<SessionMessage.Info>,
   model: Pick<SessionContext.Loaded["model"], "model" | "ref" | "capabilities">,
   keep: number,
+  video = false,
 ) => {
   const users = messages
     .filter((message) => message.type === "user")
     .map((message) => ({ ...message, skills: undefined }))
   const sendable = SessionModelRequest.boundVideos(
     SessionModelRequest.boundImages(
-      SessionModelRequest.unsupportedParts(toLLMMessages(users, model.ref), model.capabilities, model.model),
+      SessionModelRequest.unsupportedParts(toLLMMessages(users, model.ref, { video }), model.capabilities, model.model),
     ),
   )
   return sendable.slice(oldestToDrop(sendable, estimateMessage, keep))

@@ -114,6 +114,7 @@ export const baseTranscript = (input: {
   readonly tools: Tool.Snapshot
   readonly initial: ReadonlyArray<Instructions.Rendered>
   readonly messages: ReadonlyArray<SessionMessage.Info>
+  readonly video: boolean
 }) => {
   const providerMetadataKey = input.model.model.route.providerMetadataKey ?? input.model.model.provider
   return {
@@ -129,7 +130,7 @@ export const baseTranscript = (input: {
         metadata: { experimental: { instructions: input.initial } },
       },
     ].filter((part) => part.text.length > 0),
-    messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey),
+    messages: toLLMMessages(input.messages, input.model.ref, { providerMetadataKey, video: input.video }),
   }
 }
 
@@ -237,11 +238,8 @@ const replaceMedia = (
 const sameParts = (next: ReadonlyArray<ContentPart>, previous: ReadonlyArray<ContentPart>) =>
   next.every((part, index) => part === previous[index])
 
-export const unsupportedParts = (
-  messages: LLMRequest["messages"],
-  capabilities: Model.Capabilities,
-  target?: Target,
-) => replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities, target))
+export const unsupportedParts = (messages: LLMRequest["messages"], capabilities: Model.Capabilities, target?: Target) =>
+  replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities, target))
 
 const mediaSizes = (messages: LLMRequest["messages"], prefix: string) =>
   messages.flatMap((message) =>

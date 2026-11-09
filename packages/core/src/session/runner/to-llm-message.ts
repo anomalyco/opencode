@@ -223,7 +223,8 @@ const modelSwitched = (message: SessionMessage.ModelSelected, model: Model.Ref):
   return [Message.effort({ effort: to.effort, previous: from.effort })]
 }
 
-function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMetadataKey: string): Message[] {
+function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, options: Options): Message[] {
+  const providerMetadataKey = options.providerMetadataKey ?? model.providerID
   switch (message.type) {
     case "agent-switched":
     case "idle":
@@ -242,7 +243,9 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
       const content = [
         ...(message.skills ?? []).flatMap((skill) => (skill.text === undefined ? [] : [Message.text(skill.text)])),
         ...(message.text === "" ? [] : [Message.text(message.text)]),
-        ...userAttachmentContent(message.files ?? []),
+        ...userAttachmentContent(
+          (message.files ?? []).filter((file) => options.video || !file.mime.startsWith("video/")),
+        ),
       ]
       if (content.length === 0) return []
       return [
@@ -293,9 +296,12 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
   }
 }
 
+type Options = {
+  readonly providerMetadataKey?: string
+  /** Sends attached videos as media, with the `rich_media` flag; otherwise they are left out, as before video support. */
+  readonly video?: boolean
+}
+
 /** Translate projected Session history into canonical @opencode/ai context. */
-export const toLLMMessages = (
-  messages: readonly SessionMessage.Info[],
-  model: Model.Ref,
-  providerMetadataKey: string = model.providerID,
-) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey))
+export const toLLMMessages = (messages: readonly SessionMessage.Info[], model: Model.Ref, options: Options = {}) =>
+  messages.flatMap((message) => toLLMMessage(message, model, options))

@@ -45,7 +45,7 @@ const probe = () => ({
  */
 export async function renderMedia(view: () => JSX.Element, richMedia = false, clock?: Clock) {
   const temporary = await tmpdir()
-  const info: Info = { experimental: { "rich-media": richMedia } }
+  const info: Info = { experimental: { rich_media: richMedia } }
   const service = {
     get: async () => info,
     update: async (update: (draft: Info) => void) => {
@@ -115,7 +115,7 @@ export async function renderMedia(view: () => JSX.Element, richMedia = false, cl
     /** Unmounts the media provider and everything inside it. */
     unmount: () => setMounted(false),
     setRichMedia: (enabled: boolean) =>
-      contexts!.config.update((draft) => (draft.experimental = { "rich-media": enabled })),
+      contexts!.config.update((draft) => (draft.experimental = { rich_media: enabled })),
     frame: () => app.captureCharFrame(),
     videos: (id?: string) =>
       descendants(id ? find(id)! : app.renderer.root).filter((node) => node instanceof VideoRenderable),

@@ -2008,7 +2008,7 @@ async function renderDiffViewer(
     info: {
       keybinds: options.keybinds,
       diffs: { source: options.source, single: options.single },
-      experimental: { "rich-media": options.richMedia === true },
+      experimental: { rich_media: options.richMedia === true },
     },
   }
   const writes: Info[] = []
