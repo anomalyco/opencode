@@ -80,6 +80,31 @@ describe("Tool local file content", () => {
       }),
     ),
   )
+  it.live("returns textual files as text instead of media", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const file = path.join(tmp.path, "notes.txt")
+        yield* Effect.tryPromise(() => fs.writeFile(file, "hello from disk"))
+        const execution = yield* run([
+          { type: "file", uri: pathToFileURL(file).href, mime: "text/plain", name: "notes.txt" },
+        ])
+        expect(execution.status).toBe("completed")
+        expect(execution.content).toEqual([
+          { type: "text", text: "[Resource notes.txt (text/plain)]\nhello from disk" },
+        ])
+      }),
+    ),
+  )
+
+  it.live("degrades unsupported file types to a note", () =>
+    Effect.gen(function* () {
+      const execution = yield* run([
+        { type: "file", uri: "file:///C:/Windows/win.ini", mime: "application/zip", name: "archive.zip" },
+      ])
+      expect(execution.status).toBe("completed")
+      expect(execution.content).toEqual([{ type: "text", text: "[archive.zip omitted: unsupported file type]" }])
+    }),
+  )
 
   it.live("leaves remote references untouched", () =>
     Effect.gen(function* () {
