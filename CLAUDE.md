@@ -41,6 +41,7 @@ Die Regeln in `AGENTS.md` (Upstream) gelten weiterhin; dieser Abschnitt ergänzt
 | Free Models / Upsell / Stats | `OPENCODE_DISABLE_FREE_MODELS`, `packages/tui/src/component/dialog-go-upsell.tsx`, `packages/cli/src/commands/handlers/stats.ts`, `packages/tui/src/util/usage-limits.ts` | entfernen bzw. abschalten |
 | Plugins / Pakete zur Laufzeit | npm-Registry, GitHub-Downloads | nur lokal installierte Plugins laden |
 | Sharing | Session-Share-Funktionen | deaktivieren |
+| ✅ ripgrep | `packages/core/src/ripgrep/binary.ts` (GitHub-Release-Download) | **erledigt:** Download abgeschaltet (`OFFLINE`), fehlendes `rg` ist ein Fehler. `rg` muss im `PATH` liegen; unter Windows `rg.exe` neben `opencode.exe` (`local-only/opencode-offline.cmd`) |
 | ✅ TUI-Syntax-Highlighting | `packages/tui/src/parsers-config.ts` (GitHub-URLs) | **erledigt:** Dateien liegen in `packages/tui/assets/tree-sitter/`, geladen über `#tree-sitter-parsers`. Mitgelieferte Sprachen: `packages/tui/script/parsers-languages.json` (übrige ohne Highlighting). Nach Upstream-Änderungen an `parsers-config.ts`: `node packages/tui/script/vendor-parsers.mjs` (Test `test/util/parsers-local.test.ts` erkennt Abweichungen) |
 
 Externe URLs in Tests, Kommentaren, Doku-Links, Schemas (`$schema`) und Fixtures sind unkritisch,

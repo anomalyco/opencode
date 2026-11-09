@@ -10,6 +10,7 @@ import { RelativePath } from "@opencode/core/schema"
 import { tmpdirScoped, withTempDir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { tempLocationLayer } from "./fixture/location"
+import { withEnv } from "./fixture/env"
 
 const it = testEffect(AppNodeBuilder.build(Ripgrep.node, [Location.node.replace(tempLocationLayer)]))
 
@@ -183,4 +184,21 @@ describe("RipgrepBinary.verify", () => {
       "ripgrep download ripgrep.tar.gz failed SHA-256 verification",
     )
   })
+})
+
+// local-only: ripgrep must never be downloaded; a missing executable is a clear error instead.
+describe("RipgrepBinary offline", () => {
+  const binary = testEffect(AppNodeBuilder.build(RipgrepBinary.node))
+
+  binary.live("fails without downloading when rg is missing", () =>
+    withTempDir((tmp) =>
+      withEnv({ PATH: tmp.path, Path: undefined }, () =>
+        Effect.gen(function* () {
+          const service = yield* RipgrepBinary.Service
+          const error = yield* service.filepath.pipe(Effect.flip)
+          expect(error.message).toContain("downloads are disabled")
+        }),
+      ),
+    ),
+  )
 })

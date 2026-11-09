@@ -39,12 +39,36 @@
     { "action": "integration.use", "resource": "ollama", "effect": "allow" },
     { "action": "provider.use", "resource": "lmstudio", "effect": "allow" },
     { "action": "integration.connect", "resource": "lmstudio", "effect": "allow" },
-    { "action": "integration.use", "resource": "lmstudio", "effect": "allow" }
+    { "action": "integration.use", "resource": "lmstudio", "effect": "allow" },
+
+    // Eigener OpenAI-kompatibler Server im Firmennetz (siehe "firma" unten)
+    { "action": "provider.use", "resource": "firma", "effect": "allow" },
+    { "action": "integration.connect", "resource": "firma", "effect": "allow" },
+    { "action": "integration.use", "resource": "firma", "effect": "allow" }
   ],
 
   // Lokale Endpunkte explizit setzen (Defaults: Ollama 127.0.0.1:11434, LM Studio 127.0.0.1:1234, vLLM 127.0.0.1:8000)
   "providers": {
     "ollama": { "settings": { "baseURL": "http://127.0.0.1:11434/v1" } },
-    "lmstudio": { "settings": { "baseURL": "http://127.0.0.1:1234/v1" } }
+    "lmstudio": { "settings": { "baseURL": "http://127.0.0.1:1234/v1" } },
+
+    // Vorlage für einen OpenAI-kompatiblen Server (vLLM, TGI, LiteLLM, llama.cpp, ...).
+    // "@ai-sdk/openai-compatible" wird auf die eingebaute Implementierung umgebogen, es wird nichts von npm geladen.
+    "firma": {
+      "name": "Firmen-LLM",
+      "package": "@ai-sdk/openai-compatible",
+      // API-Key aus dieser Umgebungsvariable lesen (entfällt, wenn der Server keinen Key verlangt)
+      "env": ["FIRMA_API_KEY"],
+      "settings": { "baseURL": "http://llm.intern:8000/v1" },
+      "models": {
+        // Schlüssel = Modell-ID, wie sie GET <baseURL>/models liefert
+        "modell-id": {
+          "name": "Firmenmodell",
+          // Ohne Tool-Calling kann opencode keine Dateien lesen oder bearbeiten
+          "capabilities": { "tools": true },
+          "limit": { "context": 32768, "output": 8192 }
+        }
+      }
+    }
   }
 }

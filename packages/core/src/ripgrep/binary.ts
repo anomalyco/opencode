@@ -12,6 +12,8 @@ import { Global } from "@opencode/util/global"
 import { which } from "../util/which.js"
 
 export namespace RipgrepBinary {
+  // local-only: the download path below stays for upstream merges but is never taken.
+  const OFFLINE = true
   const VERSION = "15.1.0"
   // SHA-256 of each release asset, from the `<asset>.sha256` files published with ripgrep 15.1.0. Release assets
   // can be replaced after publication, so a download is only written and run when it matches the pinned hash.
@@ -123,6 +125,12 @@ export namespace RipgrepBinary {
 
             const target = path.join(global.bin, `rg${process.platform === "win32" ? ".exe" : ""}`)
             if (yield* fs.isFile(target).pipe(Effect.orDie)) return target
+
+            // local-only: never download ripgrep from GitHub; it must be installed on PATH or placed at `target`.
+            if (OFFLINE)
+              return yield* Effect.fail(
+                new Error(`ripgrep not found: put the rg executable on PATH or at ${target} (downloads are disabled)`),
+              )
 
             const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
             const config = PLATFORM[platformKey]
