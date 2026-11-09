@@ -43,13 +43,15 @@ export function filename(channel = OPENCODE_CHANNEL) {
   return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
-export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platform) {
+export function defaultPort(channel = OPENCODE_CHANNEL) {
   const port = channelPort(channel)
-  // Windows hands out 0xC000-0xFFFF for outgoing connections, Hyper-V and WinNAT reserve blocks of that range at boot,
-  // and WSL mirrored networking reserves a 4096-port block that usually covers 44620-48715. A reserved port fails as in
-  // use while nothing listens on it. Moving into the 0x7000 block, below 32768, avoids all of them and keeps the low
-  // 12 bits: 0xC0DE becomes 0x70DE.
-  if (platform === "win32" && port >= 0x8000) return 0x7000 | (port & 0xfff)
+  // Keep the managed service off the ephemeral/reserved source-port ranges the OS can hand to an outgoing connection:
+  // Linux hands out 32768-60999, macOS 49152-65535, and Windows 0xC000-0xFFFF plus the Hyper-V/WinNAT/WSL reserved
+  // blocks (WSL mirrored networking alone reserves a 4096-port block that usually covers 44620-48715). A port inside
+  // those ranges fails to bind as "in use" while nothing listens on it, because the OS handed it to a connection.
+  // Moving anything at 0x8000 or above into the 0x7000 block, below 32768, avoids all of them on every platform and
+  // keeps the low 12 bits: 0xC0DE becomes 0x70DE.
+  if (port >= 0x8000) return 0x7000 | (port & 0xfff)
   return port
 }
 

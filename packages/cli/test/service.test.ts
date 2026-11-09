@@ -20,28 +20,20 @@ import { testEffect } from "../../core/test/lib/effect"
 
 const it = testEffect(NodeFileSystem.layer)
 
-test("managed service ports are stable per installation channel", () => {
-  expect(ServiceConfig.defaultPort("latest", "linux")).toBe(0xc0de)
-  expect(ServiceConfig.defaultPort("dev", "linux")).toBe(0xc0de)
-  expect(ServiceConfig.defaultPort("beta", "linux")).toBe(0xc0de)
-  expect(ServiceConfig.defaultPort("next", "linux")).toBe(0xc0de)
-  expect(ServiceConfig.defaultPort("local", "linux")).toBe(0xc0df)
-  expect(ServiceConfig.defaultPort("latest", "darwin")).toBe(0xc0de)
-  expect(ServiceConfig.defaultPort("preview-a", "linux")).toBe(ServiceConfig.defaultPort("preview-a", "linux"))
-  expect(ServiceConfig.defaultPort("preview-a", "linux")).not.toBe(ServiceConfig.defaultPort("preview-b", "linux"))
-})
-
-test("managed service ports on Windows stay below the ranges Windows and WSL reserve", () => {
-  expect(ServiceConfig.defaultPort("latest", "win32")).toBe(0x70de)
-  expect(ServiceConfig.defaultPort("dev", "win32")).toBe(0x70de)
-  expect(ServiceConfig.defaultPort("local", "win32")).toBe(0x70df)
-  const ports = Array.from({ length: 200 }, (_, index) => ({
-    windows: ServiceConfig.defaultPort(`preview-${index}`, "win32"),
-    linux: ServiceConfig.defaultPort(`preview-${index}`, "linux"),
-  }))
-  expect(ports.some((port) => port.linux >= 0x8000)).toBe(true)
-  expect(ports.every((port) => port.windows >= 10_000 && port.windows < 0x8000)).toBe(true)
-  expect(ports.filter((port) => port.linux < 0x8000 && port.windows !== port.linux)).toEqual([])
+test("managed service ports are stable per installation channel and stay below the ephemeral range", () => {
+  // Defaults must sit below 0x8000 on every platform so the OS does not hand them out as an ephemeral
+  // source port (Linux 32768-60999, macOS 49152-65535, Windows 0xC000-0xFFFF plus reserved blocks).
+  expect(ServiceConfig.defaultPort("latest")).toBe(0x70de)
+  expect(ServiceConfig.defaultPort("dev")).toBe(0x70de)
+  expect(ServiceConfig.defaultPort("beta")).toBe(0x70de)
+  expect(ServiceConfig.defaultPort("next")).toBe(0x70de)
+  expect(ServiceConfig.defaultPort("local")).toBe(0x70df)
+  // Deterministic per channel, and distinct across channels.
+  expect(ServiceConfig.defaultPort("preview-a")).toBe(ServiceConfig.defaultPort("preview-a"))
+  expect(ServiceConfig.defaultPort("preview-a")).not.toBe(ServiceConfig.defaultPort("preview-b"))
+  // Every generated default stays in range and out of the ephemeral/reserved block.
+  const ports = Array.from({ length: 200 }, (_, index) => ServiceConfig.defaultPort(`preview-${index}`))
+  expect(ports.every((port) => port >= 1 && port < 0x8000)).toBe(true)
 })
 
 test("service disabled accepts only booleans without changing configuration on invalid input", async () => {
