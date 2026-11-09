@@ -45,7 +45,11 @@ pub async fn start(command: &[OsString], cwd: &Path, print_logs: bool) -> Result
     let (program, args) =
         command.split_first().ok_or_else(|| Error("Failed to resolve standalone server command".to_owned()))?;
     let password = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(rand::random::<[u8; 32]>());
-    let mut child = Command::new(program)
+    let mut command = Command::new(program);
+    // `detached: true`: its own process group, so Ctrl+Z, which stops this client's group, leaves it running.
+    #[cfg(unix)]
+    command.process_group(0);
+    let mut child = command
         .args(args)
         .current_dir(cwd)
         // An explicit entry wins over anything inherited, so an exported OPENCODE_PASSWORD cannot
