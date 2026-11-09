@@ -1105,6 +1105,23 @@ it.effect("summary cache prefix still flattens genuinely oversized measured inpu
   }),
 )
 
+it.effect("summary preserves output room when measured input exceeds the character estimate", () =>
+  Effect.gen(function* () {
+    // One exchange leaves no retained tail; its measured size fills the window even though its text estimates low.
+    const fixture = yield* summaryFixture([
+      textUser("Latest question"),
+      measured("Latest answer", summaryWindow - 1024),
+    ])
+    expect(yield* fixture.run()).toEqual({ status: "completed" })
+    expect(requests).toHaveLength(1)
+    expect(requests[0].maxTokens).toBe(summaryBuffer)
+    expect(requests[0].tools).toEqual([])
+    expect(requests[0].messages).toHaveLength(2)
+    expect(JSON.stringify(requests[0].messages[0])).toContain("Latest question")
+    expect(JSON.stringify(requests[0].messages[0])).toContain("Latest answer")
+  }),
+)
+
 it.effect("summary measured recovery shrinks from the rejected measured size", () =>
   Effect.gen(function* () {
     const text = tokenText(summaryCeiling / 2)
