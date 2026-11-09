@@ -2083,7 +2083,14 @@ function ConsoleOutput(props: {
  * Content cut to a few lines, as the Activity timeline shows shell output and diffs. A click on the cut content shows
  * all of it. `tail` keeps the newest lines in view, as running output grows at the bottom.
  */
-function ClampedContent(props: { expanded: boolean; onExpand: () => void; tail?: boolean; children: JSX.Element }) {
+function ClampedContent(props: {
+  expanded: boolean
+  onExpand: () => void
+  tail?: boolean
+  /** The height to cut at, measured from the rendered content, in place of the fixed one. */
+  height?: (content: HTMLElement) => number | undefined
+  children: JSX.Element
+}) {
   const i18n = useI18n()
   const [overflow, setOverflow] = createSignal(false)
   const clamped = () => !props.expanded && overflow()
@@ -2092,6 +2099,9 @@ function ClampedContent(props: { expanded: boolean; onExpand: () => void; tail?:
 
   const measure = () => {
     if (!frame || !content) return
+    const height = props.height?.(content)
+
+    frame.style.setProperty("--clamped-content-height", height ? `${height}px` : null)
     setOverflow(content.offsetHeight > frame.clientHeight + 1)
 
     if (props.tail && !props.expanded) frame.scrollTop = frame.scrollHeight
@@ -2135,6 +2145,27 @@ function ClampedContent(props: { expanded: boolean; onExpand: () => void; tail?:
       <div ref={content}>{props.children}</div>
     </div>
   )
+}
+
+// A diff's preview is its first change, up to four rows, ending before the gap to the next change, so a short change
+// shows whole rather than cut into the gap row below it.
+function diffPreviewHeight(content: HTMLElement) {
+  const column = content.querySelector("diffs-container")?.shadowRoot?.querySelector("[data-content]")
+
+  if (!column) return
+  const rows = [...column.children].filter((row) => row instanceof HTMLElement)
+  const start = rows.findIndex((row) => !row.hasAttribute("data-separator"))
+
+  if (start === -1) return
+  const gap = rows.findIndex((row, index) => index > start && row.hasAttribute("data-separator"))
+  const last = rows
+    .slice(start, gap === -1 ? undefined : gap)
+    .slice(0, 4)
+    .at(-1)
+
+  if (!last) return
+
+  return last.getBoundingClientRect().bottom - content.getBoundingClientRect().top
 }
 
 // The button sits beside its section's <pre>, not inside it, so selecting and copying text never picks it up.
@@ -2890,7 +2921,11 @@ ToolRegistry.register({
                     }
                   >
                     <Show when={preview()} fallback={<Show when={disclosure.mounted()}>{views()}</Show>}>
-                      <ClampedContent expanded={disclosure.open()} onExpand={() => disclosure.setOpen(true)}>
+                      <ClampedContent
+                        expanded={disclosure.open()}
+                        onExpand={() => disclosure.setOpen(true)}
+                        height={diffPreviewHeight}
+                      >
                         {views()}
                       </ClampedContent>
                     </Show>
