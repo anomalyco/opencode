@@ -465,7 +465,7 @@ fn removing_the_last_account_disconnects() {
 #[test]
 fn an_mcp_sign_in_goes_straight_to_its_method() {
     let kit = Kit::new();
-    opencode_tui::dialogs::integration::show_auto_connect(&kit.tui, &IntegrationID("mcp_notion".into()));
+    opencode_tui::dialogs::integration::show_auto_connect(&kit.tui, &IntegrationID("mcp_notion".into()), None);
     kit.wait_for("Waiting for authorization");
     assert_eq!(
         kit.writes(),
@@ -490,7 +490,7 @@ fn a_command_connect_shows_its_output_and_completes() {
         "status": "pending", "message": "Visit example.test and enter 1234\n",
         "time": { "created": 1, "expires": 2 },
     });
-    opencode_tui::dialogs::integration::show_auto_connect(&kit.tui, &IntegrationID("mcp_cli".into()));
+    opencode_tui::dialogs::integration::show_auto_connect(&kit.tui, &IntegrationID("mcp_cli".into()), None);
     kit.wait_for("Visit example.test and enter 1234");
     kit.wait_for("Waiting for command to finish");
     *kit.status.lock().unwrap() = json!({
@@ -533,7 +533,7 @@ fn form_steps_open_a_link_take_an_own_answer_and_a_multiselect() {
         "connections": [],
     }));
     let kit = Kit::with(list, "auto");
-    opencode_tui::dialogs::integration::show_auto_connect(&kit.tui, &IntegrationID("mcp_aws".into()));
+    opencode_tui::dialogs::integration::show_auto_connect(&kit.tui, &IntegrationID("mcp_aws".into()), None);
     // "I finished" stays hidden until the link was opened.
     kit.wait_for("Open link");
     assert!(!kit.app.text().contains("I finished"));
