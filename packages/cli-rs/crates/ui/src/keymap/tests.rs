@@ -93,11 +93,11 @@ fn oracle_invalid_configs_fail_as_typescript_does() {
 
 #[test]
 fn generated_definitions_cover_every_name_once() {
-    assert_eq!(DEFINITIONS.len(), 244);
+    assert_eq!(DEFINITIONS.len(), 245);
     let mut names: Vec<&str> = DEFINITIONS.iter().map(|definition| definition.name).collect();
     names.sort_unstable();
     names.dedup();
-    assert_eq!(names.len(), 244);
+    assert_eq!(names.len(), 245);
     assert_eq!(DEFINITIONS.iter().filter(|definition| definition.name.starts_with("which-key.")).count(), 11);
     let keybinds = Keybinds::<u32>::defaults();
     assert_eq!(keybinds.get("session.share").len(), 0);
