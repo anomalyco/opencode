@@ -1,12 +1,14 @@
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Option, Schema } from "effect"
 import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { KV } from "@opencode/core/kv"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { SharedCache } from "@opencode/core/shared-cache"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(SharedCache.node))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([SharedCache.node, KV.node])))
 
 const request = HttpClientRequest.get("https://models.example/v1")
 const status = (code: number) =>
@@ -156,6 +158,113 @@ describe("SharedCache", () => {
       yield* Deferred.succeed(gate, undefined)
       expect([yield* Fiber.join(slow), yield* Fiber.join(joined)]).toEqual(["slow", "slow"])
       expect(loads.slow).toBe(1)
+    }),
+  )
+})
+
+describe("SharedCache persist", () => {
+  const codec = Schema.toCodecJson(Schema.NullOr(Schema.Array(Schema.String)))
+  const counted = (results: Array<string[] | null | string>) => {
+    const state = { loads: 0 }
+    const load = Effect.suspend(() => {
+      state.loads++
+      const result = results.shift()
+      return typeof result === "string" ? Effect.fail(result) : Effect.succeed(result ?? null)
+    })
+    return { state, load }
+  }
+
+  it.effect("starts a cold entry from the saved value, and only an infinite interval returns it without loading", () =>
+    Effect.gen(function* () {
+      const cache = yield* SharedCache.Service
+      const kv = yield* KV.Service
+      const remote = counted([["a"], "offline", ["b"]])
+
+      expect(yield* cache.get({ key: "plain", load: Effect.succeed(1) })).toBe(1)
+      expect((yield* kv.scan({ prefix: "shared-cache:" })).entries).toEqual([])
+      expect(yield* cache.get({ key: "list", persist: codec, load: remote.load })).toEqual(["a"])
+      expect(yield* kv.get("shared-cache:list")).toEqual({ value: ["a"] })
+
+      // Unread for a day, the entry leaves memory, as it does when another process starts.
+      yield* TestClock.adjust("25 hours")
+      expect(yield* cache.get({ key: "list", interval: Duration.infinity, persist: codec, load: remote.load })).toEqual(
+        ["a"],
+      )
+      expect(remote.state.loads).toBe(1)
+
+      yield* TestClock.adjust("25 hours")
+      expect(yield* cache.lookup({ key: "list", persist: codec, load: remote.load })).toEqual({
+        value: Option.some(["a"]),
+        failure: Option.some("offline"),
+      })
+      expect(yield* cache.lookup({ key: "list", persist: codec, load: remote.load })).toEqual({
+        value: Option.some(["a"]),
+        failure: Option.some("offline"),
+      })
+      expect(remote.state.loads).toBe(2)
+
+      yield* TestClock.adjust("10 minutes")
+      expect(yield* cache.lookup({ key: "list", persist: codec, load: remote.load })).toEqual({
+        value: Option.some(["b"]),
+        failure: Option.none(),
+      })
+      expect(yield* kv.get("shared-cache:list")).toEqual({ value: ["b"] })
+    }),
+  )
+
+  it.effect("saves a value only when it changed, including null", () =>
+    Effect.gen(function* () {
+      const cache = yield* SharedCache.Service
+      const kv = yield* KV.Service
+      const remote = counted([null, null, ["a"]])
+      const get = () => cache.get({ key: "list", force: true, persist: codec, load: remote.load })
+
+      expect(yield* get()).toBeNull()
+      expect(yield* kv.get("shared-cache:list")).toEqual({ value: null })
+      yield* kv.set("shared-cache:list", "untouched")
+      expect(yield* get()).toBeNull()
+      expect(yield* kv.get("shared-cache:list")).toBe("untouched")
+      expect(yield* get()).toEqual(["a"])
+      expect(yield* kv.get("shared-cache:list")).toEqual({ value: ["a"] })
+    }),
+  )
+
+  it.effect("keeps a failure without a value for its own interval", () =>
+    Effect.gen(function* () {
+      const cache = yield* SharedCache.Service
+      const remote = counted(["bad", ["a"]])
+      const get = () =>
+        cache.get({ key: "skill", interval: Duration.infinity, failureInterval: "1 minute", load: remote.load })
+
+      expect(yield* Effect.flip(get())).toBe("bad")
+      yield* TestClock.adjust("30 seconds")
+      expect(yield* Effect.flip(get())).toBe("bad")
+      expect(remote.state.loads).toBe(1)
+      yield* TestClock.adjust("30 seconds")
+      expect(yield* get()).toEqual(["a"])
+      yield* TestClock.adjust("1 hour")
+      expect(yield* get()).toEqual(["a"])
+      expect(remote.state.loads).toBe(2)
+    }),
+  )
+
+  it.effect("forgets the entries under a prefix, in memory and saved", () =>
+    Effect.gen(function* () {
+      const cache = yield* SharedCache.Service
+      const kv = yield* KV.Service
+      const remote = counted([["a"], ["b"], ["c"], ["d"]])
+      const get = (key: string) => cache.get({ key, interval: Duration.infinity, persist: codec, load: remote.load })
+
+      yield* get("console:1:config")
+      yield* get("console:1:skills")
+      yield* get("console:2:config")
+      yield* cache.forget("console:1:")
+      expect((yield* kv.scan({ prefix: "shared-cache:" })).entries.map((entry) => entry.key)).toEqual([
+        "shared-cache:console:2:config",
+      ])
+      expect(yield* get("console:2:config")).toEqual(["c"])
+      expect(yield* get("console:1:config")).toEqual(["d"])
+      expect(remote.state.loads).toBe(4)
     }),
   )
 })
