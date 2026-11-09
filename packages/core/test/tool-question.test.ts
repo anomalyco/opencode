@@ -9,7 +9,7 @@ import { Tool } from "@Mackery6969/core/tool"
 import { QuestionTool } from "@Mackery6969/core/tool/plugin/question"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { makeLocationNode } from "@Mackery6969/util/effect/app-node"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNodeReplacements } from "./lib/tool"
 
 const sessionID = Session.ID.make("ses_question_tool_test")
