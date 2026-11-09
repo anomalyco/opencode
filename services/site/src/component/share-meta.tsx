@@ -1,4 +1,5 @@
 import { Meta } from "@solidjs/meta"
+import { Show } from "solid-js"
 import { config } from "~/config"
 import { useLanguage } from "~/context/language"
 import type { Locale } from "~/lib/language"
@@ -11,6 +12,7 @@ import type { OgImage } from "~/lib/og"
  */
 export function ShareMeta(props: { title: string; description: string; image: OgImage; englishOnly?: boolean }) {
   const language = useLanguage()
+  const image = () => (props.englishOnly ? undefined : props.image.locales?.[language.locale()]) ?? props.image
   return (
     <>
       <Meta property="og:type" content="website" />
@@ -18,17 +20,29 @@ export function ShareMeta(props: { title: string; description: string; image: Og
       <Meta property="og:locale" content={OG_LOCALE[props.englishOnly ? "en" : language.locale()]} />
       <Meta property="og:title" content={props.title} />
       <Meta property="og:description" content={props.description} />
-      <Meta property="og:image" content={`${config.baseUrl}${props.image.src}`} />
+      <Meta property="og:image" content={`${config.baseUrl}${image().src}`} />
       <Meta property="og:image:type" content="image/png" />
       <Meta property="og:image:width" content="1200" />
       <Meta property="og:image:height" content="630" />
-      <Meta property="og:image:alt" content={props.image.alt} />
+      <Meta property="og:image:alt" content={image().alt} />
+      {/* Only iMessage and Discord play og:video. Everyone else shows og:image. */}
+      <Show when={props.image.video}>
+        {(video) => (
+          <>
+            <Meta property="og:video" content={`${config.baseUrl}${video()}`} />
+            <Meta property="og:video:secure_url" content={`${config.baseUrl}${video()}`} />
+            <Meta property="og:video:type" content="video/mp4" />
+            <Meta property="og:video:width" content="1200" />
+            <Meta property="og:video:height" content="630" />
+          </>
+        )}
+      </Show>
       <Meta name="twitter:card" content="summary_large_image" />
       <Meta name="twitter:site" content={`@${new URL(config.social.twitter).pathname.slice(1)}`} />
       <Meta name="twitter:title" content={props.title} />
       <Meta name="twitter:description" content={props.description} />
-      <Meta name="twitter:image" content={`${config.baseUrl}${props.image.src}`} />
-      <Meta name="twitter:image:alt" content={props.image.alt} />
+      <Meta name="twitter:image" content={`${config.baseUrl}${image().src}`} />
+      <Meta name="twitter:image:alt" content={image().alt} />
     </>
   )
 }
