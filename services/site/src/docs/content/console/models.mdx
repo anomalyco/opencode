@@ -120,6 +120,7 @@ translates. See [Base URLs](/console/harnesses#base-urls) for the full set.
 | DeepSeek V4.1 Flash Free        | deepseek-v4.1-flash-free        | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Beam Free                       | beam-free                       | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Flint 40B Free                  | flint-40b-free                  | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
+| LongCat 2.5 Free                | longcat-2.5-free                | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | MiMo-V2.6-Flash Free            | mimo-v2.6-flash-free            | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Ultra Free           | nemotron-3-ultra-free           | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Nemotron 3.5 Lightning Free     | nemotron-3.5-lightning-free     | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
@@ -213,6 +214,7 @@ Console uses pay-as-you-go pricing. Below are the prices **per 1M tokens**.
 | DeepSeek V4.1 Flash Free          | Free            | Free            | Free            | -            |
 | Beam Free                         | Free            | Free            | Free            | -            |
 | Flint 40B Free                    | Free            | Free            | Free            | -            |
+| LongCat 2.5 Free                  | Free            | Free            | Free            | -            |
 | MiMo-V2.6-Flash Free              | Free            | Free            | Free            | -            |
 | Nemotron 3 Ultra Free             | Free            | Free            | Free            | -            |
 | Nemotron 3.5 Lightning Free       | Free            | Free            | Free            | -            |
@@ -246,7 +248,7 @@ Console uses pay-as-you-go pricing. Below are the prices **per 1M tokens**.
 | Claude Opus 4.7                   | $5.00           | $25.00          | $0.50           | $6.25        |
 | Claude Opus 4.6                   | $5.00           | $25.00          | $0.50           | $6.25        |
 | Claude Opus 4.5                   | $5.00           | $25.00          | $0.50           | $6.25        |
-| Claude Sonnet 5.5                 | $2.00           | $10.00          | $0.20           | $2.50        |
+| Claude Sonnet 5.5                 | $2.00           | $10.00          | $0.10           | $2.50        |
 | Claude Sonnet 5                   | $2.00           | $10.00          | $0.20           | $2.50        |
 | Claude Sonnet 4.6                 | $3.00           | $15.00          | $0.30           | $3.75        |
 | Claude Sonnet 4.5 (≤ 200K tokens) | $3.00           | $15.00          | $0.30           | $3.75        |
@@ -332,6 +334,7 @@ models to generate session titles.
 - Crouton Alpha Free is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model. It's not available in the European Union, Afghanistan, Belarus, China (including Hong Kong and Macau), Cambodia, Cuba, Eritrea, Ethiopia, Haiti, Iran, Iraq, Libya, Myanmar, Nicaragua, North Korea, Pakistan, Russia, Somalia, Syria, Venezuela, or Western Sahara, or in some regions within otherwise supported countries.
 - Beam Free is free on OpenCode for a limited time. Its provider does not use your data for model training and retains it for 30 days for safety reasons. It's not available in Angola, Belarus, Cambodia, China (including Hong Kong and Macau), Cuba, the Democratic Republic of the Congo, Equatorial Guinea, Iran, Iraq, Laos, Libya, Nigeria, North Korea, Russia, Syria, Turkmenistan, Uzbekistan, Venezuela, or the Crimea, Donetsk, and Luhansk regions of Ukraine.
 - Flint 40B Free is free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
+- LongCat 2.5 Free is free on OpenCode for a limited time, with a limit of 100 requests per day. Its provider follows a zero-retention policy and does not use your data for model training. It's hosted in China.
 - Jev 1.13 Free is available on OpenCode for a limited time.
 
 To hide free models in OpenCode, set `OPENCODE_DISABLE_FREE_MODELS=1`. See [free models](/models#free-models).
@@ -385,6 +388,7 @@ All our models are hosted in the US and EU. Our providers follow a zero-retentio
 - Anthropic APIs: Requests are retained for 30 days in accordance with [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).
 - Mistral APIs: Prompts and other inputs are not used for training. Data is retained in accordance with [Mistral's Data Retention Policy](https://docs.mistral.ai/admin/monitor-comply/zero-data-retention).
 - Beam Free: Prompts and other inputs are not used for training. Data is retained for 30 days for safety reasons.
+- LongCat 2.5 Free: Hosted in China. Prompts and other inputs are not used for training or retained.
 
 For subscription models, see [Go privacy](/console/go#privacy).
 

@@ -29,7 +29,10 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import type { LocalProject } from "@/shell/state/layout"
 import { sessionTabTitle } from "./tab-title"
-import { sessionTitle } from "@/session/title"
+import { sessionLabel, sessionTitle } from "@/session/title"
+import { createSessionExporter } from "@/session/commands/export-session"
+import { SessionReadMenuItem } from "@/session/session-read-menu-item"
+import { RenameDialog } from "./project-session-row"
 import { createSessionInbox, inboxArchived, type InboxEntry, type InboxStatus } from "./inbox-model"
 import { compareWorking, workingSince } from "./inbox-working"
 
@@ -48,6 +51,8 @@ export function SidebarInbox() {
   const dialog = useDialog()
   const servers = useServers()
   const inbox = createSessionInbox({ archived: true })
+
+  const exporter = createSessionExporter()
 
   const [state, setState, , ready] = persisted(Persist.global("sidebar.inbox"), InboxState, {
     workingExpanded: true,
@@ -177,6 +182,32 @@ export function SidebarInbox() {
               branch={inbox.branch(entry())}
               worktree={inbox.inWorktree(entry())}
               archived={inboxArchived(entry())}
+              actions={
+                <>
+                  <Menu.Item
+                    onSelect={() => {
+                      const current = entry()
+
+                      void dialog.show(() => (
+                        <RenameDialog
+                          title={sessionLabel(current.session)}
+                          onRename={(title) => inbox.rename(current, title)}
+                        />
+                      ))
+                    }}
+                  >
+                    {language.t("common.rename")}
+                  </Menu.Item>
+                  <Menu.Item
+                    disabled={exporter.exporting({ server: entry().server, sessionID: entry().session.id })}
+                    onSelect={() => exporter.export({ server: entry().server, sessionID: entry().session.id })}
+                  >
+                    {language.t("common.export")}…
+                  </Menu.Item>
+                  <SessionReadMenuItem server={entry().server} session={entry().session} />
+                  <Menu.Separator />
+                </>
+              }
               onOpen={() => inbox.open(entry())}
               onArchive={() => void inbox.archive(entry())}
               onUnarchive={() => void inbox.unarchive(entry())}
@@ -556,6 +587,7 @@ export function InboxSessionCard(props: {
   onArchive: () => void
   onUnarchive: () => void
   onDelete: () => void
+  actions?: JSX.Element
 }) {
   const language = useLanguage()
   const navigation = useContext(InboxNavigation)
@@ -671,6 +703,7 @@ export function InboxSessionCard(props: {
       </Menu.Context.Trigger>
       <Menu.Context.Portal>
         <Menu.Context.Content>
+          {props.actions}
           <Show
             when={props.archived}
             fallback={<Menu.Item onSelect={props.onArchive}>{language.t("common.archive")}</Menu.Item>}

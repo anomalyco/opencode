@@ -2,7 +2,7 @@ import type { Accessor } from "solid-js"
 import { useServer } from "@/runtime/server/current"
 import { useProviders } from "../../../../app/src/providers/catalog/providers"
 
-export { popularProviders, syncWhileBooting } from "../../../../app/src/providers/catalog/providers"
+export { popularProviders } from "../../../../app/src/providers/catalog/providers"
 
 export { useStoryProviders as useProviders }
 

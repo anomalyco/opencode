@@ -55,7 +55,7 @@ interval:
 ## Automatic interval
 
 Set `interval` to `"auto"` to warm just before each model's prompt cache
-expires. OpenCode uses 90% of the model's [`cache.ttl`](/config) setting, so a
+expires. OpenCode uses 90% of the model's [`cache.ttl`](/models#cache-lifetime) setting, so a
 `"5m"` cache is warmed every 4.5 minutes. Models without a `cache.ttl` are not
 warmed.
 
@@ -71,6 +71,31 @@ warmed.
 The interval must be shorter than `duration`, so raise `duration` for long
 cache lifetimes such as `"1h"`. Otherwise OpenCode skips warming and logs a
 warning.
+
+## Per provider and model
+
+Set `settings.cache.warming` on a provider or model to warm only its sessions,
+or to give them their own timing. It takes the same values as the top-level
+`warming`, except `prompt`, and overrides it. A model setting overrides the
+provider setting.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "anthropic": {
+      "settings": { "cache": { "ttl": "5m", "warming": { "interval": "auto" } } },
+      "models": {
+        "claude-haiku-5-5": { "settings": { "cache": { "warming": false } } },
+      },
+    },
+  },
+}
+```
+
+Here Anthropic sessions are warmed every 4.5 minutes, except on Claude Haiku
+5.5, and other providers aren't warmed. Fields left out of the object form come
+from the top-level `warming`, then the defaults. An invalid setting logs a
+warning and falls back to the top-level `warming`.
 
 ## Durations
 
@@ -89,7 +114,8 @@ otherwise OpenCode skips warming and logs a warning.
 
 ## Timing
 
-Warming starts after a non-warming model request. After a warming request
+Warming starts after a non-warming model request in a top-level session.
+Subagent sessions are not warmed. After a warming request
 finishes, the next idle interval starts, but the active window is not extended.
 
 ```text

@@ -107,15 +107,13 @@ import {
   type Step,
   type Value,
 } from "./objects.js"
-import { type Hint, preserveConsumerError, toPrimitive } from "./callback.js"
+import { Interruption, isEval, type Hint, preserveConsumerError, toPrimitive } from "./callback.js"
 import {
   AsyncBoundary,
   Await,
   Call,
   type Eval,
   type GeneratorRequest,
-  Interruption,
-  isEval,
   MAX_CALL_DEPTH,
   Runner,
   Slice,
