@@ -63,7 +63,9 @@ pub const ABI_MAJOR: u32 = 1;
 /// The minor version: grows when entries are appended. 1.0 is the core; 1.1 adds [`PluginApi::describe`]; 1.2 adds
 /// [`HostApi::theme_mode`]; 1.3 adds [`HostApi::wake`]; 1.4 adds [`Manifest::render`], [`Request::RenderFence`],
 /// [`Request::Render`], [`Request::Event`], [`HostRequest::Color`], the session and catalog reads,
-/// [`HostRequest::Info`], [`HostRequest::Route`], [`HostRequest::Dispatch`] and [`HostRequest::Attention`].
+/// [`HostRequest::Info`], [`HostRequest::Route`], [`HostRequest::Dispatch`], [`HostRequest::Attention`], and the
+/// requests of routes, replies, dialogs, navigation and the clipboard ([`Request::RenderRoute`], [`Request::Reply`],
+/// [`HostRequest::Fetch`], [`HostRequest::Navigate`], [`HostRequest::Dialog`], [`HostRequest::Copy`]).
 pub const ABI_MINOR: u32 = 4;
 
 /// The symbol every plugin exports, of type [`EntryFn`].
@@ -274,6 +276,9 @@ pub struct Manifest {
     /// The event types of each [`Setup::on_event`] handler, in order; [`Request::Event`] names one by index.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub events: Vec<Vec<String>>,
+    /// The routes of [`Setup::route`], which answer [`Request::RenderRoute`]; [`Manifest::routes`] lists them too.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub render_routes: Vec<String>,
 }
 
 /// What [`Manifest::render`] is for the render requests of ABI 1.4.
@@ -292,6 +297,30 @@ pub struct Command {
     pub slash: Option<String>,
     pub keybind: Option<String>,
     pub palette: bool,
+    /// 1.4: a line under the title in the palette.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// 1.4: `/slash` keeps its text after the name and passes it as the input.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub arguments: bool,
+    /// 1.4: where the command runs.
+    #[serde(default, skip_serializing_if = "Scope::is_global")]
+    pub scope: Scope,
+}
+
+/// Where a [`Command`] runs: everywhere, or while the plugin's route of that name shows.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Scope {
+    #[default]
+    Global,
+    Route(String),
+}
+
+impl Scope {
+    fn is_global(&self) -> bool {
+        *self == Scope::Global
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -511,6 +540,9 @@ pub enum Node {
         /// How the children share the room left along the row or column.
         #[serde(default, skip_serializing_if = "Justify::is_start")]
         justify: Justify,
+        /// Where the children sit across the row or column.
+        #[serde(default, skip_serializing_if = "Align::is_stretch")]
+        align: Align,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         bg: Option<Color>,
         #[serde(default, skip_serializing_if = "Layout::is_default")]
@@ -546,6 +578,10 @@ pub enum Node {
     /// nothing for any other path. The host keeps the slot's claims mounted, and renders them with each change,
     /// also while this claim returns [`Render::Keep`].
     Slot { path: String },
+    /// Markdown, drawn as the host draws a message, with the code-fence renderers of the active plugins.
+    Markdown { text: String },
+    /// A spinner with `label`, in the host's spinner color.
+    Spinner { label: String },
 }
 
 impl Node {
@@ -556,6 +592,7 @@ impl Node {
             gap: 0,
             padding: (0, 0),
             justify: Justify::Start,
+            align: Align::Stretch,
             bg: None,
             layout: Layout::default(),
             on_click: None,
@@ -627,6 +664,22 @@ impl Node {
     pub fn justify(mut self, value: Justify) -> Self {
         if let Node::Box { justify, .. } = &mut self {
             *justify = value;
+        }
+        self
+    }
+
+    /// A box whose children sit across it as `value` says; text is unchanged.
+    pub fn align(mut self, value: Align) -> Self {
+        if let Node::Box { align, .. } = &mut self {
+            *align = value;
+        }
+        self
+    }
+
+    /// Text the mouse cannot select; a box is unchanged.
+    pub fn unselectable(mut self) -> Self {
+        if let Node::Text { selectable, .. } = &mut self {
+            *selectable = false;
         }
         self
     }
@@ -719,6 +772,24 @@ pub enum Justify {
     End,
     Center,
     SpaceBetween,
+    SpaceAround,
+}
+
+/// Where a box's children sit across its row or column.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Align {
+    #[default]
+    Stretch,
+    Start,
+    Center,
+    End,
+}
+
+impl Align {
+    fn is_stretch(&self) -> bool {
+        *self == Align::Stretch
+    }
 }
 
 impl Justify {
@@ -957,6 +1028,16 @@ pub enum Request {
         handler: usize,
         event: Box<V2Event>,
     },
+    /// 1.4: renders a route of [`Setup::route`].
+    RenderRoute {
+        name: String,
+        changed: Changed,
+    },
+    /// 1.4: the reply to a [`Host::fetch`], for the [`Setup::on_reply`] handlers: the JSON body, or the error.
+    Reply {
+        id: RequestId,
+        result: Result<serde_json::Value, String>,
+    },
 }
 
 /// A fence for the render of [`Setup::code_block`] that [`Manifest::fences`] names by `index`. The host matches a fence
@@ -1056,6 +1137,22 @@ pub enum HostRequest {
     },
     /// 1.4: [`Host::attention`], once the current call returns.
     Attention(Attention),
+    /// 1.4: [`Host::navigate`], once the current call returns.
+    Navigate {
+        route: Route,
+    },
+    /// 1.4: [`Host::fetch`], sent once the current call returns; answers the [`RequestId`].
+    Fetch(Fetch),
+    /// 1.4: [`Host::dialog`], once the current call returns.
+    Dialog {
+        dialog: Dialog,
+    },
+    /// 1.4: [`Host::copy`], once the current call returns.
+    Copy {
+        text: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        then: Option<Action>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1163,6 +1260,98 @@ pub enum Route {
     },
 }
 
+/// A request to the server, for [`Host::fetch`]: it goes through the host's own client, to the server the host talks
+/// to now, with the host's credentials.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Fetch {
+    /// `GET`, `POST`, `PUT`, `PATCH` or `DELETE`.
+    pub method: String,
+    /// The path on the server, such as `/api/session/ses_1/generate`.
+    pub path: String,
+    /// Query pairs, already encoded the way the server reads them (`location[directory]`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub query: Vec<(String, String)>,
+    /// A JSON body.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<serde_json::Value>,
+}
+
+/// What [`Host::fetch`] returns, and [`Setup::on_reply`] gets back with the reply.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct RequestId(pub u64);
+
+/// A dialog, for [`Host::dialog`]. It replaces the dialogs that are open, unless it is a [`Panel`] whose key is open.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum Dialog {
+    /// A one-line text field. Enter closes it and runs `action` with the text as its input; escape closes it.
+    Prompt {
+        title: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        placeholder: Option<String>,
+        action: Action,
+    },
+    Panel(Panel),
+}
+
+/// A dialog that shows a node, live: a panel shown again while its `key` is open changes in place and keeps where its
+/// body is scrolled. The host scrolls the body with the arrows, `j`/`k`, page up and down, home and end.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Panel {
+    /// The plugin's own name for the panel; the host keeps keys of different plugins apart.
+    pub key: String,
+    #[serde(default)]
+    pub size: PanelSize,
+    /// The header's title, which keeps its width.
+    pub title: Vec<Span>,
+    /// Muted text after the title on the same row, cut to fit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subtitle: Option<String>,
+    pub body: Node,
+    /// The footer's actions, on the right; a click runs one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub actions: Vec<PanelAction>,
+    /// Keys that run an action while the panel is open.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub binds: Vec<PanelBind>,
+    /// The body is on the raised background, edge to edge, at most 60% of the screen high.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub bleed: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PanelSize {
+    #[default]
+    Medium,
+    Large,
+}
+
+/// A footer action of a [`Panel`].
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PanelAction {
+    pub title: String,
+    /// The key shown after the title; [`Panel::binds`] binds it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// The color of the title and the key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<Color>,
+    /// The panel closes before the action runs.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub close: bool,
+    pub action: Action,
+}
+
+/// A key of a [`Panel`].
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PanelBind {
+    pub key: String,
+    pub title: String,
+    pub action: Action,
+}
+
 /// What a render reads from the host. It has no effects, so a render may call it at any time, also inside
 /// [`Read::messages`]'s visitor; the host answers from what it has. A read of a catalog the host has not loaded
 /// returns `None` and asks for the load, which the host starts once the plugin's callback has returned; the claim
@@ -1257,6 +1446,15 @@ pub trait Host: Read {
     fn attention(&self, attention: Attention);
     /// Opens the plugin's route `name`.
     fn open_route(&self, name: &str);
+    /// Shows `route`: home, a session, or a plugin's route.
+    fn navigate(&self, route: Route);
+    /// Sends `fetch` to the server. [`Setup::on_reply`] gets the reply, with the ID this returns, unless the plugin is
+    /// disposed first.
+    fn fetch(&self, fetch: Fetch) -> RequestId;
+    /// Shows `dialog`.
+    fn dialog(&self, dialog: Dialog);
+    /// Copies `text` to the clipboard, then runs `then` once it is copied; a toast says so when it fails.
+    fn copy(&self, text: &str, then: Option<Action>);
 }
 
 /// The host table, as the plugin calls it. It is valid until the host destroys the instance, so it is the plugin's
@@ -1426,6 +1624,23 @@ impl Host for HostHandle {
     fn open_route(&self, name: &str) {
         let _ = self.request(&HostRequest::OpenRoute { name: name.to_owned() });
     }
+
+    fn navigate(&self, route: Route) {
+        let _ = self.request(&HostRequest::Navigate { route });
+    }
+
+    fn fetch(&self, fetch: Fetch) -> RequestId {
+        // A host without fetch never replies; an ID no reply carries is as good as any.
+        self.read(&HostRequest::Fetch(fetch)).unwrap_or(RequestId(0))
+    }
+
+    fn dialog(&self, dialog: Dialog) {
+        let _ = self.request(&HostRequest::Dialog { dialog });
+    }
+
+    fn copy(&self, text: &str, then: Option<Action>) {
+        let _ = self.request(&HostRequest::Copy { text: text.to_owned(), then });
+    }
 }
 
 impl HostHandle {
@@ -1483,7 +1698,11 @@ enum SlotFn {
     Lines(LinesFn),
     Render(RenderFn),
 }
-type RouteFn = Box<dyn Fn() -> Vec<Line>>;
+type LinesRouteFn = Box<dyn Fn() -> Vec<Line>>;
+/// A registered route render of [`Setup::route`].
+pub type RouteFn = Rc<dyn Fn(&dyn Read, &Changed) -> Render>;
+/// A registered reply handler.
+pub type ReplyFn = Rc<dyn Fn(&dyn Host, RequestId, Result<serde_json::Value, String>)>;
 /// A registered command.
 pub type CommandFn = Rc<dyn Fn(&dyn Host, Option<&str>)>;
 /// A registered event handler.
@@ -1525,9 +1744,11 @@ pub struct Setup {
     waker: Option<Waker>,
     fences: Vec<(String, FenceFn)>,
     slots: Vec<SlotFn>,
-    routes: Vec<(String, RouteFn)>,
+    routes: Vec<(String, LinesRouteFn)>,
+    views: Vec<(String, RouteFn)>,
     commands: Vec<CommandFn>,
     events: Vec<EventFn>,
+    replies: Vec<ReplyFn>,
     disposers: Vec<DisposeFn>,
 }
 
@@ -1599,10 +1820,25 @@ impl Setup {
         self.slots.push(SlotFn::Lines(Box::new(render)));
     }
 
-    /// Registers a route the host opens as `plugin/<id>/<name>`.
-    pub fn route(&mut self, name: &str, render: impl Fn() -> Vec<Line> + 'static) {
+    /// Registers route `name`, which [`Host::navigate`] opens as [`Route::Plugin`]. The host draws what `render`
+    /// returns centered in a scroll box on the page background; `render` runs again with each change, as a slot
+    /// claim's does. Commands of [`Scope::Route`] run while it shows.
+    pub fn route(&mut self, name: &str, render: impl Fn(&dyn Read, &Changed) -> Render + 'static) {
+        self.manifest.routes.push(name.to_owned());
+        self.manifest.render_routes.push(name.to_owned());
+        self.views.push((name.to_owned(), Rc::new(render)));
+    }
+
+    /// Registers a route of rows, as ABI 1.3 did.
+    pub fn route_lines(&mut self, name: &str, render: impl Fn() -> Vec<Line> + 'static) {
         self.manifest.routes.push(name.to_owned());
         self.routes.push((name.to_owned(), Box::new(render)));
+    }
+
+    /// Calls `run` with each reply to the plugin's [`Host::fetch`]es, on the UI thread, with the request's ID. A reply
+    /// that arrives after the plugin was disposed is dropped.
+    pub fn on_reply(&mut self, run: impl Fn(&dyn Host, RequestId, Result<serde_json::Value, String>) + 'static) {
+        self.replies.push(Rc::new(run));
     }
 
     /// A setup for a plugin the host runs in process: it has no ABI host, so [`Setup::host`] answers every request
@@ -1649,6 +1885,18 @@ impl Setup {
         self.manifest.commands.iter().zip(&self.commands)
     }
 
+    /// The routes of [`Setup::route`], with their renders.
+    #[doc(hidden)]
+    pub fn routes(&self) -> &[(String, RouteFn)] {
+        &self.views
+    }
+
+    /// The reply handlers.
+    #[doc(hidden)]
+    pub fn replies(&self) -> &[ReplyFn] {
+        &self.replies
+    }
+
     /// The event handlers, with the types each takes.
     #[doc(hidden)]
     pub fn events(&self) -> impl Iterator<Item = (&[String], &EventFn)> {
@@ -1665,8 +1913,10 @@ impl Setup {
             fences: Vec::new(),
             slots: Vec::new(),
             routes: Vec::new(),
+            views: Vec::new(),
             commands: Vec::new(),
             events: Vec::new(),
+            replies: Vec::new(),
             disposers: Vec::new(),
         }
     }
@@ -1708,6 +1958,14 @@ impl Setup {
             }
             Request::Event { handler, event } => {
                 self.events.get(handler).ok_or("no such event handler")?(&self.host, &event);
+                Ok(serde_json::Value::Null)
+            }
+            Request::RenderRoute { name, changed } => {
+                let (_, render) = self.views.iter().find(|(route, _)| *route == name).ok_or("no such route")?;
+                json(serde_json::to_value(render(&self.host, &changed)))
+            }
+            Request::Reply { id, result } => {
+                self.replies.iter().for_each(|run| run(&self.host, id, result.clone()));
                 Ok(serde_json::Value::Null)
             }
         }
@@ -2189,6 +2447,79 @@ mod tests {
         assert_eq!(setup.handle(request).unwrap(), serde_json::Value::Null);
         assert_eq!(*seen.borrow(), std::slice::from_ref(&event));
         assert!(setup.handle(Request::Event { handler: 1, event: Box::new(event) }).is_err());
+    }
+
+    // Expected: what 1.4 adds for fetches, routes and dialogs reads back as written; a 1.3 command keeps its JSON;
+    // a route renders and replies reach every handler through `handle`, by the IDs the host chose.
+    #[test]
+    fn fetches_routes_and_dialogs_round_trip() {
+        let old = Command { name: "x.a".into(), title: "A".into(), ..Command::default() };
+        let json = r#"{"name":"x.a","title":"A","group":null,"slash":null,"keybind":null,"palette":false}"#;
+        assert_eq!(serde_json::to_string(&old).unwrap(), json);
+        let scoped = Command { scope: Scope::Route("stats".into()), arguments: true, ..old };
+        let json = serde_json::to_string(&scoped).unwrap();
+        assert!(json.ends_with(r#""arguments":true,"scope":{"route":"stats"}}"#), "{json}");
+        let fetch = Fetch {
+            method: "POST".into(),
+            path: "/api/x".into(),
+            query: vec![("a".into(), "b".into())],
+            body: Some(serde_json::json!({ "c": 1 })),
+        };
+        let action = Action::Command { name: "x.ask".into(), input: None };
+        let panel = Panel {
+            key: "k".into(),
+            size: PanelSize::Large,
+            title: vec![Span::new("t").bold()],
+            subtitle: Some("s".into()),
+            body: Node::Markdown { text: "**m**".into() },
+            actions: vec![PanelAction {
+                title: "a".into(),
+                key: Some("c".into()),
+                color: None,
+                close: true,
+                action: action.clone(),
+            }],
+            binds: vec![PanelBind { key: "c".into(), title: "C".into(), action: action.clone() }],
+            bleed: true,
+        };
+        let requests = [
+            HostRequest::Fetch(fetch),
+            HostRequest::Navigate { route: Route::Session { id: "ses_1".into() } },
+            HostRequest::Dialog { dialog: Dialog::Panel(panel) },
+            HostRequest::Dialog { dialog: Dialog::Prompt { title: "p".into(), placeholder: None, action } },
+            HostRequest::Copy { text: "x".into(), then: None },
+        ];
+        for request in requests {
+            let json = serde_json::to_string(&request).unwrap();
+            assert_eq!(serde_json::from_str::<HostRequest>(&json).unwrap(), request, "{json}");
+        }
+        let node =
+            Node::row(vec![Node::Spinner { label: "/btw".into() }]).align(Align::Center).justify(Justify::SpaceAround);
+        let json = r#"{"type":"box","row":true,"justify":"space-around","align":"center","children":[{"type":"spinner","label":"/btw"}]}"#;
+        assert_eq!(serde_json::to_string(&node).unwrap(), json);
+        assert_eq!(serde_json::from_str::<Node>(json).unwrap(), node);
+
+        let mut setup = Setup::in_process("new", None);
+        setup.route("page", |_, changed| match changed.woken {
+            true => Render::Hide,
+            false => Render::Keep,
+        });
+        let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
+        for _ in 0..2 {
+            let into = seen.clone();
+            setup.on_reply(move |_, id, result| into.borrow_mut().push((id, result)));
+        }
+        assert_eq!(
+            (setup.manifest().routes.clone(), setup.manifest().render_routes.clone()),
+            (vec!["page".to_owned()], vec!["page".to_owned()])
+        );
+        let render =
+            Request::RenderRoute { name: "page".into(), changed: Changed { woken: true, ..Changed::default() } };
+        assert_eq!(setup.handle(render).unwrap(), serde_json::json!({ "type": "hide" }));
+        let reply = Request::Reply { id: RequestId(7), result: Err("gone".into()) };
+        let reply = serde_json::from_slice(&serde_json::to_vec(&reply).unwrap()).unwrap();
+        assert_eq!(setup.handle(reply).unwrap(), serde_json::Value::Null);
+        assert_eq!(*seen.borrow(), [(RequestId(7), Err("gone".to_owned())), (RequestId(7), Err("gone".to_owned()))]);
     }
 
     // Expected: the shims answer a null instance with an error, ignore a null `out` or a null `destroy`, and never

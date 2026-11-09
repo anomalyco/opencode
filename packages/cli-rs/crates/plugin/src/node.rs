@@ -91,7 +91,8 @@ impl<H: Host> Mount<H> {
             }
             let owner = self.owner.clone();
             let act: Act = Rc::new(move |action| act(&owner, action));
-            add(host.app(), &host.theme(), &self.root, &inner, &act, &mut hovers, &mut |parent, path| {
+            let markdown = |text: &str| host.markdown(text);
+            add(host.app(), &host.theme(), &self.root, &inner, &act, &mut hovers, &markdown, &mut |parent, path| {
                 if !nests(&self.path, path) {
                     log::warn!("a claim in slot {} cannot show slot {path}: it is not a slot inside it", self.path);
                     return;
@@ -172,7 +173,8 @@ fn act<H: Host>(host: &Weak<H>, action: &abi::Action) {
 
 /// Adds the widgets of `node` to `parent`; a click runs through `act`, and `slot` mounts a nested slot straight into
 /// the parent, as TS's `<Slot>` fragment does. A text that changes on hover goes into `hovers`, whose owner keeps it
-/// for its hover handler until the widgets are replaced.
+/// for its hover handler until the widgets are replaced. `markdown` draws [`abi::Node::Markdown`].
+#[allow(clippy::too_many_arguments)]
 pub fn add(
     app: &App,
     theme: &Theme,
@@ -180,11 +182,17 @@ pub fn add(
     node: &abi::Node,
     act: &Act,
     hovers: &mut Vec<Rc<Text>>,
+    markdown: &dyn Fn(&str) -> AnyWidget,
     slot: &mut dyn FnMut(&View, &str),
 ) {
     match node {
         abi::Node::Slot { path } => slot(parent, path),
-        abi::Node::Box { row, gap, padding, justify, bg, layout, on_click, children } => {
+        abi::Node::Markdown { text } => drop(parent.add(&markdown(text))),
+        abi::Node::Spinner { label } => {
+            let spinner = opencode_ui::motion::Spinner::new(app).color(theme.interactive().step(200)).label(label);
+            parent.add(&spinner);
+        }
+        abi::Node::Box { row, gap, padding, justify, align, bg, layout, on_click, children } => {
             let view = View::new(app);
             if *row {
                 view.row();
@@ -203,12 +211,19 @@ pub fn add(
                 abi::Justify::End => drop(view.justify(Justify::End)),
                 abi::Justify::Center => drop(view.justify(Justify::Center)),
                 abi::Justify::SpaceBetween => drop(view.justify(Justify::SpaceBetween)),
+                abi::Justify::SpaceAround => drop(view.justify(Justify::SpaceAround)),
+            }
+            match align {
+                abi::Align::Stretch => {}
+                abi::Align::Start => drop(view.align_items(Align::Start)),
+                abi::Align::Center => drop(view.align_items(Align::Center)),
+                abi::Align::End => drop(view.align_items(Align::End)),
             }
             if let Some(bg) = color(theme, bg.as_ref()) {
                 view.bg(bg);
             }
             for child in children {
-                add(app, theme, &view, child, act, hovers, slot);
+                add(app, theme, &view, child, act, hovers, markdown, slot);
             }
             clickable(&view, on_click.as_ref(), act);
             parent.add(&lay_out(&view, layout));
@@ -482,6 +497,11 @@ fn resolve(theme: &Theme, token: &str) -> Option<Color> {
         None => theme.hue(scale)?,
     };
     Some(scale.step(step))
+}
+
+/// `color` in `theme`; `None` for a token the theme does not have.
+pub fn color_of(theme: &Theme, color: &abi::Color) -> Option<Color> {
+    self::color(theme, Some(color))
 }
 
 fn color(theme: &Theme, value: Option<&abi::Color>) -> Option<Color> {

@@ -845,3 +845,110 @@ fn a_wake_from_an_in_process_plugin_thread_draws_its_claims_again() {
     assert!(ticked, "{}", host.app.text());
     assert!(registry.set_active(&host, "ticking", false));
 }
+
+/// The sample's server request and live panel, compiled in rather than loaded.
+#[path = "../../../examples/sample/src/fetch.rs"]
+mod sample_fetch;
+
+/// The sample's fetch row before and after the reply, the fetches it sent, and the panels it showed, as `registry` has
+/// them.
+fn fetched(host: &Rc<TestHost>, registry: &Rc<Registry<TestHost>>) -> (Vec<String>, Vec<abi::Fetch>, Vec<abi::Dialog>) {
+    host.dialogs.borrow_mut().clear();
+    *host.registry.borrow_mut() = Rc::downgrade(registry);
+    let parent = View::new(host.app()).column();
+    let mounted = registry.mount(&**host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+    host.app().root().clear();
+    host.app().root().add(&parent);
+    let row = |host: &TestHost| {
+        host.app.render();
+        host.app.text().lines().find(|line| line.contains("sample fetch:")).unwrap_or_default().trim_end().to_owned()
+    };
+    let mut rows = vec![row(host)];
+    host.keymap().dispatch("sample.fetch", None);
+    host.app.advance(Duration::from_millis(1));
+    let fetches = host.fetches.borrow().iter().map(|(fetch, _)| fetch.clone()).collect();
+    host.reply();
+    host.app.advance(Duration::from_millis(1));
+    rows.push(row(host));
+    host.keymap().dispatch("sample.panel", None);
+    host.keymap().dispatch("sample.panel", None);
+    host.app.advance(Duration::from_millis(1));
+    drop(mounted);
+    let dialogs =
+        host.dialogs.borrow().iter().map(|(id, dialog)| (assert_eq!(id, "sample"), dialog.clone()).1).collect();
+    (rows, fetches, dialogs)
+}
+
+// Expected: the sample's fetch goes to the host, and its reply reaches `on_reply`, whose claim renders it without a
+// change batch; its panel is shown again with its key and a new body; the same in process and from the library.
+#[test]
+fn the_sample_fetch_and_panel_act_the_same_in_process_and_through_the_library() {
+    let host = host();
+    let in_process = Rc::new(Registry::new(vec![abi::Plugin { id: "sample", setup: sample_fetch::setup }.into()], []));
+    in_process.activate(&host);
+    let direct = fetched(&host, &in_process);
+    assert_eq!(direct.0, ["sample fetch: none", "sample fetch: /api/sample"]);
+    assert_eq!(direct.1, [abi::Fetch { method: "GET".into(), path: "/api/sample".into(), ..abi::Fetch::default() }]);
+    let bodies: Vec<_> = direct
+        .2
+        .iter()
+        .map(|dialog| match dialog {
+            abi::Dialog::Panel(panel) => (panel.key.clone(), panel.body.clone()),
+            abi::Dialog::Prompt { .. } => unreachable!(),
+        })
+        .collect();
+    let body = |count: u64| abi::Node::text([abi::Span::new(format!("shown {count} times"))]);
+    assert_eq!(bodies, [("live".to_owned(), body(1)), ("live".to_owned(), body(2))]);
+    in_process.set_active(&host, "sample", false);
+    let library = Rc::new(active(&host, &build("still")));
+    assert_eq!(fetched(&host, &library), direct);
+}
+
+/// A plugin that fetches on `x.fetch` and toasts each reply, with a claim that keeps it mounted.
+fn replying(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.slot(abi::Placement::append("home.footer"), |_, _, _| abi::Render::Hide);
+    let command = abi::Command { name: "x.fetch".into(), ..abi::Command::default() };
+    setup.command(command, |host, _| {
+        host.fetch(abi::Fetch { method: "GET".into(), path: "/slow".into(), ..abi::Fetch::default() });
+    });
+    setup.on_reply(|host, _, _| host.toast(abi::Toast::new(abi::Variant::Info, "reply")));
+    Ok(())
+}
+
+unsafe extern "C" fn replying_create(
+    host: *const HostApi,
+    options: Bytes,
+    instance: *mut *mut c_void,
+    out: *mut Owned,
+) -> i32 {
+    // SAFETY: the loader passes what `PluginApi::create` documents.
+    unsafe { abi::runtime::create("replying", replying, host, options, instance, out) }
+}
+
+// Expected: a reply that arrives after its plugin was disabled reaches nothing, in process and over the C ABI, also while
+// a claim of it is still mounted, while a reply to an active plugin does.
+#[test]
+fn a_slow_reply_across_a_disable_delivers_nothing() {
+    let host = host();
+    let registries = [
+        Registry::new(vec![abi::Plugin { id: "replying", setup: replying }.into()], []),
+        loopback(&host, replying_create),
+    ];
+    for registry in registries {
+        registry.activate(&host);
+        host.keymap().dispatch("x.fetch", None);
+        host.app.advance(Duration::from_millis(1));
+        host.reply();
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!(host.toasts.borrow_mut().drain(..).count(), 1);
+        host.keymap().dispatch("x.fetch", None);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!(host.fetches.borrow().len(), 1);
+        let parent = View::new(host.app()).column();
+        let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+        registry.set_active(&host, "replying", false);
+        host.reply();
+        host.app.advance(Duration::from_millis(1));
+        assert!(host.toasts.borrow().is_empty(), "{:?}", host.toasts.borrow());
+    }
+}
