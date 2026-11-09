@@ -822,8 +822,16 @@ impl Data {
                         })
                         .cloned()
                         .collect();
+                    // The transcript only holds delivered input, so a pending row it contains missed its
+                    // inbox.delivered event (and maybe its enqueued echo) while the event stream was down.
+                    let delivered: Vec<String> =
+                        admitted.iter().filter(|id| ids.contains(*id)).map(|id| (*id).to_owned()).collect();
                     let mut messages = fetched;
                     messages.extend(local);
+                    for id in &delivered {
+                        state.outbox.remove(id);
+                        state.remove_pending(&session, id);
+                    }
                     let next = response.cursor.next.flatten();
                     let paged = state.cursor.contains_key(&session) == next.is_some();
                     match next {
