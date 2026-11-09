@@ -66,6 +66,8 @@
           "name": "Firmenmodell",
           // Ohne Tool-Calling kann opencode keine Dateien lesen oder bearbeiten
           "capabilities": { "tools": true },
+          // Falls ein Denk-Modell (z. B. Qwen3 unter Ollama) nach dem Nachdenken keinen Tool-Call liefert:
+          // "body": { "reasoning_effort": "none" },
           "limit": { "context": 32768, "output": 8192 }
         }
       }
