@@ -614,7 +614,7 @@ describe("image and decision generation", () => {
     }),
   )
 
-  mediaIt.effect("routes a gemini-decisions catalog entry to the Google decisions entrypoint", () =>
+  mediaIt.effect("routes a gemini-decisions catalog entry to Google and prices it from the catalog", () =>
     Effect.gen(function* () {
       requests.length = 0
       const generate = yield* Generate.Service
@@ -639,6 +639,8 @@ describe("image and decision generation", () => {
       })
       expect(result.answers).toEqual([{ type: "predicate", name: "photo", probability: 0.8 }])
       expect(result.tokens).toEqual({ input: 12, output: 0 })
+      // The host reports no cost, so the catalog's input price applies.
+      expect(result.cost).toBe(Money.USD.make((12 * 0.5) / 1_000_000))
     }),
   )
 
@@ -722,6 +724,7 @@ function decisionCatalog() {
             "decide-override": model("decide-override", { media_input: "state" }),
             "decide-gemini": {
               ...model("decide-gemini"),
+              cost: { text: { input: { price: 0.5 }, output: { price: 0 } } },
               api: {
                 "gemini-decisions": {
                   base_url: "https://gemini.test/v1beta",

@@ -12,6 +12,7 @@ import { Integration } from "./integration.js"
 import { ModelResolver } from "./model-resolver.js"
 import { Model } from "./model.js"
 import { ModelRetry } from "./model-retry.js"
+import { SessionUsage } from "./session/usage.js"
 
 export interface TextInput {
   readonly prompt: string
@@ -90,24 +91,26 @@ export const layer = Layer.effect(
     const decisionClient = yield* DecisionClient.Service
 
     const runText = Effect.fn("Generate.text")(function* (input: TextInput) {
-      const resolved = yield* resolver.resolve(input.model).pipe(
-        Effect.catchTag(
-          [
-            "SessionRunnerModel.VariantUnavailableError",
-            "SessionRunnerModel.UnsupportedPackageError",
-            "SessionRunnerModel.ModelConfigurationError",
-            "SessionRunnerModel.ModelInitializationError",
-            "SessionRunnerModel.UnresolvedProviderVariablesError",
-            "SessionRunnerModel.UnsupportedCompactionError",
-          ],
-          (error) =>
-            Effect.fail(
-              input.model
-                ? resolutionError(input.model, "chat", error)
-                : new UnavailableError({ message: error.message, service: error.providerID }),
-            ),
-        ),
-      )
+      const resolved = yield* resolver
+        .resolve(input.model)
+        .pipe(
+          Effect.catchTag(
+            [
+              "SessionRunnerModel.VariantUnavailableError",
+              "SessionRunnerModel.UnsupportedPackageError",
+              "SessionRunnerModel.ModelConfigurationError",
+              "SessionRunnerModel.ModelInitializationError",
+              "SessionRunnerModel.UnresolvedProviderVariablesError",
+              "SessionRunnerModel.UnsupportedCompactionError",
+            ],
+            (error) =>
+              Effect.fail(
+                input.model
+                  ? resolutionError(input.model, "chat", error)
+                  : new UnavailableError({ message: error.message, service: error.providerID }),
+              ),
+          ),
+        )
       if (!resolved && input.model) return yield* missing(input.model, "chat")
       if (!resolved)
         return yield* new UnavailableError({ message: "No model specified and no supported model is available" })
@@ -152,18 +155,20 @@ export const layer = Layer.effect(
         .pipe(Effect.mapError((error) => resolutionError(input.model, "image", error)))
       if (!model) return yield* missing(input.model, "image")
       // `ai.image.generate` turns an invalid request into a typed error; building it with `ai.image.request` would throw.
-      const response = yield* ai.image.generate({
-        model,
-        prompt: input.prompt,
-        images: input.images?.map((file) => Media.base64(file.data, file.mime)),
-        n: input.n,
-        aspect: input.aspect,
-        resolution: input.resolution,
-      }).pipe(
-        Effect.provideService(ImageClient.Service, images),
-        ModelRetry.retryOneShot,
-        Effect.mapError((error) => providerError(input.model, error)),
-      )
+      const response = yield* ai.image
+        .generate({
+          model,
+          prompt: input.prompt,
+          images: input.images?.map((file) => Media.base64(file.data, file.mime)),
+          n: input.n,
+          aspect: input.aspect,
+          resolution: input.resolution,
+        })
+        .pipe(
+          Effect.provideService(ImageClient.Service, images),
+          ModelRetry.retryOneShot,
+          Effect.mapError((error) => providerError(input.model, error)),
+        )
       // URL results are downloaded so every image comes back inline, like the request's own files.
       // Materializing also detects the type of a downloaded image from its bytes when the URL didn't say.
       const outputs = yield* Effect.forEach(response.images, (asset) =>
@@ -190,23 +195,43 @@ export const layer = Layer.effect(
         .resolveDecision(input.model)
         .pipe(Effect.mapError((error) => resolutionError(input.model, "decision", error)))
       if (!model) return yield* missing(input.model, "decision")
-      const response = yield* ai.decision.generate({
-        model,
-        input: input.input.map((part) =>
-          part.type === "file"
-            ? { type: "media" as const, media: Media.base64(part.data, part.mime), filename: part.name }
-            : part,
-        ),
-        questions: input.questions,
-      }).pipe(
-        Effect.provideService(DecisionClient.Service, decisionClient),
-        ModelRetry.retryOneShot,
-        Effect.mapError((error) => providerError(input.model, error)),
-      )
+      const response = yield* ai.decision
+        .generate({
+          model,
+          input: input.input.map((part) =>
+            part.type === "file"
+              ? { type: "media" as const, media: Media.base64(part.data, part.mime), filename: part.name }
+              : part,
+          ),
+          questions: input.questions,
+        })
+        .pipe(
+          Effect.provideService(DecisionClient.Service, decisionClient),
+          ModelRetry.retryOneShot,
+          Effect.mapError((error) => providerError(input.model, error)),
+        )
       const usage = response.usage
+      // Hosts that don't report what they charged are priced from the catalog, as sessions are.
+      const catalog =
+        usage === undefined || usage.cost !== undefined
+          ? undefined
+          : (yield* models.available(["decision"])).find(
+              (item) => item.providerID === input.model.providerID && item.id === input.model.id,
+            )
+      const cost =
+        usage?.cost !== undefined
+          ? Money.USD.make(usage.cost)
+          : catalog && usage
+            ? SessionUsage.calculateCost(catalog.cost, {
+                input: usage.inputTokens ?? 0,
+                output: usage.outputTokens ?? 0,
+                reasoning: 0,
+                cache: { read: 0, write: 0 },
+              })
+            : undefined
       return {
         answers: response.answers,
-        ...(usage?.cost === undefined ? {} : { cost: Money.USD.make(usage.cost) }),
+        ...(cost === undefined ? {} : { cost }),
         ...(usage?.inputTokens === undefined && usage?.outputTokens === undefined
           ? {}
           : { tokens: { input: usage.inputTokens, output: usage.outputTokens } }),
