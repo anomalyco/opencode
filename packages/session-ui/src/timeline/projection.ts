@@ -80,6 +80,8 @@ export type TimelineProjectionInput = {
   pendingInputIDs?: ReadonlySet<string>
   queuedCompactionIDs?: readonly string[]
   turnDiffs?: boolean
+  /** The Activity timeline experiment. */
+  activity?: boolean
   previousRows?: TimelineRow.TimelineRow[]
 }
 
@@ -93,6 +95,7 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
     input.pendingInputIDs,
     input.queuedCompactionIDs,
     input.turnDiffs,
+    input.activity,
   )
 
   const rows = reuseTimelineRows(input.previousRows, projection.rows)
@@ -132,6 +135,8 @@ export function createReactiveTimelineProjection(input: {
   queuedCompactionIDs?: Accessor<readonly string[]>
   /** Summarize each finished turn's changed files after it. */
   turnDiffs?: Accessor<boolean>
+  /** The Activity timeline experiment. */
+  activity?: Accessor<boolean>
 }) {
   const sessionMessageByID = createMemo(
     () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
@@ -170,9 +175,10 @@ export function createReactiveTimelineProjection(input: {
       input.pendingInputIDs?.(),
       input.queuedCompactionIDs?.(),
       input.turnDiffs?.(),
-      (detail, content) =>
+      input.activity?.(),
+      (detail, content, activity) =>
         content.type === "tool"
-          ? timelineRenders(detail, content)
+          ? timelineRenders(detail, content, activity)
           : (content.type === "text" || detail.thinking.placement !== "hidden") && textVisible().get(content)!(),
     ),
   )
@@ -245,6 +251,7 @@ export namespace Timeline {
     pendingInputIDs?: ReadonlySet<string>,
     queuedCompactionIDs: readonly string[] = [],
     turnDiffs = false,
+    activity = false,
     isRenderable = timelineRenders,
   ) {
     type Turn = {
@@ -377,14 +384,14 @@ export namespace Timeline {
       detail.commentary.placement !== "separate"
         ? turns.flatMap((turn) =>
             turnCommentary(turn.entries, viewTurnPhase(phaseOf(turn)).settled, (content) =>
-              isRenderable(detail, content),
+              isRenderable(detail, content, activity),
             ),
           )
         : [],
     )
 
     const visible = (content: Content) =>
-      !(detail.commentary.placement === "hidden" && commentary.has(content)) && isRenderable(detail, content)
+      !(detail.commentary.placement === "hidden" && commentary.has(content)) && isRenderable(detail, content, activity)
 
     const visibleNotice = (message: Notice) => timelineNoticePlacement(detail, message) !== "hidden"
 
@@ -423,7 +430,17 @@ export namespace Timeline {
             ),
           ]
 
-        return constructMessageRows(turn.user, turn.id, turn.entries, index, phaseOf(turn), detail, visible, commentary)
+        return constructMessageRows(
+          turn.user,
+          turn.id,
+          turn.entries,
+          index,
+          phaseOf(turn),
+          detail,
+          visible,
+          commentary,
+          activity,
+        )
       }),
     ]
 
@@ -469,6 +486,7 @@ export namespace Timeline {
     detail: TimelineDetail,
     isVisible: (content: Content) => boolean,
     commentary: ReadonlySet<Content> = new Set(),
+    activity = false,
   ) {
     const rows: TimelineRow.TimelineRow[] = []
     const assistantMessages = entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
@@ -583,6 +601,18 @@ export namespace Timeline {
       }
     })
     appendAssistantSegment(assistantSegment)
+
+    // Where the setting hides the agent's activity, a finished turn that left no answer still says it worked.
+    if (
+      activity &&
+      detail.tools.placement === "hidden" &&
+      view.settled &&
+      assistantMessages.length > 0 &&
+      !assistantMessages.some((message) =>
+        message.content.some((content) => content.type === "text" && !!content.text.trim()),
+      )
+    )
+      rows.push(new TimelineRow.Worked({ userMessageID: turnID }))
 
     return rows
   }

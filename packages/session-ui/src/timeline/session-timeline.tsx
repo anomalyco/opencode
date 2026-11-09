@@ -26,6 +26,7 @@ export function SessionTimeline(props: SessionTimelineProps) {
     status: () => props.document.status,
     timelineDetail: () => props.timelineDetail ?? defaultTimelineDetail,
     turnDiffs: () => props.turnDiffs ?? false,
+    activity: () => props.activity ?? false,
   })
 
   const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>({})

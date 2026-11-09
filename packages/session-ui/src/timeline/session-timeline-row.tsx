@@ -1192,6 +1192,42 @@ export function createSessionTimelineRowRenderer(input: {
       )
     }
 
+    if (Predicate.isTagged(row(), "Worked")) {
+      const current = () => {
+        const value = row()
+
+        if (!Predicate.isTagged(value, "Worked")) throw new Error("Expected a worked timeline row")
+
+        return value
+      }
+
+      const label = createMemo(() => {
+        const ms = duration(current().userMessageID)
+
+        if (ms === null || ms === undefined || !(ms >= 0)) return i18n.t("ui.timeline.activity.workedUnknown")
+        const total = Math.round(ms / 1000)
+        const numfmt = new Intl.NumberFormat(i18n.locale())
+
+        return i18n.t("ui.timeline.activity.worked", {
+          duration:
+            total < 60
+              ? i18n.t("ui.message.duration.seconds", { count: numfmt.format(total) })
+              : i18n.t("ui.message.duration.minutesSeconds", {
+                  minutes: numfmt.format(Math.floor(total / 60)),
+                  seconds: numfmt.format(total % 60),
+                }),
+        })
+      })
+
+      return (
+        <Frame row={current()}>
+          <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
+            <div class="pt-2 text-13-regular leading-text-compact text-v2-text-text-muted">{label()}</div>
+          </div>
+        </Frame>
+      )
+    }
+
     if (Predicate.isTagged(row(), "TurnDiff")) {
       const current = () => {
         const value = row()

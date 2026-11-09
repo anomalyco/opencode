@@ -196,6 +196,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
     pendingInputIDs,
     queuedCompactionIDs,
     turnDiffs: settings.general.showTurnDiffs,
+    activity: settings.general.activityTimeline,
   })
 
   const errorMessage = (cause: unknown) =>

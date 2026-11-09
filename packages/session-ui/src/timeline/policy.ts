@@ -25,13 +25,16 @@ export function timelineCategory(content: Content): keyof TimelineDetail | undef
   return "tools"
 }
 
-/** Whether a part of an assistant message shows at all. */
-export function timelineRenders(detail: TimelineDetail, content: Content) {
+/**
+ * Whether a part of an assistant message shows at all. A failed call shows even where its category is hidden, except
+ * in the Activity timeline, where the agent's recovery is part of the work the setting hides.
+ */
+export function timelineRenders(detail: TimelineDetail, content: Content, activity = false) {
   if (content.type === "text") return timelineTextShows(content)
 
   if (content.type === "reasoning") return detail.thinking.placement !== "hidden" && timelineTextShows(content)
 
-  if (currentToolFailed(content)) return true
+  if (!activity && currentToolFailed(content)) return true
 
   if (content.name === "todowrite") return false
 
