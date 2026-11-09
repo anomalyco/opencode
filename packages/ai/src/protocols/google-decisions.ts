@@ -48,7 +48,29 @@ const fromRequest = Effect.fn("GoogleDecisions.fromRequest")(function* (request:
     ...mergeJsonRecords(native, request.http?.body),
     model: request.model.id,
     input: yield* Effect.forEach(request.input, (part) => inputPart(request, part, options.mediaResolution)),
-    questions: yield* SystemOne.encodeQuestions(request.questions),
+    questions: {
+      ...(yield* SystemOne.encodeQuestions(request.questions)),
+      // Google names System One's predicate criteria `true_description` and `false_description`.
+      ...Object.fromEntries(
+        request.questions.flatMap((question) =>
+          question.type === "predicate" && question.criteria !== undefined
+            ? [
+                [
+                  question.name,
+                  {
+                    type: "noul",
+                    instructions: question.instructions,
+                    criteria: {
+                      ...(question.criteria.true === undefined ? {} : { true_description: question.criteria.true }),
+                      ...(question.criteria.false === undefined ? {} : { false_description: question.criteria.false }),
+                    },
+                  },
+                ],
+              ]
+            : [],
+        ),
+      ),
+    },
   }
 })
 

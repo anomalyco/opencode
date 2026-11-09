@@ -504,7 +504,10 @@ describe("Decision", () => {
           { type: "media", media: Media.url("https://assets.test/clip.mp4", { mediaType: "video/mp4" }) },
           { type: "media", media: Media.base64("JVBERi0=", "application/pdf") },
         ],
-        questions,
+        questions: [
+          ...questions.slice(0, 2),
+          { ...questions[2], criteria: { true: "They want money back.", false: "Anything else." } },
+        ],
         providerOptions: { mediaResolution: "low", labels: { team: "support" } },
       })
       .pipe(
@@ -546,7 +549,11 @@ describe("Decision", () => {
                   instructions: "How urgent is this?",
                   criteria: ["Can wait", "Needs attention: Same day", "Blocking"],
                 },
-                refund: { type: "noul", instructions: "Is the customer asking for a refund?" },
+                refund: {
+                  type: "noul",
+                  instructions: "Is the customer asking for a refund?",
+                  criteria: { true_description: "They want money back.", false_description: "Anything else." },
+                },
               },
             })
             return Effect.succeed(
