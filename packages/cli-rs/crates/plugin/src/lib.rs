@@ -6,6 +6,7 @@
 mod activation;
 pub mod loader;
 pub mod node;
+mod route;
 pub mod slot;
 
 use std::any::Any;
@@ -102,6 +103,29 @@ pub trait Host: 'static {
     /// Runs the registered command `name` with `input` (a plugin's [`abi::Host::dispatch`], a click's
     /// [`abi::Action::Command`]). Called outside every plugin callback.
     fn dispatch(&self, _name: &str, _input: Option<&str>) {}
+    /// Shows `route` for plugin `id` ([`abi::Host::navigate`]). Called outside every plugin callback.
+    fn navigate(&self, _id: &str, _route: &abi::Route) {}
+    /// Sends `fetch` with the host's own client and current transport, and calls `reply` on the UI thread with the
+    /// JSON body or the error. Called outside every plugin callback.
+    fn fetch(&self, _fetch: abi::Fetch, reply: Box<dyn FnOnce(Result<serde_json::Value, String>)>) {
+        reply(Err("this host has no server".to_owned()));
+    }
+    /// Shows plugin `id`'s `dialog` ([`abi::Host::dialog`]). Called outside every plugin callback.
+    fn dialog(&self, _id: &str, _dialog: abi::Dialog) {}
+    /// Copies `text` to the clipboard, and returns whether it did; a host tells the user when it did not. Called
+    /// outside every plugin callback.
+    fn copy(&self, text: &str) -> bool {
+        self.app().copy_to_clipboard(text)
+    }
+    /// The widget of an [`abi::Node::Markdown`]. By default, Markdown in the page theme without plugin fences.
+    fn markdown(&self, text: &str) -> AnyWidget {
+        let theme = self.theme();
+        let syntax = opencode_ui::code::syntax_theme(&theme);
+        let renderers = CodeBlockRenderers::default();
+        let markdown = opencode_ui::markdown::view(self.app(), &theme, &syntax, &renderers, true, false);
+        markdown.set_markdown(text);
+        markdown.as_any()
+    }
 
     // What the renders of the one API (O-67) read, on both paths.
 
@@ -191,15 +215,20 @@ impl<H: Host> From<abi::Plugin> for Definition<H> {
                 return;
             }
             let manifest = api.manifest();
-            if !(manifest.routes.is_empty() && manifest.slots.iter().all(|claim| claim.render)) {
-                log::error!("plugin {}: routes and 1.3 slot claims do not run in process", setup.id());
+            if manifest.routes.len() != manifest.render_routes.len() || !manifest.slots.iter().all(|claim| claim.render)
+            {
+                log::error!("plugin {}: 1.3 routes and slot claims do not run in process", setup.id());
             }
             let scope = Rc::new(Scope {
                 host: Rc::downgrade(setup.host()),
                 id: setup.id().to_owned(),
                 keys: manifest.storage.clone(),
                 activation: activation.clone(),
+                replies: api.replies().to_vec(),
             });
+            // Registered first, so it runs last: no reply reaches the plugin once it is disposed.
+            let disposed = activation.clone();
+            setup.on_dispose(move || disposed.dispose());
             for (language, render) in api.fences() {
                 let (render, scope, fences) = (render.clone(), scope.clone(), node::Fences::default());
                 let render: CodeBlockRender = Rc::new(move |block, theme| {
@@ -230,15 +259,25 @@ impl<H: Host> From<abi::Plugin> for Definition<H> {
                 }));
                 setup.registration.disposers.extend(subscription);
             }
-            let commands: Vec<TuiCommand> = api
+            let commands: Vec<(abi::Scope, TuiCommand)> = api
                 .commands()
                 .map(|(command, run)| {
                     let (run, scope) = (run.clone(), scope.clone());
-                    tui_command(command, move |input| scope.run(|host| run(host, input)))
+                    (command.scope.clone(), tui_command(command, move |input| scope.run(|host| run(host, input))))
                 })
                 .collect();
-            if !commands.is_empty() {
-                setup.layer(KeymapLayer::global(commands));
+            let (global, scoped) = route::split(commands);
+            if !global.is_empty() {
+                setup.layer(KeymapLayer::global(global));
+            }
+            for (name, render) in api.routes() {
+                let (render, scope) = (render.clone(), scope.clone());
+                let render: node::SlotRender<H> = Rc::new(move |host: &H, _, changed| {
+                    let mut out = abi::Render::Keep;
+                    host.read(&mut |read| out = render(&Scoped { read, host, scope: &scope }, changed));
+                    out
+                });
+                setup.view_route(name, render, route::commands(&scoped, name), &activation);
             }
             for run in api.take_disposers() {
                 let (scope, mut run) = (scope.clone(), Some(run));
@@ -269,8 +308,11 @@ pub(crate) fn tui_command(command: &abi::Command, run: impl Fn(Option<&str>) + '
     if let Some(group) = &command.group {
         entry = entry.group(group.clone());
     }
+    if let Some(description) = &command.description {
+        entry = entry.description(description.clone());
+    }
     if let Some(slash) = &command.slash {
-        entry = entry.slash(Slash { name: slash.clone(), aliases: Vec::new(), arguments: false });
+        entry = entry.slash(Slash { name: slash.clone(), aliases: Vec::new(), arguments: command.arguments });
     }
     entry
 }
@@ -282,6 +324,7 @@ struct Scope<H: Host> {
     id: String,
     keys: Vec<String>,
     activation: Rc<Activation<H>>,
+    replies: Vec<abi::ReplyFn>,
 }
 
 impl<H: Host> Scope<H> {
@@ -295,7 +338,7 @@ impl<H: Host> Scope<H> {
     }
 
     /// Runs a handler of the plugin with the host, then invalidates its claims, whose state it may have changed.
-    fn run(&self, handler: impl FnOnce(&dyn abi::Host)) {
+    fn run(self: &Rc<Self>, handler: impl FnOnce(&dyn abi::Host)) {
         let Some(host) = self.host.upgrade() else { return };
         let mut handler = Some(handler);
         host.read(&mut |read| {
@@ -312,7 +355,7 @@ impl<H: Host> Scope<H> {
 struct Scoped<'a, H: Host> {
     read: &'a dyn abi::Read,
     host: &'a H,
-    scope: &'a Scope<H>,
+    scope: &'a Rc<Scope<H>>,
 }
 
 impl<H: Host> abi::Read for Scoped<'_, H> {
@@ -413,6 +456,59 @@ impl<H: Host> abi::Host for Scoped<'_, H> {
         let (id, name) = (self.scope.id.clone(), name.to_owned());
         self.defer(move |host| host.open_route(&id, &name));
     }
+
+    fn navigate(&self, route: abi::Route) {
+        let id = self.scope.id.clone();
+        self.defer(move |host| host.navigate(&id, &route));
+    }
+
+    fn fetch(&self, fetch: abi::Fetch) -> abi::RequestId {
+        let id = next_request();
+        let scope = Rc::downgrade(self.scope);
+        self.defer(move |host| {
+            if scope.upgrade().is_none_or(|scope| scope.activation.disposed()) {
+                return;
+            }
+            host.fetch(
+                fetch,
+                Box::new(move |result| {
+                    let Some(host) = scope.upgrade().map(|scope| scope.host.clone()) else { return };
+                    // The reply runs on the effect queue, in order with the effects queued before it.
+                    defer(&host, move |_| {
+                        let Some(scope) = scope.upgrade().filter(|scope| !scope.activation.disposed()) else {
+                            return;
+                        };
+                        let replies = scope.replies.clone();
+                        scope.run(|host| replies.iter().for_each(|run| run(host, id, result.clone())));
+                    });
+                }),
+            );
+        });
+        id
+    }
+
+    fn dialog(&self, dialog: abi::Dialog) {
+        let id = self.scope.id.clone();
+        self.defer(move |host| host.dialog(&id, dialog));
+    }
+
+    fn copy(&self, text: &str, then: Option<abi::Action>) {
+        let text = text.to_owned();
+        self.defer(move |host| copy(host, &text, then));
+    }
+}
+
+/// Copies `text`, then runs `then` once it is copied.
+pub(crate) fn copy<H: Host>(host: &H, text: &str, then: Option<abi::Action>) {
+    if let (true, Some(abi::Action::Command { name, input })) = (host.copy(text), then) {
+        host.dispatch(&name, input.as_deref());
+    }
+}
+
+/// A fresh [`abi::RequestId`], unique in the process.
+pub(crate) fn next_request() -> abi::RequestId {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    abi::RequestId(NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
 }
 
 impl<H: Host> Scoped<'_, H> {
@@ -470,6 +566,23 @@ impl<H: Host> Setup<'_, H> {
             let mount = node::Mount::new(host, owner.clone(), &path, input, render.clone());
             activation.track(Rc::downgrade(&mount) as Weak<dyn Drawn<H>>);
             Box::new(mount)
+        });
+    }
+
+    /// Registers route `name` of the one API, on either path: `render` draws in [`route::View`], and `commands` run
+    /// while it shows.
+    pub(crate) fn view_route(
+        &mut self,
+        name: &str,
+        render: node::SlotRender<H>,
+        commands: Vec<TuiCommand>,
+        activation: &Rc<Activation<H>>,
+    ) {
+        let (owner, activation) = (Rc::downgrade(self.host), activation.clone());
+        self.route(name, move |host| {
+            let view = route::View::new(host, owner.clone(), render.clone(), commands.clone());
+            activation.track(Rc::downgrade(&view.mount) as Weak<dyn Drawn<H>>);
+            Box::new(view)
         });
     }
 

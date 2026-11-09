@@ -179,6 +179,56 @@ impl opencode_plugin::Host for Tui {
         self.keymap.dispatch(name, input);
     }
 
+    fn navigate(&self, _: &str, route: &abi::Route) {
+        let route = match route {
+            abi::Route::Home => Route::Home,
+            abi::Route::Session { id } => Route::Session { id: SessionID(id.clone()) },
+            abi::Route::Plugin { id, name } => {
+                self.dialogs.clear();
+                Route::Plugin { id: id.clone(), name: name.clone() }
+            }
+        };
+        self.navigate(route);
+    }
+
+    fn fetch(&self, fetch: abi::Fetch, reply: Box<dyn FnOnce(Result<Value, String>)>) {
+        // The client of the moment, on the transport that follows a restarted service.
+        let client = self.data.client().clone();
+        let call = super::fetch::call_of(fetch);
+        self.app.spawn(
+            async move { client.json::<Value>(call?).await.map_err(|error| error.to_string()) },
+            move |_, result| reply(result),
+        );
+    }
+
+    fn dialog(&self, id: &str, dialog: abi::Dialog) {
+        super::panel::show(self, id, dialog);
+    }
+
+    fn copy(&self, text: &str) -> bool {
+        let copied = match crate::features::links::testing::sink() {
+            Some(sink) => {
+                sink.copied.borrow_mut().push(text.to_owned());
+                true
+            }
+            None => self.app.copy_to_clipboard(text),
+        };
+        if !copied {
+            self.toasts.error("Failed to copy to clipboard");
+        }
+        copied
+    }
+
+    fn markdown(&self, text: &str) -> AnyWidget {
+        let page = self.page();
+        let conceal = self.config().info.session.as_ref().and_then(|session| session.markdown)
+            != Some(opencode_local::cli_config::Markdown::Source);
+        let syntax = opencode_ui::code::syntax_theme(&page);
+        let markdown = opencode_ui::markdown::view(&self.app, &page, &syntax, &code_blocks(self), conceal, false);
+        markdown.set_markdown(text);
+        markdown.as_any()
+    }
+
     fn read(&self, f: &mut dyn FnMut(&dyn abi::Read)) {
         f(&Reader { tui: self, theme: OnceCell::new() });
     }
@@ -302,6 +352,8 @@ pub struct Reads {
     telling: Cell<bool>,
     /// The server plugins of the default location (TS `plugins.server()`), and that location.
     server: RefCell<(Option<Location>, Vec<PluginInfo>)>,
+    /// The plugin panel on screen.
+    pub(super) panel: RefCell<Option<super::panel::Live>>,
 }
 
 impl Reads {
@@ -493,7 +545,7 @@ pub fn builtins(external: Vec<Definition<Tui>>) -> Vec<Definition<Tui>> {
     let mut builtins = vec![
         super::home_footer::plugin().into(),
         super::prompt_footer::plugin(),
-        super::btw::plugin(),
+        super::btw::plugin().into(),
         super::sidebar_context::plugin().into(),
         super::sidebar_limit::plugin().into(),
         super::sidebar_mcp::plugin().into(),
@@ -501,7 +553,7 @@ pub fn builtins(external: Vec<Definition<Tui>>) -> Vec<Definition<Tui>> {
         super::sidebar_footer::plugin().into(),
         crate::plugins::notifications::plugin().into(),
         crate::dialogs::plugins::plugin(),
-        super::stats::plugin(),
+        super::stats::plugin().into(),
     ];
     builtins.extend(external);
     builtins.push(super::diffs::viewer::plugin());

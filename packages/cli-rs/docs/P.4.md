@@ -51,9 +51,10 @@ the boundary:
 | `layer` (commands, palette, slash, keybinds) | `command(Command, run(&dyn Host, input))`; the host builds the keymap layer. A command without `palette` and `slash` is hidden: a click or `Host::dispatch` runs it |
 | `code_block(language, render)` | `code_block(language, render(&dyn Read, &Fence) -> Fenced)` (1.4) |
 | `slot(placement, render)` | `slot(Placement, render(&dyn Read, &SlotInput, &Changed) -> Render)` (1.4); the 1.3 form is `slot_lines(SlotKind, path, render(session_id) -> Vec<Line>)` |
-| `route(name, render)` | `route(name, render() -> Vec<Line>)` |
+| `route(name, render)` | `route(name, render(&dyn Read, &Changed) -> Render)` (1.4), drawn centered in a scroll box on the page background; the 1.3 form is `route_lines(name, render() -> Vec<Line>)` |
 | `storage_key(key)` | `storage_key(key)`; `Read::storage_get` and `Host::storage_set` on `plugin.<id>.<key>` |
 | event subscriptions (`api.event.on`) | `on_event(types, run(&dyn Host, &V2Event))` (1.4); the host sends `Request::Event` with the HTTP API's own event JSON |
+| `api.client` | `Host::fetch(Fetch { method, path, query, body }) -> RequestId` and `on_reply(run(&dyn Host, RequestId, Result<Value, String>))` (1.4) |
 | `on_dispose` | the instance is destroyed on deactivation |
 
 A `Line` is a list of spans with text, colors, and bold, italic, underline, and dim. A color is a theme token
@@ -89,7 +90,16 @@ order. `storage_set` shows to `storage_get` at once; the host writes the disk la
 `local`. `dispatch(name, input)` runs any registered command, palette or not (`HostRequest::Dispatch`).
 `toast(Toast { variant, title, message, session })` shows a toast; with a `session` it offers "Open" unless that
 session's family is on screen. `attention(Attention { title, message, notify, sound })` sends a notification and plays
-a sound as the user's `attention` settings allow (`HostRequest::Attention`). An event handler gets the same `Host`.
+a sound as the user's `attention` settings allow (`HostRequest::Attention`). `navigate(Route)` shows home, a session or
+a plugin's route. `dialog(Dialog)` shows a `Prompt`, whose text goes to its action as the input, or a `Panel { key,
+size, title, subtitle, body, actions, binds, bleed }`, which changes in place while its key is open and keeps where its
+body is scrolled. `copy(text, then)` copies and runs `then` once copied. `fetch` sends a request through the host's own
+client, to the server the TUI talks to now (a managed service it follows across restarts); the reply comes back to
+the `on_reply` handlers on the UI thread, in order with the other effects, unless the plugin was disposed first. A
+command of `Scope::Route(name)` runs while that route shows (`/stats`' escape); `description` and `arguments` (the
+slash command keeps its text and passes it as the input) show in the palette and the prompt. Nodes also have `align`,
+`Justify::SpaceAround`, `Markdown { text }` (with the active fence renderers in a panel) and `Spinner { label }`. An
+event handler and a reply handler get the same `Host`.
 The 1.3
 `HostHandle` (`Setup::host`) is still valid for the instance.
 

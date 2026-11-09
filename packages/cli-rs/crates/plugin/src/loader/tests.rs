@@ -35,7 +35,13 @@ pub(super) struct TestHost {
     pub mode: Cell<ThemeMode>,
     /// The messages of its one session, `ses_1`, titled "Sample".
     pub messages: RefCell<Vec<SessionMessageInfo>>,
+    /// The fetches sent, with their replies, which [`TestHost::reply`] delivers.
+    pub fetches: RefCell<Vec<(abi::Fetch, Reply)>>,
+    pub dialogs: RefCell<Vec<(String, abi::Dialog)>>,
 }
+
+/// A fetch's reply.
+pub(super) type Reply = Box<dyn FnOnce(Result<serde_json::Value, String>)>;
 
 /// What [`TestHost`]'s renders read.
 struct Fixture<'a> {
@@ -134,6 +140,14 @@ impl Host for TestHost {
     fn read(&self, f: &mut dyn FnMut(&dyn abi::Read)) {
         f(&Fixture { host: self, theme: self.theme() });
     }
+
+    fn fetch(&self, fetch: abi::Fetch, reply: Reply) {
+        self.fetches.borrow_mut().push((fetch, reply));
+    }
+
+    fn dialog(&self, id: &str, dialog: abi::Dialog) {
+        self.dialogs.borrow_mut().push((id.to_owned(), dialog));
+    }
 }
 
 impl TestHost {
@@ -141,6 +155,14 @@ impl TestHost {
     pub fn emit(&self, event: &abi::types::V2Event) {
         let handlers = self.events.borrow().clone();
         handlers.iter().for_each(|handler| handler(event));
+    }
+
+    /// Answers every fetch sent so far with `{"name": <its path>}`, as the server would.
+    pub fn reply(&self) {
+        let fetches = std::mem::take(&mut *self.fetches.borrow_mut());
+        for (fetch, reply) in fetches {
+            reply(Ok(serde_json::json!({ "name": fetch.path })));
+        }
     }
 }
 
@@ -157,6 +179,8 @@ pub(super) fn host() -> Rc<TestHost> {
         remounts: Cell::new(0),
         mode: Cell::new(ThemeMode::Dark),
         messages: RefCell::default(),
+        fetches: RefCell::default(),
+        dialogs: RefCell::default(),
     })
 }
 
