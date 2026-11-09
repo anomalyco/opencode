@@ -1,7 +1,6 @@
 export * as Ipc from "./ipc"
 
 import { app, BrowserWindow, MessageChannelMain } from "electron"
-import { isAuxiliaryWindow } from "@opencode/plugin/gui/builtin"
 import { Effect, Layer } from "effect"
 import { RpcServer } from "effect/rpc"
 import { DesktopRpcs } from "../shared/ipc-rpc"
@@ -58,7 +57,6 @@ export const registerIpcHandlers = Effect.gen(function* () {
   }
 
   const wire = (win: BrowserWindow) => {
-    if (isAuxiliaryWindow(win) || win.getParentWindow()) return
     win.webContents.on("before-input-event", (_event, input) => {
       // Ctrl+R renames the session and Ctrl+Shift+R toggles review in the renderer,
       // so the default menu's Reload and Force Reload must not take them.
@@ -71,9 +69,9 @@ export const registerIpcHandlers = Effect.gen(function* () {
     })
 
     const post = () => {
-      if (win.isDestroyed() || win.webContents.isDestroyed() || isAuxiliaryWindow(win)) return
+      if (win.isDestroyed() || win.webContents.isDestroyed()) return
 
-      // Only the app's own renderer document gets a privileged transport port; an overlay's data URL must not.
+      // Only the app's own renderer document gets a privileged transport port.
       if (!isRendererUrl(win.webContents.getURL())) return
       const channel = new MessageChannelMain()
       handoff.bind(win.webContents, channel.port1)
@@ -82,7 +80,7 @@ export const registerIpcHandlers = Effect.gen(function* () {
 
     // A committed document replaces the bound one; its events wait for the port posted when it loads.
     win.webContents.on("did-navigate", (_event, url) => {
-      if (!isAuxiliaryWindow(win) && isRendererUrl(url)) handoff.prepare(win.webContents)
+      if (isRendererUrl(url)) handoff.prepare(win.webContents)
     })
     win.webContents.on("did-finish-load", post)
 

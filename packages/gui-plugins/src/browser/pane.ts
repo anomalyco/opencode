@@ -12,7 +12,7 @@ import { browserFailure } from "./errors"
 import { createBrowserNetwork, type BrowserNetwork, type BrowserNetworkUpstream } from "./network"
 import { destinationOrigin, fileURLWithin, refusal } from "./policy"
 import { createRefs } from "./refs"
-import type { PaneEvent } from "./ipc"
+import type { PaneEvent, PillOverlay } from "./ipc"
 import {
   attachmentFailure,
   createPaneState,
@@ -69,6 +69,16 @@ type SessionRecord = {
   cleanup: () => void
 }
 
+/** A window's closed image-overlay shell; created only after the first visible disconnected page. */
+type PillEntry = {
+  readonly win: BrowserWindow
+  readonly shell: Electron.BaseWindow
+  readonly view: Electron.ImageView
+  wanted: boolean
+  bounds?: { x: number; y: number; width: number; height: number }
+  cleanup: () => void
+}
+
 /** The Electron and Effect handles of one binding; its phase lives in the pane machine. */
 type Handle = {
   window: number
@@ -99,13 +109,13 @@ export function createBrowserPane(input: {
   readonly embeds: Embeds
   /** The screen is locked: no attachment may start. */
   readonly locked: () => boolean
-  /** The translated "Disconnected" label for the floating status pill. */
-  readonly disconnectedLabel: () => string
   readonly emit: (window: number, value: { readonly binding: string; readonly event: PaneEvent }) => void
 }) {
   const machine: PaneMachine = { state: createPaneState() }
   const handles = new Map<string, Handle>()
   const records = new Map<string, SessionRecord>()
+  /** One lazy image overlay per window, in a parented click-through shell without a renderer process. */
+  const pillViews = new Map<number, PillEntry>()
   /** One createRecord per window and session at a time; concurrent registrations share the same record. */
   const creating = new Map<string, Promise<SessionRecord>>()
   let disposed = false
@@ -468,6 +478,48 @@ export function createBrowserPane(input: {
     release(window: number, server: string, session: string) {
       releaseKey(`${window}\n${server}\n${session}`)
     },
+    /** Draws the connection pill: a bitmap from the app renderer in a parented, click-through image shell. */
+    pill(window: number, input: PillOverlay) {
+      const current = pillViews.get(window)
+
+      if (!input.visible) {
+        if (current) {
+          current.wanted = false
+          current.shell.hide()
+        }
+
+        return
+      }
+
+      const entry = pillView(window)
+
+      if (!entry || !input.image || !input.bounds) return
+
+      if (entry.win.webContents.isDestroyed()) return
+      const image = electron.nativeImage.createFromDataURL(input.image)
+
+      if (image.isEmpty()) {
+        entry.wanted = false
+        entry.shell.hide()
+
+        return
+      }
+
+      const zoom = entry.win.webContents.getZoomFactor()
+
+      entry.wanted = true
+      entry.bounds = {
+        x: Math.round(input.bounds.x * zoom),
+        y: Math.round(input.bounds.y * zoom),
+        width: Math.round(input.bounds.width * zoom),
+        height: Math.round(input.bounds.height * zoom),
+      }
+      entry.view.setImage(image)
+      clipPillWindow(entry)
+      placePill(entry)
+
+      if (entry.win.isVisible()) entry.shell.showInactive()
+    },
     /** The screen locked: every attachment ends, so the server drops this desktop's browser tools until it unlocks. */
     lock() {
       // The pages stay live behind the local proxy, but it has no upstream to tunnel through while locked.
@@ -490,8 +542,122 @@ export function createBrowserPane(input: {
       await Promise.all(Array.from(records.keys(), (storageKey) => releaseLater(storageKey)))
       await Promise.all(releasingRecords)
       await Promise.all(releasing)
+      pillViews.forEach((entry) => entry.cleanup())
+      pillViews.clear()
       await runtime.dispose()
     },
+  }
+
+  // BaseWindow transparency is unreliable on some Linux compositors; shape the window to the pill body there.
+  function clipPillWindow(entry: PillEntry) {
+    if (process.platform !== "linux" || !entry.bounds || entry.shell.isDestroyed()) return
+    const bodyWidth = Math.max(1, entry.bounds.width - 12)
+    const bodyHeight = Math.max(1, entry.bounds.height - 12)
+    const radius = 8
+    const rects: Electron.Rectangle[] = []
+
+    for (let row = 0; row < bodyHeight; row++) {
+      const edge = Math.min(row, bodyHeight - 1 - row)
+      const inset = edge >= radius ? 0 : Math.round(radius - Math.sqrt(radius * radius - (radius - edge - 0.5) ** 2))
+      rects.push({ x: 6 + inset, y: 6 + row, width: Math.max(1, bodyWidth - inset * 2), height: 1 })
+    }
+
+    try {
+      entry.shell.setShape(rects)
+    } catch {
+      // A platform that cannot shape keeps the image background.
+    }
+  }
+
+  function placePill(entry: PillEntry) {
+    if (entry.win.isDestroyed() || entry.shell.isDestroyed() || !entry.bounds) return
+    const content = entry.win.getContentBounds()
+
+    entry.shell.setBounds({
+      x: content.x + entry.bounds.x,
+      y: content.y + entry.bounds.y,
+      width: entry.bounds.width,
+      height: entry.bounds.height,
+    })
+    entry.view.setBounds({ x: 0, y: 0, width: entry.bounds.width, height: entry.bounds.height })
+  }
+
+  function pillView(window: number) {
+    const current = pillViews.get(window)
+
+    if (current && !current.win.isDestroyed()) return current
+    const win = input.windows.get(window)
+
+    if (!win || win.isDestroyed()) return undefined
+
+    const shell = new electron.BaseWindow({
+      parent: win,
+      width: 1,
+      height: 1,
+      frame: false,
+      transparent: true,
+      show: false,
+      focusable: false,
+      fullscreenable: false,
+      skipTaskbar: true,
+      hasShadow: false,
+    })
+
+    const view = new electron.ImageView()
+
+    shell.setIgnoreMouseEvents(true)
+    shell.setBackgroundColor("#00000000")
+    view.setBackgroundBlur(0)
+    shell.contentView.addChildView(view)
+
+    const entry: PillEntry = {
+      win,
+      shell,
+      view,
+      wanted: false,
+      bounds: undefined,
+      cleanup: () => undefined,
+    }
+
+    const place = () => placePill(entry)
+
+    const hide = () => {
+      if (!shell.isDestroyed()) shell.hide()
+    }
+
+    const show = () => {
+      if (entry.wanted && !win.isDestroyed() && win.isVisible() && !shell.isDestroyed()) {
+        place()
+        shell.showInactive()
+      }
+    }
+
+    const cleanup = () => {
+      if (!win.isDestroyed()) {
+        win.off("move", place)
+        win.off("resize", place)
+        win.off("hide", hide)
+        win.off("minimize", hide)
+        win.off("show", show)
+        win.off("restore", show)
+      }
+
+      if (!shell.isDestroyed()) shell.destroy()
+
+      if (pillViews.get(window) === entry) pillViews.delete(window)
+    }
+
+    entry.cleanup = cleanup
+    pillViews.set(window, entry)
+    win.on("move", place)
+    win.on("resize", place)
+    win.on("hide", hide)
+    win.on("minimize", hide)
+    win.on("show", show)
+    win.on("restore", show)
+    win.once("closed", cleanup)
+
+    return entry
   }
 
   function dispatch(event: PaneMachineEvent) {
@@ -635,7 +801,6 @@ export function createBrowserPane(input: {
       },
       set upstream(value) {
         upstream = value
-        record.pages.forEach((entry) => entry.page.setDisconnected(!value))
       },
     }
 
@@ -866,7 +1031,6 @@ export function createBrowserPane(input: {
       restore: options.restore,
       popupOptions: options.popupOptions,
       fileRoots: () => selectFileRoots(machine.state, owner.binding),
-      disconnectedLabel: input.disconnectedLabel,
       shared,
       embeds: input.embeds,
       fail,
@@ -911,7 +1075,6 @@ export function createBrowserPane(input: {
     live = { tabID: id, page, owner }
     handle.record.pages.set(id, live)
     handle.pages.set(attempt, live)
-    page.setDisconnected(!handle.record.upstream)
     dispatchBinding(binding, { type: "tab.opened", tabID: id, attempt, tab: options.restore ?? page.state() })
     // Straight to the window, not through the server report: the embed is local to this desktop.
     emit(binding, { type: "embed", tabID: id, embed: page.embed })

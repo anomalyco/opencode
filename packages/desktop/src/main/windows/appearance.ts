@@ -1,5 +1,4 @@
 import { app, BrowserWindow, nativeImage, nativeTheme } from "electron"
-import { isAuxiliaryWindow } from "@opencode/plugin/gui/builtin"
 import type { DesktopZoomLevel } from "@opencode/app/desktop-menu"
 import type { Path } from "effect"
 import { type TitlebarTheme } from "../../shared/ipc-contract"
@@ -24,8 +23,6 @@ const maxZoomLevel = 10
 const minZoomLevel = 0.2
 
 let backgroundColor: string | undefined
-
-const appWindows = () => BrowserWindow.getAllWindows().filter((win) => !win.isDestroyed() && !isAuxiliaryWindow(win))
 
 export function windowAppearance(path: Path.Path, paths: DesktopPaths.Resolved) {
   return {
@@ -54,7 +51,7 @@ export function setBackgroundColor(color: string) {
   // settings file on each set, so only persist a change.
   if (getBackgroundColor() !== color) getStore().set(BACKGROUND_COLOR_KEY, color)
   backgroundColor = color
-  appWindows().forEach((win) => {
+  BrowserWindow.getAllWindows().forEach((win) => {
     win.setBackgroundColor(color)
 
     if (process.platform === "darwin") win.invalidateShadow()
@@ -82,13 +79,13 @@ export function setTrafficLightsPosition(win: BrowserWindow, position: { x: numb
 }
 
 export function updateTitlebar(win: BrowserWindow) {
-  if (process.platform !== "win32" || isAuxiliaryWindow(win)) return
+  if (process.platform !== "win32") return
   win.setTitleBarOverlay(overlay(titlebarThemes.get(win), win.webContents.getZoomFactor()))
 }
 
 export function setPinchZoomEnabled(enabled: boolean) {
   getStore().set(PINCH_ZOOM_ENABLED_KEY, enabled)
-  appWindows().forEach((win) => {
+  BrowserWindow.getAllWindows().forEach((win) => {
     pinchZoomEnabled.set(win, enabled)
     emitIpcEvent(win.webContents, new WindowPinchZoomChanged({ enabled }))
 
@@ -104,7 +101,7 @@ export function getPinchZoomEnabled() {
 // Saves the level and applies it to every window. A pinch zooms one window without saving.
 export function setZoomLevel(level: DesktopZoomLevel) {
   if (storedZoomLevel() !== level) getStore().set(ZOOM_LEVEL_KEY, level)
-  appWindows().forEach((win) => {
+  BrowserWindow.getAllWindows().forEach((win) => {
     win.webContents.setZoomFactor(level)
     updateZoom(win)
   })

@@ -1,10 +1,10 @@
+import { BrowserWindow } from "electron"
 import { Effect } from "effect"
 import { StorageRpcs } from "../../shared/ipc-rpc"
 import { StorageChanged } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 import { IpcPortHandoff } from "../ipc-transport"
 import { DesktopStorage } from "../storage"
-import { getMainWindows } from "../windows"
 
 export const storageHandlers = StorageRpcs.toLayer(
   Effect.gen(function* () {
@@ -20,7 +20,7 @@ export const storageHandlers = StorageRpcs.toLayer(
           // window's new document is another copy too: an unloading document's flush reaches it.
           const event = new StorageChanged({ name, insert, remove, revision })
 
-          for (const win of getMainWindows()) {
+          for (const win of BrowserWindow.getAllWindows()) {
             if (!handoff.isCurrentClient(win.webContents, context.client.id)) emitIpcEvent(win.webContents, event)
           }
 

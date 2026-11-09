@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto"
 import { app, BrowserWindow, screen } from "electron"
-import { isAuxiliaryWindow } from "@opencode/plugin/gui/builtin"
 import { Effect, FileSystem, Path } from "effect"
 import { openExternalURL } from "../files"
 import { scoped } from "../native/logging"
@@ -89,14 +88,9 @@ export function getWindowID(win: BrowserWindow) {
   return registry.persisted().find((id) => registry.get(id) === win)
 }
 
-/** App windows that host the renderer, excluding auxiliary overlays, popups and other native windows. */
+/** App windows that host the renderer, excluding popups and other native windows. */
 export function getMainWindows() {
-  return registry.list().filter((win) => !win.isDestroyed() && !isAuxiliaryWindow(win))
-}
-
-/** Whether a window is one of the app's renderer windows, not an overlay or popup. */
-export function isMainWindow(win: BrowserWindow) {
-  return !win.isDestroyed() && !isAuxiliaryWindow(win) && getWindowID(win) !== undefined
+  return registry.list().filter((win) => !win.isDestroyed())
 }
 
 /** Runs for each app window as it registers, before its renderer loads. */

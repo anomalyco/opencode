@@ -41,7 +41,6 @@ const setup: Plugin.MainSetup = (ctx) => {
                   refs,
                   embeds: ctx.embeds,
                   locked: () => screenLock.locked(),
-                  disconnectedLabel: () => ctx.t("disconnected"),
                   emit: (window, value) => provider.emit("event", value, window),
                 }),
               })
@@ -98,6 +97,7 @@ const setup: Plugin.MainSetup = (ctx) => {
     clearSite: async (input, caller) => (await pane()).clearSite(caller.window, input.binding, input.tabID),
     close: async (input, caller) => (await pane()).close(caller.window, input.binding),
     release: async (input, caller) => (await pane()).release(caller.window, input.server, input.session),
+    pill: async (input, caller) => (await pane()).pill(caller.window, input),
   })
 
   // A locked screen ends every attachment, which drops this desktop's browser tools from the server's sessions. Windows

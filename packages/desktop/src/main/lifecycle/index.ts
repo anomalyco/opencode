@@ -7,7 +7,7 @@ import { DeepLinks } from "../deep-links"
 import { DesktopLogging, scoped } from "../native/logging"
 import { DesktopStorage } from "../storage"
 import { safeWebContentsURL } from "../windows/state"
-import { getLastFocusedWindow, getMainWindows, mainWindows } from "../windows"
+import { getLastFocusedWindow, mainWindows } from "../windows"
 import type { Scope } from "@opencode/plugin/gui/host"
 import { marks } from "./marks"
 import {
@@ -149,7 +149,7 @@ const runtime = Layer.effect(
     const activate = () => {
       if (!restoresWindows(driver.state())) return
 
-      if (getMainWindows().length === 0) restoreWindows()
+      if (BrowserWindow.getAllWindows().length === 0) restoreWindows()
     }
 
     let windowsWired = false

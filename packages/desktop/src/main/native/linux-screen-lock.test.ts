@@ -71,7 +71,8 @@ describe("linux screen lock hints", () => {
 
   test("reads xscreensaver watch lines", () => {
     expect(parseScreensaverLine("LOCK 2026-11-09 12:00:00")).toBe(true)
-    expect(parseScreensaverLine("UNLOCK 2026-11-09 12:01:00")).toBe(false)
     expect(parseScreensaverLine("BLANK 2026-11-09 12:00:00")).toBeUndefined()
+    expect(parseScreensaverLine("RUN 1 2026-11-09 12:00:10")).toBeUndefined()
+    expect(parseScreensaverLine("UNBLANK 2026-11-09 12:01:00")).toBe(false)
   })
 })

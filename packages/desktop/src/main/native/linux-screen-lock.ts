@@ -88,7 +88,7 @@ export function parseGdbusBoolean(output: string) {
 }
 
 export function parseScreensaverLine(line: string) {
-  if (/\bUNLOCK\b/.test(line)) return false
+  if (/\bUNBLANK\b/.test(line)) return false
 
   if (/\bLOCK\b/.test(line)) return true
 

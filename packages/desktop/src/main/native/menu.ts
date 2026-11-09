@@ -1,6 +1,5 @@
 import { BrowserWindow, Menu } from "electron"
 import type { MenuItemConstructorOptions } from "electron"
-import { getMainWindows } from "../windows"
 import {
   DESKTOP_MENU,
   desktopMenuKey,
@@ -156,7 +155,7 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
   if (entry.action) {
     const action = entry.action
     item.click = () => {
-      const win = selectMenuActionWindow(BrowserWindow.getFocusedWindow(), getMainWindows())
+      const win = selectMenuActionWindow(BrowserWindow.getFocusedWindow(), BrowserWindow.getAllWindows())
 
       runDesktopMenuAction(win, action, {
         installCli: deps.installCli,

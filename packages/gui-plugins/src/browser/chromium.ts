@@ -1,9 +1,8 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
-import electron, { type BrowserWindow, type WebContents, type WebContentsView } from "electron"
+import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
-import { Exit, Schema } from "effect"
+import { Schema } from "effect"
 import type { Embeds } from "@opencode/plugin/gui/main"
-import { markAuxiliaryWindow } from "@opencode/plugin/gui/builtin"
 import { createCdp, abortError, waitFor } from "./cdp"
 import { createBrowserFiles } from "./files"
 import { createDiagnostics } from "./diagnostics"
@@ -175,383 +174,6 @@ function runStopError(reason: RunStopReason) {
   }
 }
 
-const PillPresentationSchema = Schema.Struct({
-  background: Schema.String,
-  border: Schema.String,
-  color: Schema.String,
-  muted: Schema.String,
-  shadow: Schema.String,
-  font: Schema.String,
-})
-
-type PillPresentation = typeof PillPresentationSchema.Type
-
-const PillSizeSchema = Schema.Struct({ width: Schema.Number, height: Schema.Number })
-
-/** Used only until the app renderer answers with its resolved theme. System colors follow the native light/dark mode. */
-const fallbackPresentation: PillPresentation = {
-  background: "Canvas",
-  border: "color-mix(in srgb, CanvasText 12%, transparent)",
-  color: "CanvasText",
-  muted: "GrayText",
-  shadow: "0 2px 4px rgb(0 0 0 / 0.12)",
-  font: "system-ui",
-}
-
-/** Resolves the app's own CSS tokens instead of guessing at its font stack or light/dark palette. */
-async function readPresentation(win: BrowserWindow): Promise<PillPresentation | undefined> {
-  if (win.isDestroyed() || win.webContents.isDestroyed() || win.webContents.isLoading()) return undefined
-
-  try {
-    const value: unknown = await win.webContents.executeJavaScript(
-      `(() => {
-        const probe = document.createElement("div")
-        probe.style.cssText = "position:fixed;left:-10000px;top:0;visibility:hidden;pointer-events:none;background:var(--v2-background-bg-base);color:var(--v2-text-text-base);font-family:var(--v2-font-family-sans);box-shadow:var(--v2-elevation-floating);border:1px solid var(--v2-border-border-muted)"
-        document.documentElement.appendChild(probe)
-        const text = getComputedStyle(probe)
-        const presentation = {
-          background: text.backgroundColor,
-          border: text.borderTopColor,
-          color: text.color,
-          muted: "",
-          shadow: text.boxShadow,
-          font: getComputedStyle(document.body).fontFamily || text.fontFamily,
-        }
-        probe.style.color = "var(--v2-text-text-muted)"
-        presentation.muted = getComputedStyle(probe).color
-        probe.remove()
-        return presentation
-      })()`,
-      true,
-    )
-
-    const decoded = Schema.decodeUnknownExit(PillPresentationSchema)(value)
-
-    if (Exit.isFailure(decoded)) return undefined
-
-    const data = decoded.value
-
-    if (!data.background || data.background === "rgba(0, 0, 0, 0)" || data.background === "transparent")
-      return undefined
-
-    return data
-  } catch {
-    return undefined
-  }
-}
-
-type PillPage = { wanted: boolean; visible: boolean }
-
-const pillHosts = new WeakMap<BrowserWindow, ReturnType<typeof createPillHost>>()
-
-/**
- * One lazy, click-through pill window per main window. Pages only record whether they need a pill and whether they are
- * the visible tab; the window is created on the first visible disconnected page and reused by every tab after that.
- */
-function pillHost(win: BrowserWindow, label: () => string) {
-  const existing = pillHosts.get(win)
-
-  if (existing) return existing
-  const host = createPillHost(win, label)
-  pillHosts.set(win, host)
-
-  return host
-}
-
-function createPillHost(win: BrowserWindow, label: () => string) {
-  const pages = new Map<WebContentsView, PillPage>()
-  let active: WebContentsView | undefined
-  let pill: BrowserWindow | undefined
-  let ready = false
-  let shown = false
-  let width = 144
-  let height = 44
-  let poll: ReturnType<typeof setInterval> | undefined
-  let refreshing = false
-  let measureGeneration = 0
-  let closed = false
-  let presentation: PillPresentation | undefined
-
-  const hide = () => {
-    if (!shown) return
-    shown = false
-
-    if (pill && !pill.isDestroyed()) pill.hide()
-  }
-
-  const stopPolling = () => {
-    clearInterval(poll)
-    poll = undefined
-  }
-
-  const startPolling = () => {
-    if (poll) return
-    poll = setInterval(() => void refresh(), 700)
-  }
-
-  const lastVisible = () => {
-    let found: WebContentsView | undefined
-
-    pages.forEach((entry, view) => {
-      if (entry.visible) found = view
-    })
-
-    return found
-  }
-
-  const apply = async (data: PillPresentation, text: string) => {
-    if (!pill || pill.isDestroyed() || !ready || closed) return
-    const generation = ++measureGeneration
-
-    // Without a compositor the window's own background shows at the shaped edge, so match the pill surface.
-    if (process.platform === "linux") pill.setBackgroundColor(data.background)
-
-    try {
-      const size: unknown = await pill.webContents.executeJavaScript(
-        `(() => {
-          const root = document.documentElement.style
-          root.setProperty("--pill-bg", ${JSON.stringify(data.background)})
-          root.setProperty("--pill-border", ${JSON.stringify(data.border)})
-          root.setProperty("--pill-fg", ${JSON.stringify(data.color)})
-          root.setProperty("--pill-muted", ${JSON.stringify(data.muted)})
-          root.setProperty("--pill-shadow", ${JSON.stringify(data.shadow)})
-          root.setProperty("--pill-font", ${JSON.stringify(data.font)})
-          document.getElementById("label").textContent = ${JSON.stringify(text)}
-          const rect = document.getElementById("frame").getBoundingClientRect()
-          return { width: Math.ceil(rect.width), height: Math.ceil(rect.height) }
-        })()`,
-        true,
-      )
-
-      if (generation !== measureGeneration || closed || !pill || pill.isDestroyed()) return
-      const decoded = Schema.decodeUnknownExit(PillSizeSchema)(size)
-
-      if (Exit.isFailure(decoded)) return
-      width = Math.max(96, decoded.value.width)
-      height = Math.max(32, decoded.value.height)
-      clipPill()
-      layout()
-    } catch {
-      // The app renderer may be reloading or gone; keep the last pill until it answers again.
-    }
-  }
-
-  const refresh = async () => {
-    if (refreshing || closed || !active || !shown) return
-    const page = pages.get(active)
-
-    if (!page?.visible || !page.wanted) return
-    refreshing = true
-
-    try {
-      const data = await readPresentation(win)
-      const text = label()
-
-      if (data) presentation = data
-      await apply(presentation ?? fallbackPresentation, text)
-    } finally {
-      refreshing = false
-    }
-  }
-
-  // Linux window transparency needs a compositor. Where there is none, shape the window to the pill so the
-  // transparent padding never paints as a black box; the border carries the raised edge instead of the clipped shadow.
-  const clipPill = () => {
-    if (process.platform !== "linux" || !pill || pill.isDestroyed()) return
-    const bodyWidth = Math.max(1, width - 12)
-    const bodyHeight = Math.max(1, height - 12)
-    const radius = 8
-    const rects: Electron.Rectangle[] = []
-
-    for (let row = 0; row < bodyHeight; row++) {
-      const edge = Math.min(row, bodyHeight - 1 - row)
-      const inset = edge >= radius ? 0 : Math.round(radius - Math.sqrt(radius * radius - (radius - edge - 0.5) ** 2))
-      rects.push({ x: 6 + inset, y: 6 + row, width: Math.max(1, bodyWidth - inset * 2), height: 1 })
-    }
-
-    try {
-      pill.setShape(rects)
-    } catch {
-      // A compositor or platform that cannot shape keeps the transparent window.
-    }
-  }
-
-  const layout = () => {
-    if (!active || !pill || pill.isDestroyed() || !ready || win.isDestroyed() || !win.isVisible()) return
-    const bounds = active.getBounds()
-
-    if (bounds.width <= 0 || bounds.height <= 0) return
-    const actual = Math.min(width, Math.max(96, bounds.width - 16))
-    const content = win.getContentBounds()
-    pill.setBounds({
-      x: content.x + bounds.x + Math.round((bounds.width - actual) / 2),
-      y: content.y + bounds.y + 2,
-      width: actual,
-      height,
-    })
-    clipPill()
-
-    if (!shown) {
-      shown = true
-      pill.showInactive()
-    }
-
-    if (win.isFocused() && !pill.isDestroyed()) pill.moveTop()
-  }
-
-  const sync = () => {
-    if (closed) return
-    const page = active ? pages.get(active) : undefined
-
-    if (!page?.wanted || !page.visible) {
-      stopPolling()
-      hide()
-
-      return
-    }
-
-    ensurePill()
-    startPolling()
-    layout()
-    void refresh()
-  }
-
-  const ensurePill = () => {
-    if (pill || closed || win.isDestroyed()) return
-    pill = new electron.BrowserWindow({
-      parent: win,
-      frame: false,
-      transparent: true,
-      backgroundColor: "#00000000",
-      show: false,
-      focusable: false,
-      fullscreenable: false,
-      resizable: false,
-      movable: false,
-      minimizable: false,
-      maximizable: false,
-      closable: false,
-      skipTaskbar: true,
-      hasShadow: false,
-      acceptFirstMouse: false,
-      webPreferences: {
-        sandbox: true,
-        contextIsolation: true,
-        nodeIntegration: false,
-        devTools: false,
-        backgroundThrottling: false,
-        spellcheck: false,
-      },
-    })
-
-    markAuxiliaryWindow(pill)
-    pill.setIgnoreMouseEvents(true)
-    pill.setBackgroundColor("#00000000")
-    pill.setMenuBarVisibility(false)
-    pill.webContents.on("did-finish-load", () => {
-      ready = true
-      layout()
-      void refresh()
-    })
-    pill.on("closed", () => {
-      ready = false
-      pill = undefined
-      hide()
-    })
-
-    const html = `<!doctype html><html><head><meta charset="utf-8"><style>
-      html,body{margin:0;background:transparent;overflow:hidden}
-      body{width:max-content;-webkit-font-smoothing:antialiased}
-      .frame{display:inline-block;padding:6px}
-      .pill{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:0.5px solid var(--pill-border,CanvasText);border-radius:8px;background:var(--pill-bg,Canvas);color:var(--pill-fg,CanvasText);box-shadow:var(--pill-shadow,none);font-family:var(--pill-font,system-ui);font-size:13px;font-weight:440;line-height:16px;letter-spacing:-0.04px;white-space:nowrap}
-      svg{display:block;flex:none;color:var(--pill-muted,GrayText)}
-    </style></head><body><div class="frame" id="frame"><div class="pill" role="status" aria-live="polite">
-      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.45 12.2h6.95a2.7 2.7 0 0 0 .35-5.38 3.85 3.85 0 0 0-7.3-1.02 3 3 0 0 0-.1 6.4Z"/><path d="m2.3 2.3 11.4 11.4"/></svg>
-      <span id="label"></span>
-    </div></div></body></html>`
-
-    void pill
-      .loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
-      .catch(() => undefined)
-  }
-
-  const moved = () => layout()
-  const shownWindow = () => sync()
-
-  const hiddenWindow = () => {
-    stopPolling()
-    hide()
-  }
-
-  const destroy = () => {
-    if (closed) return
-    closed = true
-    stopPolling()
-    hide()
-
-    if (pill && !pill.isDestroyed()) pill.destroy()
-    pill = undefined
-    win.off("move", moved)
-    win.off("resize", moved)
-    win.off("show", shownWindow)
-    win.off("restore", shownWindow)
-    win.off("hide", hiddenWindow)
-    win.off("minimize", hiddenWindow)
-    win.off("focus", moved)
-    win.off("closed", destroy)
-    pages.forEach((_entry, view) => view.off("bounds-changed", moved))
-    pages.clear()
-    pillHosts.delete(win)
-  }
-
-  const attach = (view: WebContentsView) => {
-    const entry: PillPage = { wanted: false, visible: false }
-    pages.set(view, entry)
-    view.on("bounds-changed", moved)
-
-    return {
-      setDisconnected(wanted: boolean) {
-        entry.wanted = wanted
-
-        if (wanted && entry.visible) active = view
-        sync()
-      },
-      setPageVisible(visible: boolean) {
-        entry.visible = visible
-
-        if (visible) active = view
-        else if (active === view) active = lastVisible()
-        sync()
-      },
-      dispose() {
-        pages.delete(view)
-        view.off("bounds-changed", moved)
-
-        if (active === view) active = lastVisible()
-
-        if (pages.size === 0) destroy()
-        else sync()
-      },
-    }
-  }
-
-  win.on("move", moved)
-  win.on("resize", moved)
-  win.on("show", shownWindow)
-  win.on("restore", shownWindow)
-  win.on("hide", hiddenWindow)
-  win.on("minimize", hiddenWindow)
-  win.on("focus", moved)
-  win.on("closed", destroy)
-
-  return { attach, destroy }
-}
-
-/** A page's handle to its window's shared pill; creating it opens no window until the page is visible and disconnected. */
-function createDisconnectedPill(win: BrowserWindow, view: WebContentsView, label: () => string) {
-  return pillHost(win, label).attach(view)
-}
-
 export type BrowserPage = ReturnType<typeof createBrowserPage>
 
 export function createBrowserPage(
@@ -579,8 +201,6 @@ export function createBrowserPage(
     popupOptions?: Electron.BrowserWindowConstructorOptions
     /** Directories whose files may load as file:// documents; empty when the server is remote. */
     fileRoots?: () => ReadonlyArray<string>
-    /** The translated "Disconnected" label for the floating status pill. */
-    disconnectedLabel: () => string
     shared: Shared
     embeds: Embeds
   },
@@ -933,12 +553,9 @@ export function createBrowserPage(
   // Hidden tabs keep a desktop-sized viewport until the renderer lays the embed out.
   view.setBounds({ x: 0, y: 0, width: 1000, height: 700 })
   const embed = options.embeds.create(view, win)
-  const disconnected = createDisconnectedPill(win, view, options.disconnectedLabel)
   // A hidden page cannot be picked from, and a comment's frozen still already shows the
   // picked element, so hiding ends the picker, any pick in progress, and the highlight.
   embed.on("visible", (visible) => {
-    disconnected.setPageVisible(visible)
-
     if (!visible) void dispatchPicker({ type: "embed.hidden" })
   })
 
@@ -988,10 +605,6 @@ export function createBrowserPage(
     ready,
     /** The host embed the renderer lays this page out with. */
     embed: embed.id,
-    /** Shows the floating disconnected pill above this page; hidden while the page itself is hidden. */
-    setDisconnected(visible: boolean) {
-      disconnected.setDisconnected(visible)
-    },
     async inspect(enabled: boolean) {
       if (closed()) return
       await ready
@@ -1065,8 +678,6 @@ export function createBrowserPage(
       dispatchDialog({ type: "disposed" })
       void dispatchPicker({ type: "disposed" })
       clearTimeout(pickerTimer)
-      // The pill is a separate window and must go before profiling releases this page's last references.
-      disconnected.dispose()
       detachNetwork?.()
       contents.session.off("will-download", download)
       await profiling.dispose()

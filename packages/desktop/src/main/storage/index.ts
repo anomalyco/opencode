@@ -1,7 +1,6 @@
 export * as DesktopStorage from "./index"
 
 import { app, BrowserWindow } from "electron"
-import { isAuxiliaryWindow } from "@opencode/plugin/gui/builtin"
 import { Context, Effect, Layer, Path } from "effect"
 import { marks } from "../lifecycle/marks"
 import { openDatabase } from "./database"
@@ -34,11 +33,7 @@ export const layer = Layer.effect(
       ),
       Effect.catch((error) => Effect.logWarning("failed to import legacy store files", { error })),
     )
-
-    const wire = (_event: Electron.Event | undefined, win: BrowserWindow) => {
-      if (!isAuxiliaryWindow(win) && !win.getParentWindow()) win.on("session-end", storage.flush)
-    }
-
+    const wire = (_event: Electron.Event | undefined, win: BrowserWindow) => win.on("session-end", storage.flush)
     app.on("before-quit", storage.flush)
     app.on("browser-window-created", wire)
     BrowserWindow.getAllWindows().forEach((win) => wire(undefined, win))

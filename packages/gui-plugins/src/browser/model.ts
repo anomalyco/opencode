@@ -16,7 +16,7 @@ import {
 import { recordable, remember, withIcon } from "./history"
 import type definition from "./index"
 import { workspaceFileURL } from "./link"
-import { BrowserPane, type PaneEvent } from "./ipc"
+import { BrowserPane, type PaneEvent, type PillOverlay } from "./ipc"
 import {
   addressFocusTab,
   createInitialState,
@@ -662,6 +662,12 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       return code === undefined ? undefined : describe(code)
     },
     suspended: (session: Session) => sessionSuspended(machine(), session.key),
+    /** Sends the app renderer's pill bitmap to the native overlay for this window. */
+    pill(input: PillOverlay) {
+      void client()
+        ?.pill(input)
+        .catch(() => undefined)
+    },
     /** The screen lock currently holds every attachment; its notice replaces the reconnect one. */
     locked() {
       const current = machine()

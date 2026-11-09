@@ -47,6 +47,7 @@ import {
   type OverlayEvent,
 } from "./overlay-machine"
 import { PageIcon } from "./page-icon"
+import { createPillOverlay } from "./pill"
 import {
   initialSiteState,
   SITE_CLEAR_TIMEOUT_MS,
@@ -377,6 +378,13 @@ export default function SessionBrowserPane(props: {
     () => box,
     (rect) => setSize({ width: rect.width, height: rect.height }),
   )
+  createPillOverlay({
+    frame: () => box,
+    visible: () => shown() && connection() !== "connected",
+    label: () => plugin.t("disconnected"),
+    mode: () => plugin.appearance.mode(),
+    send: (pill) => props.model.pill(pill),
+  })
 
   // A restored tab has no page until the pane first shows it.
   createKeyed(

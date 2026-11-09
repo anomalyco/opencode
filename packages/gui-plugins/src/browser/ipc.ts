@@ -11,6 +11,17 @@ const binding = text(128)
 /** The longest page icon data URL main reports: a 32px PNG is a few kilobytes; larger icons are dropped. */
 export const MAX_ICON_URL = 24_576
 
+/** The bitmap and window bounds of the floating connection pill, drawn by the app renderer. */
+export const PillOverlay = Schema.Struct({
+  visible: Schema.Boolean,
+  image: Schema.optionalKey(text(400_000).check(Schema.isStartingWith("data:image/png;base64,"))),
+  bounds: Schema.optionalKey(
+    Schema.Struct({ x: Schema.Finite, y: Schema.Finite, width: Schema.Finite, height: Schema.Finite }),
+  ),
+})
+
+export type PillOverlay = typeof PillOverlay.Type
+
 /** An element the user picked in the page. The ref stays valid for browser tools until the page navigates. */
 export const PaneElement = Schema.Struct({
   ref: Browser.Ref,
@@ -141,6 +152,8 @@ export const BrowserPane = Ipc.define({
         session: text(256).check(Schema.isStartingWith("ses")),
       }),
     },
+    // The app renderer draws the connection pill with its resolved theme and sends the bitmap and window bounds.
+    pill: { input: PillOverlay },
   },
   events: {
     event: Schema.Struct({ binding: Schema.String, event: PaneEvent }),

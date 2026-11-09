@@ -331,6 +331,7 @@ export function mountBrowserPane(input: PaneHost) {
         })
       },
       release: async () => undefined,
+      pill: async () => undefined,
       load: async () => undefined,
       command: async (value) => {
         const command = value.command
@@ -959,6 +960,7 @@ export function mountBrowserRegion(input: RegionHost) {
         ])
       },
       release: async () => undefined,
+      pill: async () => undefined,
       load: async () => undefined,
       command: async (value) => {
         if (value.command.type === "tabs.open") setStore("opens", (count) => count + 1)
