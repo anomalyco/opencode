@@ -1,4 +1,4 @@
-import { createMemo, createSignal, onCleanup, Show, type Accessor, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { Predicate } from "effect"
 import { abort } from "@opencode/util/abort"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
@@ -41,7 +41,7 @@ import { SessionHeaderSpacer } from "@/session/header/session-header"
 import { SessionHeaderGap } from "@/session/header/drag-area"
 import { SessionWorkingIndicator } from "@/session/header/session-working-indicator"
 
-type BlockingTask = { type: "shell" | "subagent"; partID: string; id?: string; label?: string }
+type BlockingTask = { type: "shell" | "subagent"; partID: string; id?: string; label?: string; started: number }
 
 type SessionBackground = {
   blocking: Accessor<BlockingTask[]>
@@ -310,7 +310,7 @@ function MessageTimelineView(
     revealPart: virtualized.revealPart,
   })
 
-  const backgroundHintPartID = createMemo(() => {
+  const blockingPartID = createMemo(() => {
     const blocking = new Set(props.background.blocking().map((task) => task.partID))
 
     if (blocking.size === 0) return
@@ -322,6 +322,28 @@ function MessageTimelineView(
       )
       .findLast((ref) => blocking.has(ref.partID))?.partID
   })
+
+  // In the Activity timeline, the button to move work to the background waits until the shell or subagent has run for
+  // a moment, so a quick command does not flash it. The wait counts from when the call started, so a call already
+  // running when the timeline opens shows it at once.
+  const [settledBlockingPartID, setSettledBlockingPartID] = createSignal<string>()
+
+  createEffect(() => {
+    const partID = blockingPartID()
+    const started = props.background.blocking().find((task) => task.partID === partID)?.started
+
+    if (!partID || started === undefined || !settings.general.activityTimeline()) return
+    const timer = setTimeout(() => setSettledBlockingPartID(partID), Math.max(0, started + 300 - Date.now()))
+    onCleanup(() => clearTimeout(timer))
+  })
+
+  const backgroundHintPartID = () => {
+    const partID = blockingPartID()
+
+    if (!settings.general.activityTimeline()) return partID
+
+    return partID && settledBlockingPartID() === partID ? partID : undefined
+  }
 
   const [backgroundHintRef, setBackgroundHintRef] = createSignal<HTMLDivElement>()
 
