@@ -78,11 +78,13 @@ pub fn install(tui: &Rc<Tui>) -> Vec<Disposer> {
             write(tui, &["prompt", "paste"], Value::from(next));
         }),
     ];
-    let ids: Vec<String> = commands.iter().filter_map(|c| c.id.clone()).collect();
+    let ids: Vec<String> = commands.iter().filter_map(|c| c.id.clone()).filter(|id| id != "terminal.suspend").collect();
     let layers = [
         KeymapLayer::global(commands),
         // `appBindingCommands` (`app.tsx:150-186`).
         KeymapLayer::default().bindings(ids),
+        // `appGlobalBindingCommands` (`app.tsx:117`): Ctrl+Z suspends with a form or dialog open too.
+        KeymapLayer::global(Vec::new()).bindings(["terminal.suspend"]),
     ];
     install_effects(tui);
     layers
