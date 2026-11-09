@@ -86,6 +86,9 @@ pub struct Updates {
     notification: RefCell<Option<Notice>>,
     /// The home's notice row while a home is mounted.
     slot: RefCell<Option<View>>,
+    /// The notice row its hover handler restyles. The handler holds it weakly: a widget whose handler holds the
+    /// widget is never freed.
+    row: RefCell<Option<Rc<View>>>,
     hovered: Cell<bool>,
     /// Redraws the open update dialog.
     pub(crate) dialog: RefCell<Option<Weak<dyn Fn()>>>,
@@ -331,6 +334,7 @@ fn render(tui: &Tui) {
         return;
     };
     slot.clear();
+    tui.updates.row.take();
     let Some(notice) = tui.updates.notification.borrow().clone() else {
         return;
     };
@@ -375,13 +379,16 @@ fn render(tui: &Tui) {
         text.add(&part.clone().backdrop(backdrop));
     }
     row.add(&text);
-    let (weak, styled) = (tui.weak(), row.clone());
+    let row = Rc::new(row);
+    let (weak, styled) = (tui.weak(), Rc::downgrade(&row));
     // Restyled in place: a row built again between press and release would lose the click.
     row.on_hover(bind!(weak, |tui, _, over| {
         tui.updates.hovered.set(over);
         let theme = tui.page();
         let hovered = theme.background.action.primary.hovered;
-        styled.bg(if over { hovered } else { Color::TRANSPARENT });
+        if let Some(row) = styled.upgrade() {
+            row.bg(if over { hovered } else { Color::TRANSPARENT });
+        }
         for part in &parts {
             part.clone().backdrop(if over { hovered } else { theme.background.base });
         }
@@ -405,7 +412,8 @@ fn render(tui: &Tui) {
             open(&tui, Origin::Notification);
         });
     });
-    slot.add(&row);
+    slot.add(&*row);
+    *tui.updates.row.borrow_mut() = Some(row);
 }
 
 /// The width of the logo the home shows at this size (`routes/home.rs` `paint_logo`).

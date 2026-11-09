@@ -4,6 +4,7 @@
 use crate::support;
 
 use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -141,4 +142,24 @@ fn leaving_the_route_ends_its_file_menu() {
     h.open_menu();
     h.tui.navigate(Route::Home);
     h.assert_menu_closed();
+}
+
+// Expected (R2-1): the viewer's file tree and file menu are freed with every widget they showed once the menu closes
+// and the route goes.
+#[test]
+fn the_file_tree_and_menu_are_freed_with_their_view() {
+    let h = mount(Route::Home);
+    h.wait_for("/project");
+    h.tui.keymap.dispatch("diff.open", None);
+    h.wait_for("≡ main.rs");
+    let marker = Rc::new(());
+    assert!(support::mark(&h.app, &h.tui.frame.main(), 0, &marker) > 0);
+    h.open_menu();
+    // The label, its row, and the overlay.
+    support::mark_at(&h.app, "Mark complete", 3, &marker);
+    h.app.press("escape");
+    h.assert_menu_closed();
+    h.tui.navigate(Route::Home);
+    h.app.render();
+    assert_eq!(Rc::strong_count(&marker), 1);
 }

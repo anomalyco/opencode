@@ -22,6 +22,9 @@ pub struct User {
     rendered: RefCell<Option<SessionMessageUser>>,
     /// The message a click opens dialogs for.
     id: Rc<RefCell<String>>,
+    /// The box its hover handler restyles. The handler holds it weakly: a widget whose handler holds the widget
+    /// is never freed.
+    _body: Rc<View>,
 }
 
 impl User {
@@ -42,9 +45,12 @@ impl User {
             .child(&skills)
             .child(&files);
         let hovered = theme.decrease(&theme.background.raised.base, 1);
-        let target = body.clone();
+        let body = Rc::new(body);
+        let target = Rc::downgrade(&body);
         body.on_hover(move |_, hover| {
-            target.bg(if hover { hovered } else { raised });
+            if let Some(body) = target.upgrade() {
+                body.bg(if hover { hovered } else { raised });
+            }
         });
         // A release (`onMouseUp`) opens the pending steer dialog for a prompt waiting to steer, else the message
         // actions (E.10b); a release that ends a text selection opens neither.
@@ -73,8 +79,18 @@ impl User {
             .border_sides(Sides::LEFT)
             .bg(raised)
             .child(images.root())
-            .child(&body);
-        Self { root, text, skills, files, images, color: Cell::new(None), rendered: RefCell::default(), id }
+            .child(&*body);
+        Self {
+            root,
+            text,
+            skills,
+            files,
+            images,
+            color: Cell::new(None),
+            rendered: RefCell::default(),
+            id,
+            _body: body,
+        }
     }
 
     pub fn root(&self) -> &View {
