@@ -572,6 +572,58 @@ describe("OpencodePlugin event watches", () => {
     ),
   )
 
+  it.effect(
+    "resumes for six CI updates in 10 minutes, which don't fill the window, so a Slack reply after them does too",
+    () =>
+      withConsole({}, (console) =>
+        Effect.gen(function* () {
+          const { host, wakes } = yield* start(console)
+          const session = yield* host.session.create({})
+          yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+          for (const index of [1, 2, 3, 4, 5, 6])
+            yield* deliver(console, watchEvent(session.id, `evt_${index}`, { kind: "workflow_run", status: "success" }))
+          yield* deliver(
+            console,
+            watchEvent(session.id, "evt_reply", { source: "slack", kind: "message", status: null }),
+          )
+          expect(wakes.map((wake) => wake.resume)).toEqual([true, true, true, true, true, true, true])
+        }),
+      ),
+  )
+
+  it.effect("holds the 21st CI update since the person's last prompt", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const { host, wakes } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        for (const index of Array.from({ length: 21 }, (_, index) => index))
+          yield* deliver(console, watchEvent(session.id, `evt_${index}`, { kind: "workflow_job", status: "failure" }))
+        expect(wakes.map((wake) => wake.resume)).toEqual([...Array.from({ length: 20 }, () => true), false])
+      }),
+    ),
+  )
+
+  it.effect("counts a batch of CI and a review toward the 10-minute window", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const { host, wakes } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        for (const index of [1, 2, 3, 4, 5]) {
+          console.push(
+            watchEvent(session.id, `evt_ci_${index}`, { kind: "workflow_run", status: "success" }),
+            watchEvent(session.id, `evt_review_${index}`),
+          )
+          yield* waitUntil(Effect.sync(() => console.state.acks.flat().includes(`evt_review_${index}`)))
+        }
+        yield* deliver(console, watchEvent(session.id, "evt_ci_6", { kind: "workflow_run", status: "success" }))
+        yield* deliver(console, watchEvent(session.id, "evt_review_6"))
+        expect(wakes.map((wake) => wake.resume)).toEqual([true, true, true, true, true, true, false])
+      }),
+    ),
+  )
+
   it.effect("resumes a held session with a later wake once 10 minutes pass", () =>
     withConsole({}, (console) =>
       Effect.gen(function* () {

@@ -133,8 +133,10 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
     const kept = own ? undefined : Option.getOrUndefined(decodeWakes(yield* ctx.storage.get(streakKey(sessionID))))
     const recent = (kept?.at ?? []).filter((at) => now - at < Duration.toMillis(Duration.minutes(10)))
     const count = kept?.count ?? 0
-    const resume = recent.length < WINDOW_LIMIT && count < PROMPT_LIMIT
-    const paused = !resume || recent.length + 1 >= WINDOW_LIMIT || count + 1 >= PROMPT_LIMIT
+    // CI runs pace themselves, so their updates count toward 20 since the prompt but not the 10-minute window.
+    const ci = events.every((event) => event.kind === "workflow_run" || event.kind === "workflow_job")
+    const resume = (ci || recent.length < WINDOW_LIMIT) && count < PROMPT_LIMIT
+    const paused = !resume || (!ci && recent.length + 1 >= WINDOW_LIMIT) || count + 1 >= PROMPT_LIMIT
     // The same events delivered again, after a lost acknowledgement, conflict with the message they already made:
     // they were delivered, so they're acknowledged without another wake.
     const delivered = yield* ctx.session
@@ -153,7 +155,8 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
         Effect.as(true),
         Effect.catchIf(Predicate.isTagged("Session.SyntheticConflictError"), () => Effect.succeed(false)),
       )
-    if (delivered && resume) yield* ctx.storage.set(streakKey(sessionID), { count: count + 1, at: [...recent, now] })
+    if (delivered && resume)
+      yield* ctx.storage.set(streakKey(sessionID), { count: count + 1, at: ci ? recent : [...recent, now] })
     return ids
   })
 
