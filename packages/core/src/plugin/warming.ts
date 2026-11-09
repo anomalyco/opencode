@@ -5,7 +5,7 @@ import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { Provider } from "@opencode/schema/provider"
 import type { Session } from "@opencode/schema/session"
 import { ConfigWarming } from "@opencode/schema/config/warming"
-import { Clock, Data, Duration, Effect, Option, Schema, Scope, Stream } from "effect"
+import { Clock, Data, Deferred, Duration, Effect, Option, Schema, Scope, Stream } from "effect"
 import { Config } from "../config.js"
 import { resolveModel } from "./optimize.js"
 
@@ -17,7 +17,8 @@ const defaults = {
   duration: Duration.minutes(30),
 }
 
-type Settings = typeof defaults & { interval: Duration.Duration }
+/** `ttl` is how long the provider keeps a cache entry after the request that last sent it. */
+type Settings = typeof defaults & { interval: Duration.Duration; ttl: Duration.Duration }
 
 /** Whether a session is warmed after a request, and why not. */
 type Decision = Data.TaggedEnum<{
@@ -33,6 +34,7 @@ const Decision = Data.taggedEnum<Decision>()
 
 // The interval for "auto" when the model has no cache.ttl, a little under the five minutes most explicit caches last.
 const fallbackInterval = Duration.minutes(4)
+const fallbackTTL = Duration.minutes(5)
 
 /** Whether a session's warming is sending pings. */
 type Status = Data.TaggedEnum<{
@@ -41,6 +43,20 @@ type Status = Data.TaggedEnum<{
   StoppedAfterMiss: {}
 }>
 const Status = Data.taggedEnum<Status>()
+
+/** What a session's warming loop does next. */
+type Next = Data.TaggedEnum<{
+  /** The next ping isn't due yet. */
+  Wait: { readonly until: number }
+  /** The warming window has closed. */
+  Expired: {}
+  /** A ping is due while a model request runs; it waits for the request to finish rather than compete with it. */
+  AwaitRequest: { readonly finished: Deferred.Deferred<void> }
+  /** That request ran past the cache's lifetime, so a ping would only write a new cache, not keep the old one. */
+  Cold: {}
+  Ping: {}
+}>
+const Next = Data.taggedEnum<Next>()
 
 export const Plugin = define({
   id: "opencode.warming",
@@ -64,7 +80,10 @@ export const Plugin = define({
         ...(typeof local === "object" ? local : {}),
       }
       const { duration } = settings
-      const interval = settings.interval === "auto" ? (autoInterval(cache?.ttl) ?? fallbackInterval) : settings.interval
+      const ttl = parseTTL(cache?.ttl)
+      // "auto" pings at 90% of the cache's lifetime, so it lands before the cache expires.
+      const interval =
+        settings.interval === "auto" ? (ttl ? Duration.times(ttl, 0.9) : fallbackInterval) : settings.interval
       // A cache that outlives the window, such as "1h" with the 30-minute default, needs no keep-alive.
       if (
         settings.interval === "auto" &&
@@ -76,7 +95,11 @@ export const Plugin = define({
         Duration.isFinite(duration) &&
         Duration.isGreaterThan(interval, Duration.zero) &&
         Duration.isLessThan(interval, duration)
-      if (valid) return Decision.Warm({ settings: { ...settings, interval } })
+      // Without a cache.ttl, an explicit interval longer than five minutes implies a cache that lasts at least that long.
+      if (valid)
+        return Decision.Warm({
+          settings: { ...settings, interval, ttl: ttl ?? Duration.max(fallbackTTL, interval) },
+        })
       yield* Effect.logWarning("warming interval must be positive and shorter than a finite duration", {
         interval,
         duration,
@@ -90,7 +113,8 @@ export const Plugin = define({
     const outlived = new Set<Session.ID>()
     // A ping during a model request would compete with the request it keeps warm, which stalls single-slot local models.
     // A request counts from its context hook, because `session.step.started` waits for the first response chunk.
-    const requesting = new Set<Session.ID>()
+    // Each running request's entry completes when it ends, which wakes a loop waiting to ping.
+    const requesting = new Map<Session.ID, Deferred.Deferred<void>>()
     // A turn always ends with an execution event, so a step that ends without its own event can't stay in flight.
     yield* ctx.event
       .subscribe({
@@ -104,59 +128,74 @@ export const Plugin = define({
       })
       .pipe(
         Stream.runForEach((event) =>
-          Effect.gen(function* () {
+          Effect.suspend(() => {
+            // The interval still counts from when the request was sent, because that is when it touched the cache.
+            const finished = requesting.get(event.data.sessionID)
             requesting.delete(event.data.sessionID)
-            // Count the next interval from the end of the response, not from when a long request started.
-            const current = sessions.get(event.data.sessionID)
-            if (current) current.last = yield* Clock.currentTimeMillis
+            return finished ? Deferred.succeed(finished, undefined) : Effect.void
           }),
         ),
         Effect.forkScoped({ startImmediately: true }),
       )
-    const loop: (sessionID: Session.ID) => Effect.Effect<void> = Effect.fn("WarmingPlugin.loop")(function* (sessionID) {
-      const current = sessions.get(sessionID)
-      if (!current) return
-
-      const now = yield* Clock.currentTimeMillis
-      const next = Math.min(current.last + Duration.toMillis(current.settings.interval), current.expires)
-      if (now < next) {
-        yield* Effect.sleep(Duration.millis(next - now))
-        return yield* loop(sessionID)
-      }
-      if (now >= current.expires) {
-        sessions.delete(sessionID)
-        return
-      }
-      if (requesting.has(sessionID)) {
-        yield* Effect.sleep(current.settings.interval)
-        return yield* loop(sessionID)
-      }
-
-      const last = current.last
-      yield* Effect.logInfo("warming session", { sessionID, last })
-      const result = yield* ctx.session
-        .generate({ sessionID, prompt: current.settings.prompt })
-        .pipe(
-          Effect.catchCause((cause) =>
-            Effect.logWarning("failed to warm session", { sessionID, cause }).pipe(Effect.as(undefined)),
-          ),
-        )
-      const latest = sessions.get(sessionID)
-      if (latest !== current || latest.last !== last) return yield* loop(sessionID)
-      // A ping that wrote more to the cache than it read rebuilt the cache instead of keeping it, so later pings
-      // would keep paying for that. Providers that report no cache usage never count as a miss.
-      if (result && result.tokens.cache.read < result.tokens.cache.write) {
-        latest.status = Status.StoppedAfterMiss()
-        yield* Effect.logInfo("stopped warming session after a cache miss", {
-          sessionID,
-          read: result.tokens.cache.read,
-          write: result.tokens.cache.write,
+    // `last` is when the latest request or ping was sent, since a provider's cache lifetime starts when a request reads or
+    // writes it, not when its response ends.
+    // `overran` marks a loop resumed by a request that was still running when the ping came due.
+    const next = (current: { last: number; expires: number; settings: Settings }, now: number, sessionID: Session.ID, overran: boolean) => {
+      if (now >= current.expires) return Next.Expired()
+      const due = Math.min(current.last + Duration.toMillis(current.settings.interval), current.expires)
+      if (now < due) return Next.Wait({ until: due })
+      const finished = requesting.get(sessionID)
+      if (finished) return Next.AwaitRequest({ finished })
+      if (overran && now >= current.last + Duration.toMillis(current.settings.ttl)) return Next.Cold()
+      return Next.Ping()
+    }
+    const loop: (sessionID: Session.ID, overran?: boolean) => Effect.Effect<void> = Effect.fn("WarmingPlugin.loop")(
+      function* (sessionID, overran = false) {
+        const current = sessions.get(sessionID)
+        if (!current) return
+        const now = yield* Clock.currentTimeMillis
+        const stop = Effect.sync(() => {
+          if (sessions.get(sessionID) === current) sessions.delete(sessionID)
         })
-        return
-      }
-      latest.last = yield* Clock.currentTimeMillis
-      return yield* loop(sessionID)
-    })
+        yield* Next.$match(next(current, now, sessionID, overran), {
+          Wait: (next) => Effect.sleep(Duration.millis(next.until - now)).pipe(Effect.andThen(loop(sessionID))),
+          Expired: () => stop,
+          // Pinging as soon as the request ends keeps a cache that is about to expire, and the next interval counts from then.
+          AwaitRequest: (next) => Deferred.await(next.finished).pipe(Effect.andThen(loop(sessionID, true))),
+          // The next real request starts warming again.
+          Cold: () => stop,
+          Ping: () =>
+            Effect.gen(function* () {
+              // A ping touches the cache like any request, so the next interval counts from when it was sent.
+              current.last = now
+              yield* Effect.logInfo("warming session", { sessionID })
+              const result = yield* ctx.session
+                .generate({ sessionID, prompt: current.settings.prompt })
+                .pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.logWarning("failed to warm session", { sessionID, cause }).pipe(Effect.as(undefined)),
+                  ),
+                )
+              // A session restarted during the ping has its own loop.
+              if (sessions.get(sessionID) !== current) return
+              // A real request sent during the ping restarted the interval, and the cache is judged by that request.
+              if (current.last !== now) return yield* loop(sessionID)
+              // A ping that wrote more to the cache than it read rebuilt the cache instead of keeping it, so later pings
+              // would keep paying for that. Providers that report no cache usage never count as a miss.
+              if (result && result.tokens.cache.read < result.tokens.cache.write) {
+                current.status = Status.StoppedAfterMiss()
+                yield* Effect.logInfo("stopped warming session after a cache miss", {
+                  sessionID,
+                  read: result.tokens.cache.read,
+                  write: result.tokens.cache.write,
+                })
+                return
+              }
+              return yield* loop(sessionID)
+            }),
+        })
+      },
+    )
 
     const hook = (event: SessionHooks["context"]) =>
       Effect.gen(function* () {
@@ -225,7 +264,11 @@ export const Plugin = define({
         )
       })
     yield* ctx.session.hook("context", (event) =>
-      Effect.sync(() => requesting.add(event.sessionID)).pipe(Effect.andThen(hook(event))),
+      Effect.gen(function* () {
+        // Steps of one turn share an entry, so the next end event wakes a waiting loop even if a step ended silently.
+        if (!requesting.has(event.sessionID)) requesting.set(event.sessionID, yield* Deferred.make<void>())
+        yield* hook(event)
+      }),
     )
     yield* ctx.session.hook("compaction", hook)
     yield* ctx.session.hook("generate", hook)
@@ -234,8 +277,7 @@ export const Plugin = define({
 
 const units = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000, d: 86_400_000 }
 
-/** 90% of a cache TTL such as "5m", so the ping lands before the cache expires. */
-function autoInterval(ttl: Provider.CacheTTL | undefined) {
+function parseTTL(ttl: Provider.CacheTTL | undefined) {
   const match = ttl?.match(/^([\d.]+)(ms|s|m|h|d)$/)
-  if (match) return Duration.millis(Number(match[1]) * units[match[2] as keyof typeof units] * 0.9)
+  if (match) return Duration.millis(Number(match[1]) * units[match[2] as keyof typeof units])
 }
