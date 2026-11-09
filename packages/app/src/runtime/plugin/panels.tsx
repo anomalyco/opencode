@@ -496,6 +496,8 @@ export function createRegion(input: {
 
       return input.closed.list(input.view()).filter((entry) => !!entry.file && !open.has(entry.key))
     }),
+    /** When the tab `reopen()` brings back closed. */
+    lastClosedTime: () => input.closed.list(input.view())[0]?.closed,
     /** Brings back the closed tab under `key`, or the newest one. */
     reopen(key?: string) {
       const entry = input.closed.take(input.view(), key)

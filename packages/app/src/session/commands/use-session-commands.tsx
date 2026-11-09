@@ -19,6 +19,7 @@ import type { SessionRevert } from "@/session/revert"
 import { usePluginClaims, usePluginScoped } from "@/runtime/plugin/commands"
 import type { Region } from "@/runtime/plugin/panels"
 import { sideTabShortcuts } from "@/runtime/plugin/closed-tabs"
+import { useTabs } from "@/shell/tabs/tabs"
 import {
   createCloseTabGuardState,
   createSessionCommandsState,
@@ -99,6 +100,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const exporter = useSessionExporter()
   const pluginScoped = usePluginScoped()
   const pluginClaims = usePluginClaims()
+  const tabs = useTabs()
 
   // The file the selected side tab shows; other tabs have no line selection.
   const activeFile = () => actions.region.selected()?.tab.file
@@ -113,8 +115,19 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const inSide = actions.region.focus
-  // ⌘T and ⌘W inside the side region open and close its tabs, unless the focused panel binds the key itself there.
+  // ⌘T inside the side region opens one of its tabs, unless the focused panel binds the key itself there.
   const sideKey = (event: KeyboardEvent) => inSide(event) && !pluginClaims(event)
+
+  // As in a browser, ⌘⇧T reopens whichever tab closed last, side or session.
+  const reopensSideTab = () => {
+    const side = actions.region.lastClosedTime()
+
+    if (side === undefined) return false
+    const session = tabs.lastClosedTime()
+
+    return session === undefined || side >= session
+  }
+
   // ⌘W on the side panel's last tab, or on a panel with nothing left to close, closes the panel and moves focus out of
   // it, where one press too many would close the session tab; the guard swallows that press.
   const [closeGuard, setCloseGuard] = createSignal(createCloseTabGuardState())
@@ -526,7 +539,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         keybind: "mod+w",
         follows: "tab.close",
         hidden: !tab,
-        when: (event) => (side ? sideKey(event) : selectCloseTabSwallowed(closeGuard())),
+        // While the side region is open, ⌘W closes its tabs wherever focus is.
+        when: (event) => (side ? !pluginClaims(event) : selectCloseTabSwallowed(closeGuard())),
         onSelect: (source) => {
           if (!side) return
           closeTab()
@@ -547,13 +561,12 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           when: sideKey,
           onSelect: openSideTab,
         }),
-      // As in a browser: in the side panel, ⌘⇧T reopens a side tab rather than a session tab.
       fileCommand({
         id: "file.tab.reopen",
         title: "",
         keybind: settings.keybinds.get("tab.reopenClosed") ?? "mod+shift+t",
         hidden: true,
-        when: inSide,
+        when: (event) => reopensSideTab() && !pluginClaims(event),
         onSelect: () => actions.region.reopen(),
       }),
       cycle &&
