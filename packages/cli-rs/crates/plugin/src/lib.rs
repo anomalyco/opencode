@@ -8,6 +8,7 @@ pub mod loader;
 pub mod node;
 pub mod slot;
 
+use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
@@ -807,7 +808,7 @@ impl<H: Host> Registry<H> {
     /// Mounts slot `path` into `parent`: the claims before it, prepended to it, `content` (the host's own,
     /// unless a claim replaces it), the claims appended to it, and after it. TS's `<Slot>` is a fragment, so
     /// every part goes straight into `parent`. Claims resolve against the slots mounted now: a claim on a slot inside
-    /// this one that is not mounted is appended here, until that slot mounts ([`SlotMount::sync`]).
+    /// this one that is not mounted is appended here until that slot mounts, and moves as soon as it does.
     pub fn mount(
         &self,
         host: &H,
@@ -816,7 +817,10 @@ impl<H: Host> Registry<H> {
         input: &SlotInput,
         content: impl FnOnce(&View),
     ) -> SlotMount<H> {
-        let mut slot = SlotMount { claims: Vec::new(), mounted: Some(self.live.mount(path)), nested: None };
+        let mounted = self.live.mount(path);
+        // The claims that degraded onto an ancestor while this slot was missing leave it before they show here.
+        settle(host, &self.live);
+        let mut slot = SlotMount { claims: Vec::new(), mounted: Some(mounted), nested: None };
         let snapshot = Rc::new(self.claims());
         let (claims, renders) = &*snapshot;
         let placed = resolve(&self.live, claims).placed.remove(path).unwrap_or_default();
@@ -844,15 +848,19 @@ impl<H: Host> Registry<H> {
         let marker = View::new(host.app()).visible(false);
         parent.add(&marker);
         let after = placed.after.clone();
-        let nested = Nested {
+        let nested = Rc::new(Nested {
             parent: parent.clone(),
             marker,
+            path: path.to_owned(),
+            live: self.live.clone(),
             input: input.clone(),
             claims: snapshot.clone(),
             appended: RefCell::default(),
             seen: Cell::new(0),
-        };
-        nested.refresh(host, slot.mounted.as_ref().unwrap());
+            busy: Cell::new(false),
+        });
+        self.live.follow(Rc::downgrade(&nested) as Weak<dyn Any>);
+        settle(host, &self.live);
         render(&after);
         slot.nested = Some(nested);
         slot
@@ -948,7 +956,7 @@ pub struct SlotMount<H: Host> {
     claims: Vec<Box<dyn Slotted<H>>>,
     mounted: Option<slot::Mounted>,
     /// The claims appended to a slot that others may degrade onto, kept in step with the mounted slots.
-    nested: Option<Nested<H>>,
+    nested: Option<Rc<Nested<H>>>,
 }
 
 impl<H: Host> Default for SlotMount<H> {
@@ -960,10 +968,19 @@ impl<H: Host> Default for SlotMount<H> {
 impl<H: Host> SlotMount<H> {
     pub fn sync(&self, host: &H, changes: &H::Changes) {
         self.claims.iter().for_each(|claim| claim.sync(host, changes));
-        if let (Some(nested), Some(mounted)) = (&self.nested, &self.mounted) {
+        if let Some(nested) = &self.nested {
+            let busy = nested.busy.replace(true);
             nested.appended.borrow().iter().for_each(|(_, claim)| claim.sync(host, changes));
-            nested.refresh(host, mounted);
+            nested.busy.set(busy);
         }
+        if let Some(live) = self.live() {
+            settle(host, live);
+        }
+    }
+
+    /// The mounted slots this one counts in, if it is mounted.
+    pub(crate) fn live(&self) -> Option<&Rc<slot::Live>> {
+        self.mounted.as_ref().map(slot::Mounted::live)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -976,6 +993,8 @@ impl<H: Host> SlotMount<H> {
 struct Nested<H: Host> {
     parent: View,
     marker: View,
+    path: String,
+    live: Rc<slot::Live>,
     input: SlotInput,
     /// The claims and their renders as of the mount, which a change of plugins mounts again.
     claims: Rc<(Vec<Placement>, Vec<SlotRender<H>>)>,
@@ -983,32 +1002,35 @@ struct Nested<H: Host> {
     appended: RefCell<Vec<(usize, Claim<H>)>>,
     /// The [`slot::Live::version`] the appended claims follow.
     seen: Cell<u64>,
+    /// A refresh or a sync of the appended claims runs; it settles them once it is done.
+    busy: Cell<bool>,
 }
 
 impl<H: Host> Nested<H> {
     /// Mounts the claims appended here that are not, and drops the ones that are no longer, one at a time in claim
     /// order: a claim that mounts a slot inside this one takes the claims on that slot along before they show here.
-    fn refresh(&self, host: &H, mounted: &slot::Mounted) {
-        let live = mounted.live();
-        if self.seen.get() == live.version() {
+    fn refresh(&self, host: &H) {
+        if self.busy.get() || self.seen.get() == self.live.version() {
             return;
         }
+        self.busy.set(true);
         // Each pass mounts one claim at most; the bound only guards against claims that keep mounting and dropping
         // each other's slots.
         for _ in 0..=self.claims.0.len() {
-            let version = live.version();
-            let wanted = resolve(live, &self.claims.0).placed.remove(mounted.path()).unwrap_or_default().append;
-            let mut appended = self.appended.borrow_mut();
-            appended.retain(|(index, claim)| {
-                let keep = wanted.contains(index);
-                if !keep {
-                    claim.root().detach();
-                }
-                keep
-            });
+            let version = self.live.version();
+            let wanted = resolve(&self.live, &self.claims.0).placed.remove(&self.path).unwrap_or_default().append;
+            let dropped: Vec<_> =
+                self.appended.borrow_mut().extract_if(.., |(index, _)| !wanted.contains(index)).collect();
+            dropped.iter().for_each(|(_, claim)| claim.root().detach());
+            // A dropped claim may take slots along.
+            drop(dropped);
+            if self.live.version() != version {
+                continue;
+            }
+            let appended = self.appended.borrow();
             let Some(&index) = wanted.iter().find(|index| !appended.iter().any(|(known, _)| known == *index)) else {
                 self.seen.set(version);
-                return;
+                break;
             };
             let at = appended.partition_point(|(known, _)| *known < index);
             drop(appended);
@@ -1016,6 +1038,23 @@ impl<H: Host> Nested<H> {
             let marker = self.parent.children().iter().position(|child| child.is(&self.marker)).unwrap_or(0);
             self.parent.insert(marker + 1 + at, &claim.root());
             self.appended.borrow_mut().insert(at, (index, claim));
+        }
+        self.busy.set(false);
+    }
+}
+
+/// Moves the claims that degrade onto a mounted slot as the slots mounted now say, until they agree. A slot that
+/// mounts or goes calls it, as does a claim that drew again and so may have mounted or dropped the slots it nests.
+pub(crate) fn settle<H: Host>(host: &H, live: &slot::Live) {
+    for _ in 0..=slot::PATHS.len() {
+        let version = live.version();
+        for follower in live.followers() {
+            if let Ok(nested) = follower.downcast::<Nested<H>>() {
+                nested.refresh(host);
+            }
+        }
+        if live.version() == version {
+            return;
         }
     }
 }
