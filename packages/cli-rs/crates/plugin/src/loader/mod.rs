@@ -299,6 +299,8 @@ impl Loader {
             }
             Entry::Vacant(seen) => seen.insert(Seen { digest, reload: Rc::default() }).reload.clone(),
         };
+        // The registry asks the running build whether it panicked, without the last reload's failure.
+        reload.take();
         if registry.failed_load(target, &error) {
             *reload.borrow_mut() = Some(format!("{error} (previous version still active)"));
         }
