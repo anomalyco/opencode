@@ -1,7 +1,8 @@
 //! The prompt loop of `@clack/core` (`prompts/prompt.ts`): key handling, validation, and the frame
 //! diffing that redraws only the lines that changed.
 
-use std::sync::Mutex;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 
 use super::line::Line;
 use super::term::{self, Key, Keys, Press, Raw};
@@ -100,6 +101,16 @@ pub fn with_keys<R>(read: impl FnOnce(&mut Keys) -> R) -> R {
 
 /// Runs a prompt until it is submitted or cancelled.
 pub fn run(prompt: &mut dyn Prompt, output: Output, initial_input: Option<&str>) -> Result<(), Cancelled> {
+    run_until(prompt, output, initial_input, None)
+}
+
+/// [`run`], cancelled as at the end of input once `stop` is set (Clack's `signal`).
+pub fn run_until(
+    prompt: &mut dyn Prompt,
+    output: Output,
+    initial_input: Option<&str>,
+    stop: Option<Arc<AtomicBool>>,
+) -> Result<(), Cancelled> {
     let _raw = Raw::enable(output);
     let mut base = Base {
         state: State::Initial,
@@ -122,12 +133,14 @@ pub fn run(prompt: &mut dyn Prompt, output: Output, initial_input: Option<&str>)
     render(prompt, &mut base);
     let mut keys = KEYS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let keys = keys.get_or_insert_with(Keys::new);
+    keys.set_stop(stop);
     while !base.closed {
         match keys.next() {
             Some(press) => keypress(prompt, &mut base, press),
             None => end_of_input(prompt, &mut base),
         }
     }
+    keys.set_stop(None);
     match base.state {
         State::Submit => Ok(()),
         _ => Err(Cancelled),

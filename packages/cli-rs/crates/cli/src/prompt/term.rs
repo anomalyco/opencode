@@ -202,6 +202,11 @@ impl Keys {
         Keys { bytes: Vec::new(), chars: VecDeque::new(), stop: Some(stop) }
     }
 
+    /// Makes the reader give up (as at the end of input) once `stop` is set, or never with `None`.
+    pub fn set_stop(&mut self, stop: Option<Arc<AtomicBool>>) {
+        self.stop = stop;
+    }
+
     /// Drops what was read but not delivered yet. Effect CLI's prompts lose the rest of a chunk when one ends.
     pub fn discard(&mut self) {
         self.chars.clear();
