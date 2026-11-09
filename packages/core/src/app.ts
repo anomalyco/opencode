@@ -13,7 +13,7 @@ export const Metadata = Context.Reference<Info>("@Mackery6969/App", {
   defaultValue: () => make(),
 })
 
-export class Service extends Context.Service<Service, Info>()("@opencode/App") {}
+export class Service extends Context.Service<Service, Info>()("@Mackery6969/App") {}
 
 export function make(input: Partial<Info> = {}): Info {
   return {

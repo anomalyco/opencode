@@ -21,7 +21,7 @@ export interface Interface {
   readonly enabled: (key: Key) => Effect.Effect<boolean>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Flag") {}
+export class Service extends Context.Service<Service, Interface>()("@Mackery6969/Flag") {}
 
 /**
  * `OPENCODE_FLAGS`, a comma-separated list such as `schedules,-media_blob`; a leading `-` turns a flag off, and
