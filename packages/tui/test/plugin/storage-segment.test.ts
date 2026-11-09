@@ -5,28 +5,63 @@ import path from "path"
 import { createStorage } from "../../src/context/storage"
 import { sanitizeSegment } from "../../src/plugin/api"
 
-// Plugin ids come from npm package names: scoped ids contain `@` and `/`, which
-// the storage layer rejects as invalid path segments (TypeError at runtime).
-// The storage key is composed host-side (`plugin.${id}.${key}`), so the plugin
-// itself cannot work around this by sanitizing its own key.
+// The host composes `plugin.${id}.${key}` verbatim, so a plugin id holding
+// characters outside the storage segment charset (scoped npm ids contain `@`
+// and `/`) throws on any storage access. sanitizeSegment maps ids into the
+// charset: identity for ids that are already valid segments (existing stored
+// data keeps its file), escaping for the rest.
 
-test("sanitizeSegment converts scoped npm plugin ids to valid storage segments", () => {
-  expect(sanitizeSegment("@log0u7/opencode-mesh.tui")).toBe("log0u7_opencode-mesh.tui")
+test("sanitizeSegment keeps valid ids unchanged", () => {
   expect(sanitizeSegment("plain-name")).toBe("plain-name")
-  expect(sanitizeSegment("..")).toBe("__")
+  expect(sanitizeSegment("acme_tools")).toBe("acme_tools")
+  // segment() validates the composed key, which starts with "plugin.", so
+  // dot-only ids never reach the traversal rejection.
+  expect(sanitizeSegment(".")).toBe(".")
+  expect(sanitizeSegment("..")).toBe("..")
 })
 
-test("storage accepts a sanitized plugin-scoped key", () => {
+test("sanitizeSegment gives distinct ids distinct segments", () => {
+  expect(sanitizeSegment("@acme/tools")).not.toBe(sanitizeSegment("acme_tools"))
+  expect(sanitizeSegment("@a")).not.toBe(sanitizeSegment("a"))
+})
+
+test("sanitizeSegment emits charset-valid segments that round-trip", () => {
+  const ids = ["@acme/tools", "@a", "a~b", "café/naïve", "🚀", "a_b!"]
+  for (const id of ids) {
+    const segment = sanitizeSegment(id)
+    expect(segment).toMatch(/^[a-zA-Z0-9._-]+$/)
+    expect(decode(segment)).toBe(id)
+  }
+})
+
+test("distinct ids write distinct storage files", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "storage-plugin-key-"))
   try {
     const { storage } = createStorage(dir, "next")
-    const raw = `plugin.@log0u7/opencode-mesh.tui.mesh-sidebar`
-    // The raw composed key is what crashes plugin TUIs today.
-    expect(() => storage.store(raw, { initial: { collapsed: false } })).toThrow(TypeError)
-    const safe = `plugin.${sanitizeSegment("@log0u7/opencode-mesh.tui")}.mesh-sidebar`
-    const [store] = storage.store(safe, { initial: { collapsed: false } })
-    expect(store.collapsed).toBe(false)
+    const [first] = storage.store(`plugin.${sanitizeSegment("@acme/tools")}.state`, { initial: { n: 1 } })
+    const [second] = storage.store(`plugin.${sanitizeSegment("acme_tools")}.state`, { initial: { n: 2 } })
+    expect(first.n).toBe(1)
+    expect(second.n).toBe(2)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+function decode(segment: string): string {
+  let out = ""
+  for (let i = 0; i < segment.length; ) {
+    if (segment[i] !== "_") {
+      out += segment[i]
+      i++
+      continue
+    }
+    if (segment[i + 1] === "_") {
+      out += "_"
+      i += 2
+      continue
+    }
+    out += String.fromCharCode(Number.parseInt(segment.slice(i + 1, i + 5), 16))
+    i += 5
+  }
+  return out
+}

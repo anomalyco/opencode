@@ -34,18 +34,24 @@ import { useOptionalPanel } from "../context/panel"
 import { useLocal } from "../context/local"
 import { abbreviateHome } from "../util/path-format"
 
-/** Sanitize a string for use as a storage path segment. Scoped npm plugin ids
- * (`@scope/name`) contain `@` and `/`, which segment() rejects with a TypeError
- * at runtime — so any storage access from a scoped plugin's TUI crashes. The
- * plugin cannot work around this: the invalid prefix is composed host-side. */
+/** Escape a plugin id into the charset accepted by storage segment(). The host
+ * composes `plugin.${id}.${key}` verbatim, so an id with characters outside the
+ * segment charset (scoped npm ids contain `@` and `/`) crashes any storage
+ * access from the plugin's TUI. Ids that already form a valid segment stay
+ * untouched so existing stored data keeps its file; others escape `_` to `__`
+ * and any other invalid UTF-16 code unit to `_XXXX` (lowercase hex), so two
+ * distinct ids can only share a file if one is crafted to mirror the other's
+ * escaped form. */
 export function sanitizeSegment(value: string): string {
-  const cleaned = value
-    .replace(/^@/, "")
-    .replace(/[/]/g, "_")
-    .replace(/[^a-zA-Z0-9._-]/g, "_")
-  // segment() also rejects "." and ".." (path traversal) even though the
-  // charset matches, so the sanitizer must not emit them either.
-  return cleaned === "." || cleaned === ".." ? "__" : cleaned
+  if (/^[a-zA-Z0-9._-]+$/.test(value)) return value
+  return value
+    .split("")
+    .map((unit) => {
+      if (unit === "_") return "__"
+      if (/^[a-zA-Z0-9.-]$/.test(unit)) return unit
+      return `_${unit.charCodeAt(0).toString(16).padStart(4, "0")}`
+    })
+    .join("")
 }
 
 export type Dispose = () => Promise<void>
