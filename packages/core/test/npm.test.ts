@@ -125,6 +125,16 @@ describe("Npm.sanitize", () => {
   })
 })
 
+describe("Npm.resolveNpmBin", () => {
+  test("never hands pacote a script from inside the compiled binary", () => {
+    expect(Npm.resolveNpmBin({ npm_execpath: "/$bunfs/bin/npm-cli.js" }, () => true)).toBe("npm")
+    expect(Npm.resolveNpmBin({ npm_execpath: "/usr/lib/node_modules/npm/bin/npm-cli.js" }, () => true)).toBe(
+      "/usr/lib/node_modules/npm/bin/npm-cli.js",
+    )
+    expect(Npm.resolveNpmBin({}, () => false)).toBe("npm")
+  })
+})
+
 describe("Npm.isRegistryPackage", () => {
   test("accepts registry packages and rejects unsupported install targets", async () => {
     expect(await Npm.isRegistryPackage("plugin")).toBe(true)

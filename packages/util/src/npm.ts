@@ -2,6 +2,7 @@ export * as Npm from "./npm.js"
 
 import path from "path"
 import { createHash, randomUUID } from "node:crypto"
+import { existsSync } from "node:fs"
 import { Clock, Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { FSUtil } from "./fs-util.js"
 import { Global } from "./global.js"
@@ -47,6 +48,21 @@ const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|",
 export function sanitize(pkg: string) {
   if (!illegal) return pkg
   return Array.from(pkg, (char) => (illegal.has(char) || char.charCodeAt(0) < 32 ? "_" : char)).join("")
+}
+
+export function resolveNpmBin(
+  env: NodeJS.ProcessEnv = process.env,
+  exists: (file: string) => boolean = existsSync,
+) {
+  // pacote builds a Git dependency by running `npm install` inside it, and takes the
+  // binary from `npmBin`: when the name ends in `.js` it spawns `process.execPath`
+  // with that script as the argument. In the compiled binary `npm_execpath` points
+  // into Bun's embedded filesystem, so the child was opencode itself — which runs its
+  // own CLI and never that script — and every Git plugin with a build step died with
+  // "git dep preparation failed". Only trust a path that exists outside the bundle.
+  const exec = env.npm_execpath
+  if (exec && exec.endsWith(".js") && !exec.includes("$bunfs") && exists(exec)) return exec
+  return "npm"
 }
 
 export async function isRegistryPackage(pkg: string) {
@@ -219,6 +235,7 @@ const layer = Layer.effect(
         const add = input.add ?? []
         const options = {
           ...(yield* NpmConfig.load(input.config ?? input.dir)),
+          npmBin: resolveNpmBin(),
           ...(input.update ? { preferOnline: true, noGitRevCache: true } : {}),
           // Audit reports are unused here, but Arborist waits for them before completing an install.
           audit: false,
