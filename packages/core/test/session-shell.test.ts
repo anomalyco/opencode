@@ -343,43 +343,30 @@ describe("Session.shell", () => {
     Effect.gen(function* () {
       const { spans, tracer } = recordSpans()
       const fixture = yield* setup
-      const command = `exit 3 # ${"x".repeat(300)}`
+      // The emoji's two UTF-16 units sit at indexes 199 and 200, across the 200-unit cut.
+      const command = `exit 3 # ${"x".repeat(190)}😀${"x".repeat(100)}`
+      const truncated = `exit 3 # ${"x".repeat(190)}\uFFFD…`
       yield* fixture.session.shell({ sessionID: fixture.created.id, command }).pipe(Effect.withTracer(tracer))
 
       const create = spans.find((span) => span.name === "Shell.create")
       const result = spans.find((span) => span.name === "Shell.result")
       const shellID = create?.attributes.get("opencode.shell.id")
       expect(shellID).toBeString()
+      expect(truncated.isWellFormed()).toBe(true)
       expect(Object.fromEntries(create?.attributes ?? [])).toEqual({
         "opencode.shell.id": shellID,
-        "opencode.shell.command": `${command.slice(0, 200)}…`,
+        "opencode.shell.command": truncated,
         "session.id": fixture.created.id,
         "opencode.shell.background": true,
       })
       expect(Object.fromEntries(result?.attributes ?? [])).toEqual({
         "opencode.shell.id": shellID,
-        "opencode.shell.command": `${command.slice(0, 200)}…`,
+        "opencode.shell.command": truncated,
         "session.id": fixture.created.id,
         "opencode.shell.background": true,
         "opencode.shell.status": "exited",
         "process.exit.code": 3,
       })
-    }),
-  )
-
-  it.live("never cuts a shell span's command through a surrogate pair", () =>
-    Effect.gen(function* () {
-      const { spans, tracer } = recordSpans()
-      const fixture = yield* setup
-      const kept = `exit 0 # ${"x".repeat(190)}`
-      // The emoji's two UTF-16 units sit at indexes 199 and 200, across the 200-unit cut.
-      const command = `${kept}😀${"x".repeat(20)}`
-      expect(kept).toHaveLength(199)
-      yield* fixture.session.shell({ sessionID: fixture.created.id, command }).pipe(Effect.withTracer(tracer))
-
-      const attribute = spans.find((span) => span.name === "Shell.create")?.attributes.get("opencode.shell.command")
-      expect(attribute).toBe(`${kept}…`)
-      expect(String(attribute).isWellFormed()).toBe(true)
     }),
   )
 

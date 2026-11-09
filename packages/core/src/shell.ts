@@ -511,12 +511,10 @@ function annotate(info: Info) {
   })
 }
 
-// Never ends on half a surrogate pair: strict OTLP JSON parsers reject a lone surrogate.
+// Strict OTLP JSON parsers reject a lone surrogate, which a cut through an emoji would leave.
 function spanCommand(command: string) {
   if (command.length <= SPAN_COMMAND_LIMIT) return command.toWellFormed()
-  const last = command.charCodeAt(SPAN_COMMAND_LIMIT - 1)
-  const end = last >= 0xd800 && last <= 0xdbff ? SPAN_COMMAND_LIMIT - 1 : SPAN_COMMAND_LIMIT
-  return `${command.slice(0, end).toWellFormed()}…`
+  return `${command.slice(0, SPAN_COMMAND_LIMIT).toWellFormed()}…`
 }
 
 // Moves past UTF-8 continuation bytes (at most 3) so a byte cut never splits a character.
