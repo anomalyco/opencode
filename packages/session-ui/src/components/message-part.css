@@ -2094,10 +2094,15 @@
   --clamped-content-height: 96px;
 }
 
-/* Opened groups in the Activity timeline indent their rows without the rail beside them. */
+/* Opened groups in the Activity timeline indent their rows 12px, as an opened thought indents its text, without the
+   rail beside them. */
 [data-activity-timeline] [data-component="collapsed-tool-group"] > [data-component="collapsible"].tool-collapsible {
-  > [data-slot="collapsible-content"]::before {
-    display: none;
+  > [data-slot="collapsible-content"] {
+    margin-inline-start: 0;
+
+    &::before {
+      display: none;
+    }
   }
 }
 
