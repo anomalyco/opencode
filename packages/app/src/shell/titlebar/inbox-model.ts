@@ -454,7 +454,16 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
     // Marking viewed reads the loaded session, and rows from the index usually are not loaded, so load it first.
     markViewed: (entry: InboxEntry) => {
       if (!entry.ctx.data.session.get(entry.session.id)) entry.ctx.data.session.remember(entry.session)
-      entry.ctx.notification.session.markViewed(entry.session.id)
+      entry.ctx.notification.session.markRead(entry.session.id)
+    },
+    rename: async (entry: InboxEntry, title: string) => {
+      await entry.ctx.sdk.api.session.update({ sessionID: entry.session.id, title })
+      entry.ctx.data.session.remember({ ...(entry.ctx.data.session.get(entry.session.id) ?? entry.session), title })
+      entry.ctx.data.session.invalidate(entry.session.id)
+      void entry.ctx.data.session.sync(entry.session.id).catch(() => undefined)
+      void queryClient.invalidateQueries({ queryKey: ["home-sessions", entry.conn], exact: true })
+      void queryClient.invalidateQueries({ queryKey: ["inbox-sessions", entry.conn], exact: true })
+      void queryClient.invalidateQueries({ queryKey: ["inbox-archived-sessions", entry.conn], exact: true })
     },
     archive: (entry: InboxEntry) =>
       entry.ctx.sdk.api.session

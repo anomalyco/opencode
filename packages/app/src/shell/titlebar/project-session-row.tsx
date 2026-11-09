@@ -16,6 +16,8 @@ import { errorMessage } from "@/shell/layout/helpers"
 import { showToast } from "@/shell/notifications/toast"
 import { sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { sessionLabel } from "@/session/title"
+import { createSessionExporter } from "@/session/commands/export-session"
+import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { notifySessionTabsRemoved } from "./session-events"
 import {
   createSessionRenameDialogState,
@@ -44,6 +46,10 @@ export function ProjectSessionRow(props: {
   const connection = () => global.servers.list().find((conn) => ServerConnection.key(conn) === props.server)
 
   const ctx = () => global.serverCtx(props.server)
+
+  const exporter = createSessionExporter()
+
+  const exportTarget = () => ({ server: props.server, sessionID: props.session.id })
 
   const status = useSessionTabAvatarState(
     () => props.server,
@@ -168,8 +174,15 @@ export function ProjectSessionRow(props: {
           >
             {language.t("common.rename")}
           </Menu.Item>
+          <Menu.Item
+            disabled={!ctx() || exporter.exporting(exportTarget())}
+            onSelect={() => exporter.export(exportTarget())}
+          >
+            {language.t("common.export")}…
+          </Menu.Item>
+          <SessionReadMenuItem server={props.server} session={props.session} />
           <Menu.Separator />
-          <Menu.Item data-variant="critical" disabled={!ctx()} onSelect={() => dialog.show(() => <DeleteDialog />)}>
+          <Menu.Item disabled={!ctx()} onSelect={() => dialog.show(() => <DeleteDialog />)}>
             {language.t("common.delete")}…
           </Menu.Item>
         </Menu.Context.Content>
@@ -178,7 +191,7 @@ export function ProjectSessionRow(props: {
   )
 }
 
-function RenameDialog(props: { title: string; onRename: (title: string) => Promise<void> }) {
+export function RenameDialog(props: { title: string; onRename: (title: string) => Promise<void> }) {
   const language = useLanguage()
 
   const dialog = useDialog()

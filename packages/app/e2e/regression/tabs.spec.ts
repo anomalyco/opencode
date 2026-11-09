@@ -334,10 +334,11 @@ for (const [tabLayout, direction, label] of [
     await tabB.click({ button: "right" })
     await expect(menu.getByRole("menuitem")).toHaveText([
       "Rename",
+      "Export…",
       "Close tab",
       "Close other tabs",
       label,
-      "Delete session…",
+      "Delete…",
     ])
     await menu.getByRole("menuitem", { name: "Close other tabs", exact: true }).click()
     await expect(titles).toHaveText([b.title])
@@ -439,7 +440,7 @@ for (const tabLayout of ["horizontal", "vertical"] as const) {
     await expect(title).toHaveText(a.title)
 
     await title.click({ button: "right" })
-    await page.getByRole("menuitem", { name: "Delete session…", exact: true }).click()
+    await page.getByRole("menuitem", { name: "Delete…", exact: true }).click()
 
     const dialog = page.getByRole("dialog")
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
@@ -447,7 +448,7 @@ for (const tabLayout of ["horizontal", "vertical"] as const) {
     await expect(title).toHaveText(a.title)
 
     await title.click({ button: "right" })
-    await page.getByRole("menuitem", { name: "Delete session…", exact: true }).click()
+    await page.getByRole("menuitem", { name: "Delete…", exact: true }).click()
     await dialog.getByRole("button", { name: "Delete session", exact: true }).click()
     await remove
     await expect(title).toHaveCount(0)
@@ -668,6 +669,60 @@ test("an unread tab whose run failed shows the failed dot, as the inbox does", a
   await expect(tab(b.id).locator('[data-mark="unread"]')).toBeHidden()
   await expect(tab(c.id).locator('[data-mark="unread"]')).toBeVisible()
   await expect(tab(c.id).locator('[data-mark="failed"]')).toBeHidden()
+
+  await tab(c.id).locator("[data-titlebar-tab-link]").click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Mark as read", exact: true }).click()
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeHidden()
+  await tab(c.id).locator("[data-titlebar-tab-link]").click({ button: "right" })
+  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText([
+    "Rename",
+    "Export…",
+    "Mark as unread",
+    "Close tab",
+    "Close other tabs",
+    "Close tabs to the right",
+    "Delete…",
+  ])
+  await page.getByRole("menuitem", { name: "Mark as unread", exact: true }).click()
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeVisible()
+  await tab(c.id).locator("[data-titlebar-tab-link]").click()
+  await expectPath(page, sessionHref(c.id))
+  await tab(c.id).locator("[data-titlebar-tab-link]").click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Mark as unread", exact: true }).click()
+  await page.mouse.move(0, 0)
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeVisible()
+  await expect(tab(c.id).locator('[data-slot="tab-status"]')).toHaveCSS("opacity", "1")
+  await tab(a.id).locator("[data-titlebar-tab-link]").click()
+  await expectPath(page, sessionHref(a.id))
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeVisible()
+  await tab(c.id).locator("[data-titlebar-tab-link]").click()
+  await expectPath(page, sessionHref(c.id))
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeHidden()
+  await tab(a.id).locator("[data-titlebar-tab-link]").click()
+  await expectPath(page, sessionHref(a.id))
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeHidden()
+})
+
+test("an unfocused window preserves a restored manual unread reminder", async ({ page }) => {
+  // Playwright emulates focus for each page, so model a background window explicitly.
+  await page.addInitScript(() => {
+    document.hasFocus = () => false
+  })
+  await mockWorkspace(page, {
+    name: "BackgroundUnread",
+    sessions: [a, { ...c, time: { created: T0, updated: T0, idle: T0, viewed: T0 } }],
+    seed: { storage: { "opencode.global.dat:notification.manual-unread": { sessions: [c.id] } } },
+  })
+  await page.goto(sessionHref(c.id))
+  await expectSessionTitle(page, c.title)
+  const tab = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(c.id)}"])`)
+
+  await expect(tab.locator('[data-mark="unread"]')).toBeVisible()
+  await page.evaluate(() => {
+    document.hasFocus = Document.prototype.hasFocus.bind(document)
+    window.dispatchEvent(new Event("focus"))
+  })
+  await expect(tab.locator('[data-mark="unread"]')).toBeHidden()
 })
 
 test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({ page }) => {
@@ -2066,6 +2121,17 @@ test("the inbox keeps every unread result separate from expandable Recent, inclu
   await inbox.getByRole("button", { name: "Show less", exact: true }).click()
   await expect(recent).toHaveCount(10)
   await expect(unread).toHaveCount(12)
+
+  const marked = page.getByText("Read session 1", { exact: true })
+
+  await recent.filter({ has: marked }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Mark as unread", exact: true }).click()
+  await expect(unread.filter({ has: marked })).toHaveCount(1)
+  await expect(recent.filter({ has: marked })).toHaveCount(0)
+  await unread.filter({ has: marked }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Mark as read", exact: true }).click()
+  await expect(recent.filter({ has: marked })).toHaveCount(1)
+  await expect(unread.filter({ has: marked })).toHaveCount(0)
 })
 
 test("the inbox waits for initial requests and orders attention by waiting age rather than last update", async ({
