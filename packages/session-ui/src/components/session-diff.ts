@@ -61,7 +61,7 @@ function fileDiffFromPatch(file: string, patch: string, context: number) {
 
     const value = complete
       ? fileDiffFromCompletePatch(file, complete, context)
-      : (partialFileDiff(file, patch) ?? emptyFileDiff(file))
+      : (partialFileDiff(file, trimContext(patch, context)) ?? emptyFileDiff(file))
 
     // The patch text fixes both the content and the producer's alignment, so equal keys always mean equal hunks.
     value.cacheKey = highlightKey(key)
@@ -267,6 +267,53 @@ function splitHunk(lines: string[], context: number) {
       return `@@ -${oldCount === 0 ? start.old : start.old + 1},${oldCount} +${newCount === 0 ? start.new : start.new + 1},${newCount} @@\n${body}`
     })
     .join("\n")
+}
+
+// A tool patch carries jsdiff's context around each hunk. Asking for less drops the outer unchanged lines of each hunk
+// and moves its ranges to match; context between two changes stays, as the hunk already joined them.
+function trimContext(patch: string, context: number) {
+  if (context >= hunkContext) return patch
+  const lines = patch.split("\n")
+
+  return lines
+    .reduce<{ out: string[]; skip: number }>(
+      (result, line, index) => {
+        if (index < result.skip) return result
+        const header = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$/.exec(line)
+
+        if (!header) {
+          result.out.push(line)
+
+          return result
+        }
+        const end = lines.findIndex((next, at) => at > index && !/^[ +\-\\]/.test(next))
+        const body = lines.slice(index + 1, end === -1 ? lines.length : end)
+        const first = body.findIndex((row) => row.startsWith("+") || row.startsWith("-"))
+        const last = body.findLastIndex((row) => row.startsWith("+") || row.startsWith("-"))
+        const lead = first === -1 ? 0 : Math.max(0, first - context)
+        // The first lines of trailing context, each with the no-newline marker that may annotate it.
+        const tail = body.slice(last + 1)
+        const keepTail = tail.filter(
+          (row, at) =>
+            tail.slice(0, at + (row.startsWith("\\") ? 0 : 1)).filter((item) => item.startsWith(" ")).length <= context,
+        )
+        const dropTail =
+          tail.filter((row) => row.startsWith(" ")).length - keepTail.filter((row) => row.startsWith(" ")).length
+        const kept = first === -1 ? body : [...body.slice(lead, last + 1), ...keepTail]
+        const shrink = first === -1 ? 0 : lead + dropTail
+        const oldStart = Number(header[1]) + (first === -1 ? 0 : lead)
+        const newStart = Number(header[3]) + (first === -1 ? 0 : lead)
+        const oldCount = Number(header[2] ?? 1) - shrink
+        const newCount = Number(header[4] ?? 1) - shrink
+
+        result.out.push(`@@ -${oldStart},${oldCount} +${newStart},${newCount} @@${header[5]}`, ...kept)
+        result.skip = index + 1 + body.length
+
+        return result
+      },
+      { out: [], skip: 0 },
+    )
+    .out.join("\n")
 }
 
 function partialFileDiff(file: string, patch: string) {

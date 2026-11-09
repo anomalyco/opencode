@@ -2101,25 +2101,22 @@
   }
 }
 
-/* A goal the user set reads as their message, opening with a /goal badge. The badge sits as far from the bubble's
-   leading edge as from its top: the top padding plus the space the 20px badge leaves in the first line. */
+/* A goal the user set reads as their message, opening with a /goal tag centered on the first line. The tag sits as far
+   from the bubble's leading edge as from its top: the top padding plus the space the 18px tag leaves in that line. The
+   gap is a registered length, so it resolves against the bubble's line and the smaller tag inherits that value. */
+@property --goal-tag-gap {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
 [data-component="user-message"][data-goal] [data-slot="user-message-text"] {
-  --goal-badge-inset: calc(8px + (1lh - 20px) / 2);
-  padding-inline-start: var(--goal-badge-inset);
+  --goal-tag-gap: calc((1lh - 18px) / 2);
+  padding-inline-start: calc(8px + var(--goal-tag-gap));
 
   [data-slot="user-message-goal-badge"] {
-    display: inline-block;
-    height: 20px;
-    margin-block-start: calc((1lh - 20px) / 2);
+    margin-block-start: var(--goal-tag-gap);
     margin-inline-end: 6px;
-    padding: 0 6px;
     vertical-align: top;
-    border-radius: 6px;
-    background: var(--v2-background-bg-layer-03);
-    color: var(--v2-text-text-base);
-    font-family: var(--v2-font-family-code);
-    font-size: 12px;
-    font-weight: 440;
-    line-height: 20px;
   }
 }

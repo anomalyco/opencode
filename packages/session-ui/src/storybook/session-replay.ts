@@ -4,6 +4,7 @@ import type {
   SessionMessageAssistantTool,
   SessionMessageInfo,
 } from "@opencode/client/promise"
+import { createTwoFilesPatch, diffLines } from "diff"
 import type { SessionDocument } from "../document"
 import { CURRENT_SESSION_ID, STORY_MODEL } from "./current-session-fixtures"
 
@@ -50,17 +51,229 @@ export function ticks(beat: Beat) {
   return beat.kind === "tool" && beat.hold ? 1 : steps[beat.kind]
 }
 
-function diff(file: string, additions: number, deletions: number, status: "modified" | "added" = "modified") {
-  const removed = Array.from({ length: deletions }, (_, index) => `-const before${index} = true`)
-  const added = Array.from({ length: additions }, (_, index) => `+const after${index} = true`)
+// Files the scripted sessions change, before and after, so their diffs read like edits inside real code.
+const generalBefore = `import { For, Show, createMemo } from "solid-js"
+import { useLanguage } from "@/runtime/i18n/language"
+import { useSettings } from "@/settings/model"
+import { SettingsRow } from "./row"
+import { SettingsSection } from "./section"
+import { FontPicker } from "./font-picker"
+import { LanguagePicker } from "./language-picker"
 
-  return {
-    file,
-    status,
-    additions,
-    deletions,
-    patch: `@@ -1,${deletions} +1,${additions} @@\n${[...removed, ...added].join("\n")}\n`,
-  }
+export function GeneralSettings() {
+  const language = useLanguage()
+  const settings = useSettings()
+
+  const fonts = createMemo(() => settings.fonts.available())
+
+  return (
+    <SettingsSection title={language.t("settings.general.title")}>
+      <SettingsRow
+        title={language.t("settings.general.language")}
+        description={language.t("settings.general.languageDescription")}
+      >
+        <LanguagePicker value={settings.general.language} onChange={settings.setLanguage} />
+      </SettingsRow>
+      <SettingsRow title={language.t("settings.general.font")}>
+        <FontPicker fonts={fonts()} value={settings.general.font} onChange={settings.setFont} />
+      </SettingsRow>
+      <Show when={settings.general.advanced}>
+        <SettingsRow title={language.t("settings.general.telemetry")}>
+          <For each={settings.telemetry.options}>{(option) => <span>{option.label}</span>}</For>
+        </SettingsRow>
+      </Show>
+    </SettingsSection>
+  )
+}
+`
+
+const generalAfter = generalBefore
+  .replace(
+    `import { LanguagePicker } from "./language-picker"\n`,
+    `import { LanguagePicker } from "./language-picker"\nimport { ThemeToggle } from "./theme-toggle"\n`,
+  )
+  .replace(
+    `      <SettingsRow title={language.t("settings.general.font")}>
+        <FontPicker fonts={fonts()} value={settings.general.font} onChange={settings.setFont} />
+      </SettingsRow>
+`,
+    `      <SettingsRow title={language.t("settings.general.font")}>
+        <FontPicker fonts={fonts()} value={settings.general.font} onChange={settings.setFont} />
+      </SettingsRow>
+      <SettingsRow
+        title={language.t("settings.general.darkMode")}
+        description={language.t("settings.general.darkModeDescription")}
+      >
+        <ThemeToggle />
+      </SettingsRow>
+`,
+  )
+
+const schemeBefore = `import { createSignal } from "solid-js"
+import { persisted } from "@/runtime/persist"
+
+export type ColorScheme = "light" | "dark" | "system"
+
+const query = window.matchMedia("(prefers-color-scheme: dark)")
+
+const [stored, setStored] = persisted<ColorScheme>("theme.scheme", "system")
+const [system, setSystem] = createSignal<"light" | "dark">(query.matches ? "dark" : "light")
+
+query.addEventListener("change", (event) => setSystem(event.matches ? "dark" : "light"))
+
+/** The scheme the app renders with, after resolving "system" against the OS setting. */
+export function resolvedScheme() {
+  const value = stored()
+
+  return value === "system" ? system() : value
+}
+
+export function storedScheme() {
+  return stored()
+}
+
+export function applyScheme(root: HTMLElement) {
+  root.dataset.scheme = resolvedScheme()
+  root.style.colorScheme = resolvedScheme()
+}
+`
+
+const schemeAfter = schemeBefore
+  .replace(
+    `export function storedScheme() {
+  return stored()
+}
+`,
+    `export function storedScheme() {
+  return stored()
+}
+
+/** Sets the scheme and applies it straight away, so the page never shows the old one. */
+export function setScheme(value: ColorScheme) {
+  setStored(value)
+  applyScheme(document.documentElement)
+}
+`,
+  )
+  .replace(
+    `  root.dataset.scheme = resolvedScheme()\n  root.style.colorScheme = resolvedScheme()\n`,
+    `  const scheme = resolvedScheme()\n\n  root.dataset.scheme = scheme\n  root.style.colorScheme = scheme\n`,
+  )
+
+const themeIndexBefore = `export { applyScheme, resolvedScheme, storedScheme, type ColorScheme } from "./scheme"
+export { ThemeProvider, useTheme } from "./provider"
+export { tokens } from "./tokens"
+`
+
+const themeIndexAfter = themeIndexBefore.replace(
+  "applyScheme, resolvedScheme, storedScheme,",
+  "applyScheme, resolvedScheme, setScheme, storedScheme,",
+)
+
+const toggleFirst = `import { Switch } from "@opencode/ui/switch"
+import { useLanguage } from "@/runtime/i18n/language"
+import { resolvedScheme, setScheme } from "@/theme"
+
+/** Switches between the light and dark scheme. Turning it off follows the system again. */
+export function ThemeToggle() {
+  const language = useLanguage()
+
+  return (
+    <Switch
+      checked={resolvedScheme() === "dark"}
+      aria-label={language.t("settings.general.darkMode")}
+      onChange={(checked) => setScheme(checked ? "dark" : "system")}
+    />
+  )
+}
+`
+
+const toggleFixed = toggleFirst
+  .replace(
+    `import { useLanguage } from "@/runtime/i18n/language"\n`,
+    `import { createEffect } from "solid-js"\nimport { useLanguage } from "@/runtime/i18n/language"\n`,
+  )
+  .replace(
+    `  const language = useLanguage()\n`,
+    `  const language = useLanguage()\n\n  // The store subscribes after mount, so read the scheme in an effect rather than once while rendering.\n  createEffect(() => resolvedScheme())\n`,
+  )
+
+const docsBefore = `# Settings
+
+Open Settings from the app menu, or press Cmd+, on macOS and Ctrl+, elsewhere.
+
+## General
+
+### Language
+
+Choose the language the app uses. It follows your system language until you pick one.
+
+### Font
+
+Choose the font for the timeline and the editor. Monospaced fonts apply to code only.
+
+## Keyboard shortcuts
+
+Every command lists its shortcut. Click a shortcut to change it.
+`
+
+const docsAfter = docsBefore.replace(
+  `### Font
+
+Choose the font for the timeline and the editor. Monospaced fonts apply to code only.
+`,
+  `### Font
+
+Choose the font for the timeline and the editor. Monospaced fonts apply to code only.
+
+### Dark mode
+
+Turn on **Dark mode** to use the dark color scheme everywhere in the app.
+
+- Turning it off follows your system setting again.
+- The setting applies straight away, without a restart.
+- It is stored on this device, so each computer keeps its own choice.
+
+The terminal and code views follow the same scheme. To give code a different theme,
+choose one under **Settings → Editor → Theme**.
+`,
+)
+
+const changelogBefore = `# Changelog
+
+## Unreleased
+
+### Added
+
+- Search across every open session from the command palette.
+
+### Fixed
+
+- The timeline keeps its scroll position when a long diff loads.
+
+## 1.14.0
+
+### Added
+
+- Pin sessions to the top of the sidebar.
+`
+
+const changelogAfter = changelogBefore.replace(
+  `- Search across every open session from the command palette.\n`,
+  `- Search across every open session from the command palette.\n- A **Dark mode** toggle in Settings → General.\n`,
+)
+
+/** A file change as the server records it: a jsdiff patch with its line counts, like core's `fileDiff`. */
+function change(file: string, before: string, after: string, status: "modified" | "added" = "modified") {
+  const counts = diffLines(before, after).reduce(
+    (result, item) => ({
+      additions: result.additions + (item.added ? (item.count ?? 0) : 0),
+      deletions: result.deletions + (item.removed ? (item.count ?? 0) : 0),
+    }),
+    { additions: 0, deletions: 0 },
+  )
+
+  return { file, status, ...counts, patch: createTwoFilesPatch(file, file, before, after) }
 }
 
 const featureWork: Beat[] = [
@@ -95,20 +308,25 @@ const featureWork: Beat[] = [
   {
     kind: "tool",
     name: "write",
-    input: { path: "/workspace/src/settings/theme-toggle.tsx", content: "export function ThemeToggle() {}\n" },
-    metadata: { files: [diff("/workspace/src/settings/theme-toggle.tsx", 24, 0, "added")] },
+    input: { path: "/workspace/src/settings/theme-toggle.tsx", content: toggleFirst },
+    metadata: { files: [change("/workspace/src/settings/theme-toggle.tsx", "", toggleFirst, "added")] },
   },
   {
     kind: "tool",
     name: "edit",
     input: { path: "/workspace/src/settings/general.tsx", oldString: "before", newString: "after" },
-    metadata: { files: [diff("/workspace/src/settings/general.tsx", 6, 2)] },
+    metadata: { files: [change("/workspace/src/settings/general.tsx", generalBefore, generalAfter)] },
   },
   {
     kind: "tool",
     name: "patch",
     input: { patchText: "*** Begin Patch" },
-    metadata: { files: [diff("/workspace/src/theme/scheme.ts", 9, 3), diff("/workspace/src/theme/index.ts", 1, 0)] },
+    metadata: {
+      files: [
+        change("/workspace/src/theme/scheme.ts", schemeBefore, schemeAfter),
+        change("/workspace/src/theme/index.ts", themeIndexBefore, themeIndexAfter),
+      ],
+    },
   },
   { kind: "step" },
   {
@@ -126,7 +344,7 @@ const featureWork: Beat[] = [
     kind: "tool",
     name: "edit",
     input: { path: "/workspace/src/settings/theme-toggle.tsx", oldString: "before", newString: "after" },
-    metadata: { files: [diff("/workspace/src/settings/theme-toggle.tsx", 3, 1)] },
+    metadata: { files: [change("/workspace/src/settings/theme-toggle.tsx", toggleFirst, toggleFixed)] },
   },
   {
     kind: "tool",
@@ -163,8 +381,8 @@ const featureWork: Beat[] = [
   {
     kind: "tool",
     name: "write",
-    input: { path: "/workspace/docs/settings.md", content: "# Settings\n" },
-    metadata: { files: [diff("/workspace/docs/settings.md", 14, 0)] },
+    input: { path: "/workspace/docs/settings.md", content: docsAfter },
+    metadata: { files: [change("/workspace/docs/settings.md", docsBefore, docsAfter)] },
   },
   {
     kind: "tool",
@@ -200,7 +418,7 @@ const featureWork: Beat[] = [
     kind: "tool",
     name: "edit",
     input: { path: "/workspace/CHANGELOG.md", oldString: "before", newString: "after" },
-    metadata: { files: [diff("/workspace/CHANGELOG.md", 1, 0)] },
+    metadata: { files: [change("/workspace/CHANGELOG.md", changelogBefore, changelogAfter)] },
   },
   { kind: "step" },
   { kind: "say", text: "Added the changelog entry under the next release." },

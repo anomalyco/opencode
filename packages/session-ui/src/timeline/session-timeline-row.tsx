@@ -52,6 +52,7 @@ import type { TimelineDetail } from "./detail"
 import { timelineCategory, timelineDefaultOpen, timelineDiffOpen, timelineThinkingOpen } from "./policy"
 import { userMessageRuns, userRunSpring } from "./user-runs"
 import { ActivityTimelineProvider } from "./activity-context"
+import { Badge } from "@opencode/ui/badge"
 import { attached } from "../components/message-file"
 import { createReactiveTimelineProjection, Timeline, TimelineRow, unwrapErrorMessage, type PartRef } from "./projection"
 import { IDLE_TURN_PHASE, sameRef, viewTurnPhase } from "./turn-phase-machine"
@@ -771,9 +772,9 @@ export function createSessionTimelineRowRenderer(input: {
               <div data-component="user-message" data-goal="">
                 <div data-slot="user-message-body">
                   <div data-slot="user-message-text" dir="auto">
-                    <span data-slot="user-message-goal-badge" dir="ltr">
+                    <Badge data-slot="user-message-goal-badge" appearance="standard" dir="ltr">
                       /goal
-                    </span>
+                    </Badge>
                     <bdi>{objective()}</bdi>
                   </div>
                 </div>
