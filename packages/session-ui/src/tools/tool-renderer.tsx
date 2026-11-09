@@ -470,7 +470,7 @@ function activityLabel(tools: SessionMessageAssistantTool[], i18n: UiI18n) {
     ].flatMap(([key, value]) => (value > 0 ? [i18n.plural(key, value)] : []))
 
   const runs = calls("run")
-  const single = runs.length === 1 ? runCommand(runs[0]!) : undefined
+  // Commands are counted, never quoted: a command can be any length.
   const commands = runs.length ? [i18n.plural("ui.timeline.activity.commands", runs.length)] : []
   const used = [...new Set(calls("tool").map((tool) => toolTitle(tool, i18n)))]
 
@@ -487,7 +487,7 @@ function activityLabel(tools: SessionMessageAssistantTool[], i18n: UiI18n) {
       files.length <= 3
         ? files.map((path) => getFilename(path)).join(", ")
         : i18n.plural("ui.timeline.activity.files", files.length),
-    run: single ?? commands[0]!,
+    run: commands[0]!,
     tool: used.join(", "),
     explore: explore(true).join(", "),
   }[mode]
@@ -495,15 +495,8 @@ function activityLabel(tools: SessionMessageAssistantTool[], i18n: UiI18n) {
   return {
     verb: i18n.t(modeVerb[mode]),
     main,
-    code: mode === "run" && !!single,
     others: modePriority.filter((item) => item !== mode).flatMap((item) => others[item]),
   }
-}
-
-function runCommand(tool: SessionMessageAssistantTool) {
-  if (tool.name === "execute") return executeToolSubtitle(executeToolCalls(currentToolMetadata(tool)))
-
-  return toolInput(currentToolInput(tool)).command
 }
 
 export function CurrentContextToolGroup(props: {
@@ -792,9 +785,7 @@ export function CurrentContextToolGroup(props: {
                   <span data-slot="context-tool-group-title" data-activity="">
                     <span data-slot="context-tool-group-verb">{value().verb}</span>
                     <Show when={value().main}>
-                      <span data-slot="context-tool-group-detail" data-code={value().code ? "" : undefined}>
-                        {value().main}
-                      </span>
+                      <span data-slot="context-tool-group-detail">{value().main}</span>
                     </Show>
                     <Show when={value().others.length > 0}>
                       <span data-slot="context-tool-group-separator" aria-hidden="true">

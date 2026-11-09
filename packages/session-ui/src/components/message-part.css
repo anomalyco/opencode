@@ -1317,10 +1317,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     color: var(--v2-text-text-base);
-
-    &[data-code] {
-      font-family: var(--v2-font-family-code);
-    }
   }
 
   [data-slot="context-tool-group-usage"] {
