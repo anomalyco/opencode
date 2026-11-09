@@ -195,7 +195,7 @@
   }
 
   [data-site]:not([data-bare]) > [data-component="announcement-banner"] [data-slot="dismiss"] {
-    --dismiss-centre: calc(var(--edge) + env(safe-area-inset-right, 0px) + 3.75rem);
+    --dismiss-centre: calc(var(--edge) + env(safe-area-inset-right, 0px) + 3.375rem);
   }
 }
 

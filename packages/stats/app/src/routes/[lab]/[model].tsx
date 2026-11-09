@@ -15,8 +15,11 @@ import { useI18n } from "../../context/i18n"
 import { useLanguage } from "../../context/language"
 import { dismissChartTooltipOnExit } from "../../lib/chart-tooltip"
 import { fromFirstUsage } from "../../lib/format"
+import { providerIconId } from "../../lib/provider-icon"
 import { localizedUrl } from "../../lib/language"
+import { formerModelName, publicModelName } from "../../lib/model-name"
 import { loadModelPage, type ModelPageData } from "../../lib/page-data"
+import { modelOgCard, ogImageAlt, ogImageUrl } from "../../og/card-data"
 import { modelSummary } from "../../lib/summaries"
 import {
   catalogLabPath,
@@ -47,8 +50,6 @@ import {
   type ThemePreference,
 } from "../stats-shell"
 
-const statsUnfurlPath = "banner.png"
-const glmFlashModel = "glm-5.3-flash"
 const shortMonths = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const
 
 type IsoCountryCode = readonly [string, string, string]
@@ -96,7 +97,10 @@ export default function StatsModel() {
   })
   const modelPath = createMemo(() => page()?.path ?? `/data/${providerSlug(labParam())}/${providerSlug(modelParam())}`)
   const modelUrl = createMemo(() => localizedUrl(language.locale(), modelPath()))
-  const statsUnfurlUrl = new URL(statsUnfurlPath, localizedUrl("en", "/data/")).toString()
+  const ogCard = createMemo(() => {
+    const data = page()
+    return data && modelOgCard(data)
+  })
   const modelHeaderLinks = createMemo<readonly HeaderLink[]>(() => [
     { href: "#overview", label: i18n.t("nav.overview") },
     { href: "#momentum", label: i18n.t("model.momentum") },
@@ -149,16 +153,22 @@ export default function StatsModel() {
           <Meta property="og:title" content={modelTitle()} />
           <Meta property="og:description" content={modelDescription()} />
           <Meta property="og:url" content={modelUrl()} />
-          <Meta property="og:image" content={statsUnfurlUrl} />
+          <Show when={ogCard()}>
+            {(card) => (
+              <>
+                <Meta property="og:image" content={ogImageUrl(card())} />
+                <Meta property="og:image:alt" content={ogImageAlt(card())} />
+                <Meta name="twitter:image" content={ogImageUrl(card())} />
+                <Meta name="twitter:image:alt" content={ogImageAlt(card())} />
+              </>
+            )}
+          </Show>
           <Meta property="og:image:type" content="image/png" />
           <Meta property="og:image:width" content="1200" />
           <Meta property="og:image:height" content="630" />
-          <Meta property="og:image:alt" content={i18n.t("app.unfurlAlt")} />
           <Meta name="twitter:card" content="summary_large_image" />
           <Meta name="twitter:title" content={modelTitle()} />
           <Meta name="twitter:description" content={modelDescription()} />
-          <Meta name="twitter:image" content={statsUnfurlUrl} />
-          <Meta name="twitter:image:alt" content={i18n.t("app.unfurlAlt")} />
           <JsonLd
             data={{
               "@context": "https://schema.org",
@@ -356,7 +366,7 @@ function ModelHero(props: {
       <div data-slot="model-hero-title-row">
         <Show when={hasLab()}>
           <span data-slot="model-hero-avatar">
-            <ProviderIcon aria-hidden="true" id={getProviderIconId(labId() ?? "")} />
+            <ProviderIcon aria-hidden="true" id={providerIconId(labId() ?? "")} />
           </span>
         </Show>
         <h1>{modelName()}</h1>
@@ -1067,7 +1077,7 @@ function PeerRow(props: { peer: ModelPeerEntry; active: boolean; catalogLabs: re
         </span>
         <Show when={hasProvider()}>
           <span data-slot="model-peer-avatar">
-            <ProviderIcon aria-hidden="true" id={getProviderIconId(props.peer.author)} />
+            <ProviderIcon aria-hidden="true" id={providerIconId(props.peer.author)} />
           </span>
         </Show>
         <span data-slot="model-peer-copy">
@@ -1144,13 +1154,6 @@ function modelComparisonRef(
     labName: undefined,
     metric: `#${data.rank}`,
   }
-}
-
-function getProviderIconId(author: string) {
-  if (author === "MiniMax") return "minimax"
-  if (author === "Moonshot") return "moonshotai"
-  if (author === "Zhipu") return "zhipuai"
-  return author.toLowerCase().replace(/[^a-z0-9]+/g, "")
 }
 
 function countryNumericId(country: string) {
@@ -1489,14 +1492,4 @@ function providerSlug(provider: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .replace(/-{2,}/g, "-")
-}
-
-function formerModelName(model: string) {
-  return statModel(model, undefined) === glmFlashModel ? "ox-alpha" : undefined
-}
-
-function publicModelName(model: string) {
-  if (model === "unknown") return undefined
-  if (model === glmFlashModel) return "GLM-5.3-Flash"
-  return model
 }

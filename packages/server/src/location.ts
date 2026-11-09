@@ -1,10 +1,9 @@
 import { FileSystem } from "@Mackery6969/core/filesystem"
 import { Location } from "@Mackery6969/core/location"
-import { Plugin } from "@Mackery6969/core/plugin"
 import { LocationServiceMap } from "@Mackery6969/core/location-services"
 import { AbsolutePath } from "@Mackery6969/core/schema"
 import { Session } from "@Mackery6969/core/session"
-import { LocationNotFoundError, InvalidRequestError, ServiceUnavailableError } from "@Mackery6969/protocol/errors"
+import { LocationNotFoundError, InvalidRequestError } from "@Mackery6969/protocol/errors"
 import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/http"
 import { HttpApiMiddleware } from "effect/http-api"
@@ -32,19 +31,6 @@ export function locationErrors<A, E, R>(effect: Effect.Effect<A, E, R>) {
     ),
   )
 }
-
-export const awaitPlugins = Plugin.awaitActivation.pipe(
-  Effect.timeoutOrElse({
-    duration: "5 seconds",
-    orElse: () =>
-      Effect.fail(
-        new ServiceUnavailableError({
-          message: "Location plugins did not finish activating",
-          service: "plugin",
-        }),
-      ),
-  }),
-)
 
 export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
   return Effect.gen(function* () {

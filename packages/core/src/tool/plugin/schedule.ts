@@ -53,8 +53,8 @@ export const Plugin = {
       ctx.event,
       Effect.andThen(ctx.tool.reload(), ctx.command.reload()),
     )
-    const flags = yield* Flag.resolver
-    const enabled = () => flags(loaded.entries).schedules.enabled
+    const flags = yield* Flag.Service
+    const enabled = () => flags.resolve(loaded.entries).schedules.enabled
 
     // A request keeps the tools it started with after config reloads, so each call rechecks the flag.
     const allowed = (sessionID: Session.ID) =>

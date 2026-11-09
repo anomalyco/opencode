@@ -7,6 +7,7 @@ import { HttpEffect, HttpRouter, HttpServer } from "effect/http"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { createEmbeddedRoutes } from "../src/routes"
+import { pluginsLoaded } from "./fixture/routes"
 
 const Broken = Rpc.define({
   id: "broken",
@@ -52,6 +53,7 @@ for (const method of ["handler", "schema"] as const) {
       const handler = Context.get(context, HttpRouter.HttpRouter)
         .asHttpEffect()
         .pipe(HttpEffect.toWebHandlerWith(context))
+      yield* pluginsLoaded(context, directory.path)
       const url = new URL(`/api/rpc/broken/${method}`, "http://opencode.local")
       url.searchParams.set("location[directory]", directory.path)
       const response = yield* Effect.promise(() =>

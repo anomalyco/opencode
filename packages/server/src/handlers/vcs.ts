@@ -2,7 +2,6 @@ import { Vcs } from "@Mackery6969/core/vcs"
 import { Project } from "@Mackery6969/core/project"
 import { Worktree } from "@Mackery6969/core/worktree"
 import { Bus } from "@Mackery6969/core/bus"
-import { Plugin } from "@Mackery6969/core/plugin"
 import { Location } from "@Mackery6969/core/location"
 import { LocationServiceMap } from "@Mackery6969/core/location-services"
 import { ConflictError, InvalidRequestError, ServiceUnavailableError } from "@Mackery6969/protocol/errors"
@@ -23,7 +22,6 @@ export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
           const location = yield* Location.Service
           const directory = location.project.directory
           const providerID = ctx.query.provider ?? "git"
-          yield* Plugin.awaitActivation
           const vcs = yield* Vcs.Service
           yield* vcs.initialize(providerID).pipe(
             Effect.mapError((error) => {

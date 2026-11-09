@@ -533,7 +533,7 @@ export const layer = (options?: Options) =>
     Effect.gen(function* () {
       const fs = yield* FSUtil.Service
       const bus = yield* Bus.Service
-      const app = yield* App.Metadata
+      const app = yield* App.Service
       const kv = yield* KV.Service
       const http = (yield* HttpClient.HttpClient).pipe(
         HttpClient.retryTransient({

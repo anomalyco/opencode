@@ -1,18 +1,32 @@
 import { Agent } from "@Mackery6969/core/agent"
 import { CodeModeCatalog } from "@Mackery6969/core/codemode/catalog"
-import type { Permission } from "@Mackery6969/core/permission"
+import { Config } from "@Mackery6969/core/config"
+import { Image } from "@Mackery6969/core/image"
+import { Permission } from "@Mackery6969/core/permission"
 import { SessionMessage } from "@Mackery6969/core/session/message"
 import { toSessionError } from "@Mackery6969/core/session/to-session-error"
 import type { SessionError } from "@Mackery6969/schema/session-error"
 import { Tool } from "@Mackery6969/core/tool"
 import type { Context } from "@Mackery6969/plugin/effect/plugin"
-import { Effect, type Scope } from "effect"
+import type { LayerNode } from "@Mackery6969/util/effect/layer-node"
+import { Effect, type Layer, type Scope } from "effect"
 import { host } from "../plugin/host"
+import { imagePassthrough } from "./image"
+import { permissionLayer } from "./permission"
 
 export const toolIdentity = {
   agent: Agent.ID.make("build"),
   messageID: SessionMessage.ID.make("msg_tool_test"),
 }
+
+/** Replacements for tests that build `Tool.node` without a Location. */
+export const toolNodeReplacements = (
+  permission: Layer.Layer<Permission.Service> = permissionLayer(),
+): LayerNode.Replacements => [
+  Config.node.replace(Config.testLayer()),
+  Image.node.replace(imagePassthrough),
+  Permission.node.replace(permission),
+]
 
 export const toolDefinitions = (registry: Tool.Interface, permissions?: Permission.Ruleset) =>
   registry.snapshot(permissions).pipe(Effect.map((toolSet) => toolSet.definitions))

@@ -4,6 +4,7 @@ import { Effect, Layer, Stream } from "effect"
 import { AppNodeBuilder } from "@Mackery6969/core/effect/app-node-builder"
 import { Artifact } from "@Mackery6969/core/artifact"
 import { Config } from "@Mackery6969/core/config"
+import { Flag } from "@Mackery6969/core/flag"
 import { Image } from "@Mackery6969/core/image"
 import { Location } from "@Mackery6969/core/location"
 import { Permission } from "@Mackery6969/core/permission"
@@ -41,7 +42,16 @@ const buildLayer = (artifactsEnabled: boolean, dir: string) => {
     : []
   const ref = Location.Ref.make({ directory: AbsolutePath.make(dir) })
   return AppNodeBuilder.build(
-    LayerNode.group([Artifact.node, Config.node, Global.node, Location.node, Permission.node, Session.node, Tool.node]),
+    LayerNode.group([
+      Artifact.node,
+      Config.node,
+      Flag.node,
+      Global.node,
+      Location.node,
+      Permission.node,
+      Session.node,
+      Tool.node,
+    ]),
     [
       Config.node.replace(Config.testLayer(entries)),
       Global.node.replace(Global.layerWith({ data: path.join(dir, ".data") })),

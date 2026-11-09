@@ -72,9 +72,11 @@
     z-index: 8;
   }
 
+  /* Its centre 54px in from the page edge, at any link size, so the 24px mark ends 24px before the menu button's lines
+     (phone-menu.css), and the search glyph before it (docs.css) ends 24px before the mark. */
   [data-component="topbar"] [data-component="github-link"] {
     margin-inline-start: auto;
-    margin-inline-end: 0.5rem;
+    margin-inline-end: calc(1.375rem - var(--github-size) / 2);
   }
 
   @media (max-width: 60rem) {

@@ -1,4 +1,5 @@
 import { Agent } from "@Mackery6969/core/agent"
+import { App } from "@Mackery6969/core/app"
 import { Artifact } from "@Mackery6969/core/artifact"
 import { AISDK } from "@Mackery6969/core/aisdk"
 import { Command } from "@Mackery6969/core/command"
@@ -7,6 +8,7 @@ import { Credential } from "@Mackery6969/core/credential"
 import { Database } from "@Mackery6969/core/database/database"
 import { Environment } from "@Mackery6969/core/environment/index"
 import { FileAccess } from "@Mackery6969/core/file-access"
+import { Flag } from "@Mackery6969/core/flag"
 import { LayerNodePlatform } from "@Mackery6969/util/effect/app-node-platform"
 import { AppProcess } from "@Mackery6969/util/process"
 import { LayerNode } from "@Mackery6969/util/effect/layer-node"
@@ -89,6 +91,7 @@ const permissionLayer = Layer.succeed(
 export const makePluginTestLayer = (permission = permissionLayer, generate = generateLayer) =>
   AppNodeBuilder.build(
     LayerNode.group([
+      App.node,
       AppProcess.node,
       FileSystem.node,
       FSUtil.node,
@@ -96,6 +99,7 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
       Npm.node,
       Credential.node,
       Config.node,
+      Flag.node,
       Database.node,
       Environment.node,
       FileAccess.node,

@@ -37,12 +37,11 @@
       }
     }
 
-    /* Header. The GitHub mark's link grows from 40 to 44px, centred on the mark (still 20px), and
-       keeps 8px to the menu button's target, so the mark sits 2px further left (62px in from the
-       page edge instead of 60). The chevrons and the banner's × follow its centre line. */
+    /* Header. The GitHub mark's link grows from 40 to 44px, centred on the mark, which stays 54px in
+       from the page edge (github-link.css), so its target meets the menu button's. The banner's ×
+       follows its centre line. */
     [data-component="topbar"] [data-component="github-link"] {
       --github-size: 2.75rem;
-      margin-inline-end: 0.5rem;
     }
 
     /* The fixed corner mark beside the sidebar (touch tablets) and on bare pages: 44px too. Set on
@@ -55,7 +54,7 @@
 
     @media (max-width: 60rem) {
       &:not([data-bare]) > [data-component="announcement-banner"] button[data-slot="dismiss"] {
-        --dismiss-centre: calc(var(--edge) + env(safe-area-inset-right, 0px) + 3.875rem);
+        --dismiss-centre: calc(var(--edge) + env(safe-area-inset-right, 0px) + 3.375rem);
       }
     }
 
@@ -156,12 +155,12 @@
       inset: 0 -10px;
     }
 
-    :is([data-slot="section-toggle"], [data-component="contents-menu"] summary) {
-      transition: background-color 100ms ease;
-
-      &:active {
-        background: var(--bg-weak);
-      }
+    /* The press fill of the sticky menu rows and the open Contents list's rows reaches both screen
+       edges; the label and chevron stay on the content edge and the menu column. The border image's outset paints past the box
+       without making the page wider. */
+    :is([data-slot="section-toggle"], [data-component="contents-menu"] :is(summary, a)):active {
+      background: var(--row-press);
+      border-image: linear-gradient(var(--row-press), var(--row-press)) fill 0 / 0 / 0 100vmax;
     }
 
     /* The asset buttons on /brand and /press: asset-buttons.css. */

@@ -179,7 +179,7 @@ describe("Integration", () => {
         }),
       ])
       expect((yield* Fiber.join(created)).map((event) => ({ type: event.type, data: event.data }))).toEqual([
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: stored[0]?.id } },
         { type: Credential.Event.Switched.type, data: { credentialID: stored[0]?.id, integrationID } },
       ])
     }),
@@ -635,7 +635,7 @@ describe("Integration", () => {
         yield* integrations.connection.remove(archived.id)
         expect(events).toEqual([
           { type: Credential.Event.Switched.type, data: { credentialID: work.id, integrationID } },
-          { type: Credential.Event.Updated.type, data: {} },
+          { type: Credential.Event.Updated.type, data: { integrationID, credentialID: archived.id } },
         ])
 
         yield* integrations.connection.remove(work.id)
@@ -652,10 +652,10 @@ describe("Integration", () => {
         })
         expect(events).toEqual([
           { type: Credential.Event.Switched.type, data: { credentialID: work.id, integrationID } },
-          { type: Credential.Event.Updated.type, data: {} },
-          { type: Credential.Event.Updated.type, data: {} },
+          { type: Credential.Event.Updated.type, data: { integrationID, credentialID: archived.id } },
+          { type: Credential.Event.Updated.type, data: { integrationID, credentialID: work.id } },
           { type: Credential.Event.Switched.type, data: { credentialID: personal.id, integrationID } },
-          { type: Credential.Event.Updated.type, data: {} },
+          { type: Credential.Event.Updated.type, data: { integrationID, credentialID: personal.id } },
           { type: Credential.Event.Switched.type, data: { credentialID: null, integrationID } },
         ])
       }),

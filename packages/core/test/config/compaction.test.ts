@@ -6,6 +6,7 @@ import { Config } from "@Mackery6969/core/config"
 import { ConfigCompactionPlugin } from "@Mackery6969/core/config/plugin/compaction"
 import { AppNodeBuilder } from "@Mackery6969/core/effect/app-node-builder"
 import { llmClient } from "@Mackery6969/core/effect/app-node-platform"
+import { Flag } from "@Mackery6969/core/flag"
 import { SessionCompaction } from "@Mackery6969/core/session/compaction"
 import { SessionEvent } from "@Mackery6969/core/session/event"
 import { SessionMessage } from "@Mackery6969/core/session/message"
@@ -39,15 +40,18 @@ const config = Config.testLayer()
 const it = testEffect(
   Layer.merge(
     config,
-    AppNodeBuilder.build(LayerNode.group([SessionCompaction.node, SessionModelRequest.node, Config.node, Bus.node]), [
-      llmClient.replace(
-        Layer.mock(LLMClient.Service)({
-          stream: () => Stream.make(LLMEvent.textDelta({ id: "summary", text: "## Objective\n- summary" })),
-        }),
-      ),
-      Config.node.replace(config),
-      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/tmp") })),
-    ]),
+    AppNodeBuilder.build(
+      LayerNode.group([SessionCompaction.node, SessionModelRequest.node, Config.node, Flag.node, Bus.node]),
+      [
+        llmClient.replace(
+          Layer.mock(LLMClient.Service)({
+            stream: () => Stream.make(LLMEvent.textDelta({ id: "summary", text: "## Objective\n- summary" })),
+          }),
+        ),
+        Config.node.replace(config),
+        Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/tmp") })),
+      ],
+    ),
   ),
 )
 describe("ConfigCompactionPlugin.Plugin", () => {

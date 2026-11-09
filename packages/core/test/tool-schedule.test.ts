@@ -1,9 +1,7 @@
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Layer, Stream } from "effect"
 import { AppNodeBuilder } from "@Mackery6969/core/effect/app-node-builder"
-import { Config } from "@Mackery6969/core/config"
-import { Image } from "@Mackery6969/core/image"
-import { Permission } from "@Mackery6969/core/permission"
+import { Flag } from "@Mackery6969/core/flag"
 import { Schedule } from "@Mackery6969/core/schedule"
 import { Session } from "@Mackery6969/core/session"
 import { Tool } from "@Mackery6969/core/tool"
@@ -12,9 +10,8 @@ import { Document, Info, type Entry } from "@Mackery6969/schema/config"
 import { ConfigExperimental } from "@Mackery6969/schema/config/experimental"
 import type { CommandDefinition } from "@Mackery6969/plugin/effect/command"
 import { testEffect } from "./lib/effect"
-import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
-import { codeModeListings, executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
+import { codeModeListings, executeTool, registerToolPlugin, toolIdentity, toolNodeReplacements } from "./lib/tool"
 
 const sessionID = Session.ID.make("ses_schedule_tool_test")
 const otherSessionID = Session.ID.make("ses_schedule_tool_other")
@@ -23,9 +20,7 @@ const names = ["schedule_create", "schedule_list", "schedule_pause", "schedule_r
   (name) => `opencode.${name}`,
 )
 
-const it = testEffect(
-  AppNodeBuilder.build(Tool.node, [Image.node.replace(imagePassthrough), Permission.node.replace(permissionLayer())]),
-)
+const it = testEffect(AppNodeBuilder.build(Tool.node, toolNodeReplacements()))
 
 /** An in-memory Schedule service. The real one is covered in schedule.test.ts; this exercises the tool layer. */
 const memory = () => {
@@ -93,7 +88,7 @@ const setup = (experimental: ConfigExperimental.Info | undefined) =>
       },
       session: { prompt: (input) => Effect.sync(() => prompts.push(input)).pipe(Effect.as(undefined as never)) },
     }).pipe(
-      Effect.provide(Layer.mock(Config.Service)({ entries: () => Effect.succeed([document(experimental)]) })),
+      Effect.provide(Flag.testLayer([document(experimental)])),
       Effect.provide(Layer.succeed(Schedule.Service, schedules.service)),
       Effect.provide(permissionLayer({ assert: () => Effect.void })),
     )

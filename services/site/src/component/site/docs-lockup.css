@@ -185,7 +185,10 @@
 }
 
 /* Phones: the word sits in the 56px top bar after its 24 × 30 logo, with a 44px tap target, and the
-   menu becomes a sheet under the bar. */
+   menu becomes an edge-to-edge sheet under the bar on the code blocks' surface, with a line above
+   (on the sticky row's top line, so the join is one line) and below, and none at the sides. Its
+   labels start at the logo mark (--menu-label) and the "›" centres on the menu button
+   (--menu-chevron, from the inline end), both measured when it opens (src/docs/client.ts). */
 @media (max-width: 60rem) {
   /* --lockup-text is the trigger's text x: 12px after the bar's logo. */
   [data-site] [data-component="docs-lockup"] {
@@ -221,41 +224,44 @@
   [data-component="docs-lockup"] {
     [data-slot="menu"] {
       position: fixed;
-      top: calc(var(--banner-offset, 0px) + env(safe-area-inset-top, 0px) + var(--topbar-height) + 2px);
-      inset-inline-start: 12px;
-      inset-inline-end: 12px;
+      top: calc(var(--banner-offset, 0px) + env(safe-area-inset-top, 0px) + var(--topbar-height) + 1px);
+      left: 0;
+      right: 0;
       width: auto;
       min-width: 0;
+      background: var(--code-body, var(--popover-bg));
+      /* Its rows press to the docs' shared full-width row tint (site.css), not the menus' darker fill. */
+      --menu-press: var(--row-press);
+      box-shadow:
+        0 -1px 0 var(--border),
+        0 1px 0 var(--border),
+        0 6px 12px -4px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.45));
     }
   }
 
-  /* 44px rows for touch, with the labels indented to the trigger's text (--menu-text, measured when
-     the menu opens; the sheet's 12px inset comes first). Specific enough to beat the
-     shared menu row padding in site.css. */
+  /* 44px rows for touch, the labels on the logo mark's edge. Specific enough to beat the shared menu
+     row padding in site.css. */
   [data-site] [data-component="docs-lockup"] [data-slot="menu"] [role="menuitem"] {
     padding-block: 13px;
-    padding-inline-start: calc(var(--menu-text) - 12px);
+    padding-inline-start: var(--menu-label, 26px);
   }
 
-  /* A 44px tap target of its own, set off from the "Docs" label by a short rule. */
+  /* The active and hover bars sit on the screen's edge (site.css hangs them 1px over a menu's ring). */
+  [data-site] [data-component="docs-lockup"] [data-slot="menu"] [role="menuitem"]::before {
+    inset-inline-start: 0 !important;
+  }
+
+  /* A 44px tap target of its own, centred on the menu button's column, with the sticky rows' 16px
+     chevron (site.css section-toggle). */
   [data-site] [data-component="docs-lockup"] [data-slot="expand"] {
     --lockup-row: 44px;
+    inset-inline-end: calc(var(--menu-chevron, 34px) - 22px);
     width: 44px;
     color: var(--text-strong);
 
-    &::before {
-      content: "";
-      position: absolute;
-      top: 12px;
-      bottom: 12px;
-      inset-inline-start: 0;
-      width: 1px;
-      background: var(--border);
-    }
-
     svg {
-      width: 12px;
-      height: 12px;
+      width: 16px;
+      height: 16px;
     }
   }
 }
@@ -328,10 +334,10 @@
     justify-content: center;
   }
 
-  /* OpenTUI Mono's caps sit 0.325px below its line box's centre; this puts them on the logo's centre. */
+  /* The product name's size and padding (packages/nav-menus): 15px, 20px on phones. */
   [data-slot="word"] {
-    padding: 0 6px 0.65px;
-    font: 700 15px/1 var(--font-mono);
+    padding: 0 6px var(--nav-name-pad, 0.65px);
+    font: 700 var(--nav-name-size, 15px) / 1 var(--font-mono);
     text-transform: uppercase;
     white-space: nowrap;
     color: var(--text-strong);
