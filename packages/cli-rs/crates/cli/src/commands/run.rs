@@ -8,6 +8,7 @@ use serde_json::json;
 use std::cell::Cell;
 use std::io::{IsTerminal, Read};
 use std::rc::Rc;
+use tokio::sync::watch;
 
 use super::Context;
 use super::client::{Connected, connect_without_autostart};
@@ -22,6 +23,8 @@ mod prompt;
 #[path = "../run/ui.rs"]
 mod ui;
 
+const PIPED_INPUT_GRACE: std::time::Duration = std::time::Duration::from_secs(1);
+
 pub fn run(context: &Context, args: &RunArgs) -> error::Result<()> {
     let json = args.format == OutputFormat::Json;
     let exit = Rc::new(Cell::new(0u8));
@@ -35,10 +38,19 @@ pub fn run(context: &Context, args: &RunArgs) -> error::Result<()> {
                 return report(json, &exit, &error.to_string(), None);
             }
         };
-        if let Err(failure) = execute(args, &server, json, &exit).await {
+        // SIGINT and SIGTERM abort the run, which cancels its Session and jobs before the process exits.
+        let (abort, signal) = watch::channel(false);
+        let (finished, wait) = std::sync::mpsc::channel::<()>();
+        let _cancel = crate::signals::on_shutdown("cancel the run", move || {
+            abort.send_replace(true);
+            let _ = wait.recv();
+        });
+        if let Err(failure) = execute(args, &server, json, &exit, signal).await {
             report(json, &exit, &failure.message, failure.session.as_deref());
         }
+        drop(finished);
     });
+    crate::signals::park_during_shutdown();
     match exit.get() {
         0 => Ok(()),
         code => Err(crate::output::Exit(code).into()),
@@ -56,7 +68,13 @@ impl<T: std::fmt::Display> From<T> for Failure {
     }
 }
 
-async fn execute(args: &RunArgs, server: &Connected, json: bool, exit: &Rc<Cell<u8>>) -> Result<(), Failure> {
+async fn execute(
+    args: &RunArgs,
+    server: &Connected,
+    json: bool,
+    exit: &Rc<Cell<u8>>,
+    signal: watch::Receiver<bool>,
+) -> Result<(), Failure> {
     if args.fork && !args.continue_ && args.session.is_none() {
         return Err("--fork requires --continue or --session".into());
     }
@@ -65,14 +83,17 @@ async fn execute(args: &RunArgs, server: &Connected, json: bool, exit: &Rc<Cell<
     }
     let root = opencode_local::paths::start_directory()?;
     let directory = root.to_string_lossy().into_owned();
+    let argument = Some(args.message.join(" ")).filter(|message| !message.is_empty());
+    // With a message argument, stdin is extra context: a shell pipe is read in full, but the open, silent
+    // stdin that spawn's default stdio gives a child must not hold the run.
     let piped = if std::io::stdin().is_terminal() {
         None
+    } else if argument.is_some() {
+        read_stdin_if_ready(PIPED_INPUT_GRACE)?
     } else {
-        let mut bytes = Vec::new();
-        std::io::stdin().read_to_end(&mut bytes)?;
-        Some(String::from_utf8_lossy(&bytes).into_owned())
+        Some(read_stdin()?)
     };
-    let message = merge_input(format_message(&args.message), piped).unwrap_or_default();
+    let message = merge_input(argument, piped).unwrap_or_default();
     if message.trim().is_empty() {
         return Err("You must provide a message".into());
     }
@@ -133,20 +154,40 @@ async fn execute(args: &RunArgs, server: &Connected, json: bool, exit: &Rc<Cell<
         thinking: args.thinking,
         json,
         auto: args.permissions.auto(),
+        standalone: server.is_standalone(),
+        signal,
         exit: exit.clone(),
     })
     .await
     .map_err(failed)
 }
 
-/// Words with spaces are quoted, with their quotes escaped.
-fn format_message(words: &[String]) -> Option<String> {
-    let value = words
-        .iter()
-        .map(|word| if word.contains(' ') { format!("\"{}\"", word.replace('"', "\\\"")) } else { word.clone() })
-        .collect::<Vec<_>>()
-        .join(" ");
-    (!value.is_empty()).then_some(value)
+fn read_stdin() -> std::io::Result<String> {
+    let mut bytes = Vec::new();
+    std::io::stdin().read_to_end(&mut bytes)?;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// `readStdinIfReady`: a shell pipe or redirected file is read in full, however slow its producer. Any other
+/// stdin (the socket that spawn's default stdio gives a child) is read only if it has data or ends within
+/// `grace`; otherwise it is left unread.
+fn read_stdin_if_ready(grace: std::time::Duration) -> std::io::Result<Option<String>> {
+    #[cfg(unix)]
+    {
+        use rustix::event::{PollFd, PollFlags, Timespec, poll};
+        use rustix::fs::{FileType, fstat};
+        let stdin = std::io::stdin();
+        let kind = FileType::from_raw_mode(fstat(&stdin)?.st_mode);
+        if !matches!(kind, FileType::Fifo | FileType::RegularFile) {
+            let timeout = Timespec { tv_sec: grace.as_secs() as _, tv_nsec: grace.subsec_nanos() as _ };
+            if poll(&mut [PollFd::new(&stdin, PollFlags::IN)], Some(&timeout))? == 0 {
+                return Ok(None);
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = grace;
+    read_stdin().map(Some)
 }
 
 fn merge_input(message: Option<String>, piped: Option<String>) -> Option<String> {
@@ -189,13 +230,6 @@ fn report(json: bool, exit: &Cell<u8>, message: &str, session: Option<&str>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn messages_quote_words_with_spaces() {
-        let words = ["fix".to_owned(), "the \"bug\" now".to_owned()];
-        assert_eq!(format_message(&words).as_deref(), Some("fix \"the \\\"bug\\\" now\""));
-        assert_eq!(format_message(&[]), None);
-    }
 
     #[test]
     fn words_after_the_separator_are_submitted_once() {

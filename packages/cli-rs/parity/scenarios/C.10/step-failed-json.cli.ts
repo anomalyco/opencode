@@ -1,6 +1,6 @@
 // As `step-failed`, in JSON.
 import { defineCli } from "../../cli/run"
-import { event, server } from "./fixture"
+import { event, nowMask, server } from "./fixture"
 import { failed } from "./step-failed.cli"
 
 export default defineCli({
@@ -9,4 +9,6 @@ export default defineCli({
     events: () => failed,
     end: event("session.execution.failed", { error: { type: "provider", message: "rate limited" } }, 13),
   }),
+  // The final error is stamped with `Date.now()`.
+  masks: [nowMask],
 })

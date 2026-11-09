@@ -20,8 +20,8 @@ export type Route = {
   events?: unknown[]
   // Events pushed to every open `events` stream once this request is answered.
   then?: (entry: Logged, requests: Logged[]) => unknown[]
-  // Waits this long (ms) before answering.
-  delay?: number
+  // Waits this long (ms) before answering; a function computes it from the request and the log so far.
+  delay?: number | ((entry: Logged, requests: Logged[]) => number)
   // Waits this long (ms) after answering before pushing `then`'s events.
   thenDelay?: number
 }
@@ -66,7 +66,8 @@ export async function startFakeServer(options: Options = {}) {
       requests.push(entry)
       const route = routes.find((route) => matches(route, request.method, url.pathname))
       if (route) {
-        if (route.delay) await Bun.sleep(route.delay)
+        const delay = typeof route.delay === "function" ? route.delay(entry, requests) : route.delay
+        if (delay) await Bun.sleep(delay)
         const response = respond(route, streams, entry, requests)
         if (route.then) {
           const events = route.then(entry, requests)
