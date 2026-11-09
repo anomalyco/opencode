@@ -1,0 +1,678 @@
+/* Dev only: the font page's sections composed for social posts at 4:5 (1080 × 1350), 1:1
+   (1080 × 1080) and 16:9 (1920 × 1080). Each canvas frames the one element that makes the
+   section interesting, large and centred; the page furniture around it goes. */
+
+[data-site][data-page="font"]:has([data-component="font-share"]) {
+  [data-component="bare-chrome"] {
+    display: none;
+  }
+}
+
+html:has([data-component="font-share"]),
+html:has([data-component="font-share"]) body {
+  overflow: hidden;
+  scrollbar-width: none;
+}
+
+[data-site][data-page="font"] [data-component="font-share"] {
+  --pad: 56px;
+  --head: 24px;
+  position: fixed;
+  z-index: 100;
+  top: 0;
+  left: 0;
+  width: 1080px;
+  height: 1350px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text-strong);
+
+  &[data-ratio="1x1"] {
+    height: 1080px;
+  }
+
+  &[data-ratio="16x9"] {
+    --pad: 72px;
+    --head: 32px;
+    width: 1920px;
+    height: 1080px;
+  }
+
+  [data-slot="share-stage"] {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* Every plate fills the canvas; its children can size against it with cqw / cqh. */
+  [data-plate] {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 40px var(--pad) var(--pad);
+    overflow: hidden;
+    container-type: size;
+  }
+
+  /* The plate's header strip: small, but legible when the canvas is shown about 500px wide. */
+  [data-slot="plate-head"] {
+    position: relative;
+    z-index: 2;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    gap: 1.6em;
+    flex-shrink: 0;
+    padding-bottom: 0.7em;
+    background: var(--bg);
+    font-size: var(--head);
+
+    [data-anno] {
+      font-size: var(--head);
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+    }
+
+    [data-slot="plate-aside"] {
+      overflow: hidden;
+      text-align: right;
+      text-overflow: ellipsis;
+    }
+  }
+
+  [data-slot="plate-lead"] {
+    display: none;
+  }
+
+  [data-slot="share-cursor"] {
+    position: absolute;
+    z-index: 50;
+    top: 0;
+    left: 0;
+    width: 34px;
+    height: 34px;
+    margin: -3px 0 0 -4px;
+    pointer-events: none;
+    overflow: visible;
+    transform-origin: 0 0;
+
+    path {
+      fill: #0c0c0c;
+      stroke: #fff;
+      stroke-width: 1.5;
+      stroke-linejoin: round;
+      transition: transform 120ms ease;
+      transform-origin: 4px 3px;
+    }
+
+    &[data-down] path {
+      transform: scale(0.82);
+    }
+  }
+
+  &[data-ratio="16x9"] [data-slot="share-cursor"] {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* ───────────── Per-section framing ───────────── */
+
+[data-site][data-page="font"] [data-component="font-share"] {
+  /* Hero: the live page's full-screen typewriter, its claim scaled up with the canvas. */
+  &[data-share="hero"] {
+    [data-component="font-hero"] {
+      height: 100%;
+      min-height: 0;
+    }
+    [data-slot="top-copy"] {
+      font-size: calc(var(--head) * 0.8);
+      line-height: 1.5;
+    }
+    .gif-control {
+      display: none;
+    }
+  }
+
+  /* Cover: the plotter drawing "opencode", across the full measure. */
+  &[data-share="cover"] {
+    [data-slot="cover"] {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      margin: 0;
+      padding: 0;
+      overflow: visible;
+    }
+    [data-slot="cover-copy"] {
+      width: 100%;
+    }
+    :is(
+      [data-slot="cover-font"],
+      [data-slot="cover-lead"],
+      [data-slot="cover-facts"],
+      [data-slot="contents"],
+      [data-slot="cover-stats"],
+      [data-slot="cover-switch"]
+    ) {
+      display: none;
+    }
+  }
+
+  /* Construction: the one large letter building, as tall as the canvas allows. */
+  &[data-share="construction"] {
+    [data-slot="construction-stage"] {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 0;
+    }
+    [data-slot="construction-main"] {
+      width: min(100cqw, calc((100cqh - 90px) * 0.75));
+      margin: 0;
+    }
+    :is([data-slot="construction-side"], [data-slot="construction-row"]) {
+      display: none;
+    }
+  }
+
+  /* Timeline: the Gantt chart, its tracks stretched to the canvas. */
+  &[data-share="timeline"] {
+    [data-slot="gantt"] {
+      gap: 1rem;
+      margin-block: auto;
+    }
+    [data-slot="gantt-ticks"] span {
+      font-size: calc(var(--head) * 0.6);
+    }
+    [data-slot="gantt-row"] {
+      height: clamp(3.5rem, calc((100cqh - 240px) / 6.6), 10rem);
+    }
+    [data-slot="gantt-label"] svg {
+      width: 28px;
+      height: 49px;
+    }
+    [data-slot="gantt-bar"] span {
+      font-size: calc(var(--head) * 0.55);
+    }
+  }
+
+  /* Exploded: just the isometric blocks; the script drives the hidden controls. */
+  &[data-share="exploded"] {
+    [data-slot="exploded-scroll"] {
+      height: 100%;
+      > [data-plate] {
+        position: relative;
+        min-height: 0;
+      }
+    }
+    [data-slot="exploded-stage"] {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 0;
+      svg {
+        width: auto;
+        max-width: 100%;
+        height: calc(100cqh - 120px);
+        max-height: none;
+      }
+    }
+    [data-slot="exploded-controls"] {
+      display: none;
+    }
+  }
+  /* Height-bound canvases leave room beside the drawing: scale it into the empty margin. */
+  &[data-share="exploded"]:not([data-ratio="4x5"]) [data-slot="exploded-stage"] svg {
+    transform: scale(1.12);
+    transform-origin: 50% 50%;
+  }
+
+  /* Passports: whole documents at their page proportions, the photo measuring itself on hover. */
+  &[data-share="passports"] {
+    [data-slot="passports"] {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin-block: auto;
+    }
+    [data-slot="passport"]:nth-child(n + 3) {
+      display: none;
+    }
+    [data-slot="passport"] {
+      transition: outline-color 200ms ease;
+    }
+    [data-slot="passport"][data-share-active] {
+      outline: 2px solid var(--link);
+      outline-offset: 4px;
+    }
+    [data-slot="passport"][data-share-active] [data-slot="photo-measure"] {
+      opacity: 1;
+    }
+  }
+  /* Zoomed rather than stretched, so the documents keep their page proportions. */
+  &[data-share="passports"][data-ratio="4x5"] [data-slot="passports"] {
+    width: 740px;
+    zoom: 1.3;
+  }
+  &[data-share="passports"][data-ratio="16x9"] {
+    [data-slot="passports"] {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      width: 1300px;
+      margin-inline: auto;
+      zoom: 1.2;
+    }
+    [data-slot="passport"]:nth-child(3) {
+      display: flex;
+    }
+  }
+  &[data-share="passports"][data-ratio="1x1"] [data-slot="passports"] {
+    width: 760px;
+    margin-inline: auto;
+    zoom: 1.15;
+  }
+
+  /* Analysis: one chart per canvas, large, with its figure header and its reading. */
+  &:is([data-share="modules"], [data-share="scatter"], [data-share="heatmap"], [data-share="frequency"]) {
+    [data-slot="charts"] {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      margin-top: 32px;
+      border: 0;
+    }
+    [data-slot="chart"] {
+      flex: 1;
+      min-height: 0;
+      gap: 40px;
+      padding: 0;
+      border: 0;
+
+      > header {
+        padding-bottom: 0.7em;
+        border-bottom: 1px solid var(--hair);
+        font-size: calc(var(--head) * 0.85);
+        [data-anno] {
+          font-size: calc(var(--head) * 0.85);
+        }
+      }
+
+      figcaption {
+        max-width: 32ch;
+        font-size: calc(var(--head) * 1.25);
+        line-height: 1.25;
+        letter-spacing: -0.015em;
+        color: var(--text-strong);
+      }
+    }
+    [data-slot="mini"] {
+      width: 28px;
+      height: 49px;
+    }
+  }
+  &:is(
+      [data-share="modules"],
+      [data-share="scatter"],
+      [data-share="heatmap"],
+      [data-share="frequency"]
+    )[data-ratio="16x9"] {
+    [data-slot="chart"] {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 30rem;
+      grid-template-rows: auto minmax(0, 1fr);
+      column-gap: 96px;
+      > header {
+        grid-column: 1 / -1;
+      }
+      > :not(header, figcaption) {
+        grid-column: 1;
+        align-self: center;
+        justify-self: center;
+      }
+      figcaption {
+        grid-column: 2;
+        grid-row: 2;
+        align-self: end;
+      }
+    }
+  }
+  &[data-share="modules"] {
+    [data-slot="chart"]:not(:has([data-slot="bars"])) {
+      display: none;
+    }
+    [data-slot="bars"] {
+      width: 100%;
+      gap: clamp(16px, calc((100cqh - 640px) / 8), 56px);
+      > div {
+        grid-template-columns: 28px minmax(0, 1fr) 7rem;
+        gap: 28px;
+      }
+      [data-slot="bar-track"] {
+        height: 40px;
+      }
+      [data-anno] {
+        font-size: calc(var(--head) * 1.1);
+      }
+    }
+  }
+  &[data-share="scatter"] {
+    [data-slot="chart"]:not(:has([data-slot="scatter"])) {
+      display: none;
+    }
+    [data-slot="scatter"] {
+      width: min(100%, calc((100cqh - 380px) * 4 / 3));
+      :is(rect, text, [data-slot="trend"], [data-slot="axis-line"]) {
+        transform-box: fill-box;
+        transition:
+          opacity 500ms var(--ease-out),
+          transform 900ms var(--ease-out);
+      }
+      [data-slot="trend"] {
+        transform-origin: 0 0;
+        transition-delay: 500ms;
+      }
+      rect {
+        transform-origin: center;
+      }
+      g:nth-of-type(1) :is(rect, text) {
+        transition-delay: 1000ms;
+      }
+      g:nth-of-type(2) :is(rect, text) {
+        transition-delay: 1250ms;
+      }
+      g:nth-of-type(3) :is(rect, text) {
+        transition-delay: 1500ms;
+      }
+      g:nth-of-type(4) :is(rect, text) {
+        transition-delay: 1750ms;
+      }
+    }
+    [data-slot="charts"]:not([data-seen]) [data-slot="scatter"] {
+      [data-slot="axis-line"],
+      g text {
+        opacity: 0;
+      }
+      [data-slot="trend"],
+      rect {
+        opacity: 0;
+        transform: scale(0);
+      }
+    }
+  }
+  &[data-share="scatter"][data-ratio="16x9"] [data-slot="scatter"] {
+    width: min(100%, calc((100cqh - 200px) * 4 / 3));
+  }
+  &[data-share="heatmap"] {
+    --cell: min(92px, calc((100cqh - 420px) / 7.3));
+    [data-slot="chart"]:not(:has([data-slot="heatmap"])) {
+      display: none;
+    }
+    [data-slot="heatmap"] {
+      gap: 6px;
+      > div {
+        gap: 6px;
+      }
+      [role="cell"] {
+        width: var(--cell);
+        height: var(--cell);
+        font-size: calc(var(--cell) * 0.3);
+        transition:
+          opacity 420ms var(--ease-out),
+          transform 520ms var(--ease-out);
+        transition-delay: calc(var(--row, 0) * 70ms + var(--col, 0) * 110ms);
+      }
+      > div:nth-child(2) {
+        --row: 1;
+      }
+      > div:nth-child(3) {
+        --row: 2;
+      }
+      > div:nth-child(4) {
+        --row: 3;
+      }
+      > div:nth-child(5) {
+        --row: 4;
+      }
+      > div:nth-child(6) {
+        --row: 5;
+      }
+      > div:nth-child(7) {
+        --row: 6;
+      }
+      [role="cell"]:nth-child(2) {
+        --col: 1;
+      }
+      [role="cell"]:nth-child(3) {
+        --col: 2;
+      }
+      [role="cell"]:nth-child(4) {
+        --col: 3;
+      }
+    }
+    [data-slot="charts"]:not([data-seen]) [data-slot="heatmap"] [role="cell"] {
+      opacity: 0;
+      transform: scale(0.4);
+    }
+  }
+  &[data-share="heatmap"][data-ratio="16x9"] {
+    --cell: calc((100cqh - 220px) / 7.3);
+  }
+  &[data-share="frequency"] {
+    [data-slot="chart"]:not(:has([data-slot="columns"])) {
+      display: none;
+    }
+    [data-slot="columns"] {
+      width: min(100%, 900px);
+      height: calc(100cqh - 470px);
+      gap: 24px;
+      [data-anno] {
+        font-size: calc(var(--head) * 0.9);
+      }
+    }
+  }
+  &[data-share="frequency"][data-ratio="16x9"] [data-slot="columns"] {
+    height: calc(100cqh - 240px);
+  }
+
+  /* Kerning: the table and the live pair; the totals go. */
+  &[data-share="kerning"] {
+    --cell: 80px;
+    [data-slot="kerning"] {
+      flex: 1;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      align-content: center;
+    }
+    [data-slot="kern-table"] {
+      > div > span,
+      button {
+        width: var(--cell);
+        height: var(--cell);
+      }
+      button {
+        font-size: calc(var(--cell) * 0.45);
+      }
+      [data-anno] {
+        font-size: calc(var(--head) * 0.75);
+      }
+    }
+    [data-slot="kern-pair"] p {
+      font-size: calc(var(--head) * 0.6);
+    }
+    [data-slot="kern-total"] {
+      display: none;
+    }
+  }
+  &[data-share="kerning"][data-ratio="4x5"] {
+    --cell: 92px;
+    [data-slot="kerning"] {
+      grid-template-columns: minmax(0, 1fr);
+      justify-items: center;
+    }
+    [data-slot="kern-pair"] {
+      width: 440px;
+    }
+  }
+  &[data-share="kerning"][data-ratio="1x1"] {
+    --cell: 72px;
+  }
+  &[data-share="kerning"][data-ratio="16x9"] {
+    --cell: 112px;
+    [data-slot="kerning"] {
+      gap: 120px;
+      padding-inline: 40px;
+    }
+  }
+
+  /* Performance: the numbers and the live benchmark; the tables go. */
+  &[data-share="performance"] {
+    [data-slot="performance"] {
+      margin-block: auto;
+    }
+    [data-slot="points-table"] {
+      display: none;
+    }
+  }
+  &[data-share="performance"]:not([data-ratio="16x9"]) {
+    [data-slot="performance"] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    /* Its long aside would be cut off at this width. */
+    [data-slot="plate-aside"] {
+      display: none;
+    }
+  }
+
+  /* Poster: the printed sheet, sized to fit the canvas. */
+  &[data-share="poster"] {
+    [data-slot="poster"] {
+      width: min(100%, var(--poster-width, 100%));
+      margin: auto;
+    }
+  }
+  &[data-share="poster"][data-ratio="1x1"] {
+    --poster-width: 680px;
+  }
+  &[data-share="poster"][data-ratio="16x9"] {
+    --poster-width: 740px;
+  }
+
+  &[data-share="waterfall"] [data-slot="waterfall"] {
+    margin-top: 32px;
+  }
+
+  /* Anagrams: the counter and the word turning over; the script drives the hidden controls. */
+  &[data-share="anagrams"] {
+    [data-slot="anagram"] {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 48px;
+    }
+    :is([data-slot="anagram-controls"], [data-slot="anagram-words"]) {
+      display: none;
+    }
+  }
+
+  /* Field: the canvas at twice its size, whole pixels doubled, filling the canvas. */
+  &[data-share="field"] {
+    [data-slot="field"] {
+      width: 600px;
+      margin: auto calc(50% - 300px);
+      transform: scale(2);
+      transform-origin: 50% 50%;
+      border-block: 0;
+      canvas {
+        image-rendering: pixelated;
+        cursor: none;
+      }
+    }
+  }
+  &[data-share="field"][data-ratio="16x9"] [data-slot="field"] {
+    width: 1020px;
+    margin-inline: calc(50% - 510px);
+  }
+
+  /* Loupe: only "open", set to the measure, and a large lens. */
+  &[data-share="loupe"] {
+    [data-slot="loupe-stage"] {
+      margin-block: auto;
+      padding-block: 80px;
+    }
+    [data-slot="loupe-lens"] {
+      --size: 400px;
+    }
+    [data-slot="loupe-word"] {
+      overflow: hidden;
+      [data-component="font-word"] {
+        --m: round(down, calc(100cqw / 19), 1px);
+      }
+    }
+    [data-slot="loupe-hint"] {
+      display: none;
+    }
+  }
+  &[data-share="loupe"][data-ratio="16x9"] {
+    [data-slot="loupe-stage"] {
+      width: 1340px;
+      margin-inline: auto;
+      padding-block: 40px;
+    }
+    [data-slot="loupe-lens"] {
+      --size: 520px;
+    }
+  }
+
+  /* Tester: the controls and the typed word, cropped tight. */
+  &[data-share="tester"] {
+    [data-slot="tester"] {
+      margin-block: auto;
+    }
+    [data-slot="tester-controls"] {
+      zoom: 1.45;
+    }
+    [data-slot="tester-preview"] {
+      min-height: calc(var(--m) * 11 + 40px);
+    }
+    [data-slot="tester-footer"] {
+      display: none;
+    }
+  }
+
+  /* Colophon: "done", whole and centred, with the download under it. */
+  &[data-share="colophon"] {
+    [data-slot="colophon"] {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 72px;
+    }
+    [data-slot="credits"] {
+      display: none;
+    }
+    [data-slot="colophon-word"] {
+      order: -1;
+      width: 100%;
+      height: auto;
+      margin: 0;
+      overflow: visible;
+    }
+    [data-slot="colophon-action"] [data-component="site-button"] {
+      height: 4rem;
+      padding: 0 2.25rem;
+      font-size: calc(var(--head) * 0.85);
+    }
+    [data-slot="colophon-action"] [data-component="site-button"][data-share-hover] {
+      background: var(--link);
+      color: #fff;
+    }
+  }
+  &[data-share="colophon"][data-ratio="16x9"] [data-slot="colophon-word"] {
+    width: 1300px;
+  }
+}

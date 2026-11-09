@@ -38,7 +38,7 @@ const adapter = {
 } satisfies OpenResponses.ProviderAdapter
 
 const tools = {
-  web_search_call: { name: "web_search", input: (item) => item.action ?? {} },
+  web_search_call: ResponsesHostedTools.common.web_search_call,
   code_interpreter_call: { name: "code_interpreter", input: (item) => ({ code: item.code }) },
 } satisfies ResponsesHostedTools.Definitions
 
@@ -63,34 +63,24 @@ export const protocol = Protocol.make({
       }
     }),
   },
-  stream: {
-    event: OpenResponses.protocol.stream.event,
-    initial: (req) => OpenResponses.initial(req, adapter),
-    step: (state, input) =>
-      Effect.gen(function* () {
-        const event = OpenResponses.normalize(state, input)
-        if (event.type !== "response.output_item.done" || !event.item) return yield* OpenResponses.step(state, event)
-        if (event.item.type === "web_extractor_call") {
-          const item = yield* Schema.decodeUnknownEffect(WebExtractorItem)(event.item).pipe(
-            Effect.mapError((cause) =>
-              ProviderShared.eventError(
-                adapter.id,
-                "Alibaba returned an invalid web extraction item",
-                ProviderShared.encodeJson(event),
-                cause,
-              ),
-            ),
-          )
-          return yield* ResponsesHostedTools.onDone(state, item, {
-            web_extractor_call: { name: "web_extractor", input: () => ({ urls: item.urls, goal: item.goal }) },
-          })
-        }
-        if (ResponsesHostedTools.isItem(event.item, tools))
-          return yield* ResponsesHostedTools.onDone(state, event.item, tools)
-        return yield* OpenResponses.step(state, event)
-      }),
-    terminal: OpenResponses.terminal,
-  },
+  stream: ResponsesHostedTools.stream(adapter, tools, (state, event) => {
+    if (event.type !== "response.output_item.done" || event.item?.type !== "web_extractor_call") return undefined
+    return Schema.decodeUnknownEffect(WebExtractorItem)(event.item).pipe(
+      Effect.mapError((cause) =>
+        ProviderShared.eventError(
+          adapter.id,
+          "Alibaba returned an invalid web extraction item",
+          ProviderShared.encodeJson(event),
+          cause,
+        ),
+      ),
+      Effect.flatMap((item) =>
+        ResponsesHostedTools.onDone(state, item, {
+          web_extractor_call: { name: "web_extractor", input: () => ({ urls: item.urls, goal: item.goal }) },
+        }),
+      ),
+    )
+  }),
 })
 
 export * as AlibabaResponses from "./alibaba-responses.js"

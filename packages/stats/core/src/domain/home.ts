@@ -1078,6 +1078,7 @@ function formatProvider(provider: string) {
     openai: "OpenAI",
     qwen: "Qwen",
     tencent: "Tencent",
+    thinkingmachines: "Thinking Machines",
     xai: "xAI",
     xiaomi: "Xiaomi",
     zhipu: "Zhipu",

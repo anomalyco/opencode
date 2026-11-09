@@ -112,7 +112,8 @@ describe("ConfigNormalize", () => {
     expect(result.encoded.warming).toEqual({ interval: "240000 millis", duration: "1800000 millis" })
     const info = Schema.decodeUnknownSync(Info)(result.encoded)
     if (typeof info.warming === "boolean" || info.warming === undefined) throw new Error("expected warming info")
-    expect(Duration.toMillis(info.warming.interval ?? Duration.zero)).toBe(240_000)
+    const interval = info.warming.interval
+    expect(interval === "auto" ? interval : Duration.toMillis(interval ?? Duration.zero)).toBe(240_000)
     expect(Duration.toMillis(info.warming.duration ?? Duration.zero)).toBe(1_800_000)
   })
 
@@ -204,6 +205,22 @@ describe("ConfigNormalize", () => {
       providerID: "anthropic",
       model: "claude",
     })
+  })
+
+  test("keeps an inline variant in legacy model references", () => {
+    const result = normalized({
+      small_model: "anthropic/claude-haiku-4-5#low",
+      agent: { reviewer: { model: "anthropic/claude#high", variant: "low" } },
+      command: { review: { template: "review", model: "anthropic/claude#high" } },
+    })
+    expect(result.encoded.agents).toEqual({
+      reviewer: { model: { providerID: "anthropic", model: "claude", variant: "high" } },
+      title: { model: { providerID: "anthropic", model: "claude-haiku-4-5", variant: "low" } },
+    })
+    expect(result.encoded.commands).toEqual({
+      review: { template: "review", model: { providerID: "anthropic", model: "claude", variant: "high" } },
+    })
+    expect(result.diagnostics).toEqual([])
   })
 
   test("migrates the legacy small model to the title agent", () => {
@@ -552,6 +569,8 @@ describe("ConfigNormalize", () => {
           todo: true,
           background_compaction: true,
           media_blob: true,
+          part_rows: true,
+          codemode_vm: true,
           image_generate: { model: "openai/gpt-image-2" },
           subagent_depth: 0,
           location_idle_timeout: "2 hours",
@@ -564,6 +583,8 @@ describe("ConfigNormalize", () => {
         todo: true,
         background_compaction: true,
         media_blob: true,
+        part_rows: true,
+        codemode_vm: true,
         image_generate: { model: { providerID: "openai", model: "gpt-image-2" } },
         subagent_depth: 0,
         location_idle_timeout: "7200000 millis",
@@ -595,6 +616,24 @@ describe("ConfigNormalize", () => {
         ["invalid", ["experimental", "image_generate"]],
       ])
     }
+  })
+
+  test("normalizes every registered flag as a boolean", () => {
+    const result = normalized({ experimental: { todo: true, media_blob: false, schedules: "yes" } })
+    expect(result.encoded.experimental).toEqual({ todo: true, media_blob: false })
+    expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+      ["invalid", ["experimental", "schedules"]],
+    ])
+  })
+
+  test("passes experimental.all_flags through as a boolean", () => {
+    expect(normalized({ experimental: { all_flags: true } }).encoded.experimental).toEqual({ all_flags: true })
+    expect(normalized({ experimental: { all_flags: false } }).encoded.experimental).toEqual({ all_flags: false })
+    const invalid = normalized({ experimental: { all_flags: "yes" } })
+    expect(invalid.encoded.experimental).toBeUndefined()
+    expect(invalid.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+      ["invalid", ["experimental", "all_flags"]],
+    ])
   })
 
   test("never emits experimental policies", () => {

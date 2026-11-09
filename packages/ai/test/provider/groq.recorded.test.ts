@@ -1,7 +1,7 @@
 import { configure } from "@opencode/ai/providers/groq"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LLMEvent, LLMRequest, LLMResponse, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, LLMResponse, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
@@ -42,7 +42,7 @@ describe("Groq recorded", () => {
             },
           }).model("openai/gpt-oss-20b"),
           prompt: "Reply with exactly one word: hello",
-          generation: { maxTokens: 512 },
+          maxTokens: 512,
         })
         const compiled = yield* compileRequest(request)
         expect(compiled.body).toMatchObject({
@@ -96,7 +96,7 @@ describe("Groq recorded", () => {
             prompt: `Look up the current weather in ${item.cities.join(" and ")}. Call lookup_weather once for each city in the same response before answering. After receiving all results, report each city's weather in one short sentence.`,
             tools: [weather],
             toolChoice: "required",
-            generation: { maxTokens: 1536 },
+            maxTokens: 1536,
           })
           const compiled = yield* compileRequest(request)
           expect(compiled.body.stream_options).toEqual({ include_usage: true })
@@ -119,7 +119,8 @@ describe("Groq recorded", () => {
             expect(first.events.some(LLMEvent.is.reasoningDelta)).toBe(true)
           }
 
-          const followUp = LLMRequest.update(request, {
+          const followUp = {
+            ...request,
             toolChoice: ToolChoice.make("none"),
             messages: [
               ...request.messages,
@@ -128,7 +129,7 @@ describe("Groq recorded", () => {
                 Message.tool({ id: call.id, name: call.name, result: { condition: "sunny", temperature: "18C" } }),
               ),
             ],
-          })
+          }
           const replay = yield* compileRequest(followUp)
           if (item.reasoning) {
             expect(replay.body.messages).toEqual(
@@ -160,7 +161,7 @@ describe("Groq recorded", () => {
           }).model("qwen/qwen3.6-27b"),
           prompt:
             "What is 173 multiplied by 219? Think through the arithmetic, then reply with only the final integer.",
-          generation: { maxTokens: 2048 },
+          maxTokens: 2048,
         })
         const compiled = yield* compileRequest(request)
         expect(compiled.body).toMatchObject({ reasoning_format: "parsed", reasoning_effort: "default" })

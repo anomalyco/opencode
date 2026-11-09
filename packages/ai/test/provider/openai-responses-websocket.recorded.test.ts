@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
 import { Socket } from "effect/socket"
-import { ai, LLMRequest, Message, ToolRuntime } from "../../src/effect.js"
+import { ai, Message, ToolRuntime } from "../../src/effect.js"
 import {
   LLMClient,
   WebSocketTransport,
@@ -121,7 +121,7 @@ describe("OpenAI Responses WebSocket recorded", () => {
         system: "Call get_weather once, then reply exactly: Paris is sunny.",
         prompt: "What is the weather in Paris?",
         tools: [weatherTool],
-        generation: { maxTokens: 50 },
+        maxTokens: 50,
         cache: "none",
       })
       const first = yield* LLMClient.generate(request, { webSocket: channel.executor })
@@ -129,13 +129,14 @@ describe("OpenAI Responses WebSocket recorded", () => {
       if (!call) yield* Effect.die("Expected get_weather tool call")
       const result = yield* ToolRuntime.dispatch([weatherRuntimeTool], call)
       const second = yield* LLMClient.generate(
-        LLMRequest.update(request, {
+        {
+          ...request,
           messages: [
             ...request.messages,
             first.message,
             Message.tool({ id: call.id, name: call.name, result: result.result }),
           ],
-        }),
+        },
         { webSocket: channel.executor },
       )
 
@@ -158,15 +159,13 @@ describe("OpenAI Responses WebSocket recorded", () => {
         model,
         system: "Follow the user's exact reply instruction.",
         prompt: "Reply exactly: Alpha.",
-        generation: { maxTokens: 30 },
+        maxTokens: 30,
         cache: "none",
       })
       const first = yield* LLMClient.generate(request, { webSocket: channel.executor })
       yield* channel.reconnect()
       const second = yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          messages: [...request.messages, first.message, Message.user("Reply exactly: Beta.")],
-        }),
+        { ...request, messages: [...request.messages, first.message, Message.user("Reply exactly: Beta.")] },
         { webSocket: channel.executor },
       )
 
@@ -191,13 +190,14 @@ describe("OpenAI Responses WebSocket recorded", () => {
         model,
         system: "Follow the user's exact reply instruction.",
         prompt: "Reply exactly: Ready.",
-        generation: { maxTokens: 30 },
+        maxTokens: 30,
         cache: "none",
       })
       const first = yield* LLMClient.generate(request, { webSocket: channel.executor })
-      const continuation = LLMRequest.update(request, {
+      const continuation = {
+        ...request,
         messages: [...request.messages, first.message, Message.user("Reply exactly: Recovered.")],
-      })
+      }
       yield* channel.reconnect(true)
       const rejected = yield* LLMClient.generate(continuation, { webSocket: channel.executor }).pipe(Effect.flip)
       const recovered = yield* LLMClient.generate(continuation, { webSocket: channel.executor })

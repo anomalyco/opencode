@@ -115,3 +115,39 @@ void AI.ai.stream(AI.ai.request({ model, prompt: "Hello" }))
 void AI.ai.generate({ model, prompt: "Hello", providerOptions: { mode: "slow" } })
 // @ts-expect-error Promise stream input keeps the selected model's provider option types.
 void AI.ai.stream({ model, prompt: "Hello", providerOptions: { mode: "slow" } })
+
+ai.request({ model, system: "Be brief.", prompt: "Hello" })
+ai.request({ model, system: "Be brief.", messages: [] })
+// @ts-expect-error A request needs `prompt` or `messages`.
+ai.request({ model })
+// @ts-expect-error A request takes `prompt` or `messages`, not both.
+ai.request({ model, prompt: "Hello", messages: [] })
+// @ts-expect-error Effect generate needs `prompt` or `messages`.
+ai.generate({ model, system: "Be brief." })
+// @ts-expect-error Effect stream takes `prompt` or `messages`, not both.
+ai.stream({ model, prompt: "Hello", messages: [] })
+// @ts-expect-error Effect loop needs `prompt` or `messages`.
+ai.loop({ model, tools: [] })
+// @ts-expect-error Effect structured output takes `prompt` or `messages`, not both.
+ai.generate({ model, prompt: "Hello", messages: [], schema: Schema.String })
+// @ts-expect-error Promise generate needs `prompt` or `messages`.
+void AI.ai.generate({ model })
+// @ts-expect-error Promise stream takes `prompt` or `messages`, not both.
+AI.ai.stream({ model, prompt: "Hello", messages: [] })
+// @ts-expect-error Promise loop takes `prompt` or `messages`, not both.
+AI.ai.loop({ model, prompt: "Hello", messages: [], tools: [] })
+AI.ai.loop({ model, messages: [], tools: [] })
+// Transport fields sit at the top level; `http` keeps only the rare wire overrides.
+ai.request({ model, prompt: "Hello", headers: { "x-trace": "1" }, timeout: 30_000, fetch: globalThis.fetch })
+ai.request({ model, prompt: "Hello", timeout: { total: false, headers: 1_000, chunk: 2_000 } })
+ai.request({ model, prompt: "Hello", http: { query: { trace: "1" }, body: { extra: true }, encoding: "gzip" } })
+// @ts-expect-error Headers moved out of `http`.
+ai.request({ model, prompt: "Hello", http: { headers: { "x-trace": "1" } } })
+// @ts-expect-error Timeouts moved out of `http`.
+ai.request({ model, prompt: "Hello", http: { headerTimeout: 1_000 } })
+
+// Portable knobs sit at the top level; editing one is a flat spread.
+const knobs = ai.request({ model, prompt: "Hello", maxTokens: 256, temperature: 0, stop: ["END"] })
+ai.generate({ ...knobs, maxTokens: 512 })
+// @ts-expect-error The nested `generation` object was removed.
+ai.request({ model, prompt: "Hello", generation: { maxTokens: 256 } })

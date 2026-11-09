@@ -5,7 +5,7 @@ import {
   ImageModel,
   type ImageModelOptions,
   type ImageOptions,
-  type ImageRequestFor,
+  type ImageRequest,
   Media,
 } from "../src/effect.js"
 import type { Service } from "../src/image-client.js"
@@ -157,8 +157,11 @@ ai.image.generate({ model: generic, prompt: "A lighthouse", providerOptions: { a
 const explicitAsset: Media.Asset = Media.url("https://example.com/image.png")
 void explicitAsset
 
-// @ts-expect-error Raw strings are ambiguous and are not media assets.
-ai.image.generate({ model: openai, prompt: "A lighthouse", images: ["AQID"] })
+ai.image.generate({
+  model: openai,
+  prompt: "A lighthouse",
+  images: [explicitAsset, new Uint8Array(), new ArrayBuffer(0), new URL("https://example.com/a.png"), "AQID"],
+})
 // @ts-expect-error Plain source objects must be lifted into `Media.Asset` first.
 ai.image.generate({ model: openai, prompt: "A lighthouse", images: [{ type: "bytes", data: new Uint8Array() }] })
 // @ts-expect-error Masks are media assets, not strings.
@@ -169,7 +172,7 @@ const request = ai.image.request({
   prompt: "A lighthouse",
   providerOptions: { imageSize: "1K", futureOption: true },
 })
-const typedRequest: ImageRequestFor<GoogleLikeOptions> = request
+const typedRequest: ImageRequest<ImageModel<GoogleLikeOptions>> = request
 void typedRequest
 const generated = ImageClient.generate(request)
 type GenerateRequirements = Assert<Equal<Requirements<typeof generated>, Service>>

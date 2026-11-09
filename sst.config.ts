@@ -38,12 +38,12 @@ export default $config({
 
     const stage = await import("./infra/stage.js")
     await import("./infra/app.js")
-    const stats = stage.deployAws ? await import("./infra/stats.js") : undefined
+    const stats = stage.deployStats ? await import("./infra/stats.js") : undefined
     await import("./infra/console.js")
     await import("./infra/share.js")
 
     return {
-      ...(stats ? { StatsUrl: stats.app.url } : {}),
+      ...(stats ? { StatsUrl: stats.publicUrl } : {}),
       AwsStage: stage.awsStage,
     }
   },

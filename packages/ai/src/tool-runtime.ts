@@ -36,10 +36,27 @@ export const dispatch = (tools: ReadonlyArray<Tool>, call: ToolCallPart): Effect
   return decodeAndExecute(tool, call).pipe(
     Effect.map((value) => result(call, value)),
     Effect.catchTag("Tool.Error", (failure) =>
-      Effect.succeed(result(call, { type: "error", value: failure.message }, failure.error)),
+      Effect.succeed(result(call, { type: "error", value: failure.message })),
     ),
   )
 }
+
+/** A call the loop answers before the next step. With `error`, it is not run and the model gets the error back. */
+export interface PendingCall {
+  readonly call: ToolCallPart
+  readonly error?: string
+}
+
+/** Run a step's tool calls concurrently, with results in call order. */
+export const runTools = (tools: ReadonlyArray<Tool>, calls: ReadonlyArray<PendingCall>) =>
+  Effect.forEach(
+    calls,
+    (item) =>
+      item.error === undefined
+        ? dispatch(tools, item.call)
+        : Effect.succeed(result(item.call, { type: "error", value: item.error })),
+    { concurrency: "unbounded" },
+  )
 
 const decodeAndExecute = (tool: Tool, call: ToolCallPart): Effect.Effect<ToolSettlement, ToolFailure> =>
   tool._decode(call.input).pipe(
@@ -71,40 +88,21 @@ const decodeAndExecute = (tool: Tool, call: ToolCallPart): Effect.Effect<ToolSet
     ),
   )
 
-const result = (call: ToolCallPart, value: ToolResultValueType | ToolSettlement, error?: unknown): DispatchResult => {
+const result = (call: ToolCallPart, value: ToolResultValueType | ToolSettlement): DispatchResult => {
   const settlement = ToolResultValue.is(value) ? { result: value } : value
   return {
     result: settlement.result,
     output: settlement.output,
-    events:
-      settlement.result.type === "error"
-        ? [
-            LLMEvent.toolError({
-              id: call.id,
-              name: call.name,
-              namespace: call.namespace,
-              message: String(settlement.result.value),
-              error,
-              providerMetadata: call.providerMetadata,
-            }),
-            LLMEvent.toolResult({
-              id: call.id,
-              name: call.name,
-              namespace: call.namespace,
-              result: settlement.result,
-              providerMetadata: call.providerMetadata,
-            }),
-          ]
-        : [
-            LLMEvent.toolResult({
-              id: call.id,
-              name: call.name,
-              namespace: call.namespace,
-              result: settlement.result,
-              output: settlement.output,
-              providerMetadata: call.providerMetadata,
-            }),
-          ],
+    events: [
+      LLMEvent.toolResult({
+        id: call.id,
+        name: call.name,
+        namespace: call.namespace,
+        result: settlement.result,
+        output: settlement.output,
+        providerMetadata: call.providerMetadata,
+      }),
+    ],
   }
 }
 

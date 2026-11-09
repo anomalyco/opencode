@@ -1,5 +1,5 @@
 diff --git a/dist/index.cjs b/dist/index.cjs
-index 71cf63076b073284aa14f63cd41efa653e8def0f..d4679fc706c76b87949fd674857cea54793e82ce 100644
+index 71cf63076b073284aa14f63cd41efa653e8def0f..90e2a8778c4a0981aa57d3b5c6657d9c7c0e3562 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
 @@ -1038,7 +1038,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
@@ -18,7 +18,25 @@ index 71cf63076b073284aa14f63cd41efa653e8def0f..d4679fc706c76b87949fd674857cea54
  	if (resource) authorizationUrl.searchParams.set("resource", resourceIndicatorToString(resource));
  	return {
  		authorizationUrl,
-@@ -4350,7 +4348,7 @@ var Client = class extends require_src.Protocol {
+@@ -3206,7 +3204,16 @@ var Client = class extends require_src.Protocol {
+ 		}));
+ 		return require_src.runInputRequiredFlow({
+ 			getRequestHandler: (method) => this._getRequestHandler(method),
+-			buildContext: (baseCtx) => this.buildContext(baseCtx, void 0),
++			buildContext: (baseCtx) => this.buildContext({
++				...baseCtx,
++				mcpReq: {
++					...baseCtx.mcpReq,
++					origin: {
++						request: flow.request,
++						options: flow.options
++					}
++				}
++			}, void 0),
+ 			sessionId: this.transport?.sessionId
+ 		}, this._inputRequiredDriverConfig, decoded, flow);
+ 	}
+@@ -4350,7 +4357,7 @@ var Client = class extends require_src.Protocol {
  	_excludeInvalidXMcpHeaderTools(result) {
  		if (this.getProtocolEra() !== "modern" || !this.transport || detectProbeTransportKind(this.transport) === "stdio") return;
  		const filtered = result.tools.filter((tool) => {
@@ -28,7 +46,7 @@ index 71cf63076b073284aa14f63cd41efa653e8def0f..d4679fc706c76b87949fd674857cea54
  				console.warn(`[mcp-sdk] excluding tool '${tool.name}' from tools/list: invalid x-mcp-header declaration — ${scan.reason}`);
  				return false;
 diff --git a/dist/index.mjs b/dist/index.mjs
-index c1a09a82b8121d6a1b038ccc6d02bae46d55dbcf..bf457bdfdef05ad8d09f3fbb94c6ac1aecc59487 100644
+index c1a09a82b8121d6a1b038ccc6d02bae46d55dbcf..0adaa1f8ef80f1bd29581e896add283258a57918 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
 @@ -1035,7 +1035,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
@@ -47,7 +65,25 @@ index c1a09a82b8121d6a1b038ccc6d02bae46d55dbcf..bf457bdfdef05ad8d09f3fbb94c6ac1a
  	if (resource) authorizationUrl.searchParams.set("resource", resourceIndicatorToString(resource));
  	return {
  		authorizationUrl,
-@@ -4347,7 +4345,7 @@ var Client = class extends Protocol {
+@@ -3203,7 +3201,16 @@ var Client = class extends Protocol {
+ 		}));
+ 		return runInputRequiredFlow({
+ 			getRequestHandler: (method) => this._getRequestHandler(method),
+-			buildContext: (baseCtx) => this.buildContext(baseCtx, void 0),
++			buildContext: (baseCtx) => this.buildContext({
++				...baseCtx,
++				mcpReq: {
++					...baseCtx.mcpReq,
++					origin: {
++						request: flow.request,
++						options: flow.options
++					}
++				}
++			}, void 0),
+ 			sessionId: this.transport?.sessionId
+ 		}, this._inputRequiredDriverConfig, decoded, flow);
+ 	}
+@@ -4347,7 +4354,7 @@ var Client = class extends Protocol {
  	_excludeInvalidXMcpHeaderTools(result) {
  		if (this.getProtocolEra() !== "modern" || !this.transport || detectProbeTransportKind(this.transport) === "stdio") return;
  		const filtered = result.tools.filter((tool) => {

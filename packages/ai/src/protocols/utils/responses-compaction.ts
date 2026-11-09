@@ -4,10 +4,10 @@ import {
   InvalidProviderOutputError,
   CompactionPart,
   CompactionResponse,
-  HttpOptions,
-  LLMRequest,
+  type LLMRequest,
   Message,
-  type ContentPart,
+  type MediaPart,
+  type TextPart,
   mergeJsonRecords,
 } from "../../schema/index.js"
 import type { CompactOperation } from "../../route/client.js"
@@ -108,9 +108,10 @@ export const make = (
     const url = Endpoint.render(route.endpoint, { request, body: native })
     url.pathname = `${url.pathname.replace(/\/$/, "")}/compact`
     const parts = yield* HttpTransport.jsonRequestParts({
-      request: LLMRequest.update(request, {
-        http: request.http === undefined ? undefined : new HttpOptions({ ...request.http, body: undefined }),
-      }),
+      request: {
+        ...request,
+        http: request.http === undefined ? undefined : { ...request.http, body: undefined },
+      },
       body,
       endpoint: Endpoint.path(url.toString()),
       auth: route.auth,
@@ -123,7 +124,7 @@ export const make = (
         headers: parts.headers,
         encoding: request.http?.encoding,
       }),
-      options?.http,
+      RequestExecutor.withFetch(request.fetch, options?.http),
     )
     const text = yield* RequestExecutor.responseStream(response).pipe(
       Stream.decodeText(),
@@ -174,7 +175,7 @@ function toMessage(item: (typeof Response.Type.output)[number], model: LLMReques
   return Message.make({
     role: item.role,
     providerMetadata: { [key]: { itemId: item.id, type: item.type, status: item.status, phase: item.phase } },
-    content: item.content.map((part): ContentPart => {
+    content: item.content.map((part): TextPart | MediaPart => {
       if (part.type === "input_text" || part.type === "output_text") return { type: "text", text: part.text }
       if (part.type === "input_image")
         return {

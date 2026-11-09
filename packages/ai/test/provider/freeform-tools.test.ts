@@ -33,7 +33,7 @@ const tools = (freeform?: Freeform) =>
     tool({
       name: "run",
       description: "Run code",
-      parameters: Schema.Struct({ code: Schema.String }),
+      input: Schema.Struct({ code: Schema.String }),
       success: Schema.String,
       freeform,
     }),
@@ -299,11 +299,11 @@ describe("freeform tools", () => {
 
   it.effect("rejects freeform tools without exactly one required string parameter", () =>
     Effect.sync(() => {
-      const make = (parameters: Schema.Struct<Schema.Struct.Fields>) =>
+      const make = (fields: Schema.Struct<Schema.Struct.Fields>) =>
         tool({
           name: "run",
           description: "Run code",
-          jsonSchema: Schema.toJsonSchemaDocument(parameters).schema,
+          input: Schema.toJsonSchemaDocument(fields).schema,
           freeform: { type: "text" },
         })
       expect(() => make(Schema.Struct({ code: Schema.Number }))).toThrow("exactly one parameter, a required string")

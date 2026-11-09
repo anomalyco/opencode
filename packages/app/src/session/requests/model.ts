@@ -1,6 +1,6 @@
-import { createEffect, createMemo } from "solid-js"
-import { createStore } from "solid-js/store"
-import type { FormInfo, PermissionRequest } from "@opencode/client/promise"
+import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
+import { isPermissionNotFoundError, type FormInfo, type PermissionRequest } from "@opencode/client/promise"
+import { abort } from "@opencode/util/abort"
 import { useParams } from "@solidjs/router"
 import { showToast } from "@/shell/notifications/toast"
 import { useServerSDK } from "@/runtime/server/client"
@@ -11,15 +11,40 @@ import { sessionPermissionRequest, sessionFormRequest, sessionTreeIDs } from "@/
 import { createWebSearchRequest } from "./websearch"
 import { createSessionBackground } from "@/session/requests/background"
 import { createSteerBackground } from "@/session/requests/steer-background"
-import { useData } from "@/runtime/server/current"
+import { useData, useServer } from "@/runtime/server/current"
+import { needsUser } from "./auto-approve-machine"
+import {
+  INITIAL_PERMISSION_REPLY_STATE,
+  isPermissionReplied,
+  isPermissionResponding,
+  PERMISSION_REPLIED_LIMIT,
+  transitionPermissionReply,
+  type PermissionDecision,
+  type PermissionReplyEffect,
+  type PermissionReplyEvent,
+  type PermissionReplyState,
+} from "./permission-machine"
 
 export function createSessionRequestModel() {
   const params = useParams()
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
   const data = useData()
+  const autoApprove = useServer().ctx.autoApprove
   const language = useLanguage()
   const settings = useSettings()
+  // Manual replies from the dock, by request. Requests nobody answered from this dock have no entry.
+  const [replies, setReplies] = createSignal<Readonly<Record<string, PermissionReplyState>>>({})
+  const runs = new Map<string, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
+  const replyState = (requestID: string) => replies()[requestID] ?? INITIAL_PERMISSION_REPLY_STATE
+
+  const stop = serverSDK.event.on("permission.replied", (event) => dispatch(event.data.requestID, { type: "resolved" }))
+
+  onCleanup(() => {
+    stop()
+    Object.keys(untrack(replies)).forEach((id) => dispatch(id, { type: "disposed" }))
+  })
+
   createEffect(() => {
     const id = params.id
 
@@ -107,11 +132,16 @@ export function createSessionRequestModel() {
   const permissionRequest = createMemo((): PermissionRequest | undefined => {
     const id = params.id
 
-    const project = projectSettingsKey(serverSDK.scope, id ? data.session.get(id)?.projectID : undefined)
+    const enabled = settings.permissions.autoApproves(
+      projectSettingsKey(serverSDK.scope, id ? data.session.get(id)?.projectID : undefined),
+    )
 
-    if (settings.permissions.autoApproves(project)) return
-
-    return sessionPermissionRequest(data.session.list(), data.session.permission.list, id)
+    return sessionPermissionRequest(
+      data.session.list(),
+      data.session.permission.list,
+      id,
+      (item) => needsUser(autoApprove.state(item.id), enabled) && !isPermissionReplied(replyState(item.id)),
+    )
   })
 
   const blocked = createMemo(() => {
@@ -160,35 +190,73 @@ export function createSessionRequestModel() {
     move: (sessionID) => serverSDK.api.session.background({ sessionID }),
   })
 
-  const [store, setStore] = createStore<{ responding: string | undefined }>({ responding: undefined })
+  // The dock keeps the last request mounted while it closes, so its buttons follow that request's reply.
+  const lastPermissionID = createMemo<string | undefined>((previous) => permissionRequest()?.id ?? previous)
 
   const permissionResponding = createMemo(() => {
-    const perm = permissionRequest()
+    const id = lastPermissionID()
 
-    if (!perm) return false
-
-    return store.responding === perm.id
+    return !!id && isPermissionResponding(replyState(id))
   })
 
-  const decide = (response: "once" | "always" | "reject") => {
+  const decide = (decision: PermissionDecision) => {
     const perm = permissionRequest()
 
     if (!perm) return
+    dispatch(perm.id, { type: "decide", sessionID: perm.sessionID, decision })
+  }
 
-    if (store.responding === perm.id) return
+  function dispatch(requestID: string, event: PermissionReplyEvent) {
+    const state = untrack(() => replyState(requestID))
+    const result = transitionPermissionReply(state, event)
 
-    setStore("responding", perm.id)
-    serverSDK.api.permission
-      .reply({ sessionID: perm.sessionID, requestID: perm.id, decision: response })
-      .catch((error) => {
-        showToast({
-          title: language.t("common.requestFailed"),
-          description: error instanceof Error ? error.message : String(error),
-        })
-      })
-      .finally(() => {
-        setStore("responding", (id) => (id === perm.id ? undefined : id))
-      })
+    if (result.state !== state) setReplies((current) => pruneReplied({ ...current, [requestID]: result.state }))
+
+    result.effects.forEach((effect) => execute(requestID, effect))
+  }
+
+  function execute(requestID: string, effect: PermissionReplyEffect) {
+    if (effect.type === "toast-failed") {
+      showToast({ title: language.t("common.requestFailed"), description: effect.error })
+
+      return
+    }
+
+    if (effect.type === "abort") {
+      const run = runs.get(requestID)
+      runs.delete(requestID)
+      clearTimeout(run?.timer)
+      abort(run?.controller)
+
+      return
+    }
+
+    const controller = new AbortController()
+
+    runs.set(requestID, {
+      controller,
+      timer: setTimeout(
+        () => dispatch(requestID, { type: "reply.timed-out", attempt: effect.attempt }),
+        effect.timeoutMs,
+      ),
+    })
+    // A request another client or the TUI already answered counts as replied.
+    void serverSDK.api.permission
+      .reply({ sessionID: effect.sessionID, requestID, decision: effect.decision }, { signal: controller.signal })
+      .then(
+        () => dispatch(requestID, { type: "reply.succeeded", attempt: effect.attempt }),
+        (error) =>
+          dispatch(
+            requestID,
+            isPermissionNotFoundError(error)
+              ? { type: "reply.succeeded", attempt: effect.attempt }
+              : {
+                  type: "reply.failed",
+                  attempt: effect.attempt,
+                  error: error instanceof Error ? error.message : String(error),
+                },
+          ),
+      )
   }
 
   return {
@@ -210,3 +278,13 @@ export function createSessionRequestModel() {
 }
 
 export type SessionRequestModel = ReturnType<typeof createSessionRequestModel>
+
+// Replied entries only hide requests until `permission.replied` removes them, so the oldest can go.
+function pruneReplied(replies: Readonly<Record<string, PermissionReplyState>>) {
+  const replied = Object.entries(replies).flatMap(([id, state]) => (isPermissionReplied(state) ? [id] : []))
+
+  if (replied.length <= PERMISSION_REPLIED_LIMIT) return replies
+  const drop = new Set(replied.slice(0, replied.length - PERMISSION_REPLIED_LIMIT))
+
+  return Object.fromEntries(Object.entries(replies).filter(([id]) => !drop.has(id)))
+}
