@@ -115,7 +115,7 @@ jobs:
   # Fetches the models.dev catalog once per run, so every CLI bundles the same copy.
   models-catalog:
     needs: [plan, tag]
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     env: *env
     steps:
@@ -138,7 +138,7 @@ jobs:
 
   build-cli:
     needs: [plan, tag, models-catalog]
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env: *env
     steps:
@@ -178,11 +178,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { target: linux-arm64, host: blacksmith-4vcpu-ubuntu-2404-arm }
-          - { target: linux-x64, host: blacksmith-4vcpu-ubuntu-2404 }
+          - { target: linux-arm64, host: ubuntu-24.04 }
+          - { target: linux-x64, host: ubuntu-24.04 }
           - { target: darwin-arm64, host: macos-26 }
-          - { target: windows-arm64, host: blacksmith-4vcpu-windows-2025 }
-          - { target: windows-x64, host: blacksmith-4vcpu-windows-2025 }
+          - { target: windows-arm64, host: windows-2025 }
+          - { target: windows-x64, host: windows-2025 }
     runs-on: ${{ matrix.host }}
     env: *env
     steps:
@@ -222,7 +222,7 @@ jobs:
   build-npm:
     needs: [plan, tag, build-cli, build-node]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.cli == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env: *env
     steps:
@@ -258,7 +258,7 @@ jobs:
   build-docker:
     needs: [plan, tag, build-cli]
     if: needs.plan.outputs.release == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     env: *env
     steps:
       - *checkout
@@ -292,16 +292,13 @@ jobs:
       matrix:
         include:
           - target: darwin-x64
-            host: ${{ (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && 'macos-26' || 'macos-26-intel' }}
-            install: ${{ (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && '--os=darwin --cpu=*' || '--os=darwin --cpu=x64' }}
+            host: macos-26
+            install: --os=darwin --cpu=x64
           - { target: darwin-arm64, host: macos-26, install: --os=darwin --cpu=arm64 }
-          # github-hosted: blacksmith lacks the ARM64 MSVC cross-compilation toolchain
-          - target: windows-arm64
-            host: ${{ (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && 'blacksmith-4vcpu-windows-2025' || 'windows-2025' }}
-            install: --cpu=*
-          - { target: windows-x64, host: blacksmith-4vcpu-windows-2025 }
-          - { target: linux-x64, host: blacksmith-4vcpu-ubuntu-2404 }
-          - { target: linux-arm64, host: blacksmith-4vcpu-ubuntu-2404-arm }
+          - { target: windows-arm64, host: windows-2025, install: --cpu=* }
+          - { target: windows-x64, host: windows-2025 }
+          - { target: linux-x64, host: ubuntu-24.04 }
+          - { target: linux-arm64, host: ubuntu-24.04 }
     runs-on: ${{ matrix.host }}
     env: *env
     steps:
@@ -357,10 +354,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target: windows-arm64
-            host: ${{ (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && 'blacksmith-4vcpu-windows-2025' || 'windows-2025' }}
-            install: --cpu=*
-          - { target: windows-x64, host: blacksmith-4vcpu-windows-2025 }
+          - { target: windows-arm64, host: windows-2025, install: --cpu=* }
+          - { target: windows-x64, host: windows-2025 }
     runs-on: ${{ matrix.host }}
     env: *env
     steps:
