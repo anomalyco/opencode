@@ -288,20 +288,20 @@ describe("AzurePlugin connecting", () => {
 })
 
 describe("AzurePlugin startup", () => {
-  it.live("starts without calling Azure, then lists deployments", () =>
+  it.live("starts without waiting for Azure, then lists deployments", () =>
     Effect.gen(function* () {
       const cli = yield* fakeAzureCli()
-      const azure = yield* fakeAzure({ management: () => managementPage([managed("gpt-5-mini", "gpt-5-mini")]) })
+      const answer = Promise.withResolvers<Response>()
+      const azure = yield* fakeAzure({ management: () => answer.promise })
       yield* seedCatalog
       yield* connect(cliCredential())
       yield* addPlugin(azure.endpoints).pipe(cli.provide)
 
-      expect(cli.commands).toEqual([])
-      expect(azure.requests).toEqual([])
       const providers = yield* Provider.Service
       expect(required(yield* providers.get(Provider.ID.azure)).settings?.resourceName).toBe("test-resource")
       expect(yield* azureModelIDs).toEqual(catalogIDs)
 
+      answer.resolve(managementPage([managed("gpt-5-mini", "gpt-5-mini")]))
       yield* eventually(azureModelIDs, (ids) => ids.length === 1)
       expect(yield* azureModelIDs).toEqual(["gpt-5-mini"])
     }),

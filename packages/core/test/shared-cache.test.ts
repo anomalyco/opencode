@@ -1,12 +1,14 @@
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Option, Schema, Scope, Stream } from "effect"
 import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { KV } from "@opencode/core/kv"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { SharedCache } from "@opencode/core/shared-cache"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(SharedCache.node))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([SharedCache.node, KV.node])))
 
 const request = HttpClientRequest.get("https://models.example/v1")
 const status = (code: number) =>
@@ -17,6 +19,30 @@ const status = (code: number) =>
   )
     .execute(request)
     .pipe(Effect.flip)
+
+// A load that answers each refresh with the next result.
+const remote = <A>(results: Array<Exit.Exit<A, unknown>>) => {
+  const state = { loads: 0 }
+  const load = Effect.suspend(() => {
+    state.loads++
+    return results.shift() ?? Effect.die("no more results")
+  })
+  return { state, load }
+}
+const ok = Exit.succeed
+const failed = Exit.fail
+
+// Moves the clock and lets the woken refresh run.
+const after = (duration: Duration.Input) =>
+  TestClock.adjust(duration).pipe(Effect.andThen(Effect.yieldNow), Effect.andThen(Effect.yieldNow))
+
+const hold = <A, E>(input: SharedCache.Input<A, E>) =>
+  Effect.gen(function* () {
+    const cache = yield* SharedCache.Service
+    const scope = yield* Scope.make()
+    const source = yield* cache.source(input).pipe(Scope.provide(scope))
+    return { source, release: Scope.close(scope, Exit.void) }
+  })
 
 describe("SharedCache", () => {
   it.effect("counts network errors, timeouts and 408, 429 or 5xx as transient, and nothing else", () =>
@@ -34,128 +60,183 @@ describe("SharedCache", () => {
     }),
   )
 
-  it.effect("joins a running load, refreshes after the caller's interval, and forces without overlapping", () =>
+  it.effect("shares one timer between every holder of a key", () =>
     Effect.gen(function* () {
-      const cache = yield* SharedCache.Service
-      const loads = { a: 0, b: 0 }
-      const gate = yield* Deferred.make<void>()
-      const get = (key: "a" | "b", options: { interval?: Duration.Input; force?: boolean } = {}) =>
-        cache.get({ key, ...options, load: Deferred.await(gate).pipe(Effect.map(() => `${key}${++loads[key]}`)) })
+      const list = remote([ok(["a"]), ok(["b"]), ok(["c"])])
+      const first = yield* hold({ key: "models", load: list.load })
+      const second = yield* hold<string[], unknown>({
+        key: "models",
+        interval: "1 minute",
+        load: Effect.die("never runs"),
+      })
+      expect(yield* first.source.get).toEqual(["a"])
+      expect(yield* second.source.get).toEqual(["a"])
+      expect(list.state.loads).toBe(1)
 
-      const joined = yield* Effect.all([get("a"), get("a", { force: true }), get("b")], {
-        concurrency: "unbounded",
-      }).pipe(Effect.forkChild({ startImmediately: true }))
+      // The first holder's interval wins.
+      yield* after("1 minute")
+      expect(list.state.loads).toBe(1)
+      yield* after("9 minutes")
+      expect(list.state.loads).toBe(2)
+      expect(yield* second.source.get).toEqual(["b"])
+    }),
+  )
+
+  it.effect("waits only for the first load, and then reads the value without loading", () =>
+    Effect.gen(function* () {
+      const gate = yield* Deferred.make<void>()
+      const state = { loads: 0 }
+      const { source } = yield* hold({
+        key: "models",
+        load: Deferred.await(gate).pipe(Effect.map(() => ++state.loads)),
+      })
+      const first = yield* source.get.pipe(Effect.forkChild({ startImmediately: true }))
+      expect(yield* source.current).toEqual({ value: Option.none(), failure: Option.none() })
       yield* Deferred.succeed(gate, undefined)
-      expect(yield* Fiber.join(joined)).toEqual(["a1", "a1", "b1"])
+      expect(yield* Fiber.join(first)).toBe(1)
 
-      yield* TestClock.adjust("5 minutes")
-      expect(yield* get("a")).toBe("a1")
-      expect(yield* get("a", { interval: "1 minute" })).toBe("a2")
-      expect(yield* get("a", { force: true })).toBe("a3")
-      yield* TestClock.adjust("10 minutes")
-      expect(yield* get("b")).toBe("b2")
-      expect(loads).toEqual({ a: 3, b: 2 })
-    }),
-  )
-
-  it.effect("retries transient failures, then keeps the last list or the failure until the next interval", () =>
-    Effect.gen(function* () {
-      const cache = yield* SharedCache.Service
-      const remote = { results: [] as unknown[], loads: 0 }
-      const get = (force?: boolean) =>
-        cache.get({
-          key: "models",
-          force,
-          load: Effect.suspend(() => {
-            remote.loads++
-            const result = remote.results.shift()
-            return typeof result === "string" ? Effect.succeed(result) : Effect.fail(result)
-          }),
-        })
-      const timeout = new Cause.TimeoutError()
-
-      remote.results = [401]
-      expect(yield* Effect.flip(get())).toBe(401)
+      // A stale value is still read at once, and reading never starts a load.
       yield* TestClock.adjust("9 minutes")
-      expect(yield* Effect.flip(get())).toBe(401)
-      remote.results = [timeout, timeout, "list"]
-      const flaky = yield* get(true).pipe(Effect.forkChild({ startImmediately: true }))
-      yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust("1 second")))
-      yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust("2 seconds")))
-      expect(yield* Fiber.join(flaky)).toBe("list")
-      expect(remote.loads).toBe(4)
-
-      remote.results = [401, timeout, timeout, timeout, timeout]
-      expect(yield* get(true)).toBe("list")
-      const outage = yield* get(true).pipe(Effect.forkChild({ startImmediately: true }))
-      for (const wait of ["1 second", "2 seconds", "4 seconds"] as const)
-        yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust(wait)))
-      expect(yield* Fiber.join(outage)).toBe("list")
-      expect(yield* get()).toBe("list")
-      expect(remote.loads).toBe(9)
+      expect(yield* Effect.all([source.get, source.get, source.get])).toEqual([1, 1, 1])
+      expect(state.loads).toBe(1)
     }),
   )
 
-  it.effect("never keeps interrupts or defects, and an interrupted caller leaves the load to the others", () =>
+  it.effect("keeps the last value through failures, retries transient ones, and reports the failure", () =>
     Effect.gen(function* () {
-      const cache = yield* SharedCache.Service
-      const gate = yield* Deferred.make<void>()
-      const loads = { count: 0 }
-      const get = (load: Effect.Effect<number>) =>
-        cache.get({
-          key: "models",
-          load: Effect.suspend(() => {
-            loads.count++
-            return load
-          }),
-        })
+      const timeout = new Cause.TimeoutError()
+      const list = remote([ok(["a"]), failed("unauthorized"), failed(timeout), failed(timeout), ok(["b"])])
+      const { source } = yield* hold({ key: "models", load: list.load })
+      expect(yield* source.get).toEqual(["a"])
 
-      const first = yield* get(Deferred.await(gate).pipe(Effect.as(1))).pipe(
+      yield* after("10 minutes")
+      expect(yield* source.current).toEqual({ value: Option.some(["a"]), failure: Option.some("unauthorized") })
+      expect(yield* source.get).toEqual(["a"])
+
+      yield* after("10 minutes")
+      yield* after("1 second")
+      yield* after("2 seconds")
+      expect(yield* source.current).toEqual({ value: Option.some(["b"]), failure: Option.none() })
+      expect(list.state.loads).toBe(5)
+    }),
+  )
+
+  it.effect("fails a read only without any value, and tries again within a minute", () =>
+    Effect.gen(function* () {
+      const skill = remote([failed("bad"), ok("ready")])
+      const { source } = yield* hold({ key: "skill", interval: Duration.infinity, load: skill.load })
+      expect(yield* Effect.flip(source.get)).toBe("bad")
+      yield* after("30 seconds")
+      expect(skill.state.loads).toBe(1)
+      yield* after("30 seconds")
+      expect(yield* source.get).toBe("ready")
+
+      // An infinite interval loads a value once.
+      yield* after("1 day")
+      expect(skill.state.loads).toBe(2)
+    }),
+  )
+
+  it.effect("never keeps an interrupt and keeps a defect as the failure", () =>
+    Effect.gen(function* () {
+      const { source } = yield* hold({ key: "models", load: Effect.die("bug") })
+      expect(Exit.hasDies(yield* Effect.exit(source.get))).toBe(true)
+      expect(yield* source.current).toEqual({ value: Option.none(), failure: Option.none() })
+    }),
+  )
+
+  it.effect("tells holders when the value or the failure changes, and nothing else", () =>
+    Effect.gen(function* () {
+      const list = remote([ok(["a"]), ok(["a"]), failed("down"), failed("down"), ok(["b"])])
+      const { source } = yield* hold({ key: "models", load: list.load })
+      yield* source.get
+      const seen = yield* source.changes.pipe(
+        Stream.take(3),
+        Stream.runCollect,
         Effect.forkChild({ startImmediately: true }),
       )
-      const second = yield* get(Effect.succeed(2)).pipe(Effect.forkChild({ startImmediately: true }))
-      yield* Effect.yieldNow
-      yield* Fiber.interrupt(first)
-      yield* Deferred.succeed(gate, undefined)
-      expect(yield* Fiber.join(second)).toBe(1)
-
-      yield* TestClock.adjust("10 minutes")
-      expect(Exit.hasDies(yield* Effect.exit(get(Effect.die("bug"))))).toBe(true)
-      expect(Exit.hasInterrupts(yield* Effect.exit(get(Effect.interrupt)))).toBe(true)
-      expect(yield* get(Effect.succeed(3))).toBe(3)
-      expect(loads.count).toBe(4)
+      for (let refresh = 0; refresh < 4; refresh++) yield* after("10 minutes")
+      expect(list.state.loads).toBe(5)
+      expect(yield* Fiber.join(seen)).toEqual([
+        { value: Option.some(["a"]), failure: Option.none() },
+        { value: Option.some(["a"]), failure: Option.some("down") },
+        { value: Option.some(["b"]), failure: Option.none() },
+      ])
     }),
   )
 
-  it.effect("drops entries unread for 24 hours, never one still in use or loading", () =>
+  it.effect("stops refreshing and drops the value once the last holder releases it", () =>
+    Effect.gen(function* () {
+      const list = remote([ok(["a"]), ok(["b"]), ok(["c"])])
+      const first = yield* hold({ key: "models", load: list.load })
+      const second = yield* hold({ key: "models", load: list.load })
+      yield* first.source.get
+      yield* first.release
+      yield* after("10 minutes")
+      expect(list.state.loads).toBe(2)
+
+      yield* second.release
+      yield* after("1 hour")
+      expect(list.state.loads).toBe(2)
+
+      // The next holder starts again from nothing.
+      const next = yield* hold({ key: "models", load: list.load })
+      expect(yield* next.source.get).toEqual(["c"])
+    }),
+  )
+})
+
+describe("SharedCache persist", () => {
+  const codec = Schema.toCodecJson(Schema.NullOr(Schema.Array(Schema.String)))
+
+  it.effect("restores the saved value at once and saves a value only when it changed, including null", () =>
+    Effect.gen(function* () {
+      const kv = yield* KV.Service
+      const gate = yield* Deferred.make<void>()
+      const list = remote<readonly string[] | null>([ok(null), ok(null), ok(["a"])])
+      const first = yield* hold({ key: "list", persist: codec, load: list.load })
+      expect(yield* first.source.get).toBeNull()
+      expect(yield* kv.get("shared-cache:list")).toEqual({ value: null })
+
+      yield* kv.set("shared-cache:list", "untouched")
+      yield* after("10 minutes")
+      expect(yield* kv.get("shared-cache:list")).toBe("untouched")
+      yield* after("10 minutes")
+      expect(yield* kv.get("shared-cache:list")).toEqual({ value: ["a"] })
+      yield* first.release
+
+      // A later holder, as in another process, reads the saved value while its first load waits.
+      const next = yield* hold({
+        key: "list",
+        persist: codec,
+        load: Deferred.await(gate).pipe(Effect.as(["b"])),
+      })
+      expect(yield* next.source.get).toEqual(["a"])
+      yield* Deferred.succeed(gate, undefined)
+      yield* Effect.yieldNow
+      expect(yield* next.source.get).toEqual(["b"])
+      expect(yield* kv.get("shared-cache:list")).toEqual({ value: ["b"] })
+    }),
+  )
+
+  it.effect("forgets the saved values under a prefix and stops their refreshes", () =>
     Effect.gen(function* () {
       const cache = yield* SharedCache.Service
-      const loads = { idle: 0, used: 0, daily: 0, slow: 0 }
-      const once = (key: keyof typeof loads) =>
-        Effect.suspend(() => (++loads[key] === 1 ? Effect.succeed(key) : Effect.fail("offline")))
-      const gate = yield* Deferred.make<void>()
+      const kv = yield* KV.Service
+      const list = remote<readonly string[] | null>([ok(["a"]), ok(["b"]), ok(["c"]), ok(["d"])])
+      const one = yield* hold({ key: "console:1:config", persist: codec, load: list.load })
+      yield* one.source.get
+      const two = yield* hold({ key: "console:2:config", persist: codec, load: list.load })
+      yield* two.source.get
+      yield* cache.forget("console:1:")
+      expect((yield* kv.scan({ prefix: "shared-cache:" })).entries.map((entry) => entry.key)).toEqual([
+        "shared-cache:console:2:config",
+      ])
 
-      expect(yield* cache.get({ key: "idle", load: once("idle") })).toBe("idle")
-      expect(yield* cache.get({ key: "daily", interval: "48 hours", load: once("daily") })).toBe("daily")
-      const getSlow = cache
-        .get({ key: "slow", load: Deferred.await(gate).pipe(Effect.andThen(once("slow"))) })
-        .pipe(Effect.forkChild({ startImmediately: true }))
-      const slow = yield* getSlow
-      yield* Effect.yieldNow
-      // A Location refreshing every 10 minutes keeps its entry, so its list survives later failures.
-      for (let elapsed = 0; elapsed <= 25 * 60; elapsed += 10) {
-        expect(yield* cache.get({ key: "used", load: once("used") })).toBe("used")
-        yield* TestClock.adjust("10 minutes")
-      }
-
-      expect(yield* Effect.flip(cache.get({ key: "idle", load: once("idle") }))).toBe("offline")
-      expect(loads.idle).toBe(2)
-      yield* TestClock.adjust("23 hours")
-      expect(yield* cache.get({ key: "daily", interval: "48 hours", load: once("daily") })).toBe("daily")
-      const joined = yield* getSlow
-      yield* Deferred.succeed(gate, undefined)
-      expect([yield* Fiber.join(slow), yield* Fiber.join(joined)]).toEqual(["slow", "slow"])
-      expect(loads.slow).toBe(1)
+      yield* after("10 minutes")
+      expect(list.state.loads).toBe(3)
+      const again = yield* hold({ key: "console:1:config", persist: codec, load: list.load })
+      expect(yield* again.source.get).toEqual(["d"])
     }),
   )
 })
