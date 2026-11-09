@@ -128,7 +128,7 @@ type FactSource = {
 }
 
 /** Context window and max output tokens, e.g. `200K/8K`, or `""` when the model declares neither. */
-function limits(model: FactSource) {
+export function modelLimits(model: FactSource) {
   const context = model.limit?.context ?? 0
   const output = model.limit?.output ?? 0
   if (context && output) return `${tokens(context)}/${tokens(output)}`
@@ -144,7 +144,7 @@ function limits(model: FactSource) {
 export function modelFacts(model: FactSource) {
   return [
     (model.capabilities?.input ?? []).map(modality).join(", "),
-    limits(model),
+    modelLimits(model),
     ...(model.variants?.length ? ["Reasoning"] : []),
     ...(model.capabilities?.tools ? ["Tools"] : []),
   ].filter(Boolean)
