@@ -1,7 +1,7 @@
 export * as DesktopStorage from "./index"
 
 import { app, BrowserWindow } from "electron"
-import { isAuxiliaryWindow } from "@opencode/plugin/gui/main"
+import { isAuxiliaryWindow } from "@opencode/plugin/gui/builtin"
 import { Context, Effect, Layer, Path } from "effect"
 import { marks } from "../lifecycle/marks"
 import { openDatabase } from "./database"

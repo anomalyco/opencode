@@ -1,5 +1,5 @@
 import { app, BrowserWindow, nativeImage, nativeTheme } from "electron"
-import { isAuxiliaryWindow } from "@opencode/plugin/gui/main"
+import { isAuxiliaryWindow } from "@opencode/plugin/gui/builtin"
 import type { DesktopZoomLevel } from "@opencode/app/desktop-menu"
 import type { Path } from "effect"
 import { type TitlebarTheme } from "../../shared/ipc-contract"

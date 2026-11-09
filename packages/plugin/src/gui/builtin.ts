@@ -1,6 +1,7 @@
 // The parts of the SDK only the app's built-in plugins use, for workspace imports only: `tsconfig.build.json` leaves it
 // out of `dist`, and `script/pack.ts` exports it as `null`. Public SDK modules never import it.
 
+import type { BrowserWindow } from "electron"
 import type { Schema } from "effect"
 import type { Context } from "./context.js"
 import { Registry, type Catalog, type Messages, type Persisted, type StoreDeclaration, type StoreFrom } from "./core.js"
@@ -8,6 +9,29 @@ import type { Desktop, Layout, Locale, StorageScope, StoreOptions } from "./host
 import type { MainContext } from "./main.js"
 import type { Command, IconName, Panel, PanelTab, SlotMap } from "./registries.js"
 import { type JSX } from "solid-js"
+
+// The globally registered symbol keeps the mark visible when the app and a plugin bundle load separate copies.
+const auxiliaryWindow = Symbol.for("opencode.auxiliaryWindow")
+
+/**
+ * Marks a BrowserWindow the app owns but that is not one of its main windows: a native overlay, not a renderer the
+ * desktop wires to privileged services or menus.
+ *
+ * @param win - The window to mark as auxiliary.
+ */
+export function markAuxiliaryWindow(win: BrowserWindow) {
+  Object.defineProperty(win, auxiliaryWindow, { value: true, configurable: true })
+}
+
+/**
+ * Whether a BrowserWindow was marked as an auxiliary overlay rather than one of the app's main windows.
+ *
+ * @param win - The window to inspect.
+ * @returns True when the window carries the auxiliary marker.
+ */
+export function isAuxiliaryWindow(win: BrowserWindow) {
+  return Object.getOwnPropertyDescriptor(win, auxiliaryWindow)?.value === true
+}
 
 /**
  * Runs fn when the main thread is idle (a short timeout where requestIdleCallback is missing, e.g. Safari). Load lazy

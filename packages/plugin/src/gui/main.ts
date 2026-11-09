@@ -16,20 +16,6 @@ export * from "./core.js"
 
 export * as Plugin from "./plugin.js"
 
-/**
- * Marks a BrowserWindow the app owns but that is not one of its main windows: a native overlay, not a renderer the
- * desktop wires to privileged services or menus. `Symbol.for` keeps the mark visible across bundled copies.
- */
-export type AuxiliaryWindow = BrowserWindow & { __opencodeAuxiliaryWindow?: boolean }
-
-export function markAuxiliaryWindow(win: AuxiliaryWindow) {
-  win.__opencodeAuxiliaryWindow = true
-}
-
-export function isAuxiliaryWindow(win: AuxiliaryWindow) {
-  return win.__opencodeAuxiliaryWindow === true
-}
-
 /** The app's main windows. */
 export interface Windows {
   /**

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { app, BrowserWindow, screen } from "electron"
-import { isAuxiliaryWindow } from "@opencode/plugin/gui/main"
+import { isAuxiliaryWindow } from "@opencode/plugin/gui/builtin"
 import { Effect, FileSystem, Path } from "effect"
 import { openExternalURL } from "../files"
 import { scoped } from "../native/logging"
