@@ -1,5 +1,5 @@
 import { RGBA } from "@opentui/core"
-import { oklchToHex } from "./color.js"
+import { contrast, oklchToHex } from "./color.js"
 import type { HueDefinition, Mode, ModeDefinition, ThemeDefinition, ThemeDocument } from "./index.js"
 import { HueStep } from "./schema.js"
 import type { Theme, ThemeV1Json } from "./v1.js"
@@ -290,15 +290,6 @@ function hueScale(color: RGBA, mode: Mode, neutral: ReturnType<typeof neutralSca
 }
 
 type OklchColor = ReturnType<typeof toOklch>
-
-function contrast(first: RGBA, second: RGBA) {
-  const luminance = (color: RGBA) => {
-    const channel = (value: number) => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
-    return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b)
-  }
-  const [lighter, darker] = [luminance(first), luminance(second)].sort((a, b) => b - a)
-  return (lighter! + 0.05) / (darker! + 0.05)
-}
 
 function mix(start: OklchColor, end: OklchColor, amount: number) {
   const startHue = start.c > 0.002 ? start.h : end.h

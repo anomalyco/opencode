@@ -1,4 +1,5 @@
 import { SyntaxStyle, type NativeResourceOwner, type RGBA, type ThemeTokenStyle } from "@opentui/core"
+import { contrast } from "./color.js"
 import type { ResolvedThemeTokens } from "./index.js"
 
 export function generateSyntax(theme: ResolvedThemeTokens, owner: NativeResourceOwner) {
@@ -13,11 +14,14 @@ export function generateSyntax(theme: ResolvedThemeTokens, owner: NativeResource
     rule(["extmark.file"], feedback.warning.base, { bold: true }),
     rule(["extmark.agent"], theme.categorical[0][step], { bold: true }),
     rule(["extmark.skill"], (theme.categorical[1] ?? theme.categorical[0])[step], { bold: true }),
-    // V1 migration preserves its selected/inverse foreground in this action state.
-    rule(["extmark.paste"], theme.text.action.primary.focused, {
-      background: feedback.warning.base,
-      bold: true,
-    }),
+    rule(
+      ["extmark.paste"],
+      readableOn(feedback.warning.base, [theme.text.action.primary.focused, theme.background.base, theme.text.base]),
+      {
+        background: feedback.warning.base,
+        bold: true,
+      },
+    ),
     rule(["comment", "comment.documentation"], syntax.comment, { italic: true }),
     rule(["string", "symbol", "character.special", "character"], syntax.string),
     rule(["number", "boolean", "constant", "float"], syntax.number),
@@ -92,4 +96,11 @@ function rule(
   style: Omit<ThemeTokenStyle["style"], "foreground"> = {},
 ): ThemeTokenStyle {
   return { scope, style: { foreground, ...style } }
+}
+
+// The paste chip sits on a solid warning fill, so pick whichever text candidate reads best on it.
+function readableOn(background: RGBA, candidates: RGBA[]) {
+  const opaque = candidates.filter((color) => color.a === 1)
+  if (!opaque.length) return candidates[0]!
+  return opaque.reduce((best, color) => (contrast(color, background) > contrast(best, background) ? color : best))
 }
