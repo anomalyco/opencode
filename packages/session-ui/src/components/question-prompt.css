@@ -1,5 +1,5 @@
 [data-component="dock-prompt"][data-kind="question"]:not([data-variant="experimental"]) {
-  --v2-question-answer-bg-selected: color-mix(in srgb, var(--v2-border-border-focus) 15%, transparent);
+  --v2-question-answer-bg-selected: var(--v2-background-bg-layer-01);
   --question-feedback-duration: 120ms;
 
   position: relative;
@@ -183,13 +183,19 @@
     flex: 1 1 auto;
     min-block-size: 0;
     min-inline-size: 0;
-    margin: 0;
-    padding: 0;
+    /* Room for the picked answer's shadow, which the scroll box would clip. */
+    margin: -4px;
+    padding: 4px;
     overflow-y: auto;
     scrollbar-width: none;
 
     &::-webkit-scrollbar {
       display: none;
+    }
+
+    &[inert] {
+      margin: 0;
+      padding: 0;
     }
   }
 
@@ -205,7 +211,7 @@
     padding: 10px;
     border: 0;
     border-radius: 6px;
-    background-color: var(--v2-background-bg-layer-01);
+    background-color: var(--v2-background-bg-base);
     box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
     color: var(--v2-text-text-base);
     text-align: start;
@@ -226,7 +232,7 @@
     }
 
     &[data-picked="true"] {
-      box-shadow: none;
+      box-shadow: var(--v2-elevation-raised);
 
       &::before {
         opacity: 1;
