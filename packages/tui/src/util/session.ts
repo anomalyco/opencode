@@ -1,4 +1,4 @@
-import type { ModelInfo, SessionMessageInfo } from "@opencode/client"
+import type { ModelInfo, SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
 import { lastAssistantWithUsage } from "@opencode/client/solid"
 import { Locale } from "./locale"
 
@@ -56,8 +56,19 @@ export function contextUsage(
   const model = models?.find((model) => model.providerID === last.model.providerID && model.id === last.model.id)
   return {
     tokens,
+    limit: model?.limit.context || undefined,
     percent: model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : undefined,
   }
+}
+
+/** One part of an assistant message: a tool call by its call ID, text and reasoning by ordinal (`text:2`). */
+export function resolvePart(message: SessionMessageAssistant, partID: string) {
+  const tool = message.content.find((part) => part.type === "tool" && part.id === partID)
+  if (tool) return tool
+  const match = /^(text|reasoning):(\d+)$/.exec(partID)
+  if (!match) return
+  const ordinal = Number(match[2])
+  return message.content.filter((part) => part.type === match[1])[ordinal]
 }
 
 export function formatContextUsage(tokens: number, percent?: number) {

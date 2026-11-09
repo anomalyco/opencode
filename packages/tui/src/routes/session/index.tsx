@@ -100,8 +100,9 @@ import { collapseShellOutput, collapseToolOutput } from "../../util/collapse-too
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
-import { Slot } from "../../plugin/render"
+import { PluginTool, Slot } from "../../plugin/render"
 import { usePlugin } from "../../plugin/context"
+import type { TranscriptRowKind } from "@opencode/plugin/tui/context"
 import {
   cacheReuseDrop,
   completeGroupBoundary,
@@ -147,6 +148,9 @@ const BACKGROUND_TOOL_HINT_DELAY = 3_000
 const TRANSCRIPT_TAIL_ROWS = 40
 const TRANSCRIPT_BACKFILL_CHUNK = 60
 
+/** The box holding the session.transcript.start slot, first in the transcript scroll. */
+const TRANSCRIPT_START = "session-transcript-start"
+
 export function Session(props: {
   scrollRef?: (scroll: ScrollBoxRenderable | undefined) => void
   verticalTabsWidth: number
@@ -159,6 +163,7 @@ export function Session(props: {
   width?: number
 }) {
   const epilogue = useEpilogue()
+  const plugins = usePlugin()
   const clipboard = useClipboard()
   const paths = useTuiPaths()
   const writeExport = async (file: string, content: string) => {
@@ -241,11 +246,16 @@ export function Session(props: {
 
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
-  const thinkingMode = createMemo<ThinkingMode>(() => config.session?.thinking ?? "hide")
+  // The user's choice wins over a plugin's transcript default.
+  const thinkingMode = createMemo<ThinkingMode>(
+    () => config.session?.thinking ?? plugins.layout().transcript?.thinking ?? "hide",
+  )
   const showScrollbar = createMemo(() => config.session?.scrollbar ?? false)
   const markdownMode = createMemo(() => config.session?.markdown ?? "rendered")
   const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
-  const groupExploration = createMemo(() => config.session?.grouping !== "none")
+  const groupExploration = createMemo(
+    () => (config.session?.grouping ?? plugins.layout().transcript?.grouping) !== "none",
+  )
   const verbosity = createMemo(() => config.session?.verbosity ?? defaultVerbosity)
   // High opens exploration and instruction summaries by default; everything else starts collapsed.
   const groupExpanded = (groupID: string, kind: GroupKind) =>
@@ -259,7 +269,9 @@ export function Session(props: {
     enabled: () => props.sidebarVisible && dimensions().width - props.verticalTabsWidth <= 120 && !disabled(),
     commands: [{ bind: "escape,ctrl+c", title: "Close sidebar", group: "Session", run: props.onToggleSidebar }],
   }))
-  const contentWidth = createMemo(() => (props.width ?? dimensions().width - props.verticalTabsWidth) - 4)
+  const contentWidth = createMemo(
+    () => (props.width ?? dimensions().width - props.verticalTabsWidth) - 2 * (plugins.layout().inset ?? 2),
+  )
   const models = createMemo(() => data.location.model.list(location()) ?? [])
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
@@ -412,7 +424,10 @@ export function Session(props: {
   const pinAbove = () => {
     if (!scroll || scroll.isDestroyed) return
     if (scroll.stickyScroll && scroll.scrollTop >= scroll.scrollHeight - scroll.viewport.height) return
-    const node = scroll.getChildren().find((node) => node.height > 0 && node.y + node.height > scroll.viewport.y)
+    // The transcript-start slot stays on top while older rows load beneath it, so it never anchors.
+    const node = scroll
+      .getChildren()
+      .find((node) => node.id !== TRANSCRIPT_START && node.height > 0 && node.y + node.height > scroll.viewport.y)
     if (node) afterLayout(scroll.anchor(node))
   }
 
@@ -1518,10 +1533,14 @@ export function Session(props: {
           flexGrow={1}
           minHeight={0}
           paddingBottom={1}
-          paddingLeft={dimensions().width < 44 ? 1 : 2}
-          paddingRight={dimensions().width < 44 ? 1 : 2}
+          paddingLeft={plugins.layout().inset ?? (dimensions().width < 44 ? 1 : 2)}
+          paddingRight={plugins.layout().inset ?? (dimensions().width < 44 ? 1 : 2)}
         >
           <Show when={session()}>
+            {/* Keeps its full height; the transcript below takes what is left. */}
+            <box flexShrink={0}>
+              <Slot path="session.header" input={{ sessionID: route.sessionID }} />
+            </box>
             <box flexGrow={1} minHeight={0} position="relative">
               <scrollbox
                 ref={(r) => {
@@ -1551,10 +1570,15 @@ export function Session(props: {
                   updateAwayFromBottom()
                 }}
               >
+                {/* Pinned above every row, so the history scroll anchor skips it (pinAbove). */}
+                <box id={TRANSCRIPT_START} flexShrink={0}>
+                  <Slot path="session.transcript.start" input={{ sessionID: route.sessionID }} />
+                </box>
                 <For each={visibleRows()}>
                   {(row, index) => (
                     <SessionRowView
                       row={row}
+                      previous={visibleRows()[index() - 1]}
                       message={(messageID) => data.session.message.get(route.sessionID, messageID)}
                       boundaryID={boundaries()[index() + hidden()]}
                     />
@@ -1671,18 +1695,44 @@ export function Session(props: {
 
 type SessionRowViewProps = {
   row: SessionRow
+  previous?: SessionRow
   message: (messageID: string) => SessionMessageInfo | undefined
   boundaryID?: string
 }
 
+// The coarse row kind a plugin layout rule sees: one name per visual role.
+function transcriptRowKind(
+  row: SessionRow,
+  message: (messageID: string) => SessionMessageInfo | undefined,
+): TranscriptRowKind {
+  if (row.type === "group") return "group"
+  if (row.type === "assistant-footer") return "footer"
+  if (row.type === "message") return message(row.messageID)?.type === "user" ? "user" : "other"
+  if (row.type !== "part") return "other"
+  const item = message(row.ref.messageID)
+  if (item?.type !== "assistant") return "other"
+  const part = resolvePart(item, row.ref.partID)
+  if (part?.type === "text" || part?.type === "reasoning" || part?.type === "tool") return part.type
+  return "other"
+}
+
 function SessionRowView(props: SessionRowViewProps) {
+  const plugins = usePlugin()
   const [target, setTarget] = createSignal<BoxRenderable>()
   useEntryAnchor({
     entry: () => (props.row.type === "group" ? undefined : props.row),
     node: target,
   })
+  const gap = createMemo(() => {
+    const rule = plugins.layout().rowGap
+    if (!rule) return 1
+    return rule({
+      kind: transcriptRowKind(props.row, props.message),
+      previous: props.previous ? transcriptRowKind(props.previous, props.message) : undefined,
+    })
+  })
   return (
-    <box ref={setTarget} id={sessionRowID(props.row, props.boundaryID)} marginTop={1} flexShrink={0}>
+    <box ref={setTarget} id={sessionRowID(props.row, props.boundaryID)} marginTop={gap()} flexShrink={0}>
       <Switch>
         <Match when={props.row.type === "group" ? props.row : undefined}>
           {(row) => (
@@ -1703,6 +1753,7 @@ function SessionRowView(props: SessionRowViewProps) {
 }
 
 function SessionEntryView(props: { row: SessionEntry; message: SessionRowViewProps["message"]; images?: boolean }) {
+  const ctx = use()
   return (
     <Switch>
       <Match when={props.row.type === "message" ? props.row : undefined}>
@@ -1721,7 +1772,12 @@ function SessionEntryView(props: { row: SessionEntry; message: SessionRowViewPro
           <Show when={props.message(row().messageID)}>
             {(message) => (
               <Show when={message().type === "assistant"}>
-                <AssistantFooter message={message() as SessionMessageAssistant} />
+                <Slot
+                  path="session.message.assistant.footer"
+                  input={{ sessionID: ctx.sessionID, messageID: message().id }}
+                >
+                  <AssistantFooter message={message() as SessionMessageAssistant} />
+                </Slot>
               </Show>
             )}
           </Show>
@@ -1931,10 +1987,13 @@ function BackgroundToolHint(props: { messages: SessionMessageInfo[] }) {
 }
 
 function SessionMessageView(props: { message: SessionMessageInfo }) {
+  const ctx = use()
   return (
     <Switch>
       <Match when={props.message.type === "user"}>
-        <UserMessage message={props.message as SessionMessageUser} />
+        <Slot path="session.message.user" input={{ sessionID: ctx.sessionID, messageID: props.message.id }}>
+          <UserMessage message={props.message as SessionMessageUser} />
+        </Slot>
       </Match>
       <Match when={props.message.type === "shell"}>
         <ShellMessage message={props.message as Extract<SessionMessageInfo, { type: "shell" }>} />
@@ -1985,26 +2044,40 @@ function SessionPartView(props: {
     if (item?.type !== "assistant") return
     return resolvePart(item, props.partRef.partID)
   })
+  const ctx = use()
+  const input = () => ({ sessionID: ctx.sessionID, messageID: props.partRef.messageID, partID: props.partRef.partID })
+  const toolInput = () => {
+    const item = part()
+    return { ...input(), tool: item?.type === "tool" ? canonicalToolName(item.name) : "" }
+  }
   return (
     <Show when={part()}>
       {(item) => (
         <Switch>
           <Match when={item().type === "text"}>
-            <TextPart
-              part={item() as SessionMessageAssistantText}
-              message={message() as SessionMessageAssistant}
-              last={false}
-            />
+            <Slot path="session.part.text" input={input()}>
+              <TextPart
+                part={item() as SessionMessageAssistantText}
+                message={message() as SessionMessageAssistant}
+                last={false}
+              />
+            </Slot>
           </Match>
           <Match when={item().type === "reasoning"}>
-            <ReasoningPart
-              part={item() as SessionMessageAssistantReasoning}
-              message={message() as SessionMessageAssistant}
-              last={false}
-            />
+            <Slot path="session.part.reasoning" input={input()}>
+              <ReasoningPart
+                part={item() as SessionMessageAssistantReasoning}
+                message={message() as SessionMessageAssistant}
+                last={false}
+              />
+            </Slot>
           </Match>
           <Match when={item().type === "tool"}>
-            <ToolPart part={item() as SessionMessageAssistantTool} images={props.images} />
+            <Slot path="session.part.tool" input={toolInput()}>
+              <PluginTool input={toolInput()}>
+                <ToolPart part={item() as SessionMessageAssistantTool} images={props.images} />
+              </PluginTool>
+            </Slot>
           </Match>
         </Switch>
       )}
