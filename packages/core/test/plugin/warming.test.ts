@@ -61,7 +61,11 @@ const run = Effect.fnUntraced(function* (warming: unknown, cache?: Provider.Cach
           Clock.currentTimeMillis.pipe(
             Effect.map((now) => {
               warms.push(now / 60_000)
-              return { text: "OK" }
+              return {
+                text: "OK",
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                cost: Money.USD.zero,
+              }
             }),
           ),
         hook: (name, callback) => {
