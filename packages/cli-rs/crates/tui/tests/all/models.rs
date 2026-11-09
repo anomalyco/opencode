@@ -561,7 +561,10 @@ fn a_closed_go_upsell_is_freed() {
     let marker = Rc::new(());
     // The host, its backdrop and its panel stay for the next dialog.
     assert!(support::mark(&h.app, h.tui.dialogs.host(), 2, &marker) > 0);
-    h.app.press("escape");
+    let (x, y) = h.find("dismiss");
+    h.app.hover(x, y);
+    h.app.click(x, y);
+    assert!(!h.tui.dialogs.is_open());
     h.app.render();
     assert_eq!(Rc::strong_count(&marker), 1);
 }

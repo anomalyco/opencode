@@ -163,6 +163,7 @@ fn a_split_panel_shows_beside_the_session_and_resizes() {
     assert_eq!(row.chars().position(|c| c == 'p'), Some(70), "{screen}");
 
     // Drag the handle (on the boundary's right cell, column 69) to column 89: the panel is 50 wide.
+    h.app.hover(69, 10);
     h.app.drag((69, 10), (89, 10));
     let column = || {
         h.app.text().lines().find(|line| line.contains("panel for")).and_then(|row| row.chars().position(|c| c == 'p'))

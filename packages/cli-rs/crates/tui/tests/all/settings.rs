@@ -274,6 +274,10 @@ fn the_devtools_bar_frees_what_it_draws_again() {
     wait_for(&app, "[ ] Time to first draw");
     support::mark_at(&app, "[ ] Time to first draw", 2, &marker);
     app.press("escape");
+    // The bar keeps one render's widgets for a release that arrives after a redraw.
+    app.click(column(&bar, "Theme"), app.size().1 - 1);
+    wait_for(&app, "Switch to light");
+    app.press("escape");
     app.render();
     assert_eq!(Rc::strong_count(&marker), 1);
 }
