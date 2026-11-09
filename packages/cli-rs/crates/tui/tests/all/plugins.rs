@@ -430,3 +430,13 @@ fn the_tui_disposes_its_plugins_as_it_exits() {
     .unwrap();
     assert_eq!(DISPOSED_WITH.take().as_deref(), Some("9.9.9"));
 }
+
+// Expected: once a plugin panics, the fences it drew before fall back to the code view too, as `docs/P.4.md` says.
+#[test]
+fn a_panic_turns_the_fences_already_drawn_back_into_code() {
+    let h = open(session_route(), "Here:\n\n```sample\nhello plugin\n```", &build("still"));
+    h.wait_for("SAMPLE v1 HELLO PLUGIN");
+    h.tui.keymap.dispatch("sample.panic", None);
+    h.wait_for("hello plugin");
+    h.wait_gone("SAMPLE v1 HELLO PLUGIN");
+}
