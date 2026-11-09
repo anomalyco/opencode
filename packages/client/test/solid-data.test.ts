@@ -1470,6 +1470,56 @@ test("ignores activity snapshots from an older connection", async () => {
   }
 })
 
+test("projects active shell sessions across locations without loading transcripts", () => {
+  const setup = activityFixture(() => Response.json({ data: {} }))
+  const shell = {
+    id: "sh_first",
+    status: "running" as const,
+    command: "pwd",
+    cwd: "/project",
+    shell: "/bin/sh",
+    file: "/shell.out",
+    metadata: { sessionID: "ses_first" },
+    time: { started: 1 },
+  }
+  try {
+    setup.emit({ type: "shell.created", location: { directory: "/project" }, data: { info: shell } })
+    setup.emit({
+      type: "shell.created",
+      location: { directory: "/other" },
+      data: { info: { ...shell, id: "sh_duplicate" } },
+    })
+    setup.emit({
+      type: "shell.created",
+      location: { directory: "/other" },
+      data: { info: { ...shell, id: "sh_second", metadata: { sessionID: "ses_second" } } },
+    })
+    setup.emit({
+      type: "shell.created",
+      location: { directory: "/other" },
+      data: { info: { ...shell, id: "sh_unowned", metadata: {} } },
+    })
+    expect(setup.data.shell.activeSessions()).toEqual(["ses_first", "ses_second"])
+    expect(setup.data.session.list()).toEqual([])
+    setup.emit({
+      type: "shell.exited",
+      location: { directory: "/project" },
+      data: { id: "sh_first", status: "exited", exit: 0 },
+    })
+    expect(setup.data.shell.activeSessions()).toEqual(["ses_first", "ses_second"])
+    setup.emit({ type: "shell.deleted", location: { directory: "/other" }, data: { id: "sh_duplicate" } })
+    expect(setup.data.shell.activeSessions()).toEqual(["ses_second"])
+    setup.emit({
+      type: "shell.exited",
+      location: { directory: "/other" },
+      data: { id: "sh_second", status: "failed", exit: 1 },
+    })
+    expect(setup.data.shell.activeSessions()).toEqual([])
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("projects background user shell metadata from durable shell data", () => {
   const setup = activityFixture(() => Response.json({ data: {} }))
   try {
