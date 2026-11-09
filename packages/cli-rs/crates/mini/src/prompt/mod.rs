@@ -563,13 +563,16 @@ impl Inner {
         let theme = self.theme.borrow();
         let state = self.state.borrow();
         let colors = &theme.footer.categorical;
-        let index = state
-            .catalog
-            .agents
-            .iter()
-            .filter(|agent| !agent.hidden)
-            .position(|agent| agent.id == state.agent)
-            .unwrap_or(0);
+        let agents: Vec<_> = state.catalog.agents.iter().filter(|agent| !agent.hidden).collect();
+        let index = agents.iter().position(|agent| agent.id == state.agent);
+        // A configured color wins, except in mono.
+        if !self.mono
+            && let Some(color) =
+                index.and_then(|index| agents[index].color.as_deref()).filter(|color| !color.is_empty())
+        {
+            return opencode_ui::theme::from_hex(color);
+        }
+        let index = index.unwrap_or(0);
         colors.get(index % colors.len().max(1)).copied().unwrap_or(theme.footer.border)
     }
 
