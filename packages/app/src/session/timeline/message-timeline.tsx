@@ -18,6 +18,7 @@ import { useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { Timeline } from "@opencode/session-ui/timeline/projection"
 import { timelineThinkingOpen } from "@opencode/session-ui/timeline/policy"
+import { timelineStatus } from "@opencode/session-ui/timeline/status"
 import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/row"
 import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
@@ -396,6 +397,35 @@ function MessageTimelineView(
     })
   })
 
+  // In the Activity timeline, the status line is the one live indicator: it stays below the turn while it works and says
+  // the most useful thing happening, in place of each group showing its own.
+  const activityStatus = createMemo(() => {
+    const id = sessionID()
+    const active = projection.activeMessageID()
+
+    if (!id || !active || sessionStatus().type !== "busy") return
+
+    return timelineStatus({
+      detail: props.data.timelineDetail(),
+      blocked: data.session.permission.list(id)?.length
+        ? "approval"
+        : data.session.form.list(id)?.length
+          ? "answer"
+          : undefined,
+      content: projection.assistantMessagesByParent().get(active)?.at(-1)?.content ?? [],
+    })
+  })
+
+  const working = () => (settings.general.activityTimeline() ? !!activityStatus() : showWorking())
+
+  const workingLabel = () => {
+    const status = activityStatus()
+
+    return status && settings.general.activityTimeline()
+      ? language.t(`session.timeline.status.${status}`)
+      : language.t("session.timeline.working")
+  }
+
   // Undelivered input waits below the work the model has seen, so live status moves into the row above it.
   const activityRow = createMemo(() => projection.rows().some((row) => Predicate.isTagged(row, "Activity")))
 
@@ -410,9 +440,9 @@ function MessageTimelineView(
       }}
     >
       <div class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${turnPadding()}`}>
-        <Show when={live() && showWorking()}>
+        <Show when={live() && working()}>
           <div data-component="session-working" role="status">
-            <TextShimmer text={language.t("session.timeline.working")} active />
+            <TextShimmer text={workingLabel()} active />
           </div>
         </Show>
         <Show when={live() && backgroundHintPresence.present()}>
@@ -451,7 +481,7 @@ function MessageTimelineView(
             // This row sits above input still waiting for delivery. Until live status first shows, it takes no room,
             // so the waiting input keeps the place delivery leaves it. Once shown, the lane stays for the life of the
             // row: Working hides and returns several times in one step, and each change would move that input 36px.
-            const shown = createMemo((was) => was || showWorking() || backgroundHintPresence.present(), false)
+            const shown = createMemo((was) => was || working() || backgroundHintPresence.present(), false)
 
             return <Show when={shown()}>{activity(() => true)}</Show>
           }}

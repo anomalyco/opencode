@@ -526,8 +526,11 @@ export function CurrentContextToolGroup(props: {
   const i18n = useI18n()
   const tools = createMemo(() => props.parts.filter((part) => part.type === "tool"))
 
+  // In the Activity timeline the status line below the turn says what is live, so a group only records what happened.
   const pending = createMemo(
-    () => props.busy || tools().some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
+    () =>
+      !props.activity &&
+      (props.busy || tools().some((tool) => tool.state.status === "streaming" || tool.state.status === "running")),
   )
 
   const names = createMemo(() =>
@@ -545,7 +548,9 @@ export function CurrentContextToolGroup(props: {
   const reasoning = createMemo(() => props.parts.flatMap((part) => (part.type === "reasoning" ? [part] : [])))
   // Thoughts alone are not finished work yet, so the live group reads as Thinking, in place of Working, rather than
   // "Used 1 Thought".
-  const thinking = createMemo(() => props.busy && reasoning().length > 0 && reasoning().length === props.parts.length)
+  const thinking = createMemo(
+    () => !props.activity && props.busy && reasoning().length > 0 && reasoning().length === props.parts.length,
+  )
   const [now, setNow] = createSignal(Date.now())
 
   createEffect(() => {
