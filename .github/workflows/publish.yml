@@ -1,6 +1,10 @@
 name: publish
 run-name: "${{ format('release {0}', inputs.bump) }}"
 
+# Versioned releases read their secrets from AWS Secrets Manager: every job that needs one assumes
+# arn:aws:iam::604439173067:role/github/opencode-release over GitHub OIDC in the release environment. The Azure trusted
+# signing ids are repository variables. A run without the release environment (a push preview) fetches nothing.
+
 on:
   push:
     branches:
@@ -49,6 +53,22 @@ jobs:
         if: inputs.bump || inputs.version
         run: bun i -g opencode-ai
 
+      # A preview (push to v1) has no release environment and never runs the changelog, so it needs no API key.
+      - name: Configure AWS credentials
+        if: inputs.bump || inputs.version
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-release
+          role-session-name: opencode-${{ github.run_id }}
+          aws-region: us-east-1
+
+      - name: Read version secrets
+        if: inputs.bump || inputs.version
+        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
+        with:
+          secret-ids: OPENCODE_API_KEY,opencode/release/OPENCODE_API_KEY
+          parse-json-secrets: false
+
       - id: version
         run: |
           ./script/version.ts
@@ -56,7 +76,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           OPENCODE_BUMP: ${{ inputs.bump }}
           OPENCODE_VERSION: ${{ inputs.version }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GH_REPO: ${{ github.repository }}
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -116,6 +135,19 @@ jobs:
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-release
+          role-session-name: opencode-${{ github.run_id }}
+          aws-region: us-east-1
+
+      - name: Read signing secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
+        with:
+          secret-ids: APPLE_SIGNING_CERTIFICATE,shared/APPLE_SIGNING_CERTIFICATE
+          parse-json-secrets: false
+
       # The certificate has no password, which apple-actions/import-codesign-certs rejects. The signing step looks up
       # the identity in build.keychain, and codesign finds the key through the user search list.
       - name: Import certificate
@@ -130,8 +162,6 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" build.keychain > /dev/null
           security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
           rm -f "$cert"
-        env:
-          APPLE_SIGNING_CERTIFICATE: ${{ secrets.APPLE_SIGNING_CERTIFICATE }}
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -207,12 +237,12 @@ jobs:
     if: github.repository == 'anomalyco/opencode'
     environment: release
     env:
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
-      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
-      AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ vars.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ vars.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+      AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ vars.AZURE_TRUSTED_SIGNING_ENDPOINT }}
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
@@ -299,12 +329,12 @@ jobs:
     if: github.repository == 'anomalyco/opencode'
     continue-on-error: false
     env:
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
-      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
-      AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ vars.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ vars.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+      AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ vars.AZURE_TRUSTED_SIGNING_ENDPOINT }}
     strategy:
       fail-fast: false
       matrix:
@@ -335,6 +365,22 @@ jobs:
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-release
+          role-session-name: opencode-${{ github.run_id }}
+          aws-region: us-east-1
+
+      - name: Read signing secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
+        with:
+          secret-ids: |
+            APPLE_SIGNING_CERTIFICATE,shared/APPLE_SIGNING_CERTIFICATE
+            APPLE_NOTARY_KEY,shared/APPLE_NOTARY_KEY
+            SENTRY_AUTH_TOKEN,opencode/release/SENTRY_AUTH_TOKEN
+          parse-json-secrets: false
+
       # The certificate has no password, which apple-actions/import-codesign-certs rejects. electron-builder reads
       # the identity from build.keychain through CSC_KEYCHAIN.
       - name: Import certificate
@@ -350,15 +396,11 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" build.keychain > /dev/null
           security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
           rm -f "$cert"
-        env:
-          APPLE_SIGNING_CERTIFICATE: ${{ secrets.APPLE_SIGNING_CERTIFICATE }}
 
       # electron-builder notarizes with APPLE_API_KEY (a .p8 path), APPLE_API_KEY_ID and APPLE_API_ISSUER.
       - name: Setup Apple notary key
         if: runner.os == 'macOS'
         run: printf '%s\n' "$APPLE_NOTARY_KEY" > "$RUNNER_TEMP/apple-api-key.p8"
-        env:
-          APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
 
       - uses: ./.github/actions/setup-bun
         with:
@@ -408,7 +450,6 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_CHANNEL: prod
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ vars.WEB_SENTRY_PROJECT }}
           SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
@@ -503,10 +544,28 @@ jobs:
     # npm trusted publishing (previews included) only accepts the release environment.
     environment: release
     steps:
+      # These come before the checkout: the release deploy key is what makes the tag checkout pushable.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-release
+          role-session-name: opencode-${{ github.run_id }}
+          aws-region: us-east-1
+
+      - name: Read publish secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
+        with:
+          secret-ids: |
+            RELEASE_TAG_KEY,opencode/release/RELEASE_TAG_KEY
+            AUR_KEY,shared/AUR_SSH_KEY
+            HOMEBREW_TAP_DEPLOY_KEY,shared/HOMEBREW_TAP_DEPLOY_KEY
+            DISCORD_WEBHOOK,opencode/release/DISCORD_WEBHOOK
+          parse-json-secrets: false
+
       # The release deploy key pushes the release tag and the version sync commit to v1.
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
         with:
-          ssh-key: ${{ needs.version.outputs.release && secrets.RELEASE_TAG_KEY || '' }}
+          ssh-key: ${{ needs.version.outputs.release && env.RELEASE_TAG_KEY || '' }}
 
       - uses: ./.github/actions/setup-bun
 
@@ -582,7 +641,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y pacman-package-manager
           mkdir -p ~/.ssh
-          echo "${{ secrets.AUR_KEY }}" > ~/.ssh/id_rsa
+          printf '%s\n' "$AUR_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           git config --global user.email "opencode@sst.dev"
           git config --global user.name "opencode"
@@ -605,11 +664,30 @@ jobs:
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
-          AUR_KEY: ${{ secrets.AUR_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
-          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
           GH_REPO: ${{ needs.version.outputs.repo }}
           NPM_CONFIG_PROVENANCE: false
           LATEST_YML_DIR: /tmp/latest-yml
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      # notify-discord.yml used to post this from a `release` event, but that event runs with a tag ref and the
+      # release environment only allows branches, so the post lives here, right after the release is un-drafted.
+      - name: Read release notes
+        id: release
+        if: needs.version.outputs.release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "body<<RELEASE_BODY"
+            gh api "repos/${{ needs.version.outputs.repo }}/releases/tags/v${{ needs.version.outputs.version }}" --jq .body
+            echo "RELEASE_BODY"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Notify Discord
+        if: needs.version.outputs.release
+        uses: SethCohen/github-releases-to-discord@24d166886aee4646d448c8a389ff9e1ebcab3682 # v1.20.0
+        with:
+          webhook_url: ${{ env.DISCORD_WEBHOOK }}
+          release_name: v${{ needs.version.outputs.version }}
+          release_body: ${{ steps.release.outputs.body }}
+          release_html_url: ${{ github.server_url }}/${{ needs.version.outputs.repo }}/releases/tag/v${{ needs.version.outputs.version }}
