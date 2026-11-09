@@ -115,7 +115,7 @@ pub struct Inner {
     location_box: View,
     /// The location box's width, which the location label shortens to (`truncateFilePath`, E.14).
     location_width: Cell<u16>,
-    footer_slots: RefCell<(Option<opencode_plugin::SlotInput>, Vec<opencode_plugin::SlotMount<Tui>>)>,
+    footer_slots: RefCell<(Option<opencode_plugin::SlotInput>, Vec<opencode_plugin::SlotMount>)>,
     /// The pointer is over the footer's location (E.20).
     hovered: Cell<bool>,
     /// The running indicator: the spinner, one cell in from the footer's edge.
@@ -178,9 +178,9 @@ impl Prompt {
                 complete.sync();
             }
         }
-        for slot in &self.inner.footer_slots.borrow().1 {
-            slot.sync(tui, changes);
-        }
+        crate::plugins::host::changed(tui, changes, |changed| {
+            self.inner.footer_slots.borrow().1.iter().for_each(|slot| slot.sync(tui, changed));
+        });
         let Some(session) = &self.inner.session else {
             return;
         };
@@ -757,8 +757,9 @@ impl Inner {
     /// Repaints after a change outside the store, the terminal size or the settings, which the footer slots read too.
     fn relayout(&self, tui: &Tui) {
         self.refresh(tui);
-        let everything = Changes::everything();
-        self.footer_slots.borrow().1.iter().for_each(|slot| slot.sync(tui, &everything));
+        crate::plugins::host::changed(tui, &Changes::everything(), |changed| {
+            self.footer_slots.borrow().1.iter().for_each(|slot| slot.sync(tui, changed));
+        });
     }
 
     /// Mounts the `prompt.footer` slots again when their input changed (E.14).

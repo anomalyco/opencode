@@ -1,5 +1,6 @@
-//! Plugin manager dialog (E.18b): `packages/tui/src/feature-plugins/system/plugins.tsx`, the built-in plugin
-//! `opencode.plugins` with `plugins.list` (`/plugins`).
+//! Plugin manager dialog (E.18b): `packages/tui/src/feature-plugins/system/plugins.tsx`, the built-in
+//! `opencode.plugins` with `plugins.list` (`/plugins`). It reads and toggles the registry, so it is a host entry, not a
+//! plugin.
 //!
 //! TUI rows come from the plugin registry (`Registry::entries`): built-ins are internal and hidden until
 //! `ctrl+a`; a configured TypeScript plugin is listed as `skipped` with the reason as its error (F16), and an
@@ -12,13 +13,14 @@ use opencode_api::generated::{
     V2Event,
 };
 use opencode_api::js::locale_compare;
-use opencode_plugin::{Definition, Setup, Source, Status};
+use opencode_plugin::{Source, Status};
 use opencode_ui::bind;
 use opencode_ui::dialog::{DialogOptions, DialogSize};
 use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::motion::Spinner;
 use opencode_ui::select::{ActionRun, FooterHint, Group, Select, SelectAction, SelectOption, SelectProps, select};
 use opencode_ui::theme::Theme;
+use opentui::keymap::Disposer;
 use opentui::prelude::*;
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
@@ -28,18 +30,20 @@ use crate::app::Tui;
 
 pub const ID: &str = "opencode.plugins";
 
-/// The built-in: `plugins.list` in the global layer.
-pub fn plugin() -> Definition<Tui> {
-    Definition::new(ID, |setup: &mut Setup<'_, Tui>| {
-        let weak = setup.host().weak();
-        setup.layer(KeymapLayer::global(vec![
-            TuiCommand::new("plugins.list", bind!(weak, |tui, _, _| show(&tui)))
-                .bind(Bind::Default)
-                .title("Plugins")
-                .group("System")
-                .palette()
-                .slash("plugins"),
-        ]));
+/// The host entry: `plugins.list` in the global layer while it is active.
+pub fn activate(tui: &Rc<Tui>) -> Disposer {
+    let weak = tui.weak();
+    let layer = KeymapLayer::global(vec![
+        TuiCommand::new("plugins.list", bind!(weak, |tui, _, _| show(&tui)))
+            .bind(Bind::Default)
+            .title("Plugins")
+            .group("System")
+            .palette()
+            .slash("plugins"),
+    ]);
+    tui.keymap.layer(layer).unwrap_or_else(|error| {
+        log::error!("plugin {ID} keymap layer: {error}");
+        Disposer::noop()
     })
 }
 
@@ -415,7 +419,7 @@ impl Manager {
             let Some(tui) = manager.tui.upgrade() else {
                 return;
             };
-            if !tui.plugins.set_active(&tui, &id, !active) {
+            if !tui.plugins.set_active(&crate::plugins::host::host(&tui), &id, !active) {
                 tui.toasts.error(format!("Failed to update plugin {id}"));
                 return;
             }

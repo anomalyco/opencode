@@ -31,7 +31,7 @@ fn status(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 /// The home at `width` columns, with two connected MCP servers and `plugins` in the config.
-fn mount(width: u16, plugins: &[&str], builtins: Vec<opencode_plugin::Definition<opencode_tui::Tui>>) -> Harness {
+fn mount(width: u16, plugins: &[&str], builtins: Vec<opencode_plugin::Builtin>) -> Harness {
     let servers = json!([
         { "name": "github", "status": { "status": "connected" } },
         { "name": "linear", "status": { "status": "connected" } },
@@ -107,7 +107,9 @@ fn footer_frames(loopback: bool) -> Vec<Vec<opentui::testing::Cell>> {
     let plugins: &[&str] = if loopback { &["-opencode.home.footer"] } else { &[] };
     let h = mount(100, plugins, vec![abi::Plugin { id: "test.status", setup: status }.into()]);
     if loopback {
-        let (definition, _) = opencode_plugin::loader::native::loopback(&h.tui, footer_create).unwrap();
+        let (definition, _) =
+            opencode_plugin::loader::native::loopback(&opencode_tui::plugins::host::host(&h.tui), footer_create)
+                .unwrap();
         opencode_tui::plugins::host::add(&h.tui, definition);
     }
     h.wait_for("2 MCP");

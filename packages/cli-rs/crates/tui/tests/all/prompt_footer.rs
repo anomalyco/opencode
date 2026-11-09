@@ -108,7 +108,9 @@ fn mount(server: &Gated, width: u16, loopback: bool) -> Harness {
     let h = support::mount(width, 30, deps);
     h.wait_for("Fix the parser");
     if loopback {
-        let (definition, _) = opencode_plugin::loader::native::loopback(&h.tui, footer_create).unwrap();
+        let (definition, _) =
+            opencode_plugin::loader::native::loopback(&opencode_tui::plugins::host::host(&h.tui), footer_create)
+                .unwrap();
         opencode_tui::plugins::host::add(&h.tui, definition);
         h.wait_for("Fix the parser");
     }

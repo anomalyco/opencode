@@ -48,7 +48,7 @@ use super::Backend;
 use crate::activation::{Activation, Drawn, Wake};
 use crate::node::{Fences, MountFn, Scroll, SlotRender, lines_widget, theme_color};
 use crate::slot::placement;
-use crate::{Definition, ErrorFn, Host, Setup, Slotted, defer, next_request, route, tui_command};
+use crate::{Claimed, Definition, ErrorFn, Host, Setup, defer, next_request, route, tui_command};
 
 /// The host's minor version: it serves every entry and request up to it.
 pub const HOST_MINOR: u32 = ABI_MINOR;
@@ -74,14 +74,19 @@ impl Native {
     }
 }
 
-impl<H: Host> Backend<H> for Native {
-    fn load(&self, host: &Rc<H>, library: &[u8], options: Option<&str>) -> Result<(Definition<H>, ErrorFn), String> {
+impl Backend for Native {
+    fn load(
+        &self,
+        host: &Rc<dyn Host>,
+        library: &[u8],
+        options: Option<&str>,
+    ) -> Result<(Definition, ErrorFn), String> {
         define(host, Library::open(library, HOST_MINOR)?, options)
     }
 }
 
 /// The definition of the plugin `library` holds; setup runs on each activation.
-fn define<H: Host>(host: &Rc<H>, library: Library, options: Option<&str>) -> Result<(Definition<H>, ErrorFn), String> {
+fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Result<(Definition, ErrorFn), String> {
     let library = Rc::new(library);
     let metadata = library.metadata();
     if let Some(version) = &metadata.version {
@@ -97,7 +102,7 @@ fn define<H: Host>(host: &Rc<H>, library: Library, options: Option<&str>) -> Res
     let failure: Rc<RefCell<Option<String>>> = Rc::default();
     let definition = Definition::new(id, {
         let failure = failure.clone();
-        move |setup: &mut Setup<'_, H>| {
+        move |setup: &mut Setup<'_>| {
             let host = Rc::downgrade(setup.host());
             let instance = Instance::create(&library, host.clone(), setup.id(), options.as_deref()).and_then(
                 |(instance, manifest)| match manifest.id == setup.id() {
@@ -242,16 +247,16 @@ fn has<T>(size: usize, offset: usize) -> bool {
 
 /// What the host's callbacks see: the plugin's identity, its storage keys, and effects that wait for the call to
 /// return.
-struct Ctx<H: Host> {
-    host: Weak<H>,
+struct Ctx {
+    host: Weak<dyn Host>,
     id: String,
     keys: Vec<String>,
     effects: Vec<Effect>,
 }
 
 /// What [`HostApi::ctx`] points to: the context of the UI thread's callbacks, and what `wake` reads from any thread.
-struct Shared<H: Host> {
-    ctx: RefCell<Ctx<H>>,
+struct Shared {
+    ctx: RefCell<Ctx>,
     wake: Arc<Wake>,
 }
 
@@ -269,19 +274,19 @@ enum Effect {
 }
 
 /// One plugin instance; dropping it destroys the instance in the plugin.
-struct Instance<H: Host> {
+struct Instance {
     library: Rc<Library>,
     handle: *mut c_void,
     // The plugin keeps pointers to these until `destroy`, so they are boxed and dropped after it.
     _api: Box<HostApi>,
-    shared: Box<Shared<H>>,
+    shared: Box<Shared>,
 }
 
-impl<H: Host> Instance<H> {
+impl Instance {
     /// Runs setup. `id` is the plugin's ID, or empty while it is not known, so setup may use storage.
     fn create(
         library: &Rc<Library>,
-        host: Weak<H>,
+        host: Weak<dyn Host>,
         id: &str,
         options: Option<&str>,
     ) -> Result<(Self, Manifest), String> {
@@ -292,11 +297,11 @@ impl<H: Host> Instance<H> {
             size: size_of::<HostApi>(),
             major: ABI_MAJOR,
             minor: HOST_MINOR,
-            ctx: std::ptr::from_ref::<Shared<H>>(&shared).cast_mut().cast(),
-            call: Some(host_call::<H>),
+            ctx: std::ptr::from_ref::<Shared>(&shared).cast_mut().cast(),
+            call: Some(host_call),
             free: Some(host_free),
-            theme_mode: Some(host_theme_mode::<H>),
-            wake: Some(host_wake::<H>),
+            theme_mode: Some(host_theme_mode),
+            wake: Some(host_wake),
         });
         let mut handle = std::ptr::null_mut();
         let mut out = Owned::EMPTY;
@@ -351,7 +356,7 @@ impl<H: Host> Instance<H> {
     }
 }
 
-impl<H: Host> Drop for Instance<H> {
+impl Drop for Instance {
     fn drop(&mut self) {
         if let Some(destroy) = self.library.destroy {
             // SAFETY: `handle` came from `create` and is destroyed once; the plugin catches its own panics.
@@ -361,12 +366,12 @@ impl<H: Host> Drop for Instance<H> {
 }
 
 /// The host's side of [`HostApi::call`]. Catches the host's panics.
-unsafe extern "C" fn host_call<H: Host>(ctx: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
+unsafe extern "C" fn host_call(ctx: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
     if out.is_null() {
         return abi::ERROR;
     }
-    // SAFETY: `ctx` is the `Shared<H>` this instance was created with, or null; `request` is valid for the call.
-    let (ctx, request) = unsafe { (ctx.cast::<Shared<H>>().as_ref().map(|shared| &shared.ctx), request.as_slice()) };
+    // SAFETY: `ctx` is the `Shared` this instance was created with, or null; `request` is valid for the call.
+    let (ctx, request) = unsafe { (ctx.cast::<Shared>().as_ref().map(|shared| &shared.ctx), request.as_slice()) };
     let result = catch_unwind(AssertUnwindSafe(|| {
         let ctx = ctx.ok_or("no host context")?;
         let request: HostRequest = serde_json::from_slice(request)
@@ -385,22 +390,22 @@ unsafe extern "C" fn host_call<H: Host>(ctx: *mut c_void, request: Bytes, out: *
 }
 
 /// The host's side of [`HostApi::theme_mode`]. A host that is gone or panics answers dark.
-unsafe extern "C" fn host_theme_mode<H: Host>(ctx: *mut c_void) -> u32 {
-    // SAFETY: `ctx` is the `Shared<H>` this instance was created with, or null.
-    let ctx = unsafe { ctx.cast::<Shared<H>>().as_ref().map(|shared| &shared.ctx) };
+unsafe extern "C" fn host_theme_mode(ctx: *mut c_void) -> u32 {
+    // SAFETY: `ctx` is the `Shared` this instance was created with, or null.
+    let ctx = unsafe { ctx.cast::<Shared>().as_ref().map(|shared| &shared.ctx) };
     let host = ctx.and_then(|ctx| ctx.try_borrow().ok()).and_then(|ctx| ctx.host.upgrade());
     let light = catch_unwind(AssertUnwindSafe(|| host.is_some_and(|host| host.theme_mode() == ThemeMode::Light)));
     if light.unwrap_or(false) { abi::THEME_LIGHT } else { abi::THEME_DARK }
 }
 
 /// The host's side of [`HostApi::wake`], on any thread: posts one [`Woken`] until the UI thread handles it.
-unsafe extern "C" fn host_wake<H: Host>(ctx: *mut c_void) {
+unsafe extern "C" fn host_wake(ctx: *mut c_void) {
     if ctx.is_null() {
         return;
     }
-    // SAFETY: `ctx` is this instance's `Shared<H>`, which lives until `destroy` returns. Only `wake`, which is
+    // SAFETY: `ctx` is this instance's `Shared`, which lives until `destroy` returns. Only `wake`, which is
     // `Sync`, is read off the UI thread.
-    let wake = unsafe { &*std::ptr::addr_of!((*ctx.cast::<Shared<H>>()).wake) };
+    let wake = unsafe { &*std::ptr::addr_of!((*ctx.cast::<Shared>()).wake) };
     wake.post();
 }
 
@@ -409,8 +414,8 @@ unsafe extern "C" fn host_free(owned: Owned) {
     drop(unsafe { owned.into_vec() });
 }
 
-fn handle<H: Host>(ctx: &mut Ctx<H>, request: HostRequest) -> Result<serde_json::Value, String> {
-    let key = |ctx: &Ctx<H>, key: &str| {
+fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, String> {
+    let key = |ctx: &Ctx, key: &str| {
         if ctx.id.is_empty() {
             return Err("the plugin ID is not known during setup".to_owned());
         }
@@ -499,8 +504,8 @@ fn handle<H: Host>(ctx: &mut Ctx<H>, request: HostRequest) -> Result<serde_json:
 }
 
 /// Answers a read through the host's [`Host::read`], as a built-in reads in process.
-fn read<H: Host>(
-    ctx: &Ctx<H>,
+fn read(
+    ctx: &Ctx,
     answer: impl FnOnce(&dyn abi::Read) -> serde_json::Result<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
     let host = ctx.host.upgrade().ok_or("the host is gone")?;
@@ -514,20 +519,20 @@ fn read<H: Host>(
 }
 
 /// One activation's instance, as registrations call it.
-struct Guest<H: Host> {
+struct Guest {
     /// The instance, until the registration's disposal takes it, which destroys it.
-    instance: RefCell<Option<Instance<H>>>,
+    instance: RefCell<Option<Instance>>,
     busy: Cell<bool>,
     failure: Rc<RefCell<Option<String>>>,
-    host: Weak<H>,
+    host: Weak<dyn Host>,
     id: String,
     /// The commands' keymap layer, until deactivation or a panic removes it.
     layer: RefCell<Option<Disposer>>,
     /// The mounted slot claims and routes, which a wake draws again.
-    activation: Rc<Activation<H>>,
+    activation: Rc<Activation>,
 }
 
-impl<H: Host> Guest<H> {
+impl Guest {
     /// Sends one request. A failed or destroyed plugin is not called; a panic fails it, and its claims draw empty.
     fn request<T: DeserializeOwned>(self: &Rc<Self>, export: &str, request: &Request) -> Option<T> {
         if self.failure.borrow().is_some() {
@@ -610,7 +615,7 @@ impl<H: Host> Guest<H> {
 
     /// Sends `fetch` unless the instance is destroyed; its reply goes to the instance on the effect queue, unless the
     /// instance is destroyed by then.
-    fn fetch(guest: &Weak<Self>, host: &H, request: abi::RequestId, fetch: abi::Fetch) {
+    fn fetch(guest: &Weak<Self>, host: &dyn Host, request: abi::RequestId, fetch: abi::Fetch) {
         let Some(live) = guest.upgrade().filter(|guest| guest.instance.borrow().is_some()) else { return };
         let (guest, owner) = (guest.clone(), live.host.clone());
         host.fetch(
@@ -627,7 +632,7 @@ impl<H: Host> Guest<H> {
 }
 
 /// Registers what the manifest lists, each calling into `guest`.
-fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &Manifest) {
+fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
     // Registered first, so it runs last: the instance is destroyed now, on deactivation, unload and reload, even while
     // a route, a claim or a dialog's fences of it are still mounted, which then draw nothing.
     let disposed = guest.clone();
@@ -691,11 +696,11 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
             let activation = guest.activation.clone();
             let mount = slot.mount.then(|| {
                 let guest = guest.clone();
-                Rc::new(move |_: &H, input: &abi::SlotInput, mounted: bool| {
+                Rc::new(move |_: &dyn Host, input: &abi::SlotInput, mounted: bool| {
                     guest.handle("on-mount", &Request::Mount { claim, input: input.clone(), mounted });
-                }) as MountFn<H>
+                }) as MountFn
             });
-            let render: SlotRender<H> = Rc::new(move |_, input, changed| {
+            let render: SlotRender = Rc::new(move |_, input, changed| {
                 let request = Request::Render { claim, input: input.clone(), changed: changed.clone() };
                 guest.request("render-slot", &request).unwrap_or(abi::Render::Hide)
             });
@@ -722,7 +727,7 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
         let guest = guest.clone();
         if manifest.render >= abi::RENDER && manifest.render_routes.contains(name) {
             let (request, activation) = (name.clone(), guest.activation.clone());
-            let render: SlotRender<H> = Rc::new(move |_, _, changed| {
+            let render: SlotRender = Rc::new(move |_, _, changed| {
                 let request = Request::RenderRoute { name: request.clone(), changed: changed.clone() };
                 guest.request("render-route", &request).unwrap_or(abi::Render::Hide)
             });
@@ -736,24 +741,24 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
 
 /// A mounted slot claim or route: the plugin's rows in a view, empty when it drew nothing or failed. It asks for
 /// them again with each change batch and each wake, and rebuilds the view only when they differ.
-struct Claim<H: Host> {
-    guest: Rc<Guest<H>>,
+struct Claim {
+    guest: Rc<Guest>,
     export: &'static str,
     request: Request,
     view: View,
     lines: RefCell<Vec<Line>>,
 }
 
-impl<H: Host> Claim<H> {
-    fn mount(host: &H, guest: &Rc<Guest<H>>, export: &'static str, request: Request) -> Rc<Self> {
+impl Claim {
+    fn mount(host: &dyn Host, guest: &Rc<Guest>, export: &'static str, request: Request) -> Rc<Self> {
         let view = View::new(host.app()).shrink(0.0);
         let claim = Rc::new(Self { guest: guest.clone(), export, request, view, lines: RefCell::default() });
-        guest.activation.track(Rc::downgrade(&claim) as Weak<dyn Drawn<H>>);
+        guest.activation.track(Rc::downgrade(&claim) as Weak<dyn Drawn>);
         claim.draw(host);
         claim
     }
 
-    fn draw(&self, host: &H) {
+    fn draw(&self, host: &dyn Host) {
         let lines = self.guest.request::<Vec<Line>>(self.export, &self.request).unwrap_or_default();
         if *self.lines.borrow() == lines {
             return;
@@ -767,20 +772,18 @@ impl<H: Host> Claim<H> {
     }
 }
 
-impl<H: Host> Slotted<H> for Rc<Claim<H>> {
+impl Claimed for Rc<Claim> {
     fn root(&self) -> View {
         self.view.clone()
     }
 
-    fn sync(&self, host: &H, changes: &H::Changes) {
-        if !H::unchanged(changes) {
-            self.draw(host);
-        }
+    fn sync(&self, host: &dyn Host, _: &abi::Changed) {
+        self.draw(host);
     }
 }
 
-impl<H: Host> Drawn<H> for Claim<H> {
-    fn woken(&self, host: &H) {
+impl Drawn for Claim {
+    fn woken(&self, host: &dyn Host) {
         self.draw(host);
     }
 }
@@ -788,10 +791,10 @@ impl<H: Host> Drawn<H> for Claim<H> {
 /// The definition of a built-in whose `create` is `create`, wired through the byte shims of the C ABI as a loaded
 /// library is, for the tests that prove a built-in on that path (`Loopback`).
 #[doc(hidden)]
-pub fn loopback<H: Host>(
-    host: &Rc<H>,
+pub fn loopback(
+    host: &Rc<dyn Host>,
     create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
-) -> Result<(Definition<H>, ErrorFn), String> {
+) -> Result<(Definition, ErrorFn), String> {
     let api = PluginApi {
         size: size_of::<PluginApi>(),
         major: ABI_MAJOR,

@@ -382,7 +382,8 @@ fn sidebar_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
     let h = mount_at(170, "ses_a", json!({ "animations": false, "plugins": plugins }));
     if loopback {
         for create in [context_create as _, limit_create as _] {
-            let (definition, _) = opencode_plugin::loader::native::loopback(&h.tui, create).unwrap();
+            let (definition, _) =
+                opencode_plugin::loader::native::loopback(&opencode_tui::plugins::host::host(&h.tui), create).unwrap();
             opencode_tui::plugins::host::add(&h.tui, definition);
         }
     }

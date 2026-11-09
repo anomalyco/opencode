@@ -19,20 +19,20 @@ use crate::node::Mount;
 use crate::{Host, abi, defer};
 
 /// A mounted claim or route that a wake or an invalidation renders again.
-pub(crate) trait Drawn<H: Host> {
-    fn woken(&self, host: &H);
+pub(crate) trait Drawn {
+    fn woken(&self, host: &dyn Host);
 }
 
-impl<H: Host> Drawn<H> for Mount<H> {
-    fn woken(&self, host: &H) {
+impl Drawn for Mount {
+    fn woken(&self, host: &dyn Host) {
         self.draw(host, &abi::Changed { woken: true, ..abi::Changed::default() });
     }
 }
 
-pub(crate) struct Activation<H: Host> {
-    host: Weak<H>,
+pub(crate) struct Activation {
+    host: Weak<dyn Host>,
     wake: Arc<Wake>,
-    claims: RefCell<Vec<Weak<dyn Drawn<H>>>>,
+    claims: RefCell<Vec<Weak<dyn Drawn>>>,
     /// An invalidation waits on the effect queue.
     queued: Cell<bool>,
     /// The handler of this activation's [`Woken`].
@@ -43,8 +43,8 @@ pub(crate) struct Activation<H: Host> {
     on_wake: RefCell<Option<Rc<dyn Fn()>>>,
 }
 
-impl<H: Host> Activation<H> {
-    pub fn new(host: &Rc<H>, wake: Arc<Wake>) -> Rc<Self> {
+impl Activation {
+    pub fn new(host: &Rc<dyn Host>, wake: Arc<Wake>) -> Rc<Self> {
         Rc::new_cyclic(|this: &Weak<Self>| {
             let (this, id) = (this.clone(), wake.id);
             let handler = host.app().on_message(move |_, message: &Woken| {
@@ -98,7 +98,7 @@ impl<H: Host> Activation<H> {
         }
     }
 
-    pub fn track(&self, claim: Weak<dyn Drawn<H>>) {
+    pub fn track(&self, claim: Weak<dyn Drawn>) {
         let mut claims = self.claims.borrow_mut();
         claims.retain(|claim| claim.strong_count() > 0);
         claims.push(claim);
@@ -108,8 +108,8 @@ impl<H: Host> Activation<H> {
     pub fn redraw(&self) {
         self.wake.pending.store(false, Ordering::Release);
         let Some(host) = self.host.upgrade() else { return };
-        let claims: Vec<Rc<dyn Drawn<H>>> = self.claims.borrow().iter().filter_map(Weak::upgrade).collect();
-        claims.iter().for_each(|claim| claim.woken(&host));
+        let claims: Vec<Rc<dyn Drawn>> = self.claims.borrow().iter().filter_map(Weak::upgrade).collect();
+        claims.iter().for_each(|claim| claim.woken(&*host));
     }
 
     /// Queues one redraw on the effect queue, after the effects queued so far: a handler of the plugin ran, and
@@ -128,7 +128,7 @@ impl<H: Host> Activation<H> {
     }
 }
 
-impl<H: Host> Drop for Activation<H> {
+impl Drop for Activation {
     fn drop(&mut self) {
         if let Some(host) = self.host.upgrade() {
             host.app().remove_handler(self.handler);

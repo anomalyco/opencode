@@ -1,7 +1,7 @@
-//! The Rust plugin API (P.1, `docs/P.1.md`): the in-process form of `@opencode/plugin/tui`. Built-in
-//! plugins and the LaTeX and Mermaid plugins register slots, keymap layers, routes, and code-block renderers
-//! through [`Setup`]; the host mounts them through [`Registry`]. [`loader`] finds and loads external plugins
-//! (P.4). A plugin of the one API (O-67, `opencode-plugin-abi`) becomes a [`Definition`] too, with [`From`].
+//! The plugin host (P.1, P.4, O-67): the TUI's side of the one plugin API, `opencode-plugin-abi`. Built-ins and
+//! external plugins reach the TUI only through that API, in process or over the C ABI. [`Registry`] starts them,
+//! resolves their slot claims and mounts them; [`loader`] finds and loads external plugins; [`node`] turns what a
+//! plugin draws into widgets. The TUI implements [`Host`] once, and that is the only code here that sees it.
 
 mod activation;
 pub mod loader;
@@ -26,11 +26,9 @@ use opentui::widget::CodeBlock;
 
 pub use slot::{Kind, Placement, SlotInput};
 
-/// What a plugin is given besides its registrations (TS `Plugin.Context`). The TUI implements it for its
-/// shared context, so a built-in also reaches the store, dialogs, and toasts through [`Setup::host`].
+/// What the plugins' reads and effects reach in the host: the TUI implements it, and the adapters of both paths call
+/// it. It is not plugin API.
 pub trait Host: 'static {
-    /// What changed since the last sync.
-    type Changes;
     fn app(&self) -> &App;
     /// The page theme.
     fn theme(&self) -> Theme;
@@ -43,12 +41,6 @@ pub trait Host: 'static {
     }
     /// The keymap plugin layers register on.
     fn keymap(&self) -> &DialogKeymap;
-    /// Whether a change batch changed nothing, so external plugins' slot claims and routes need not draw again.
-    fn unchanged(_changes: &Self::Changes) -> bool {
-        false
-    }
-
-    // What external plugins reach across the component boundary (P.4). Built-ins use the host directly.
 
     /// The JSON text of storage key `key` (already `plugin.<id>.<key>`), if stored.
     fn storage_read(&self, _key: &str) -> Option<String> {
@@ -90,10 +82,7 @@ pub trait Host: 'static {
         None
     }
     /// Mounts slot `path` with `input` into `parent`, for a claim's [`abi::Node::Slot`].
-    fn slot(&self, _parent: &View, _path: &str, _input: &SlotInput) -> Option<SlotMount<Self>>
-    where
-        Self: Sized,
-    {
+    fn slot(&self, _parent: &View, _path: &str, _input: &SlotInput) -> Option<SlotMount> {
         None
     }
     /// Opens the route plugin `id` registered as `name`.
@@ -139,10 +128,6 @@ pub trait Host: 'static {
         let theme = self.theme();
         f(&node::Reader::new(&theme, self.theme_mode()));
     }
-    /// Sets `changed` to what `changes` changed. Reuse one `changed` across batches with [`node::refill`].
-    fn changed(_changes: &Self::Changes, changed: &mut abi::Changed) {
-        *changed = abi::Changed::everything();
-    }
     /// Calls `push` with what changes outside change batches, the host's own state (`local`) and the terminal size
     /// (`size`), until the disposer is dropped.
     fn watch(&self, _push: Rc<dyn Fn(&abi::Changed)>) -> Option<Disposer> {
@@ -150,165 +135,191 @@ pub trait Host: 'static {
     }
 }
 
-/// A mounted slot claim or plugin route: its root view, and a sync with each change batch. A plain
-/// [`View`] never changes.
-pub trait Slotted<H: Host> {
+/// A mounted slot claim or plugin route: its root view, and a sync with each change batch. A plain [`View`] never
+/// changes.
+pub(crate) trait Claimed {
     fn root(&self) -> View;
-    fn sync(&self, _host: &H, _changes: &H::Changes) {}
+    fn sync(&self, _host: &dyn Host, _changed: &abi::Changed) {}
 }
 
-impl<H: Host> Slotted<H> for View {
+impl Claimed for View {
     fn root(&self) -> View {
         self.clone()
     }
 }
 
-pub type SlotRender<H> = Rc<dyn Fn(&H, &SlotInput) -> Box<dyn Slotted<H>>>;
-type Claim<H> = Box<dyn Slotted<H>>;
-pub type RouteRender<H> = Rc<dyn Fn(&H) -> Box<dyn Slotted<H>>>;
-type SetupFn<H> = Rc<dyn Fn(&mut Setup<'_, H>)>;
+type ClaimRender = Rc<dyn Fn(&dyn Host, &SlotInput) -> Box<dyn Claimed>>;
+type Claim = Box<dyn Claimed>;
+type RouteRender = Rc<dyn Fn(&dyn Host) -> Box<dyn Claimed>>;
+type SetupFn = Rc<dyn Fn(&mut Setup<'_>)>;
 /// The current failure of an external plugin, if any.
 pub type ErrorFn = Rc<dyn Fn() -> Option<String>>;
 /// Renders a fenced code block in the theme, or returns `None` to keep the default code view.
-pub type CodeBlockRender = Rc<dyn Fn(&CodeBlock<'_>, &Theme) -> Option<AnyWidget>>;
+type CodeBlockRender = Rc<dyn Fn(&CodeBlock<'_>, &Theme) -> Option<AnyWidget>>;
 
-/// A plugin (TS `Plugin.define`): an ID and the setup that registers everything it contributes. Setup runs
-/// on each activation; deactivation undoes every registration.
-pub struct Definition<H: Host> {
+/// A built-in, in the order the registry activates it.
+pub enum Builtin {
+    /// A plugin of the one API, run in process.
+    Plugin(abi::Plugin),
+    /// A part of the host that the plugin manager lists and toggles like a plugin. It is not plugin API: `activate`
+    /// and `dispose` reach the host on their own.
+    Host { id: &'static str, activate: Rc<dyn Fn()>, dispose: Rc<dyn Fn()> },
+}
+
+impl From<abi::Plugin> for Builtin {
+    fn from(plugin: abi::Plugin) -> Self {
+        Builtin::Plugin(plugin)
+    }
+}
+
+/// A plugin as the registry runs it: an ID and the setup that registers everything it contributes. Setup runs on each
+/// activation; deactivation undoes every registration.
+#[derive(Clone)]
+pub struct Definition {
     pub id: String,
-    setup: SetupFn<H>,
+    setup: SetupFn,
     /// The `plugins` target or discovered path of an external plugin, and its failure.
     external: Option<(String, ErrorFn)>,
 }
 
-impl<H: Host> Clone for Definition<H> {
-    fn clone(&self) -> Self {
-        Self { id: self.id.clone(), setup: self.setup.clone(), external: self.external.clone() }
-    }
-}
-
-impl<H: Host> Definition<H> {
-    pub fn new(id: impl Into<String>, setup: impl Fn(&mut Setup<'_, H>) + 'static) -> Self {
+impl Definition {
+    pub(crate) fn new(id: impl Into<String>, setup: impl Fn(&mut Setup<'_>) + 'static) -> Self {
         Self { id: id.into(), setup: Rc::new(setup), external: None }
     }
 
     /// Marks an external plugin loaded from `target`; `error` reports its failure while it is active.
-    pub fn external(mut self, target: impl Into<String>, error: ErrorFn) -> Self {
+    pub(crate) fn external(mut self, target: impl Into<String>, error: ErrorFn) -> Self {
         self.external = Some((target.into(), error));
         self
     }
 
     /// The target of an external plugin.
-    pub fn target(&self) -> Option<&str> {
+    fn target(&self) -> Option<&str> {
         self.external.as_ref().map(|(target, _)| target.as_str())
     }
 }
 
-/// A plugin of the one API, run in process: its closures get Rust values, with no JSON step.
-impl<H: Host> From<abi::Plugin> for Definition<H> {
-    fn from(plugin: abi::Plugin) -> Self {
-        Definition::new(plugin.id, move |setup: &mut Setup<'_, H>| {
-            let proxy = setup.host().app().proxy();
-            let activation = Activation::new(setup.host(), Arc::new(activation::Wake::new(Some(proxy))));
-            let mut api = abi::Setup::in_process(setup.id(), None);
-            api.set_waker(activation.waker());
-            if let Err(error) = (plugin.setup)(&mut api) {
-                log::error!("plugin {} failed: {error}", setup.id());
-                return;
-            }
-            let manifest = api.manifest();
-            if manifest.routes.len() != manifest.render_routes.len() || !manifest.slots.iter().all(|claim| claim.render)
-            {
-                log::error!("plugin {}: 1.3 routes and slot claims do not run in process", setup.id());
-            }
-            let scope = Rc::new(Scope {
-                host: Rc::downgrade(setup.host()),
-                id: setup.id().to_owned(),
-                keys: manifest.storage.clone(),
-                activation: activation.clone(),
-                replies: api.replies().to_vec(),
-            });
-            // Registered first, so it runs last: no reply or wake reaches the plugin once it is disposed.
-            let disposed = activation.clone();
-            setup.on_dispose(move || disposed.dispose());
-            if !api.wakes().is_empty() {
-                let (wakes, scope) = (api.wakes().to_vec(), scope.clone());
-                activation.on_wake(Rc::new(move || scope.run(|host| wakes.iter().for_each(|run| run(host)))));
-            }
-            for (language, render) in api.fences() {
-                let (render, scope, fences) = (render.clone(), scope.clone(), node::Fences::default());
-                let render: CodeBlockRender = Rc::new(move |block, theme| {
-                    let host = scope.host.upgrade()?;
-                    fences.render(block, theme, |fence| {
-                        let mut out = abi::Fenced::Code;
-                        host.read(&mut |read| out = render(&Scoped { read, host: &*host, scope: &scope }, &fence));
-                        out
-                    })
-                });
-                setup.registration.code_blocks.push((language.clone(), render));
-            }
-            for (index, claim, render) in api.renders() {
-                let (render, scope) = (render.clone(), scope.clone());
-                let mounts: Vec<abi::MountFn> =
-                    api.mounts().iter().filter(|(claim, _)| *claim == index).map(|(_, run)| run.clone()).collect();
-                let mount = (!mounts.is_empty()).then(|| {
-                    let scope = scope.clone();
-                    // A claim may unmount after its plugin was disposed; the plugin hears of it no more.
-                    Rc::new(move |_: &H, input: &abi::SlotInput, mounted: bool| {
-                        if !scope.activation.disposed() {
-                            scope.run(|host| mounts.iter().for_each(|run| run(host, input, mounted)));
-                        }
-                    }) as node::MountFn<H>
-                });
-                let render: node::SlotRender<H> = Rc::new(move |host: &H, input, changed| {
-                    let mut out = abi::Render::Keep;
-                    host.read(&mut |read| out = render(&Scoped { read, host, scope: &scope }, input, changed));
-                    out
-                });
-                setup.claim(slot::placement(claim), render, mount, &activation);
-            }
-            for (types, run) in api.events() {
-                let (types, run, scope) = (types.to_vec(), run.clone(), scope.clone());
-                let subscription = setup.host().on_event(Rc::new(move |event| {
-                    if types.iter().any(|kind| kind == event.tag()) {
-                        scope.run(|host| run(host, event));
-                    }
-                }));
-                setup.registration.disposers.extend(subscription);
-            }
-            let commands: Vec<(abi::Scope, TuiCommand)> = api
-                .commands()
-                .map(|(command, run)| {
-                    let (run, scope) = (run.clone(), scope.clone());
-                    (command.scope.clone(), tui_command(command, move |input| scope.run(|host| run(host, input))))
-                })
-                .collect();
-            let (global, scoped) = route::split(commands);
-            if !global.is_empty() {
-                setup.layer(KeymapLayer::global(global));
-            }
-            for (name, render) in api.routes() {
-                let (render, scope) = (render.clone(), scope.clone());
-                let render: node::SlotRender<H> = Rc::new(move |host: &H, _, changed| {
-                    let mut out = abi::Render::Keep;
-                    host.read(&mut |read| out = render(&Scoped { read, host, scope: &scope }, changed));
-                    out
-                });
-                setup.view_route(name, render, route::commands(&scoped, name), &activation);
-            }
-            for run in api.take_disposers() {
-                let (scope, mut run) = (scope.clone(), Some(run));
-                setup.on_dispose(move || {
-                    let Some(host) = scope.host.upgrade() else { return };
-                    host.read(&mut |read| {
-                        if let Some(run) = run.take() {
-                            run(&Scoped { read, host: &*host, scope: &scope });
-                        }
-                    });
-                });
-            }
-        })
+impl From<Builtin> for Definition {
+    fn from(builtin: Builtin) -> Self {
+        match builtin {
+            Builtin::Plugin(plugin) => in_process(plugin),
+            Builtin::Host { id, activate, dispose } => Definition::new(id, move |setup: &mut Setup<'_>| {
+                activate();
+                let dispose = dispose.clone();
+                setup.on_dispose(move || dispose());
+            }),
+        }
     }
+}
+
+impl From<abi::Plugin> for Definition {
+    fn from(plugin: abi::Plugin) -> Self {
+        in_process(plugin)
+    }
+}
+
+/// A plugin of the one API, run in process: its closures get Rust values, with no JSON step.
+fn in_process(plugin: abi::Plugin) -> Definition {
+    Definition::new(plugin.id, move |setup: &mut Setup<'_>| {
+        let proxy = setup.host().app().proxy();
+        let activation = Activation::new(setup.host(), Arc::new(activation::Wake::new(Some(proxy))));
+        let mut api = abi::Setup::in_process(setup.id(), None);
+        api.set_waker(activation.waker());
+        if let Err(error) = (plugin.setup)(&mut api) {
+            log::error!("plugin {} failed: {error}", setup.id());
+            return;
+        }
+        let manifest = api.manifest();
+        if manifest.routes.len() != manifest.render_routes.len() || !manifest.slots.iter().all(|claim| claim.render) {
+            log::error!("plugin {}: 1.3 routes and slot claims do not run in process", setup.id());
+        }
+        let scope = Rc::new(Scope {
+            host: Rc::downgrade(setup.host()),
+            id: setup.id().to_owned(),
+            keys: manifest.storage.clone(),
+            activation: activation.clone(),
+            replies: api.replies().to_vec(),
+        });
+        // Registered first, so it runs last: no reply or wake reaches the plugin once it is disposed.
+        let disposed = activation.clone();
+        setup.on_dispose(move || disposed.dispose());
+        if !api.wakes().is_empty() {
+            let (wakes, scope) = (api.wakes().to_vec(), scope.clone());
+            activation.on_wake(Rc::new(move || scope.run(|host| wakes.iter().for_each(|run| run(host)))));
+        }
+        for (language, render) in api.fences() {
+            let (render, scope, fences) = (render.clone(), scope.clone(), node::Fences::default());
+            let render: CodeBlockRender = Rc::new(move |block, theme| {
+                let host = scope.host.upgrade()?;
+                fences.render(block, theme, |fence| {
+                    let mut out = abi::Fenced::Code;
+                    host.read(&mut |read| out = render(&Scoped { read, host: &*host, scope: &scope }, &fence));
+                    out
+                })
+            });
+            setup.registration.code_blocks.push((language.clone(), render));
+        }
+        for (index, claim, render) in api.renders() {
+            let (render, scope) = (render.clone(), scope.clone());
+            let mounts: Vec<abi::MountFn> =
+                api.mounts().iter().filter(|(claim, _)| *claim == index).map(|(_, run)| run.clone()).collect();
+            let mount = (!mounts.is_empty()).then(|| {
+                let scope = scope.clone();
+                // A claim may unmount after its plugin was disposed; the plugin hears of it no more.
+                Rc::new(move |_: &dyn Host, input: &abi::SlotInput, mounted: bool| {
+                    if !scope.activation.disposed() {
+                        scope.run(|host| mounts.iter().for_each(|run| run(host, input, mounted)));
+                    }
+                }) as node::MountFn
+            });
+            let render: node::SlotRender = Rc::new(move |host: &dyn Host, input, changed| {
+                let mut out = abi::Render::Keep;
+                host.read(&mut |read| out = render(&Scoped { read, host, scope: &scope }, input, changed));
+                out
+            });
+            setup.claim(slot::placement(claim), render, mount, &activation);
+        }
+        for (types, run) in api.events() {
+            let (types, run, scope) = (types.to_vec(), run.clone(), scope.clone());
+            let subscription = setup.host().on_event(Rc::new(move |event| {
+                if types.iter().any(|kind| kind == event.tag()) {
+                    scope.run(|host| run(host, event));
+                }
+            }));
+            setup.registration.disposers.extend(subscription);
+        }
+        let commands: Vec<(abi::Scope, TuiCommand)> = api
+            .commands()
+            .map(|(command, run)| {
+                let (run, scope) = (run.clone(), scope.clone());
+                (command.scope.clone(), tui_command(command, move |input| scope.run(|host| run(host, input))))
+            })
+            .collect();
+        let (global, scoped) = route::split(commands);
+        if !global.is_empty() {
+            setup.layer(KeymapLayer::global(global));
+        }
+        for (name, render) in api.routes() {
+            let (render, scope) = (render.clone(), scope.clone());
+            let render: node::SlotRender = Rc::new(move |host: &dyn Host, _, changed| {
+                let mut out = abi::Render::Keep;
+                host.read(&mut |read| out = render(&Scoped { read, host, scope: &scope }, changed));
+                out
+            });
+            setup.view_route(name, render, route::commands(&scoped, name), &activation);
+        }
+        for run in api.take_disposers() {
+            let (scope, mut run) = (scope.clone(), Some(run));
+            setup.on_dispose(move || {
+                let Some(host) = scope.host.upgrade() else { return };
+                host.read(&mut |read| {
+                    if let Some(run) = run.take() {
+                        run(&Scoped { read, host: &*host, scope: &scope });
+                    }
+                });
+            });
+        }
+    })
 }
 
 /// The keymap command of a plugin's `command`, which calls `run` with its input.
@@ -336,15 +347,15 @@ pub(crate) fn tui_command(command: &abi::Command, run: impl Fn(Option<&str>) + '
 
 /// What an in-process plugin's reads and effects are scoped to: its host, its ID and declared storage keys, and its
 /// activation.
-struct Scope<H: Host> {
-    host: Weak<H>,
+struct Scope {
+    host: Weak<dyn Host>,
     id: String,
     keys: Vec<String>,
-    activation: Rc<Activation<H>>,
+    activation: Rc<Activation>,
     replies: Vec<abi::ReplyFn>,
 }
 
-impl<H: Host> Scope<H> {
+impl Scope {
     /// The host's storage key of `key`, when the plugin declared it.
     fn stored(&self, key: &str) -> Option<String> {
         if self.keys.iter().any(|known| known == key) {
@@ -369,13 +380,13 @@ impl<H: Host> Scope<H> {
 
 /// The host as an in-process plugin reads and calls it: the host's reads, its storage, and its effects, which wait
 /// for the callback to return.
-struct Scoped<'a, H: Host> {
+struct Scoped<'a> {
     read: &'a dyn abi::Read,
-    host: &'a H,
-    scope: &'a Rc<Scope<H>>,
+    host: &'a dyn Host,
+    scope: &'a Rc<Scope>,
 }
 
-impl<H: Host> abi::Read for Scoped<'_, H> {
+impl abi::Read for Scoped<'_> {
     fn theme_mode(&self) -> abi::ThemeMode {
         self.read.theme_mode()
     }
@@ -450,7 +461,7 @@ impl<H: Host> abi::Read for Scoped<'_, H> {
     }
 }
 
-impl<H: Host> abi::Host for Scoped<'_, H> {
+impl abi::Host for Scoped<'_> {
     fn storage_set(&self, key: &str, value: serde_json::Value) {
         let Some(stored) = self.scope.stored(key) else { return };
         // The host shows it to reads at once; the claims hear of it in queue order.
@@ -528,7 +539,7 @@ impl<H: Host> abi::Host for Scoped<'_, H> {
 }
 
 /// Copies `text`, then runs `then` once it is copied.
-pub(crate) fn copy<H: Host>(host: &H, text: &str, then: Option<abi::Action>) {
+pub(crate) fn copy(host: &dyn Host, text: &str, then: Option<abi::Action>) {
     if let (true, Some(abi::Action::Command { name, input })) = (host.copy(text), then) {
         host.dispatch(&name, input.as_deref());
     }
@@ -540,48 +551,47 @@ pub(crate) fn next_request() -> abi::RequestId {
     abi::RequestId(NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
 }
 
-impl<H: Host> Scoped<'_, H> {
-    fn defer(&self, effect: impl FnOnce(&H) + 'static) {
+impl Scoped<'_> {
+    fn defer(&self, effect: impl FnOnce(&dyn Host) + 'static) {
         defer(&self.scope.host, effect);
     }
 }
 
 /// Queues `effect` on the host's one effect queue, which both paths share: it runs in order with every other plugin
 /// effect, once the outermost plugin callback has returned and every UI and store borrow has ended.
-pub(crate) fn defer<H: Host>(host: &Weak<H>, effect: impl FnOnce(&H) + 'static) {
+pub(crate) fn defer(host: &Weak<dyn Host>, effect: impl FnOnce(&dyn Host) + 'static) {
     let Some(strong) = host.upgrade() else { return };
     let host = host.clone();
     strong.app().defer(move |_| {
         if let Some(host) = host.upgrade() {
-            effect(&host);
+            effect(&*host);
         }
     });
 }
 
-/// What a plugin registers while it is active.
-pub struct Setup<'a, H: Host> {
-    host: &'a Rc<H>,
+/// What a plugin registers while it is active: the host's side of a setup, on either path.
+pub(crate) struct Setup<'a> {
+    host: &'a Rc<dyn Host>,
     id: &'a str,
-    registration: Registration<H>,
+    registration: Registration,
 }
 
-impl<H: Host> Setup<'_, H> {
+impl Setup<'_> {
     /// The host; closures keep a [`std::rc::Weak`] of it.
-    pub fn host(&self) -> &Rc<H> {
+    pub(crate) fn host(&self) -> &Rc<dyn Host> {
         self.host
     }
 
-    pub fn id(&self) -> &str {
+    pub(crate) fn id(&self) -> &str {
         self.id
     }
 
-    /// The host storage key of this plugin's `key` (TS `storage.store(key)`).
-    pub fn storage_key(&self, key: &str) -> String {
-        format!("plugin.{}.{key}", self.id)
-    }
-
     /// Claims a place in the slot tree (TS `ui.slot`).
-    pub fn slot(&mut self, placement: Placement, render: impl Fn(&H, &SlotInput) -> Box<dyn Slotted<H>> + 'static) {
+    pub(crate) fn slot(
+        &mut self,
+        placement: Placement,
+        render: impl Fn(&dyn Host, &SlotInput) -> Box<dyn Claimed> + 'static,
+    ) {
         self.registration.claims.push((placement, Rc::new(render)));
     }
 
@@ -590,16 +600,16 @@ impl<H: Host> Setup<'_, H> {
     pub(crate) fn claim(
         &mut self,
         placement: Placement,
-        render: node::SlotRender<H>,
-        mount: Option<node::MountFn<H>>,
-        activation: &Rc<Activation<H>>,
+        render: node::SlotRender,
+        mount: Option<node::MountFn>,
+        activation: &Rc<Activation>,
     ) {
         let owner = Rc::downgrade(self.host);
         let path = placement.target.clone();
         let activation = activation.clone();
         self.slot(placement, move |host, input| {
             let mount = node::Mount::new(host, owner.clone(), &path, input, render.clone(), mount.clone());
-            activation.track(Rc::downgrade(&mount) as Weak<dyn Drawn<H>>);
+            activation.track(Rc::downgrade(&mount) as Weak<dyn Drawn>);
             Box::new(mount)
         });
     }
@@ -609,20 +619,20 @@ impl<H: Host> Setup<'_, H> {
     pub(crate) fn view_route(
         &mut self,
         name: &str,
-        render: node::SlotRender<H>,
+        render: node::SlotRender,
         commands: Vec<TuiCommand>,
-        activation: &Rc<Activation<H>>,
+        activation: &Rc<Activation>,
     ) {
         let (owner, activation) = (Rc::downgrade(self.host), activation.clone());
         self.route(name, move |host| {
             let view = route::View::new(host, owner.clone(), render.clone(), commands.clone());
-            activation.track(Rc::downgrade(&view.mount) as Weak<dyn Drawn<H>>);
+            activation.track(Rc::downgrade(&view.mount) as Weak<dyn Drawn>);
             Box::new(view)
         });
     }
 
     /// Registers a keymap layer: commands, their palette and slash entries, and keybinds (TS `keymap.layer`).
-    pub fn layer(&mut self, layer: KeymapLayer<FocusId>) {
+    pub(crate) fn layer(&mut self, layer: KeymapLayer<FocusId>) {
         match self.host.keymap().layer(layer) {
             Ok(disposer) => self.registration.disposers.push(disposer),
             Err(error) => log::error!("plugin {} keymap layer: {error}", self.id),
@@ -630,12 +640,12 @@ impl<H: Host> Setup<'_, H> {
     }
 
     /// Registers the route `Route::Plugin { id, name }` shows (TS `ui.router.register`).
-    pub fn route(&mut self, name: impl Into<String>, render: impl Fn(&H) -> Box<dyn Slotted<H>> + 'static) {
+    pub(crate) fn route(&mut self, name: impl Into<String>, render: impl Fn(&dyn Host) -> Box<dyn Claimed> + 'static) {
         self.registration.routes.push((name.into(), Rc::new(render)));
     }
 
     /// Renders Markdown fences of `language` (TS `markdown.registerCodeBlockRenderer`).
-    pub fn code_block(
+    pub(crate) fn code_block(
         &mut self,
         language: impl Into<String>,
         render: impl Fn(&CodeBlock<'_>, &Theme) -> Option<AnyWidget> + 'static,
@@ -644,32 +654,21 @@ impl<H: Host> Setup<'_, H> {
     }
 
     /// Runs `cleanup` when the plugin deactivates (the cleanup TS `setup` returns).
-    pub fn on_dispose(&mut self, cleanup: impl FnOnce() + 'static) {
+    pub(crate) fn on_dispose(&mut self, cleanup: impl FnOnce() + 'static) {
         self.registration.cleanups.push(Box::new(cleanup));
     }
 }
 
-struct Registration<H: Host> {
-    claims: Vec<(Placement, SlotRender<H>)>,
-    routes: Vec<(String, RouteRender<H>)>,
+#[derive(Default)]
+struct Registration {
+    claims: Vec<(Placement, ClaimRender)>,
+    routes: Vec<(String, RouteRender)>,
     code_blocks: Vec<(String, CodeBlockRender)>,
     disposers: Vec<Disposer>,
     cleanups: Vec<Box<dyn FnOnce()>>,
 }
 
-impl<H: Host> Default for Registration<H> {
-    fn default() -> Self {
-        Self {
-            claims: Vec::new(),
-            routes: Vec::new(),
-            code_blocks: Vec::new(),
-            disposers: Vec::new(),
-            cleanups: Vec::new(),
-        }
-    }
-}
-
-impl<H: Host> Registration<H> {
+impl Registration {
     fn dispose(self) {
         self.disposers.into_iter().rev().for_each(Disposer::dispose);
         self.cleanups.into_iter().rev().for_each(|cleanup| cleanup());
@@ -714,28 +713,28 @@ pub struct Entry {
 /// Why a configured TypeScript TUI plugin is listed but not loaded (deviation of F16 until P.4).
 pub const SKIPPED: &str = "TypeScript TUI plugins do not run in opencode-rs yet";
 
-struct Plugin<H: Host> {
-    definition: Definition<H>,
+struct Plugin {
+    definition: Definition,
     source: Source,
     enabled: bool,
     /// The activation order and registrations while active.
-    active: Option<(u64, Registration<H>)>,
+    active: Option<(u64, Registration)>,
     /// The built-in an external plugin of its ID replaced in place (TS `desired.set(id, ...)`), and whether it was
     /// enabled; it comes back when the external plugin is unloaded.
-    shadowed: Option<(Definition<H>, bool)>,
+    shadowed: Option<(Definition, bool)>,
     /// The activation order a replacement of a built-in keeps, so its claims take the built-in's place.
     place: Option<u64>,
 }
 
-impl<H: Host> Plugin<H> {
-    fn new(definition: Definition<H>, source: Source, enabled: bool) -> Self {
+impl Plugin {
+    fn new(definition: Definition, source: Source, enabled: bool) -> Self {
         Self { definition, source, enabled, active: None, shadowed: None, place: None }
     }
 }
 
 /// The host's plugins in enable order, and the configured entries it did not load.
-pub struct Registry<H: Host> {
-    plugins: RefCell<Vec<Plugin<H>>>,
+pub struct Registry {
+    plugins: RefCell<Vec<Plugin>>,
     /// Targets that are not loaded, with their status ([`Status::Skipped`] or [`Status::Failed`]).
     unloaded: RefCell<Vec<(String, Status)>>,
     /// The `plugins` targets, in order, which also enable and disable external plugins as they load.
@@ -745,11 +744,16 @@ pub struct Registry<H: Host> {
     live: Rc<slot::Live>,
 }
 
-impl<H: Host> Registry<H> {
+impl Registry {
     /// The built-ins, enabled unless a `cli.json` `plugins` entry disables them (`plugin/context.tsx:313-330`).
     /// Every entry that names no built-in is a TypeScript plugin; it is listed as skipped.
-    pub fn new<'a>(builtins: Vec<Definition<H>>, targets: impl IntoIterator<Item = &'a str>) -> Self {
-        let mut plugins: Vec<Plugin<H>> =
+    pub fn new<'a>(builtins: Vec<Builtin>, targets: impl IntoIterator<Item = &'a str>) -> Self {
+        Self::define(builtins.into_iter().map(Definition::from).collect(), targets)
+    }
+
+    /// [`Registry::new`] with built-ins as the registry runs them.
+    pub(crate) fn define<'a>(builtins: Vec<Definition>, targets: impl IntoIterator<Item = &'a str>) -> Self {
+        let mut plugins: Vec<Plugin> =
             builtins.into_iter().map(|definition| Plugin::new(definition, Source::Builtin, true)).collect();
         let mut skipped = Vec::new();
         let directives: Vec<String> = targets.into_iter().map(str::to_owned).collect();
@@ -781,7 +785,8 @@ impl<H: Host> Registry<H> {
     }
 
     /// Adds an enabled plugin after the others; [`Registry::activate`] starts it.
-    pub fn add(&self, definition: Definition<H>) {
+    pub fn add(&self, definition: impl Into<Definition>) {
+        let definition = definition.into();
         self.plugins.borrow_mut().push(Plugin::new(definition, Source::Added, true));
     }
 
@@ -813,7 +818,7 @@ impl<H: Host> Registry<H> {
     /// unless a `plugins` entry or the plugin manager disabled it. A replacement keeps its place, so slot
     /// order holds across a reload. A replacement of an active plugin starts before the active one stops: when its
     /// setup fails, it is disposed, the active one keeps running, and the error is returned (TS `context.tsx`).
-    pub fn load(&self, host: &Rc<H>, definition: Definition<H>) -> Option<String> {
+    pub fn load(&self, host: &Rc<dyn Host>, definition: Definition) -> Option<String> {
         let target = definition.target()?.to_owned();
         self.set_unloaded(&target, None);
         // A `plugins` entry that names the plugin enables it; it is not a plugin of its own.
@@ -899,7 +904,7 @@ impl<H: Host> Registry<H> {
 
     /// Deactivates and removes the external plugin loaded from `target`; the built-in it replaced comes back in its
     /// place.
-    pub fn unload(&self, host: &Rc<H>, target: &str) {
+    pub fn unload(&self, host: &Rc<dyn Host>, target: &str) {
         let (removed, restored) = {
             let mut plugins = self.plugins.borrow_mut();
             let Some(index) = plugins.iter().position(|plugin| plugin.definition.target() == Some(target)) else {
@@ -923,7 +928,7 @@ impl<H: Host> Registry<H> {
     }
 
     /// Activates every enabled plugin that is not active, in enable order.
-    pub fn activate(&self, host: &Rc<H>) {
+    pub fn activate(&self, host: &Rc<dyn Host>) {
         let ids: Vec<String> = self
             .plugins
             .borrow()
@@ -937,7 +942,7 @@ impl<H: Host> Registry<H> {
     }
 
     /// Activates or deactivates plugin `id` (the plugin manager's toggle); returns whether it exists.
-    pub fn set_active(&self, host: &Rc<H>, id: &str, active: bool) -> bool {
+    pub fn set_active(&self, host: &Rc<dyn Host>, id: &str, active: bool) -> bool {
         if self.with_plugin(id, |_| ()).is_none() {
             return false;
         }
@@ -996,12 +1001,12 @@ impl<H: Host> Registry<H> {
     /// this one that is not mounted is appended here until that slot mounts, and moves as soon as it does.
     pub fn mount(
         &self,
-        host: &H,
+        host: &dyn Host,
         parent: &View,
         path: &str,
         input: &SlotInput,
         content: impl FnOnce(&View),
-    ) -> SlotMount<H> {
+    ) -> SlotMount {
         let mounted = self.live.mount(path);
         // The claims that degraded onto an ancestor while this slot was missing leave it before they show here.
         settle(host, &self.live);
@@ -1052,12 +1057,12 @@ impl<H: Host> Registry<H> {
     }
 
     /// The route plugin `id` registers as `name`, rendered.
-    pub fn route(&self, host: &H, id: &str, name: &str) -> Option<Box<dyn Slotted<H>>> {
+    pub fn route(&self, host: &dyn Host, id: &str, name: &str) -> Option<RouteMount> {
         let render = self.with_plugin(id, |plugin| {
             let (_, registration) = plugin.active.as_ref()?;
             registration.routes.iter().find(|(route, _)| route == name).map(|(_, render)| render.clone())
         })??;
-        Some(render(host))
+        Some(RouteMount(render(host)))
     }
 
     /// The code-block renderers of the active plugins, drawing in `theme`. At one language the last-enabled
@@ -1075,7 +1080,7 @@ impl<H: Host> Registry<H> {
     }
 
     /// Runs `setup` for plugin `id` unless it is active.
-    fn start(&self, host: &Rc<H>, id: &str) {
+    fn start(&self, host: &Rc<dyn Host>, id: &str) {
         let Some(Some(definition)) =
             self.with_plugin(id, |plugin| plugin.active.is_none().then(|| plugin.definition.clone()))
         else {
@@ -1088,7 +1093,7 @@ impl<H: Host> Registry<H> {
 
     /// Runs the setup of `definition` and numbers the activation, unless it keeps the order `place`. Setup runs without
     /// the registry borrowed, so it may read the registry through the host.
-    fn setup(&self, host: &Rc<H>, definition: &Definition<H>, place: Option<u64>) -> (u64, Registration<H>) {
+    fn setup(&self, host: &Rc<dyn Host>, definition: &Definition, place: Option<u64>) -> (u64, Registration) {
         let mut setup = Setup { host, id: &definition.id, registration: Registration::default() };
         (definition.setup)(&mut setup);
         let order = place.unwrap_or_else(|| {
@@ -1099,22 +1104,22 @@ impl<H: Host> Registry<H> {
         (order, setup.registration)
     }
 
-    fn with_target<T>(&self, target: &str, f: impl FnOnce(&mut Plugin<H>) -> T) -> Option<T> {
+    fn with_target<T>(&self, target: &str, f: impl FnOnce(&mut Plugin) -> T) -> Option<T> {
         let mut plugins = self.plugins.borrow_mut();
         plugins.iter_mut().find(|plugin| plugin.definition.target() == Some(target)).map(f)
     }
 
-    fn with_plugin<T>(&self, id: &str, f: impl FnOnce(&mut Plugin<H>) -> T) -> Option<T> {
+    fn with_plugin<T>(&self, id: &str, f: impl FnOnce(&mut Plugin) -> T) -> Option<T> {
         let mut plugins = self.plugins.borrow_mut();
         plugins.iter_mut().find(|plugin| plugin.definition.id == id).map(f)
     }
 
     /// Every active claim in activation order, and its renders.
-    fn claims(&self) -> (Vec<Placement>, Vec<SlotRender<H>>) {
+    fn claims(&self) -> (Vec<Placement>, Vec<ClaimRender>) {
         self.by_activation().into_iter().flat_map(|(_, registration)| registration.claims.clone()).unzip()
     }
 
-    fn by_activation(&self) -> Vec<(u64, RegistrationView<H>)> {
+    fn by_activation(&self) -> Vec<(u64, RegistrationView)> {
         let plugins = self.plugins.borrow();
         let mut active: Vec<_> = plugins
             .iter()
@@ -1135,32 +1140,46 @@ impl<H: Host> Registry<H> {
 }
 
 /// The parts of a registration the registry hands out, cloned so no borrow outlives the call.
-struct RegistrationView<H: Host> {
-    claims: Vec<(Placement, SlotRender<H>)>,
+struct RegistrationView {
+    claims: Vec<(Placement, ClaimRender)>,
     code_blocks: Vec<(String, CodeBlockRender)>,
 }
 
-/// A mounted slot's claims. The owner of the slot syncs it with each change batch.
-pub struct SlotMount<H: Host> {
-    claims: Vec<Box<dyn Slotted<H>>>,
-    mounted: Option<slot::Mounted>,
-    /// The claims appended to a slot that others may degrade onto, kept in step with the mounted slots.
-    nested: Option<Rc<Nested<H>>>,
-}
+/// A mounted plugin route. The route that shows it syncs it with each change batch.
+pub struct RouteMount(Box<dyn Claimed>);
 
-impl<H: Host> Default for SlotMount<H> {
-    fn default() -> Self {
-        Self { claims: Vec::new(), mounted: None, nested: None }
+impl RouteMount {
+    pub fn root(&self) -> View {
+        self.0.root()
+    }
+
+    /// Draws what `changed` changed; `None` when a change batch changed nothing.
+    pub fn sync(&self, host: &dyn Host, changed: Option<&abi::Changed>) {
+        if let Some(changed) = changed {
+            self.0.sync(host, changed);
+        }
     }
 }
 
-impl<H: Host> SlotMount<H> {
-    pub fn sync(&self, host: &H, changes: &H::Changes) {
-        self.claims.iter().for_each(|claim| claim.sync(host, changes));
-        if let Some(nested) = &self.nested {
-            let busy = nested.busy.replace(true);
-            nested.appended.borrow().iter().for_each(|(_, claim)| claim.sync(host, changes));
-            nested.busy.set(busy);
+/// A mounted slot's claims. The owner of the slot syncs it with each change batch.
+#[derive(Default)]
+pub struct SlotMount {
+    claims: Vec<Box<dyn Claimed>>,
+    mounted: Option<slot::Mounted>,
+    /// The claims appended to a slot that others may degrade onto, kept in step with the mounted slots.
+    nested: Option<Rc<Nested>>,
+}
+
+impl SlotMount {
+    /// Draws what `changed` changed, `None` when a change batch changed nothing, and settles the claims that moved.
+    pub fn sync(&self, host: &dyn Host, changed: Option<&abi::Changed>) {
+        if let Some(changed) = changed {
+            self.claims.iter().for_each(|claim| claim.sync(host, changed));
+            if let Some(nested) = &self.nested {
+                let busy = nested.busy.replace(true);
+                nested.appended.borrow().iter().for_each(|(_, claim)| claim.sync(host, changed));
+                nested.busy.set(busy);
+            }
         }
         if let Some(live) = self.live() {
             settle(host, live);
@@ -1179,26 +1198,26 @@ impl<H: Host> SlotMount<H> {
 
 /// The claims appended to a mounted slot, in claim order after a hidden marker that follows its content. A claim on a
 /// slot inside it shows here while that slot is not mounted (TS `survivingAncestor`).
-struct Nested<H: Host> {
+struct Nested {
     parent: View,
     marker: View,
     path: String,
     live: Rc<slot::Live>,
     input: SlotInput,
     /// The claims and their renders as of the mount, which a change of plugins mounts again.
-    claims: Rc<(Vec<Placement>, Vec<SlotRender<H>>)>,
+    claims: Rc<(Vec<Placement>, Vec<ClaimRender>)>,
     /// The mounted ones, by claim index.
-    appended: RefCell<Vec<(usize, Claim<H>)>>,
+    appended: RefCell<Vec<(usize, Claim)>>,
     /// The [`slot::Live::version`] the appended claims follow.
     seen: Cell<u64>,
     /// A refresh or a sync of the appended claims runs; it settles them once it is done.
     busy: Cell<bool>,
 }
 
-impl<H: Host> Nested<H> {
+impl Nested {
     /// Mounts the claims appended here that are not, and drops the ones that are no longer, one at a time in claim
     /// order: a claim that mounts a slot inside this one takes the claims on that slot along before they show here.
-    fn refresh(&self, host: &H) {
+    fn refresh(&self, host: &dyn Host) {
         if self.busy.get() || self.seen.get() == self.live.version() {
             return;
         }
@@ -1234,11 +1253,11 @@ impl<H: Host> Nested<H> {
 
 /// Moves the claims that degrade onto a mounted slot as the slots mounted now say, until they agree. A slot that
 /// mounts or goes calls it, as does a claim that drew again and so may have mounted or dropped the slots it nests.
-pub(crate) fn settle<H: Host>(host: &H, live: &slot::Live) {
+pub(crate) fn settle(host: &dyn Host, live: &slot::Live) {
     for _ in 0..=slot::PATHS.len() {
         let version = live.version();
         for follower in live.followers() {
-            if let Ok(nested) = follower.downcast::<Nested<H>>() {
+            if let Ok(nested) = follower.downcast::<Nested>() {
                 nested.refresh(host);
             }
         }

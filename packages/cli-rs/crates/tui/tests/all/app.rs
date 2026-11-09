@@ -17,8 +17,9 @@ use opencode_api::pty;
 use opencode_local::cli_config;
 use opencode_parity::Fixture;
 use opencode_parity::app::{self, Recording, Sent, Step};
-use opencode_plugin::{Definition, Placement, Setup, slot};
-use opencode_tui::{Args, Deps, Route, Tui};
+use opencode_plugin::abi::{self, Node, Placement, Render, Span};
+use opencode_plugin::slot;
+use opencode_tui::{Args, Deps, Route};
 use opentui::prelude::*;
 use opentui::testing::TestApp;
 
@@ -84,7 +85,7 @@ fn run(recording: &Recording) -> (bool, String) {
     );
     // The Rust twins of the TS test plugins under parity/plugins, which the Rust TUI lists as skipped (P.1).
     if recording.env.get("OPENCODE_PARITY_PLUGIN").is_some_and(|plugin| plugin == "slot") {
-        opencode_tui::plugins::host::add(&tui, slot_plugin());
+        opencode_tui::plugins::host::add(&tui, slot_plugin().into());
     }
     // The editor context's sources (E.5): the fake IDE server and the Zed database the TS side had.
     let ide = recording.ide.as_ref().map(|_| ide::Ide::start());
@@ -300,19 +301,16 @@ impl pty::Connector for Sockets {
 }
 
 /// `parity/plugins/slot/tui.tsx`: one line appended to `home.footer`, and one to `session.composer.top`.
-fn slot_plugin() -> Definition<Tui> {
-    Definition::new("parity.slot", |cx: &mut Setup<'_, Tui>| {
+fn slot_plugin() -> abi::Plugin {
+    fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         for path in [slot::HOME_FOOTER, slot::SESSION_COMPOSER_TOP] {
-            cx.slot(Placement::append(path), move |tui, _| {
-                let app = &tui.app;
-                Box::new(
-                    View::new(app)
-                        .padding_edge(Edge::Left, 2)
-                        .child(&Text::new(app, format!("slot plugin: {path}")).fg(tui.page().text.muted)),
-                )
-            });
+            // TS pads the left edge only; the line is short, so the right edge's padding shows nothing.
+            let node = Node::column(vec![Node::text([Span::new(format!("slot plugin: {path}"))]).fg("text.muted")]);
+            setup.slot(Placement::append(path), move |_, _, _| Render::Show(node.clone().padding(2, 0)));
         }
-    })
+        Ok(())
+    }
+    abi::Plugin { id: "parity.slot", setup }
 }
 
 /// The scenario routes first, then each recorded read by its exact query, then by path alone.
