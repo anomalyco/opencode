@@ -3,9 +3,22 @@ import { useNewSessionLocationDialog } from "@/new-session/location/dialog"
 import { useTabs, type DraftTab } from "@/shell/tabs/tabs"
 import { useLayout } from "@/shell/state/layout"
 import { useSearchParams } from "@solidjs/router"
-import { createEffect, createMemo, createResource, on, untrack } from "solid-js"
+import { batch, createEffect, createMemo, createResource, on, onCleanup, Show, untrack } from "solid-js"
+import { createMediaQuery } from "@solid-primitives/media"
+import { ResizeHandle } from "@opencode/ui/resize-handle"
 import { createComposerModel } from "@/composer/model"
 import { useComposerCommands } from "@/composer/commands"
+import { createMountedSession } from "@/runtime/plugin/mounted-session"
+import { createPanelSidebar, createRegion } from "@/runtime/plugin/panels"
+import { createPaneDrag } from "@/runtime/plugin/pane-drag"
+import { PluginLinks } from "@/runtime/plugin/render"
+import { SideRegion } from "@/runtime/plugin/side-region"
+import { usePluginAttachment } from "@/runtime/plugin/host-apis"
+import { createSessionScreenLayout } from "@/session/screen-layout"
+import { useSessionLayout } from "@/session/session-layout"
+import { SESSION_PANEL_WIDTH_MIN } from "@/session/session-panel-width"
+import { SessionReviewToggle } from "@/session/header/session-header-actions"
+import { useWorkspaceLocation } from "@/workspaces/location"
 import { createNewSessionComposerAdapter, createNewSessionStartStore } from "./composer-adapter"
 import { NewSessionView } from "./view"
 import { createNewSessionWorkspaceController } from "./workspace/controller"
@@ -17,6 +30,58 @@ export default function NewSessionPage(props: { draftId: string }) {
   const [search, setSearch] = useSearchParams<{ draftId?: string; prompt?: string }>()
   const tabs = useTabs()
   const layout = useLayout()
+  // The reserved id gives the draft a stable session key, so its side region and panels survive promotion.
+  tabs.reserveDraft(props.draftId)
+
+  const sessionLayout = useSessionLayout()
+  const workspaceLocation = useWorkspaceLocation()
+  const attachment = usePluginAttachment()
+  const isDesktop = createMediaQuery("(min-width: 768px)")
+
+  const mounted = createMountedSession({
+    identity: { sessionID: sessionLayout.sessionID },
+    workspace: { directory: () => workspaceLocation().directory },
+    layout: { tabKey: sessionLayout.tabKey },
+    data: { isChild: () => false },
+    draft: true,
+  })
+
+  const sidebar = createPanelSidebar()
+
+  const region = createRegion({
+    region: "side",
+    view: mounted.view,
+    screen: mounted.screen,
+    tabs: sessionLayout.tabs,
+    closed: attachment.closed,
+    open: (key) => attachment.openTab(key, mounted.view()),
+    side: () => sessionLayout.view().side,
+    // Closing the last tab closes the side region, which opens with a new tab next time.
+    onEmptied: () => {
+      if (!sessionLayout.view().side.opened()) return
+      sessionLayout.view().side.toggle()
+    },
+  })
+
+  onCleanup(attachment.region(region))
+
+  const bottomOpen = createMemo(() => region.pane("bottom").keys().length > 0 && sessionLayout.view().bottom.opened())
+
+  const drag = createPaneDrag({
+    identity: sessionLayout.tabKey,
+    shown: (pane) => (pane === "bottom" ? bottomOpen() : region.pane(pane).keys().length > 0),
+    drop: (key, target) =>
+      batch(() => {
+        sessionLayout.tabs().move(key, target.pane, target.before)
+
+        if (target.pane === "bottom") sessionLayout.view().bottom.setOpened(true)
+      }),
+  })
+
+  const screen = createSessionScreenLayout(
+    { layout: { view: sessionLayout.view }, isDesktop },
+    { wide: region.wide, panel: region.pane("side").selected, widths: layout.panelWidth },
+  )
 
   const draftTab = createMemo(() =>
     tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId),
@@ -67,6 +132,7 @@ export default function NewSessionPage(props: { draftId: string }) {
       enabled: workspace.bar.visible,
       cycle: workspace.selection.cycle,
     },
+    toggleReview: region.toggle,
   })
   // Focus once the draft loads. restoreFocus reads the stored cursor, so tracking it here would reapply
   // a stale cursor a frame after every key-up and yank the caret from a key pressed in that frame.
@@ -97,11 +163,44 @@ export default function NewSessionPage(props: { draftId: string }) {
   )
 
   return (
-    <div class="relative size-full overflow-hidden flex flex-col">
-      {suspendUntilPromptReady()}
-      <div class="flex-1 min-h-0 flex flex-col gap-2 px-[var(--shell-inline-inset,8px)] pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
-        <NewSessionView composer={model} project={project} workspace={workspace} location={location} />
+    <PluginLinks session={mounted.view()}>
+      <div class="relative size-full overflow-hidden flex flex-col">
+        {suspendUntilPromptReady()}
+        <div class="flex-1 min-h-0 flex gap-2 px-[var(--shell-inline-inset,8px)] pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
+          <div ref={screen.panel.ref} class="relative flex-1 min-h-0 min-w-0 flex gap-2">
+            <div class="relative min-w-0 shrink-0 h-full" style={{ width: screen.panel.width() }}>
+              <NewSessionView composer={model} project={project} workspace={workspace} location={location} />
+              <Show when={isDesktop()}>
+                <div class="absolute end-3 top-0 z-30 h-12 flex items-center" data-slot="session-review-toggle">
+                  <SessionReviewToggle onToggle={region.toggle} />
+                </div>
+              </Show>
+              <Show when={screen.panel.resizable()}>
+                <ResizeHandle
+                  class="-end-1"
+                  direction="horizontal"
+                  size={screen.panel.resizedWidth()}
+                  min={SESSION_PANEL_WIDTH_MIN}
+                  max={screen.panel.max()}
+                  onResize={(width) => screen.panel.resize(width)}
+                />
+              </Show>
+            </div>
+            <Show when={screen.side.open()}>
+              <SideRegion
+                view={mounted.view()}
+                screen={mounted.screen}
+                region={region}
+                sidebar={sidebar}
+                show
+                size={screen.size}
+                contentWidth={screen.side.contentWidth}
+                drag={drag}
+              />
+            </Show>
+          </div>
+        </div>
       </div>
-    </div>
+    </PluginLinks>
   )
 }

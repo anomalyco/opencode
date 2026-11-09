@@ -106,7 +106,7 @@ export function createNewSessionComposerAdapter(props: {
       const projectDirectory = props.root()
       const worktree = props.worktree()
       const directory = worktree === "main" ? projectDirectory : worktree
-      const sessionID = Session.ID.create()
+      const sessionID = tabs.reserveDraft(props.draftID)
       const settled = Promise.withResolvers<Started>()
 
       const accepted = props.start.start(

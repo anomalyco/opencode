@@ -10,6 +10,7 @@ import type { NewSessionStartView } from "@/new-session/machine"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { usePlatform } from "@/runtime/platform/platform"
 import { uuid } from "@opencode/util/uuid"
+import { Session } from "@opencode/schema/session"
 import { SessionTabsRemovedDetail } from "@/shell/titlebar/session-events"
 import { sessionHref } from "@/shell/routes/session"
 import { createTabMemory } from "./memory"
@@ -202,6 +203,16 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       )
     }
 
+    // A draft keeps its side region while it is promoted to, or rolled back from, a session.
+    const moveRegions = (from: string, to: string) => {
+      if (from === to) return
+      const current = regions[from]
+
+      if (!current) return
+      setRegions(to, { ...current })
+      removeRegions(from)
+    }
+
     const dispatchPromotion = (event: Exclude<TabPromotionEvent, TabPromotionCommit>) => {
       const previous = untrack(promotion)
       const result = transitionTabPromotion(previous, event)
@@ -262,6 +273,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         if (index === -1) return
         const route = currentRoute()
+        moveRegions(effect.key, tabKey(effect.draft))
         setStore(
           produce((tabs) => {
             tabs[index] = effect.draft
@@ -499,6 +511,17 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         return tab
       },
+      /** The session id reserved for a draft's first message, created on first use. */
+      reserveDraft(draftID: string) {
+        const draft = actions.draft(draftID)
+
+        if (draft.sessionId) return Session.ID.make(draft.sessionId)
+        const id = Session.ID.create()
+
+        setStore((tab) => tab.type === "draft" && tab.draftID === draftID, "sessionId", id)
+
+        return id
+      },
       /** Opens a draft tab; pass `draftID` to know it before the draft opens. */
       async newDraft(
         draft: Omit<DraftTab, "type" | "draftID"> & { draftID?: string },
@@ -506,7 +529,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         model?: PromptModel,
       ) {
         const draftID = draft.draftID ?? uuid()
-        const tab = { ...draft, type: "draft" as const, draftID }
+        const tab = { ...draft, type: "draft" as const, draftID, sessionId: Session.ID.create() }
         memory.ensure(tabKey(tab), "prompt", () => createDraftComposerState(draftID, { prompt, model }))
         await startTransition(() => {
           preview.clear()
@@ -564,6 +587,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
           }
 
           const active = location.pathname === "/new-session" && location.query.draftId === draftID
+          moveRegions(tabKey(draft), key)
           setStore(
             produce((tabs) => {
               tabs[index] = next

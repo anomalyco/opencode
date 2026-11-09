@@ -196,7 +196,7 @@ export function createReviewModel(input: {
     }
 
     // Turn snapshots are captured only for Git sessions.
-    if (project?.vcs === "git" && view().id) list.push("turn")
+    if (project?.vcs === "git" && !view().draft && view().id) list.push("turn")
 
     return list
   })
@@ -674,13 +674,16 @@ export function createReviewModel(input: {
       const data = session.server.data
 
       data.project.invalidate()
-      data.session.invalidate(session.id)
+
+      if (!session.draft) data.session.invalidate(session.id)
+
       data.location.invalidate(location)
       data.location.vcs.invalidate(location)
       await data.project.sync().catch(() => undefined)
 
       if (signal.aborted) return
-      await data.session.sync(session.id).catch(() => undefined)
+
+      if (!session.draft) await data.session.sync(session.id).catch(() => undefined)
 
       if (signal.aborted) return
       await Promise.allSettled([data.location.syncInfo(location), data.location.vcs.sync(location)])

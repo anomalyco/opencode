@@ -95,7 +95,9 @@ const setup: Plugin.Setup<typeof Review> = (ctx) => {
           createRoot((dispose) => {
             // The routed session of this screen; the last one stays while it routes none.
             const view = createMemo<MountedSession>(
-              (last) => (ctx.screen.current() === screen ? sessions.current() : undefined) ?? last,
+              (last) =>
+                (ctx.screen.current({ drafts: true }) === screen ? sessions.current({ drafts: true }) : undefined) ??
+                last,
               origin.session,
             )
 
@@ -141,8 +143,8 @@ const setup: Plugin.Setup<typeof Review> = (ctx) => {
 
   createKeyed(
     () => {
-      const screen = ctx.screen.current()
-      const session = sessions.current()
+      const screen = ctx.screen.current({ drafts: true })
+      const session = sessions.current({ drafts: true })
 
       return screen && session ? { screen, session } : undefined
     },
@@ -171,7 +173,7 @@ const setup: Plugin.Setup<typeof Review> = (ctx) => {
   }
 
   const count = () => {
-    const session = sessions.current()
+    const session = sessions.current({ drafts: true })
 
     return session ? (modelFor(session)?.count() ?? 0) : 0
   }
@@ -204,6 +206,8 @@ const setup: Plugin.Setup<typeof Review> = (ctx) => {
   ctx.add(BuiltinPanel, {
     id: "main",
     region: "side",
+    // Review reads the draft workspace's changes, so it is available before the first message.
+    drafts: true,
     // The split diff needs the wider session minimum while the side region is open.
     get wide() {
       return diff.value.diffStyle === "split"
@@ -280,7 +284,7 @@ const setup: Plugin.Setup<typeof Review> = (ctx) => {
 
   // Opens the review tab, the side region with it, unless the session has no changes to review.
   const show = () => {
-    const session = sessions.current()
+    const session = sessions.current({ drafts: true })
 
     if (session?.project && !layout.narrow()) layout.open(KEY, session, { tab: "select" })
   }
@@ -295,13 +299,13 @@ const setup: Plugin.Setup<typeof Review> = (ctx) => {
       group: ctx.t("command.category.view"),
       bind: mac ? "ctrl+meta+r" : "ctrl+alt+r",
       editable: true,
-      enabled: !!sessions.current()?.project && !layout.narrow(),
+      enabled: !!sessions.current({ drafts: true })?.project && !layout.narrow(),
       run: show,
     }),
   )
 
   ctx.add(MenuItem, (): MenuItem | undefined => {
-    const session = sessions.current()
+    const session = sessions.current({ drafts: true })
 
     if (!session?.project || layout.narrow()) return undefined
 
@@ -323,7 +327,7 @@ const setup: Plugin.Setup<typeof Review> = (ctx) => {
     priority: 1,
     match: (link) => link.origin === "review",
     open(link) {
-      const session = sessions.current()
+      const session = sessions.current({ drafts: true })
 
       if (!session || (link.session && link.session.key !== session.key)) return
 

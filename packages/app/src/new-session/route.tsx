@@ -61,6 +61,12 @@ function ResolvedDraftContent(props: { draft: DraftTab }) {
   const server = useServer()
   const tabs = useTabs()
 
+  // A selected worktree is the draft's workspace; "main" and "create" start from the project directory.
+  const directory = () =>
+    props.draft.worktree && props.draft.worktree !== "main" && props.draft.worktree !== "create"
+      ? props.draft.worktree
+      : props.draft.directory
+
   return (
     <Show
       when={!isServerIncompatible(server.health)}
@@ -88,9 +94,9 @@ function ResolvedDraftContent(props: { draft: DraftTab }) {
           </SessionRouteFrame>
         )}
       >
-        <ModelsProvider directory={props.draft.directory}>
-          <LocationProvider directory={props.draft.directory}>
-            <SessionUIProvider directory={props.draft.directory} server={props.draft.server}>
+        <ModelsProvider directory={directory()}>
+          <LocationProvider directory={directory()}>
+            <SessionUIProvider directory={directory()} server={props.draft.server}>
               <DraftProviders>
                 <NewSession draftId={props.draft.draftID} />
               </DraftProviders>

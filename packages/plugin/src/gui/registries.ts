@@ -264,6 +264,11 @@ export interface Panel {
    * - `side`: tabs in the side region's strip.
    */
   readonly region: "side"
+  /**
+   * Also lists on an unsent draft. Its `session.draft` is true and no server Session exists yet. Defaults to false,
+   * so a session-only panel keeps its current behavior.
+   */
+  readonly drafts?: boolean
   /** Asks for the wider session minimum while the side region is open. Reactive. */
   readonly wide?: boolean
   /**

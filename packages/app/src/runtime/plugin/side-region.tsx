@@ -43,6 +43,8 @@ export function SideRegion(props: {
   region: Region
   sidebar: PanelSidebar
   present?: boolean
+  /** Shows the region on a screen without a session id, such as an unsent draft. */
+  show?: boolean
   size: Sizing
   /**
    * The width the contents keep, the side region's open width, which a close keeps as the far end of its travel. Set
@@ -98,7 +100,7 @@ export function SideRegion(props: {
   })
 
   return (
-    <Show when={isDesktop() && !!params.id}>
+    <Show when={isDesktop() && (props.show || !!params.id)}>
       <aside
         ref={setRoot}
         id="review-panel"
@@ -499,7 +501,8 @@ function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: (ke
   const menu = createDeferredMenu<SessionPanelMenuEntry>({
     onChoose: (entry) => {
       props.onChoose(entry.key)
-      entry.item.run()    },
+      entry.item.run()
+    },
   })
 
   return (

@@ -17,6 +17,8 @@ export const Session = Persistence.struct({
 export const Draft = Persistence.struct({
   type: Schema.Literal("draft"),
   draftID: Schema.String,
+  /** The session id reserved for the first message; no server Session exists until then. */
+  sessionId: Persistence.optional(Schema.String),
   server: ServerKey,
   directory: Schema.String,
   worktree: Persistence.optional(Schema.String),
