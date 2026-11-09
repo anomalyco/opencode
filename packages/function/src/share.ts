@@ -150,7 +150,7 @@ const page = `<!doctype html>
       </header>
       <nav>
         <a href="https://opencode.ai">Home</a>
-        <a href="https://opencode.ai/docs">Docs</a>
+        <a href="https://opencode.ai/v2/docs">Docs</a>
         <a href="https://github.com/anomalyco/opencode">GitHub</a>
         <a href="https://opencode.ai/discord">Discord</a>
       </nav>

@@ -1,4 +1,5 @@
 export { Agent } from "./agent.js"
+export { Artifact } from "./artifact.js"
 export { Command } from "./command.js"
 export { Config } from "./config.js"
 export { Connection } from "./connection.js"
@@ -36,6 +37,15 @@ export { PersistentPty } from "./persistent-pty.js"
 export { PtyTicket } from "./pty-ticket.js"
 export { Question } from "./question.js"
 export { Workspace } from "./workspace.js"
-export { Prompt, PromptMention, FileSource, FileAttachment, AgentAttachment } from "./prompt.js"
+export {
+  Prompt,
+  PromptMention,
+  FileSource,
+  FileAttachment,
+  MediaRef,
+  MediaFileAttachment,
+  Attachment,
+  AgentAttachment,
+} from "./prompt.js"
 export { PromptInput } from "./prompt-input.js"
 export * from "./schema.js"

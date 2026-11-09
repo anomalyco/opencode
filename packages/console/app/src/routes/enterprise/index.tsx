@@ -1,16 +1,52 @@
 import "./index.css"
 import { Title, Meta } from "@solidjs/meta"
-import { createSignal, For, Show } from "solid-js"
+import { createSignal, For, onMount, Show } from "solid-js"
 import { Header } from "~/component/header"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
 import { Faq } from "~/component/faq"
 import { useI18n } from "~/context/i18n"
 import { LocaleLinks } from "~/component/locale-links"
+import { SocialMeta } from "~/component/social-meta"
 import { inferenceSpendOptions } from "~/lib/inference-spend"
+
+type HCaptcha = {
+  render(container: HTMLElement, params: { sitekey: string; size: "invisible" }): string
+  execute(widget: string, options: { async: true }): Promise<{ response: string }>
+  reset(widget: string): void
+}
+
+declare global {
+  interface Window {
+    hcaptcha?: HCaptcha
+    onEnterpriseHcaptchaLoad?: () => void
+  }
+}
+
+function loadHcaptcha(container: HTMLElement) {
+  const sitekey = import.meta.env.VITE_HCAPTCHA_SITE_KEY
+  if (!sitekey) return Promise.reject(new Error("VITE_HCAPTCHA_SITE_KEY is not set"))
+  return new Promise<{ api: HCaptcha; widget: string }>((resolve, reject) => {
+    window.onEnterpriseHcaptchaLoad = () => {
+      const api = window.hcaptcha!
+      resolve({ api, widget: api.render(container, { sitekey, size: "invisible" }) })
+    }
+    const script = document.createElement("script")
+    script.src = "https://js.hcaptcha.com/1/api.js?render=explicit&onload=onEnterpriseHcaptchaLoad"
+    script.async = true
+    script.onerror = () => reject(new Error("hCaptcha failed to load"))
+    document.head.appendChild(script)
+  })
+}
 
 export default function Enterprise() {
   const i18n = useI18n()
+  let captchaContainer!: HTMLDivElement
+  let captcha: ReturnType<typeof loadHcaptcha> | undefined
+  onMount(() => {
+    captcha = loadHcaptcha(captchaContainer)
+    captcha.catch((error) => console.error(error))
+  })
   const [formData, setFormData] = createSignal({
     name: "",
     role: "",
@@ -36,13 +72,28 @@ export default function Enterprise() {
     setShowSuccess(false)
     setIsSubmitting(true)
 
+    const token = await captcha
+      ?.then((hcaptcha) =>
+        hcaptcha.api.execute(hcaptcha.widget, { async: true }).finally(() => hcaptcha.api.reset(hcaptcha.widget)),
+      )
+      .then((result) => result.response)
+      .catch((error) => {
+        console.error("hCaptcha challenge failed:", error)
+        return undefined
+      })
+    if (!token) {
+      setError(i18n.t("enterprise.form.error.captcha"))
+      setIsSubmitting(false)
+      return
+    }
+
     try {
       const response = await fetch("/api/enterprise", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData()),
+        body: JSON.stringify({ ...formData(), captcha: token }),
       })
 
       if (response.ok) {
@@ -76,6 +127,11 @@ export default function Enterprise() {
       <Title>{i18n.t("enterprise.title")}</Title>
       <LocaleLinks path="/enterprise" />
       <Meta name="description" content={i18n.t("enterprise.meta.description")} />
+      <SocialMeta
+        title={i18n.t("enterprise.title")}
+        description={i18n.t("enterprise.meta.description")}
+        path="/enterprise"
+      />
       <div data-component="container">
         <Header />
 
@@ -262,6 +318,8 @@ export default function Enterprise() {
                         placeholder={i18n.t("enterprise.form.message.placeholder")}
                       />
                     </div>
+
+                    <div ref={captchaContainer} />
 
                     <button type="submit" disabled={isSubmitting()} data-component="submit-button">
                       {isSubmitting() ? i18n.t("enterprise.form.sending") : i18n.t("enterprise.form.send")}

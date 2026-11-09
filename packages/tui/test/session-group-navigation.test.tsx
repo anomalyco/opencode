@@ -18,7 +18,8 @@ test.each([
   "restores exact part/group anchors at width %s with %s trailing lines",
   async (width, lines) => {
     await using state = await tmpdir()
-    const setup = await createTestRenderer({ width, height: 30, useThread: false, kittyKeyboard: true })
+    const setup = await createTestRenderer({ width, height: 30, kittyKeyboard: true })
+    await setup.renderer.setupTerminal()
     setup.renderer.start()
     const session = {
       id: "ses_group_navigation",

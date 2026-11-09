@@ -9,7 +9,7 @@
 // The view itself is stateless except for derived memos.
 /** @jsxImportSource @opentui/solid */
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { TextBuffer, TextBufferView } from "@opentui/core"
+import { RGBA, TextBuffer, TextBufferView } from "@opentui/core"
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { OneCellSpinner } from "../component/one-cell-spinner"
 import { WORK_SPINNERS, SEED_LAUNCH, SEED_MONO } from "../ui/one-cell-motion"
@@ -28,7 +28,6 @@ import { FOOTER_MENU_ROWS, RunFooterMenu } from "./footer.menu"
 import { RunFooterSubagentBody } from "./footer.subagent"
 import { RunPromptBody, createPromptState } from "./footer.prompt"
 import { promptAppend } from "./prompt.shared"
-import { promptOffsetWidth } from "../prompt/display"
 import { RunPermissionBody } from "./footer.permission"
 import { RunFormBody } from "./footer.form"
 import { createFormBodyState, type FormBodyState } from "./form.shared"
@@ -229,10 +228,10 @@ export function RunFooterView(props: RunFooterViewProps) {
   const theme = createMemo(() => runTheme().footer)
   const agentColor = createMemo(() => {
     const colors = theme().categorical
-    const index = props
-      .agents()
-      .filter((agent) => !agent.hidden)
-      .findIndex((agent) => agent.id === props.currentAgentID())
+    const agents = props.agents().filter((agent) => !agent.hidden)
+    const index = agents.findIndex((agent) => agent.id === props.currentAgentID())
+    const color = agents[index]?.color
+    if (!props.mono && color) return RGBA.fromHex(color)
     return colors[Math.max(0, index) % colors.length]!
   })
   const block = createMemo(() => runTheme().block)
@@ -516,7 +515,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       .join(props.mono ? " - " : " \u00b7 ")
     if (stringWidth(text) <= statusWidth() && !text.includes("\n")) return 1
     // Measure outside the clipped footer so wrapped required controls can grow it.
-    const buffer = TextBuffer.create(renderer.widthMethod)
+    const buffer = TextBuffer.create(renderer.widthMethod, renderer.nativeScene)
     const view = TextBufferView.create(buffer)
     buffer.setText(text)
     view.setWrapMode("word")
@@ -807,8 +806,9 @@ export function RunFooterView(props: RunFooterViewProps) {
                               }
                               if (!(await queuedPromptAction("cancel", item.messageID, "undo"))) return
                               closePanel()
-                              const next = promptAppend(composer.current(), item.prompt)
-                              composer.replacePrompt(next, promptOffsetWidth(next.text))
+                              composer.replacePrompt(
+                                promptAppend(composer.current(), item.prompt, renderer.widthMethod),
+                              )
                             }}
                             onDelete={(item) => {
                               void queuedPromptAction("cancel", item.messageID)

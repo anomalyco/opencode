@@ -56,7 +56,7 @@ await opencode.worktree.remove({ projectID, directory: worktree.directory, force
 ```
 
 Refresh discovers worktrees across known checkout roots using all available strategies. Register a custom strategy
-through a [plugin's worktree transform](/build/plugins#worktrees).
+through a [plugin's worktree transform](/build/plugins/server#worktrees).
 
 ## Stream events
 
@@ -95,5 +95,5 @@ await using opencode = await OpenCode.create({ plugins: [plugin] })
 
 Call `await opencode.plugin(plugin)` to register another plugin after startup.
 
-See the [full plugins documentation](/build/plugins) for plugin hooks,
+See the [full plugins documentation](/build/plugins/server) for plugin hooks,
 transforms, tools, and the complete plugin context.

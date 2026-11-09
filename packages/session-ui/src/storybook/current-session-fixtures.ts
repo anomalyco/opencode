@@ -192,13 +192,13 @@ export const streamingDocument = document(
         {
           type: "reasoning",
           text: "## Checking the current contract\n\nThe assistant content is nested on each current Session message.",
-          state: { phase: "streaming" },
+          native: { phase: "streaming" },
           time: { created: STORY_TIME + 11_100 },
         },
         {
           type: "text",
           text: "I have the typed rows in place. Next I am checking the streaming presentation",
-          state: { phase: "streaming" },
+          native: { phase: "streaming" },
         },
       ],
     }),
@@ -544,9 +544,46 @@ export const executeCodeDocument = document([
         name: "execute",
         offset: 52_300,
         args: {
-          code: 'const greeting = "Code Mode execute completed"\nreturn { greeting, timestamp: new Date().toISOString() }',
+          code: 'const tab = await tools.browser.tabs.open({ url: "http://localhost:4399" })\nconst usage = await tools.opencode_console.get_usage({ range: "24h" })\nreturn { tab: tab.id, cost: usage.cost_usd }',
         },
-        output: '{\n  "greeting": "Code Mode execute completed",\n  "timestamp": "2026-08-17T09:01:43.590Z"\n}',
+        output: '{\n  "tab": "tab_4f1c",\n  "cost": 0.42\n}',
+        metadata: {
+          toolCalls: [
+            { tool: "browser.tabs.open", status: "completed", input: { url: "http://localhost:4399" } },
+            { tool: "opencode_console.get_usage", status: "completed", input: { range: "24h" } },
+          ],
+        },
+      }),
+      completedTool({
+        id: "tool_execute_followup",
+        name: "execute",
+        offset: 52_600,
+        args: { code: "return await tools.browser.tabs.list()" },
+        output: "[]",
+        metadata: { toolCalls: [{ tool: "browser.tabs.list", status: "completed" }] },
+      }),
+      completedTool({
+        id: "tool_execute_long_call",
+        name: "execute",
+        offset: 52_700,
+        args: {
+          code: 'return await tools.mesh.exec({ target: "blade", script: "foreach ($t in \'\\\\opencode-mesh\\\\sync\', \'\\\\opencode-mesh\\\\run\') { schtasks /delete /tn $t /f 2>&1 | Out-Null; \\"deleted $t\\" }" })',
+        },
+        output:
+          "deleted \\opencode-mesh\\sync\ndeleted \\opencode-mesh\\run\nCleanup finished on blade after removing both scheduled tasks and their trigger history.",
+        metadata: {
+          toolCalls: [
+            {
+              tool: "mesh.exec",
+              status: "completed",
+              input: {
+                target: "blade",
+                script:
+                  "foreach ($t in '\\opencode-mesh\\sync', '\\opencode-mesh\\run') { schtasks /delete /tn $t /f 2>&1 | Out-Null; \"deleted $t\" }",
+              },
+            },
+          ],
+        },
       }),
     ],
   }),
@@ -984,7 +1021,6 @@ export const compactionRunningDocument = document(
       status: "running",
       reason: "auto",
       summary: "## Goal\n\nRestore compaction output while preserving timeline notices.",
-      recent: "",
       time: { created: STORY_TIME + 63_000 },
     },
   ] satisfies SessionMessageInfo[],
@@ -999,7 +1035,6 @@ export const compactionDocument = document([
     status: "completed",
     reason: "auto",
     summary: "The Session timeline now consumes current nested assistant content.",
-    recent: "Add deterministic stories and verify Storybook.",
     cost: 0.0142,
     tokens: { input: 3_180, output: 412, reasoning: 96, cache: { read: 8_704, write: 0 } },
     time: { created: STORY_TIME + 63_000 },
@@ -1010,6 +1045,20 @@ export const compactionDocument = document([
     completed: 66_000,
     content: [{ type: "text", text: "Context restored. I continued from the durable Session messages." }],
   }),
+] satisfies SessionMessageInfo[])
+
+export const compactionManualDocument = document([
+  ...compactionPrelude,
+  {
+    id: "msg_compaction_manual",
+    type: "compaction",
+    status: "completed",
+    reason: "manual",
+    summary: "The Session timeline now consumes current nested assistant content.",
+    cost: 0.0142,
+    tokens: { input: 3_180, output: 412, reasoning: 96, cache: { read: 8_704, write: 0 } },
+    time: { created: STORY_TIME + 63_000 },
+  },
 ] satisfies SessionMessageInfo[])
 
 export const compactionFailedDocument = document([

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, jest, test } from "bun:test"
 import type { ModelSelection } from "@/providers/models/selection"
 import type { SessionMessageHandoff } from "@/session/handoff"
 import { Skill } from "@opencode/schema/skill"
@@ -10,7 +10,10 @@ import type {
   NewSessionComposerAdapter,
 } from "./adapter"
 import { createMemoryComposerState, type Prompt } from "./state"
+import { composerSubmitView } from "./machine"
 import { createComposerSubmit } from "./submit"
+import { createSteerBackground } from "@/session/requests/steer-background"
+import { setMediaBlobLoader } from "@/runtime/persistence/drafts"
 import type { ComposerStateTarget } from "./submission-state"
 
 // SAFETY: submission reads only the selected model's id, name, and provider id.
@@ -22,8 +25,10 @@ const selectedModel = {
 
 const selection = {
   ready: Object.assign(() => true, { promise: undefined }),
+  key: () => ({ providerID: "provider-1", modelID: "model-1" }),
   current: () => selectedModel,
   recent: () => [selectedModel],
+  favorite: { list: () => [], toggle() {} },
   list: () => [selectedModel],
   cycle() {},
   set() {},
@@ -31,7 +36,6 @@ const selection = {
   setVisibility() {},
   variant: {
     configured: () => undefined,
-    selected: () => "balanced",
     current: () => "balanced",
     list: () => ["balanced"],
     set() {},
@@ -81,14 +85,14 @@ function submitInput(
   commands: () => readonly { name: string }[] | undefined = () => [],
   history: string[] = [],
   clientCommand?: (text: string) => (() => void | Promise<void>) | undefined,
-  delivery: ComposerDelivery = "steer",
+  delivery: (alternate: boolean) => ComposerDelivery = () => "steer",
 ) {
   return createComposerSubmit({
     adapter,
     mode: () => mode,
     commands,
     clientCommand,
-    delivery: () => delivery,
+    delivery,
     editor: () => undefined,
     queueScroll() {},
     addToHistory: (prompt) =>
@@ -96,12 +100,13 @@ function submitInput(
     removeFromHistory: (prompt) =>
       history.push(`remove:${prompt.map((part) => ("content" in part ? part.content : part.type)).join("")}`),
     resetHistory() {},
-    setMode() {},
     closePopover() {},
     notify,
     comments: { capture: () => [], clear() {}, restore() {} },
   })
 }
+
+const sessions = { count: 0 }
 
 function session(input: {
   calls: string[]
@@ -114,11 +119,14 @@ function session(input: {
   command?: ComposerSession["api"]["command"]
   switchAgent?: ComposerSession["api"]["switchAgent"]
   switchModel?: ComposerSession["api"]["switchModel"]
+  background?: ComposerSession["background"]
 }): ComposerSession {
   return {
-    id: "session-1",
+    // Unique per test: what this client knows about a session outlives the test that sent to it.
+    id: `session-${++sessions.count}`,
+    background: input.background,
     directory: "C:/repo",
-    handoff: input.handoff ?? { set() {}, clear() {} },
+    handoff: input.handoff ?? { set() {}, hold() {}, settle() {}, clear() {} },
     current: input.current ?? (() => undefined),
     admitted: input.admitted ?? (() => false),
     api: {
@@ -170,7 +178,389 @@ function session(input: {
   }
 }
 
+function text(state: ComposerStateTarget) {
+  return state
+    .current()
+    .map((part) => ("content" in part ? part.content : ""))
+    .join("")
+}
+
 describe("Composer submission", () => {
+  test("retains the submitting session before waiting for server admission", async () => {
+    const calls: string[] = []
+
+    const admitted = Promise.withResolvers<void>()
+
+    const state = createMemoryComposerState({ prompt: "Hello" }).capture()
+
+    const adapter = {
+      ...active(state, session({ calls, prompt: () => admitted.promise })),
+      beforeSubmit: () => calls.push("keep-preview"),
+    }
+
+    const submitted = submitInput(adapter).submit(new Event("submit"))
+
+    expect(calls).toEqual(["keep-preview"])
+    await submitted
+    admitted.resolve()
+    expect(calls[0]).toBe("keep-preview")
+    expect(calls).toContain("admit")
+  })
+
+  test("an empty submit does not retain a preview", async () => {
+    const calls: string[] = []
+
+    const state = createMemoryComposerState().capture()
+
+    const adapter = {
+      ...active(state, session({ calls })),
+      beforeSubmit: () => calls.push("keep-preview"),
+    }
+
+    await submitInput(adapter).submit(new Event("submit"))
+    expect(calls).toEqual([])
+  })
+
+  test("pressing Enter and then Send while an image attachment resolves sends the prompt once", async () => {
+    const state = createMemoryComposerState({ prompt: "ship it" }).capture()
+    const id = `media:${"a".repeat(64)}`
+    state.set([
+      ...state.current(),
+      { type: "image", id, filename: "shot.png", mime: "image/png", blob: { id, url: "" } },
+    ])
+    // The image's bytes load through the media loader, which answers only when the test lets it.
+    const loaded = Promise.withResolvers<string | undefined>()
+    setMediaBlobLoader("composer-double-submit", () => loaded.promise)
+    const handoffs: SessionMessageHandoff[] = []
+
+    const calls: string[] = []
+
+    const submission = submitInput({
+      ...active(
+        state,
+        session({ calls, handoff: { set: (handoff) => handoffs.push(handoff), hold() {}, settle() {}, clear() {} } }),
+      ),
+      beforeSubmit: () => calls.push("keep-preview"),
+    })
+
+    const enter = submission.submit(new Event("submit"))
+    const send = submission.submit(new Event("submit"))
+
+    expect(calls).toEqual(["keep-preview"])
+    loaded.resolve("data:image/png;base64,YQ==")
+    await Promise.all([enter, send])
+    setMediaBlobLoader("composer-double-submit", undefined)
+
+    expect(handoffs.map((handoff) => handoff.message.text)).toEqual(["ship it"])
+    expect(state.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
+  })
+
+  test.each(["steer", "queue"] as const)(
+    "sends only the selected quote as a %s, including its comment mentions, without clearing the draft",
+    async (delivery) => {
+      const state = createMemoryComposerState({ prompt: "/review keep this draft" }).capture()
+
+      const image = {
+        type: "image" as const,
+        id: "unrelated-image",
+        filename: "draft.png",
+        mime: "image/png",
+        blob: { id: "unrelated-image", url: "data:image/png;base64,YQ==" },
+      }
+
+      state.set([...state.current(), image], 5)
+      state.mode.set("shell")
+      state.context.add({ type: "quote", text: "Selected passage", commentID: "selected", comment: "Old comment" })
+      state.context.add({ type: "quote", text: "Unrelated passage", commentID: "other" })
+      state.context.add({ type: "file", path: "unrelated.ts" })
+      const before = state.current()
+
+      const requests: Parameters<ComposerSession["data"]["session"]["prompt"]>[0][] = []
+
+      const calls: string[] = []
+
+      const submission = submitInput(
+        {
+          ...active(state, session({ calls, prompt: async (value) => void requests.push(value) })),
+          beforeSubmit: () => calls.push("keep-preview"),
+        },
+        undefined,
+        "shell",
+        undefined,
+        undefined,
+        undefined,
+        (alternate) => {
+          expect(alternate).toBe(true)
+
+          return delivery
+        },
+      )
+
+      expect(await submission.submitQuote("quote:c=selected", "Compare @src/api.ts")).toBe(true)
+      expect(calls[0]).toBe("keep-preview")
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.text).toBe(
+        "The user quoted the following from earlier in the conversation:\n> Selected passage\n\nThe user made the following comment regarding this quote: Compare @src/api.ts",
+      )
+      expect(requests[0]).toMatchObject({
+        delivery,
+        files: [{ uri: "file:///C:/repo/src/api.ts", name: "api.ts" }],
+        agents: [],
+        skills: [],
+        metadata: {
+          displayText: "",
+          comments: [{ type: "quote", text: "Selected passage", comment: "Compare @src/api.ts" }],
+          attachments: [],
+        },
+      })
+      expect(state.current()).toBe(before)
+      expect(state.cursor()).toBe(5)
+      expect(state.mode.current()).toBe("shell")
+      expect(state.context.items().map((item) => item.key)).toEqual([
+        "quote:c=other",
+        "file:unrelated.ts:undefined:undefined",
+      ])
+    },
+  )
+
+  test("a failed quote send retains its latest comment and prevents duplicate submissions while pending", async () => {
+    const state = createMemoryComposerState({ prompt: "Keep this draft" }).capture()
+
+    state.context.add({ type: "quote", text: "Selected passage", commentID: "selected" })
+    const failed = Promise.withResolvers<void>()
+
+    const started = Promise.withResolvers<void>()
+
+    const errors: string[] = []
+
+    const calls: string[] = []
+
+    const submission = submitInput(
+      active(
+        state,
+        session({
+          calls,
+          prompt: async () => {
+            started.resolve()
+            await failed.promise
+          },
+        }),
+      ),
+      { missingSelection() {}, unqueueable() {}, failed: (_kind, error) => void errors.push(String(error)) },
+    )
+
+    const pending = submission.submitQuote("quote:c=selected", "Latest comment")
+
+    await started.promise
+    expect(await submission.submitQuote("quote:c=selected", "Duplicate")).toBe(false)
+    failed.reject(new Error("Could not send"))
+    expect(await pending).toBe(false)
+    expect(errors).toHaveLength(1)
+    expect(state.current()).toEqual([{ type: "text", content: "Keep this draft", start: 0, end: 15 }])
+    expect(state.context.items()).toMatchObject([
+      { key: "quote:c=selected", text: "Selected passage", comment: "Latest comment" },
+    ])
+    expect(calls.filter((call) => call === "send")).toHaveLength(2)
+  })
+
+  test("a quote send keeps sending while the composer sends it, and fails only once the composer can retry", async () => {
+    const state = createMemoryComposerState().capture()
+    state.context.add({ type: "quote", text: "Selected passage", commentID: "selected" })
+    const release = Promise.withResolvers<void>()
+    const failed = Promise.withResolvers<void>()
+
+    const submission = submitInput(active(state, session({ calls: [], prompt: () => release.promise })), {
+      missingSelection() {},
+      unqueueable() {},
+      failed: () => failed.resolve(),
+    })
+
+    jest.useFakeTimers()
+    state.quoteComment.set("quote:c=selected")
+    state.quoteComment.send("note", submission.submitQuote)
+    // A silent server holds a prompt for a minute per attempt; the send has not failed until the composer says so.
+    jest.advanceTimersByTime(5 * 60_000)
+    jest.useRealTimers()
+    expect(state.quoteComment.state()).toMatchObject({ status: "sending", draft: "note" })
+    expect(composerSubmitView(submission.state()).canSubmit).toBe(false)
+
+    release.reject(new Error("offline"))
+    await failed.promise
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(state.quoteComment.state()).toMatchObject({ status: "failed", draft: "note" })
+    expect(composerSubmitView(submission.state()).canSubmit).toBe(true)
+  })
+
+  test("a prompt that fails after a newer one went out leaves the Session running", async () => {
+    const state = createMemoryComposerState({ prompt: "first" }).capture()
+    const statuses: ("idle" | "running")[] = []
+    const first = Promise.withResolvers<void>()
+    const second = Promise.withResolvers<void>()
+    const failed = { count: 0, settled: Promise.withResolvers<void>() }
+
+    const target = session({
+      calls: [],
+      statuses,
+      prompt: async (value) => {
+        if (value.text === "first") return first.promise
+        await second.promise
+      },
+    })
+
+    const submission = submitInput(
+      { ...active(state, target), working: () => statuses.at(-1) === "running" },
+      {
+        missingSelection() {},
+        unqueueable() {},
+        failed: () => {
+          failed.count++
+          failed.settled.resolve()
+        },
+      },
+    )
+
+    await submission.submit(new Event("submit"))
+    state.set([{ type: "text", content: "second", start: 0, end: 6 }])
+    await submission.submit(new Event("submit"))
+    first.reject(new Error("offline"))
+    await failed.settled.promise
+    // The second prompt's turn may already run; only the server's events may end it.
+    expect(statuses).toEqual(["running"])
+
+    failed.settled = Promise.withResolvers<void>()
+    second.reject(new Error("offline"))
+    await failed.settled.promise
+    expect(failed.count).toBe(2)
+    expect(statuses).toEqual(["running", "idle"])
+  })
+
+  test("resends a failed prompt under its ID only while what it sends is unchanged", async () => {
+    const state = createMemoryComposerState({ prompt: "ship it" }).capture()
+
+    const note = {
+      type: "note" as const,
+      origin: "browser",
+      label: "button#save",
+      icon: "select-element",
+      subject: 'the "button#save" element',
+      live: { subject: 'the "button#save" element (browser ref @e42)' },
+      comment: "Rename this",
+      commentID: "note",
+    }
+
+    state.context.add(note)
+    const sent: string[] = []
+    const run = { fail: true, queued: false, settled: Promise.withResolvers<void>() }
+
+    const submission = submitInput(
+      active(
+        state,
+        session({
+          calls: [],
+          prompt: async (value) => {
+            sent.push(value.id ?? "")
+
+            if (run.fail) throw new Error("offline")
+            run.settled.resolve()
+          },
+        }),
+      ),
+      { missingSelection() {}, unqueueable() {}, failed: () => run.settled.resolve() },
+      "normal",
+      undefined,
+      undefined,
+      undefined,
+      () => (run.queued ? "queue" : "steer"),
+    )
+
+    const send = async () => {
+      run.settled = Promise.withResolvers<void>()
+      sent.length = 0
+      await submission.submit(new Event("submit"))
+      await run.settled.promise
+
+      return sent[0]
+    }
+
+    const first = await send()
+    expect(state.retry.current()).toMatchObject({ id: first })
+    expect(await send()).toBe(first)
+
+    // The browser plugin re-picked the element, so the note now names another ref.
+    state.context.replaceComments([{ ...note, live: { subject: 'the "button#save" element (browser ref @e7)' } }])
+    const edited = await send()
+    expect(edited).not.toBe(first)
+
+    run.queued = true
+    const queued = await send()
+    expect(queued).not.toBe(edited)
+
+    run.fail = false
+    expect(await send()).toBe(queued)
+    expect(state.retry.current()).toBeUndefined()
+  })
+
+  test("an unedited resend after a failed send keeps its ID and its file order", async () => {
+    const state = createMemoryComposerState({ prompt: "review these" }).capture()
+    state.context.add({ type: "file", path: "src/a.ts" })
+    state.context.add({ type: "file", path: "src/b.ts", comment: "Check this", commentID: "b" })
+    const keys = state.context.items().map((item) => item.key)
+    const sent: string[] = []
+    const failed = { settled: Promise.withResolvers<void>() }
+
+    const submission = submitInput(
+      active(
+        state,
+        session({
+          calls: [],
+          prompt: async (value) => {
+            sent.push(value.id ?? "")
+            throw new Error("offline")
+          },
+        }),
+      ),
+      { missingSelection() {}, unqueueable() {}, failed: () => failed.settled.resolve() },
+    )
+
+    const send = async () => {
+      failed.settled = Promise.withResolvers<void>()
+      sent.length = 0
+      await submission.submit(new Event("submit"))
+      await failed.settled.promise
+
+      return sent[0]
+    }
+
+    const first = await send()
+    // Restoring used to list the commented file first, so the resend fingerprinted differently and took a new ID.
+    expect(state.context.items().map((item) => item.key)).toEqual(keys)
+    expect(await send()).toBe(first)
+  })
+
+  test("a failed server command restores its draft without a retry ID, which it never sent", async () => {
+    const state = createMemoryComposerState({ prompt: "/review" }).capture()
+    const failed = Promise.withResolvers<void>()
+
+    await submitInput(
+      active(
+        state,
+        session({
+          calls: [],
+          command: async () => {
+            throw new Error("offline")
+          },
+        }),
+      ),
+      { missingSelection() {}, unqueueable() {}, failed: () => failed.resolve() },
+      "normal",
+      () => [{ name: "review" }],
+    ).submit(new Event("submit"))
+    await failed.promise
+
+    expect(text(state)).toBe("/review")
+    expect(state.retry.current()).toBeUndefined()
+  })
+
   test("applies the selection and runs a client argument command without admitting it to the session", async () => {
     const state = createMemoryComposerState().capture()
 
@@ -187,16 +577,23 @@ describe("Composer submission", () => {
     const calls: string[] = []
     const history: string[] = []
 
-    await submitInput(active(state, session({ calls })), undefined, "normal", undefined, history, (text) => {
-      expect(text).toBe("/btw why this approach?")
+    await submitInput(
+      { ...active(state, session({ calls })), beforeSubmit: () => calls.push("keep-preview") },
+      undefined,
+      "normal",
+      undefined,
+      history,
+      (text) => {
+        expect(text).toBe("/btw why this approach?")
 
-      return () => {
-        calls.push("btw")
-      }
-    }).submit(new Event("submit"))
+        return () => {
+          calls.push("btw")
+        }
+      },
+    ).submit(new Event("submit"))
 
     // Client commands such as /btw generate with the session's model, so the composer's selection commits first.
-    expect(calls).toEqual(["switch-agent", "switch-model", "btw"])
+    expect(calls).toEqual(["keep-preview", "switch-agent", "switch-model", "btw"])
     expect(history).toEqual([])
     expect(state.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }, image])
     expect(state.context.items()).toHaveLength(1)
@@ -208,10 +605,10 @@ describe("Composer submission", () => {
       current: { agent: "plan", model: { id: "old", providerID: "old" } },
       calls: ["admit", "switch-agent", "switch-model", "send"],
     },
-    // The model still commits: cached session state may lag behind an earlier switch.
+    // An unchanged selection sends without a model request to wait on.
     {
       current: { agent: "build", model: { providerID: "provider-1", id: "model-1", variant: "balanced" } },
-      calls: ["admit", "switch-model", "send"],
+      calls: ["admit", "send"],
     },
     // A prompt commits a staged revert, which would delete the model switch made after its boundary. The revert
     // settles before admission, whose row it would also delete.
@@ -245,6 +642,60 @@ describe("Composer submission", () => {
     expect(state.context.items()).toEqual([])
   })
 
+  test.each(["", "Align these targets"])("hands off and admits uncommented notes with instruction %j", async (text) => {
+    const draft = createMemoryComposerState({ prompt: text }).capture()
+
+    const notes = [
+      {
+        type: "note" as const,
+        origin: "example",
+        label: "Save",
+        title: "button#save",
+        subtitle: "Browser annotation",
+        icon: "select-element",
+        subject: 'the "Save" element',
+        href: "example:save",
+        live: { subject: 'the "Save" element (live reference @e42)', href: "example:save#e42" },
+        comment: "",
+      },
+      {
+        type: "note" as const,
+        origin: "another-plugin",
+        label: "Cancel",
+        icon: "select-element",
+        subject: 'the "Cancel" element',
+        comment: "",
+      },
+    ]
+
+    notes.forEach((note, index) => draft.context.add({ ...note, commentID: `${index}` }))
+    const handoffs: SessionMessageHandoff[] = []
+    const first: Parameters<NewSessionComposerAdapter["start"]>[2][] = []
+    const admitted = Promise.withResolvers<Parameters<ComposerSession["data"]["session"]["prompt"]>[0]>()
+    const calls: string[] = []
+
+    const target = session({
+      calls,
+      handoff: { set: (value) => handoffs.push(value), hold() {}, settle() {}, clear() {} },
+      prompt: async (value) => admitted.resolve(value),
+    })
+
+    await submitInput(
+      fresh(draft, async (_selection, _submission, message) => {
+        first.push(message)
+
+        return { session: target, cleanupReady: Promise.resolve() }
+      }),
+    ).submit(new Event("submit"))
+
+    expect(calls).toContain("admit")
+    const request = await admitted.promise
+    expect(request.metadata).toMatchObject({ displayText: text, comments: notes })
+    expect(first).toMatchObject([{ text, metadata: { displayText: text, comments: notes } }])
+    expect(handoffs).toMatchObject([{ message: { text, metadata: { displayText: text, comments: notes } } }])
+    expect(draft.context.items()).toEqual([])
+  })
+
   test.each(["steer", "queue"] as const)(
     "shows a %s in the session as the composer clears, before its selection commits",
     async (delivery) => {
@@ -256,13 +707,19 @@ describe("Composer submission", () => {
       const target = session({
         calls: [],
         statuses,
-        handoff: { set: (handoff) => handoffs.push(handoff), clear() {} },
+        handoff: { set: (handoff) => handoffs.push(handoff), hold() {}, settle() {}, clear() {} },
         switchModel: async () => committed.promise,
       })
 
-      await submitInput(active(state, target), undefined, "normal", undefined, undefined, undefined, delivery).submit(
-        new Event("submit"),
-      )
+      await submitInput(
+        active(state, target),
+        undefined,
+        "normal",
+        undefined,
+        undefined,
+        undefined,
+        () => delivery,
+      ).submit(new Event("submit"))
 
       expect(state.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
       expect(statuses).toEqual(["running"])
@@ -396,6 +853,21 @@ describe("Composer submission", () => {
 
     state.set(prompt)
     state.context.add({ type: "file", path: "notes.md", description: "the failing version" })
+
+    const note = {
+      type: "note" as const,
+      origin: "example",
+      label: "Target",
+      title: "#target",
+      subtitle: "Browser annotation",
+      icon: "select-element",
+      subject: "the target",
+      live: { subject: "the live target" },
+      comment: "",
+      commentID: "target",
+    }
+
+    state.context.add(note)
     const attempts: string[] = []
     const calls: string[] = []
     const statuses: ("idle" | "running")[] = []
@@ -432,8 +904,10 @@ describe("Composer submission", () => {
     expect(calls).toEqual([...submitted, ...submitted])
     expect(statuses).toEqual(["running", "idle", "running", "idle"])
     expect(state.current()).toEqual(prompt)
+    // In the order it was sent, so the resend's request matches the first.
     expect(state.context.items()).toMatchObject([
       { type: "file", path: "notes.md", description: "the failing version" },
+      note,
     ])
     // The caret returns after the mention text; attachments take no caret positions.
     expect(state.cursor()).toBe(17)
@@ -476,6 +950,78 @@ describe("Composer submission", () => {
     expect(promoted.mode.current()).toBe("shell")
   })
 
+  test("moves a first prompt and its quote sources to the promoted Session, and recovers it with the follow-up typed there", async () => {
+    const draft = createMemoryComposerState({ prompt: "first prompt" }).capture()
+    draft.context.add({ type: "quote", commentID: "quote-source", text: "quoted passage" })
+    const key = draft.context.items()[0]!.key
+    const source = [{ partID: "part-source", revealID: "message-source", start: 4, end: 18, text: "quoted passage" }]
+    draft.quoteSource.add(key, source)
+    // The Session's composer already holds a follow-up typed while it prepared.
+    const promoted = createMemoryComposerState({ prompt: "follow-up" }).capture()
+    const moved: (typeof promoted.quoteSource.state.sources)[string][] = []
+    const release = Promise.withResolvers<void>()
+    const failed = Promise.withResolvers<void>()
+
+    const target = session({
+      calls: [],
+      prompt: async () => {
+        await release.promise
+        throw new Error("network unavailable")
+      },
+    })
+
+    await submitInput(
+      fresh(draft, async (_selection, submission) => {
+        submission.retarget(promoted, { preserveDraft: true })
+        moved.push(promoted.quoteSource.state.sources[key])
+
+        return { session: target, cleanupReady: Promise.resolve() }
+      }),
+      { missingSelection() {}, unqueueable() {}, failed: () => failed.resolve() },
+    ).submit(new Event("submit"))
+
+    expect(moved).toEqual([source])
+    expect(text(draft)).toBe("")
+    expect(text(promoted)).toBe("follow-up")
+    release.resolve()
+    await failed.promise
+
+    expect(text(promoted)).toBe("first prompt\n\nfollow-up")
+    expect(promoted.context.items()).toMatchObject([{ key, type: "quote", text: "quoted passage" }])
+    expect(promoted.quoteSource.state.sources[key]).toEqual(source)
+    // A recovered follow-up changes the payload, so it is not a retry of the failed admission.
+    expect(promoted.retry.current()).toBeUndefined()
+  })
+
+  test("does not restore a failed prompt over one typed after the composer cleared", async () => {
+    const state = createMemoryComposerState({ prompt: "submitted" }).capture()
+    const release = Promise.withResolvers<void>()
+    const failed = Promise.withResolvers<void>()
+    const history: string[] = []
+
+    const target = session({
+      calls: [],
+      prompt: async () => {
+        await release.promise
+        throw new Error("network unavailable")
+      },
+    })
+
+    await submitInput(
+      active(state, target),
+      { missingSelection() {}, unqueueable() {}, failed: () => failed.resolve() },
+      "normal",
+      () => [],
+      history,
+    ).submit(new Event("submit"))
+    state.set([{ type: "text", content: "new draft", start: 0, end: 9 }])
+    release.resolve()
+    await failed.promise
+
+    expect(text(state)).toBe("new draft")
+    expect(history).toEqual(["add:submitted"])
+  })
+
   test("does not restore a prompt already acknowledged by the durable inbox", async () => {
     const state = createMemoryComposerState({ prompt: "admitted prompt" }).capture()
     const checked = Promise.withResolvers<void>()
@@ -502,6 +1048,159 @@ describe("Composer submission", () => {
     expect(new Set(attempts).size).toBe(1)
   })
 
+  describe("steering while foreground work runs", () => {
+    // A long shell command blocks the run; moving it resolves only the move, never the admission.
+    // `unstarted` moves before the shell's job starts, so the server finds nothing to move and the call still blocks.
+    function running(
+      input: {
+        fail?: boolean
+        failOnce?: boolean
+        unstarted?: boolean
+        blocking?: { partID: string }[]
+        prompt?: () => Promise<void>
+      } = {},
+    ) {
+      const calls: string[] = []
+      const failures: string[] = []
+      const state = createMemoryComposerState({ prompt: "use Beta instead" }).capture()
+      const blocking = { parts: input.blocking ?? [{ partID: "prt_shell" }] }
+
+      const claim = createSteerBackground({
+        sessionID: () => "session-1",
+        blocking: () => blocking.parts,
+        move: async () => {
+          calls.push("background")
+
+          if (input.fail) throw new Error("server unavailable")
+
+          if (input.failOnce) {
+            input.failOnce = false
+            throw new Error("server unavailable")
+          }
+
+          if (input.unstarted) {
+            input.unstarted = false
+
+            return
+          }
+
+          blocking.parts = []
+        },
+      })
+
+      const target = session({ calls, prompt: input.prompt, background: () => claim("session-1") })
+      const adapter = { ...active(state, target), working: () => true }
+      const notify = { missingSelection() {}, unqueueable() {}, failed: () => void failures.push("failed") }
+
+      const submit = async (delivery: ComposerDelivery = "steer", working = true) => {
+        state.set([{ type: "text", content: "use Beta instead", start: 0, end: 16 }])
+        await submitInput(
+          { ...adapter, working: () => working },
+          notify,
+          "normal",
+          () => [],
+          [],
+          undefined,
+          () => delivery,
+        ).submit(new Event("submit"))
+        // The send settles after submit returns; let it and the move that follows it finish.
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      }
+
+      return { calls, failures, submit, blocking }
+    }
+
+    test("moves the work to the background once the steer is admitted, and only once", async () => {
+      const run = running()
+
+      await run.submit()
+      expect(run.calls).toEqual(["admit", "switch-agent", "switch-model", "send", "background"])
+
+      await run.submit()
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(1)
+    })
+
+    test("a steer moves work that its previous steer's move missed", async () => {
+      const run = running({ unstarted: true })
+
+      await run.submit()
+      await run.submit()
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(2)
+    })
+
+    test("a steer sent while the previous one is admitted moves the work when the previous move fails", async () => {
+      const admitted = Promise.withResolvers<void>()
+      const attempts = { count: 0 }
+
+      const run = running({
+        failOnce: true,
+        prompt: async () => {
+          attempts.count++
+
+          if (attempts.count === 1) await admitted.promise
+        },
+      })
+
+      await run.submit()
+      await run.submit()
+      admitted.resolve()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(2)
+      expect(run.blocking.parts).toEqual([])
+    })
+
+    test("moves a shell that starts while the steer is admitted", async () => {
+      const run = running({
+        blocking: [],
+        prompt: async () => {
+          run.blocking.parts = [{ partID: "prt_shell" }]
+        },
+      })
+
+      await run.submit()
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(1)
+      expect(run.blocking.parts).toEqual([])
+    })
+
+    test("leaves the work alone for a queued prompt or an idle session", async () => {
+      const run = running()
+
+      await run.submit("queue")
+      await run.submit("steer", false)
+      expect(run.calls).not.toContain("background")
+    })
+
+    test("still sends the steer when the move fails, and a later steer tries again", async () => {
+      const run = running({ fail: true })
+
+      await run.submit()
+      await run.submit()
+      expect(run.failures).toEqual([])
+      expect(run.calls.filter((call) => call === "send")).toHaveLength(2)
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(2)
+    })
+
+    test("a steer that fails to send leaves the work for the next one", async () => {
+      const attempts = { count: 0 }
+
+      const run = running({
+        prompt: async () => {
+          attempts.count++
+
+          // The first submission's admission and its single retry both fail.
+          if (attempts.count <= 2) throw new Error("network unavailable")
+        },
+      })
+
+      await run.submit()
+      expect(run.failures).toEqual(["failed"])
+      expect(run.calls).not.toContain("background")
+
+      await run.submit()
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(1)
+    })
+  })
+
   test("hands off image-only first prompts and admits them before cleanup is ready", async () => {
     const draft = createMemoryComposerState().capture()
 
@@ -523,7 +1222,7 @@ describe("Composer submission", () => {
 
     const target = session({
       calls: [],
-      handoff: { set: handedOff.resolve, clear() {} },
+      handoff: { set: handedOff.resolve, hold() {}, settle() {}, clear() {} },
       prompt: async () => admitted.resolve(),
     })
 
@@ -549,6 +1248,42 @@ describe("Composer submission", () => {
         },
       ],
     })
+  })
+
+  test.each([
+    { case: "is admitted", fails: false, admitted: false, result: "settle" },
+    { case: "loses its response after admission", fails: true, admitted: true, result: "settle" },
+    { case: "fails", fails: true, admitted: false, result: "clear" },
+  ])("a steer's handoff waits for its echo or ends when its send $case", async (row) => {
+    const state = createMemoryComposerState({ prompt: "steer" }).capture()
+    const handoff: string[] = []
+    const ended = Promise.withResolvers<void>()
+
+    const target = session({
+      calls: [],
+      admitted: () => row.admitted,
+      handoff: {
+        set: (value) => handoff.push(`set:${value.message.id}`),
+        hold: (value) => handoff.push(`hold:${value.message.id}`),
+        settle: (id) => {
+          handoff.push(`settle:${id}`)
+          ended.resolve()
+        },
+        clear: (id) => {
+          handoff.push(`clear:${id}`)
+          ended.resolve()
+        },
+      },
+      prompt: async () => {
+        if (row.fails) throw new Error("response lost")
+      },
+    })
+
+    await submitInput(active(state, target)).submit(new Event("submit"))
+    await ended.promise
+
+    expect(handoff).toHaveLength(2)
+    expect(handoff[1]).toBe(handoff[0]!.replace("set:", `${row.result}:`))
   })
 
   test("forwards structured mentions to custom commands", async () => {

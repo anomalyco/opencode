@@ -4,7 +4,7 @@ import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { AIError, mergeJsonRecords, type OpenString } from "../schema/index.js"
-import { SpeechModel, type SpeechEvent, type SpeechRequestFor } from "../speech.js"
+import { SpeechModel, type SpeechEvent, type SpeechRequest } from "../speech.js"
 import { ProviderShared, optionalNull } from "./shared.js"
 import { SpeechStream } from "./utils/speech-stream.js"
 
@@ -33,7 +33,7 @@ export type CartesiaSpeechOptions = {
   readonly pronunciation_dict_id?: string
 } & Record<string, unknown>
 
-export type Request = SpeechRequestFor<CartesiaSpeechOptions>
+export type Request = SpeechRequest<SpeechModel<CartesiaSpeechOptions>>
 
 // ---------------------------------------------------------------------------
 // 3. Streaming event schema
@@ -140,10 +140,7 @@ const onEvent = Effect.fnUntraced(function* (state: State, frame: string) {
   return [state, []] as const
 })
 
-const finish = Effect.fnUntraced(function* (
-  state: State,
-  context: MediaProtocol.ResponseContext<Request>,
-) {
+const finish = Effect.fnUntraced(function* (state: State, context: MediaProtocol.ResponseContext<Request>) {
   if (usesSse(context.request) && !state.done) return yield* route.incomplete()
   const format = yield* outputFormat(context.request)
   return yield* SpeechStream.finish(

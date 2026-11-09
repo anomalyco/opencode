@@ -26,6 +26,9 @@ async function getMainRoutes(): Promise<SitemapEntry[]> {
     { path: "/brand", priority: 0.6, changefreq: "monthly" },
     { path: "/zen", priority: 0.8, changefreq: "weekly" },
     { path: "/go", priority: 0.8, changefreq: "weekly" },
+    { path: "/download", priority: 0.8, changefreq: "weekly" },
+    { path: "/legal/privacy-policy", priority: 0.3, changefreq: "yearly" },
+    { path: "/legal/terms-of-service", priority: 0.3, changefreq: "yearly" },
   ]
 
   for (const item of staticRoutes) {
@@ -37,6 +40,8 @@ async function getMainRoutes(): Promise<SitemapEntry[]> {
       })
     }
   }
+
+  routes.push({ url: `${BASE_URL}/changelog`, priority: 0.7, changefreq: "weekly" })
 
   return routes
 }
@@ -51,11 +56,12 @@ async function getDocsRoutes(): Promise<SitemapEntry[]> {
       if (!file.endsWith(".mdx")) continue
 
       const slug = file.replace(".mdx", "")
-      const path = slug === "index" ? "/docs/" : `/docs/${slug}`
+      const path = slug === "index" ? "/docs/" : `/docs/${slug}/`
 
-      for (const locale of LOCALES) {
+      // Locales without translated docs share the English URL.
+      for (const url of new Set(LOCALES.map((locale) => `${BASE_URL}${route(locale, path)}`))) {
         routes.push({
-          url: `${BASE_URL}${route(locale, path)}`,
+          url,
           priority: slug === "index" ? 0.9 : 0.7,
           changefreq: "weekly",
         })

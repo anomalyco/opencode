@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM } from "../../src/index.js"
+import { ai } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import * as Google from "../../src/providers/google.js"
 import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios.js"
@@ -15,12 +15,13 @@ const model = Google.configure({
 // API is out-of-band and intentionally not wired up). This test exists to
 // pin the usage-parsing path: `cachedContentTokenCount` should surface as
 // `cacheReadInputTokens` on the second identical call.
-const cacheRequest = LLM.request({
+const cacheRequest = ai.request({
   id: "recorded_gemini_cache",
   model,
   system: LARGE_CACHEABLE_SYSTEM,
   prompt: "Say hi.",
-  generation: { maxTokens: 16, temperature: 0 },
+  maxTokens: 16,
+  temperature: 0,
 })
 
 const recorded = recordedTests({

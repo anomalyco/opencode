@@ -510,8 +510,11 @@ test("spells GitLab Duo variants for gitlab-ai-provider routes", () => {
 
 test("spells reasoning variants for every bundled native package", () => {
   const supports: Variant.Support[] = [{ type: "toggle" }, { type: "effort" }, { type: "budget_tokens" }]
+  // Image and decision APIs have no reasoning setting, except Gemini's, which has a spelling.
   const missing = Array.from(Provider.builtinPackages).filter(
-    (packageName) => Variant.resolve(model(packageName, "test-model", 32_000), supports).length === 0,
+    (packageName) =>
+      !/\/(images|decisions)$/.test(packageName) &&
+      Variant.resolve(model(packageName, "test-model", 32_000), supports).length === 0,
   )
   expect(missing).toEqual([])
 })
@@ -543,4 +546,16 @@ test("spells Google Interactions variants as thinking levels", () => {
       { id: "low", settings: { thinkingLevel: "low", thinkingSummaries: "auto" } },
       { id: "high", settings: { thinkingLevel: "high", thinkingSummaries: "auto" } },
     ])
+})
+
+test("reads models.dev v2 reasoning as variant support", () => {
+  expect(Variant.supports({ supported: false })).toEqual([])
+  expect(Variant.supports({ supported: true })).toEqual([])
+  expect(
+    Variant.supports({ supported: true, toggle: true, effort: ["default", "low"], budget: { min: 1024, max: 8000 } }),
+  ).toEqual([
+    { type: "toggle" },
+    { type: "effort", values: ["low"] },
+    { type: "budget_tokens", min: 1024, max: 8000 },
+  ])
 })

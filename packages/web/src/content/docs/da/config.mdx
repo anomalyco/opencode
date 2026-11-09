@@ -14,7 +14,7 @@ OpenCode understøtter både **JSON** og **JSONC** (JSON med kommentarer) format
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-sonnet-4-5",
+  "model": "anthropic/claude-sonnet-5-5",
   "autoupdate": true,
   "server": {
     "port": 4096,
@@ -35,7 +35,7 @@ Konfigurationsfiler **flettes sammen**, erstattes ikke.
 
 Konfigurationsfiler flettes sammen, erstattes ikke. Indstillinger fra følgende konfigurationssteder kombineret. Senere konfigurationer tilsidesætter kun tidligere konfigurationer for modstridende nøgler. Ikke-modstridende indstillinger fra alle konfigurationer bevares.
 
-For eksempel, hvis dine globale konfigurationssæt `autoupdate: true`, og dine projektkonfigurationssæt `model: "anthropic/claude-sonnet-4-5"`, vil den endelige konfiguration integrere begge indstillinger.
+For eksempel, hvis dine globale konfigurationssæt `autoupdate: true`, og dine projektkonfigurationssæt `model: "anthropic/claude-sonnet-5-5"`, vil den endelige konfiguration integrere begge indstillinger.
 
 ---
 
@@ -235,8 +235,8 @@ Du kan konfigurere de udbydere og modeller, du vil bruge i din OpenCode-konfigur
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
-  "model": "anthropic/claude-sonnet-4-5",
-  "small_model": "anthropic/claude-haiku-4-5"
+  "model": "anthropic/claude-sonnet-5-5",
+  "small_model": "anthropic/claude-haiku-5-5"
 }
 ```
 
@@ -325,7 +325,7 @@ Du kan konfigurere opgaver specialiserede agenter til specifikke indstillinger g
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
-      "model": "anthropic/claude-sonnet-4-5",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         // Disable file modification tools for review-only agent
@@ -370,7 +370,7 @@ Du kan konfigurere brugerdefinerede kommandoer til gentagne opgaver gennem indst
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-haiku-4-5",
+      "model": "anthropic/claude-haiku-5-5",
     },
     "component": {
       "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
@@ -602,7 +602,7 @@ Nøglen `experimental` indeholder muligheder, der er under aktiv udvikling.
 }
 ```
 
-:::caution
+:::caution[Caution]
 Eksperimentelle muligheder er ikke stabile. De kan ændres eller fjernes uden varsel.
 :::
 

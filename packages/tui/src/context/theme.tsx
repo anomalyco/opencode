@@ -9,6 +9,7 @@ import {
 } from "@opencode/theme/tui"
 import {
   allThemes,
+  getOpenCode2Theme,
   hasTheme,
   parseTheme,
   setCustomThemes,
@@ -22,7 +23,7 @@ import { createComponentTheme, type ComponentTheme } from "../theme/component"
 import { createEffect, createMemo, createSignal, onCleanup, onMount, type Accessor, type ParentProps } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
-import { useConfig } from "../config"
+import { useConfig, useNewDesigns } from "../config"
 import { useStorageOptional } from "./storage"
 import { DevTools } from "../devtools"
 import { configDirectories } from "../util/config-directories"
@@ -124,6 +125,7 @@ const themeContext = createSimpleContext({
   init: (props: { mode: "dark" | "light"; source: ThemeSource }): ThemeContextValue => {
     const renderer = useRenderer()
     const configState = useConfig()
+    const newDesigns = useNewDesigns()
     const config = configState.data
     const themes = props.source
     const cache = useStorageOptional()?.store<{ colors?: TerminalColors }>("system-theme", { initial: {} })
@@ -286,17 +288,23 @@ const themeContext = createSimpleContext({
       themeRefreshTimeouts.length = 0
     })
 
+    const available = createMemo(
+      (): Record<string, ThemeDocumentSource> =>
+        newDesigns() ? { opencode2: getOpenCode2Theme(), ...themeSources() } : themeSources(),
+    )
+    const has = (name: string) => Boolean(name) && available()[name] !== undefined
+
     const initStarted = performance.now()
     const selected = createMemo(() => {
-      const sources = themeSources()
+      const sources = available()
       const name = sources[store.active] ? store.active : "opencode"
       try {
-        return loadTheme(sources[name], name, store.mode)
+        return loadTheme(sources[name], name, store.mode, newDesigns())
       } catch (error) {
         if (name === "opencode") throw error
         themeErrors.emit(name, error)
         setStore("active", "opencode")
-        return loadTheme(sources.opencode, "opencode", store.mode)
+        return loadTheme(sources.opencode, "opencode", store.mode, newDesigns())
       }
     })
     const modes = () => selected().modes
@@ -308,7 +316,7 @@ const themeContext = createSimpleContext({
 
     createEffect(() => renderer.setBackgroundColor(tokens().background.base))
 
-    const currentSyntax = createSyntaxStyleMemo(() => generateSyntax(tokens()))
+    const currentSyntax = createSyntaxStyleMemo(() => generateSyntax(tokens(), renderer.nativeScene))
     const service: Themes = {
       current,
       currentTokens: tokens,
@@ -316,8 +324,8 @@ const themeContext = createSimpleContext({
       get selected() {
         return store.active
       },
-      all: allThemes,
-      has: hasTheme,
+      all: available,
+      has,
       mode,
       modes,
       supports: (requested) => modes().includes(requested),
@@ -330,7 +338,7 @@ const themeContext = createSimpleContext({
         return true
       },
       set(theme: string) {
-        if (!hasTheme(theme)) return false
+        if (!has(theme)) return false
         setStore("active", theme)
         if (theme === "system") refreshPalette()
         void configState
@@ -384,8 +392,8 @@ function usablePalette(colors: TerminalColors | undefined): colors is TerminalCo
   )
 }
 
-function loadTheme(source: ThemeDocumentSource, name: string, requested: "dark" | "light") {
-  const document = parseTheme(source, name)
+function loadTheme(source: ThemeDocumentSource, name: string, requested: "dark" | "light", newDesigns: boolean) {
+  const document = parseTheme(source, name, { newDesigns })
   const modes = themeModes(document)
   const mode = modes.includes(requested) ? requested : (modes[0] ?? requested)
   return { modes, mode, theme: resolveThemeDocument(document, mode) }

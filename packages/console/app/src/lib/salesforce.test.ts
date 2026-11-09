@@ -59,6 +59,8 @@ test("a fake entry keeps the visitor message, spend range, and enterprise lead s
     Title: "Engineering lead",
     Description: "  We need SSO for our developers.\nPlease share the enterprise options.  ",
     Current_Monthly_Inference_Spend__c: "$10K–$50K",
+    In_Region_Routing__c: false,
+    DPA_Required__c: false,
     LeadSource: "enterprise website form",
   })
 })
@@ -74,12 +76,17 @@ test("the local Enterprise request handler applies the updated mapping to a form
         role: "Engineering lead",
         company: "Example Test Company",
         email: "fake-local-visitor@example.test",
+        country: " Germany ",
         inferenceSpend: "50k-100k",
+        inRegionRouting: true,
+        dpa: false,
         message: "  How are you bro!\nThis is a local form test.  ",
         alias: "",
+        captcha: "test-token",
       }),
     }),
     {
+      captcha: { secret: "test-secret", fetch: async () => Response.json({ success: true }) },
       salesforceSubmit: async (payload) => {
         const response = await fetch(`${server.url.origin}/services/data/v59.0/sobjects/Lead`, {
           method: "POST",
@@ -89,12 +96,6 @@ test("the local Enterprise request handler applies the updated mapping to a form
         return response.ok
       },
       notifications: false,
-      accountLookup: async () => ({
-        id: "user_test",
-        email: "fake-local-visitor@example.test",
-        name: null,
-        createdAt: "2026-10-01T12:00:00.000Z",
-      }),
     },
   )
 
@@ -103,10 +104,10 @@ test("the local Enterprise request handler applies the updated mapping to a form
   expect(leads.at(-1)).toMatchObject({
     LastName: "Fake Local Form Visitor",
     Description: "  How are you bro!\nThis is a local form test.  ",
+    Country: "Germany",
     Current_Monthly_Inference_Spend__c: "$50K–$100K",
+    In_Region_Routing__c: true,
+    DPA_Required__c: false,
     LeadSource: "enterprise website form",
-    Has_Console_Account__c: true,
-    Console_Account_ID__c: "user_test",
-    Console_Signup_Date__c: "2026-10-01T12:00:00.000Z",
   })
 })

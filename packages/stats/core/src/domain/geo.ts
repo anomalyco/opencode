@@ -18,6 +18,7 @@ import {
   UPSERT_CHUNK_SIZE,
   withUniqueUsersFallback,
   type StatBaseAggregate,
+  type StatPeriodScope,
 } from "./stat"
 
 export type GeoStatRow = typeof geoStat.$inferInsert
@@ -56,7 +57,7 @@ export declare namespace GeoStatRepo {
     }) => Effect.Effect<GeoStatRow[], DatabaseError>
     readonly upsert: (rows: GeoStatRow[]) => Effect.Effect<void, DatabaseError>
     readonly deleteRetiredDimensions: (
-      rows: GeoStatRow[],
+      scope: StatPeriodScope,
       hiddenModels: readonly string[],
     ) => Effect.Effect<void, DatabaseError>
     readonly deleteUnknownDimensions: (rows: GeoStatRow[]) => Effect.Effect<void, DatabaseError>
@@ -190,23 +191,20 @@ export class GeoStatRepo extends Context.Service<GeoStatRepo, GeoStatRepo.Servic
       }
 
       const deleteRetiredDimensions = Effect.fn("GeoStatRepo.deleteRetiredDimensions")(function* (
-        rows: GeoStatRow[],
+        scope: StatPeriodScope,
         hiddenModels: readonly string[],
       ) {
-        const scope = statRowScope(rows)
-        if (!scope) return
-
         yield* Effect.tryPromise({
           try: () =>
             db
               .delete(geoStat)
               .where(
                 and(
-                  inArray(geoStat.grain, scope.grains),
-                  inArray(geoStat.period_key, scope.periodKeys),
-                  inArray(geoStat.dataset, scope.datasets),
-                  inArray(geoStat.client, scope.clients),
-                  inArray(geoStat.source, scope.sources),
+                  eq(geoStat.grain, scope.grain),
+                  eq(geoStat.period_key, scope.periodKey),
+                  eq(geoStat.dataset, scope.dataset),
+                  eq(geoStat.client, "all"),
+                  eq(geoStat.source, "all"),
                   or(
                     inArray(geoStat.provider, RETIRED_STAT_PROVIDERS),
                     inArray(geoStat.model, [...RETIRED_STAT_MODELS, ...hiddenModels]),

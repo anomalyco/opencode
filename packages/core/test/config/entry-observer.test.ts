@@ -2,39 +2,38 @@ import { describe, expect } from "bun:test"
 import { Config } from "@opencode/core/config"
 import { Document, Info, type Entry } from "@opencode/schema/config"
 import { Event } from "@opencode/schema/event"
-import { Deferred, Effect, PubSub, Ref, Stream } from "effect"
+import { Deferred, Effect, PubSub, Stream } from "effect"
 import { ConfigEntryObserver } from "../../src/config/plugin/entry-observer"
 import { it } from "../lib/effect"
+import { host } from "../plugin/host"
 
 describe("ConfigEntryObserver", () => {
-  it.effect("closes the startup race and reloads later updates", () =>
+  it.effect("reads the current config and reloads on updates", () =>
     Effect.gen(function* () {
-      const current = yield* Ref.make([document("first")])
+      const state = { current: [document("first")] }
       const updates = yield* PubSub.unbounded<ReturnType<typeof updated>>()
       const reloaded = yield* Deferred.make<void>()
       const config = Config.Service.of({
-        entries: () => Ref.get(current),
+        entries: () => Effect.sync(() => state.current),
+        snapshot: () => state.current,
         changes: () => Stream.empty,
       })
-      const event = {
-        subscribe: () =>
-          Stream.unwrap(Ref.set(current, [document("raced")]).pipe(Effect.as(Stream.fromPubSub(updates)))),
-      }
+      const event = host({ event: { subscribe: () => Stream.fromPubSub(updates) } }).event
 
       const loaded = yield* ConfigEntryObserver.observe(
         config,
         event,
         Deferred.succeed(reloaded, undefined).pipe(Effect.asVoid),
       )
+      expect(Config.latest(loaded.entries, "shell")).toBe("first")
 
-      expect(Config.latest(loaded.entries, "shell")).toBe("raced")
+      // Visible before `config.updated` arrives, so a reload triggered another way already sees it.
+      state.current = [document("later")]
+      expect(Config.latest(loaded.entries, "shell")).toBe("later")
       expect(yield* Deferred.isDone(reloaded)).toBe(false)
 
-      yield* Ref.set(current, [document("later")])
       yield* PubSub.publish(updates, updated())
       yield* Deferred.await(reloaded)
-
-      expect(Config.latest(loaded.entries, "shell")).toBe("later")
     }),
   )
 })

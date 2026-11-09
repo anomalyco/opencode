@@ -22,6 +22,7 @@ const rendered = await render(entry)
   currentSlug={entry.id}
   headings={rendered.headings}
   showTableOfContents={entry.data.tableOfContents !== false}
+  noindex={entry.data.noindex}
 >
   <rendered.Content components={{ Callout, Card, CardGroup, CodeBlock, CodeTabs, PlanTabs }} />
 </DocsLayout>

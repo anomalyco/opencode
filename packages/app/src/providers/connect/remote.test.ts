@@ -2,14 +2,12 @@ import { expect, test } from "bun:test"
 import { authServerName } from "./remote"
 
 const contributed = {
-  type: "extension",
+  type: "plugin",
   key: "ssh:production",
-  extension: "ssh",
-  state: "ready",
-  connecting: false,
-  authenticationRequired: false,
+  plugin: "ssh",
+  status: { type: "ready", http: { url: "http://127.0.0.1:4096" } },
+  authenticate: () => false,
   managed: true,
-  http: { url: "http://127.0.0.1:4096" },
 } as const
 
 test("SSH disclosure uses the remote identity even with a loopback proxy", () => {
@@ -39,7 +37,7 @@ test.each([
   },
   {
     name: "WSL",
-    server: { ...contributed, key: "wsl:Ubuntu", extension: "wsl", displayName: "Ubuntu" } as const,
+    server: { ...contributed, key: "wsl:Ubuntu", plugin: "wsl", displayName: "Ubuntu" } as const,
     expected: "Ubuntu",
   },
   {

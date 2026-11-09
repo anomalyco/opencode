@@ -1,7 +1,7 @@
 export * as ConfigNormalize from "./normalize.js"
 
 import { isDeepStrictEqual } from "node:util"
-import { isRecord } from "@opencode/ai/utils/record"
+import { isRecord } from "@opencode/util/record"
 import { Option, Schema } from "effect"
 import { Info } from "@opencode/schema/config"
 import { ConfigAgent } from "@opencode/schema/config/agent"
@@ -210,6 +210,7 @@ export function normalize(input: unknown): Result {
     share: Info.fields.share,
     enterprise: Info.fields.enterprise,
     username: Info.fields.username,
+    timezone: Info.fields.timezone,
     snapshots: Info.fields.snapshots,
     media: Info.fields.media,
     tool_output: Info.fields.tool_output,
@@ -458,24 +459,12 @@ function normalizeExperimental(
       unsupportedExperimental.forEach((key) =>
         unsupportedIfPresent(experimental, key, ["experimental", key], diagnostics),
       )
-      if (own(experimental, "portable_shell_scanner")) {
-        const value = decodeEncoded(
-          ConfigExperimental.Info.fields.portable_shell_scanner,
-          experimental.portable_shell_scanner,
-          ["experimental", "portable_shell_scanner"],
-          diagnostics,
-        )
-        if (value !== undefined) result.portable_shell_scanner = value
-      }
-      if (own(experimental, "subagent_depth")) {
-        const value = decodeEncoded(
-          ConfigExperimental.Info.fields.subagent_depth,
-          experimental.subagent_depth,
-          ["experimental", "subagent_depth"],
-          diagnostics,
-        )
-        if (value !== undefined) result.subagent_depth = value
-      }
+      // `policies` merges into top-level `policies` in normalizePolicies.
+      Object.entries(ConfigExperimental.Info.fields).forEach(([key, schema]) => {
+        if (key === "policies" || !own(experimental, key)) return
+        const value = decodeEncoded(schema, experimental[key], ["experimental", key], diagnostics)
+        if (value !== undefined) result[key] = value
+      })
     }
   }
   if (Object.keys(result).length || (isRecord(input.experimental) && !Object.keys(input.experimental).length))

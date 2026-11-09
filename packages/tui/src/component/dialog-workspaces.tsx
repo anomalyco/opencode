@@ -260,6 +260,7 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
         const choice = await DialogWorkspaceFileChanges.show(dialog, status?.data ?? [], {
           title: "Delete worktree?",
           message: "This worktree has file changes. Do you want to delete it anyway?",
+          confirm: { title: "delete", key: "d" },
         })
         if (choice !== "yes") {
           reopen()

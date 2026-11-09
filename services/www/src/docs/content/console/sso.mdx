@@ -3,8 +3,8 @@ title: "SSO"
 description: "Sign in to an OpenCode Console workspace through your identity provider with OIDC or SAML."
 ---
 
-Single sign-on (SSO) sends workspace members through your company's identity provider when they sign in. Owners and
-admins set it up in **Settings › Security**, and it's included with every workspace.
+Single sign-on (SSO) sends workspace members through your company's identity provider when they sign in. Owners
+set it up in **Settings › Security**, and it's included with every workspace.
 
 | Protocol       | Providers                                                                              |
 | -------------- | -------------------------------------------------------------------------------------- |
@@ -79,8 +79,9 @@ Invitations to an SSO workspace send the invitee to your identity provider when 
 
 ## Existing accounts
 
-If someone already has a Console account with the same email, Console asks them to sign in to it once to link SSO.
-Invited people and people added by directory sync are linked automatically.
+If someone already has a Console account with the same email, they sign in again during the SSO flow and confirm
+with **Link account**. An invitation does not skip this confirmation. SCIM-provisioned accounts on a verified
+workspace domain can still link automatically.
 
 ## Edit or delete
 

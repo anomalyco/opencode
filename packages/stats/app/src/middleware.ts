@@ -9,7 +9,18 @@ import {
   modelJson,
   modelMarkdown,
 } from "./lib/agent-formats"
-import { fromPathname, LOCALE_HEADER, pageUrl, parseLocale, prefersMarkdown, route, strip } from "./lib/language"
+import {
+  basePath,
+  cookie,
+  fromPathname,
+  LOCALE_HEADER,
+  localeFromRequest,
+  pageUrl,
+  parseLocale,
+  prefersMarkdown,
+  route,
+  strip,
+} from "./lib/language"
 import { loadComparePage, loadHomePage, loadLabPage, loadModelPage } from "./lib/page-data"
 import { canonicalModelEntry, catalogModelPath, findModelCatalogLab, loadModelCatalog } from "./routes/model-catalog"
 import { statsPageCacheControl } from "./routes/stats-cache"
@@ -41,6 +52,8 @@ export default createMiddleware({
     const request = event.request
     if (request.method !== "GET" && request.method !== "HEAD") return
     const url = new URL(request.url)
+    const localized = localizedRedirect(request, url)
+    if (localized) return localized
     const path = strip(url.pathname)
     const parsed = parsePath(path)
     if (!parsed) return
@@ -68,6 +81,43 @@ export default createMiddleware({
     return formatResponse(await render(parsed.target, format), format, { negotiated, head: request.method === "HEAD" })
   },
 })
+
+// Unprefixed pages redirect to the visitor's language from their cookie or Accept-Language. /en/data stays put so
+// English remains reachable for visitors whose browser prefers another language.
+function localizedRedirect(request: Request, url: URL) {
+  if (fromPathname(url.pathname)) return undefined
+  if (url.pathname !== basePath && !url.pathname.startsWith(`${basePath}/`)) return undefined
+  if (isDataBypassPath(url.pathname)) return undefined
+  const accept = request.headers.get("accept")
+  // Agents asking for Markdown get the English page in place.
+  if (prefersMarkdown(accept)) return undefined
+  if (accept && !accept.includes("text/html") && !accept.includes("*/*")) return undefined
+  const locale = localeFromRequest(request)
+  if (locale === "en") return undefined
+  const headers = new Headers({
+    // route() normalizes /data to /data/, so keep the visitor's own trailing slash.
+    Location: `${url.pathname === basePath ? `/${locale}${basePath}` : route(locale, url.pathname)}${url.search}`,
+    "Cache-Control": "private, no-store",
+    Vary: "Accept, Accept-Language, Cookie",
+  })
+  headers.append("Set-Cookie", cookie(locale))
+  return new Response(null, { status: 308, headers })
+}
+
+function isDataBypassPath(pathname: string) {
+  return (
+    pathname.startsWith(`${basePath}/_build/`) ||
+    pathname.startsWith(`${basePath}/api/`) ||
+    pathname.startsWith(`${basePath}/stats/`) ||
+    pathname.startsWith(`${basePath}/_server`) ||
+    pathname === `${basePath}/banner.jpg` ||
+    pathname === `${basePath}/banner.png` ||
+    pathname === `${basePath}/sitemap.xml` ||
+    pathname.endsWith("/llms.txt") ||
+    pathname.endsWith(".md") ||
+    pathname.endsWith(".json")
+  )
+}
 
 function parsePath(path: string) {
   const segments = path.split("/").filter(Boolean).slice(1)

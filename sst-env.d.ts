@@ -19,33 +19,11 @@ declare module "sst" {
       "value": string
     }
     "Api": import("@cloudflare/workers-types").Service
-    "Bucket": import("@cloudflare/workers-types").R2Bucket
     "Console": {
       "type": "sst.cloudflare.SolidStart"
       "url": string
     }
-    "DISCORD_INCIDENT_WEBHOOK_URL": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "DISCORD_SUPPORT_BOT_TOKEN": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "DISCORD_SUPPORT_CHANNEL_ID": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
     "EMAILOCTOPUS_API_KEY": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "EnterpriseStorage": import("@cloudflare/workers-types").R2Bucket
-    "FEISHU_APP_ID": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "FEISHU_APP_SECRET": {
       "type": "sst.sst.Secret"
       "value": string
     }
@@ -57,15 +35,6 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "HONEYCOMB_API_KEY": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "HoneycombWebhookSecret": {
-      "type": "random.index/randomPassword.RandomPassword"
-      "value": string
-    }
-    "LogProcessor": import("@cloudflare/workers-types").Service
     "SALESFORCE_CLIENT_ID": {
       "type": "sst.sst.Secret"
       "value": string

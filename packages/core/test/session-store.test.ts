@@ -1,13 +1,22 @@
 import { describe, expect } from "bun:test"
+import { asc, eq } from "drizzle-orm"
 import { Effect } from "effect"
 import { Bus } from "@opencode/core/bus"
+import { Config } from "@opencode/core/config"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionHistory } from "@opencode/core/session/history"
+import { SessionMessageTable, SessionPartTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
+import { Agent } from "@opencode/schema/agent"
+import { Document, Info } from "@opencode/schema/config"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { Event } from "@opencode/schema/event"
+import { Model } from "@opencode/schema/model"
 import { Project } from "@opencode/schema/project"
+import { Provider } from "@opencode/schema/provider"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
 import { SessionEvent } from "@opencode/schema/session-event"
@@ -20,6 +29,12 @@ const it = testEffect(
     Bus.node.replace(Bus.configured({ persist: true })),
   ]),
 )
+const partRows = Config.testLayer([
+  new Document({
+    type: "document",
+    info: new Info({ experimental: new ConfigExperimental.Info({ part_rows: true }) }),
+  }),
+])
 
 const seedSessions = (rows: { id: string; updated: number }[]) =>
   Effect.gen(function* () {
@@ -186,5 +201,185 @@ describe("SessionStore", () => {
         }),
       ).toEqual([])
     }),
+  )
+
+  it.effect("hydrates and settles assistant messages across session_part rows and legacy inline content rows", () =>
+    Effect.gen(function* () {
+      const sessionID = Session.ID.make("ses_dual_read")
+      const bus = yield* seedSessions([{ id: sessionID, updated: 0 }])
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const agent = Agent.ID.make("build")
+      const model = { providerID: Provider.ID.make("anthropic"), id: Model.ID.make("claude-sonnet-4-5") }
+
+      const legacyUntouchedID = SessionMessage.ID.make("msg_legacy_untouched")
+      const legacyMutatedID = SessionMessage.ID.make("msg_legacy_mutated")
+      const splitID = SessionMessage.ID.make("msg_split")
+
+      // 1. Untouched legacy row with inline content and no session_part rows
+      yield* database.db
+        .insert(SessionMessageTable)
+        .values({
+          id: legacyUntouchedID,
+          session_id: sessionID,
+          seq: -2,
+          type: "assistant",
+          time_created: 10,
+          time_updated: 10,
+          data: {
+            agent,
+            model,
+            content: [{ type: "text", text: "legacy inline only" }],
+            time: { created: 10, completed: 11 },
+          },
+        })
+        .run()
+
+      // 2. Legacy row with inline content that gets mutated via projector and split into session_part
+      yield* database.db
+        .insert(SessionMessageTable)
+        .values({
+          id: legacyMutatedID,
+          session_id: sessionID,
+          seq: -1,
+          type: "assistant",
+          time_created: 20,
+          time_updated: 20,
+          data: {
+            agent,
+            model,
+            content: [{ type: "reasoning", text: "legacy reasoning" }],
+            time: { created: 20 },
+          },
+        })
+        .run()
+      yield* bus.publish(SessionEvent.Text.Started, {
+        sessionID,
+        assistantMessageID: legacyMutatedID,
+        ordinal: 1,
+      })
+      yield* bus.publish(SessionEvent.Text.Ended, {
+        sessionID,
+        assistantMessageID: legacyMutatedID,
+        ordinal: 1,
+        text: "appended into session_part",
+      })
+
+      // 3. Fresh step projected directly into session_part
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID: splitID,
+        agent,
+        model,
+        started: 30,
+      })
+      yield* bus.publish(SessionEvent.Reasoning.Started, { sessionID, assistantMessageID: splitID, ordinal: 0 })
+      yield* bus.publish(SessionEvent.Reasoning.Ended, {
+        sessionID,
+        assistantMessageID: splitID,
+        ordinal: 0,
+        text: "step reasoning",
+      })
+      yield* bus.publish(SessionEvent.Tool.Input.Started, {
+        sessionID,
+        assistantMessageID: splitID,
+        id: "call_1",
+        name: "bash",
+      })
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID,
+        assistantMessageID: splitID,
+        id: "call_1",
+        input: { command: "ls" },
+        executed: true,
+      })
+      yield* bus.publish(SessionEvent.Tool.Success, {
+        sessionID,
+        assistantMessageID: splitID,
+        id: "call_1",
+        content: [{ type: "text", text: "ok" }],
+        executed: true,
+      })
+      yield* bus.publish(SessionEvent.Text.Started, { sessionID, assistantMessageID: splitID, ordinal: 2 })
+      yield* bus.publish(SessionEvent.Text.Ended, {
+        sessionID,
+        assistantMessageID: splitID,
+        ordinal: 2,
+        text: "step answer",
+      })
+
+      // Verify raw storage split on the mutated legacy row
+      const mutatedRaw = yield* database.db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, legacyMutatedID))
+        .get()
+      expect(mutatedRaw?.data).toMatchObject({ content: [] })
+      const mutatedParts = yield* database.db
+        .select()
+        .from(SessionPartTable)
+        .where(eq(SessionPartTable.message_id, legacyMutatedID))
+        .orderBy(asc(SessionPartTable.ordinal))
+        .all()
+      expect(mutatedParts).toHaveLength(2)
+
+      // Settle reads (single-message lookup)
+      expect(yield* store.message(legacyUntouchedID)).toMatchObject({
+        sessionID,
+        message: {
+          id: legacyUntouchedID,
+          content: [{ type: "text", text: "legacy inline only" }],
+        },
+      })
+      expect(yield* store.message(legacyMutatedID)).toMatchObject({
+        sessionID,
+        message: {
+          id: legacyMutatedID,
+          content: [
+            { type: "reasoning", text: "legacy reasoning" },
+            { type: "text", text: "appended into session_part" },
+          ],
+        },
+      })
+      expect(yield* store.message(splitID)).toMatchObject({
+        sessionID,
+        message: {
+          id: splitID,
+          content: [
+            { type: "reasoning", text: "step reasoning" },
+            { type: "tool", id: "call_1", state: { status: "completed" } },
+            { type: "text", text: "step answer" },
+          ],
+        },
+      })
+
+      // Hydrate reads (paged store.messages and full SessionHistory.get)
+      const hydrated = yield* store.messages({ sessionID, order: "asc" })
+      expect(hydrated).toMatchObject([
+        { id: legacyUntouchedID, content: [{ type: "text", text: "legacy inline only" }] },
+        {
+          id: legacyMutatedID,
+          content: [
+            { type: "reasoning", text: "legacy reasoning" },
+            { type: "text", text: "appended into session_part" },
+          ],
+        },
+        {
+          id: splitID,
+          content: [
+            { type: "reasoning", text: "step reasoning" },
+            { type: "tool", id: "call_1", state: { status: "completed" } },
+            { type: "text", text: "step answer" },
+          ],
+        },
+      ])
+      const rows = yield* database.db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.session_id, sessionID))
+        .orderBy(asc(SessionMessageTable.seq))
+        .all()
+      expect(yield* SessionHistory.decodeMessageRows(database.db, rows)).toEqual(hydrated)
+    }).pipe(Effect.provide(partRows)),
   )
 })

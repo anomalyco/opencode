@@ -1,8 +1,8 @@
 import { Menu } from "@opencode/ui/menu"
 import { For } from "solid-js"
-import { useServerRowItems } from "@/runtime/extension/servers"
+import { useServerRowItems } from "@/runtime/plugin/servers"
 
-/** Extension "server.row" menu items for one server, placed inside that row's menu. */
+/** Plugin "server.row" menu items for one server, placed inside that row's menu. */
 export function ServerRowItems(props: { server: string }) {
   const items = useServerRowItems(() => props.server)
 

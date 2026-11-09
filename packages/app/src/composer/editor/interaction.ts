@@ -1,9 +1,11 @@
 import { Predicate } from "effect"
-import { createEffect, type Accessor } from "solid-js"
-import { createStore, reconcile } from "solid-js/store"
+import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js"
+import { unwrap } from "solid-js/store"
 import { useFilteredList } from "@opencode/ui/hooks"
+import { abort } from "@opencode/util/abort"
 import { createComposerAttachments, type ComposerAttachmentConfig } from "../attachments/attachments"
 import type { Upload } from "../attachments/uploads"
+import { resolveBlobUrl } from "@/runtime/persistence/drafts"
 import { createComposerEditorActions, type ComposerStateStoreInput } from "./actions"
 import type {
   ComposerAttachment,
@@ -15,13 +17,32 @@ import type {
   ComposerSuggestion,
 } from "../types"
 import {
+  composerPopoverActiveID,
   createComposerInteractionState,
+  isComposerPopoverOpen,
+  selectComposerMode,
   transitionComposer,
   type ComposerInteractionCommand,
   type ComposerInteractionEvent,
+  type ComposerInteractionState,
+  type ComposerSavedDraft,
 } from "../suggestions/machine"
+import { getCursorPosition, setCursorPosition } from "./dom"
 import { clonePrompt, isAttachment, promptLength } from "../prompt-parts"
-import type { ComposerQueue } from "../adapter"
+import type { ComposerDelivery, ComposerQueue } from "../adapter"
+import { isCommentItem } from "../state"
+import { createQuoteCommentController, type QuoteCommentController } from "../quote-comment-machine"
+import {
+  INITIAL_MENTION_SEARCH_STATE,
+  isMentionFileStale,
+  selectMentionFiles,
+  selectMentionSessionsPending,
+  transitionMentionSearch,
+  type MentionSearchEffect,
+  type MentionSearchEvent,
+} from "./mention-search-machine"
+
+const MENTION_CONTEXT_CLOSED: MentionSearchEvent = Object.freeze({ type: "context.closed" })
 
 export type ComposerSelectControl = {
   options: Accessor<ComposerOption[]>
@@ -41,8 +62,19 @@ export type ComposerEditorView = {
   submit: {
     available?: Accessor<boolean>
     stopping: Accessor<boolean>
+    /** A send pressed while agents and models load, which goes through once they do. */
+    held?: Accessor<boolean>
+    /** A send is held, or is preparing and handing off its draft; the submit button shows progress. */
+    busy?: Accessor<boolean>
+    /** False while a send, client command or quote is underway, so the composer cannot submit it twice. */
+    canSubmit?: Accessor<boolean>
     working?: Accessor<boolean>
     queue?: ComposerQueue
+    quote?: {
+      available: Accessor<boolean>
+      delivery: Accessor<ComposerDelivery | undefined>
+      onSubmit: (key: string, comment: string) => Promise<boolean>
+    }
     onSubmit: (options?: { alternate?: boolean }) => void
     onStop: () => void
   }
@@ -52,20 +84,29 @@ export type ComposerEditorView = {
   }
 }
 
-export function createComposerEditorState(mode: "normal" | "shell" = "normal") {
-  return createStore({ ...createComposerInteractionState(), mode })
-}
+const DRAFT_EDITED: ComposerInteractionEvent = Object.freeze({ type: "draft.edited" })
+
+const HISTORY_RESET: ComposerInteractionEvent = Object.freeze({ type: "history.reset" })
+
+const NO_IDS: readonly string[] = Object.freeze([])
 
 export function createComposerEditor(input: {
   store: ComposerStateStoreInput
-  state?: ReturnType<typeof createComposerEditorState>
   history?: ComposerHistory
   commands: Accessor<ComposerSuggestion[]>
   context: Accessor<ComposerSuggestion[]>
-  searchContextFiles: (query: string) => ComposerSuggestion[] | Promise<ComposerSuggestion[]>
-  openAttachment?: (attachment: ComposerAttachment) => void
+  searchContextFiles: (query: string, signal?: AbortSignal) => ComposerSuggestion[] | Promise<ComposerSuggestion[]>
+  /** Reads reactively, so newly found sessions refresh the list without waiting on file search. */
+  searchSessions?: (query: string) => ComposerSuggestion[]
+  /** Loads sessions matching `word` into what `searchSessions` reads; settles once they are in. */
+  requestSessionSearch?: (word: string, signal: AbortSignal) => Promise<void>
+  openAttachment?: (attachment: ComposerAttachment, origin?: HTMLElement) => void
+  /** An object URL for the image file at this path, which a path attachment references without its bytes. */
+  readImage?: (path: string) => Promise<string | undefined>
   openContext?: (key: string) => void
   onContextRemove?: (item: ComposerComment) => void
+  onQuoteComment?: (item: Extract<ComposerComment, { type: "quote" }>, comment: string) => void
+  quoteComment?: QuoteCommentController
   onEditor?: (element: HTMLElement) => void
   onSuggestionSelect?: (item: ComposerSuggestion) => (() => void) | void
   view: ComposerEditorView
@@ -73,8 +114,65 @@ export function createComposerEditor(input: {
 }) {
   let editor: HTMLElement | undefined
   let fileInput: HTMLInputElement | undefined
+  let focusFrame: number | undefined
+  let focusCursor: number | undefined
+
+  const cancelFocus = () => {
+    if (focusFrame === undefined) return
+    cancelAnimationFrame(focusFrame)
+    focusFrame = undefined
+    focusCursor = undefined
+  }
+
+  const flushFocus = () => {
+    const cursor = focusCursor
+
+    if (cursor === undefined) return
+    cancelFocus()
+
+    if (!editor) return
+    editor.focus()
+    setCursorPosition(editor, cursor)
+  }
+
+  onCleanup(cancelFocus)
   const draft = createComposerEditorActions(input.store)
-  const [state, setState] = input.state ?? createComposerEditorState(draft.state.mode)
+  const quoteComment = input.quoteComment ?? createQuoteCommentController()
+  // A signal, not a store: the machine shares frozen states, which a store write would merge into and mutate. Memos
+  // keep readers of one field from rerunning when another changes.
+  const [readState, writeState] = createSignal(createComposerInteractionState())
+  const popover = createMemo(() => readState().popover)
+  const drag = createMemo(() => readState().drag)
+  const focus = createMemo(() => readState().focus)
+  const activeContextID = createMemo(() => readState().activeContextID)
+
+  const state: ComposerInteractionState = {
+    get popover() {
+      return popover()
+    },
+    get drag() {
+      return drag()
+    },
+    get focus() {
+      return focus()
+    },
+    get activeContextID() {
+      return activeContextID()
+    },
+  }
+
+  // The draft holds the only copy of the mode, so hydration, queue edits and sends change it without the editor.
+  const mode = () => selectComposerMode(draft.state)
+
+  createEffect(on(mode, (next) => dispatch({ type: "mode.synced", mode: next }), { defer: true }))
+  // Another draft replaces this one, so neither recalled history nor its saved draft applies to it.
+  createEffect(
+    on(
+      () => draft.state,
+      () => dispatch(HISTORY_RESET),
+      { defer: true },
+    ),
+  )
 
   function addPart(part: ComposerPersistedState["prompt"][number]) {
     if (isAttachment(part)) return false
@@ -94,9 +192,13 @@ export function createComposerEditor(input: {
     ? createComposerAttachments({
         ...input.attachments,
         capture: () => ({
+          scope: unwrap(draft.state),
           current: () => draft.state.prompt,
           cursor: () => draft.state.cursor,
-          set: (prompt, cursor) => draft.setPrompt(prompt, cursor),
+          set: (prompt, cursor) => {
+            draft.setPrompt(prompt, cursor)
+            dispatch(DRAFT_EDITED)
+          },
         }),
         editor: () => editor,
         focusEditor: () => editor?.focus(),
@@ -105,6 +207,7 @@ export function createComposerEditor(input: {
       })
     : undefined
 
+  // Recalled history stays recalled until a file is actually added, so a cancelled picker loses nothing.
   const attach = () => {
     if (!attachments) {
       input.view.add?.onAttach()
@@ -119,21 +222,98 @@ export function createComposerEditor(input: {
     )
   }
 
+  // Debounced and abortable: each keystroke or close replaces the pending searches instead of queueing behind them.
+  const [mentionSearch, setMentionSearch] = createSignal(INITIAL_MENTION_SEARCH_STATE)
+  const mentionRuns = new Map<number, { timer: ReturnType<typeof setTimeout>; controller?: AbortController }>()
+
+  const dispatchMentionSearch = (event: MentionSearchEvent) => {
+    const previous = untrack(mentionSearch)
+    const next = transitionMentionSearch(previous, event)
+
+    if (next.state !== previous) setMentionSearch(next.state)
+    next.effects.forEach(runMentionSearch)
+  }
+
+  const runMentionSearch = (effect: MentionSearchEffect) => {
+    const attempt = effect.attempt
+
+    if (effect.type === "file.debounce") {
+      mentionRuns.set(attempt, {
+        timer: setTimeout(() => dispatchMentionSearch({ type: "file.debounce.fired", attempt }), effect.delayMs),
+      })
+
+      return
+    }
+
+    clearTimeout(mentionRuns.get(attempt)?.timer)
+
+    if (effect.type === "file.abort" || effect.type === "session.abort") {
+      const controller = mentionRuns.get(attempt)?.controller
+      mentionRuns.delete(attempt)
+
+      if (controller) abort(controller)
+
+      return
+    }
+
+    const controller = new AbortController()
+
+    if (effect.type === "file.search") {
+      mentionRuns.set(attempt, {
+        controller,
+        timer: setTimeout(() => dispatchMentionSearch({ type: "file.timed-out", attempt }), effect.timeoutMs),
+      })
+      void Promise.try(() => input.searchContextFiles(effect.query, controller.signal)).then(
+        (items) => dispatchMentionSearch({ type: "file.resolved", attempt, items }),
+        () => dispatchMentionSearch({ type: "file.failed", attempt }),
+      )
+
+      return
+    }
+
+    mentionRuns.set(attempt, {
+      controller,
+      timer: setTimeout(() => dispatchMentionSearch({ type: "session.timed-out", attempt }), effect.timeoutMs),
+    })
+    // A failed search settles too: the titles already known still match locally.
+    const settled = () => dispatchMentionSearch({ type: "session.settled", attempt })
+    void Promise.try(() => input.requestSessionSearch?.(effect.word, controller.signal)).then(settled, settled)
+  }
+
+  createEffect(() => {
+    if (state.popover.type !== "context") return untrack(() => dispatchMentionSearch(MENTION_CONTEXT_CLOSED))
+    const query = state.popover.query
+    untrack(() => dispatchMentionSearch({ type: "context.changed", query, hasSessions: !!input.requestSessionSearch }))
+  })
+  onCleanup(() => dispatchMentionSearch({ type: "disposed" }))
+
   const contextList = useFilteredList<ComposerSuggestion>({
-    items: async (query) => {
+    items: (query) => {
+      if (state.popover.type !== "context") return []
+
+      const sessions = input.searchSessions?.(query) ?? []
+
+      // Only session titles contain spaces; fuzzy matches elsewhere would keep the popover over prose.
+      if (/\s/.test(query)) return sessions
+
       const fixed = input.context().filter((item) => item.kind !== "file")
       const recent = input.context().filter((item) => item.kind === "file" && item.recent)
 
-      if (!query.trim()) return [...fixed, ...recent]
       const seen = new Set(recent.map((item) => item.id))
-      const files = (await input.searchContextFiles(query)).filter((item) => !seen.has(item.id))
 
-      return [...fixed, ...recent, ...files]
+      return [
+        ...fixed,
+        ...sessions,
+        ...recent,
+        ...selectMentionFiles(mentionSearch()).filter((item) => !seen.has(item.id)),
+      ]
     },
     key: (item) => item.id,
     filterKeys: ["label"],
-    skipFilter: (item) => item.kind === "file" && !item.recent,
+    skipFilter: (item) => item.kind === "session" || (item.kind === "file" && !item.recent),
     groupBy: (item) => {
+      if (item.kind === "session") return "session"
+
       if (item.kind === "reference") return "reference"
 
       if (item.kind === "skill") return "skill"
@@ -147,7 +327,7 @@ export function createComposerEditor(input: {
       return "file"
     },
     sortGroupsBy: (a, b) => {
-      const order = ["reference", "skill", "agent", "resource", "recent", "file"]
+      const order = ["skill", "agent", "session", "reference", "resource", "recent", "file"]
 
       return order.indexOf(a.category) - order.indexOf(b.category)
     },
@@ -160,9 +340,64 @@ export function createComposerEditor(input: {
   })
 
   const list = () => (state.popover.type === "context" ? contextList : commandList)
-  const suggestions = () => list().flat()
+
+  const history = createMemo<ComposerSuggestion[]>(() =>
+    (input.history?.entries(mode()) ?? []).map((entry, index) => ({
+      id: `history:${index}`,
+      kind: "history",
+      label: entry.prompt.map((part) => ("content" in part ? part.content : "")).join(""),
+      description: entry.prompt.flatMap((part) => (isAttachment(part) ? [part.filename] : [])).join(", "),
+      history: entry,
+    })),
+  )
+
+  // Files from the previous query stay listed while the next search runs, but the keyboard can't highlight or pick them.
+  const stale = (item: ComposerSuggestion) =>
+    state.popover.type === "context" &&
+    item.kind === "file" &&
+    !item.recent &&
+    isMentionFileStale(mentionSearch(), state.popover.query)
+
+  const selectable = () => suggestions().flatMap((item) => (stale(item) ? [] : [item.id]))
+
+  const suggestions = () => {
+    if (state.popover.type !== "history") return list().flat()
+    const query = state.popover.query.trim().toLowerCase()
+
+    return history().filter((item) => `${item.label} ${item.description}`.toLowerCase().includes(query))
+  }
 
   const execute = (command: ComposerInteractionCommand) => {
+    if (command.type === "history.preview") {
+      const item = history().find((entry) => entry.id === command.id)
+
+      if (item?.history) applyHistory(item.history, { focus: false })
+
+      return
+    }
+
+    if (command.type === "history.apply") {
+      applyHistory(command.entry, { cursor: command.cursor })
+
+      return
+    }
+
+    if (command.type === "history.restore") {
+      applyHistory(command.draft.entry, { cursor: command.draft.cursor, focus: command.focus })
+
+      return
+    }
+
+    if (command.type === "draft.setMode") {
+      draft.setMode(command.mode)
+
+      if (command.mode === "shell") input.view.shell?.onOpen()
+
+      if (command.mode === "normal") input.view.shell?.onClose()
+
+      return
+    }
+
     if (command.type === "draft.setText") {
       draft.setText(command.value)
 
@@ -171,6 +406,12 @@ export function createComposerEditor(input: {
 
     if (command.type === "draft.addText") {
       draft.addText(command.value)
+
+      return
+    }
+
+    if (command.type === "draft.removeTextBefore") {
+      draft.removeTextBefore(command.value)
 
       return
     }
@@ -198,42 +439,38 @@ export function createComposerEditor(input: {
     if (command.type === "focus.editor") requestAnimationFrame(() => editor?.focus())
   }
 
+  // Effects dispatch too, so neither the transition nor its commands subscribe the caller.
   function dispatch(event: ComposerInteractionEvent) {
-    const mode = state.mode
-    const result = transitionComposer(state, event, draft.state)
-    const action = event.type === "popover.select" ? input.onSuggestionSelect?.(event.item) : undefined
+    return untrack(() => {
+      if (event.type === "popover.active" && !selectable().includes(event.id)) return false
 
-    if (event.type === "popover.select") {
-      if (!action) result.commands.forEach(execute)
+      if (event.type === "popover.close") cancelFocus()
+      const previous = readState()
+      const result = transitionComposer(previous, event, draft.state)
+      const action = event.type === "popover.select" ? input.onSuggestionSelect?.(event.item) : undefined
 
-      if (action && event.item.kind === "command" && state.popover.type !== "command-menu") {
-        draft.setPrompt(draft.state.prompt.filter(isAttachment), 0)
+      if (event.type === "popover.select") {
+        if (!action) result.commands.forEach(execute)
+
+        if (action && event.item.kind === "command" && previous.popover.type !== "command-menu") {
+          draft.setPrompt(draft.state.prompt.filter(isAttachment), 0)
+        }
       }
-    }
 
-    setState(reconcile(result.state))
+      if (result.state !== previous) writeState(result.state)
 
-    if (mode !== result.state.mode) draft.setMode(result.state.mode)
+      if (event.type !== "popover.select") result.commands.forEach(execute)
+      action?.()
 
-    if (event.type !== "popover.select") result.commands.forEach(execute)
-
-    if (mode !== result.state.mode) {
-      if (result.state.mode === "shell") input.view.shell?.onOpen()
-
-      if (result.state.mode === "normal") input.view.shell?.onClose()
-    }
-
-    if (event.type === "popover.select") {
-      if (!action) return result.handled
-      action()
-    }
-
-    return result.handled
+      return result.handled
+    })
   }
 
-  const onKeyDown = (event: KeyboardEvent) => {
+  const onKeyDown = (event: KeyboardEvent, height?: number) => {
+    flushFocus()
+
     if (
-      state.mode === "normal" &&
+      mode() === "normal" &&
       (event.metaKey || event.ctrlKey) &&
       !event.altKey &&
       !event.shiftKey &&
@@ -245,25 +482,49 @@ export function createComposerEditor(input: {
       return true
     }
 
-    const handled = dispatch({
-      type: "key.down",
-      key: event.key,
-      ctrl: event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey,
-      composing: event.isComposing,
-      ids: suggestions().map((item) => item.id),
-      empty: draft.state.prompt.every((part) => !("content" in part) || part.content.length === 0),
-    })
+    const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+    const open = isComposerPopoverOpen(readState())
+
+    // Every keystroke lands here. With no list open only Escape, Backspace and Ctrl+G reach the machine, so typing
+    // neither lists suggestions nor builds an event.
+    const handled =
+      (open || event.key === "Escape" || event.key === "Backspace" || (ctrl && event.key.toLowerCase() === "g")) &&
+      dispatch({
+        type: "key.down",
+        key: event.key,
+        ctrl,
+        composing: event.isComposing,
+        ids: open ? selectable() : NO_IDS,
+        empty:
+          event.key === "Backspace" &&
+          draft.state.prompt.every((part) => !("content" in part) || part.content.length === 0),
+      })
 
     if (handled) event.preventDefault()
 
-    if (handled && event.key !== "Enter" && event.key !== "Tab" && state.popover.type !== "closed") {
-      const activeID = state.popover.activeID ?? ""
+    if (handled && event.key !== "Enter" && event.key !== "Tab" && isComposerPopoverOpen(readState())) {
+      const activeID = composerPopoverActiveID(readState()) ?? ""
       requestAnimationFrame(() =>
         document.querySelector(`[data-suggestion-id="${CSS.escape(activeID)}"]`)?.scrollIntoView({ block: "nearest" }),
       )
     }
 
     if (handled) return true
+
+    // The suggestion lists don't page, and a page key must not move the caret out of the query or page the timeline.
+    if (
+      isComposerPopoverOpen(readState()) &&
+      (event.key === "PageUp" || event.key === "PageDown") &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.isComposing
+    ) {
+      event.preventDefault()
+
+      return true
+    }
 
     if (event.key === "Escape" && input.view.submit.queue?.editing()) {
       event.preventDefault()
@@ -273,7 +534,7 @@ export function createComposerEditor(input: {
     }
 
     const stop =
-      input.view.submit.working?.() &&
+      (input.view.submit.working?.() || input.view.submit.held?.()) &&
       ((event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "g") ||
         event.key === "Escape")
 
@@ -288,8 +549,11 @@ export function createComposerEditor(input: {
       !event.altKey &&
       !event.ctrlKey &&
       !event.metaKey &&
+      !event.isComposing &&
       (event.key === "ArrowUp" || event.key === "ArrowDown") &&
-      navigateHistory(event.key === "ArrowUp" ? "up" : "down")
+      (event.shiftKey
+        ? event.key === "ArrowUp" && openHistory(height)
+        : navigateHistory(event.key === "ArrowUp" ? "up" : "down"))
     ) {
       event.preventDefault()
 
@@ -300,73 +564,73 @@ export function createComposerEditor(input: {
   }
 
   createEffect(() => {
-    if (state.popover.type === "closed") return
-    const ids = suggestions().map((item) => item.id)
+    if (!isComposerPopoverOpen(state)) return
+    const ids = selectable()
 
-    if (state.popover.activeID ? ids.includes(state.popover.activeID) : ids.length === 0) return
+    if (state.popover.activeID ? state.popover.chosen && ids.includes(state.popover.activeID) : ids.length === 0) return
     dispatch({ type: "popover.results", ids })
   })
 
+  // A space ends the mention once nothing matches, so `@` can still start ordinary prose.
+  createEffect(() => {
+    if (state.popover.type !== "context" || !/\s/.test(state.popover.query)) return
+
+    if (selectMentionSessionsPending(mentionSearch(), state.popover.query, !!input.requestSessionSearch)) return
+
+    if (contextList.grouped.state === "ready" && contextList.flat().length === 0) dispatch({ type: "popover.close" })
+  })
+
   const restoreFocus = (cursor = draft.state.cursor ?? promptLength(draft.state.prompt)) => {
-    requestAnimationFrame(() => {
-      editor?.focus()
-      setEditorCursor(editor, cursor)
-    })
+    cancelFocus()
+    focusCursor = cursor
+    focusFrame = requestAnimationFrame(flushFocus)
   }
 
-  const applyHistory = (entry: ComposerHistoryEntry, position: "start" | "end") => {
+  const applyHistory = (entry: ComposerHistoryEntry, options?: { focus?: boolean; cursor?: number }) => {
     input.history?.restore?.(entry.metadata)
-    const cursor = position === "start" ? 0 : promptLength(entry.prompt)
+    const cursor = options?.cursor ?? promptLength(entry.prompt)
     draft.setPrompt(clonePrompt(entry.prompt), cursor)
-    restoreFocus(cursor)
+
+    if (options?.focus !== false) restoreFocus(cursor)
+  }
+
+  const captureDraft = (): ComposerSavedDraft => ({
+    entry: { prompt: clonePrompt(draft.state.prompt), metadata: input.history?.capture?.() },
+    cursor: draft.state.cursor,
+  })
+
+  const caretInEditor = (element: HTMLElement) => {
+    const selection = window.getSelection()
+
+    return !!selection?.isCollapsed && element.contains(selection.anchorNode)
+  }
+
+  // `height` is the composer's height before the first preview replaces the draft; the composer keeps it while open.
+  const openHistory = (height?: number) => {
+    if (isComposerPopoverOpen(readState()) || !editor || !history().length || !caretInEditor(editor)) return false
+
+    if (draft.state.prompt.some((part) => "content" in part && part.content.length > 0)) return false
+
+    return dispatch({ type: "history.open", id: history()[0]!.id, saved: captureDraft(), height })
   }
 
   const navigateHistory = (direction: "up" | "down") => {
-    if (!input.history || !editor) return false
-    const selection = window.getSelection()
-
-    if (!selection?.isCollapsed || !editor.contains(selection.anchorNode)) return false
+    if (isComposerPopoverOpen(readState()) || !input.history || !editor || !caretInEditor(editor)) return false
     const text = draft.state.prompt.map((part) => ("content" in part ? part.content : "")).join("")
 
-    if (!canNavigateHistory(direction, text, editorCursor(editor), state.historyIndex >= 0)) return false
-    const entries = input.history.entries(state.mode)
-
-    if (direction === "up") {
-      if (entries.length === 0 || state.historyIndex >= entries.length - 1) return false
-
-      if (state.historyIndex === -1) {
-        setState("savedHistory", {
-          prompt: clonePrompt(draft.state.prompt),
-          metadata: input.history.capture?.(),
-        })
-      }
-
-      const index = state.historyIndex + 1
-      setState("historyIndex", index)
-      applyHistory(entries[index]!, "start")
-
-      return true
-    }
-
-    if (state.historyIndex < 0) return false
-
-    if (state.historyIndex > 0) {
-      const index = state.historyIndex - 1
-      setState("historyIndex", index)
-      applyHistory(entries[index]!, "end")
-
-      return true
-    }
-
-    const saved = state.savedHistory ?? { prompt: [{ type: "text", content: "", start: 0, end: 0 }] }
-    setState({ historyIndex: -1, savedHistory: undefined })
-    applyHistory(saved, "end")
-
-    return true
+    return dispatch({
+      type: "history.step",
+      direction,
+      text,
+      cursor: getCursorPosition(editor) ?? text.length,
+      entries: input.history.entries(mode()),
+      capture: captureDraft,
+    })
   }
 
   return {
     state,
+    mode,
     view: input.view,
     suggestions,
     dispatch,
@@ -381,7 +645,7 @@ export function createComposerEditor(input: {
       return draft.state.context.items.find((item) => item.key === id)
     },
     comments() {
-      return draft.state.context.items.filter((item) => !!item.comment?.trim())
+      return draft.state.context.items.filter(isCommentItem)
     },
     files() {
       return draft.state.context.items.flatMap((item) => (item.type === "file" && !item.comment?.trim() ? [item] : []))
@@ -399,35 +663,58 @@ export function createComposerEditor(input: {
       dispatch({ type: "context.active", id })
       input.openContext?.(id)
     },
+    quoteComment,
+    focusQuotePrompt: () => restoreFocus(),
+    commentQuote(id: string, comment: string) {
+      const item = draft.state.context.items.find((entry) => entry.key === id)
+
+      if (item?.type === "quote") input.onQuoteComment?.(item, comment)
+    },
+    async searchPaths(query: string) {
+      return (await input.searchContextFiles(query)).flatMap((item) => (item.path ? [item.path] : []))
+    },
     removeContext(id: string) {
       const item = draft.state.context.items.find((entry) => entry.key === id)
 
       if (item) input.onContextRemove?.(item)
       draft.removeContext(id)
+      quoteComment.retain(draft.state.context.items.map((entry) => entry.key))
+      dispatch(DRAFT_EDITED)
 
       if (state.activeContextID === id) dispatch({ type: "context.active", id })
     },
-    openAttachment(attachment: ComposerAttachment) {
-      input.openAttachment?.(attachment)
+    openAttachment(attachment: ComposerAttachment, origin?: HTMLElement) {
+      input.openAttachment?.(attachment, origin)
+    },
+    /** The image an attachment shows, whether its bytes are in the draft store or in a file at its path. */
+    previewAttachment(attachment: ComposerAttachment): Promise<string | undefined> {
+      if (!attachment.mime.startsWith("image/")) return Promise.resolve(undefined)
+
+      if (attachment.type === "image") return resolveBlobUrl(attachment.blob)
+
+      return input.readImage?.(attachment.path) ?? Promise.resolve(undefined)
     },
     removeAttachment(id: string) {
       draft.removeAttachment(id)
+      dispatch(DRAFT_EDITED)
     },
     canSubmit() {
       if (input.view.submit.available?.() === false) return false
+
+      if (input.view.submit.canSubmit?.() === false) return false
 
       if (input.view.draftOnly) return false
 
       if (attachments?.pending().length) return false
       const persisted = draft.state
 
-      if (state.mode === "shell") {
+      if (selectComposerMode(persisted) === "shell") {
         return persisted.prompt.some((part) => "content" in part && !!part.content.trim())
       }
 
       if (persisted.prompt.some(isAttachment)) return true
 
-      if (persisted.context.items.some((item) => !!item.comment?.trim())) return true
+      if (persisted.context.items.some(isCommentItem)) return true
 
       return persisted.prompt.some((part) => "content" in part && !!part.content.trim())
     },
@@ -437,6 +724,8 @@ export function createComposerEditor(input: {
     },
     restoreFocus,
     onInput(value: string, prompt?: ComposerPersistedState["prompt"], cursor?: number) {
+      cancelFocus()
+
       if (prompt) draft.setPrompt(prompt, cursor)
 
       if (input.view.draftOnly) return
@@ -468,10 +757,9 @@ export function createComposerEditor(input: {
     },
     addHistory(prompt: ComposerPersistedState["prompt"], mode: "normal" | "shell") {
       input.history?.add(prompt, mode)
-      setState({ historyIndex: -1, savedHistory: undefined })
     },
     resetHistory() {
-      setState({ historyIndex: -1, savedHistory: undefined })
+      dispatch(HISTORY_RESET)
     },
     onPaste(event: ClipboardEvent) {
       const clipboard = event.clipboardData
@@ -513,14 +801,15 @@ export function createComposerEditor(input: {
       selection.addRange(range)
       target.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste", data: normalized }))
     },
+    // The document's dragover owns the drag state. A dragleave fires on every move between the editor's own
+    // nodes, so clearing the state here made the dropzone flicker.
     onDragEnter(event: DragEvent) {
       event.preventDefault()
-      dispatch({ type: "drag.enter" })
     },
     onDragOver(event: DragEvent) {
       event.preventDefault()
     },
-    onDragLeave() {
+    clearDrag() {
       dispatch({ type: "drag.leave" })
     },
     onDrop(event: DragEvent) {
@@ -557,50 +846,4 @@ export function shouldHandlePasteAsAttachment(clipboard: DataTransfer | null, re
   if (Array.from(clipboard?.types ?? []).some((type) => type.startsWith("text/"))) return false
 
   return readClipboardImage
-}
-
-function canNavigateHistory(direction: "up" | "down", text: string, cursor: number, inHistory: boolean) {
-  const position = Math.max(0, Math.min(cursor, text.length))
-
-  if (inHistory) return position === 0 || position === text.length
-
-  if (direction === "up") return position === 0 && text.length === 0
-
-  return position === text.length
-}
-
-function editorCursor(editor: HTMLElement) {
-  const selection = window.getSelection()
-
-  if (!selection?.rangeCount || !editor.contains(selection.anchorNode)) return editor.textContent?.length ?? 0
-  const range = selection.getRangeAt(0).cloneRange()
-  range.selectNodeContents(editor)
-  range.setEnd(selection.anchorNode!, selection.anchorOffset)
-
-  return range.toString().length
-}
-
-function setEditorCursor(editor: HTMLElement | undefined, cursor: number) {
-  if (!editor) return
-  const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT)
-  let remaining = cursor
-  let node = walker.nextNode()
-
-  while (node) {
-    const length = node.textContent?.length ?? 0
-
-    if (remaining <= length) {
-      const range = document.createRange()
-      range.setStart(node, remaining)
-      range.collapse(true)
-      const selection = window.getSelection()
-      selection?.removeAllRanges()
-      selection?.addRange(range)
-
-      return
-    }
-
-    remaining -= length
-    node = walker.nextNode()
-  }
 }

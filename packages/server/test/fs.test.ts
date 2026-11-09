@@ -335,3 +335,32 @@ it.live("opens no file for HEAD and closes it when a download is aborted", () =>
     ).toBe(0)
   }),
 )
+
+it.live("confines watch requests like read and reports a disabled watcher", () =>
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const project = path.join(tmp.path, "project")
+    yield* Effect.promise(async () => {
+      await fs.mkdir(project)
+      await fs.writeFile(path.join(project, "a.ts"), "a")
+      await fs.writeFile(path.join(tmp.path, "outside.ts"), "outside")
+    })
+    const server = yield* startServer(path.join(tmp.path, "config"))
+    const watch = (method: string, file: string) =>
+      Effect.promise(async () => {
+        const url = new URL("/api/experimental/fs/watch", server.base)
+        url.searchParams.set("location[directory]", project)
+        const response = await fetch(url, {
+          method,
+          headers: { ...server.headers, "content-type": "application/json" },
+          body: JSON.stringify({ path: file }),
+        })
+        return response.status
+      })
+
+    expect(yield* watch("POST", "../outside.ts")).toBe(404)
+    expect(yield* watch("POST", "missing.ts")).toBe(404)
+    expect(yield* watch("POST", "a.ts")).toBe(503)
+    expect(yield* watch("DELETE", "a.ts")).toBe(204)
+  }),
+)

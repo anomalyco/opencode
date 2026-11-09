@@ -1,31 +1,47 @@
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { SessionMessageUser } from "@opencode/client/promise"
-import type { Accessor } from "solid-js"
+import { createEffect, createSignal, onCleanup, untrack, type Accessor } from "solid-js"
 import type { PromptComment } from "./comment-note"
 import type { PromptHistoryComment } from "./history/entry"
-import type { ImageAttachmentPart, Prompt } from "./state"
-import { clonePrompt, promptLength } from "./prompt-parts"
-import type { ComposerAdapter, ComposerDelivery, ComposerSelection, ComposerSession } from "./adapter"
-import { createComposerSubmission } from "./submission-state"
-import { buildPromptRequest, noteComment } from "./request"
+import { isCommentItem, type ContextItem, type ImageAttachmentPart, type Prompt } from "./state"
+import { appendPrompt, clonePrompt, isAttachment, promptLength, serializePrompt } from "./prompt-parts"
+import type {
+  ComposerAdapter,
+  ComposerDelivery,
+  ComposerSelection,
+  ComposerSession,
+  ComposerSubmissionHandle,
+} from "./adapter"
+import { buildPromptRequest, noteComment, quoteComment } from "./request"
 import { setCursorPosition } from "./editor/dom"
 import { blobDataUrl, resolveBlobUrl } from "@/runtime/persistence/drafts"
-import { isAttachment } from "./prompt-parts"
 import type { ModelSelection } from "@/providers/models/selection"
-import { parseSlashCommand } from "./client-slash-command"
+import {
+  composerSubmitTarget,
+  createComposerSubmitState,
+  transitionComposerSubmit,
+  type CapturedDraft,
+  type ComposerSubmission,
+  type ComposerSubmitEffect,
+  type ComposerSubmitEvent,
+  type PromptSend,
+  type SubmissionKind,
+  type SubmitSnapshot,
+} from "./machine"
+import { retryFingerprint } from "./retry"
+import {
+  SERVER_PROMPT_STATUS,
+  transitionPromptStatus,
+  type PromptStatusEvent,
+  type PromptStatusState,
+} from "./prompt-status-machine"
 
-const submitting = new WeakSet<object>()
+// The model each session was last switched to from this client, by session ID.
+const switched = new Map<string, string>()
 
-type ComposerSubmission = {
-  id: SessionMessage.ID
-  mode: "normal" | "shell"
-  prompt: Prompt
-  context: ReturnType<ComposerAdapter["state"]["context"]["items"]>
-  text: string
-  images: ImageAttachmentPart[]
-  selection: ComposerSelection
-  delivery: ComposerDelivery
-}
+// The optimistic busy status of each session, by session ID. Module-wide, because a new session's first prompt and
+// the follow-ups sent from its own composer go through different submit machines. A session left out is `server`.
+const statuses = new Map<string, PromptStatusState>()
 
 type ComposerSubmitInput = {
   adapter: ComposerAdapter
@@ -36,7 +52,6 @@ type ComposerSubmitInput = {
   addToHistory: (prompt: Prompt, mode: "normal" | "shell") => void
   removeFromHistory: (prompt: Prompt, mode: "normal" | "shell", comments: PromptHistoryComment[]) => void
   resetHistory: () => void
-  setMode: (mode: "normal" | "shell") => void
   closePopover: () => void
   delivery?: (alternate: boolean) => ComposerDelivery
   clientCommand?: (text: string) => (() => void | Promise<void>) | undefined
@@ -53,173 +68,387 @@ type ComposerSubmitInput = {
   }
 }
 
+// The submit lifecycle is `transitionComposerSubmit`; this runs its effects and turns their results into events.
 export function createComposerSubmit(input: ComposerSubmitInput) {
-  const submit = async (event: globalThis.Event, options?: { alternate?: boolean }) => {
-    event.preventDefault()
+  const [state, setState] = createSignal(createComposerSubmitState())
 
-    const prompt = clonePrompt(input.adapter.state.current())
-    const text = submissionText(prompt)
-    const clientCommand = input.mode() === "normal" ? input.clientCommand?.(text) : undefined
+  const dispatch = (event: ComposerSubmitEvent) => {
+    const result = transitionComposerSubmit(state(), event)
+    setState(result.state)
+    result.effects.forEach(run)
+  }
 
-    if (clientCommand) {
-      if (submitting.has(input.adapter.state)) return
-      submitting.add(input.adapter.state)
+  const run = (effect: ComposerSubmitEffect) => {
+    if (effect.type === "done") return effect.done(effect.sent)
 
-      try {
-        // Client commands such as /btw answer with the session's model, so apply the composer's selection first,
-        // following the same steer rule as server commands.
-        const selection = currentSelection(input)
+    if (effect.type === "notify.missing-selection") return input.notify.missingSelection()
 
-        if (input.adapter.kind === "active-session" && selection && (input.delivery?.(false) ?? "steer") === "steer")
-          await applySelection(
-            input.adapter.session(),
-            selection,
-            input.adapter.controls().model.selection.trackSessionCommit,
-          )
-        clearClientCommand(input, prompt)
-        await clientCommand()
-      } catch (error) {
-        input.notify.failed("command", error)
-      } finally {
-        submitting.delete(input.adapter.state)
-      }
+    if (effect.type === "notify.unqueueable") return input.notify.unqueueable()
+
+    if (effect.type === "interrupt") {
+      if (input.adapter.kind === "active-session") void input.adapter.interrupt()
 
       return
     }
 
-    const submission = createComposerSubmission({
-      target: input.adapter.state,
-      prompt,
-      context: input.adapter.state.context
-        .items()
-        .map((item) =>
-          item.type === "note"
-            ? { ...item, live: item.live ? { ...item.live } : undefined }
-            : { ...item, selection: item.selection ? { ...item.selection } : undefined },
-        ),
-    })
+    if (effect.type === "submit.retry")
+      return dispatch({ type: "submit", snapshot: snapshot(input, effect.alternate), done: effect.done })
 
-    const read = readSubmission(input, submission.prompt, submission.context, text, options?.alternate ?? false)
-
-    if (!read) {
-      if (input.adapter.working() && input.adapter.kind === "active-session") void input.adapter.interrupt()
-
-      return
-    }
-
-    // Like the TUI, a shell command runs now or not at all; it cannot wait in the queue.
-    if (read.mode === "shell" && read.delivery === "queue") {
-      input.notify.unqueueable()
-
-      return
-    }
-
-    if (submitting.has(input.adapter.state)) return
-
-    // Images restored from a draft or history carry ids only; the optimistic message shows their URLs.
-    const value = {
-      ...read,
-      images: await Promise.all(
-        read.images.map(async (image) => ({
-          ...image,
-          blob: { ...image.blob, url: (await resolveBlobUrl(image.blob)) ?? image.blob.url },
-        })),
-      ),
-    }
-
-    submitting.add(input.adapter.state)
-    const comments = input.comments.capture()
-    // Capture command intent before starting a session in a worktree whose catalog has not loaded.
-    const command = value.mode === "normal" ? findCommand(input.commands(), value.text) : undefined
-
-    try {
-      const started =
-        input.adapter.kind === "active-session"
-          ? { session: input.adapter.session(), cleanupReady: Promise.resolve() }
-          : await input.adapter.start(value.selection, submission, handoffMessage(value))
-
-      if (!started) return
-      const session = started.session
-
-      input.addToHistory(value.prompt, value.mode)
+    if (effect.type === "hold.show") {
+      input.adapter.beforeSubmit?.()
+      effect.session.handoff.hold({
+        message: handoffMessage({
+          id: effect.snapshot.id,
+          prompt: effect.snapshot.draft.prompt,
+          context: effect.snapshot.draft.context,
+          images: effect.snapshot.draft.prompt.filter((part): part is ImageAttachmentPart => part.type === "image"),
+        }),
+      })
+      input.addToHistory(effect.snapshot.draft.prompt, effect.snapshot.mode)
       input.resetHistory()
-      const restore = () => restoreSubmission(input, submission, value, comments)
 
-      if (value.mode === "normal" && !command) {
-        // The timeline shows a steer, and any switches it makes, as the composer clears; a queued prompt shows in
-        // the queue once admitted.
-        if (value.delivery === "steer")
-          session.handoff.set({
-            message: handoffMessage(value),
-            selection: {
-              agent: value.selection.agent,
-              model: {
-                id: value.selection.model.modelID,
-                providerID: value.selection.model.providerID,
-                variant: value.selection.variant,
-              },
-            },
-          })
-        const optimisticBusy = !input.adapter.working()
+      return dispatch({
+        type: "hold.cleared",
+        attempt: effect.attempt,
+        cleared: clearComposer(input, effect.snapshot.draft, "prompt").cleared,
+      })
+    }
 
-        if (optimisticBusy) session.data.session.setStatus(session.id, "running")
+    if (effect.type === "hold.cancel") {
+      effect.session.handoff.clear(effect.snapshot.id)
 
-        const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit).then(
-          () => ({ ok: true as const }),
-          (error) => ({ ok: false as const, error }),
-        )
+      if (!effect.cleared) return
+      restoreDraft(
+        input,
+        { draft: effect.snapshot.draft, mode: effect.snapshot.mode, comments: effect.snapshot.comments },
+        afterHold(effect.snapshot.draft, effect.cleared),
+      )
 
-        await started.cleanupReady
-        await started.complete?.()
-        input.adapter.submitted()
-        // Like the TUI, sent context goes with the prompt rather than riding along on the next one.
-        submission.context.forEach((item) => submission.target().context.remove(item.key))
-        input.comments.clear()
-        clearSubmission(input, submission)
-        void sending.then((result) => {
-          if (!result.ok)
-            failSubmission(input, session, "prompt", result.error, restore, value.id, () => {
-              if (optimisticBusy) session.data.session.setStatus(session.id, "idle")
-            })
+      return
+    }
+
+    if (effect.type === "command.run") {
+      input.adapter.beforeSubmit?.()
+      void runClientCommand(input, effect.prompt, effect.run).then(
+        () => dispatch({ type: "run.settled", attempt: effect.attempt, sent: true }),
+        (error) => {
+          input.notify.failed("command", error)
+          dispatch({ type: "run.settled", attempt: effect.attempt, sent: false })
+        },
+      )
+
+      return
+    }
+
+    if (effect.type === "quote.send") {
+      input.adapter.beforeSubmit?.()
+      const target = input.adapter.state
+
+      void dispatchPrompt(input, effect.session, effect.value)
+        .settled(() => {
+          target.context.updateComment(effect.quote.commentID, { comment: effect.comment })
+
+          return true
+        })
+        .then((sent) => {
+          if (sent) {
+            target.context.remove(effect.key)
+
+            if (target.quoteComment.key() === effect.key) target.quoteComment.set()
+            input.adapter.submitted()
+          }
+
+          dispatch({ type: "run.settled", attempt: effect.attempt, sent })
         })
 
-        return
-      }
+      return
+    }
 
-      await started.cleanupReady
-      await started.complete?.()
-      input.adapter.submitted()
+    if (effect.type === "session.start") {
+      input.adapter.beforeSubmit?.()
+      void startSession(input, effect.value, {
+        target: () => composerSubmitTarget(state(), effect.attempt) ?? effect.target,
+        retarget: (target, options) =>
+          dispatch({
+            type: "session.retargeted",
+            attempt: effect.attempt,
+            target,
+            preserveDraft: options?.preserveDraft ?? false,
+          }),
+      }).then(
+        (started) =>
+          dispatch(
+            started
+              ? {
+                  type: "session.started",
+                  attempt: effect.attempt,
+                  images: started.images,
+                  session: started.session,
+                  ready: started.cleanupReady,
+                  complete: started.complete,
+                }
+              : { type: "submit.aborted", attempt: effect.attempt },
+          ),
+        (error) => {
+          dispatch({ type: "submit.aborted", attempt: effect.attempt })
+          throw error
+        },
+      )
 
-      if (value.mode === "shell") {
-        clearSubmission(input, submission)
-        void sendShell(session, value).catch((error) => failSubmission(input, session, "shell", error, restore))
+      return
+    }
 
-        return
-      }
+    if (effect.type === "draft.retarget") {
+      effect.context.forEach((item) => effect.target.context.add(item))
+      effect.sources.forEach((item) => effect.target.quoteSource.add(item.key, item.source))
 
-      if (command) {
-        clearSubmission(input, submission)
-        void sendCommand(session, value, command, input.adapter.controls().model.selection.trackSessionCommit).catch(
-          (error) => failSubmission(input, session, "command", error, restore, value.id),
+      return
+    }
+
+    if (effect.type === "history.record") {
+      input.addToHistory(effect.prompt, effect.mode)
+      input.resetHistory()
+
+      return
+    }
+
+    if (effect.type === "handoff") {
+      const prompt = effect.sendFirst ? dispatchPrompt(input, effect.session, effect.value) : undefined
+
+      void effect.ready
+        .then(() => effect.complete?.())
+        .then(
+          () => dispatch({ type: "handoff.ready", attempt: effect.attempt, prompt }),
+          (error) => {
+            dispatch({ type: "submit.aborted", attempt: effect.attempt })
+            throw error
+          },
         )
 
-        return
-      }
-    } finally {
-      submitting.delete(input.adapter.state)
+      return
     }
+
+    clearSubmission(input, effect)
   }
 
+  // A held send goes through once the Location's agents and models load. One still in the composer ends if the draft
+  // changes first; a shown one already left it.
+  createEffect(() => {
+    const current = state()
+
+    if (current.type !== "held") return
+
+    if (!current.shown && JSON.stringify(input.adapter.state.current()) !== current.snapshot.serialized)
+      return untrack(() => dispatch({ type: "hold.changed", attempt: current.attempt }))
+
+    if (!input.adapter.controls().model.loading)
+      untrack(() =>
+        dispatch({
+          type: "hold.loaded",
+          attempt: current.attempt,
+          selection: currentSelection(input),
+          commands: input.commands(),
+        }),
+      )
+  })
+
+  onCleanup(() => dispatch({ type: "unmounted" }))
+
   return {
-    submit,
-    stop: () => (input.adapter.kind === "active-session" ? input.adapter.interrupt() : Promise.resolve()),
+    state,
+    submit(event: globalThis.Event, options?: { alternate?: boolean }) {
+      event.preventDefault()
+
+      return new Promise<void>((resolve) =>
+        dispatch({ type: "submit", snapshot: snapshot(input, options?.alternate ?? false), done: () => resolve() }),
+      )
+    },
+    submitQuote(key: string, comment: string) {
+      const adapter = input.adapter
+
+      if (adapter.kind !== "active-session") return Promise.resolve(false)
+      const quote = adapter.state.context.items().find((item) => item.key === key)
+
+      return new Promise<boolean>((resolve) =>
+        dispatch({
+          type: "quote",
+          snapshot: {
+            key,
+            quote: quote?.type === "quote" ? quote : undefined,
+            comment,
+            selection: currentSelection(input),
+            delivery: input.delivery?.(true) ?? "steer",
+            id: SessionMessage.ID.create(),
+            session: adapter.session(),
+          },
+          done: resolve,
+        }),
+      )
+    },
+    stop() {
+      dispatch({ type: "stop" })
+
+      return Promise.resolve()
+    },
   }
+}
+
+function snapshot(input: ComposerSubmitInput, alternate: boolean): SubmitSnapshot {
+  const target = input.adapter.state
+  const prompt = clonePrompt(target.current())
+  const text = submissionText(prompt)
+  const mode = input.mode()
+
+  const context = target.context.items().map((item) => {
+    if (item.type === "note") return { ...item, live: item.live ? { ...item.live } : undefined }
+
+    if (item.type === "quote") return { ...item, source: item.source ? { ...item.source } : undefined }
+
+    return { ...item, selection: item.selection ? { ...item.selection } : undefined }
+  })
+
+  return {
+    draft: {
+      initial: target,
+      target,
+      preserveDraft: false,
+      prompt,
+      context,
+      sources: context.flatMap((item) => {
+        const source = target.quoteSource.state.sources[item.key]
+
+        return source ? [{ key: item.key, source }] : []
+      }),
+    },
+    serialized: JSON.stringify(target.current()),
+    text,
+    mode,
+    alternate,
+    delivery: input.delivery?.(alternate) ?? "steer",
+    selection: currentSelection(input),
+    loading: input.adapter.controls().model.loading,
+    retry: target.retry.current(),
+    id: SessionMessage.ID.create(),
+    commands: input.commands(),
+    clientCommand: mode === "normal" ? input.clientCommand?.(text) : undefined,
+    comments: input.comments.capture(),
+    session: input.adapter.kind === "active-session" ? input.adapter.session() : undefined,
+  }
+}
+
+async function runClientCommand(input: ComposerSubmitInput, prompt: Prompt, run: () => void | Promise<void>) {
+  // Client commands such as /btw answer with the session's model, so apply the composer's selection first,
+  // following the same steer rule as server commands.
+  const selection = currentSelection(input)
+
+  if (input.adapter.kind === "active-session" && selection && (input.delivery?.(false) ?? "steer") === "steer")
+    await applySelection(
+      input.adapter.session(),
+      selection,
+      input.adapter.controls().model.selection.trackSessionCommit,
+    )
+  clearClientCommand(input, prompt)
+  await run()
+}
+
+async function startSession(
+  input: ComposerSubmitInput,
+  submission: ComposerSubmission,
+  handle: ComposerSubmissionHandle,
+) {
+  // Images restored from a draft or history carry ids only; the optimistic message shows their URLs.
+  const images = await Promise.all(
+    submission.images.map(async (image) => ({
+      ...image,
+      blob: { ...image.blob, url: (await resolveBlobUrl(image.blob).catch(() => undefined)) ?? image.blob.url },
+    })),
+  )
+
+  if (input.adapter.kind === "active-session")
+    return { images, session: input.adapter.session(), cleanupReady: Promise.resolve(), complete: undefined }
+  const started = await input.adapter.start(submission.selection, handle, handoffMessage({ ...submission, images }))
+
+  return started && { ...started, images }
+}
+
+// The composer clears its captured draft once the Session's composer is ready; then the send settles. A shown hold
+// cleared it already, and the composer may hold a new draft since.
+function clearSubmission(
+  input: ComposerSubmitInput,
+  effect: Extract<ComposerSubmitEffect, { type: "composer.clear" }>,
+) {
+  const held = effect.cleared
+  const clear = held ? undefined : clearComposer(input, effect.draft, effect.kind.type)
+
+  // A held prompt cleared the composer at Enter, so what it goes back to is read only once the send fails.
+  const restore = () => {
+    const back = clear ?? (held && afterHold(effect.draft, held))
+
+    return !!back && restoreSubmission(input, effect, back)
+  }
+
+  if (effect.prompt) return void effect.prompt.settled(restore)
+
+  if (effect.kind.type === "shell")
+    return void sendShell(effect.session, effect.value).catch((error) =>
+      failSubmission(input, effect.session, "shell", error, restore),
+    )
+
+  if (effect.kind.type === "command")
+    void sendCommand(
+      effect.session,
+      effect.value,
+      effect.kind.command,
+      input.adapter.controls().model.selection.trackSessionCommit,
+    ).catch((error) => failSubmission(input, effect.session, "command", error, restore, effect.value.id))
+}
+
+// Returns the cleared composer, which a failed send restores only while it is unchanged, and any follow-up already
+// typed into a promoted new-session composer.
+function clearComposer(input: ComposerSubmitInput, draft: CapturedDraft, kind: SubmissionKind["type"]) {
+  const target = draft.target
+  input.adapter.submitted()
+
+  if (kind === "prompt") {
+    // Like the TUI, sent context goes with the prompt rather than riding along on the next one.
+    draft.context.forEach((item) => target.context.remove(item.key))
+    input.comments.clear()
+  }
+
+  if (draft.initial !== target) draft.initial.reset()
+
+  // A preparing session may already have an unsent follow-up in its promoted composer.
+  const following =
+    draft.initial !== target &&
+    draft.preserveDraft &&
+    target.current().some((part) => isAttachment(part) || part.content.length > 0)
+      ? clonePrompt(target.current())
+      : undefined
+
+  if (!following) target.reset()
+  const cleared = target.current()
+  // The ID went with this send; a failure arms it again for this payload when it restores the draft.
+  target.retry.clear()
+  target.mode.set("normal")
+  input.closePopover()
+
+  if (window.matchMedia("(max-width: 767px)").matches) input.editor()?.blur()
+
+  return { cleared, following, edited: !!following } satisfies ClearedComposer
+}
+
+// A held prompt left the composer before it was sent, so a draft typed since follows it back rather than keeping it out.
+function afterHold(draft: CapturedDraft, cleared: Prompt): ClearedComposer {
+  const current = draft.target.current()
+  const edited = current !== cleared
+  const typed = edited && current.some((part) => isAttachment(part) || part.content.length > 0)
+
+  return { cleared: current, following: typed ? clonePrompt(current) : undefined, edited }
 }
 
 function clearClientCommand(input: ComposerSubmitInput, prompt: Prompt) {
   input.adapter.state.set([{ type: "text", content: "", start: 0, end: 0 }, ...prompt.filter(isAttachment)], 0)
   input.adapter.state.mode.set("normal")
-  input.setMode("normal")
   input.closePopover()
 }
 
@@ -235,11 +464,16 @@ function submissionText(prompt: Prompt) {
   return prompt.map((part) => ("content" in part ? part.content : "")).join("")
 }
 
-function handoffMessage(value: ComposerSubmission): SessionMessageUser {
+// A held prompt has no agent or model until its Location's catalog loads.
+function handoffMessage(
+  value: Pick<ComposerSubmission, "id" | "prompt" | "context" | "images"> & { selection?: ComposerSelection },
+): SessionMessageUser {
+  const text = submissionText(serializePrompt(value.prompt))
+
   return {
     id: value.id,
     type: "user",
-    text: value.text,
+    text,
     files: value.images.map((image) => ({
       data: "",
       mime: image.mime,
@@ -247,16 +481,17 @@ function handoffMessage(value: ComposerSubmission): SessionMessageUser {
       name: image.sourcePath ?? image.filename,
     })),
     metadata: {
-      displayText: value.text,
+      displayText: text,
       attachments: value.prompt.flatMap((part) =>
         part.type === "path" ? [{ name: part.filename, mime: part.mime, path: part.path }] : [],
       ),
       comments: value.context.flatMap((item): PromptComment[] => {
+        if (item.type === "quote") return [quoteComment(item)]
+
+        if (item.type === "note") return [noteComment(item, item.comment.trim())]
         const comment = item.comment?.trim()
 
         if (!comment) return []
-
-        if (item.type === "note") return [noteComment(item, comment)]
 
         return [
           {
@@ -268,57 +503,9 @@ function handoffMessage(value: ComposerSubmission): SessionMessageUser {
           },
         ]
       }),
-      agent: value.selection.agent,
-      model: selectionModel(value.selection),
+      ...(value.selection && { agent: value.selection.agent, model: selectionModel(value.selection) }),
     },
     time: { created: Date.now() },
-  }
-}
-
-function readSubmission(
-  input: ComposerSubmitInput,
-  prompt: Prompt,
-  context: ComposerSubmission["context"],
-  text: string,
-  alternate: boolean,
-): ComposerSubmission | undefined {
-  const mode = input.mode()
-
-  if (mode === "shell" && !text.trim()) return
-  const images = prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
-  // Like the TUI's blank Enter, file chips alone send nothing; they wait for text.
-  const comments = context.filter((item) => !!item.comment?.trim()).length
-
-  if (!text.trim() && !prompt.some(isAttachment) && comments === 0) return
-
-  const selection = currentSelection(input)
-
-  if (!selection) {
-    input.notify.missingSelection()
-
-    return
-  }
-
-  const retry = input.adapter.state.retry.current()
-
-  const retryID =
-    retry &&
-    retry.agent === selection.agent &&
-    retry.providerID === selection.model.providerID &&
-    retry.modelID === selection.model.modelID &&
-    (retry.variant ?? "default") === (selection.variant ?? "default")
-      ? retry.id
-      : undefined
-
-  return {
-    id: retryID ?? SessionMessage.ID.create(),
-    mode,
-    prompt,
-    context,
-    text,
-    images,
-    selection,
-    delivery: input.delivery?.(alternate) ?? "steer",
   }
 }
 
@@ -336,88 +523,171 @@ function currentSelection(input: ComposerSubmitInput): ComposerSelection | undef
   }
 }
 
-function clearSubmission(input: ComposerSubmitInput, submission: ReturnType<typeof createComposerSubmission>) {
-  submission.clear()
-  submission.target().mode.set("normal")
-  input.setMode("normal")
-  input.closePopover()
+function dispatchPrompt(input: ComposerSubmitInput, session: ComposerSession, value: ComposerSubmission): PromptSend {
+  // A steer appears in the timeline before the composer clears; queued prompts appear in the queue on admission.
+  if (value.delivery === "steer")
+    session.handoff.set({
+      message: handoffMessage(value),
+      selection: {
+        agent: value.selection.agent,
+        model: {
+          id: value.selection.model.modelID,
+          providerID: value.selection.model.providerID,
+          variant: value.selection.variant,
+        },
+      },
+    })
+  const working = input.adapter.working()
 
-  if (window.matchMedia("(max-width: 767px)").matches) input.editor()?.blur()
+  const background = value.delivery === "steer" && working ? session.background?.() : undefined
+
+  updateStatus(session, { type: "dispatched", id: value.id, working })
+
+  const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit).then(
+    () => ({ ok: true as const }),
+    (error) => ({ ok: false as const, error }),
+  )
+
+  // Settled here rather than when the composer settles, which an aborted promotion never reaches.
+  void sending.then((result) => {
+    const admitted = result.ok || session.admitted(value.id)
+    updateStatus(session, admitted ? { type: "admitted" } : { type: "failed", id: value.id })
+
+    if (value.delivery !== "steer") return
+
+    if (admitted) return session.handoff.settle(value.id)
+    session.handoff.clear(value.id)
+  })
+
+  return {
+    // The composer settles after clearing its captured draft; a quote settles before removing only its context.
+    settled: (restore) =>
+      sending.then((result) => {
+        const admitted = result.ok || failSubmission(input, session, "prompt", result.error, restore, value.id)
+
+        if (!admitted) return false
+
+        // Move blocking work only once the steer is admitted, so the next step can read it from the inbox.
+        void background?.move()
+
+        return true
+      }),
+  }
 }
 
+function updateStatus(session: ComposerSession, event: PromptStatusEvent) {
+  const result = transitionPromptStatus(statuses.get(session.id) ?? SERVER_PROMPT_STATUS, event)
+
+  if (result.state.type === "server") statuses.delete(session.id)
+
+  if (result.state.type === "optimistic") statuses.set(session.id, result.state)
+  result.effects.forEach((effect) => session.data.session.setStatus(session.id, effect.status))
+}
+
+/**
+ * The composer a restore goes back to: the prompt it was cleared to, a follow-up typed into it since, and whether it
+ * was edited since, which keeps the comments added meanwhile.
+ */
+type ClearedComposer = { cleared: Prompt; following: Prompt | undefined; edited: boolean }
+
+// Puts a failed submission back, unless the composer changed since it cleared: then the edit is the user's.
 function restoreSubmission(
   input: ComposerSubmitInput,
-  submission: ReturnType<typeof createComposerSubmission>,
-  value: ComposerSubmission,
-  comments: PromptHistoryComment[],
+  submission: {
+    draft: CapturedDraft
+    value: ComposerSubmission
+    kind: SubmissionKind
+    comments: PromptHistoryComment[]
+  },
+  back: ClearedComposer,
 ) {
-  const restored = submission.restore()
+  const value = submission.value
 
-  if (!restored) return false
+  if (!restoreDraft(input, { ...submission, mode: value.mode }, back)) return false
+
+  // Only a prompt was admitted under its ID. A recovered follow-up changes the payload, so it needs a new one.
+  if (submission.kind.type === "prompt" && !back.following)
+    submission.draft.target.retry.set({ id: value.id, fingerprint: retryFingerprint(value) })
+
+  return true
+}
+
+// Puts a cleared draft back, unless the composer changed since it cleared: then the edit is the user's.
+function restoreDraft(
+  input: ComposerSubmitInput,
+  submission: { draft: CapturedDraft; mode: "normal" | "shell"; comments: PromptHistoryComment[] },
+  back: ClearedComposer,
+) {
+  const target = submission.draft.target
+  const following = back.following
+
+  if (target.current() !== back.cleared) return false
+  const kept = back.edited ? input.comments.capture() : []
+  const prompt = following ? appendPrompt(submission.draft.prompt, following) : submission.draft.prompt
   // The prompt is back in the composer; its history entry would only keep attachments referenced.
-  input.removeFromHistory(value.prompt, value.mode, comments)
-  restored.target.set(restored.prompt, promptLength(restored.prompt))
-  restored.target.mode.set(value.mode)
-  restored.target.context.replaceComments(
-    restored.context
-      .filter((item) => !!item.comment?.trim())
-      .map((item) =>
-        item.type === "note"
-          ? {
-              type: "note",
-              origin: item.origin,
-              label: item.label,
-              icon: item.icon,
-              subject: item.subject,
-              href: item.href,
-              live: item.live,
-              comment: item.comment,
-              commentID: item.commentID,
-            }
-          : {
-              type: "file",
-              path: item.path,
-              selection: item.selection,
-              comment: item.comment,
-              commentID: item.commentID,
-              commentOrigin: item.commentOrigin,
-              preview: item.preview,
-            },
-      ),
-  )
-  restored.context.forEach((item) => {
-    if (item.type === "file" && !item.comment?.trim())
-      restored.target.context.add({
+  input.removeFromHistory(submission.draft.prompt, submission.mode, submission.comments)
+  target.set(prompt, promptLength(prompt))
+  target.mode.set(submission.mode)
+  const sent = new Set(submission.draft.context.map((item) => item.key))
+
+  // In the order it was sent: an unedited resend must send the same request, which the retry ID's fingerprint names.
+  // Files listed since the send stay after it. Comments the draft gained since are replaced, as before, unless they
+  // were added to a draft typed since, which keeps them.
+  target.context.replace([
+    ...submission.draft.context.map((item): ContextItem => {
+      if (item.type === "quote")
+        return {
+          type: "quote",
+          text: item.text,
+          comment: item.comment,
+          source: item.source ? { ...item.source } : undefined,
+          commentID: item.commentID,
+        }
+
+      if (item.type === "note")
+        return {
+          type: "note",
+          origin: item.origin,
+          label: item.label,
+          title: item.title,
+          subtitle: item.subtitle,
+          icon: item.icon,
+          subject: item.subject,
+          href: item.href,
+          live: item.live,
+          comment: item.comment,
+          commentID: item.commentID,
+        }
+
+      return {
         type: "file",
         path: item.path,
         selection: item.selection,
+        comment: item.comment,
+        commentID: item.commentID,
+        commentOrigin: item.commentOrigin,
+        preview: item.preview,
         name: item.name,
         description: item.description,
-      })
-  })
+      }
+    }),
+    ...target.context.items().filter((item) => (back.edited || !isCommentItem(item)) && !sent.has(item.key)),
+  ])
+  submission.draft.sources.forEach((item) => target.quoteSource.add(item.key, item.source))
 
-  // A recovered follow-up changes the payload, so it must use a new admission ID.
-  if (value.mode === "normal" && restored.prompt === submission.prompt) {
-    restored.target.retry.set({
-      id: value.id,
-      agent: value.selection.agent,
-      providerID: value.selection.model.providerID,
-      modelID: value.selection.model.modelID,
-      variant: value.selection.variant,
-    })
-  }
+  if (target !== input.adapter.state) return true
 
-  if (!submission.current(input.adapter.state)) return true
-
-  input.comments.restore(comments)
-  input.setMode(value.mode)
+  input.comments.restore([
+    ...submission.comments,
+    ...kept.filter((item) => !submission.comments.some((comment) => comment.id === item.id)),
+  ])
   input.closePopover()
   requestAnimationFrame(() => {
     const editor = input.editor()
 
     if (!editor) return
     editor.focus()
-    setCursorPosition(editor, promptLength(value.prompt))
+    setCursorPosition(editor, promptLength(submission.draft.prompt))
     input.queueScroll()
   })
 
@@ -426,14 +696,6 @@ function restoreSubmission(
 
 async function sendShell(session: ComposerSession, value: ComposerSubmission) {
   await session.api.shell({ sessionID: session.id, id: value.id, command: value.text })
-}
-
-function findCommand(commands: ReturnType<ComposerSubmitInput["commands"]>, text: string) {
-  const parsed = parseSlashCommand(text)
-
-  if (!parsed || !commands?.some((item) => item.name === parsed.name)) return
-
-  return { command: parsed.name, arguments: parsed.input }
 }
 
 async function sendCommand(
@@ -479,11 +741,23 @@ async function applySelection(
 
     await beforeModel?.()
 
-    // The server deduplicates unchanged selections; cached SSE state may still be behind an earlier switch.
+    // Skip an unchanged model so a send never waits on that request. An agent switch or a revert can move the
+    // model, and cached SSE state may lag this client's earlier switch, which must also match.
+    const model = `${selection.model.providerID}/${selection.model.modelID}/${selection.variant ?? ""}`
+    const saved = current?.model && `${current.model.providerID}/${current.model.id}/${current.model.variant ?? ""}`
+
+    if (
+      current?.agent === selection.agent &&
+      !current.revert &&
+      saved === model &&
+      (switched.get(session.id) ?? model) === model
+    )
+      return
     await session.api.switchModel({
       sessionID: session.id,
       model: { id: selection.model.modelID, providerID: selection.model.providerID, variant: selection.variant },
     })
+    switched.set(session.id, model)
   } catch (error) {
     cancel?.()
     throw error
@@ -570,12 +844,10 @@ function failSubmission(
   error: unknown,
   restore: () => boolean,
   messageID?: string,
-  rollback?: () => void,
 ) {
-  if (messageID && session.admitted(messageID)) return
-
-  if (messageID) session.handoff.clear(messageID)
-  rollback?.()
+  if (messageID && session.admitted(messageID)) return true
   restore()
   input.notify.failed(kind, error)
+
+  return false
 }

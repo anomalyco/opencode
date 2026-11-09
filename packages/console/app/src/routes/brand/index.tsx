@@ -5,6 +5,7 @@ import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
 import { useI18n } from "~/context/i18n"
 import { LocaleLinks } from "~/component/locale-links"
+import { SocialMeta } from "~/component/social-meta"
 import previewLogoLight from "../../asset/brand/preview-opencode-logo-light.png"
 import previewLogoDark from "../../asset/brand/preview-opencode-logo-dark.png"
 import previewLogoLightSquare from "../../asset/brand/preview-opencode-logo-light-square.png"
@@ -65,6 +66,7 @@ export default function Brand() {
       <Title>{i18n.t("brand.title")}</Title>
       <LocaleLinks path="/brand" />
       <Meta name="description" content={i18n.t("brand.meta.description")} />
+      <SocialMeta title={i18n.t("brand.title")} description={i18n.t("brand.meta.description")} path="/brand" />
       <div data-component="container">
         <Header />
 

@@ -43,7 +43,7 @@ const report = {
     averageCpuPercent: average(active.map((sample) => sample.cpuPercent)),
     peakAggregateRssMB: Math.max(0, ...active.map((sample) => sample.aggregateRssMB)),
     peakProcesses: Math.max(0, ...active.map((sample) => sample.processes)),
-    peakTsgoRelatedProcesses: Math.max(0, ...active.map((sample) => sample.tsgoRelatedProcesses)),
+    peakTscRelatedProcesses: Math.max(0, ...active.map((sample) => sample.tscRelatedProcesses)),
     swapDeltaMB: after.swapUsedMB - before.swapUsedMB,
     compressedMemoryDeltaMB: after.compressedMemoryMB - before.compressedMemoryMB,
     pageoutDelta: after.pageouts - before.pageouts,
@@ -63,7 +63,7 @@ Typecheck profile
   Average CPU:    ${report.summary.averageCpuPercent.toFixed(0)}%
   Peak CPU:       ${report.summary.peakCpuPercent.toFixed(0)}%
   Aggregate RSS:  ${report.summary.peakAggregateRssMB.toFixed(0)} MB
-  Peak processes: ${report.summary.peakProcesses} (${report.summary.peakTsgoRelatedProcesses} tsgo-related)
+  Peak processes: ${report.summary.peakProcesses} (${report.summary.peakTscRelatedProcesses} tsc-related)
   Swap delta:     ${signed(report.summary.swapDeltaMB)} MB
   Compressed:     ${signed(report.summary.compressedMemoryDeltaMB)} MB
   Pageouts:       ${signed(report.summary.pageoutDelta)}
@@ -89,7 +89,7 @@ function processTreeSnapshot(rootPID: number, startedAt: Date) {
   return {
     elapsedSeconds: (Date.now() - startedAt.getTime()) / 1000,
     processes: tree.length,
-    tsgoRelatedProcesses: tree.filter((process) => /\btsgo\b/.test(process.command)).length,
+    tscRelatedProcesses: tree.filter((process) => /\btsc\b/.test(process.command)).length,
     cpuPercent: sum(tree.map((process) => process.cpuPercent)),
     aggregateRssMB: sum(tree.map((process) => process.rssKB)) / 1024,
   }
@@ -115,7 +115,7 @@ function systemSnapshot() {
     pageouts: fields.Pageouts ?? 0,
     relevantProcesses: processList()
       .filter((process) =>
-        /opencode|tsgo|tsserver|vtsls|eslintServer|tailwindcss-language-server/.test(process.command),
+        /opencode|\btsc\b|tsserver|vtsls|eslintServer|tailwindcss-language-server/.test(process.command),
       )
       .sort((a, b) => b.rssKB - a.rssKB)
       .map(processSummary),

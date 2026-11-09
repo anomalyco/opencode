@@ -10,6 +10,7 @@ import { Location } from "@opencode/core/location"
 import { Image } from "@opencode/core/image"
 import { Permission } from "@opencode/core/permission"
 import { Session } from "@opencode/core/session"
+import { Skill } from "@opencode/core/skill"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Global } from "@opencode/util/global"
 import { FileAccess } from "@opencode/core/file-access"
@@ -34,6 +35,7 @@ const readToolNode = makeLocationNode({
     Image.node,
     Permission.node,
     SessionInstructions.node,
+    Skill.node,
     FSUtil.node,
     Location.node,
   ],
@@ -48,7 +50,7 @@ const readCalls: {
 }[] = []
 const listCalls: AbsolutePath[] = []
 let readDefect: unknown
-let directoryEntries: string[] = []
+let missingDirectories: string[] = []
 let directoryEntryDetails: Environment.DirEntry[] = []
 let readResult: ReadToolFileSystem.FileContent | ReadToolFileSystem.TextPage | ReadToolFileSystem.ListPage = {
   type: "file",
@@ -65,6 +67,7 @@ const reader = Layer.succeed(
   ReadToolFileSystem.Service.of({
     list: (input) => {
       listCalls.push(input)
+      if (missingDirectories.includes(input)) return Effect.fail(new Environment.NotFound({ path: input }))
       return Effect.succeed(directoryEntryDetails)
     },
     read: (input, resource, page = {}) => {
@@ -98,17 +101,6 @@ const permission = permissionLayer({
 })
 const config = Config.testLayer()
 const imageLayer = AppNodeBuilder.build(Image.node)
-const testFileSystem = Layer.effect(
-  FSUtil.Service,
-  FSUtil.Service.use((fs) =>
-    Effect.succeed(
-      FSUtil.Service.of({
-        ...fs,
-        readDirectory: () => Effect.succeed(directoryEntries),
-      }),
-    ),
-  ),
-).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
 const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) })),
@@ -118,12 +110,11 @@ const unavailableImage = Layer.mock(Image.Service, {
 })
 const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
   Layer.mergeAll(
-    AppNodeBuilder.build(LayerNode.group([Tool.node, readToolNode]), [
+    AppNodeBuilder.build(LayerNode.group([Tool.node, readToolNode, Skill.node]), [
       ReadToolFileSystem.node.replace(reader),
       Permission.node.replace(permission),
       Config.node.replace(config),
       Image.node.replace(imageLayer),
-      FSUtil.node.replace(testFileSystem),
       Location.node.replace(locationLayer),
       Global.node.replace(Global.layerWith({ data: Global.Path.data })),
     ]),
@@ -143,7 +134,7 @@ describe("ReadTool", () => {
     allow = true
     deniedResource = undefined
     readDefect = undefined
-    directoryEntries = []
+    missingDirectories = []
     directoryEntryDetails = []
     readResult = {
       type: "file",
@@ -426,6 +417,83 @@ describe("ReadTool", () => {
     }),
   )
 
+  it.effect("stores large opaque PNG screenshots as JPEG", () =>
+    Effect.gen(function* () {
+      const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
+      const width = 2000
+      const height = 1125
+      const opaquePixels = Uint8Array.from({ length: width * height * 4 }, (_, index) =>
+        index % 4 === 3 ? 255 : (index * 31 + (index >> 7)) % 256,
+      )
+      const opaqueSource = new photon.PhotonImage(opaquePixels, width, height)
+      const opaqueBase64 = Buffer.from(opaqueSource.get_bytes()).toString("base64")
+      opaqueSource.free()
+      readResult = {
+        type: "file",
+        uri: "file:///screenshot.png",
+        name: "screenshot.png",
+        content: opaqueBase64,
+        encoding: "base64",
+        mime: "image/png",
+      }
+      const registry = yield* Tool.Service
+      const result = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-transcode-screenshot", name: "read", input: { path: "screenshot.png" } },
+      })
+
+      expect(result.status).toBe("completed")
+      if (result.status !== "completed") return
+      const media = result.content?.[1]
+      expect(media?.type).toBe("file")
+      if (media?.type !== "file") return
+      expect(media.mime).toBe("image/jpeg")
+      const b64 = media.uri.split(",")[1] ?? ""
+      expect(b64.length).toBeLessThan(opaqueBase64.length)
+      const resized = photon.PhotonImage.new_from_byteslice(Buffer.from(b64, "base64"))
+      expect(resized.get_width()).toBe(width)
+      expect(resized.get_height()).toBe(height)
+      resized.free()
+    }),
+  )
+
+  it.effect("keeps fitting PNGs that are small, transparent, or smaller than their JPEG", () =>
+    Effect.gen(function* () {
+      const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
+      const png = (width: number, height: number, pixel: (x: number, y: number, channel: number) => number) => {
+        const pixels = new Uint8Array(width * height * 4)
+        for (let index = 0; index < pixels.length; index++) {
+          const offset = index >> 2
+          pixels[index] = pixel(offset % width, Math.floor(offset / width), index % 4)
+        }
+        const source = new photon.PhotonImage(pixels, width, height)
+        const content = Buffer.from(source.get_bytes()).toString("base64")
+        source.free()
+        return { uri: "file:///image.png", content, encoding: "base64" as const, mime: "image/png" }
+      }
+      let seed = 1
+      const blocks = Array.from({ length: 500 * 375 }, () => {
+        seed = (Math.imul(seed, 1103515245) + 12345) >>> 0
+        return (seed >>> 31) * 255
+      })
+      const cases = {
+        transparent: png(600, 600, (x, y, channel) =>
+          channel === 3 ? (y < 120 ? 0 : 255) : (((y * 600 + x) * 4 + channel) * 31 + x) % 256,
+        ),
+        small: png(1000, 1000, (_x, y, channel) => (channel === 3 ? 255 : y % 256)),
+        diagram: png(2000, 1500, (x, y, channel) =>
+          channel === 3 ? 255 : blocks[Math.floor(y / 4) * 500 + Math.floor(x / 4)]!,
+        ),
+      }
+      expect(cases.transparent.content.length).toBeGreaterThan(384 * 1024)
+      expect(cases.small.content.length).toBeLessThanOrEqual(384 * 1024)
+      expect(cases.diagram.content.length).toBeGreaterThan(384 * 1024)
+      const image = yield* Image.Service
+      for (const content of Object.values(cases)) expect(yield* image.normalize("image.png", content)).toEqual(content)
+    }),
+  )
+
   it.effect("accepts PNG candidates at the exact base64 limit and skips them one byte below", () =>
     Effect.gen(function* () {
       const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
@@ -637,13 +705,13 @@ describe("ReadTool", () => {
   it.effect("returns missing paths as model-visible tool failures", () =>
     Effect.gen(function* () {
       readFailure = new Environment.NotFound({ path: missingAbsolutePath })
-      directoryEntries = [
+      directoryEntryDetails = [
         "__missing_read_target__.txt.bak",
         "copy___missing_read_target__.txt",
         "old___missing_read_target__.txt",
         "other___missing_read_target__.txt",
         "unrelated.txt",
-      ]
+      ].map((name) => ({ name, type: "file" as const }))
       const registry = yield* Tool.Service
 
       expect(
@@ -666,6 +734,63 @@ describe("ReadTool", () => {
           page: { offset: undefined, limit: undefined },
         },
       ])
+    }),
+  )
+
+  it.effect("names the first missing folder and its nearest existing parent", () =>
+    Effect.gen(function* () {
+      const requested = "__missing_read_folder__/src/file.ts"
+      readFailure = new Environment.NotFound({ path: path.join(process.cwd(), requested) })
+      missingDirectories = [
+        path.join(process.cwd(), "__missing_read_folder__", "src"),
+        path.join(process.cwd(), "__missing_read_folder__"),
+      ]
+      directoryEntryDetails = [
+        { name: "__missing_read_folder__-old", type: "directory" },
+        { name: "unrelated", type: "file" },
+      ]
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-missing-folder", name: "read", input: { path: requested } },
+        }),
+      ).toEqual({
+        status: "error",
+        error: {
+          type: "tool.execution",
+          message: [
+            `File not found: ${requested}`,
+            `The folder ${path.join(process.cwd(), "__missing_read_folder__")} does not exist. The nearest folder that does is ${process.cwd()}.`,
+            `Did you mean one of these?\n${path.join(process.cwd(), "__missing_read_folder__-old")}`,
+          ].join("\n\n"),
+        },
+      })
+    }),
+  )
+
+  it.effect("trusts the environment, not this host, about which folders exist", () =>
+    Effect.gen(function* () {
+      const requested = path.join(process.cwd(), "__only_in_workspace__", "file.ts")
+      readFailure = new Environment.NotFound({ path: requested })
+      directoryEntryDetails = [{ name: "file.tsx", type: "file" }]
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-workspace-folder", name: "read", input: { path: requested } },
+        }),
+      ).toEqual({
+        status: "error",
+        error: {
+          type: "tool.execution",
+          message: `File not found: ${requested}\n\nDid you mean one of these?\n${path.join(process.cwd(), "__only_in_workspace__", "file.tsx")}`,
+        },
+      })
     }),
   )
 
@@ -934,25 +1059,122 @@ describe("ReadTool", () => {
     }),
   )
 
-  it.effect("rejects unsupported binary discovered by a direct read", () =>
+  it.effect("reads virtual skill:// files and directories from Skill.Service without external_directory approval", () =>
     Effect.gen(function* () {
-      readResult = {
-        type: "file",
-        uri: "file:///late-binary",
-        name: "late-binary",
-        content: "AAECAw==",
-        encoding: "base64",
-        mime: "application/octet-stream",
-      }
+      const skills = yield* Skill.Service
       const registry = yield* Tool.Service
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* skills.transform((editor) =>
+            editor.add(
+              Skill.Info.make({
+                id: Skill.ID.make("guide"),
+                name: Skill.Name.make("Guide"),
+                description: "Guide",
+                path: AbsolutePath.make("skill://guide/SKILL.md"),
+                content: "# Guide\nRead references/style.md",
+              }),
+              {
+                "references/style.md": "Line 1\nLine 2",
+              },
+            ),
+          )
+          yield* skills.transform((editor) =>
+            editor.add(
+              Skill.Info.make({
+                id: Skill.ID.make("disk"),
+                name: Skill.Name.make("Disk"),
+                path: AbsolutePath.make("/somewhere/disk/SKILL.md"),
+                content: "Disk",
+              }),
+            ),
+          )
 
-      expect(
-        yield* executeTool(registry, {
-          sessionID,
-          ...toolIdentity,
-          call: { type: "tool-call", id: "call-direct-binary", name: "read", input: { path: "late-binary" } },
+          const file = yield* executeTool(registry, {
+            sessionID,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-skill-file",
+              name: "read",
+              input: { path: "skill://guide/references/style.md", offset: 2, limit: 1 },
+            },
+          })
+          expect(file).toMatchObject({
+            status: "completed",
+            content: [{ type: "text", text: "Read file skill://guide/references/style.md, lines 2-2\n2: Line 2" }],
+          })
+
+          const root = yield* executeTool(registry, {
+            sessionID,
+            ...toolIdentity,
+            call: { type: "tool-call", id: "call-skill-dir", name: "read", input: { path: "skill://guide/" } },
+          })
+          expect(root).toMatchObject({
+            status: "completed",
+            content: [
+              {
+                type: "text",
+                text: "Read directory skill://guide/, entries 1-2\nreferences/\nSKILL.md",
+              },
+            ],
+          })
+
+          for (const bad of [
+            "skill://",
+            "skill://guide/../SKILL.md",
+            "skill://guide/missing.md",
+            "skill://unknown",
+            "skill://disk/SKILL.md",
+          ]) {
+            expect(
+              yield* executeTool(registry, {
+                sessionID,
+                ...toolIdentity,
+                call: { type: "tool-call", id: `call-${bad}`, name: "read", input: { path: bad } },
+              }),
+            ).toEqual({
+              status: "error",
+              error: { type: "tool.execution", message: `File not found: ${bad}` },
+            })
+          }
+
+          expect(assertions).toMatchObject([
+            { sessionID, action: "skill", resources: ["guide"], save: ["guide"] },
+            { sessionID, action: "read", resources: ["skill://guide/references/style.md"], save: ["*"] },
+            { sessionID, action: "skill", resources: ["guide"], save: ["guide"] },
+            { sessionID, action: "read", resources: ["skill://guide"], save: ["*"] },
+            { sessionID, action: "skill", resources: ["guide"], save: ["guide"] },
+            { sessionID, action: "read", resources: ["skill://guide/missing.md"], save: ["*"] },
+          ])
+          expect(readCalls).toEqual([])
+
+          deniedResource = "guide"
+          expect(
+            yield* executeTool(registry, {
+              sessionID,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-skill-denied",
+                name: "read",
+                input: { path: "skill://guide/SKILL.md" },
+              },
+            }),
+          ).toEqual({ status: "error", error: { type: "permission.rejected", message: "Permission denied: skill" } })
+
+          deniedResource = "skill://guide/SKILL.md"
+          for (const path of ["skill://guide/SKILL.md", "skill://guide/SKILL.md/"]) {
+            expect(
+              yield* executeTool(registry, {
+                sessionID,
+                ...toolIdentity,
+                call: { type: "tool-call", id: `call-skill-read-denied-${path}`, name: "read", input: { path } },
+              }),
+            ).toEqual({ status: "error", error: { type: "permission.rejected", message: "Permission denied: read" } })
+          }
         }),
-      ).toEqual({ status: "error", error: { type: "unknown", message: "Cannot read binary file: late-binary" } })
+      )
     }),
   )
 })

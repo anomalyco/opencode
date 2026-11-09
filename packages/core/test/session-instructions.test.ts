@@ -21,11 +21,13 @@ import { ReadTool } from "@opencode/core/tool/plugin/read"
 import { ReadToolFileSystem } from "@opencode/core/tool/read-filesystem"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionHistory } from "@opencode/core/session/history"
 import { SessionInstructions } from "@opencode/core/session/instructions"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionStore } from "@opencode/core/session/store"
 import { Session } from "@opencode/core/session"
+import { Skill } from "@opencode/core/skill"
 import { toLLMMessages } from "@opencode/core/session/runner/to-llm-message"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Tool } from "@opencode/core/tool"
@@ -46,6 +48,7 @@ const readToolNode = makeLocationNode({
     Image.node,
     Permission.node,
     SessionInstructions.node,
+    Skill.node,
     FSUtil.node,
     Location.node,
   ],
@@ -70,6 +73,7 @@ const testLayer = AppNodeBuilder.build(
     Tool.node,
     PluginHooks.node,
     SessionInstructions.node,
+    Skill.node,
     Global.node,
     Image.node,
   ]),
@@ -103,10 +107,14 @@ const readCall = (
 const writeAgents = (file: string, content: string) => Effect.promise(() => fs.writeFile(file, content))
 const mkdir = (dir: string) => Effect.promise(() => fs.mkdir(dir, { recursive: true }))
 
+// The instruction ledger reads only synthetic rows; they must match what full history shows the model.
 const synthetics = (sessionID: Session.ID) =>
   Effect.gen(function* () {
     const store = yield* SessionStore.Service
-    return (yield* store.context(sessionID)).filter((message) => message.type === "synthetic")
+    const { db } = yield* Database.Service
+    const visible = (yield* store.context(sessionID)).filter((message) => message.type === "synthetic")
+    expect(yield* SessionHistory.synthetics(db, sessionID)).toEqual(visible)
+    return visible
   })
 
 // Seed a prior synthetic message with an instruction dedup ledger, simulating a prior turn
@@ -266,8 +274,8 @@ describe("SessionInstructions", () => {
 
       // A completed compaction truncates model-visible history at its boundary, dropping
       // the synthetic that carried sub's instructions.
-      yield* bus.publish(SessionEvent.Compaction.Started, { sessionID, reason: "manual", recent: "" })
-      yield* bus.publish(SessionEvent.Compaction.Ended, { sessionID, reason: "manual", text: "summary", recent: "" })
+      yield* bus.publish(SessionEvent.Compaction.Started, { sessionID, reason: "manual" })
+      yield* bus.publish(SessionEvent.Compaction.Ended, { sessionID, reason: "manual", text: "summary" })
       expect(yield* synthetics(sessionID)).toHaveLength(0)
 
       // The model no longer has the rules, so the next read under the subtree must
@@ -336,7 +344,5 @@ describe("SessionInstructions", () => {
     expect(messages).toHaveLength(1)
     expect(messages[0]!.role).toBe("user")
     expect(messages[0]!.content).toEqual([{ type: "text", text: "Instructions from: /repo/sub/AGENTS.md\ncontent" }])
-    // Metadata is bookkeeping for the dedup ledger; the model must not see it.
-    expect(messages[0]!.metadata).toBeUndefined()
   })
 })

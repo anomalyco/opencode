@@ -14,7 +14,7 @@ OpenCode は、**JSON** と **JSONC** (コメント付きの JSON) 形式の両�
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-sonnet-4-5",
+  "model": "anthropic/claude-sonnet-5-5",
   "autoupdate": true,
   "server": {
     "port": 4096,
@@ -34,7 +34,7 @@ OpenCode は、**JSON** と **JSONC** (コメント付きの JSON) 形式の両�
 
 設定ファイルは結合され、置き換えられません。次の構成場所からの設定が結合されます。競合するキーに対してのみ、後の設定が前の設定を上書きします。すべての構成からの競合しない設定は保持されます。
 
-たとえば、グローバル設定で `autoupdate: true` を設定し、プロジェクト設定で `model: "anthropic/claude-sonnet-4-5"` を設定した場合、最終的な構成には両方の設定が含まれます。
+たとえば、グローバル設定で `autoupdate: true` を設定し、プロジェクト設定で `model: "anthropic/claude-sonnet-5-5"` を設定した場合、最終的な構成には両方の設定が含まれます。
 
 ---
 
@@ -236,8 +236,8 @@ LLM が使用できるツールは、`tools` オプションを通じて管理�
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
-  "model": "anthropic/claude-sonnet-4-5",
-  "small_model": "anthropic/claude-haiku-4-5"
+  "model": "anthropic/claude-sonnet-5-5",
+  "small_model": "anthropic/claude-haiku-5-5"
 }
 ```
 
@@ -326,7 +326,7 @@ UI テーマを `tui.json` で設定します。
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
-      "model": "anthropic/claude-sonnet-4-5",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         // Disable file modification tools for review-only agent
@@ -371,7 +371,7 @@ UI テーマを `tui.json` で設定します。
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-haiku-4-5",
+      "model": "anthropic/claude-haiku-5-5",
     },
     "component": {
       "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",

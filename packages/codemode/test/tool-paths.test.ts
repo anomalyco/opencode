@@ -355,6 +355,65 @@ describe("tools.search alias", () => {
   })
 })
 
+describe("search results used like a Promise", () => {
+  const runtime = CodeMode.make({ tools: { api: { list: echo("List things", "listed") } } })
+
+  test("search(...) can be read, awaited, or chained", async () => {
+    const call = "search"
+    expect(
+      await value(
+        runtime,
+        `
+        const query = { query: "list" }
+        return [
+          ${call}(query).items[0].path,
+          (await ${call}(query)).items[0].path,
+          await ${call}(query).then((result) => result.items[0].path),
+          (await ${call}(query).catch(() => "unused")).items[0].path,
+          (await ${call}(query).finally(() => "ignored")).items[0].path,
+          (await Promise.all([${call}(query), ${call}({})])).map((result) => result.items.length),
+        ]
+        `,
+      ),
+    ).toStrictEqual(["tools.api.list", "tools.api.list", "tools.api.list", "tools.api.list", "tools.api.list", [1, 1]])
+  })
+
+  test("the Promise methods stay out of data views", async () => {
+    const expected = { items: [{ path: "tools.api.list" }], remaining: 0, next: null }
+    const result = await value(
+      runtime,
+      `
+      const result = search({ query: "list" })
+      const forIn = []
+      for (const key in result) forIn.push(key)
+      return {
+        json: JSON.parse(JSON.stringify(result)),
+        keys: Object.keys(result),
+        spread: Object.keys({ ...result }),
+        forIn,
+        returned: result,
+      }
+      `,
+    )
+    expect(result).toMatchObject({
+      json: expected,
+      keys: ["items", "remaining", "next"],
+      spread: ["items", "remaining", "next"],
+      forIn: ["items", "remaining", "next"],
+      returned: expected,
+    })
+  })
+
+  test("invalid input throws at the call, so try/catch sees it in either style", async () => {
+    expect((await failure(runtime, `return search({ limit: "ten" }).items`)).message).toContain(
+      "Invalid input for tool 'search'",
+    )
+    expect(
+      await value(runtime, `try { await search({ limit: "ten" }) } catch (error) { return error.message }`),
+    ).toContain("Invalid input for tool 'search'")
+  })
+})
+
 describe("tool references under ==", () => {
   test("compare by identity against data objects without converting them", async () => {
     const runtime = CodeMode.make({ tools: { probe: echo("Probe", "ok") } })

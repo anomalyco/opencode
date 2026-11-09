@@ -35,9 +35,10 @@ export function DialogHighlights(props: { version: string; items: ReadonlyArray<
   return (
     <DialogLayout
       header={<DialogHeader title={`What's new in ${props.version}`} />}
-      footer={
+      footer={{ actions: { primary: [{ title: "ok", key: "enter", onTrigger: () => dialog.clear() }] } }}
+      legacyFooter={
         <box flexDirection="row" justifyContent="space-between" alignItems="center">
-          <DialogFooter actions={[{ title: "scroll", key: "↑/↓" }]} />
+          <DialogFooter actions={{ secondary: [{ title: "scroll", key: "↑/↓" }] }} />
           <box
             paddingLeft={3}
             paddingRight={3}

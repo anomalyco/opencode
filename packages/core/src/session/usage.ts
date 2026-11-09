@@ -1,6 +1,6 @@
 export * as SessionUsage from "./usage.js"
 
-import type { Usage } from "@opencode/ai"
+import type { Usage } from "@opencode/ai/effect"
 import { Money } from "@opencode/schema/money"
 import type { TokenUsage } from "@opencode/schema/token-usage"
 import type { Model } from "@opencode/schema/model"
@@ -18,7 +18,8 @@ export const tokens = (usage: Usage | undefined): TokenUsage.Info => ({
   },
 })
 
-// TODO(#35765): Use Copilot's reported billed amount once billing has a dedicated typed runtime contract.
+// Catalog pricing is the fallback for endpoints that don't report what they charged (`Usage.cost`).
+// TODO(#35765): Normalize Copilot's reported billed amount into `Usage.cost`.
 export function calculateCost(costs: Model.Info["cost"], usage: TokenUsage.Info) {
   const context = usage.input + usage.cache.read + usage.cache.write
   const tier = costs
@@ -35,11 +36,19 @@ export function calculateCost(costs: Model.Info["cost"], usage: TokenUsage.Info)
   )
 }
 
-export type Recorded = { readonly tokens: TokenUsage.Info; readonly cost: Money.USD }
+export type Recorded = {
+  readonly tokens: TokenUsage.Info
+  readonly cost: Money.USD
+}
 
 export const record = (usage: Usage | undefined, costs: Model.Info["cost"]): Recorded => {
   const normalized = tokens(usage)
-  return { tokens: normalized, cost: calculateCost(costs, normalized) }
+  return {
+    tokens: normalized,
+    // What an endpoint says it charged beats the catalog, which can't see its peak pricing, subscriptions or routing.
+    // A reported zero is authoritative.
+    cost: usage?.cost === undefined ? calculateCost(costs, normalized) : Money.USD.make(usage.cost),
+  }
 }
 
 export const add = (a: Recorded, b: Recorded): Recorded => ({

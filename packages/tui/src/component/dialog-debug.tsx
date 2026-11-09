@@ -1,13 +1,14 @@
 import { createMemo, createSignal, For } from "solid-js"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
-import { DialogFooter, DialogHeader, DialogLayout, useDialog } from "../ui/dialog"
+import { DialogHeader, DialogLayout, useDialog } from "../ui/dialog"
 import { useRoute } from "../context/route"
 import { useLocal } from "../context/local"
 import { useClipboard } from "../context/clipboard"
 import { useToast } from "../ui/toast"
 import { describeOS, describeTerminal } from "../util/system"
 import { useTuiApp } from "../context/runtime"
+import { useNewDesigns } from "../config"
 
 export function DialogDebug() {
   const theme = useTheme()
@@ -17,6 +18,7 @@ export function DialogDebug() {
   const clipboard = useClipboard()
   const toast = useToast()
   const app = useTuiApp()
+  const newDesigns = useNewDesigns()
   const [copied, setCopied] = createSignal(false)
 
   dialog.setSize("large")
@@ -48,27 +50,26 @@ export function DialogDebug() {
 
   Keymap.createLayer(() => ({
     mode: "modal",
-    commands: [{ bind: "return", title: "Copy debug info", group: "Dialog", run: copy }],
+    commands: [{ bind: newDesigns() ? "c" : "return", title: "Copy debug info", group: "Dialog", run: copy }],
   }))
+
+  const copyAction = () => ({
+    title: copied() ? "✓ copied" : "copy",
+    key: newDesigns() ? "c" : "enter",
+    color: copied() ? theme.text.feedback.success.base : undefined,
+    onTrigger: copy,
+  })
 
   return (
     <DialogLayout
-      header={<DialogHeader title="Debug" />}
-      footer={
-        <DialogFooter
-          actions={[
-            {
-              title: copied() ? "✓ copied" : "copy",
-              key: "enter",
-              side: "right",
-              color: copied() ? theme.text.feedback.success.base : undefined,
-              onTrigger: copy,
-            },
-          ]}
-        >
-          <text fg={theme.text.muted}>Share this when reporting an issue.</text>
-        </DialogFooter>
-      }
+      header={<DialogHeader title="Debug" description="Share this when reporting an issue" />}
+      footer={{
+        actions: { primary: [copyAction()] },
+        get children() {
+          if (newDesigns()) return undefined
+          return <text fg={theme.text.muted}>Share this when reporting an issue.</text>
+        },
+      }}
     >
       {/* No click-to-copy here: releasing a mouse selection must trigger the
           global copy-on-select so users can copy a single value, e.g. the session id. */}

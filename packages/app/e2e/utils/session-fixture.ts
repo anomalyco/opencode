@@ -341,7 +341,7 @@ export const fixture = {
     worktree: directory,
     vcs: "git",
     name: "smoke-project",
-    time: { created: 1700000000000, updated: 1700000000000 },
+    time: { created: 1700000000000, updated: 1700000000000, active: 1700000000000 },
     sandboxes: [],
   },
   provider: {
@@ -363,7 +363,7 @@ export const fixture = {
       directory,
       title: "Uncommitted changes inquiry",
       version: "dev",
-      time: { created: 1700000000000, updated: 1700000000000 },
+      time: { created: 1700000000000, updated: 1700000000000, active: 1700000000000 },
     },
     {
       id: targetID,
@@ -448,13 +448,6 @@ export function mockStressTimeline(page: Page, input: Partial<MockServerConfig> 
 export async function installStressSessionTabs(page: Page, input?: { draftID?: string; sessionIDs?: string[] }) {
   await page.addInitScript(
     ({ directory, sessionIDs, dirBase64, server, draftID }) => {
-      localStorage.setItem(
-        "opencode.global.dat:server",
-        JSON.stringify({
-          projects: { local: [{ worktree: directory, expanded: true }] },
-          lastProject: { local: directory },
-        }),
-      )
       localStorage.setItem(
         "opencode.window.browser.dat:tabs",
         JSON.stringify([

@@ -3,7 +3,7 @@ import { ParentProps } from "solid-js"
 
 export function Faq(props: ParentProps & { question: string }) {
   return (
-    <Collapsible data-slot="faq-item">
+    <Collapsible forceMount data-slot="faq-item">
       <Collapsible.Trigger data-slot="faq-question">
         <svg
           data-slot="faq-icon-plus"

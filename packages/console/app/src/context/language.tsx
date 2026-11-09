@@ -11,7 +11,7 @@ import {
   dir as localeDir,
   label as localeLabel,
   localeFromCookieHeader,
-  localeFromRequest,
+  pageLocale,
   parseLocale,
   route as localeRoute,
   tag as localeTag,
@@ -19,7 +19,7 @@ import {
 
 function initial() {
   const evt = getRequestEvent()
-  if (evt) return localeFromRequest(evt.request)
+  if (evt) return pageLocale(evt.request)
 
   if (typeof document === "object") {
     const fromDom = parseLocale(document.documentElement.dataset.locale)

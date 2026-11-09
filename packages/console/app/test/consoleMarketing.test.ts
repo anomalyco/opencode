@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import path from "node:path"
 import { i18n } from "../src/i18n"
 import { LOCALES } from "../src/lib/language"
 
@@ -15,7 +16,7 @@ describe("Console marketing navigation gate", () => {
         "--eval",
         'import { config } from "./src/config.ts"; console.log(config.consoleMarketingEnabled)',
       ],
-      cwd: new URL("..", import.meta.url).pathname,
+      cwd: path.join(import.meta.dir, ".."),
       env: {
         ...Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "VITE_CONSOLE_MARKETING_ENABLED")),
         ...(value === undefined ? {} : { VITE_CONSOLE_MARKETING_ENABLED: value }),

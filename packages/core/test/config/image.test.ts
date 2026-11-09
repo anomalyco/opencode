@@ -8,6 +8,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { Document, Event, Info, type Entry } from "@opencode/schema/config"
 import { Effect, Layer, Schema, Stream } from "effect"
+import { waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
 
@@ -27,7 +28,7 @@ describe("ConfigImagePlugin.Plugin", () => {
       const bus = yield* Bus.Service
       const config = yield* Config.Test
       const plugins = yield* Plugin.Service
-      yield* ConfigImagePlugin.Plugin.effect(yield* PluginHost.make(plugins))
+      yield* ConfigImagePlugin.Plugin.effect(yield* PluginHost.make(plugins, "test"))
 
       expect(yield* limits(image)).toEqual({ maxWidth: 1_200, maxHeight: 900, maxBytes: 1 })
 
@@ -48,19 +49,25 @@ describe("ConfigImagePlugin.Plugin", () => {
     ),
   )
 
-  it.live("refetches config after subscribing to updates", () =>
+  it.live("reads the config current when the image service reloads", () =>
     Effect.gen(function* () {
       const image = yield* Image.Service
       const plugins = yield* Plugin.Service
-      let reads = 0
+      const current = { width: 1_200 }
+      const read = () => [document({ max_width: current.width, max_base64_bytes: 1 })]
       const config = Config.Service.of({
-        entries: () => Effect.sync(() => [document({ max_width: reads++ === 0 ? 1_200 : 700, max_base64_bytes: 1 })]),
+        entries: () => Effect.sync(read),
+        snapshot: read,
         changes: () => Stream.empty,
       })
-      yield* ConfigImagePlugin.Plugin.effect(yield* PluginHost.make(plugins)).pipe(
+      yield* ConfigImagePlugin.Plugin.effect(yield* PluginHost.make(plugins, "test")).pipe(
         Effect.provideService(Config.Service, config),
       )
+      expect(yield* limits(image)).toEqual({ maxWidth: 1_200, maxHeight: 2_000, maxBytes: 1 })
 
+      // No `config.updated` yet: a reload for another reason already sees the change.
+      current.width = 700
+      yield* image.reload()
       expect(yield* limits(image)).toEqual({ maxWidth: 700, maxHeight: 2_000, maxBytes: 1 })
     }),
   )
@@ -74,12 +81,4 @@ const limits = Effect.fnUntraced(function* (image: Image.Interface) {
   const error = yield* image.normalize("pixel.png", content).pipe(Effect.flip, Effect.orDie)
   if (error._tag !== "Image.SizeError") return yield* Effect.die(error)
   return { maxWidth: error.maxWidth, maxHeight: error.maxHeight, maxBytes: error.maxBytes }
-})
-
-const waitUntil = Effect.fnUntraced(function* (condition: Effect.Effect<boolean>) {
-  for (let attempt = 0; attempt < 200; attempt++) {
-    if (yield* condition) return
-    yield* Effect.sleep("10 millis")
-  }
-  yield* Effect.die(new Error("Timed out waiting for image config reload"))
 })

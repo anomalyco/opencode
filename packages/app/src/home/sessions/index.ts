@@ -2,7 +2,9 @@ import type { SessionInfo, SessionsResponse } from "@opencode/client/promise"
 import { pathKey } from "@/workspaces/path-key"
 import { SESSION_RECENT_LIMIT, SESSION_RECENT_WINDOW } from "@/runtime/server/global-sync/types"
 
-export const HOME_V2_SESSION_PAGE_LIMIT = 5_000
+// One bounded page of the newest root sessions. Home shows 64 and the sidebar a handful per project, so older history
+// is reached through the titlebar's server-backed search instead of downloading every session on startup.
+export const HOME_SESSION_PAGE_LIMIT = 500
 
 export const HOME_SESSION_LIMIT = 64
 
@@ -25,34 +27,14 @@ export async function loadHomeSessionIndex(
   ) => Promise<SessionsResponse>,
   signal?: AbortSignal,
 ) {
-  const now = Date.now()
-  let retained: SessionInfo[] = []
-  let cursor: string | undefined
+  const response = await list({ limit: HOME_SESSION_PAGE_LIMIT, order: "desc", parentID: null }, { signal })
 
-  for (;;) {
-    const response = await list(
-      {
-        limit: HOME_V2_SESSION_PAGE_LIMIT,
-        order: "desc",
-        parentID: null,
-        ...(cursor ? { cursor } : {}),
-      },
-      { signal },
-    )
-
-    // Fold each page in as it arrives: pages are newest first, so later pages
-    // can only fill directories that still have room. Peak allocation is one
-    // page plus the retained subset, not the whole history.
-    retained = retainHomeSessions([...retained, ...parseHomeSessionIndex(response.data)], HOME_SESSION_INDEX_LIMIT, now)
-
-    if (response.data.length < HOME_V2_SESSION_PAGE_LIMIT || !response.cursor.next) return retained
-    cursor = response.cursor.next
-  }
+  return retainHomeSessions(parseHomeSessionIndex(response.data), HOME_SESSION_INDEX_LIMIT, Date.now())
 }
 
 // Keep this filter for locally known sessions merged into the fetched index.
 export function parseHomeSessionIndex(sessions: SessionInfo[]) {
-  return sessions.filter((session) => !session.parentID && typeof session.time.archived !== "number")
+  return sessions.filter((session) => !session.parentID && session.time.archived === undefined)
 }
 
 export function mergeHomeSessionIndex(fetched: SessionInfo[], known: SessionInfo[]) {

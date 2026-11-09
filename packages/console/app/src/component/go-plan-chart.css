@@ -80,6 +80,9 @@
   [data-tier="plus"] {
     background: linear-gradient(var(--v2-orange-500), var(--v2-orange-600));
   }
+  [data-tier="teams"] {
+    background: linear-gradient(var(--v2-blue-500), var(--v2-blue-600));
+  }
   button {
     display: flex;
     align-items: center;
@@ -183,7 +186,7 @@
   [data-slot="track"] {
     position: relative;
     display: grid;
-    grid-template-rows: 0.5rem 0.5rem;
+    grid-auto-rows: 0.5rem;
     row-gap: 0.5rem;
     margin: 0.5rem 0;
   }

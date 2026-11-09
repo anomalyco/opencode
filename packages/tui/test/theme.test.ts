@@ -22,6 +22,11 @@ test("registers opencode as a native V2 theme", () => {
   expect(parseTheme(getOpenCodeTheme()).base).toBeDefined()
 })
 
+test("keeps the experimental opencode2 theme out of the global theme list", () => {
+  expect(allThemes().opencode2).toBeUndefined()
+  expect(hasTheme("opencode2")).toBe(false)
+})
+
 test("detects V1 themes from their theme field and caches migrations", () => {
   const unversioned = structuredClone(opencodeV1)
   const explicit = { ...structuredClone(opencodeV1), version: 1 }

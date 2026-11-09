@@ -57,18 +57,18 @@ Można też uszkodzić to rozwiązanie.
        permissions:
          id-token: write
        steps:
-          - name: Checkout repository
-            uses: actions/checkout@v6
-            with:
-              fetch-depth: 1
-              persist-credentials: false
+         - name: Checkout repository
+           uses: actions/checkout@v6
+           with:
+             fetch-depth: 1
+             persist-credentials: false
 
-          - name: Run OpenCode
+         - name: Run OpenCode
            uses: anomalyco/opencode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            with:
-             model: anthropic/claude-sonnet-4-20250514
+             model: anthropic/claude-sonnet-5-5
              # github_token: xxxx
    ```
 
@@ -142,7 +142,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: anthropic/claude-sonnet-5-5
           prompt: |
             Review the codebase for any TODO comments and create a summary.
             If you find issues worth addressing, open an issue to track them.
@@ -180,7 +180,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: anthropic/claude-sonnet-5-5
           use_github_token: true
           prompt: |
             Review this pull request:
@@ -236,7 +236,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: anthropic/claude-sonnet-5-5
           prompt: |
             Review this issue. If there's a clear fix or relevant docs:
             - Provide documentation links
@@ -255,7 +255,7 @@ Zastąp domyślne monit, aby zastosować zachowanie opencode do twojego własneg
 ```yaml title=".github/workflows/opencode.yml"
 - uses: anomalyco/opencode/github@latest
   with:
-    model: anthropic/claude-sonnet-4-5
+    model: anthropic/claude-sonnet-5-5
     prompt: |
       Review this pull request:
       - Check for code quality issues

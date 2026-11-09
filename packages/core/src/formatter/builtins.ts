@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 import { ChildProcess } from "effect/process"
+import { isRecord } from "@opencode/util/record"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Npm } from "@opencode/util/npm"
 import { AppProcess } from "@opencode/util/process"
@@ -290,8 +291,4 @@ function hasDependency(input: unknown, dependency: string) {
 function hasRecordKey(input: unknown, field: string, key: string) {
   if (!isRecord(input)) return false
   return isRecord(input[field]) && key in input[field]
-}
-
-function isRecord(input: unknown): input is Record<string, unknown> {
-  return Boolean(input && typeof input === "object" && !Array.isArray(input))
 }

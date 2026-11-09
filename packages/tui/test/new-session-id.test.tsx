@@ -89,10 +89,12 @@ test("a failed first create keeps the launch session ID for the retry", async ()
 
   await setup.ready
   await setup.waitForFrame((frame) => frame.includes("Demo Model"))
-  await setup.mockInput.typeText("hello")
+  await setup.mockInput.typeText("hello 中文")
   setup.mockInput.pressEnter()
   await setup.waitForFrame((frame) => frame.includes("Creating a session failed") && frame.includes("hello"))
   expect(run.attempts).toEqual(["ses_chosen"])
+  await setup.mockInput.typeText("!")
+  expect(setup.renderer.currentFocusedEditor?.plainText).toBe("hello 中文!")
 
   setup.mockInput.pressEnter()
   await setup.waitForFrame(() => run.created.length === 1)

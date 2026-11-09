@@ -3,7 +3,7 @@ import type { TabStorage } from "./schema"
 
 export type ClosedTab = typeof TabStorage.ClosedTab.Type
 
-const CLOSED_TAB_LIMIT = 25
+const CLOSED_TAB_LIMIT = 100
 
 // Only session tabs are recorded; closing a draft tab deletes its persisted
 // state, so a reopened draft would come back empty anyway.

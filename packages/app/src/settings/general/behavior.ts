@@ -1,12 +1,18 @@
 import { onCleanup } from "solid-js"
+import {
+  createSoundPreviewState,
+  transitionSoundPreview,
+  type SoundPreviewEffect,
+  type SoundPreviewEvent,
+} from "./sound-preview-machine"
 
-export type ShellOption = {
+type ShellOption = {
   path: string
   name: string
   acceptable: boolean
 }
 
-export type ShellSelectOption = {
+type ShellSelectOption = {
   id: string
   value: string
   name: string
@@ -43,38 +49,54 @@ export function createShellOptions(input: { shells: ShellOption[]; current: stri
 }
 
 export function createSoundPreviewController(player: (id: string | undefined) => Promise<(() => void) | undefined>) {
-  let cleanup: (() => void) | undefined
-  let timeout: ReturnType<typeof setTimeout> | undefined
-  let run = 0
+  let state = createSoundPreviewState()
+  let timer: ReturnType<typeof setTimeout> | undefined
 
-  const stop = () => {
-    run += 1
-    cleanup?.()
-    clearTimeout(timeout)
-    cleanup = undefined
-    timeout = undefined
+  const dispatch = (event: SoundPreviewEvent) => {
+    const next = transitionSoundPreview(state, event)
+    state = next.state
+    next.effects.forEach(run)
   }
 
-  const play = (id: string | undefined) => {
-    stop()
+  const run = (effect: SoundPreviewEffect) => {
+    if (effect.type === "timer.start") {
+      clearTimeout(timer)
+      timer = setTimeout(
+        () =>
+          dispatch(
+            effect.kind === "debounce"
+              ? { type: "debounce.elapsed", attempt: effect.attempt }
+              : { type: "load.timed-out", attempt: effect.attempt },
+          ),
+        effect.delayMs,
+      )
 
-    if (!id) return
-    const current = ++run
-    timeout = setTimeout(() => {
-      timeout = undefined
-      void player(id).then((next) => {
-        if (run === current) {
-          cleanup = next
+      return
+    }
 
-          return
-        }
+    if (effect.type === "timer.stop") {
+      clearTimeout(timer)
+      timer = undefined
 
-        next?.()
-      })
-    }, 100)
+      return
+    }
+
+    if (effect.type === "audio.load") {
+      void Promise.try(() => player(effect.id)).then(
+        (active) => dispatch({ type: "load.succeeded", attempt: effect.attempt, active }),
+        () => dispatch({ type: "load.failed", attempt: effect.attempt }),
+      )
+
+      return
+    }
+
+    effect.active()
   }
 
-  onCleanup(stop)
+  onCleanup(() => dispatch({ type: "disposed" }))
 
-  return { play, stop }
+  return {
+    play: (id: string | undefined) => dispatch({ type: "play.requested", id }),
+    stop: () => dispatch({ type: "stop.requested" }),
+  }
 }

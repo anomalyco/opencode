@@ -50,7 +50,7 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   [data-component="tool-count-label"] [data-slot="tool-count-label-suffix"] {
     transition-duration: 0ms;
   }
