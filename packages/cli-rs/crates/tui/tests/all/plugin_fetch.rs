@@ -235,3 +235,49 @@ fn a_slow_btw_reply_across_a_disable_delivers_nothing() {
     h.tui.navigate(h.tui.route());
     h.wait_gone("/btw");
 }
+
+// Expected: closing an answer frees its body and handlers; four answers opened and closed leave none behind.
+#[test]
+fn a_closed_btw_answer_is_freed() {
+    let server = Server::new(true);
+    let h = mount(&server, &[]);
+    let marker = std::rc::Rc::new(());
+    for question in ["one", "two", "three", "four"] {
+        h.tui.keymap.dispatch("session.aside", Some(question));
+        h.wait_for(&format!("answer to {question}"));
+        opencode_tui::plugins::panel::testing::mark(&h.tui, &marker);
+        h.app.press("escape");
+        h.wait_gone(&format!("answer to {question}"));
+    }
+    h.app.render();
+    assert_eq!(std::rc::Rc::strong_count(&marker), 1, "a closed answer's body is still held");
+}
+
+// Expected: the answer's box follows the screen as TS's `maxHeight` does, so after the terminal gets shorter the
+// header and the footer stay on screen.
+#[test]
+fn a_btw_answer_fits_a_shorter_terminal() {
+    let server = Server::new(true);
+    let h = mount(&server, &[]);
+    h.app.resize(100, 50);
+    h.tui.keymap.dispatch("session.aside", Some("long"));
+    h.wait_for("item 01");
+    h.app.resize(100, 20);
+    h.app.render();
+    let screen = h.app.text();
+    assert!(screen.contains("/btw") && screen.contains("copy response"), "{screen}");
+}
+
+// Expected: a copy that completes after its answer closed does not open the answer again.
+#[test]
+fn a_late_btw_copy_does_not_reopen_a_closed_answer() {
+    let server = Server::new(true);
+    let h = mount(&server, &[]);
+    h.tui.keymap.dispatch("session.aside", Some("one"));
+    h.wait_for("answer to one");
+    h.app.press("escape");
+    h.wait_gone("answer to one");
+    h.tui.keymap.dispatch("btw.copied", None);
+    h.app.wait_until(Duration::from_millis(100), || false);
+    assert!(!h.app.text().contains("answer to one"), "{}", h.app.text());
+}
