@@ -124,6 +124,14 @@ fn define<H: Host>(host: &Rc<H>, library: Library, options: Option<&str>) -> Res
                 layer: RefCell::new(None),
                 activation,
             });
+            if manifest.wake {
+                let woken = Rc::downgrade(&guest);
+                guest.activation.on_wake(Rc::new(move || {
+                    if let Some(guest) = woken.upgrade() {
+                        guest.handle("on-wake", &Request::Wake);
+                    }
+                }));
+            }
             register(setup, &guest, &manifest);
             // What setup asked for (toasts, routes) happens now that the plugin is active.
             guest.apply(guest.effects());

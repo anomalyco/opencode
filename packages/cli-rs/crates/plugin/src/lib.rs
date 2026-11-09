@@ -204,9 +204,7 @@ impl<H: Host> Definition<H> {
     }
 }
 
-/// A plugin of the one API, run in process: its closures get Rust values, with no JSON step. It may register code
-/// fences, slot claims, commands, event handlers and dispose callbacks so far; the rest of its surface moves here with
-/// the built-ins that need it.
+/// A plugin of the one API, run in process: its closures get Rust values, with no JSON step.
 impl<H: Host> From<abi::Plugin> for Definition<H> {
     fn from(plugin: abi::Plugin) -> Self {
         Definition::new(plugin.id, move |setup: &mut Setup<'_, H>| {
@@ -230,9 +228,13 @@ impl<H: Host> From<abi::Plugin> for Definition<H> {
                 activation: activation.clone(),
                 replies: api.replies().to_vec(),
             });
-            // Registered first, so it runs last: no reply reaches the plugin once it is disposed.
+            // Registered first, so it runs last: no reply or wake reaches the plugin once it is disposed.
             let disposed = activation.clone();
             setup.on_dispose(move || disposed.dispose());
+            if !api.wakes().is_empty() {
+                let (wakes, scope) = (api.wakes().to_vec(), scope.clone());
+                activation.on_wake(Rc::new(move || scope.run(|host| wakes.iter().for_each(|run| run(host)))));
+            }
             for (language, render) in api.fences() {
                 let (render, scope, fences) = (render.clone(), scope.clone(), node::Fences::default());
                 let render: CodeBlockRender = Rc::new(move |block, theme| {
@@ -718,6 +720,17 @@ struct Plugin<H: Host> {
     enabled: bool,
     /// The activation order and registrations while active.
     active: Option<(u64, Registration<H>)>,
+    /// The built-in an external plugin of its ID replaced in place (TS `desired.set(id, ...)`), and whether it was
+    /// enabled; it comes back when the external plugin is unloaded.
+    shadowed: Option<(Definition<H>, bool)>,
+    /// The activation order a replacement of a built-in keeps, so its claims take the built-in's place.
+    place: Option<u64>,
+}
+
+impl<H: Host> Plugin<H> {
+    fn new(definition: Definition<H>, source: Source, enabled: bool) -> Self {
+        Self { definition, source, enabled, active: None, shadowed: None, place: None }
+    }
 }
 
 /// The host's plugins in enable order, and the configured entries it did not load.
@@ -736,10 +749,8 @@ impl<H: Host> Registry<H> {
     /// The built-ins, enabled unless a `cli.json` `plugins` entry disables them (`plugin/context.tsx:313-330`).
     /// Every entry that names no built-in is a TypeScript plugin; it is listed as skipped.
     pub fn new<'a>(builtins: Vec<Definition<H>>, targets: impl IntoIterator<Item = &'a str>) -> Self {
-        let mut plugins: Vec<Plugin<H>> = builtins
-            .into_iter()
-            .map(|definition| Plugin { definition, source: Source::Builtin, enabled: true, active: None })
-            .collect();
+        let mut plugins: Vec<Plugin<H>> =
+            builtins.into_iter().map(|definition| Plugin::new(definition, Source::Builtin, true)).collect();
         let mut skipped = Vec::new();
         let directives: Vec<String> = targets.into_iter().map(str::to_owned).collect();
         for target in directives.iter().map(String::as_str) {
@@ -771,7 +782,7 @@ impl<H: Host> Registry<H> {
 
     /// Adds an enabled plugin after the others; [`Registry::activate`] starts it.
     pub fn add(&self, definition: Definition<H>) {
-        self.plugins.borrow_mut().push(Plugin { definition, source: Source::Added, enabled: true, active: None });
+        self.plugins.borrow_mut().push(Plugin::new(definition, Source::Added, true));
     }
 
     /// The entries that were skipped.
@@ -809,8 +820,8 @@ impl<H: Host> Registry<H> {
         self.unloaded
             .borrow_mut()
             .retain(|(known, status)| !(matches!(status, Status::Skipped(_)) && matches(known, &definition.id)));
-        if self.with_target(&target, |plugin| plugin.active.is_some()) == Some(true) {
-            let (order, registration) = self.setup(host, &definition);
+        if let Some(Some(place)) = self.with_target(&target, |plugin| plugin.active.is_some().then_some(plugin.place)) {
+            let (order, registration) = self.setup(host, &definition, place);
             if let Some(error) = definition.external.as_ref().and_then(|(_, error)| error()) {
                 registration.dispose();
                 return Some(error);
@@ -843,8 +854,23 @@ impl<H: Host> Registry<H> {
                             _ => enabled,
                         }
                     });
-                    plugins.push(Plugin { definition, source: Source::External, enabled, active: None });
-                    None
+                    // Like TS, an external plugin with a built-in's ID replaces it, in its place.
+                    match plugins
+                        .iter_mut()
+                        .find(|plugin| plugin.source == Source::Builtin && plugin.definition.id == definition.id)
+                    {
+                        Some(builtin) => {
+                            builtin.place = builtin.active.as_ref().map(|(order, _)| *order);
+                            let original = std::mem::replace(&mut builtin.definition, definition);
+                            builtin.shadowed = Some((original, builtin.enabled));
+                            (builtin.source, builtin.enabled) = (Source::External, enabled);
+                            Some(builtin.active.take())
+                        }
+                        None => {
+                            plugins.push(Plugin::new(definition, Source::External, enabled));
+                            None
+                        }
+                    }
                 }
             }
         };
@@ -863,23 +889,36 @@ impl<H: Host> Registry<H> {
         self.plugins.borrow().iter().any(|plugin| matches(target, &plugin.definition.id))
     }
 
-    /// Whether a plugin other than the one loaded from `target` has ID `id`.
+    /// Whether a plugin other than the one loaded from `target` has ID `id`. A built-in's ID is free: the plugin
+    /// replaces the built-in.
     pub fn id_taken(&self, id: &str, target: &str) -> bool {
-        self.plugins
-            .borrow()
-            .iter()
-            .any(|plugin| plugin.definition.id == id && plugin.definition.target() != Some(target))
+        self.plugins.borrow().iter().any(|plugin| {
+            plugin.definition.id == id && plugin.definition.target() != Some(target) && plugin.source != Source::Builtin
+        })
     }
 
-    /// Deactivates and removes the external plugin loaded from `target`.
-    pub fn unload(&self, target: &str) {
-        let removed = {
+    /// Deactivates and removes the external plugin loaded from `target`; the built-in it replaced comes back in its
+    /// place.
+    pub fn unload(&self, host: &Rc<H>, target: &str) {
+        let (removed, restored) = {
             let mut plugins = self.plugins.borrow_mut();
-            let index = plugins.iter().position(|plugin| plugin.definition.target() == Some(target));
-            index.map(|index| plugins.remove(index))
+            let Some(index) = plugins.iter().position(|plugin| plugin.definition.target() == Some(target)) else {
+                return;
+            };
+            match plugins[index].shadowed.take() {
+                Some((definition, enabled)) => {
+                    let plugin = &mut plugins[index];
+                    (plugin.definition, plugin.source, plugin.enabled) = (definition, Source::Builtin, enabled);
+                    (plugin.active.take(), enabled.then(|| plugin.definition.id.clone()))
+                }
+                None => (plugins.remove(index).active, None),
+            }
         };
-        if let Some((_, registration)) = removed.and_then(|plugin| plugin.active) {
+        if let Some((_, registration)) = removed {
             registration.dispose();
+        }
+        if let Some(id) = restored {
+            self.start(host, &id);
         }
     }
 
@@ -1042,17 +1081,21 @@ impl<H: Host> Registry<H> {
         else {
             return;
         };
-        let active = self.setup(host, &definition);
+        let place = self.with_plugin(id, |plugin| plugin.place).flatten();
+        let active = self.setup(host, &definition, place);
         self.with_plugin(id, move |plugin| plugin.active = Some(active));
     }
 
-    /// Runs the setup of `definition` and numbers the activation. Setup runs without the registry borrowed, so it
-    /// may read the registry through the host.
-    fn setup(&self, host: &Rc<H>, definition: &Definition<H>) -> (u64, Registration<H>) {
+    /// Runs the setup of `definition` and numbers the activation, unless it keeps the order `place`. Setup runs without
+    /// the registry borrowed, so it may read the registry through the host.
+    fn setup(&self, host: &Rc<H>, definition: &Definition<H>, place: Option<u64>) -> (u64, Registration<H>) {
         let mut setup = Setup { host, id: &definition.id, registration: Registration::default() };
         (definition.setup)(&mut setup);
-        let order = self.activations.get();
-        self.activations.set(order + 1);
+        let order = place.unwrap_or_else(|| {
+            let order = self.activations.get();
+            self.activations.set(order + 1);
+            order
+        });
         (order, setup.registration)
     }
 

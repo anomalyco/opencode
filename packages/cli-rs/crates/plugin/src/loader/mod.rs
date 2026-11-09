@@ -171,7 +171,7 @@ impl<H: Host> Loader<H> {
         for target in stale.into_iter().chain(removed) {
             self.seen.borrow_mut().remove(&target);
             self.failed.borrow_mut().remove(&target);
-            registry.unload(&target);
+            registry.unload(host, &target);
             registry.set_unloaded(&target, None);
             changed = true;
         }
