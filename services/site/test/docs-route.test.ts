@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { latestDocs } from "../src/docs/config"
-import { docsRoute } from "../src/docs/route"
+import { latestDocs, v1Docs } from "../src/docs/config"
+import { docsHostRedirect, docsRoute } from "../src/docs/route"
 
 // Slugs as `virtual:docs-pages` lists them (src/docs/vite.ts): content paths, plus the API reference.
 const slugs = {
   latest: ["index", "config", "cli", "cli/keybinds", "console/api/inference", "console/go", "console/models", "api"],
+  v1: ["index", "config", "ide", "policies", "ja", "ja/config", "ja/ide", "zh-cn/config", "pt-br", "nb/config"],
 }
 const route = (path: string, accept = "text/html") => docsRoute(new URL(path, "https://opencode.ai"), accept, slugs)
 
@@ -74,8 +75,57 @@ describe("docs routes", () => {
       expect(route(path)).toEqual({ type: "file", set: latestDocs, path: path.slice("/docs".length) })
   })
 
-  test("ignore everything outside /docs", () => {
-    for (const path of ["/", "/docsx", "/v2/docs/config/", "/v1/docs/ide/", "/ja/docs/"])
+  test("ignore everything outside the docs", () => {
+    for (const path of ["/", "/docsx", "/v2/docs/config/", "/v1/docsx", "/ja/docs/", "/ja/v1/docs/ide/"])
       expect(route(path)).toBeUndefined()
+  })
+})
+
+describe("V1 docs routes", () => {
+  const page = (slug: string, markdown = false) => ({ type: "page" as const, set: v1Docs, slug, markdown, twin: true })
+  const moved = (path: string, location: string, status = 301) =>
+    expect(route(path)).toEqual({ type: "redirect", location, status })
+
+  test("serve V1 pages at /v1/docs, in English and in their languages, with their Markdown twins", () => {
+    for (const path of ["/v1/docs", "/v1/docs/"]) expect(route(path)).toEqual(page("index"))
+    expect(route("/v1/docs/ide/")).toEqual(page("ide"))
+    expect(route("/v1/docs/ja/")).toEqual(page("ja"))
+    expect(route("/v1/docs/ja/config")).toEqual(page("ja/config"))
+    expect(route("/v1/docs.md")).toEqual(page("index", true))
+    expect(route("/v1/docs/ja.md")).toEqual(page("ja", true))
+    expect(route("/v1/docs/config/", "text/markdown")).toEqual(page("config", true))
+    expect(route("/v1/docs/llms.txt")).toEqual({ type: "file", set: v1Docs, path: "/llms.txt" })
+  })
+
+  test("send the V1 app's other names for its languages to theirs, permanently", () => {
+    moved("/v1/docs/zh/config/", "/v1/docs/zh-cn/config/")
+    moved("/v1/docs/ZH-CN/config", "/v1/docs/zh-cn/config/")
+    moved("/v1/docs/br/", "/v1/docs/pt-br/")
+    moved("/v1/docs/no/config.md", "/v1/docs/nb/config.md")
+    moved("/v1/docs/en/ide/?ref=app", "/v1/docs/ide/?ref=app")
+    moved("/v1/docs/uk/", "/v1/docs/")
+  })
+
+  test("send English-only pages, Go and Zen, share links and the schemas where they live", () => {
+    moved("/v1/docs/ja/policies/", "/v1/docs/policies/", 302)
+    moved("/v1/docs/go", "/docs/console/go/")
+    moved("/v1/docs/ja/zen/", "/docs/console/models/")
+    moved("/v1/docs/s/abc123", "https://opncd.ai/share/abc123")
+    moved("/v1/docs/config.json", "/config.json")
+  })
+
+  test("answer a missing V1 page with a 404, never another redirect", () => {
+    for (const path of ["/v1/docs/nope/", "/v1/docs/ja/nope", "/v1/docs/api"])
+      expect(route(path)).toEqual({ type: "missing" })
+  })
+
+  test("send docs.opencode.ai's addresses to the same path on the V1 docs", () => {
+    const host = (url: string) => docsHostRedirect(new URL(url))
+    expect(host("https://docs.opencode.ai/")).toBe("https://opencode.ai/v1/docs/")
+    expect(host("https://docs.opencode.ai/docs")).toBe("https://opencode.ai/v1/docs/")
+    expect(host("https://docs.opencode.ai/docs/ide/?x=1")).toBe("https://opencode.ai/v1/docs/ide/?x=1")
+    expect(host("https://docs.opencode.ai/s/abc")).toBe("https://opencode.ai/v1/docs/s/abc")
+    expect(host("https://docs.dev.opencode.ai/docs/ja/")).toBe("https://dev.opencode.ai/v1/docs/ja/")
+    expect(host("https://opencode.ai/docs/")).toBeUndefined()
   })
 })

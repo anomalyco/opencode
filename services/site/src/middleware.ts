@@ -25,11 +25,10 @@ import { legacyRedirect } from "~/lib/legacy"
 import { metaResponse } from "~/lib/meta"
 import { setSecurityHeaders } from "~/lib/security-headers"
 import { noindexDev } from "~/lib/noindex"
-import { v1DocsOrigin } from "~/lib/docs"
 import { docsMiddleware } from "~/docs/middleware"
 
-// dev.opencode.ai's noindex header on every response (lib/noindex.ts), then the V2 docs (everything
-// under /docs, docs/middleware.ts), then the page middleware, then the HTML cache headers and edge
+// dev.opencode.ai's noindex header on every response (lib/noindex.ts), then the docs (everything
+// under /docs and /v1/docs, and the V1 docs' old host, docs/middleware.ts), then the page middleware, then the HTML cache headers and edge
 // cache (lib/html-cache.ts), which see the request without its locale, then one stylesheet per page
 // (lib/one-stylesheet.ts), inside the cache so cached pages carry it too.
 export default [
@@ -71,16 +70,6 @@ export default [
         locale,
       })
       if (legacy) return legacy
-
-      // The V1 docs live at /v1/docs on our domain (English only, so the locale is dropped), and /docs
-      // URLs without a V2 page come here (docs/middleware.ts). Their app is built for
-      // docs.opencode.ai/docs/ (absolute links and assets), so it can't be proxied under another
-      // path: the same path there, permanently, until it's built for /v1/docs.
-      if (/^\/v1\/docs(?=$|\/)/.test(url.pathname))
-        return new Response(null, {
-          status: 308,
-          headers: { Location: `${v1DocsOrigin}${url.pathname.slice("/v1/docs/".length)}${url.search}` },
-        })
 
       // The download page's content moved to /product and the product pages, and /products became
       // /product. The legacy redirects (/go, /zen, /enterprise, /black, /auth, …) are zone rules.

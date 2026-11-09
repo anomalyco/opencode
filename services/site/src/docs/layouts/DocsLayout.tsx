@@ -1,5 +1,6 @@
 import { For, Show, type JSX } from "solid-js"
-import { DocsLockup } from "~/component/site/docs-lockup"
+import { DocsLockup, type DocsVersion } from "~/component/site/docs-lockup"
+import { DocsVersionNotice } from "~/component/site/docs-version-notice"
 import { GitHubLink } from "~/component/site/github-link"
 import { Chevron, NewTab, SearchIcon } from "~/component/site/icons"
 import { interFaces, interLatin } from "~/component/site/inter-fonts"
@@ -14,11 +15,26 @@ import { latestDocs, type DocsSet } from "../config"
 import { DocsFooter } from "../components/DocsFooter"
 import { DocsSearchDialog } from "../components/DocsSearchDialog"
 import { DocsNav } from "../components/DocsSidebar"
-import { docsHref, getDocsSection } from "../lib/navigation"
+import { docsHref, getDocsSection, type DocsSection } from "../lib/navigation"
+import type { V1Locale } from "../lib/v1-navigation"
 import type { DocsHeading } from "../rehype-headings"
 
 /** The URLs of the docs' stylesheet (styles/docs.css) and browser script (client.ts). */
 export type DocsAssets = { stylesheet: string; script: string }
+
+/** The page in each docs version, for the lockup's versions and the V1 notice (render.tsx). */
+export type DocsVersions = Record<DocsVersion, string>
+
+/**
+ * A V1 page's language, its section in that language, the page in every language, and where its
+ * links' anchors are on the pages they go to (render.tsx).
+ */
+export type DocsV1 = {
+  locale: V1Locale
+  section: DocsSection
+  languages: (V1Locale & { href: string })[]
+  anchor: (href: string) => string
+}
 
 // Before first paint, inside the site root: the saved theme, as on the site (preload-settings.ts),
 // after taking over a choice saved by the docs before they shared the site's theme ("docs-theme").
@@ -48,11 +64,14 @@ export function DocsLayout(props: {
   source?: string
   /** The page's Markdown twin; generated pages have none. */
   markdown?: string
+  versions?: DocsVersions
+  v1?: DocsV1
   children: JSX.Element
 }) {
   const i18n = useI18n()
-  const section = getDocsSection(props.currentSlug)
-  const pages = section.groups.flatMap((group) => group.items)
+  const section = props.v1?.section ?? getDocsSection(props.currentSlug)
+  // Pagination stays in the set.
+  const pages = section.groups.flatMap((group) => group.items.filter((item) => !item.href))
   const at = pages.findIndex((item) => item.slug === props.currentSlug)
   const previous = at > 0 ? pages[at - 1] : undefined
   const next = at >= 0 ? pages[at + 1] : undefined
@@ -62,6 +81,13 @@ export function DocsLayout(props: {
   const contents = props.headings
     .filter((heading) => heading.depth === 2 || heading.depth === 3)
     .map((heading) => ({ id: heading.slug, title: heading.text, level: heading.depth as 2 | 3 }))
+  // The lockup's versions: this page in each (the versions menu, and "| V1" on V1 pages).
+  const version = () =>
+    props.versions && {
+      current: props.set.id,
+      href: (id: DocsVersion) => props.versions![id],
+      onSelect: () => undefined,
+    }
   const logo = () => (
     <a
       href="/"
@@ -78,12 +104,15 @@ export function DocsLayout(props: {
   )
 
   return (
-    <html lang="en" dir="ltr">
+    <html
+      lang={props.v1 ? (props.v1.locale.lang ?? (props.v1.locale.path || "en")) : "en"}
+      dir={props.v1?.locale.path === "ar" ? "rtl" : "ltr"}
+    >
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="description" content={description} />
-        <Show when={props.noindex}>
+        <Show when={props.noindex || props.set.noindex}>
           <meta name="robots" content="noindex" />
         </Show>
         <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fbfbfb" />
@@ -93,7 +122,7 @@ export function DocsLayout(props: {
         <link rel="canonical" href={canonical} />
         <link rel="icon" type="image/svg+xml" href={`${latestDocs.base}favicon.svg`} />
         <Show when={props.markdown}>{(href) => <link rel="alternate" type="text/markdown" href={href()} />}</Show>
-        <title>{`${props.title} | OpenCode`}</title>
+        <title>{`${props.title} | OpenCode${props.set.id === "v1" ? " V1" : ""}`}</title>
         <link rel="preload" href={interLatin} as="font" type="font/woff2" crossorigin="anonymous" />
         <link rel="preload" href={monoFontLatin} as="font" type="font/woff2" crossorigin="anonymous" />
         <style innerHTML={`${interFaces}\n${monoFontFaces}`} />
@@ -106,6 +135,7 @@ export function DocsLayout(props: {
           data-layout="docs"
           data-theme="system"
           data-docs-base={props.set.base}
+          data-locale={props.v1?.locale.path ? (props.v1.locale.site ?? props.v1.locale.path) : undefined}
           {...rootAttributes()}
         >
           <script innerHTML={themeMigration + themeScript(false)} />
@@ -114,7 +144,7 @@ export function DocsLayout(props: {
           </a>
           <header data-component="topbar">
             {logo()}
-            <DocsLockup current={section.title} inline="topbar" />
+            <DocsLockup current={section.title} inline="topbar" version={version()} />
             <button
               type="button"
               data-slot="search-button"
@@ -134,7 +164,7 @@ export function DocsLayout(props: {
               data-section="nav"
               aria-label={i18n.t("site.landmark.navigation")}
             >
-              <DocsLockup current={section.title} inline="sidebar" />
+              <DocsLockup current={section.title} inline="sidebar" version={version()} />
               {logo()}
               <div data-component="section-nav">
                 <button type="button" data-slot="section-toggle" aria-expanded="false" aria-controls="section-nav">
@@ -181,6 +211,9 @@ export function DocsLayout(props: {
 
             <main data-component="content" id="content" tabindex={-1}>
               <div data-slot="page">
+                <Show when={props.set.id === "v1" && props.versions}>
+                  {(versions) => <DocsVersionNotice latest={versions().latest} />}
+                </Show>
                 <article
                   data-component="docs-article"
                   data-section="article"
@@ -252,7 +285,7 @@ export function DocsLayout(props: {
             </aside>
           </div>
 
-          <DocsFooter markdown={props.markdown} />
+          <DocsFooter markdown={props.markdown} languages={props.v1?.languages} current={props.v1?.locale} />
           <DocsSearchDialog set={props.set} />
         </div>
         <script type="module" src={props.assets.script} />

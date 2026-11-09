@@ -8,9 +8,10 @@ import { fanMotion } from "../component/site/fan-motion"
 import { holdOpenMenu } from "../component/site/menu-hold"
 import { navMenusOnIntent } from "../component/site/nav-intent"
 
-// The page reports to the Console's funnel like the site's (lib/funnel.ts). The docs are English, at the host's root
-// like the site; their config is built in, as a chunk would bring Vite's preload helper with it.
-Funnel.start(async () => ({ surfaceOf, targetOf, localeOf: () => "en", base: "", downloadOf }))
+// The page reports to the Console's funnel like the site's (lib/funnel.ts), in its language (English but on the V1
+// docs' other languages), at the host's root like the site; their config is built in, as a chunk would bring Vite's
+// preload helper with it.
+Funnel.start(async () => ({ surfaceOf, targetOf, localeOf: () => site.dataset.locale ?? "en", base: "", downloadOf }))
 
 const $ = <T extends Element = HTMLElement>(selector: string, root: ParentNode = document) =>
   root.querySelector<T>(selector)
@@ -24,6 +25,9 @@ const html = document.documentElement
 const on = <K extends keyof DocumentEventMap>(type: K, listener: (event: DocumentEventMap[K]) => void) =>
   document.addEventListener(type, listener)
 const phone = matchMedia("(max-width: 60rem)")
+// Arrow keys by the direction they move in: left and right swap in a right-to-left page.
+const inline = (key: string) =>
+  html.dir === "rtl" ? ({ ArrowLeft: "ArrowRight", ArrowRight: "ArrowLeft" }[key] ?? key) : key
 const wait = (ms: number) => new Promise((done) => setTimeout(done, ms))
 
 // The theme switch: system, light, dark, saved as the site saves it (opencode-theme), so the docs
@@ -264,8 +268,7 @@ on("click", (event) => {
 
 on("keydown", (event) => {
   const target = event.target as HTMLElement
-  const key =
-    html.dir === "rtl" ? ({ ArrowLeft: "ArrowRight", ArrowRight: "ArrowLeft" }[event.key] ?? event.key) : event.key
+  const key = inline(event.key)
   // Escape closes the lockup wherever focus is: a click on its trigger may leave focus on the trigger (or,
   // in Safari, on the page), and keyboard opening moves it into the menu, so it can't wait for a keydown
   // that started inside the menu.
@@ -342,12 +345,18 @@ on("keydown", (event) => {
   if (!tab) return
   const tabs = $$("[role=tab]", tab.parentElement!)
   const at = tabs.indexOf(tab)
-  const next = { Home: 0, End: tabs.length - 1, ArrowRight: at + 1, ArrowLeft: at - 1 }[event.key]
+  const next = { Home: 0, End: tabs.length - 1, ArrowRight: at + 1, ArrowLeft: at - 1 }[inline(event.key)]
   if (next === undefined) return
   event.preventDefault()
   const item = tabs[(next + tabs.length) % tabs.length]
   selectTab(item)
   item.focus()
+})
+
+// The V1 docs' language select (DocsFooter.tsx) opens the page in the language chosen.
+on("change", (event) => {
+  const select = (event.target as Element).closest<HTMLSelectElement>("[data-docs-lang]")
+  if (select) location.assign(select.value)
 })
 
 // Escape closes what's open (menus return focus to their button); "0" goes to the site's home page,

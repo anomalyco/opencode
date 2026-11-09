@@ -85,7 +85,7 @@ Eller du kan indstille det manuelt.
 - `prompt`: Valgfri brugerdefineret prompt for at tilsidesætte standardadfærden. Brug dette til at tilpasse, hvordan OpenCode behandler anmodninger.
 - `token`: Valgfrit GitHub adgangstoken til at udføre operationer såsom oprettelse af kommentarer, begå ændringer og åbning af Pull Requests. Som standard bruger OpenCode installationsadgangstokenet fra OpenCode GitHub-appen, så commits, kommentarer og Pull Requests ser ud til at komme fra appen.
 
-  Alternativt kan du bruge GitHub Action runners [built-in `GITHUB_TOKEN`](OpenCode) uden at installere OpenCode GitHub appen. Bare sørg for at give de nødvendige tilladelser i dit workflow:
+  Alternativt kan du bruge GitHub Action runners [built-in `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) uden at installere OpenCode GitHub appen. Bare sørg for at give de nødvendige tilladelser i dit workflow:
 
   ```yaml
   permissions:
