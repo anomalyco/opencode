@@ -37,6 +37,8 @@ pub(crate) struct Activation<H: Host> {
     queued: Cell<bool>,
     /// The handler of this activation's [`Woken`].
     handler: HandlerId,
+    /// The plugin was disposed: its pending replies are dropped.
+    disposed: Cell<bool>,
 }
 
 impl<H: Host> Activation<H> {
@@ -48,7 +50,14 @@ impl<H: Host> Activation<H> {
                     activation.redraw();
                 }
             });
-            Self { host: Rc::downgrade(host), wake, claims: RefCell::default(), queued: Cell::new(false), handler }
+            Self {
+                host: Rc::downgrade(host),
+                wake,
+                claims: RefCell::default(),
+                queued: Cell::new(false),
+                handler,
+                disposed: Cell::new(false),
+            }
         })
     }
 
@@ -57,6 +66,14 @@ impl<H: Host> Activation<H> {
     pub fn waker(&self) -> abi::Waker {
         // SAFETY: `wake_in_process` posts through `Wake`, which is `Sync`, and the activation keeps it alive.
         unsafe { abi::Waker::new(Arc::as_ptr(&self.wake).cast_mut().cast(), wake_in_process) }
+    }
+
+    pub fn dispose(&self) {
+        self.disposed.set(true);
+    }
+
+    pub fn disposed(&self) -> bool {
+        self.disposed.get()
     }
 
     pub fn track(&self, claim: Weak<dyn Drawn<H>>) {

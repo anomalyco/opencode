@@ -2,10 +2,12 @@
 
 pub mod btw;
 pub mod diffs;
+pub mod fetch;
 pub mod goal;
 pub mod home_footer;
 pub mod host;
 pub mod notifications;
+pub mod panel;
 pub mod prompt_footer;
 pub mod sidebar_context;
 pub mod sidebar_footer;

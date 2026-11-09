@@ -11,11 +11,11 @@ use crate::app::Tui;
 
 /// `logo.ts`: `_` is a shadow-filled space, `^` a `▀` on the shadow, `~` a shadow-colored `▀`, and `,` a
 /// shadow-colored `▄`.
-const LOGO_LEFT: [&str; 4] =
+pub(crate) const LOGO_LEFT: [&str; 4] =
     ["                   ", "█▀▀█ █▀▀█ █▀▀█ █▀▀▄", "█__█ █__█ █^^^ █__█", "▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀~~▀"];
-const LOGO_RIGHT: [&str; 4] =
+pub(crate) const LOGO_RIGHT: [&str; 4] =
     ["             ▄     ", "█▀▀▀ █▀▀█ █▀▀█ █▀▀█", "█___ █__█ █__█ █^^^", "▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"];
-const GO_RIGHT: [&str; 4] = ["    ", "█▀▀█", "█__█", "▀▀▀▀"];
+pub(crate) const GO_RIGHT: [&str; 4] = ["    ", "█▀▀█", "█__█", "▀▀▀▀"];
 
 pub struct Home {
     root: View,
