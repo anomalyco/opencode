@@ -214,12 +214,15 @@ fn clipboard_text_pastes_and_read_errors_toast() {
     capture.0.clipboard.borrow_mut().extend([
         ClipboardOutcome::Read { mime_type: "text/plain".into(), data: b"one\ntwo\nthree".to_vec() },
         ClipboardOutcome::TimedOut,
+        ClipboardOutcome::Unsupported,
         ClipboardOutcome::Empty,
     ]);
     setup.app.press("ctrl+v");
     setup.wait_text("[Pasted ~3 lines] ");
     setup.app.press("ctrl+v");
     setup.wait_for("Clipboard read timed out");
+    setup.app.press("ctrl+v");
+    setup.wait_for("Clipboard read is not supported on this system");
     // An empty clipboard changes nothing; an empty terminal paste reads the clipboard too.
     setup.app.paste("");
     setup.app.advance(Duration::from_millis(5));
