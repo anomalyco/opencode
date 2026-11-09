@@ -642,6 +642,16 @@ describe("ConfigProviderPlugin.Plugin", () => {
       },
     },
     {
+      name: "provider baseURL alongside api",
+      legacy: { api: "openai", options: { baseURL: "http://127.0.0.1:4000/v1" }, models: { chat: {} } },
+      native: { settings: { baseURL: "http://127.0.0.1:4000/v1" }, models: { chat: {} } },
+    },
+    {
+      name: "empty provider baseURL falls back to api",
+      legacy: { api: "http://127.0.0.1:4000/v1", options: { baseURL: "" }, models: { chat: {} } },
+      native: { settings: { baseURL: "http://127.0.0.1:4000/v1" }, models: { chat: {} } },
+    },
+    {
       name: "model package, limits, costs, and variant overrides",
       legacy: {
         npm: "@ai-sdk/openai",
@@ -693,6 +703,11 @@ describe("ConfigProviderPlugin.Plugin", () => {
       name: "zero costs and omitted cache costs",
       legacy: { models: { chat: { cost: { input: 0, output: 0 } } } },
       native: { models: { chat: { cost: { input: 0, output: 0 } } } },
+    },
+    {
+      name: "context-only limits",
+      legacy: { models: { chat: { limit: { context: 1000000 } } } },
+      native: { models: { chat: { limit: { context: 1000000 } } } },
     },
   ]) {
     it.effect(`matches native configuration for migrated ${scenario.name}`, () =>

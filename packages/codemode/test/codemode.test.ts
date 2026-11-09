@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Cause, Effect, Schema } from "effect"
-import { CodeMode, Extension, Tool, toolError } from "../src/index.js"
+import { CodeMode, Extension, Tool, toolError } from "./lib/index.js"
 
 const run = (tool: Tool.Tool<never>) =>
   Effect.runPromise(CodeMode.make({ tools: { host: { call: tool } } }).execute("return await tools.host.call({})"))
@@ -167,7 +167,8 @@ describe("CodeMode call hooks", () => {
   }
   // Every hook logs its event, so the order across tools and extensions is visible.
   const observe = (events: Array<string>): CodeMode.Hooks => ({
-    "tool.before": (call) => Effect.sync(() => void events.push(`tool.before ${JSON.stringify(call)}`)),
+    "tool.before": (call) =>
+      Effect.sync(() => void events.push(`tool.before ${JSON.stringify({ name: call.name, input: call.input })}`)),
     "tool.after": (call, result) => Effect.sync(() => void events.push(`tool.after ${call.name} ${ended(result)}`)),
     "extension.before": (call) => Effect.sync(() => void events.push(`extension.before ${JSON.stringify(call)}`)),
     "extension.after": (call, result) =>
@@ -928,7 +929,7 @@ describe("CodeMode public contract", () => {
     const result = await Effect.runPromise(limited.execute(`search({}); return search({})`))
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error.kind).toBe("ToolCallLimitExceeded")
-    expect(observed).toEqual([{ name: "search", input: {} }])
+    expect(observed).toEqual([{ name: "search", input: {}, key: expect.any(String) }])
   })
 
   test("search is an opaque, shadowable global like other built-ins", async () => {

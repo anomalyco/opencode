@@ -16,7 +16,12 @@ import {
 } from "solid-js"
 import { notifySessionTabsRemoved } from "@/shell/titlebar/session-events"
 import { useCommand } from "@/shell/commands/command"
-import { HOME_SESSION_LIMIT, mergeHomeSessionIndex, retainHomeSessions } from "@/home/sessions/index"
+import {
+  HOME_SESSION_INDEX_LIMIT,
+  HOME_SESSION_LIMIT,
+  mergeHomeSessionIndex,
+  retainHomeSessions,
+} from "@/home/sessions/index"
 import type { LocalProject } from "@/shell/state/layout"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -229,6 +234,43 @@ export function createHomeSessionsController(home: HomeController) {
     return (conn && queryClient.getQueryData<SessionInfo[]>(["home-sessions", conn])) || []
   })
 
+  // The shared index holds one bounded page of the newest sessions. A project scoped to older history asks the server
+  // for that directory's newest sessions directly, so selecting a quiet project still lists its sessions.
+  const [scopedSessions, setScopedSessions] = createSignal<SessionInfo[]>([])
+  let scopedKey: string | undefined
+
+  createEffect(() => {
+    const directories = projectDirectories()
+    const conn = home.server.focused()
+    const ctx = home.server.focusedContext()
+
+    if (!directories || !conn || !ctx) {
+      scopedKey = undefined
+      setScopedSessions([])
+
+      return
+    }
+
+    const key = `${ServerConnection.key(conn)}\0${directories.map(pathKey).join("\0")}`
+
+    if (key === scopedKey) return
+    scopedKey = key
+    const controller = new AbortController()
+    setScopedSessions([])
+    void Promise.allSettled(
+      directories.map((directory) =>
+        ctx.sdk.api.session.list(
+          { directory, limit: HOME_SESSION_INDEX_LIMIT, order: "desc", parentID: null },
+          { signal: controller.signal },
+        ),
+      ),
+    ).then((results) => {
+      if (controller.signal.aborted) return
+      setScopedSessions(results.flatMap((result) => (result.status === "fulfilled" ? result.value.data : [])))
+    })
+    onCleanup(() => controller.abort())
+  })
+
   const indexedSessions = createMemo(() => {
     const ctx = home.server.focusedContext()
     const conn = home.server.focused()
@@ -236,7 +278,9 @@ export function createHomeSessionsController(home: HomeController) {
     if (!ctx || !conn) return []
 
     return retainHomeSessions(
-      ctx.data.session.apply(mergeHomeSessionIndex(fetchedSessions(), ctx.data.session.list())),
+      ctx.data.session.apply(
+        mergeHomeSessionIndex([...fetchedSessions(), ...scopedSessions()], ctx.data.session.list()),
+      ),
       HOME_SESSION_LIMIT,
       Date.now(),
     )

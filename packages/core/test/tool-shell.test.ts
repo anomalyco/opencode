@@ -3,7 +3,7 @@ import { realpathSync, watch } from "node:fs"
 import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, Stream, Tracer } from "effect"
 import { Money } from "@opencode/schema/money"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -34,6 +34,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Shell } from "@opencode/core/shell"
 import { ShellSelect } from "@opencode/core/shell/select"
+import { ShellResult } from "@opencode/core/shell/result"
 import { ID } from "@opencode/schema/shell"
 import { ShellTool } from "@opencode/core/tool/plugin/shell"
 import { ToolOutput } from "@opencode/core/tool-output"
@@ -188,6 +189,11 @@ const mixedOutputCommand = isWindows
   ? "[Console]::Out.Write('stdout'); Start-Sleep -Milliseconds 50; [Console]::Error.Write('stderr'); Start-Sleep -Milliseconds 100"
   : "printf stdout; sleep 0.05; printf stderr >&2"
 const idleCommand = isWindows ? "Start-Sleep -Seconds 60" : "sleep 60"
+const startingCommand = isWindows
+  ? "[Console]::Out.Write('server starting'); Start-Sleep -Seconds 60"
+  : "printf 'server starting'; sleep 60"
+// A timeout kills the process group with SIGTERM, which the result reports as 128 + 15 and its name.
+const timedOutExit = isWindows ? ".+" : "143 \\(SIGTERM\\)"
 const bodyExitCommand = isWindows
   ? "[Console]::Out.Write('body'); Start-Sleep -Milliseconds 100; exit 7"
   : "printf body && exit 7"
@@ -198,6 +204,11 @@ const overflowCommand = (bytes: number) =>
 const lineOverflowCommand = isWindows
   ? "[Console]::Out.Write('one' + [Environment]::NewLine + 'two' + [Environment]::NewLine + 'three')"
   : "printf 'one\\ntwo\\nthree'"
+// Streams a file's exact bytes, so tests control line lengths and UTF-8 boundaries on every platform.
+const catCommand = (file: string) =>
+  isWindows
+    ? `$bytes = [IO.File]::ReadAllBytes('${file}'); $out = [Console]::OpenStandardOutput(); $out.Write($bytes, 0, $bytes.Length); $out.Flush()`
+    : `cat '${file}'`
 const progressOverflowCommand = (bytes: number, release: string) =>
   isWindows
     ? `[Console]::Out.Write(('x' * ${bytes})); while (!(Test-Path -LiteralPath '${release}')) { Start-Sleep -Milliseconds 50 }`
@@ -1251,12 +1262,76 @@ describe("ShellTool", () => {
           Effect.sync(() => {
             expect(settled.status).toBe("completed")
             expect(settled.metadata).toMatchObject({ exit: 7, truncated: false })
-            expect(settled.content?.[0]).toEqual({ type: "text", text: "body" })
-            expect(settled.content?.[1]).toMatchObject(Expected.text(expect.stringContaining("Exited with code 7")))
+            expect(settled.content).toEqual([
+              { type: "text", text: "body" },
+              { type: "text", text: "Exit code: 7" },
+            ])
           }),
         ),
       )
     }),
+  )
+
+  it.live(
+    "puts the exit status after the truncation marker when overflowing output fails",
+    () =>
+      withTempDir((tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          executeTool(
+            registry,
+            call(
+              { command: `${overflowCommand(ToolOutput.MAX_BYTES + 1024)}${isWindows ? "; exit 3" : " && exit 3"}` },
+              "call-overflow-nonzero",
+            ),
+          ),
+        ).pipe(
+          Effect.andThen((settled) =>
+            Effect.sync(() => {
+              expect(settled.metadata).toMatchObject({ exit: 3, truncated: true })
+              expect(settled.content).toEqual([
+                Expected.text(
+                  expect.stringMatching(
+                    /output-end[^]*\[showing the last 50 KB of line 1 \(51 KB\); full output saved to [^\]]+\]$/,
+                  ),
+                ),
+                { type: "text", text: "Exit code: 3" },
+              ])
+            }),
+          ),
+        )
+      }),
+    { timeout: 15_000 },
+  )
+
+  it.live(
+    "reports partial output, the timeout and the exit code when a foreground command times out",
+    () =>
+      withTempDir((tmp) => {
+        reset()
+        // Long enough for the command to print before it is killed.
+        const timeout = isWindows ? 5_000 : 500
+        return withSession(tmp.path, (registry) =>
+          executeTool(registry, call({ command: startingCommand, timeout }, "call-foreground-timeout")),
+        ).pipe(
+          Effect.andThen((settled) =>
+            Effect.sync(() => {
+              expect(settled.metadata).toMatchObject({ timeout: true })
+              expect(settled.content).toEqual([
+                { type: "text", text: "server starting" },
+                Expected.text(
+                  expect.stringMatching(
+                    new RegExp(
+                      `^Command timed out after ${timeout / 1_000} seconds\\. If it needs longer and isn't waiting for input, rerun with a larger timeout\\.\\nExit code: ${timedOutExit}$`,
+                    ),
+                  ),
+                ),
+              ])
+            }),
+          ),
+        )
+      }),
+    { timeout: 15_000 },
   )
 
   it.live(
@@ -1273,6 +1348,7 @@ describe("ShellTool", () => {
               expect(settled.metadata).toMatchObject({ exit: 0, truncated: true })
               const content = settled.content?.[0]
               if (!content || content.type !== "text") throw new Error("Expected text content")
+              expect(settled.content).toHaveLength(1)
               expect(content.text.includes("output-start")).toBe(false)
               expect(content.text.includes("output-end")).toBe(true)
               expect(content).toMatchObject(Expected.text(expect.stringContaining("full output saved to ")))
@@ -1304,6 +1380,79 @@ describe("ShellTool", () => {
         expect(content.text.replaceAll("\r\n", "\n")).toStartWith("two\nthree")
         expect(content.text).toContain("full output saved to ")
       })
+    }),
+  )
+
+  const truncatedText = (tmp: string, contents: string | Uint8Array, callID: string) =>
+    Effect.gen(function* () {
+      const file = path.join(tmp, `${callID}.txt`)
+      yield* Effect.promise(() => Bun.write(file, contents))
+      const settled = yield* withSession(tmp, (registry) =>
+        executeTool(registry, call({ command: catCommand(file) }, callID)),
+      )
+      expect(settled.metadata).toMatchObject({ exit: 0, truncated: true })
+      const content = settled.content?.[0]
+      if (!content || content.type !== "text") throw new Error("Expected text content")
+      return content.text
+    })
+
+  it.live("drops the partial first line so the truncation note counts only whole lines", () =>
+    withTempDir((tmp) => {
+      reset()
+      const lines = Array.from({ length: 10 }, (_, index) => `${index + 1}`.padEnd(10 * 1024, "x"))
+      return truncatedText(tmp.path, lines.join("\n") + "\n", "call-long-lines").pipe(
+        Effect.andThen((text) =>
+          Effect.sync(() => {
+            expect(text).toStartWith(`7xxx`)
+            expect(text).toContain(`${lines[9]}\n\n[showing lines 7-10 of 10; full output saved to `)
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.live("says how much of a single long line is shown", () =>
+    withTempDir((tmp) => {
+      reset()
+      return truncatedText(tmp.path, "head\n" + "x".repeat(200 * 1024), "call-long-line").pipe(
+        Effect.andThen((text) =>
+          Effect.sync(() => {
+            expect(text).toStartWith("x".repeat(ToolOutput.MAX_BYTES) + "\n\n")
+            expect(text).toContain("[showing the last 50 KB of line 2 (200 KB); full output saved to ")
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.live("starts the truncated view on a whole UTF-8 character", () =>
+    withTempDir((tmp) => {
+      reset()
+      // The window starts on the last byte of the three-byte euro sign.
+      const contents = "a".repeat(100) + "€" + "b".repeat(ToolOutput.MAX_BYTES - 1)
+      return truncatedText(tmp.path, contents, "call-utf8-cut").pipe(
+        Effect.andThen((text) =>
+          Effect.sync(() => {
+            expect(text).toStartWith("b".repeat(ToolOutput.MAX_BYTES - 1) + "\n\n")
+            expect(text).not.toContain("\uFFFD")
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.live("numbers lines exactly when the line limit truncates", () =>
+    withTempDir((tmp) => {
+      reset()
+      const lines = Array.from({ length: 2500 }, (_, index) => `line ${index + 1}`)
+      return truncatedText(tmp.path, lines.join("\n") + "\n", "call-many-lines").pipe(
+        Effect.andThen((text) =>
+          Effect.sync(() => {
+            expect(text).toStartWith("line 501\n")
+            expect(text).toContain("line 2500\n\n[showing lines 501-2500 of 2500; full output saved to ")
+          }),
+        ),
+      )
     }),
   )
 
@@ -1354,6 +1503,46 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
+  it.live("names the tool call and background on the spans of the shell it starts", () =>
+    withTempDir((tmp) => {
+      reset()
+      const spans: Tracer.NativeSpan[] = []
+      const tracer = Tracer.make({
+        span(options) {
+          const span = new Tracer.NativeSpan(options)
+          spans.push(span)
+          return span
+        },
+      })
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          yield* executeTool(registry, call({ command: bodyExitCommand }, "call-traced"))
+          yield* executeTool(registry, call({ command: helloCommand, background: true }, "call-traced-background"))
+        }),
+      ).pipe(
+        Effect.withTracer(tracer),
+        Effect.andThen(
+          Effect.sync(() => {
+            const attributes = (name: string, callID: string) =>
+              spans
+                .filter((span) => span.name === name && span.attributes.get("gen_ai.tool.call.id") === callID)
+                .map((span) => Object.fromEntries(span.attributes))
+            expect(attributes("Shell.create", "call-traced")).toEqual([
+              expect.objectContaining({ "session.id": sessionID, "opencode.shell.command": bodyExitCommand }),
+            ])
+            expect(attributes("Shell.create", "call-traced")[0]).not.toHaveProperty("opencode.shell.background")
+            expect(attributes("Shell.result", "call-traced")).toEqual([
+              expect.objectContaining({ "session.id": sessionID, "process.exit.code": 7 }),
+            ])
+            expect(attributes("Shell.create", "call-traced-background")).toEqual([
+              expect.objectContaining({ "session.id": sessionID, "opencode.shell.background": true }),
+            ])
+          }),
+        ),
+      )
+    }),
+  )
+
   it.live("returns the shell id for a background command", () =>
     withTempDir((tmp) => {
       reset()
@@ -1385,9 +1574,17 @@ describe("ShellTool", () => {
             },
           ])
           expect((yield* shell.list()).map((info) => info.id)).toContain(id)
-          expect((yield* shell.wait(id)).status).toBe("timeout")
+          const timedOut = yield* shell.wait(id)
+          expect(timedOut.status).toBe("timeout")
+          // The timeout keeps its status but still records how the killed process exited.
+          expect(timedOut.exit !== undefined || timedOut.signal !== undefined).toBe(true)
+          if (!isWindows) expect(timedOut).toMatchObject({ signal: "SIGTERM" })
           expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
-            text: expect.stringContaining("Timed out before completion"),
+            text: expect.stringMatching(
+              new RegExp(
+                `\\nCommand timed out after 0\\.05 seconds\\. If it needs longer and isn't waiting for input, rerun with a larger timeout\\.\\nExit code: ${timedOutExit}\\n</shell>$`,
+              ),
+            ),
             description: idleCommand,
             metadata: {
               source: "shell",
@@ -1420,7 +1617,7 @@ describe("ShellTool", () => {
           const shellID = settled.metadata?.shellID
           expect(typeof shellID).toBe("string")
           expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
-            text: expect.stringContaining("Exited with code 7"),
+            text: expect.stringContaining("\nbody\n\nExit code: 7\n</shell>"),
             description: bodyExitCommand,
             metadata: {
               source: "shell",
@@ -1466,7 +1663,7 @@ describe("ShellTool", () => {
             {
               id: settled.metadata?.shellID,
               status: "completed",
-              output: "(no output)\n\nExited with code 7",
+              output: "(no output)\n\nExit code: 7",
             },
           ])
         }),
@@ -1541,7 +1738,10 @@ describe("ShellTool", () => {
                   yield* Deferred.await(ready).pipe(Effect.timeout("5 seconds"))
                   yield* shell.timeout(info.id, 1)
                   // Completion must reap the process, not only mark the command as timed out.
-                  expect((yield* shell.wait(info.id).pipe(Effect.timeout("10 seconds"))).status).toBe("timeout")
+                  expect(yield* shell.wait(info.id).pipe(Effect.timeout("10 seconds"))).toMatchObject({
+                    status: "timeout",
+                    signal: "SIGKILL",
+                  })
                   const pid = info.pid
                   if (pid === undefined) throw new Error("Expected shell PID")
                   expect(() => process.kill(pid, 0)).toThrow()
@@ -1558,6 +1758,23 @@ describe("ShellTool", () => {
         )
       }),
     { timeout: 30_000 },
+  )
+
+  it.live("words the status as an exit code", () =>
+    Effect.sync(() => {
+      expect(ShellResult.notice({ exit: 0 })).toBeUndefined()
+      expect(ShellResult.notice({ exit: 7 })).toBe("Exit code: 7")
+      expect(ShellResult.notice({ exit: 143 })).toBe("Exit code: 143")
+      expect(ShellResult.notice({ signal: "SIGTERM" })).toBe("Exit code: 143 (SIGTERM)")
+      expect(ShellResult.notice({ signal: "SIGKILL" })).toBe("Exit code: 137 (SIGKILL)")
+      expect(ShellResult.notice({ signal: "SIGNOPE" })).toBe("Exit code: unknown")
+      expect(ShellResult.notice({ signal: "SIGTERM", timeout: true }, 120_000)).toBe(
+        "Command timed out after 120 seconds. If it needs longer and isn't waiting for input, rerun with a larger timeout.\nExit code: 143 (SIGTERM)",
+      )
+      expect(ShellResult.notice({ timeout: true })).toBe(
+        "Command timed out. If it needs longer and isn't waiting for input, rerun with a larger timeout.\nExit code: unknown",
+      )
+    }),
   )
 
   if (!isWindows) {

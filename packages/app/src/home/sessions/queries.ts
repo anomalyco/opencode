@@ -5,7 +5,7 @@ import type { ServerConnection } from "@/runtime/server/registry"
 import type { ServerCtx } from "@/runtime/server/runtime"
 import {
   HOME_SESSION_LIMIT,
-  loadHomeSessionInventory,
+  loadHomeSessionIndex,
   mergeHomeSessionIndex,
   retainHomeSessions,
   type HomeSessionInventory,
@@ -23,7 +23,7 @@ export function homeSessionsQuery(
     queryKey: ["home-sessions", conn] as const,
     queryFn: ctx
       ? async ({ signal }) => {
-          const result = await loadHomeSessionInventory(
+          const result = await loadHomeSessionIndex(
             (input, options) => ctx.sdk.api.session.list(input, options),
             signal,
           )

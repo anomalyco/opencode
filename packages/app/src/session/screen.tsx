@@ -93,12 +93,11 @@ function SessionScreenContent(props: {
     closed: attachment.closed,
     open: (key) => attachment.openTab(key, props.view()),
     side: () => session.layout.view().side,
-    // Closing the last tab closes the side region, which opens with a new tab next time. The user's own hand closed
-    // it, so it goes at once.
+    // Closing the last tab closes the side region, which opens with a new tab next time. It slides shut as the toggle
+    // closes it.
     onEmptied: () => {
       if (!session.layout.view().side.opened()) return
       session.layout.view().side.toggle()
-      sideMotion.sync(false)
     },
     settled: (run) => sideMotion.whenSettled(run),
   })

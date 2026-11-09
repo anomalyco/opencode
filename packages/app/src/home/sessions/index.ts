@@ -2,7 +2,9 @@ import type { SessionInfo, SessionsResponse } from "@opencode/client/promise"
 import { pathKey } from "@/workspaces/path-key"
 import { SESSION_RECENT_LIMIT, SESSION_RECENT_WINDOW } from "@/runtime/server/global-sync/types"
 
-export const HOME_V2_SESSION_PAGE_LIMIT = 5_000
+// One bounded page of the newest root sessions. Home shows 64 and the sidebar a handful per project, so older history
+// is reached through the titlebar's server-backed search instead of downloading every session on startup.
+export const HOME_SESSION_PAGE_LIMIT = 500
 
 export const HOME_SESSION_LIMIT = 64
 
@@ -13,57 +15,32 @@ export const HOME_SESSION_LIMIT = 64
 // query cache and every per-update re-merge stay bounded by directory count.
 export const HOME_SESSION_INDEX_LIMIT = HOME_SESSION_LIMIT + SESSION_RECENT_LIMIT
 
-type SessionList = (
-  input: {
-    limit: number
-    order: "desc"
-    parentID: null
-    cursor?: string
-  },
-  options: { signal?: AbortSignal },
-) => Promise<SessionsResponse>
+export async function loadHomeSessionIndex(
+  list: (
+    input: {
+      limit: number
+      order: "desc"
+      parentID: null
+      cursor?: string
+    },
+    options: { signal?: AbortSignal },
+  ) => Promise<SessionsResponse>,
+  signal?: AbortSignal,
+) {
+  const response = await list({ limit: HOME_SESSION_PAGE_LIMIT, order: "desc", parentID: null }, { signal })
 
-export async function loadHomeSessionIndex(list: SessionList, signal?: AbortSignal) {
-  return (await loadHomeSessionInventory(list, signal)).sessions
-}
-
-export async function loadHomeSessionInventory(list: SessionList, signal?: AbortSignal) {
-  const now = Date.now()
-  const inventory = new Map<string, Pick<SessionInfo, "id" | "projectID" | "location">>()
-  let retained: SessionInfo[] = []
-  let cursor: string | undefined
-
-  for (;;) {
-    const response = await list(
-      {
-        limit: HOME_V2_SESSION_PAGE_LIMIT,
-        order: "desc",
-        parentID: null,
-        ...(cursor ? { cursor } : {}),
-      },
-      { signal },
-    )
-
-    // Fold each page in as it arrives: pages are newest first, so later pages
-    // can only fill directories that still have room. Peak allocation is one
-    // page plus the retained subset, not the whole history.
-    const visible = parseHomeSessionIndex(response.data)
-    visible.forEach((session) =>
-      inventory.set(session.id, { id: session.id, projectID: session.projectID, location: session.location }),
-    )
-    retained = retainHomeSessions([...retained, ...visible], HOME_SESSION_INDEX_LIMIT, now)
-
-    if (response.data.length < HOME_V2_SESSION_PAGE_LIMIT || !response.cursor.next)
-      return { sessions: retained, inventory: [...inventory.values()] }
-    cursor = response.cursor.next
+  const sessions = parseHomeSessionIndex(response.data)
+  return {
+    sessions: retainHomeSessions(sessions, HOME_SESSION_INDEX_LIMIT, Date.now()),
+    inventory: sessions.map((session) => ({ id: session.id, projectID: session.projectID, location: session.location })),
   }
 }
 
-export type HomeSessionInventory = Awaited<ReturnType<typeof loadHomeSessionInventory>>["inventory"]
+export type HomeSessionInventory = Awaited<ReturnType<typeof loadHomeSessionIndex>>["inventory"]
 
 // Keep this filter for locally known sessions merged into the fetched index.
 export function parseHomeSessionIndex(sessions: SessionInfo[]) {
-  return sessions.filter((session) => !session.parentID && typeof session.time.archived !== "number")
+  return sessions.filter((session) => !session.parentID && session.time.archived === undefined)
 }
 
 export function mergeHomeSessionIndex(fetched: SessionInfo[], known: SessionInfo[]) {

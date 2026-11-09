@@ -479,6 +479,8 @@ test("toggling an MCP from the dialog keeps it highlighted", async ({ page }) =>
   const row = view.panel.getByRole("option").filter({ hasText: "figma-desktop" })
   const toggle = row.getByRole("switch", { name: "figma-desktop", exact: true })
 
+  // The dialog focuses its search a task after it opens; keys pressed before then go to the composer behind it.
+  await expect(view.panel.getByRole("combobox", { name: "Search MCPs", exact: true })).toBeFocused()
   // From the keyboard, Enter toggles the highlighted server and the highlight stays on it.
   await page.keyboard.press("ArrowDown")
   await expect(row).toHaveAttribute("aria-selected", "true")
