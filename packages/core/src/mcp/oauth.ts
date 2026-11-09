@@ -342,10 +342,11 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
               yield* Effect.logInfo("mcp oauth refresh skipped", { credentialID: id, reason: "already_rotated" })
               return current.value
             }
-            const response = yield* Effect.tryPromise((signal) => send(url, { ...init, signal })).pipe(
-              Effect.timeout("30 seconds"),
-            )
-            const body = yield* Effect.tryPromise(() => response.text())
+            // Bounds reading the body too, so a server that stalls after its headers cannot hold the lock.
+            const { response, body } = yield* Effect.tryPromise(async (signal) => {
+              const response = await send(url, { ...init, signal })
+              return { response, body: await response.text() }
+            }).pipe(Effect.timeout("30 seconds"))
             const parsed = OAuthTokensSchema.safeParse(
               response.ok ? Option.getOrUndefined(decodeJson(body)) : undefined,
             )
