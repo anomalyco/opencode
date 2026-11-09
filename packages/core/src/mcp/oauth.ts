@@ -282,6 +282,26 @@ const toTokens = (credential: Credential.OAuth): StoredOAuthTokens => {
   }
 }
 
+/** What a connection needs from OAuth: the untouched provider and an optional proactive refresher. */
+export interface Auth {
+  /** The raw OAuthClientProvider; the transport must receive this object itself. */
+  readonly provider: OAuthClientProvider
+  /** Returns the current access token, refreshing first when the selected row is within the skew. */
+  readonly refresh?: (fetchFn: FetchLike) => Promise<string | undefined>
+}
+
+/** Refresh this long before the stored access token expires. */
+export const REFRESH_SKEW_MS = 5 * 60 * 1000
+/** Production bound for a proactive refresh; tests pass a shorter connectProvider timeout. */
+export const REFRESH_TIMEOUT_MS = 30_000
+
+/** Adds an abort signal without dropping a caller's signal. The SDK's token requests pass no signal. */
+export const withTimeout = (fetch: FetchLike, timeoutMs: number): FetchLike => (url, init) => {
+  const timeout = AbortSignal.timeout(timeoutMs)
+  const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout
+  return fetch(url, { ...init, signal })
+}
+
 /**
  * A provider for one credential the caller already selected, or none. It never looks up the active credential
  * itself: it reads and refreshes only the selected row, and a provider made without one stays anonymous.
@@ -289,48 +309,76 @@ const toTokens = (credential: Credential.OAuth): StoredOAuthTokens => {
 export const connectProvider = Effect.fnUntraced(function* (input: {
   readonly config: typeof ConfigMCP.Remote.Type
   readonly credential: Credential.Info | undefined
+  /** Test-only bound for the refresh effect; production never sets it. */
+  readonly timeoutMs?: number
 }) {
   const credentials = yield* Credential.Service
   const run = Effect.runPromiseWith(yield* Effect.context())
-  const fetch = yield* sender
+  const senderFetch = yield* sender
+  const timeoutMs = input.timeoutMs ?? REFRESH_TIMEOUT_MS
   const found = input.credential
-  if (!found || found.value.type !== "oauth") return provider({ config: input.config, store: memoryStore(), fetch })
+  if (!found || found.value.type !== "oauth")
+    return { provider: provider({ config: input.config, store: memoryStore(), fetch: senderFetch }) }
   const id = found.id
   const methodID = found.value.methodID
   const read = async () => {
     const stored = await run(credentials.get(id))
     return stored?.value.type === "oauth" ? stored.value : undefined
   }
-  // Refresh tokens rotate and the row is shared across connections: only drop it while it still holds ours.
+  // Refresh tokens rotate and the row is shared across connections: only write while it still holds the
+  // token this attempt sent. `presented` tracks the row for invalidation; `sent` is the best-effort 401 pin.
   let presented = found.value.refresh
-  return provider({
+  let sent = presented
+  let invalidated = false
+  const write = async (tokens: StoredOAuthTokens, expected: string) => {
+    const previous = await read()
+    if (!previous || previous.refresh !== expected) {
+      await run(Effect.logWarning("mcp oauth stale token save skipped", { credentialID: id }))
+      return
+    }
+    const value = toCredential({
+      methodID,
+      serverUrl: input.config.url,
+      tokens,
+      client: clientFromCredential(previous),
+    })
+    presented = value.refresh
+    sent = value.refresh
+    invalidated = false
+    await run(credentials.update(id, { value }))
+  }
+  const providerValue = provider({
     config: input.config,
-    fetch,
+    fetch: senderFetch,
     invalidate: async (scope) => {
       if (scope === "verifier" || scope === "discovery") return
       const oauth = await read()
       if (!oauth || oauth.refresh !== presented) return
-      await run(Effect.logWarning("mcp oauth credential invalidated", { credentialID: id, scope }))
-      await run(credentials.remove(id))
+      if (scope === "client") {
+        // Re-read just before the metadata-only update; Credential.update replaces the whole value, so a
+        // concurrent refresh in this narrow window can still be overwritten (rare invalid_client race).
+        const latest = await read()
+        if (!latest || latest.refresh !== presented) return
+        const metadata = { ...latest.metadata }
+        delete metadata.client
+        await run(credentials.update(id, { value: { ...latest, metadata } }))
+        return
+      }
+      invalidated = true
+      await run(Effect.logWarning("mcp oauth credential rejected", { credentialID: id, scope }))
     },
     store: {
       tokens: async () => {
         const oauth = await read()
         if (!oauth) return undefined
         presented = oauth.refresh
-        return toTokens(oauth)
+        sent = oauth.refresh
+        const tokens = toTokens(oauth)
+        // After a rejected refresh the SDK retries authInternal; withholding the refresh token ends that
+        // retry in needs_auth instead of replaying a token the server just rejected.
+        return invalidated ? { ...tokens, refresh_token: undefined } : tokens
       },
-      saveTokens: async (tokens) => {
-        const previous = await read()
-        const value = toCredential({
-          methodID,
-          serverUrl: input.config.url,
-          tokens,
-          client: previous ? clientFromCredential(previous) : undefined,
-        })
-        presented = value.refresh
-        await run(credentials.update(id, { value }))
-      },
+      saveTokens: (tokens) => write(tokens, sent),
       clientInformation: async () => {
         const oauth = await read()
         return oauth ? clientFromCredential(oauth) : undefined
@@ -344,6 +392,47 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
       saveCodeVerifier: async () => {},
     },
   })
+  const refresh = async (fetchFn: FetchLike): Promise<string | undefined> => {
+    const current = await read()
+    if (!current) return undefined
+    if (current.expires === 0 || current.expires - Date.now() > REFRESH_SKEW_MS) return current.access
+    if (!current.refresh)
+      throw new UnauthorizedError(`MCP server "${input.config.url}" requires user authorization`)
+    const row = await run(
+      credentials.lock(
+        id,
+        Effect.gen(function* () {
+          const latest = yield* credentials.get(id)
+          if (!latest || latest.value.type !== "oauth") return undefined
+          const oauth = latest.value
+          if (oauth.expires === 0 || oauth.expires - Date.now() > REFRESH_SKEW_MS) return oauth
+          if (!oauth.refresh)
+            return yield* Effect.fail(
+              new UnauthorizedError(`MCP server "${input.config.url}" requires user authorization`),
+            )
+          const attempt = oauth.refresh
+          yield* Effect.logInfo("mcp oauth proactive refresh", {
+            credentialID: id,
+            remainingMs: Math.max(0, oauth.expires - Date.now()),
+          })
+          // A per-attempt shallow copy keeps every provider member for auth() (client info, tokens,
+          // discovery, invalidate, redirect, DPoP) while pinning saveTokens to this attempt's token.
+          const scoped = { ...providerValue, saveTokens: (tokens: StoredOAuthTokens) => write(tokens, attempt) }
+          const result = yield* Effect.tryPromise({
+            try: () => auth(scoped, { serverUrl: input.config.url, fetchFn }),
+            catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+          }).pipe(Effect.timeout(timeoutMs))
+          if (result !== "AUTHORIZED")
+            return yield* Effect.fail(new Error(`MCP server "${input.config.url}" did not authorize the refresh`))
+          // Another connection may have refreshed while auth() ran; return the row's current access.
+          const updated = yield* credentials.get(id)
+          return updated?.value.type === "oauth" ? updated.value : undefined
+        }),
+      ),
+    )
+    return row?.access
+  }
+  return { provider: providerValue, refresh }
 })
 
 export const authorize = (input: {
