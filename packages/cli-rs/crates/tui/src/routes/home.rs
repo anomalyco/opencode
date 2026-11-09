@@ -108,11 +108,8 @@ impl RouteView for Home {
         }
     }
 
-    fn focus(&self, tui: &Tui) {
-        if self.forms.active() {
-            return;
-        }
-        self.prompt.focus(tui);
+    fn focus_target(&self) -> Option<AnyWidget> {
+        (!self.forms.active()).then(|| self.prompt.textarea().as_any())
     }
 }
 

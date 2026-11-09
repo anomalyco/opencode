@@ -7,7 +7,7 @@ pub mod session;
 
 use opencode_api::generated::SessionID;
 use opencode_store::Changes;
-use opentui::prelude::View;
+use opentui::prelude::{AnyWidget, View};
 
 use crate::app::Tui;
 
@@ -22,7 +22,10 @@ pub enum Route {
 pub trait RouteView {
     fn root(&self) -> View;
     fn sync(&self, tui: &Tui, changes: &Changes);
-    fn focus(&self, _tui: &Tui) {}
+    /// The widget that takes the keys once nothing covers the view: on mount, or when a dialog over it closes.
+    fn focus_target(&self) -> Option<AnyWidget> {
+        None
+    }
 }
 
 pub(crate) fn mount(tui: &Tui, route: &Route) -> Box<dyn RouteView> {

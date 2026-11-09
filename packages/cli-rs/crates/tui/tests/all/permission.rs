@@ -284,3 +284,20 @@ fn presentation_matches_the_typescript_rules() {
         ["This will always allow the following patterns for this project.", "- git *"]
     );
 }
+
+// Expected (bigboi-3): a plugin toggled in `/plugins` mounts the session again with its pending permission, which
+// must not take the keys from the open manager.
+#[test]
+fn a_pending_permission_does_not_take_the_plugin_manager_search() {
+    let harness = mount(
+        Fixture { root: vec![request("per_1", "ses_root", "shell", &["ls -la"], &[])], ..Fixture::default() },
+        Permissions::Prompt,
+    );
+    harness.wait_for("Permission required");
+    crate::system::toggle_a_plugin(&harness);
+    harness.app.type_text("zzqq");
+    harness.wait_for("No results found");
+    harness.app.press("escape");
+    harness.wait_gone("No results found");
+    harness.wait_for("Permission required");
+}

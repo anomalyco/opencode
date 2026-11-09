@@ -176,10 +176,12 @@ impl RouteView for Session {
         self.sidebar.sync(tui, changes);
     }
 
-    fn focus(&self, tui: &Tui) {
-        if !self.permission.active() && !self.form.active() && !self.location.active() && !self.composer.open() {
-            self.prompt.focus(tui);
+    fn focus_target(&self) -> Option<AnyWidget> {
+        if self.form.active() {
+            return self.form.editor().map(|textarea| textarea.as_any());
         }
+        (!self.permission.active() && !self.location.active() && !self.composer.open())
+            .then(|| self.prompt.textarea().as_any())
     }
 }
 
