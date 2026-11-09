@@ -47,6 +47,7 @@ pub async fn catalog(client: &Client, directory: &str) -> Catalog {
                 mode: text(&agent["mode"]).unwrap_or_default(),
                 hidden: agent["hidden"].as_bool().unwrap_or(false),
                 description: text(&agent["description"]),
+                color: text(&agent["color"]),
             })
             .collect(),
         references: references

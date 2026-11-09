@@ -18,6 +18,8 @@ pub struct Agent {
     pub mode: String,
     pub hidden: bool,
     pub description: Option<String>,
+    /// The configured color, a hex string.
+    pub color: Option<String>,
 }
 
 /// `RunReference`.
@@ -232,6 +234,7 @@ mod tests {
             mode: mode.into(),
             hidden: false,
             description: None,
+            color: None,
         };
         let command = |name: &str, description: &str| Command {
             name: name.into(),
