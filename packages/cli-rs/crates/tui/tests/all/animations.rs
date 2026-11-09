@@ -77,6 +77,9 @@ fn mount(layout: &str, animations: bool) -> support::Harness {
     h.tui.navigate(support::session_route("ses_a"));
     h.wait_for("Survey the views");
     h.wait_for("npm test");
+    // The running status comes from the `session.active` read after the event stream connects, which may land after
+    // the messages.
+    h.wait_for("esc interrupt");
     h
 }
 
