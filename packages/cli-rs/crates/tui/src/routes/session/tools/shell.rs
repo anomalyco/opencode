@@ -296,7 +296,7 @@ impl Inner {
         let expanded = self.expanded.get();
         let running = call.status == Status::Running || self.background_running();
         let output = self.output_text(call, expanded);
-        let max_chars = MAX_LINES * (call.width - 6 - if running { 2 } else { 0 }).max(20) as usize;
+        let max_chars = MAX_LINES * (call.width - 8 - if running { 2 } else { 0 }).max(20) as usize;
         let prefix = if !call.workdir.is_empty() && call.workdir != "." {
             format!("cd {} && ", call.workdir)
         } else {

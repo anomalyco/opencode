@@ -142,7 +142,7 @@ impl Queued {
             .padding_edge(Edge::Top, 1)
             .padding_edge(Edge::Bottom, 1)
             .padding_edge(Edge::Left, 2)
-            .padding_edge(Edge::Right, 1)
+            .padding_edge(Edge::Right, 2)
             .bg(raised)
             .child(&label);
         let hovered = theme.decrease(&theme.background.raised.base, 1);

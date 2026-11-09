@@ -550,6 +550,7 @@ impl BlockTool {
             .padding_edge(Edge::Top, 1)
             .padding_edge(Edge::Bottom, 1)
             .padding_edge(Edge::Left, 2)
+            .padding_edge(Edge::Right, 2)
             .bg(theme.background.raised.base)
             .child(&header)
             .child(&children)
@@ -645,7 +646,7 @@ impl BlockTool {
                 } else {
                     inner.header.add(&Text::new(&inner.app, label.clone()).shrink(0.0).fg(fg));
                 }
-                let max = (block.width - 4 - label.width() as i64 - if block.spinner { 2 } else { 0 }).max(2);
+                let max = (block.width - 6 - label.width() as i64 - if block.spinner { 2 } else { 0 }).max(2);
                 inner.header.add(
                     &Text::new(&inner.app, truncate_file_path(value, max)).fg(fg).wrap(WrapMode::None).truncate(true),
                 );

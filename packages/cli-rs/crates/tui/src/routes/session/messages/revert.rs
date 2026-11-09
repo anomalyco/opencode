@@ -45,6 +45,7 @@ impl Banner {
             .padding_edge(Edge::Top, 1)
             .padding_edge(Edge::Bottom, 1)
             .padding_edge(Edge::Left, 2)
+            .padding_edge(Edge::Right, 2)
             .bg(raised);
         let root = View::new(app)
             .column()
@@ -124,7 +125,7 @@ impl Inner {
                 let added = (file.additions > 0).then(|| format!("+{}", file.additions));
                 let removed = (file.deletions > 0).then(|| format!("-{}", file.deletions));
                 let max = props.width as i64
-                    - 5
+                    - 7
                     - added.as_ref().map_or(0, |text| text.width() as i64 + 1)
                     - removed.as_ref().map_or(0, |text| text.width() as i64 + 1);
                 let path = truncate_file_path(&file.file, max.max(2));

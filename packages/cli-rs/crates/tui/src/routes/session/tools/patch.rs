@@ -84,7 +84,7 @@ impl Patch {
                             *wrap,
                             0,
                         );
-                        View::new(cx.app).padding_edge(Edge::Left, 1).padding_edge(Edge::Right, 3).child(&diff).as_any()
+                        View::new(cx.app).padding_edge(Edge::Left, 1).padding_edge(Edge::Right, 1).child(&diff).as_any()
                     };
                     block.children().add(&child);
                     block.show_children(true);
@@ -97,7 +97,7 @@ impl Patch {
                     let block = self.block(cx, common, label(kind), resource);
                     let fg = if kind == "delete" { cx.theme.diff.text.removed } else { cx.theme.text.muted };
                     block.children().add(
-                        &Text::new(cx.app, truncate_file_path(resource, (common.width - 3).max(2)))
+                        &Text::new(cx.app, truncate_file_path(resource, (common.width - 5).max(2)))
                             .fg(fg)
                             .wrap(WrapMode::None)
                             .truncate(true),
