@@ -18,9 +18,6 @@ export const Overrides = Context.Reference<string | undefined>("@opencode/Flag/O
   defaultValue: () => process.env.OPENCODE_FLAGS,
 })
 
-// Any other channel, such as a release or a branch preview build, keeps flags off so none turns on by accident.
-const onByDefault = (channel: string) => channel === "local" || channel === "dev"
-
 /**
  * Resolves every flag: `OPENCODE_FLAGS` (`key` or `-key`, then `all`), then `experimental.<key>` from the highest-priority
  * document that sets `experimental` (the same document every other `experimental` setting reads), then `all_flags: true`
@@ -35,13 +32,7 @@ export function resolve(input: {
   readonly channel: string
   readonly overrides?: string
 }) {
-  const env = new Map(
-    (input.overrides ?? "")
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .map((item): [string, boolean] => (item.startsWith("-") ? [item.slice(1), false] : [item, true])),
-  )
+  const env = ConfigFlag.overrides(input.overrides)
   const all = env.get(ConfigFlag.wildcard) === true
   const experimental = input.entries.findLast(
     (entry): entry is Document => entry.type === "document" && entry.info.experimental !== undefined,
@@ -51,7 +42,7 @@ export function resolve(input: {
       (entry): entry is Document => entry.type === "document" && entry.info.experimental?.all_flags !== undefined,
     )?.info.experimental?.all_flags === true
   return Record.map(ConfigFlag.registry, (_, key): State => {
-    if (ConfigFlag.localOnly.has(key) && !onByDefault(input.channel)) return { enabled: false, source: "default" }
+    if (ConfigFlag.localOnly.has(key) && !ConfigFlag.onByDefault(input.channel)) return { enabled: false, source: "default" }
     const optInOnly = ConfigFlag.optInOnly.has(key)
     const override = env.get(key) ?? (all && !optInOnly ? true : undefined)
     const configured = experimental?.[key] ?? (allFlags && !optInOnly ? true : undefined)
@@ -60,7 +51,7 @@ export function resolve(input: {
         ? [override, "env"]
         : configured !== undefined
           ? [configured, "config"]
-          : [!optInOnly && onByDefault(input.channel), "default"]
+          : [!optInOnly && ConfigFlag.onByDefault(input.channel), "default"]
     return { enabled, source }
   })
 }

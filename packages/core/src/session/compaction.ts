@@ -1163,7 +1163,7 @@ export const recentUserMessages = (
   messages: ReadonlyArray<SessionMessage.Info>,
   model: Pick<SessionContext.Loaded["model"], "model" | "ref" | "capabilities">,
   keep: number,
-  video = false,
+  video: boolean,
 ) => {
   const users = messages
     .filter((message) => message.type === "user")

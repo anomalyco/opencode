@@ -12,17 +12,10 @@ export function flagEnabled(input: {
   readonly channel: string
   readonly overrides: string | undefined
 }) {
-  const env = new Map(
-    (input.overrides ?? "")
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .map((item): [string, boolean] => (item.startsWith("-") ? [item.slice(1), false] : [item, true])),
-  )
+  const env = ConfigFlag.overrides(input.overrides)
   const override = env.get(input.key) ?? (env.get(ConfigFlag.wildcard) === true ? true : undefined)
   if (override !== undefined) return override
   return (
-    input.experimental?.[input.key] ??
-    (input.experimental?.all_flags === true || input.channel === "local" || input.channel === "dev")
+    input.experimental?.[input.key] ?? (input.experimental?.all_flags === true || ConfigFlag.onByDefault(input.channel))
   )
 }
