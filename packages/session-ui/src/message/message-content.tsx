@@ -1281,14 +1281,11 @@ export function AssistantReasoningContent(props: {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   onContentRendered?: () => void
-  /**
-   * A thought at the top level of the Activity timeline reads like an activity row: the label muted, then its heading,
-   * then how long it took.
-   */
+  /** A thought at the top level of the Activity timeline reads like an activity row: the label, then how long it took. */
   row?: boolean
 }) {
   const i18n = useI18n()
-  const heading = createMemo(() => (props.streaming || props.row ? reasoningHeading(props.content.text) : ""))
+  const heading = createMemo(() => (props.streaming ? reasoningHeading(props.content.text) : ""))
 
   const duration = createMemo(() => {
     const time = props.content.time
@@ -1332,15 +1329,6 @@ export function AssistantReasoningContent(props: {
                       active={props.streaming}
                     />
                   </span>
-                  <Show when={heading()}>
-                    {(value) => (
-                      <span data-slot="context-tool-group-detail">
-                        <Show when={props.streaming} fallback={value()}>
-                          <TextReveal text={value()} />
-                        </Show>
-                      </span>
-                    )}
-                  </Show>
                   <Show when={!props.streaming && duration()}>
                     {(value) => <span data-slot="context-tool-group-elapsed">{value()}</span>}
                   </Show>

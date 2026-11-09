@@ -55,6 +55,8 @@ export namespace TimelineRow {
   export class Thinking extends Data.TaggedClass("Thinking")<{
     userMessageID: string
     ref: PartRef
+    /** In the Activity timeline, the space a row in this place takes above it, so the thought stays put as it settles. */
+    spacing?: "tool" | "content"
   }> {}
 
   /**
@@ -156,7 +158,8 @@ export namespace TimelineRow {
       other.previousAssistantPart === row.previousAssistantPart &&
       other.spacing === row.spacing &&
       sameGroup(other.group, row.group),
-    Thinking: (row) => (other: TimelineRow) => Predicate.isTagged(other, "Thinking") && sameRef(other.ref, row.ref),
+    Thinking: (row) => (other: TimelineRow) =>
+      Predicate.isTagged(other, "Thinking") && sameRef(other.ref, row.ref) && other.spacing === row.spacing,
     Error: (row) => (other: TimelineRow) =>
       Predicate.isTagged(other, "Error") &&
       other.text === row.text &&
@@ -216,7 +219,7 @@ export type TimelineRowMap = {
     previousAssistantPart: boolean
     spacing?: "tool" | "content"
   }
-  Thinking: { userMessageID: string; ref: PartRef }
+  Thinking: { userMessageID: string; ref: PartRef; spacing?: "tool" | "content" }
   Retry: { userMessageID: string; attempt: number; message: string; next: number }
   Error: {
     userMessageID: string

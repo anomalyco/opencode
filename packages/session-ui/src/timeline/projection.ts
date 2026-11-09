@@ -552,7 +552,15 @@ export namespace Timeline {
       if (messages.at(-1) !== lastAssistant) return
 
       // The live reasoning row closes its own step, so notices that arrive meanwhile follow it.
-      if (thinking) rows.push(new TimelineRow.Thinking({ userMessageID: turnID, ref: thinking }))
+      // In the Activity timeline the live thought takes the space the row it settles into will, so it does not move.
+      if (thinking)
+        rows.push(
+          new TimelineRow.Thinking({
+            userMessageID: turnID,
+            ref: thinking,
+            spacing: activity ? nextRowSpacing(assistantGroupIndex, previousAssistantTool) : undefined,
+          }),
+        )
 
       if (lastStep?.type !== "assistant") return
 
@@ -746,6 +754,36 @@ function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, 
 
     return result
   }, [])
+}
+
+/** The space above the next row of activity in a turn: none as its first, a little after activity, more after text. */
+export function nextRowSpacing(index: number, previousTool: boolean) {
+  if (index === 0) return undefined
+
+  return previousTool ? ("tool" as const) : ("content" as const)
+}
+
+/**
+ * The same space, read from a turn's rows, for the status line below it: the line sits where the next row will, so
+ * nothing moves when that row takes its place.
+ */
+export function nextRowSpacingAfter(
+  rows: readonly TimelineRow.TimelineRow[],
+  turnID: string,
+  messageByID: ReadonlyMap<string, SessionMessageInfo>,
+) {
+  const parts = rows.filter(
+    (row): row is GroupRow => Predicate.isTagged(row, "AssistantPart") && row.userMessageID === turnID,
+  )
+  const last = parts.at(-1)
+
+  if (!last) return undefined
+
+  const text =
+    last.group.type === "part" &&
+    Timeline.resolveContent(messageByID.get(last.group.ref.messageID), last.group.ref.partID)?.type === "text"
+
+  return nextRowSpacing(parts.length, !text)
 }
 
 export function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefined, rows: TimelineRow.TimelineRow[]) {

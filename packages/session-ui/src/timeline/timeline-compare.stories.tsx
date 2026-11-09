@@ -3,6 +3,7 @@ import { For, Show, createEffect, createMemo, onCleanup, onMount, type JSX } fro
 import { createStore } from "solid-js/store"
 import { replayScript, replaySession, scenarios, sessionSteps, ticks } from "../storybook/session-replay"
 import { timelinePresets } from "./detail"
+import { createTimelineProjection, nextRowSpacingAfter } from "./projection"
 import { timelineStatus, timelineThinking } from "./status"
 
 /**
@@ -103,6 +104,20 @@ export const Compare = {
       return statusLabels[status]
     })
 
+    // Where the head's status line sits: the space its next row would take, as the app computes it.
+    const laneSpacing = createMemo(() => {
+      const document = replay().document
+      const projection = createTimelineProjection({
+        sessionMessages: document.messages,
+        status: document.status,
+        timelineDetail: detail(),
+        activity: state.activity,
+      })
+      const active = projection.activeMessageID
+
+      return active ? nextRowSpacingAfter(projection.rows, active, projection.messageByID) : undefined
+    })
+
     const headCollapsed = createMemo(() => {
       if (!busy() || !state.activity) return false
       const last = replay().document.messages.findLast((message) => message.type === "assistant")
@@ -127,6 +142,7 @@ export const Compare = {
           status: side === "head" ? headStatus() : busy() ? "Working" : undefined,
           lane: side === "head" && state.activity ? "activity" : "legacy",
           collapsed: side === "head" && headCollapsed(),
+          spacing: side === "head" ? laneSpacing() : undefined,
         },
         "*",
       )

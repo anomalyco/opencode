@@ -3,6 +3,7 @@ import { createStore } from "solid-js/store"
 import { CurrentSessionProviders } from "../storybook/current-session-story"
 import { replayScript, scenarios, ticks, type ScenarioName } from "../storybook/session-replay"
 import { timelinePresets } from "./detail"
+import { createTimelineProjection, nextRowSpacingAfter } from "./projection"
 import { timelineStatus, timelineThinking } from "./status"
 import { TimelineStatusLane } from "./status-line"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
@@ -58,6 +59,20 @@ export const Playground = {
     const replay = createMemo(() => replayScript(script(), tick(), Date.now() - tick() * 1_500))
 
     const busy = () => replay().document.status.type === "busy"
+
+    // Where the status line sits: the space the turn's next row would take, as the app computes it.
+    const laneSpacing = createMemo(() => {
+      const document = replay().document
+      const projection = createTimelineProjection({
+        sessionMessages: document.messages,
+        status: document.status,
+        timelineDetail: detail(),
+        activity: state.activity,
+      })
+      const active = projection.activeMessageID
+
+      return active ? nextRowSpacingAfter(projection.rows, active, projection.messageByID) : undefined
+    })
 
     const status = createMemo(() => {
       const last = replay().document.messages.findLast((message) => message.type === "assistant")
@@ -194,6 +209,7 @@ export const Playground = {
             >
               <TimelineStatusLane
                 class="px-4 md:px-6"
+                spacing={laneSpacing()}
                 label={busy() && status() ? statusLabels[status()!] : undefined}
                 collapsed={busy() && !status()}
               />

@@ -16,7 +16,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
 import { useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { Timeline } from "@opencode/session-ui/timeline/projection"
+import { nextRowSpacingAfter, Timeline } from "@opencode/session-ui/timeline/projection"
 import { timelineThinkingOpen } from "@opencode/session-ui/timeline/policy"
 import { timelineStatus } from "@opencode/session-ui/timeline/status"
 import { TimelineStatusLane } from "@opencode/session-ui/timeline/status-line"
@@ -468,6 +468,13 @@ function MessageTimelineView(
   // The lane keeps its height while empty, so Working and the hint come and go without moving the rows around it.
   // The bottom lane also keeps its height while live status moves into the Activity row, so the tail the activity pill
   // floats in never closes and a pinned timeline does not shift when input waits.
+  // The status line sits where the turn's next row will, so that row takes its place without moving.
+  const laneSpacing = createMemo(() => {
+    const active = projection.activeMessageID()
+
+    return active ? nextRowSpacingAfter(projection.rows(), active, messageByID()) : undefined
+  })
+
   const hint = (live: () => boolean) => (
     <Show when={live() && backgroundHintPresence.present()}>
       <div
@@ -507,6 +514,7 @@ function MessageTimelineView(
         {/* The thought the model is writing takes this lane's place, so the lane folds away under it. */}
         <TimelineStatusLane
           class={turnPadding()}
+          spacing={laneSpacing()}
           label={live() && working() ? workingLabel() : undefined}
           collapsed={live() && liveThought() && !working() && !backgroundHintPresence.present()}
         >

@@ -27,12 +27,19 @@ type Render = {
   /** The Activity timeline's lane, which folds away while a thought takes its place, or the lane the app had before. */
   lane: "activity" | "legacy"
   collapsed?: boolean
+  spacing?: "tool" | "content"
 }
 
 // A build that has the Activity timeline's lane renders it as the app does; an older one draws the lane it had.
 const ActivityLane = Object.values(
   import.meta.glob<{
-    TimelineStatusLane: Component<{ label?: string; collapsed?: boolean; class?: string; children?: JSX.Element }>
+    TimelineStatusLane: Component<{
+      label?: string
+      collapsed?: boolean
+      spacing?: "tool" | "content"
+      class?: string
+      children?: JSX.Element
+    }>
   }>("./status-line.tsx", { eager: true }),
 )[0]?.TimelineStatusLane
 
@@ -122,7 +129,14 @@ export const Renderer = {
                 {(Lane) => {
                   const Current = Lane()
 
-                  return <Current class={padding} label={render().status} collapsed={render().collapsed} />
+                  return (
+                    <Current
+                      class={padding}
+                      label={render().status}
+                      collapsed={render().collapsed}
+                      spacing={render().spacing}
+                    />
+                  )
                 }}
               </Show>
             </div>

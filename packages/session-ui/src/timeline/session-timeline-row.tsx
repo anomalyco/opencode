@@ -631,8 +631,12 @@ export function createSessionTimelineRowRenderer(input: {
       classList={{
         "min-w-0 w-full max-w-full": true,
         "md:max-w-session md:mx-auto": input.centered?.(),
-        "pt-2": Predicate.isTagged(props.row, "AssistantPart") && props.row.spacing === "tool",
-        "pt-4": Predicate.isTagged(props.row, "AssistantPart") && props.row.spacing === "content",
+        "pt-2":
+          (Predicate.isTagged(props.row, "AssistantPart") || Predicate.isTagged(props.row, "Thinking")) &&
+          props.row.spacing === "tool",
+        "pt-4":
+          (Predicate.isTagged(props.row, "AssistantPart") || Predicate.isTagged(props.row, "Thinking")) &&
+          props.row.spacing === "content",
         "pt-6": Predicate.isTagged(props.row, "Error"),
       }}
     >

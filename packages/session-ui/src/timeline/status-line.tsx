@@ -9,11 +9,18 @@ import { Show, type JSX } from "solid-js"
 export function TimelineStatusLane(props: {
   label?: string
   collapsed?: boolean
+  /** The space above the next row of the turn, so the line sits where that row will. */
+  spacing?: "tool" | "content"
   class?: string
   children?: JSX.Element
 }) {
   return (
-    <div data-component="timeline-status-lane" data-collapsed={props.collapsed ? "" : undefined} class={props.class}>
+    <div
+      data-component="timeline-status-lane"
+      data-collapsed={props.collapsed ? "" : undefined}
+      data-spacing={props.spacing}
+      class={props.class}
+    >
       <Show when={props.label}>
         {(label) => (
           <div data-component="session-working" role="status" aria-label={label()}>
