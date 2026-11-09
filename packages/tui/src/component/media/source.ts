@@ -25,12 +25,26 @@ export function createVideoFile(item: Accessor<MediaItem>) {
 export function useMediaSources(): MediaSources {
   const media = useMedia()
   const client = useContext(ClientContext)
+  // A reply naming several files in one directory lists it once.
+  const listings = new Map<string, ReturnType<NonNullable<MediaSources["listFiles"]>>>()
   return {
     files: media.files,
     localServer: useTuiTerminalEnvironment().localServer === true,
     media: client?.media,
     readFile: client && ((input) => client.api.file.read(input)),
-    listFiles: client && ((input) => client.api.file.list(input).then((result) => result.data)),
+    listFiles:
+      client &&
+      ((input) => {
+        const key = JSON.stringify([input.location.directory, input.location.workspaceID, input.path])
+        const listing =
+          listings.get(key) ??
+          client.api.file
+            .list(input)
+            .then((result) => result.data)
+            .finally(() => listings.delete(key))
+        listings.set(key, listing)
+        return listing
+      }),
   }
 }
 

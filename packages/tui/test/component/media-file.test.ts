@@ -2,7 +2,12 @@ import { expect, test } from "bun:test"
 import { readdir } from "node:fs/promises"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
-import { createMediaFiles, resolveImageSource, resolveVideoFile } from "../../src/component/media/file"
+import {
+  createMediaFiles,
+  resolveImageSource,
+  resolveVideoFile,
+  serverFileExists,
+} from "../../src/component/media/file"
 import { tmpdir } from "../fixture/fixture"
 import { image, imageFixture, video, videoFixture } from "../fixture/media"
 
@@ -79,4 +84,39 @@ test("file uris play in place on a local server and are read through a remote on
     await expect(resolve(item)).rejects.toThrow()
   await expect(resolve(image("x", { uri: "file://host/share/a.png", path: undefined }), local)).rejects.toThrow()
   expect(reads).toHaveLength(2)
+})
+
+// Every listed directory holds `demo.mp4`, so a check outside the session's directory would find one.
+test.each([
+  ["/work/out/demo.mp4", "/work", ["out"], true],
+  ["/work/demo.mp4", "/work", ["."], true],
+  // On a POSIX server a backslash is part of the name, not a way out of the directory.
+  ["/work/a\\..\\..\\outside\\demo.mp4", "/work", ["."], false],
+  ["/elsewhere/demo.mp4", "/work", [], false],
+  ["C:\\work\\out\\demo.mp4", "C:\\work", ["out"], true],
+  ["C:\\other\\demo.mp4", "C:\\work", [], false],
+] as const)("a remote server's %p is looked for in a listing only inside %p", async (file, directory, paths, found) => {
+  const listed: string[] = []
+  const sources = {
+    files: createMediaFiles(directory),
+    localServer: false,
+    listFiles: async (input: { path: string }) => {
+      listed.push(input.path)
+      return [{ path: `${input.path}/demo.mp4`, type: "file" }]
+    },
+  }
+  expect(await serverFileExists(file, { directory }, sources)).toBe(found)
+  expect(listed).toEqual([...paths])
+})
+
+test("a remote server's missing directory holds no file, and another failure leaves the answer unknown", async () => {
+  const failing = (error: Error) => ({
+    files: createMediaFiles("/work"),
+    localServer: false,
+    listFiles: () => Promise.reject(error),
+  })
+  const missing = Object.assign(new Error("gone"), { _tag: "FileNotFoundError" })
+  expect(await serverFileExists("/work/out/a.mp4", { directory: "/work" }, failing(missing))).toBe(false)
+  const offline = serverFileExists("/work/out/a.mp4", { directory: "/work" }, failing(new Error("offline")))
+  await expect(offline).rejects.toThrow("offline")
 })

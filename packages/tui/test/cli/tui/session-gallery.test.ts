@@ -30,7 +30,7 @@ test("collects only a changed message's media again", () => {
   })
 })
 
-test("checks a named file once, and a missing one again only when a later reply names it", async () => {
+test("checks a named file once at a time, and again only for a reply that has not had an answer", async () => {
   const reply = (id: string, text: string): SessionMessageInfo => ({
     type: "assistant",
     id,
@@ -39,8 +39,12 @@ test("checks a named file once, and a missing one again only when a later reply 
     model: { id: "model", providerID: "provider" },
     content: [{ type: "text", text }],
   })
-  const existing = new Set(["/work/a.mp4"])
-  const checks: string[] = []
+  const checks: { file: string; answer: PromiseWithResolvers<boolean> }[] = []
+  const answer = async (index: number, exists: boolean | Error) => {
+    if (exists instanceof Error) checks[index]?.answer.reject(exists)
+    else checks[index]?.answer.resolve(exists)
+    await Bun.sleep(0)
+  }
   const prose = Array.from({ length: 200 }, (_, index) => reply(`prose${index}`, "Prose about mp4 files and .mov"))
 
   await createRoot(async (dispose) => {
@@ -49,34 +53,54 @@ test("checks a named file once, and a missing one again only when a later reply 
       reply("plan", "Rendering a.mp4 and later.mp4"),
       reply("again", "Still a.mp4 and later.mp4"),
     ])
-    const gallery = createSessionGallery(messages, () => ({ directory: "/work" }), {
-      exists: async (file) => {
-        checks.push(file)
-        return existing.has(file)
+    const [location, setLocation] = createSignal({ directory: "/work" })
+    const gallery = createSessionGallery(messages, location, {
+      exists: (file) => {
+        const answer = Promise.withResolvers<boolean>()
+        checks.push({ file, answer })
+        return answer.promise
       },
     })
     const ids = () => gallery().map((item) => item.id)
-    // Prose names no file, and replies loaded together share each check.
-    expect(checks).toEqual(["/work/a.mp4", "/work/later.mp4"])
+    const checked = () => checks.map((check) => check.file)
+    // Checks start once the collection that asks for them is done.
     await Bun.sleep(0)
+    // Prose names no file, and the second reply's asks wait for the first's checks.
+    expect(checked()).toEqual(["/work/a.mp4", "/work/later.mp4"])
+    await answer(0, true)
     expect(ids()).toEqual(["plan:text:0:0", "again:text:0:0"])
+    // The file it found stays found; the one it did not find is checked again for the reply that waited.
+    await answer(1, false)
+    expect(checked()).toEqual(["/work/a.mp4", "/work/later.mp4", "/work/later.mp4"])
+    await answer(2, false)
 
-    // A reply collected again, as when it updates, checks nothing again.
-    setMessages(messages().map((message) => (message.id === "plan" ? { ...message } : message)))
-    expect(checks).toEqual(["/work/a.mp4", "/work/later.mp4"])
-
-    // A later step renders the planned file, and the reply that names it again finds it.
-    existing.add("/work/later.mp4")
-    setMessages([...messages(), reply("done", "Saved later.mp4 and a.mp4")])
-    expect(checks).toEqual(["/work/a.mp4", "/work/later.mp4", "/work/later.mp4"])
+    // Replies collected again, as when they update, check nothing again.
+    setLocation({ directory: "/work" })
     await Bun.sleep(0)
+    expect(checked()).toHaveLength(3)
+
+    // A check that fails without an answer is asked again the next time the reply is collected.
+    setMessages([...messages(), reply("flaky", "Saved b.mp4")])
+    await Bun.sleep(0)
+    expect(checked().at(-1)).toBe("/work/b.mp4")
+    await answer(3, new Error("offline"))
+    setLocation({ directory: "/work" })
+    await Bun.sleep(0)
+    expect(checked()).toEqual(["/work/a.mp4", "/work/later.mp4", "/work/later.mp4", "/work/b.mp4", "/work/b.mp4"])
+    await answer(4, true)
+
+    // A later step renders the planned file, and the reply that names it again finds it for every reply.
+    setMessages([...messages(), reply("done", "Saved later.mp4")])
+    await Bun.sleep(0)
+    expect(checked().at(-1)).toBe("/work/later.mp4")
+    await answer(5, true)
     expect(ids()).toEqual([
       "plan:text:0:0",
       "plan:text:0:1",
       "again:text:0:0",
       "again:text:0:1",
+      "flaky:text:0:0",
       "done:text:0:0",
-      "done:text:0:1",
     ])
     dispose()
   })

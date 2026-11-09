@@ -1,6 +1,6 @@
 import type { SessionMessageInfo, SessionMessageToolStateCompleted } from "@opencode/client"
 import { expect, test } from "bun:test"
-import { collectSessionMedia, isPlayableVideo, mediaKind, mentionedVideoPaths } from "../../src/component/media/model"
+import { collectSessionMedia, isPlayableVideo, mediaKind, mentionedVideos } from "../../src/component/media/model"
 import { formatDuration, posterTime } from "../../src/component/media/tile"
 import {
   actualZoom,
@@ -98,30 +98,46 @@ test.each([
   // Delimiters and punctuation.
   ["Saved to out/demo.mp4.", ["/work/out/demo.mp4"]],
   ["(paren.mp4), <angle.mp4>; **bold.mp4**!", ["/work/paren.mp4", "/work/angle.mp4", "/work/bold.mp4"]],
-  ["Saved to `out/my demo.mp4`.", ["/work/out/my demo.mp4"]],
-  [`"quoted clip.mp4" and 'single clip.mov'`, ["/work/quoted clip.mp4", "/work/single clip.mov"]],
-  [`it's 'my clip.mp4', isn't it, or "use out.mp4 now"`, ["/work/my clip.mp4", "/work/out.mp4"]],
-  ['[the clip](out/my clip.mp4 "Title") [x](<a b.m4v>)', ["/work/out/my clip.mp4", "/work/a b.m4v"]],
+  ["out/demo(1).mp4 (out/demo(2).mp4). (see z.mp4)", ["/work/out/demo(1).mp4", "/work/out/demo(2).mp4", "/work/z.mp4"]],
+  ["保存しました out.mp4。 x.mp4…", ["/work/out.mp4", "/work/x.mp4"]],
+  // A span with spaces is one path, and its words are paths too.
+  ["Saved to `out/my demo.mp4`.", ["/work/out/my demo.mp4", "/work/demo.mp4"]],
+  ["`ffmpeg -i in.mov out.mp4`", ["/work/ffmpeg -i in.mov out.mp4", "/work/in.mov", "/work/out.mp4"]],
+  [`"quoted clip.mp4" and 'single.mov'`, ["/work/quoted clip.mp4", "/work/clip.mp4", "/work/single.mov"]],
+  [`it's 'my clip.mp4', or "use out.mp4 now"`, ["/work/my clip.mp4", "/work/clip.mp4", "/work/out.mp4"]],
+  [`René's clip is './a b.mp4'`, ["/work/a b.mp4", "/work/b.mp4"]],
   ["unquoted my clip.mp4", ["/work/clip.mp4"]],
+  // A markdown link names its target, which may be %-escaped and have a title, and not its label.
+  ['[the clip](out/my%20clip.mp4 "Title") [x](<a.m4v>)', ["/work/out/my clip.mp4", "/work/clip.mp4", "/work/a.m4v"]],
+  ["[demo.mp4](out/demo.mp4) [100%.mp4](100%.mp4)", ["/work/out/demo.mp4", "/work/100%.mp4"]],
+  // A flag or variable names its value.
+  ["--output=out/demo.mp4 VIDEO=v.mp4", ["/work/out/demo.mp4", "/work/v.mp4"]],
   // Duplicates by resolved path, first mention first.
   ["b.mp4 a.mp4 ./b.mp4 /work/a.mp4 `b.mp4`", ["/work/b.mp4", "/work/a.mp4"]],
-  // Not a playable video, or not a server file.
-  ["the .mp4 format, mp4s, clip.mp4x, clip.mp4.txt, shot.png, clip.webm, *.mp4", []],
-  ["https://example.com/a.mp4 data:video/mp4;base64,AAAA media:abc.mp4 ftp://host/b.mp4", []],
+  // Not a playable video, or not one server file.
+  ["the .mp4 format, mp4s, clip.mp4x, clip.mp4.txt, shot.png, clip.webm, *.mp4, **/*.mp4, clip?.mp4", []],
+  ["https://example.com/a.mp4 data:video/mp4;base64,AAAA media:abc.mp4 ftp://host/b.mp4 https://x/a(1)b.mp4", []],
   ["file://host/share/a.mp4 file:///bad%E0.mp4 C:\\work\\a.mp4 C:/work/b.mp4", []],
+  ["file:///work/README.md#.mp4 file:///work/x.md?v=.mp4 file:///work/sub%2F.mp4 file:///work/a.mp4#t=1", []],
+  // Another host, which a check would contact.
+  ["//cdn.example.com/a.mp4 \\\\host\\share\\b.mp4 file:////host/c.mp4", []],
 ] as const)("finds the videos %p names", (text, files) => {
-  expect(mentionedVideoPaths(text, "/work", "/home/me")).toEqual([...files])
+  expect(mentionedVideos(text, "/work", "/home/me").map((video) => video.file)).toEqual([...files])
 })
 
 test("finds Windows paths for a Windows server, and `~/` paths only for a local one", () => {
-  const text = "C:\\work\\a.mp4 D:/b.mp4 rel\\c.mp4 file:///E:/d%20e.mp4 ~/f.mp4"
-  expect(mentionedVideoPaths(text, "C:\\work")).toEqual([
-    "C:\\work\\a.mp4",
-    "D:\\b.mp4",
-    "C:\\work\\rel\\c.mp4",
-    "E:\\d e.mp4",
+  const text = "C:\\work\\a.mp4 D:/b.mp4 rel\\c.mp4 file:///E:/d%20e.mp4 ~/f.mp4 sub\\.mp4 //host/g.mp4 \\\\host\\h.mp4"
+  expect(mentionedVideos(text, "C:\\work")).toEqual([
+    { file: "C:\\work\\a.mp4", mime: "video/mp4" },
+    { file: "D:\\b.mp4", mime: "video/mp4" },
+    { file: "C:\\work\\rel\\c.mp4", mime: "video/mp4" },
+    { file: "E:\\d e.mp4", mime: "video/mp4" },
   ])
-  expect(mentionedVideoPaths("~/f.mp4", "/work")).toEqual([])
+  expect(mentionedVideos("~/f.mp4", "/work")).toEqual([])
+  // A session in a UNC directory finds no relative path.
+  expect(mentionedVideos("a.mp4 C:\\b.mov", "\\\\wsl.localhost\\work")).toEqual([
+    { file: "C:\\b.mov", mime: "video/quicktime" },
+  ])
 })
 
 test("collects the existing videos a finished reply names, in order with its tool files", () => {
@@ -145,13 +161,13 @@ test("collects the existing videos a finished reply names, in order with its too
       { type: "text", text: "" },
       { type: "text", text: "Rendered gone.mp4 and out/a.mp4" },
       tool,
-      { type: "text", text: "Also /work/out/a.mp4 and C:\\b.mp4 b.mp4" },
+      { type: "text", text: "Also /work/out/a.mp4 and C:\\b.mp4 b.mp4, not file:///work/sub%2F.mp4" },
     ],
   })
   const asked: string[] = []
   const mentioned = {
-    exists: (file: string, _: unknown, messageID: string) => {
-      asked.push(`${messageID} ${file}`)
+    exists: (file: string) => {
+      asked.push(file)
       return file !== "/work/gone.mp4"
     },
   }
@@ -165,8 +181,10 @@ test("collects the existing videos a finished reply names, in order with its too
     ["streaming:tool:call:0", "video/mp4", "data:video/mp4;base64,AAAA", "tool.mp4"],
   ])
   expect(items[0]?.location).toEqual(location)
+  // A name that only looks like a video's, such as one with an escaped separator, is no item.
+  expect(items.every(isPlayableVideo)).toBe(true)
   // A file named twice is asked about once; the streaming reply asks about none.
-  expect(asked).toEqual(["done /work/gone.mp4", "done /work/out/a.mp4", "done /work/b.mp4"])
+  expect(asked).toEqual(["/work/gone.mp4", "/work/out/a.mp4", "/work/b.mp4"])
   // Without existence checks, text adds nothing.
   expect(collectSessionMedia([reply("done", 2)], location).map((item) => item.id)).toEqual(["done:tool:call:0"])
 })

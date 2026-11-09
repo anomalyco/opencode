@@ -37,8 +37,8 @@ const PLAYABLE_EXTENSION = new RegExp(
   "i",
 )
 
-export function mediaMime(name: string): string | undefined {
-  return MEDIA_EXTENSIONS[path.extname(name).toLowerCase()]
+export function mediaMime(name: string, flavor = path): string | undefined {
+  return MEDIA_EXTENSIONS[flavor.extname(name).toLowerCase()]
 }
 
 /** The kind from the mime type, or from the name's extension when the mime type is missing or generic. */
@@ -63,7 +63,7 @@ export type MentionedFiles = Readonly<{
   /** This machine's home directory, for `~/` paths, when the server runs here. */
   home?: string
   /** Whether a server file exists. Read while collecting, so it may be a reactive read that starts a check. */
-  exists: (file: string, location: LocationRef, messageID: string) => boolean
+  exists: (file: string, location: LocationRef) => boolean
 }>
 
 /**
@@ -97,16 +97,14 @@ export function collectSessionMedia(
         if (part.type === "text") {
           // Text is read once the reply is finished, not while it streams.
           if (!location || !mentioned || message.time.completed === undefined) return []
-          return mentionedVideoPaths(part.text, location.directory, mentioned.home).flatMap(
-            (file, index): MediaItem[] => {
-              if (named.has(file)) return []
-              named.add(file)
-              if (!mentioned.exists(file, location, message.id)) return []
-              const id = `${message.id}:text:${texts.indexOf(part)}:${index}`
-              const name = file.split(/[\\/]/).at(-1)
-              return [{ id, kind: "video", mime: mediaMime(file)!, uri: fileURL(file), name, location }]
-            },
-          )
+          return mentionedVideos(part.text, location.directory, mentioned.home).flatMap((video, index): MediaItem[] => {
+            if (named.has(video.file)) return []
+            named.add(video.file)
+            if (!mentioned.exists(video.file, location)) return []
+            const id = `${message.id}:text:${texts.indexOf(part)}:${index}`
+            const name = video.file.split(/[\\/]/).at(-1)
+            return [{ id, kind: "video", mime: video.mime, uri: fileURL(video.file), name, location }]
+          })
         }
         if (part.type !== "tool") return []
         return toolDisplayContent(part.state).flatMap((content, index) =>
@@ -135,24 +133,33 @@ export function collectSessionMedia(
   })
 }
 
-// A span in backticks, quotes, or a markdown link target may hold spaces; elsewhere a path ends at whitespace or a
-// delimiter. A quote inside a word, as in "it's", opens no span. Groups 1-5 are spans, group 6 a bare word.
+// A span in backticks, quotes, or a link target may hold spaces; a link's label is skipped. Elsewhere a path ends at
+// whitespace or a delimiter, and parens wrap it unless they pair inside it, as in demo(1).mp4. A quote inside a word,
+// as in "it's", opens no span. No repeat runs past a delimiter it needs, so matching takes linear time. Groups 1-3
+// are quoted spans, 4 and 5 link targets, 6 a bare word.
 const MENTION =
-  /`([^`\n]+)`|(?<!\w)"([^"\n]+)"(?!\w)|(?<!\w)'([^'\n]+)'(?!\w)|\]\(<([^>\n]+)>\)|\]\(([^)\n]+?)(?:\s+"[^"\n]*")?\)|([^\s`"'()[\]<>]+)/g
+  /`([^`\n]+)`|(?<![\p{L}\p{N}_])"([^"\n]+)"(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])'([^'\n]+)'(?![\p{L}\p{N}_])|\[[^[\]\n]*\]\((?:<([^<>\n]+)>|([^()\n]*(?:\([^()\n]*\)[^()\n]*)*))\)|\(?((?:[^\s`"'()[\]<>]|\([^\s`"'()[\]<>]*\))+)\)?/gu
 
 /**
- * The server paths of the playable videos `text` names, deduplicated with the first mention first: absolute paths,
- * `file://` URLs, `~/` paths given `home`, and paths relative to `directory`, in the path flavor of `directory`.
+ * The playable videos `text` names, deduplicated with the first mention first, as server paths in the path flavor of
+ * `directory`: absolute paths, `file://` URLs, `~/` paths given `home`, and paths relative to `directory`.
  */
-export function mentionedVideoPaths(text: string, directory: string, home?: string) {
-  // Most replies name no video, and this skips tokenizing them.
-  if (!PLAYABLE_EXTENSION.test(text)) return []
+export function mentionedVideos(text: string, directory: string, home?: string) {
   const flavor = pathFlavor(directory)
-  const files = mentions(text).flatMap((mention) => {
-    const file = mentionPath(mention, flavor, home)
-    return file ? [flavor.resolve(directory, file)] : []
+  // Most replies name no video, and only the lines that do are tokenized.
+  const files = text
+    .split("\n")
+    .filter((line) => PLAYABLE_EXTENSION.test(line))
+    .flatMap(mentions)
+    .flatMap((mention) => {
+      const file = mentionPath(mention, flavor, home)
+      return file ? [flavor.resolve(directory, file)] : []
+    })
+  // A UNC path, as in a session under `\\wsl.localhost`, has no file URL this terminal reads.
+  return [...new Set(files)].flatMap((file) => {
+    const mime = mediaMime(file, flavor)
+    return mime && PLAYABLE.includes(mime) && !file.startsWith("\\\\") ? [{ file, mime }] : []
   })
-  return [...new Set(files)]
 }
 
 /** The path module for a server's paths, which follow its own OS, judged from one of its absolute paths. */
@@ -160,21 +167,27 @@ export function pathFlavor(directory: string) {
   return /^(?:[a-z]:[\\/]|\\\\)/i.test(directory) ? path.win32 : path.posix
 }
 
-// The words and spans that end in a playable video extension. A span that does not, such as a quoted sentence, may
-// hold words that do.
+// The paths a line's words and spans may be. A span with spaces may also hold several, as in `ffmpeg -i in.mov
+// out.mp4`, so its words count too. A `key=value` word, such as `--output=out.mp4`, names its value.
 function mentions(text: string): string[] {
   return [...text.matchAll(MENTION)].flatMap((match) => {
-    const mention = match.slice(1).find((group) => group !== undefined)!
-    const trimmed = mention.trim().replace(/^\*+|[*.,;:!?]+$/g, "")
-    const mime = mediaMime(trimmed)
-    if (mime && PLAYABLE.includes(mime)) return [trimmed]
-    return match[6] === undefined ? mentions(mention) : []
+    // A link target is a URL: a title may follow it, and a path in it may be %-escaped.
+    const target = match[4] ?? match[5]?.replace(/\s"[^"\n]*"$/, "")
+    const link = target && !/^file:/i.test(target) ? (decode(target) ?? target) : target
+    const span = link ?? match[1] ?? match[2] ?? match[3] ?? match[6]
+    const mention = span
+      .trim()
+      .replace(/^\*+|(?<![*.,;:!?。、，．；：！？…])[*.,;:!?。、，．；：！？…]+$/gu, "")
+      .replace(/^[\w-]+=/, "")
+    return /\s/.test(span) ? [mention, ...mentions(span)] : [mention]
   })
 }
 
 function mentionPath(mention: string, flavor: typeof path.posix, home?: string) {
-  const file = /^file:/i.test(mention) ? fileURLPath(mention) : mention
-  if (!file) return undefined
+  // A glob, or a URL's query, names no one file.
+  const file = /[*?]/.test(mention) ? undefined : /^file:/i.test(mention) ? fileURLPath(mention) : mention
+  // A UNC path or a protocol-relative URL names another host, which a check would contact.
+  if (!file || /^[\\/]{2}/.test(file)) return undefined
   if (/^[a-z]:[\\/]/i.test(file)) return flavor === path.win32 ? file : undefined
   // Other schemes, such as http:, data:, and media:, name no server file.
   if (/^[a-z][a-z\d+.-]*:/i.test(file)) return undefined
@@ -184,10 +197,15 @@ function mentionPath(mention: string, flavor: typeof path.posix, home?: string) 
 
 function fileURLPath(mention: string) {
   const url = URL.parse(mention)
-  if (url?.protocol !== "file:" || (url.host !== "" && url.host !== "localhost")) return undefined
-  // A malformed escape makes decodeURIComponent throw.
+  // A fragment, as in `README.md#.mp4`, is not part of the file's name.
+  if (url?.protocol !== "file:" || url.hash || (url.host !== "" && url.host !== "localhost")) return undefined
+  return decode(url.pathname)?.replace(/^\/(?=[a-z]:\/)/i, "")
+}
+
+// A malformed escape makes decodeURIComponent throw.
+function decode(text: string) {
   try {
-    return decodeURIComponent(url.pathname).replace(/^\/(?=[a-z]:\/)/i, "")
+    return decodeURIComponent(text)
   } catch {
     return undefined
   }
