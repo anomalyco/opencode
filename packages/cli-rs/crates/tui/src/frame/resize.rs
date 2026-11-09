@@ -114,19 +114,23 @@ pub struct Handle {
     tui: Weak<Tui>,
     resize: Rc<PaneResize>,
     right: bool,
-    hovered: bool,
+    hovered: Rc<Cell<bool>>,
 }
 
 pub fn handle(app: &App, tui: Weak<Tui>, resize: Rc<PaneResize>, right: bool) -> Custom<Handle> {
-    let handle = Custom::new(app, Handle { tui, resize, right, hovered: false })
+    let hovered = Rc::new(Cell::new(false));
+    let handle = Custom::new(app, Handle { tui, resize, right, hovered: hovered.clone() })
         .absolute()
         .position(Edge::Top, 0)
         .width(2)
         .height(Length::Percent(100.0))
         .z_index(10)
         .mouse_pointer(MousePointer::EW_RESIZE);
-    let weak = handle.clone();
-    handle.on_hover(move |_, hovered| weak.update(|handle| handle.hovered = hovered))
+    // The handler must not hold the widget: a widget that owns a handler holding itself is never freed.
+    handle.on_hover(move |cx, over| {
+        hovered.set(over);
+        cx.app().request_redraw();
+    })
 }
 
 impl Component for Handle {
@@ -134,7 +138,7 @@ impl Component for Handle {
         let Some(tui) = self.tui.upgrade() else {
             return;
         };
-        if self.hovered || self.resize.resizing() {
+        if self.hovered.get() || self.resize.resizing() {
             let color = tui.page().background.raised.high;
             painter.fill(i32::from(self.right), 0, 1, painter.height(), color);
         }
