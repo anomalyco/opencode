@@ -890,7 +890,11 @@ export const fromRequest = (request: LLMRequest) => fromRequestWithAdapter(reque
 // cached-read and cache-write subsets, and `output_tokens` (inclusive total)
 // with a `reasoning_tokens` subset. Pass the totals through and derive the
 // non-cached breakdown.
-export const mapUsage = (usage: OpenResponsesUsage | null | undefined, providerMetadataKey: string) => {
+export const mapUsage = (
+  usage: OpenResponsesUsage | null | undefined,
+  providerMetadataKey: string,
+  ...frames: ReadonlyArray<unknown>
+) => {
   if (!usage) return undefined
   const cached = usage.input_tokens_details?.cached_tokens
   const cacheWrite = usage.input_tokens_details?.cache_write_tokens
@@ -904,9 +908,39 @@ export const mapUsage = (usage: OpenResponsesUsage | null | undefined, providerM
     cacheWriteInputTokens: cacheWrite,
     reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(usage.input_tokens, usage.output_tokens, usage.total_tokens),
-    ...ProviderShared.reportedBilling(usage),
+    ...ProviderShared.reportedBilling(usage, ...frames),
     providerMetadata: { [providerMetadataKey]: usage },
   })
+}
+
+// GitHub Copilot lists the filters that ran; the blocking one names its rule in `content_filter_raw`.
+const decodeContentFilters = Schema.decodeUnknownOption(
+  Schema.Array(
+    Schema.Struct({
+      source_type: Schema.optional(Schema.String),
+      blocked: Schema.optional(Schema.Boolean),
+      content_filter_raw: Schema.optional(
+        Schema.Array(
+          Schema.Struct({
+            action: Schema.optional(Schema.String),
+            label: Schema.optional(Schema.String),
+            result: Schema.optional(Schema.Unknown),
+          }),
+        ),
+      ),
+      content_filter_results: Schema.optional(Schema.Unknown),
+    }),
+  ),
+)
+
+const contentFilterCategory = (raw: unknown) => {
+  const blocked = Option.getOrElse(decodeContentFilters(raw), () => []).filter((filter) => filter.blocked)
+  const filter = blocked.find((item) => item.source_type === "completion") ?? blocked[0]
+  if (!filter) return undefined
+  return (
+    filter.content_filter_raw?.find((rule) => rule.action === "BLOCK" && rule.result === true)?.label ??
+    ProviderShared.contentFilterCategory(filter.content_filter_results)
+  )
 }
 
 const mapFinishReason = (event: Event, hasFunctionCall: boolean): FinishReason => {
@@ -981,8 +1015,9 @@ const ITEM_ID_PREFIX: Readonly<Record<string, string>> = {
   compaction: "cmp",
 }
 
-// An item without an id adopts the id already open in its output slot,
-// otherwise it gets a locally minted one.
+// An item adopts the id already open in its output slot, since GitHub Copilot
+// sends a different id on every event, including the item's own done event.
+// Otherwise it keeps its id or gets a locally minted one.
 const resolveItem = (
   state: Pick<ParserState, "outputItems">,
   item: StreamItem,
@@ -990,8 +1025,8 @@ const resolveItem = (
 ): OutputItem => ({
   ...item,
   id:
-    item.id ??
     (index === undefined ? undefined : state.outputItems[index]) ??
+    item.id ??
     `${ITEM_ID_PREFIX[item.type] ?? "item"}_${crypto.randomUUID().replaceAll("-", "")}`,
 })
 
@@ -1392,12 +1427,15 @@ const onResponseFinish = Effect.fnUntraced(function* (state: ParserState, event:
     }
     events.push(...pending.events)
   }
+  const normalized = mapFinishReason(event, current.hasFunctionCall)
   const lifecycle = Lifecycle.finish(current.lifecycle, events, {
     reason: {
-      normalized: mapFinishReason(event, current.hasFunctionCall),
+      normalized,
       raw: event.response?.incomplete_details?.reason,
+      ...(normalized === "content-filter" ? { category: contentFilterCategory(event.response?.content_filters) } : {}),
     },
-    usage: mapUsage(event.response?.usage, current.providerMetadataKey),
+    // Copilot reports its billing on the terminal event, beside `response`.
+    usage: mapUsage(event.response?.usage, current.providerMetadataKey, event, event.response),
     providerMetadata:
       event.response?.id || event.response?.service_tier
         ? providerMetadata(current, {

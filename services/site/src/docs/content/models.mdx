@@ -308,6 +308,39 @@ for Alibaba Model Studio models, which accept the same markers but ignore them o
 `compatibility.cacheFormat` on the provider instead when every model it serves accepts the same format. See
 [Compatibility](#compatibility) for the other fields.
 
+### Cache lifetime
+
+OpenCode doesn't send a cache lifetime by default, so each provider uses its own default, such as five minutes on
+Anthropic. Set `settings.cache.ttl` on a provider or model to request a different one. A model setting overrides the
+provider setting.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "anthropic": {
+      "settings": { "cache": { "ttl": "1h" } },
+      "models": {
+        "claude-haiku-5-5": { "settings": { "cache": { "ttl": "5m" } } },
+      },
+    },
+  },
+}
+```
+
+`ttl` takes a number and a unit: `ms`, `s`, `m`, `h` or `d`, such as `"5m"`, `"1h"` or `"24h"`. OpenCode sends it as
+given, so use a value the provider accepts:
+
+| API | Where the lifetime goes |
+| --- | --- |
+| Anthropic Messages | `cache_control.ttl` on each cache marker. Anthropic accepts `"5m"` and `"1h"`. |
+| Bedrock Converse | `ttl` on each `cachePoint`. Older Claude models that only cache for five minutes ignore `"1h"`. |
+| OpenAI Chat and Responses | `"24h"` goes to `prompt_cache_retention`; other values go to `prompt_cache_options.ttl`. |
+
+Providers that cache automatically without markers, such as Gemini, ignore it. A longer lifetime usually costs more to
+write: Anthropic charges 2× the input price for a one-hour cache write and 1.25× for a five-minute one.
+
+[Warming](/warming) can use the lifetime to time its requests with `interval: "auto"`.
+
 ## Compatibility
 
 `compatibility` describes request and response quirks of the API a model is served through, such as which field carries

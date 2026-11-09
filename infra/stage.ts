@@ -26,9 +26,3 @@ if ($app.stage === "production") {
     ttl: 60,
   })
 }
-
-export const shortDomain = (() => {
-  if ($app.stage === "production") return "opncd.ai"
-  if ($app.stage === "dev") return "dev.opncd.ai"
-  return `${$app.stage}.dev.opncd.ai`
-})()
