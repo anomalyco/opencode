@@ -19036,6 +19036,18 @@
           },
           "instructions": {
             "type": "string"
+          },
+          "criteria": {
+            "type": "object",
+            "properties": {
+              "true": {
+                "type": "string"
+              },
+              "false": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
           }
         },
         "required": ["type", "name", "instructions"],
