@@ -135,7 +135,12 @@ impl Manager {
         let manager = self.clone();
         tui.dialogs.replace(
             move |cx| {
-                let mut props = SelectProps::new("Plugins", manager.options(&cx.theme));
+                // The rows follow the state, also as the filter changes after ctrl+a showed the internal ones.
+                let theme = cx.theme.clone();
+                let mut props = SelectProps::dynamic(
+                    "Plugins",
+                    Rc::new(bind!(manager, |manager, _: &str| manager.options(&theme), else Vec::new())),
+                );
                 props.preserve_selection = true;
                 props.locked = manager.locked.get();
                 props.focus_target = focus;

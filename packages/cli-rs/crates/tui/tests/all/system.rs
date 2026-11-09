@@ -775,3 +775,35 @@ fn without_an_updater_there_is_no_update_command_or_notice() {
     assert!(!app.text().contains("Update"), "{}", app.text());
     assert!(!app.text().contains("2.0.28"), "{}", app.text());
 }
+
+// Expected (D2): toggling a built-in in `/plugins` mounts the route again under the dialog, yet once the dialog closes
+// the prompt takes typing, as in TS.
+#[test]
+fn the_prompt_takes_typing_after_a_plugin_manager_toggle() {
+    let h = support::mount(100, 30, support::deps(Arc::new(Fake::new(|seen| support::base(seen, support::DIRECTORY)))));
+    h.wait_for("Fix the parser");
+    h.tui.keymap.dispatch("plugins.list", None);
+    h.wait_for("Plugins");
+    h.app.press("ctrl+a");
+    h.wait_for("hide internal");
+    h.app.press("enter");
+    h.wait_for("enable enter");
+    h.app.press("escape");
+    h.wait_gone("enable enter");
+    h.app.type_text("xyz");
+    h.wait("the text reaches the prompt", || h.text().contains("xyz"));
+}
+
+// Expected (D4): with the internal plugins shown, the search finds a built-in by its ID, as TS does.
+#[test]
+fn the_plugin_manager_search_finds_built_ins_once_they_show() {
+    let h = support::mount(100, 30, support::deps(Arc::new(Fake::new(|seen| support::base(seen, support::DIRECTORY)))));
+    h.wait_for("Fix the parser");
+    h.tui.keymap.dispatch("plugins.list", None);
+    h.wait_for("Plugins");
+    h.app.press("ctrl+a");
+    h.wait_for("hide internal");
+    h.app.type_text("btw");
+    h.wait_for("opencode.btw");
+    assert!(!h.app.text().contains("No results found"), "{}", h.app.text());
+}
