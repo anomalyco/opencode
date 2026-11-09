@@ -96,7 +96,7 @@ impl Edit {
             shown.wrap,
             0,
         );
-        children.add(&View::new(cx.app).padding_edge(Edge::Left, 1).padding_edge(Edge::Right, 3).child(&diff));
+        children.add(&View::new(cx.app).padding_edge(Edge::Left, 1).padding_edge(Edge::Right, 1).child(&diff));
         if let Some(errors) = diagnostics::view(cx, &props.metadata, &shown.input_path) {
             children.add(&errors);
         }

@@ -86,6 +86,7 @@ impl Shell {
             .padding_edge(Edge::Top, 1)
             .padding_edge(Edge::Bottom, 1)
             .padding_edge(Edge::Left, 2)
+            .padding_edge(Edge::Right, 2)
             .border(BorderStyle::Heavy)
             .border_sides(Sides::LEFT)
             .border_color(theme.background.base)
@@ -291,7 +292,7 @@ impl Inner {
             }
         };
         let width = props.width;
-        let max_chars = MAX_LINES * 20.max(width.saturating_sub(6 + if running { 2 } else { 0 }));
+        let max_chars = MAX_LINES * 20.max(width.saturating_sub(8 + if running { 2 } else { 0 }));
         let input = format!("{}{}", if running { "" } else { "$ " }, props.command);
         let collapsed = collapse_shell_output(&input, &output, MAX_LINES, max_chars);
         let (input, output) = if expanded { (input, output) } else { (collapsed.input, collapsed.output) };

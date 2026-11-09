@@ -39,6 +39,7 @@ impl User {
             .padding_edge(Edge::Top, 1)
             .padding_edge(Edge::Bottom, 1)
             .padding_edge(Edge::Left, 2)
+            .padding_edge(Edge::Right, 2)
             .bg(raised)
             .shrink(0.0)
             .child(&text)
