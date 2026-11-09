@@ -444,7 +444,10 @@ fn toggling_a_plugin_frees_the_view_and_the_manager() {
         h.wait_for("able enter");
         // The host, its backdrop and its panel stay for the next dialog.
         assert!(support::mark(&h.app, h.tui.dialogs.host(), 2, &marker) > 0);
-        h.app.press("enter");
+        // The footer action toggles it.
+        let (x, y) = h.find("able enter");
+        h.app.hover(x, y);
+        h.app.click(x, y);
         h.wait("the plugin toggled", || h.status() == status);
         h.app.press("escape");
         h.app.render();
