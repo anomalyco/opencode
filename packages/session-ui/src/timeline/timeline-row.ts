@@ -174,6 +174,18 @@ export namespace TimelineRow {
   export function equals(a: TimelineRow, b: TimelineRow) {
     return a === b || (a.userMessageID === b.userMessageID && sameFields(a)(b))
   }
+
+  export function pin(row: () => TimelineRow, initial = row(), rowKey = key(initial)): () => TimelineRow {
+    let last = initial
+
+    return () => {
+      const next = row()
+
+      if (key(next) === rowKey) last = next
+
+      return last
+    }
+  }
 }
 
 function sameGroup(a: PartGroup, b: PartGroup) {

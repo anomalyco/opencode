@@ -1056,7 +1056,7 @@ export function createTimelineVirtualizer(input: Input) {
       const initialItem = virtualItemByKey().get(rowProps.rowKey)!
       const initialRow = rowByKey().get(rowProps.rowKey)!
       const item = createMemo(() => virtualItemByKey().get(rowProps.rowKey) ?? initialItem)
-      const row = createMemo(() => rowByKey().get(rowProps.rowKey) ?? rows()[item().index] ?? initialRow)
+      const row = createMemo(() => rowByKey().get(rowProps.rowKey) ?? initialRow)
       const [ready, setReady] = createSignal(initialItem.size <= fallbackItemSize || !props.deferred(initialRow))
       let contentMeasureFrame: number | undefined
 
