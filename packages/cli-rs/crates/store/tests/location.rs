@@ -210,7 +210,13 @@ async fn refreshes_global_credential_events_across_every_loaded_location() {
     let before: Vec<_> = locations.iter().map(references).collect();
     requests.0.lock().unwrap().clear();
 
-    emit(&data, json!({ "id": "evt_credential.updated", "created": 1, "type": "credential.updated", "data": {} }));
+    emit(
+        &data,
+        json!({
+            "id": "evt_credential.updated", "created": 1, "type": "credential.updated",
+            "data": { "integrationID": "openai", "credentialID": "credential" },
+        }),
+    );
     wait(|| requests.len() == 2).await;
     assert_eq!(sorted(requests.get()), [pair("/api/integration", "/other"), pair("/api/integration", "/project")]);
     requests.0.lock().unwrap().clear();
