@@ -802,6 +802,9 @@ await ctx.session.command({ sessionID, name: "review", text: "--staged" })
 const synthetic = await ctx.session.synthetic({ sessionID, text: "Deployment completed" })
 ```
 
+`generate` returns the `text` along with the call's `tokens` and `cost`, in the same shape an assistant message
+reports them.
+
 Rename, interrupt, or wait for a session.
 
 ```ts

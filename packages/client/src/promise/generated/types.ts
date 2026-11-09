@@ -121,8 +121,6 @@ export type SessionStructuredError = {
   retryAfterMs?: number
 }
 
-export type SessionGenerateResponse = { data: { text: string } }
-
 export type SessionInterruptResponse = { interrupted: boolean }
 
 export type FormID = string
@@ -455,6 +453,8 @@ export type SessionMessageCompactionRunning = {
 }
 
 export type UsageLimitsBudgetModel = { providerID: ProviderID; modelID: string; name: string; spent?: MoneyUSD }
+
+export type SessionGenerateResponse = { data: { text: string; tokens: TokenUsageInfo; cost: MoneyUSD } }
 
 export type FileSystemEntry = { path: RelativePath; type: "file" | "directory" }
 
