@@ -18,7 +18,7 @@ pub enum Content {
     Text(String),
 }
 
-/// `clipboard.read`: PNG as base64, text decoded (nothing for empty text); failed, timed-out, and
+/// `clipboard.read`: PNG as base64, text decoded (nothing for empty text); failed, timed-out, unsupported, and
 /// oversized reads are errors.
 pub fn content(outcome: ClipboardOutcome) -> Result<Option<Content>, String> {
     match outcome {
@@ -33,6 +33,7 @@ pub fn content(outcome: ClipboardOutcome) -> Result<Option<Content>, String> {
         },
         ClipboardOutcome::Failed { message, .. } => Err(message),
         ClipboardOutcome::TimedOut => Err("Clipboard read timed out".to_owned()),
+        ClipboardOutcome::Unsupported => Err("Clipboard read is not supported on this system".to_owned()),
         ClipboardOutcome::LimitExceeded => {
             Err("Clipboard content exceeded configured read or image conversion limits".to_owned())
         }
@@ -78,10 +79,14 @@ mod tests {
         assert_eq!(content(ClipboardOutcome::TimedOut), Err("Clipboard read timed out".into()));
         assert!(content(ClipboardOutcome::LimitExceeded).is_err());
         assert_eq!(
+            content(ClipboardOutcome::Unsupported),
+            Err("Clipboard read is not supported on this system".into())
+        );
+        assert_eq!(
             content(ClipboardOutcome::Failed { code: 1, message: "no display".into() }),
             Err("no display".into())
         );
-        for quiet in [ClipboardOutcome::Empty, ClipboardOutcome::Unsupported, ClipboardOutcome::Cancelled] {
+        for quiet in [ClipboardOutcome::Empty, ClipboardOutcome::Cancelled] {
             assert_eq!(content(quiet), Ok(None));
         }
     }
