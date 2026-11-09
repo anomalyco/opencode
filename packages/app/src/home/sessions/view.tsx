@@ -705,7 +705,7 @@ function HomeSessionRow(
                 [font-weight:530] field-sizing-content outline-none focus:outline-none focus-visible:outline-none
                  ${showProjectName() ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}
               `}
-                style={{ "--inline-input-shadow": "none", "text-align": "start" }}
+                style={{ "text-align": "start" }}
                 onInput={(event) =>
                   props.onRowEvent({ type: "editor.input", sessionID: sessionID(), draft: event.currentTarget.value })
                 }
