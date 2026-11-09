@@ -56,7 +56,7 @@ impl Client {
         self.json(Self::agent_list_call(input)?).await
     }
     pub fn agent_list_call(input: &AgentListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/agent".to_owned(), 200, &[400, 401, 404, 503]);
+        let mut call = Call::new("GET", "/api/agent".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
