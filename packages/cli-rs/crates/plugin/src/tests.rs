@@ -233,7 +233,7 @@ fn a_replacement_drops_the_content_and_inside_claims() {
 }
 
 // Expected: as in TS, an external plugin with a built-in's ID replaces the built-in in its place among the claims, a
-// second plugin with that ID is refused, and unloading the plugin brings the built-in back in the same place.
+// second plugin with that ID is refused, and unloading the plugin brings the built-in back in the same place and state.
 #[test]
 fn an_external_plugin_replaces_a_built_in_of_its_id_in_place() {
     let host = host();
@@ -272,6 +272,18 @@ fn an_external_plugin_replaces_a_built_in_of_its_id_in_place() {
     registry.unload(&dynamic(&host), "b.so");
     assert_eq!(rows(&registry), ["a0", "b0", "c0"]);
     assert_eq!((registry.entries()[1].source, registry.entries()[1].status.clone()), (Source::Builtin, Status::Active));
+
+    // A built-in disabled in config comes back inactive, without the failure of the external plugin that replaced it.
+    let registry = Registry::define(vec![claiming("b", footer())], ["-b"]);
+    let failing = Definition::fallible("b", |_| Err("external config".to_owned())).external("b.so", Rc::new(|| None));
+    assert_eq!(registry.load(&dynamic(&host), failing), None);
+    registry.set_active(&dynamic(&host), "b", true);
+    assert_eq!(registry.entries()[0].status, Status::Failed("external config".to_owned()));
+    registry.unload(&dynamic(&host), "b.so");
+    assert_eq!(
+        (registry.entries()[0].source, registry.entries()[0].status.clone()),
+        (Source::Builtin, Status::Inactive)
+    );
 }
 
 // Expected (D3): an external plugin keeps its place among the claims when it is rebuilt and when it is disabled and
