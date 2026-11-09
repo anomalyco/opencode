@@ -15,7 +15,10 @@ use opencode_api::generated::{
     ShellOutputInput,
 };
 use opencode_store::Location;
-use opencode_ui::dialog::{DialogCx, DialogOptions, DialogSize, layout};
+use opencode_ui::bind;
+use opencode_ui::dialog::{
+    DIALOG_INSET, DialogCx, DialogOptions, DialogSize, FooterAction, FooterProps, footer, layout_view,
+};
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
@@ -41,7 +44,9 @@ pub fn show(tui: &Tui, shell: ShellInfo, location: Location) {
 
 struct Poll {
     tui: Weak<Tui>,
+    cx: Weak<DialogCx>,
     id: opencode_api::generated::ShellID,
+    command: String,
     location: Location,
     info: RefCell<ShellInfo>,
     output: RefCell<Option<String>>,
@@ -50,10 +55,19 @@ struct Poll {
     cursor: Cell<Option<i64>>,
     disposed: Cell<bool>,
     timer: Cell<Option<TimerId>>,
+    copied: Cell<Option<Copied>>,
     status: Text,
     note: Text,
     text: Text,
     failure: Text,
+    scroll: ScrollBox,
+    foot: View,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Copied {
+    Command,
+    Output,
 }
 
 /// What one load read: the info while the shell ran, the first cursor on the first load, and a page.
@@ -96,12 +110,40 @@ fn build(tui: &Weak<Tui>, cx: &Rc<DialogCx>, shell: ShellInfo, location: Locatio
         .child(&scroll)
         .child(&failure);
 
+    let poll = Rc::new(Poll {
+        tui: tui.clone(),
+        cx: Rc::downgrade(cx),
+        id: shell.id.clone(),
+        command: shell.command.clone(),
+        location,
+        info: RefCell::new(shell),
+        output: RefCell::new(None),
+        omitted: Cell::new(false),
+        error: RefCell::new(String::new()),
+        cursor: Cell::new(None),
+        disposed: Cell::new(false),
+        timer: Cell::new(None),
+        copied: Cell::new(None),
+        status,
+        note,
+        text,
+        failure,
+        scroll: scroll.clone(),
+        foot: View::new(app),
+    });
+
     let page = f64::from(height);
     let scroll_command = |key: &str, title: &str, run: fn(&ScrollBox, f64)| {
         let scroll = scroll.clone();
         TuiCommand::inline(key, move |_, _| run(&scroll, page)).title(title).group("Shell")
     };
+    let copy_command = |key: &str, title: &str, kind: Copied| {
+        let weak = Rc::downgrade(&poll);
+        TuiCommand::inline(key, bind!(weak, |poll, _, _| poll.copy(kind))).title(title).group("Shell")
+    };
     cx.layer(KeymapLayer::new(vec![
+        copy_command("c", "Copy command", Copied::Command),
+        copy_command("o", "Copy output", Copied::Output),
         scroll_command("up", "Scroll output up", |scroll, _| {
             scroll.scroll_by(0.0, -1.0);
         }),
@@ -122,23 +164,8 @@ fn build(tui: &Weak<Tui>, cx: &Rc<DialogCx>, shell: ShellInfo, location: Locatio
         }),
     ]));
 
-    let poll = Rc::new(Poll {
-        tui: tui.clone(),
-        id: shell.id.clone(),
-        location,
-        info: RefCell::new(shell),
-        output: RefCell::new(None),
-        omitted: Cell::new(false),
-        error: RefCell::new(String::new()),
-        cursor: Cell::new(None),
-        disposed: Cell::new(false),
-        timer: Cell::new(None),
-        status,
-        note,
-        text,
-        failure,
-    });
     poll.render();
+    poll.draw_footer();
     let stop = poll.clone();
     let app_for_stop = app.clone();
     cx.on_close(Disposer::new(move || {
@@ -148,7 +175,7 @@ fn build(tui: &Weak<Tui>, cx: &Rc<DialogCx>, shell: ShellInfo, location: Locatio
         }
     }));
     poll.poll();
-    layout(cx, &header, &body, None)
+    layout_view(cx, &header, &body, Some(&poll.foot), DIALOG_INSET, 1)
 }
 
 impl Poll {
@@ -223,11 +250,10 @@ impl Poll {
         };
         self.status.set_text(status);
         self.note.visible(self.omitted.get());
-        let output = self.output.borrow();
-        let text = strip_ansi(output.as_deref().unwrap_or_default()).replace("\r\n", "\n").replace('\r', "\n");
+        let text = self.shown();
         self.text.set_text(if !text.is_empty() {
             text
-        } else if output.is_none() {
+        } else if self.output.borrow().is_none() {
             "Loading output…".to_owned()
         } else {
             "No captured output. Output redirected to files is not shown here.".to_owned()
@@ -238,6 +264,64 @@ impl Poll {
         if let Some(tui) = self.tui.upgrade() {
             tui.app.request_redraw();
         }
+    }
+
+    /// The output without ANSI codes and with `\n` line ends.
+    fn shown(&self) -> String {
+        let output = self.output.borrow();
+        strip_ansi(output.as_deref().unwrap_or_default()).replace("\r\n", "\n").replace('\r', "\n")
+    }
+
+    fn copy(self: &Rc<Self>, kind: Copied) {
+        let Some(tui) = self.tui.upgrade() else {
+            return;
+        };
+        let value = match kind {
+            Copied::Command => self.command.clone(),
+            Copied::Output => self.shown(),
+        };
+        if value.is_empty() {
+            return;
+        }
+        if !tui.app.copy_to_clipboard(&value) {
+            tui.toasts.error("Failed to copy to clipboard");
+            return;
+        }
+        self.copied.set(Some(kind));
+        // A footer action runs inside the footer it replaces, so the redraw waits.
+        let weak = Rc::downgrade(self);
+        tui.app.defer(bind!(weak, |poll, _| poll.draw_footer()));
+    }
+
+    /// The new-designs footer: follow, then a copy action for the command and the output that reads `✓ copied`
+    /// once it copied.
+    fn draw_footer(self: &Rc<Self>) {
+        let Some(cx) = self.cx.upgrade() else {
+            return;
+        };
+        let scroll = self.scroll.clone();
+        let mut follow = FooterAction::new("follow").key("end");
+        follow.on_trigger = Some(Rc::new(move || {
+            scroll.scroll_to_bottom();
+        }));
+        let copies =
+            [(Copied::Command, "copy command", "c"), (Copied::Output, "copy output", "o")].map(|(kind, title, key)| {
+                let mut action = if self.copied.get() == Some(kind) {
+                    let mut action = FooterAction::new("✓ copied");
+                    action.color = Some(cx.theme.text.feedback.success.base);
+                    action
+                } else {
+                    FooterAction::new(title).key(key)
+                };
+                let weak = Rc::downgrade(self);
+                action.on_trigger = Some(Rc::new(bind!(weak, |poll| poll.copy(kind))));
+                action
+            });
+        self.foot.clear();
+        self.foot.add(&footer(
+            &cx,
+            FooterProps { primary: [vec![follow], copies.to_vec()].concat(), ..FooterProps::default() },
+        ));
     }
 }
 

@@ -427,6 +427,14 @@ fn the_shell_output_dialog_shows_the_output_without_escapes() {
     assert!(text.contains("Shell output") && text.contains("Running"), "{text}");
     assert!(text.contains("world"));
     assert!(!text.contains("Earlier output omitted"));
+    assert!(text.contains("follow end   copy command c   copy output o"), "{text}");
+    // `TestApp` has no terminal, so each copy fails with a toast (the live run copies).
+    for key in ["c", "o"] {
+        harness.app.press(key);
+        assert!(harness.wait(|harness| harness.app.text().contains("Failed to copy to clipboard")), "{key}");
+        harness.tui.toasts.dismiss();
+        assert!(harness.wait(|harness| !harness.app.text().contains("Failed to copy to clipboard")));
+    }
     let outputs = harness.requests("GET", "/api/shell/sh_1/output");
     let query = |logged: &Logged, name: &str| logged.query.get(name).and_then(|values| values.first().cloned());
     assert_eq!(query(&outputs[0], "cursor").as_deref(), Some("9007199254740991"));
