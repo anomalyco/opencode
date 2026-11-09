@@ -155,6 +155,7 @@ const source = {
   "ui.timeline.activity.ran": "Ran",
   "ui.timeline.activity.used": "Used",
   "ui.timeline.activity.thought": "Thought",
+  "ui.timeline.activity.thinking": "Thinking",
   "ui.timeline.activity.worked": "Worked {{duration}}",
   "ui.timeline.activity.workedUnknown": "Worked",
   "ui.timeline.activity.files.one": "{{count}} file",

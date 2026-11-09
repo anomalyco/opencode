@@ -17,6 +17,7 @@ import {
   timelineNoticePlacement,
   timelineNoticeRequired,
   timelineRenders,
+  timelineHidesActivity,
   timelineTextShows,
 } from "./policy"
 import { errorInfo } from "./errors"
@@ -602,15 +603,11 @@ export namespace Timeline {
     })
     appendAssistantSegment(assistantSegment)
 
-    // Where the setting hides the agent's activity, a finished turn that left no answer still says it worked.
+    // Where the setting hides all of the agent's activity, a turn the user stopped says how long it worked.
     if (
       activity &&
-      detail.tools.placement === "hidden" &&
-      view.settled &&
-      assistantMessages.length > 0 &&
-      !assistantMessages.some((message) =>
-        message.content.some((content) => content.type === "text" && !!content.text.trim()),
-      )
+      timelineHidesActivity(detail) &&
+      assistantMessages.some((message) => isInterruptedError(message.error))
     )
       rows.push(new TimelineRow.Worked({ userMessageID: turnID }))
 

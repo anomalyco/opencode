@@ -19,12 +19,8 @@ type PresetID = (typeof timelinePresets)[number]["id"]
 const statusLabels = {
   waitingApproval: "Waiting for approval",
   waitingAnswer: "Waiting for your answer",
-  waitingCommand: "Waiting for a command",
+  waitingShell: "Waiting for shell",
   waitingAgent: "Waiting for a subagent",
-  thinking: "Thinking",
-  exploring: "Exploring",
-  editing: "Editing",
-  running: "Running",
   working: "Working",
 } as const
 
@@ -62,7 +58,7 @@ export const Playground = {
     const status = createMemo(() => {
       const last = replay().document.messages.findLast((message) => message.type === "assistant")
 
-      return timelineStatus({ detail: detail(), content: last?.type === "assistant" ? last.content : [] })
+      return timelineStatus({ content: last?.type === "assistant" ? last.content : [] })
     })
 
     const receive = (event: MessageEvent<PlaygroundMessage>) => {

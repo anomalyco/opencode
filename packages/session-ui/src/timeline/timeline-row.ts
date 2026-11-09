@@ -97,7 +97,7 @@ export namespace TimelineRow {
     files: readonly string[]
   }> {}
 
-  /** How long a finished turn worked, where the setting hides its activity and the agent left no answer. */
+  /** How long a turn the user stopped worked, where the setting hides all of the agent's activity. */
   export class Worked extends Data.TaggedClass("Worked")<{
     userMessageID: string
   }> {}

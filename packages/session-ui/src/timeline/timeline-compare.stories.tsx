@@ -39,12 +39,8 @@ const exported = Object.entries(
 const statusLabels = {
   waitingApproval: "Waiting for approval",
   waitingAnswer: "Waiting for your answer",
-  waitingCommand: "Waiting for a command",
+  waitingShell: "Waiting for shell",
   waitingAgent: "Waiting for a subagent",
-  thinking: "Thinking",
-  exploring: "Exploring",
-  editing: "Editing",
-  running: "Running",
   working: "Working",
 } as const
 
@@ -99,7 +95,7 @@ export const Compare = {
       if (!state.activity) return "Working"
       const last = replay().document.messages.findLast((message) => message.type === "assistant")
 
-      return statusLabels[timelineStatus({ detail: detail(), content: last?.type === "assistant" ? last.content : [] })]
+      return statusLabels[timelineStatus({ content: last?.type === "assistant" ? last.content : [] })]
     })
 
     const frames = {

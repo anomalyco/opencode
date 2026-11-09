@@ -72,6 +72,13 @@ export function timelineDefaultOpen(detail: TimelineDetail, item: Content | Sess
   return false
 }
 
+/** Whether the setting hides every kind of activity, as Messages only does. */
+export function timelineHidesActivity(detail: TimelineDetail) {
+  return (["shell", "edit", "thinking", "subagents", "tools"] as const).every(
+    (category) => detail[category].placement === "hidden",
+  )
+}
+
 /** Whether a thought starts open. */
 export function timelineThinkingOpen(detail: TimelineDetail) {
   return detail.thinking.details === "expanded"

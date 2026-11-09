@@ -586,7 +586,14 @@ export function CurrentContextToolGroup(props: {
 
     const value = activityLabel(tools(), i18n)
 
-    if (!value) return { verb: i18n.t("ui.timeline.activity.thought"), main: "", code: false, others: [] }
+    // A stretch of thoughts alone says whether the model is still thinking, so a thought is never hidden behind Working.
+    if (!value)
+      return {
+        verb: i18n.t(reasoning().at(-1)?.streaming ? "ui.timeline.activity.thinking" : "ui.timeline.activity.thought"),
+        main: "",
+        code: false,
+        others: [],
+      }
 
     return value
   })

@@ -222,7 +222,44 @@ const thinkingOnly: Beat[] = [
   { kind: "idle" },
 ]
 
-export const scenarios = { "Feature work": featureWork, "Thinking only": thinkingOnly } as const
+// The model thinks after reading, in the same stretch, so the old timeline labels the group by the reads it made.
+const thinkingAfterTools: Beat[] = [
+  { kind: "user", text: "Is the scheme store safe to read during render?" },
+  { kind: "tool", name: "read", input: { path: "/workspace/src/theme/scheme.ts" } },
+  {
+    kind: "tool",
+    name: "grep",
+    input: { pattern: "useScheme", path: "/workspace/src", include: "*.tsx" },
+    metadata: { matches: 7 },
+  },
+  {
+    kind: "think",
+    text: "## Checking reads during render\n\nThe store reads a signal, so a read in render subscribes the component. None of the seven callers write during render.",
+  },
+  { kind: "step" },
+  {
+    kind: "say",
+    text: "Yes. The store only reads a signal during render, and none of its seven callers write to it there.",
+  },
+  { kind: "idle" },
+]
+
+// Some providers send thinking with no readable text, so the thought never has words to show.
+const encryptedThinking: Beat[] = [
+  { kind: "user", text: "Plan the dark mode change before touching any code." },
+  { kind: "think", text: "" },
+  { kind: "think", text: "" },
+  { kind: "step" },
+  { kind: "say", text: "Plan: add a scheme setter to the theme store, a toggle row in General settings, then a test." },
+  { kind: "idle" },
+]
+
+export const scenarios = {
+  "Feature work": featureWork,
+  "Thinking only": thinkingOnly,
+  "Thinking after tools": thinkingAfterTools,
+  "Encrypted thinking": encryptedThinking,
+} as const
 
 export type ScenarioName = keyof typeof scenarios
 

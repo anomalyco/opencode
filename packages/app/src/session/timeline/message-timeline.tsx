@@ -407,7 +407,6 @@ function MessageTimelineView(
     if (!id || !active || sessionStatus().type !== "busy") return
 
     return timelineStatus({
-      detail: props.data.timelineDetail(),
       blocked: data.session.permission.list(id)?.length
         ? "approval"
         : data.session.form.list(id)?.length
