@@ -940,3 +940,29 @@ async fn message_load_more_reports_only_the_published_page() {
     assert_eq!(ids(&data, SESSION), ["msg_1", "msg_2"]);
     assert!(!data.read(|state| state.messages_loading(&session) || state.has_more_messages(&session)));
 }
+
+// Expected: every event but a streaming delta reaches the signals after its batch, so a plugin's `on_event` gets any
+// type it subscribes to.
+#[tokio::test]
+async fn signals_carry_every_event_but_the_deltas() {
+    let data = data(handler(|_req: Req| async { ok(json!({ "data": [] })) }), Options::default());
+    data.remember(info(session(0)));
+    let mut signals = data.signals();
+    let step = json!({
+        "sessionID": SESSION, "assistantMessageID": "msg_a", "agent": "build",
+        "model": { "providerID": "p", "id": "m" }, "started": 1,
+    });
+    data.apply(&[
+        event(durable("session.step.started", "evt_step", 1, step)),
+        event(durable(
+            "session.text.delta",
+            "evt_delta",
+            1,
+            json!({ "sessionID": SESSION, "assistantMessageID": "msg_a", "ordinal": 0, "delta": "Hi" }),
+        )),
+        event(durable("session.renamed", "evt_renamed", 1, json!({ "sessionID": SESSION, "title": "Renamed" }))),
+    ]);
+    let tags: Vec<String> =
+        std::iter::from_fn(|| signals.try_recv().ok()).map(|event| event.tag().to_owned()).collect();
+    assert_eq!(tags, ["session.step.started", "session.renamed"]);
+}
