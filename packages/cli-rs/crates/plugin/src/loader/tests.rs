@@ -386,6 +386,32 @@ fn a_build_that_never_loaded_is_failed_and_ids_stay_unique() {
     assert_eq!(entry(&entries, &target("c")).source, Source::Configured);
 }
 
+// Expected (D5): a build refused for a taken ID loads once the plugin that had the ID is removed.
+#[test]
+fn a_build_refused_for_a_taken_id_loads_once_the_id_is_free() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let config = root.path().join("config");
+    write(&config.join(format!("plugins/a/{}", entry_file())), "id=same");
+    write(&config.join(format!("plugins/b/{}", entry_file())), "id=same");
+    let host = host();
+    let registry = Registry::define(Vec::new(), []);
+    let loader =
+        Loader::new(Rc::new(Fake::default()) as Rc<dyn Backend>, config.clone(), root.path().to_path_buf(), Vec::new());
+    loader.reconcile(&dynamic(&host), &registry);
+    let target = |name: &str| config.join("plugins").join(name).to_string_lossy().into_owned();
+    assert_eq!(
+        entry(&registry.entries(), &target("b")).status,
+        Status::Failed("plugin ID same is already registered".to_owned())
+    );
+    fs::remove_dir_all(config.join("plugins/a")).unwrap();
+    assert!(loader.reconcile(&dynamic(&host), &registry));
+    let entries = registry.entries();
+    assert_eq!(
+        (entry(&entries, &target("b")).status.clone(), entry(&entries, &target("b")).id.as_str()),
+        (Status::Active, "same")
+    );
+}
+
 #[cfg(target_os = "linux")]
 const ONE: &str = "./one.so";
 #[cfg(target_os = "macos")]
