@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "gemini-decision-eap",
+    "tags": [
+      "prefix:google-decision",
+      "provider:google",
+      "protocol:google-decisions"
+    ],
+    "name": "google-decision/decides-choice-score-and-predicate-questions",
+    "recordedAt": "2026-11-09T00:27:16.247Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/decisions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"gemini-decision-eap\",\"input\":[{\"type\":\"text\",\"text\":\"I was charged twice for the same invoice. Please refund the duplicate payment today.\"}],\"questions\":{\"department\":{\"type\":\"choice\",\"instructions\":\"Which team should handle this support request?\",\"criteria\":{\"billing\":\"Payments, invoices, refunds, or failed charges\",\"technical\":\"Bugs, outages, or integrations\",\"sales\":\"Pricing, upgrades, or new accounts\"}},\"urgency\":{\"type\":\"score\",\"instructions\":\"How urgent is this support request?\",\"criteria\":[\"Can wait for normal support\",\"Needs prompt attention\",\"Actively blocking revenue\"]},\"refund\":{\"type\":\"noul\",\"instructions\":\"Is the customer asking for a refund?\"}}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"answers\":{\"urgency\":{\"confidence\":0.5717345111874732,\"score\":1.1772012843064368,\"probabilities\":{\"0\":0.1255321022530451,\"2\":0.3027333865594818,\"1\":0.5717345111874732},\"legend\":{\"0\":\"Can wait for normal support\",\"1\":\"Needs prompt attention\",\"2\":\"Actively blocking revenue\"},\"type\":\"score\"},\"refund\":{\"confidence\":0.99,\"noul\":0.99,\"type\":\"noul\"},\"department\":{\"confidence\":0.9978076976696219,\"choice\":\"billing\",\"probabilities\":{\"billing\":0.9978076976696219,\"technical\":0.001505273323072618,\"sales\":0.000687029007305657},\"type\":\"choice\"}},\"usage\":{\"total_tokens\":242,\"total_input_tokens\":242,\"input_tokens_by_modality\":[{\"modality\":\"text\",\"tokens\":242}],\"total_output_tokens\":0}}"
+      }
+    }
+  ]
+}
