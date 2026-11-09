@@ -45,15 +45,6 @@ strobe open <rec>
 strobe bench packages/server/perf/agents.bench.ts --base origin/dev --head . --why always
 ```
 
-To isolate Git work from shell jobs and model traffic, use the existing snapshot benchmark on the same base and head. Generate its fixture once outside timing:
-
-```sh
-bun packages/core/perf/snapshot.ts small
-strobe bench packages/core/perf/snapshot.bench.ts --base origin/dev --head . --params fixture=small --filter 'capture*changed' --primary cpu.work
-```
-
-`count.git` is the actual number of child processes for one capture. A small, previously captured Windows index can use one tagged `ls-files` scan instead of two enumerations. A new or externally replaced index must first resolve any unmerged stages; larger indexes retain Git's threaded `diff-files` scan. This optimization does not cache the contents of the worktree across captures.
-
 - **`cpu.work`** measures server process-tree CPU milliseconds per completed workload, including Git. `cpu.app.total` is a percentage of one core, **not** the main thread's utilization. Neither metric tells you whether another client stalled.
 - **Boundary:** setup starts the real listener on an ephemeral port, initializes a private Git repo and on-disk database, and creates named parents. A run opens one event stream, submits all prompts and waits for terminal execution events. Reset removes the session trees and creates fresh parents outside timing. The Location, process and store stay warm across runs in a block.
 - **Validity:** the driver checks every parent–child relationship, complete Markdown report, model request and successful step/tool count. It rejects unexpected requests, retries, tool failures, permission prompts, stream disconnections and timeouts. `count.peak_children` measures overlapping child executions, not just children created. Client deltas can be coalesced; provider frame/byte counts measure the offered traffic.

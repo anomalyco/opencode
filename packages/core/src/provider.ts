@@ -483,18 +483,23 @@ const layer = Layer.effect(
         const revision = integrations.revision()
         const records = state.get()
         // Connection presence decides availability; resolving OAuth tokens belongs to execution.
-        const connections = yield* integrations.activeKeys()
+        const connections = yield* integrations.list()
         // Either fold can disable a plugin that also contributed to the other domain.
         if (revision !== integrations.revision() || records !== state.get()) continue
+        const byID = new Map(connections.map((integration) => [integration.id, integration]))
         const available = Array.from(records.values()).filter((record) => {
           if (record.provider.activation === "disabled") return false
-          const id = record.provider.integrationID ?? Integration.ID.make(record.provider.id)
-          const key = connections.get(id)
+          const integration = byID.get(record.provider.integrationID ?? Integration.ID.make(record.provider.id))
           // Never combine the previous account's discovered endpoints/models with a new connection.
-          if (record.sourceConnection && IntegrationConnection.key(record.sourceConnection) !== key) return false
+          if (
+            record.sourceConnection &&
+            IntegrationConnection.key(record.sourceConnection) !==
+              IntegrationConnection.key(integration?.connections[0])
+          )
+            return false
           if (record.provider.activation === "enabled") return true
-          if (key !== undefined) return true
-          return record.provider.integrationID === undefined && !connections.has(id)
+          if (integration?.connections.length) return true
+          return record.provider.integrationID === undefined && !integration
         })
         // A credential change that leaves the same definitions available is not a catalog change.
         if (

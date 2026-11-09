@@ -521,34 +521,16 @@ const layer = Layer.effect(
       )
     })
 
-    /** Both scans are read-only. Large indexes benefit from diff-files' threaded lstat pass. */
+    /**
+     * Both commands only read the index, so they never take `index.lock`. Two parallel processes beat one combined
+     * `ls-files -m -o`, whose lstat pass is not threaded like diff-files'.
+     */
     const listChanges = Effect.fnUntraced(function* (
       repository: Repository,
       scope: RelativePath,
       index?: string,
       excludeFrom?: string,
-      indexBytes?: number,
     ) {
-      const excludes = [...(excludeFrom ? [`--exclude-from=${excludeFrom}`] : []), "--exclude-standard"]
-      // On Windows the extra git launch costs more than the threaded scan for small snapshot indexes.
-      // Use the size we already stat for capture validity, not an extra Git query to count entries.
-      if (process.platform === "win32" && indexBytes !== undefined && indexBytes <= 80 * 1024) {
-        const result = yield* repositoryOperation(
-          "refresh",
-          repository,
-          ["ls-files", "--modified", "--others", "-t", ...excludes, "-z", "--", literalPathspec(scope)],
-          { index },
-        )
-        const tracked = new Set<RelativePath>()
-        const untracked: RelativePath[] = []
-        for (const row of nuls(result.text)) {
-          // -t prefixes each NUL-delimited path with its status and one space. Unmerged stages can repeat a path.
-          const file = RelativePath.make(row.slice(2).replace(/\/$/, ""))
-          if (row.startsWith("? ")) untracked.push(file)
-          else tracked.add(file)
-        }
-        return { tracked: [...tracked], untracked }
-      }
       const list = (args: string[]) =>
         repositoryOperation("refresh", repository, args, { index }).pipe(
           // Embedded repositories are listed as `dir/`; update-index records them as gitlinks.
@@ -557,7 +539,15 @@ const layer = Layer.effect(
       const [tracked, untracked] = yield* Effect.all(
         [
           list(["diff-files", "--name-only", "-z", "--", literalPathspec(scope)]),
-          list(["ls-files", "--others", ...excludes, "-z", "--", literalPathspec(scope)]),
+          list([
+            "ls-files",
+            "--others",
+            ...(excludeFrom ? [`--exclude-from=${excludeFrom}`] : []),
+            "--exclude-standard",
+            "-z",
+            "--",
+            literalPathspec(scope),
+          ]),
         ],
         { concurrency: 2 },
       )
@@ -667,10 +657,9 @@ const layer = Layer.effect(
     /** Git only replaces an index by renaming a new file into place, so every write changes its inode. */
     const indexFingerprint = (file: string) =>
       fs.stat(file).pipe(
-        Effect.map((info) => ({
-          key: [Option.getOrUndefined(info.ino), info.size, Option.getOrUndefined(info.mtime)?.getTime()].join(":"),
-          bytes: Number(info.size),
-        })),
+        Effect.map((info) =>
+          [Option.getOrUndefined(info.ino), info.size, Option.getOrUndefined(info.mtime)?.getTime()].join(":"),
+        ),
         Effect.orElseSucceed(() => undefined),
       )
 
@@ -759,7 +748,7 @@ const layer = Layer.effect(
                   Effect.as(true),
                   Effect.orElseSucceed(() => false),
                 )
-                return renamed ? fingerprint?.key : undefined
+                return renamed ? fingerprint : undefined
               }),
             )
             return { value, installed }
@@ -785,15 +774,12 @@ const layer = Layer.effect(
       const result = yield* withTemporaryIndex(input.repository, (index) =>
         Effect.gen(function* () {
           const scanned = yield* indexFingerprint(index)
-          const last = lastCaptures.get(input.repository.gitDirectory)
-          // A previously written tree has no unmerged entries. A newly seeded or externally replaced
-          // index can have conflict stages that match the worktree and are invisible to ls-files -m.
-          const known = scanned !== undefined && last?.fingerprint === scanned.key
           const changes = yield* Effect.forEach(
             input.scopes,
-            (scope) => listChanges(input.repository, scope, index, excludeFrom, known ? scanned.bytes : undefined),
+            (scope) => listChanges(input.repository, scope, index, excludeFrom),
             { concurrency: "unbounded" },
           )
+          const last = lastCaptures.get(input.repository.gitDirectory)
           const untracked = changes.flatMap((change) => change.untracked)
           const oversized = oversizedFiles.get(input.repository.gitDirectory)
           const stillOversized = new Set(
@@ -810,7 +796,7 @@ const layer = Layer.effect(
           )
           // Paths the source ignores are listed as untracked on every scan; they leave the index unchanged.
           const excluded =
-            known && changes.every((change) => !change.tracked.length)
+            scanned && last?.fingerprint === scanned && changes.every((change) => !change.tracked.length)
               ? input.ignores
                 ? yield* ignored({
                     repository: input.ignores,

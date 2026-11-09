@@ -105,9 +105,9 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
             http,
           }),
         })
+      const started = yield* Clock.currentTimeMillis
       const limits = timeoutConfig(request.timeout)
       // Unlike the header and chunk limits, the whole-request budget has no default.
-      const started = limits.total ? yield* Clock.currentTimeMillis : undefined
       const total = limits.total ? Duration.millis(limits.total) : Duration.infinity
       const response = yield* runtime.http.execute(prepared.request, prepared.middleware).pipe(
         Effect.timeoutOrElse({
@@ -116,35 +116,20 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
         }),
       )
       const http = RequestExecutor.responseHttp(response)
-      const body = RequestExecutor.responseStream(response)
-      const stream =
-        limits.chunk === false
-          ? body
-          : body.pipe(
-              Stream.timeoutOrElse({
-                duration: timeoutDuration(limits.chunk, DEFAULT_CHUNK_TIMEOUT_MS),
-                orElse: () => Stream.fail(timeout("read", "Timed out waiting for response data", http)),
-              }),
-            )
-      // interruptWhen merges through a queue. Do not relay every body chunk through a second fiber
-      // just to race a deadline that cannot fire.
-      const remaining =
-        started === undefined
-          ? undefined
-          : Duration.subtract(total, Duration.millis((yield* Clock.currentTimeMillis) - started))
+      const remaining = Duration.subtract(total, Duration.millis((yield* Clock.currentTimeMillis) - started))
       return {
         frames: prepared.framing.frame(
-          remaining === undefined
-            ? stream
-            : stream.pipe(
-                Stream.interruptWhen(
-                  Effect.sleep(remaining).pipe(
-                    Effect.andThen(
-                      Effect.fail(timeout("read", "Timed out waiting for the response to complete", http)),
-                    ),
-                  ),
-                ),
+          RequestExecutor.responseStream(response).pipe(
+            Stream.timeoutOrElse({
+              duration: timeoutDuration(limits.chunk, DEFAULT_CHUNK_TIMEOUT_MS),
+              orElse: () => Stream.fail(timeout("read", "Timed out waiting for response data", http)),
+            }),
+            Stream.interruptWhen(
+              Effect.sleep(remaining).pipe(
+                Effect.andThen(Effect.fail(timeout("read", "Timed out waiting for the response to complete", http))),
               ),
+            ),
+          ),
         ),
         http,
         body: prepared.framing.body,

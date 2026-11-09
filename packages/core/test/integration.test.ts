@@ -60,12 +60,9 @@ describe("Integration", () => {
           connections: [],
         }),
       )
-      expect((yield* integrations.activeKeys()).has(openai)).toBe(true)
-      expect((yield* integrations.activeKeys()).get(openai)).toBeUndefined()
 
       yield* Scope.close(scope, Exit.void)
       expect(yield* integrations.get(openai)).toBeUndefined()
-      expect((yield* integrations.activeKeys()).has(openai)).toBe(false)
     }),
   )
 
@@ -569,7 +566,6 @@ describe("Integration", () => {
             },
           }),
         )
-        expect((yield* integrations.activeKeys()).get(integrationID)).toBe("env:INTEGRATION_TEST_ACME_KEY")
         const archived = yield* credentials.create({
           integrationID,
           label: "Archived",
@@ -619,8 +615,6 @@ describe("Integration", () => {
         const events = new Array<{ type: string; data: unknown }>()
         yield* bus.listen((event) => Effect.sync(() => events.push({ type: event.type, data: event.data })))
         yield* integrations.connection.activate(work.id)
-
-        expect((yield* integrations.activeKeys()).get(integrationID)).toBe(`credential:${work.id}`)
 
         expect(yield* integrations.connection.active(integrationID)).toEqual({
           type: "credential",

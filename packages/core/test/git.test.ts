@@ -455,7 +455,6 @@ describe("Git capture", () => {
         await fs.mkdir(project)
         await initRepo(project)
         await Bun.write(path.join(project, "tracked.bin"), "small\n")
-        await Bun.write(path.join(project, "D old.txt"), "before\n")
         await $`git add . && git commit -q -m initial`.cwd(project).quiet()
         await Bun.write(path.join(project, ".git", "info", "exclude"), "source-ignored/\n")
       })
@@ -473,15 +472,12 @@ describe("Git capture", () => {
       const before = yield* capture()
       yield* Effect.promise(async () => {
         await Bun.write(path.join(project, "tracked.bin"), "changed\n")
-        await fs.rename(path.join(project, "D old.txt"), path.join(project, "C new.txt"))
         await Bun.write(path.join(project, "store-ignored", "a.txt"), "a\n")
         await Bun.write(path.join(project, "source-ignored", "b.txt"), "b\n")
         await Bun.write(path.join(project, "kept.txt"), "kept\n")
       })
       const after = yield* capture()
       expect(yield* git.tree.files({ repository, from: before, to: after })).toEqual([
-        RelativePath.make("C new.txt"),
-        RelativePath.make("D old.txt"),
         RelativePath.make("kept.txt"),
         RelativePath.make("tracked.bin"),
       ])
@@ -509,23 +505,6 @@ describe("Git capture", () => {
     }),
   )
 
-  it.live("resolves unmerged stages in a replaced index even when their blobs match the worktree", () =>
-    Effect.gen(function* () {
-      const { project, repository, capture } = yield* captureSetup
-      const before = yield* capture()
-      yield* Effect.promise(async () => {
-        const blob = (await $`git rev-parse HEAD:a.txt`.cwd(project).text()).trim()
-        const input =
-          [`0 ${"0".repeat(blob.length)}\ta.txt`, ...[1, 2, 3].map((i) => `100644 ${blob} ${i}\ta.txt`)].join("\n") +
-          "\n"
-        await $`git --git-dir ${repository.gitDirectory} update-index --index-info < ${Buffer.from(input)}`
-          .cwd(project)
-          .quiet()
-      })
-      expect(yield* capture()).toBe(before)
-    }),
-  )
-
   it.live("skips repeat ignore checks for oversized and info/exclude-only untracked files", () =>
     Effect.gen(function* () {
       const { root, project, capture } = yield* captureSetup
@@ -537,9 +516,7 @@ describe("Git capture", () => {
       const first = yield* capture({ maximumUntrackedFileBytes: 4 })
       const trace = path.join(root.path, "trace")
       expect(yield* withEnv({ GIT_TRACE: trace }, () => capture({ maximumUntrackedFileBytes: 4 }))).toBe(first)
-      expect((yield* traced(trace)).toSorted()).toEqual(
-        process.platform === "win32" ? ["ls-files"] : ["diff-files", "ls-files"],
-      )
+      expect((yield* traced(trace)).toSorted()).toEqual(["diff-files", "ls-files"])
       const entries = yield* Effect.promise(() =>
         $`git --git-dir ${root.path}/storage ls-tree --name-only ${first}`.text(),
       )

@@ -1,5 +1,4 @@
 import { Cause, Context, Effect, Layer, Option, Schema, Stream } from "effect"
-import { isReadonlyArrayNonEmpty } from "effect/Array"
 import { Auth } from "./auth.js"
 import { Endpoint, type EndpointPatch } from "./endpoint.js"
 import { RequestExecutor } from "./executor.js"
@@ -320,11 +319,11 @@ const requireTerminalEvent = (route: string) => (events: Stream.Stream<LLMEvent,
     return events.pipe(
       Stream.mapEffect((event) => {
         // Raw events carry provider frames that may trail the terminal event.
-        if (terminal && event.type !== "raw")
+        if (terminal && !LLMEvent.is.raw(event))
           return Effect.fail(
             ProviderShared.eventError(route, `Provider emitted ${event.type} after the terminal event`),
           )
-        if (event.type === "finish") terminal = true
+        if (LLMEvent.is.finish(event)) terminal = true
         return Effect.succeed(event)
       }),
       Stream.onEnd(Effect.suspend(() => (terminal ? Effect.void : Effect.fail(incompleteStreamError(route))))),
@@ -457,8 +456,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
                       Effect.mapError(frameError(frame, event)),
                     ),
                   ),
-                  Stream.filter(isReadonlyArrayNonEmpty),
-                  Stream.flattenArray,
+                  Stream.flatMap(Stream.fromIterable),
                 )
                 const onHalt = protocol.stream.onHalt
                 return onHalt
