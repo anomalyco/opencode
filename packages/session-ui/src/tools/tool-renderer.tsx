@@ -2053,7 +2053,10 @@ function ConsoleOutput(props: {
         <Show when={props.command}>
           {(command) => (
             <div data-slot="bash-command">
-              <ConsoleCopy text={command()} label={i18n.t("ui.message.copy")} />
+              {/* The Activity timeline offers copy on the output only. */}
+              <Show when={!props.clamp}>
+                <ConsoleCopy text={command()} label={i18n.t("ui.message.copy")} />
+              </Show>
               <pre data-slot="bash-pre">
                 <code>{command()}</code>
               </pre>
