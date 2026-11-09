@@ -6,6 +6,8 @@ import { mockRemoteServer, mockWorkspace, openSession, openSettings, type Worksp
 import { recordNotifications } from "../utils/notifications"
 import { installSseTransport } from "../utils/sse-transport"
 
+import { modelCatalog } from "../utils/model-catalog"
+
 const directory = "C:/Projects/settings-demo"
 
 const projectID = "proj_settings_demo"
@@ -2267,6 +2269,51 @@ test("providers: switching Console accounts keeps the list until the new workspa
   await expect(connected).not.toHaveAttribute("data-flashed")
 })
 
+test("models: gateway catalogs bound rows and preserve scrolling", async ({ page }) => {
+  const { settings } = await open(page, { provider: modelCatalog() })
+  await settings.getByRole("tab", { name: "Models", exact: true }).click()
+  const panel = settings.locator(".settings-panel:visible")
+  const models = settings.locator(".settings-models")
+  const search = settings.getByRole("searchbox", { name: "Search models", exact: true })
+  const bounded = () => expect.poll(() => models.getByRole("switch").count()).toBeLessThan(100)
+  const scroll = (target?: "end") =>
+    panel.evaluate((element, target) => {
+      const scroller = getComputedStyle(element).overflowY !== "visible" ? element : element.closest(".settings")!
+      if (target === "end") scroller.scrollTop = scroller.scrollHeight
+      return scroller.scrollTop
+    }, target)
+
+  const first = models.getByRole("switch", { name: "A Model 000", exact: true })
+  await expect(first).toBeVisible()
+  await bounded()
+  await scroll("end")
+  const far = models.getByRole("switch", { name: "C Model 299", exact: true })
+  await expect(far).toBeVisible()
+  await expect(far).not.toBeChecked()
+  await far.locator("..").locator('[data-slot="switch-control"]').click()
+  await expect(far).toBeChecked()
+  await search.fill("Model")
+  await expect(first).toBeVisible()
+  await bounded()
+  await search.clear()
+
+  // Wide and narrow layouts have different scroll owners.
+  for (const width of [1280, 640]) {
+    await page.setViewportSize({ width, height: 720 })
+    const button = models.getByRole("button", { name: "Gateway B", exact: true })
+    await button.scrollIntoViewIfNeeded()
+    await button.click()
+    await expect(button).toHaveAttribute("aria-expanded", "false")
+    const offset = await scroll()
+    expect(offset).toBeGreaterThan(0)
+    await button.click()
+    await expect(button).toHaveAttribute("aria-expanded", "true")
+    await expect(button).toBeInViewport()
+    await expect.poll(() => scroll()).toBe(offset)
+    await bounded()
+  }
+})
+
 test("models: a Console provider picked on Providers opens its collapsed group, then the search types normally", async ({
   page,
 }) => {
@@ -2319,6 +2366,13 @@ test("models: a Console provider picked on Providers opens its collapsed group, 
   const google = settings.locator('[data-component="provider-model-group"][data-provider="console-google"]')
   await expect(group).toHaveAttribute("aria-expanded", "true")
   await expect(google.locator(".provider-model-group-trigger")).toBeFocused()
+
+  await google.getByRole("button", { name: "More options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Disable all models", exact: true }).click()
+  await expect(google.getByRole("switch", { name: "Managed Gemini", exact: true })).not.toBeChecked()
+  await google.getByRole("button", { name: "More options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Enable all models", exact: true }).click()
+  await expect(google.getByRole("switch", { name: "Managed Gemini", exact: true })).toBeChecked()
 
   const search = settings.getByRole("searchbox", { name: "Search models", exact: true })
   await search.pressSequentially("gemini")

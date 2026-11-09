@@ -1,3 +1,5 @@
+import { createVirtualizer } from "@tanstack/solid-virtual"
+import { createStore } from "solid-js/store"
 import { useFilteredList } from "@opencode/ui/hooks"
 import { Switch } from "@opencode/ui/switch"
 import {
@@ -8,6 +10,7 @@ import {
   For,
   type JSX,
   onCleanup,
+  onMount,
   Show,
   untrack,
 } from "solid-js"
@@ -96,27 +99,77 @@ export const SettingsModels: Component<{
       .forEach((item) => models.setVisibility({ providerID, modelID: item.id }, visible))
 
   function ModelRows(props: { items: ModelItem[] }) {
+    let element!: HTMLDivElement
+    const [layout, setLayout] = createStore({ scroller: undefined as HTMLElement | undefined, margin: 0 })
+    const virtualizer = createVirtualizer({
+      get count() {
+        return props.items.length
+      },
+      // Wait for the scroll owner before caching its initial offset.
+      get enabled() {
+        return !!layout.scroller
+      },
+      initialOffset: () => layout.scroller?.scrollTop ?? 0,
+      getScrollElement: () => layout.scroller ?? null,
+      getItemKey: (index) => `${props.items[index].provider.id}:${props.items[index].id}`,
+      // Model titles are single-line; keep this in sync with the row height in settings.css.
+      estimateSize: () => 49,
+      overscan: 5,
+      get scrollMargin() {
+        return layout.margin
+      },
+    })
+    const padding = createMemo(() => {
+      const rows = virtualizer.getVirtualItems()
+
+      return {
+        "padding-top": `${Math.max(0, (rows[0]?.start ?? layout.margin) - layout.margin)}px`,
+        "padding-bottom": `${Math.max(0, virtualizer.getTotalSize() - ((rows.at(-1)?.end ?? layout.margin) - layout.margin))}px`,
+      }
+    })
+
+    onMount(() => {
+      const panel = element.closest<HTMLElement>(".settings-panel")!
+      const update = () => {
+        const scroller = settingsScroller(panel)
+        setLayout({
+          scroller,
+          margin: element.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop,
+        })
+      }
+      update()
+      // Earlier providers can collapse or change size, and responsive layouts change the scroll owner.
+      const observer = new ResizeObserver(update)
+      observer.observe(panel)
+      observer.observe(panel.closest(".settings")!)
+      observer.observe(element.closest(".settings-models")!)
+      onCleanup(() => observer.disconnect())
+    })
+
     return (
       <SettingsList variant="catalog">
-        <For each={props.items}>
-          {(item) => {
-            const key = { providerID: item.provider.id, modelID: item.id }
+        <div ref={element} class="settings-models-rows" style={padding()}>
+          <For each={virtualizer.getVirtualItems()}>
+            {(row) => {
+              const item = createMemo(() => props.items[row.index])
+              const key = () => ({ providerID: item().provider.id, modelID: item().id })
 
-            return (
-              <SettingsRow title={item.name} description="">
-                <div>
-                  <Switch
-                    checked={models.visible(key)}
-                    onChange={(checked) => models.setVisibility(key, checked)}
-                    hideLabel
-                  >
-                    {item.name}
-                  </Switch>
-                </div>
-              </SettingsRow>
-            )
-          }}
-        </For>
+              return (
+                <SettingsRow title={item().name} description="">
+                  <div>
+                    <Switch
+                      checked={models.visible(key())}
+                      onChange={(checked) => models.setVisibility(key(), checked)}
+                      hideLabel
+                    >
+                      {item().name}
+                    </Switch>
+                  </div>
+                </SettingsRow>
+              )
+            }}
+          </For>
+        </div>
       </SettingsList>
     )
   }

@@ -1713,6 +1713,7 @@
 }
 
 .settings-models [data-component="settings-row"] {
+  height: 49px;
   flex-wrap: nowrap;
 }
 
