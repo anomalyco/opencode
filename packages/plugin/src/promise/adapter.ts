@@ -377,6 +377,10 @@ export function fromPromise(plugin: Plugin) {
             text: adaptApiMethod(GenerateEndpoints["generate.text"], host.generate.text),
           },
           model: {
+            hook: (name, callback, options) =>
+              register(
+                host.model.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))), options),
+              ),
             list: adaptApiMethod(ModelEndpoints["model.list"], host.model.list),
             default: adaptApiMethod(ModelEndpoints["model.default"], host.model.default),
             transform: transform(host.model),

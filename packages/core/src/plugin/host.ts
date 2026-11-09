@@ -235,6 +235,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
         }),
     },
     model: {
+      hook: (name, callback, options) => hooks.register("model", name, callback, options),
       list: (input) => response(models.available(input?.types)),
       default: () => response(models.default()),
       reload: models.reload,

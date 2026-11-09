@@ -1704,6 +1704,51 @@ interface SessionHookContext {
 }
 ```
 
+### Models (experimental)
+
+Model HTTP hooks see every HTTP request to a model provider, whichever Session or API makes it: Session steps,
+compaction and titles, and [Generate](#generate-experimental) text, image and decision calls. They work like the
+session [Native HTTP](#native-http) hooks and wrap them: a model request hook runs before the session one, and a model
+response hook runs after it.
+
+`event.kind` is `"primary"`, `"compaction"`, `"title"` or `"generate"` for Session requests, and `"text"`, `"image"`
+or `"decision"` for Generate. `sessionID` and `agent` are set only for Session requests. Generate calls made through
+the HTTP API run in the global config location, so only globally configured plugins see them.
+
+```ts
+await ctx.model.hook(
+  "experimental.http.request",
+  (event) => {
+    event.request.headers.set("x-request-kind", event.kind)
+  },
+  { providerID: "openai" },
+)
+```
+
+#### Reference
+
+```ts
+interface ModelHookContext {
+  hook<Name extends "experimental.http.request" | "experimental.http.response">(
+    name: Name,
+    callback: (event: ModelRequestHooks[Name]) => Promise<void> | void,
+    options?: { providerID?: string },
+  ): Promise<Registration>
+}
+
+interface ModelRequestScope {
+  model: { providerID: string; id: string }
+  kind: "primary" | "compaction" | "title" | "generate" | "text" | "image" | "decision"
+  sessionID?: string
+  agent?: string
+}
+
+interface ModelRequestHooks {
+  "experimental.http.request": ModelRequestScope & { request: Request }
+  "experimental.http.response": ModelRequestScope & { request: Request; response: Response }
+}
+```
+
 ### Permissions
 
 Review permission decisions after configured rules are evaluated and before an

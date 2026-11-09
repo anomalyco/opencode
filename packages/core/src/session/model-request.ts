@@ -29,10 +29,10 @@ import type {
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
 import type { Content } from "@opencode/schema/tool"
-import { Cause, Context, Effect, Layer, Result, Stream } from "effect"
-import { HttpClientRequest, HttpClientResponse } from "effect/http"
+import { Cause, Context, Effect, Layer, Result } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { App } from "../app.js"
+import { ModelHttp } from "../model-http.js"
 import { Instructions } from "../instructions/index.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
@@ -349,38 +349,7 @@ export const layer = Layer.effect(
         model: route === base.model.route ? base.model : LanguageModel.update(base.model, { route }),
         headers: Object.keys(modelHook.headers).length === 0 ? undefined : modelHook.headers,
       }
-      const hasHttpHooks =
-        (yield* hooks.has("session", "http.request", model.ref.providerID)) ||
-        (yield* hooks.has("session", "http.response", model.ref.providerID))
-      const http: StreamOptions["http"] = hasHttpHooks
-        ? (req, handler) =>
-            Effect.gen(function* () {
-              const request = yield* HttpClientRequest.toWeb(req)
-              const before = yield* hooks.trigger("session", "http.request", { ...scope, request })
-              // A hook that kept the request object cannot have replaced its body, so the original body is sent as is.
-              // Reading it back would hold a second full copy of the request, screenshots included, for the whole call.
-              const sent =
-                before.request === request
-                  ? HttpClientRequest.setBody(HttpClientRequest.fromWeb(request), req.body)
-                  : before.request.body
-                    ? HttpClientRequest.bodyUint8Array(
-                        HttpClientRequest.fromWeb(before.request),
-                        new Uint8Array(yield* Effect.promise(() => before.request.clone().arrayBuffer())),
-                        before.request.headers.get("content-type") ?? undefined,
-                      )
-                    : HttpClientRequest.fromWeb(before.request)
-              const res = yield* handler(sent)
-              const after = yield* hooks.trigger("session", "http.response", {
-                ...scope,
-                request: before.request,
-                response: new Response(
-                  [204, 205, 304].includes(res.status) ? null : yield* Stream.toReadableStreamEffect(res.stream),
-                  { status: res.status, headers: res.headers },
-                ),
-              })
-              return HttpClientResponse.fromWeb(sent, after.response)
-            })
-        : undefined
+      const http = yield* ModelHttp.middleware(hooks, scope)
       // HTTP hooks wrap every HTTP request, including the WebSocket fallback path. The route decides
       // which transport actually carries the request, so both hook families are always offered.
       const webSocket =

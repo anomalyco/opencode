@@ -5,13 +5,15 @@ import type { DecisionRequest, DecisionResult, ImageRequest, ImageResult } from 
 import { Money } from "@opencode/schema/money"
 import { SessionID } from "@opencode/schema/session-id"
 import { Context, Effect, Layer, Schema } from "effect"
-import { RequestExecutor } from "@opencode/ai/route"
+import { RequestExecutor, type HttpMiddleware } from "@opencode/ai/route"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { llmClient, requestExecutor } from "./effect/app-node-platform.js"
 import { Integration } from "./integration.js"
 import { ModelResolver } from "./model-resolver.js"
 import { Model } from "./model.js"
+import { ModelHttp } from "./model-http.js"
 import { ModelRetry } from "./model-retry.js"
+import { PluginHooks } from "./plugin/hooks.js"
 
 export interface TextInput {
   readonly prompt: string
@@ -78,7 +80,6 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Generate") {}
 
-// Image and decision clients are built here, on the shared request executor, so only Generate depends on them.
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -86,8 +87,15 @@ export const layer = Layer.effect(
     const resolver = yield* ModelResolver.Service
     const models = yield* Model.Service
     const executor = yield* RequestExecutor.Service
-    const images = yield* ImageClient.Service
-    const decisionClient = yield* DecisionClient.Service
+    const hooks = yield* PluginHooks.Service
+    // Image and decision clients are built per call so the model HTTP hooks wrap every provider request they make.
+    const clients = (http: HttpMiddleware | undefined) =>
+      Layer.provide(
+        Layer.merge(ImageClient.layer, DecisionClient.layer),
+        http === undefined
+          ? Layer.succeed(RequestExecutor.Service, executor)
+          : RequestExecutor.middleware(http, Layer.succeed(RequestExecutor.Service, executor)),
+      )
 
     const runText = Effect.fn("Generate.text")(function* (input: TextInput) {
       const resolved = yield* resolver.resolve(input.model).pipe(
@@ -111,6 +119,7 @@ export const layer = Layer.effect(
       if (!resolved && input.model) return yield* missing(input.model, "chat")
       if (!resolved)
         return yield* new UnavailableError({ message: "No model specified and no supported model is available" })
+      const http = yield* ModelHttp.middleware(hooks, { model: resolved.ref, kind: "text" })
       const response = yield* llm
         .generate(
           ai.request({
@@ -119,6 +128,7 @@ export const layer = Layer.effect(
             // Gateways require session attribution even for a stateless call; no Session is stored.
             headers: { "x-opencode-session": SessionID.create() },
           }),
+          http === undefined ? undefined : { http },
         )
         .pipe(
           ModelRetry.retryOneShot,
@@ -151,6 +161,7 @@ export const layer = Layer.effect(
         .resolveImage(input.model)
         .pipe(Effect.mapError((error) => resolutionError(input.model, "image", error)))
       if (!model) return yield* missing(input.model, "image")
+      const http = yield* ModelHttp.middleware(hooks, { model: input.model, kind: "image" })
       // `ai.image.generate` turns an invalid request into a typed error; building it with `ai.image.request` would throw.
       const response = yield* ai.image.generate({
         model,
@@ -160,7 +171,7 @@ export const layer = Layer.effect(
         aspect: input.aspect,
         resolution: input.resolution,
       }).pipe(
-        Effect.provideService(ImageClient.Service, images),
+        Effect.provide(clients(http)),
         ModelRetry.retryOneShot,
         Effect.mapError((error) => providerError(input.model, error)),
       )
@@ -190,6 +201,7 @@ export const layer = Layer.effect(
         .resolveDecision(input.model)
         .pipe(Effect.mapError((error) => resolutionError(input.model, "decision", error)))
       if (!model) return yield* missing(input.model, "decision")
+      const http = yield* ModelHttp.middleware(hooks, { model: input.model, kind: "decision" })
       const response = yield* ai.decision.generate({
         model,
         input: input.input.map((part) =>
@@ -199,7 +211,7 @@ export const layer = Layer.effect(
         ),
         questions: input.questions,
       }).pipe(
-        Effect.provideService(DecisionClient.Service, decisionClient),
+        Effect.provide(clients(http)),
         ModelRetry.retryOneShot,
         Effect.mapError((error) => providerError(input.model, error)),
       )
@@ -228,7 +240,7 @@ export const layer = Layer.effect(
       decisions: (input) => credentials(decisions(input)),
     })
   }),
-).pipe(Layer.provide([ImageClient.layer, DecisionClient.layer]))
+)
 
 // Provider metadata may hold undefined fields, which the JSON response schema rejects.
 function plainJson(value: Record<string, unknown>): Record<string, unknown> {
@@ -277,5 +289,5 @@ function failureReason(tag: AIError["reason"]["_tag"], status: number | undefine
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [ModelResolver.node, Model.node, llmClient, requestExecutor],
+  deps: [ModelResolver.node, Model.node, PluginHooks.node, llmClient, requestExecutor],
 })

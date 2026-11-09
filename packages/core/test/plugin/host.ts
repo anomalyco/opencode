@@ -54,6 +54,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       reload: () => Effect.die("unused provider.reload"),
     },
     model: overrides.model ?? {
+      hook: () => Effect.die("unused model.hook"),
       list: () => Effect.die("unused model.list"),
       default: () => Effect.die("unused model.default"),
       transform: () => Effect.die("unused model.transform"),
@@ -291,6 +292,7 @@ export const noProviders: Plugin.Context["provider"] = {
 
 export function modelHost(models: Model.Interface): Plugin.Context["model"] {
   return {
+    hook: () => Effect.die("unused model.hook"),
     list: () => models.available().pipe(Effect.map(located)),
     default: () => models.default().pipe(Effect.map(located)),
     reload: models.reload,

@@ -21,6 +21,7 @@ import { Integration } from "@opencode/core/integration"
 import { IntegrationConnection } from "@opencode/core/integration/connection"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { ModelsDev } from "@opencode/core/models-dev"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { ID, Info, Model, Ref, VariantID } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { Variant } from "@opencode/core/variant"
@@ -82,7 +83,8 @@ const aisdk = Layer.mock(AISDK.Service, {
 const client = TestLLM.testLayer({ fallback: TestLLM.text("OK", "generate") })
 
 const resolver = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(providers, models, integrations, npm, aisdk)))
-const generateDeps = Layer.mergeAll(models, RequestExecutor.fetchLayer)
+const hooks = Layer.mock(PluginHooks.Service, { has: () => Effect.succeed(false) })
+const generateDeps = Layer.mergeAll(models, hooks, RequestExecutor.fetchLayer)
 const it = testEffect(Generate.layer.pipe(Layer.provide(Layer.mergeAll(resolver, client, generateDeps))))
 const resolverIt = testEffect(resolver)
 const retryIt = testEffect(
@@ -268,7 +270,7 @@ testEffect(Layer.empty).effect("attributes each stateless completion without cre
           }),
         ).toBe("OK")
       }
-    }).pipe(Effect.provide(Generate.layer.pipe(Layer.provide(Layer.mergeAll(resolver, native, models, executor)))))
+    }).pipe(Effect.provide(Generate.layer.pipe(Layer.provide(Layer.mergeAll(resolver, native, models, hooks, executor)))))
     expect(sessions).toHaveLength(2)
     expect(sessions[0]).toStartWith("ses_")
     expect(sessions[1]).not.toBe(sessions[0])
@@ -420,7 +422,7 @@ describe("image and decision generation", () => {
     Layer.provide(Layer.mergeAll(mediaProviders, mediaModels, mediaIntegrations, npm, aisdk)),
   )
   const mediaIt = testEffect(
-    Generate.layer.pipe(Layer.provide(Layer.mergeAll(mediaResolver, client, mediaModels, executor))),
+    Generate.layer.pipe(Layer.provide(Layer.mergeAll(mediaResolver, client, mediaModels, hooks, executor))),
   )
   const ref = (providerID: string, id: string, variant?: string) =>
     Ref.make({
