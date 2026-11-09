@@ -5,7 +5,7 @@ import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { Provider } from "@opencode/schema/provider"
 import type { Session } from "@opencode/schema/session"
 import { ConfigWarming } from "@opencode/schema/config/warming"
-import { Clock, Duration, Effect, Option, Schema, Scope, Stream } from "effect"
+import { Clock, Duration, Effect, FiberMap, Option, Schema, Stream } from "effect"
 import { Config } from "../config.js"
 import { resolveModel } from "./optimize.js"
 
@@ -53,11 +53,15 @@ export const Plugin = define({
       })
     })
 
-    const scope = yield* Scope.Scope
     const sessions = new Map<Session.ID, { last: number; expires: number; settings: typeof defaults }>()
     // A ping during a model request would compete with the request it keeps warm, which stalls single-slot local models.
     // A request counts from its context hook, because `session.step.started` waits for the first response chunk.
     const requesting = new Set<Session.ID>()
+    // One loop per session: a turn restarts it, so it times from the latest settings, and a loop whose session stopped
+    // warming ends when it next wakes.
+    const loops = yield* FiberMap.make<Session.ID>()
+    // Sessions whose keep-alive is in flight. Its generate hook runs inside the loop, which must not restart itself.
+    const warming = new Set<Session.ID>()
     // A turn always ends with an execution event, so a step that ends without its own event can't stay in flight.
     yield* ctx.event
       .subscribe({
@@ -102,9 +106,11 @@ export const Plugin = define({
 
         const last = current.last
         yield* Effect.logInfo("warming session", { sessionID, last })
-        yield* ctx.session
-          .generate({ sessionID, prompt: current.settings.prompt })
-          .pipe(Effect.catchCause((cause) => Effect.logWarning("failed to warm session", { sessionID, cause })))
+        warming.add(sessionID)
+        yield* ctx.session.generate({ sessionID, prompt: current.settings.prompt }).pipe(
+          Effect.catchCause((cause) => Effect.logWarning("failed to warm session", { sessionID, cause })),
+          Effect.ensuring(Effect.sync(() => warming.delete(sessionID))),
+        )
         const latest = sessions.get(sessionID)
         if (latest === current && latest.last === last) latest.last = yield* Clock.currentTimeMillis
         return yield* loop(sessionID)
@@ -123,44 +129,30 @@ export const Plugin = define({
           return
         }
 
-        // Once generate exposes request metadata to context hooks, tag warm requests instead of matching the prompt.
-        const message = event.messages.at(-1)
-        if (
-          message?.role === "user" &&
-          message.content.length === 1 &&
-          message.content[0]?.type === "text" &&
-          (message.content[0].text === active?.settings.prompt || message.content[0].text === settings.prompt)
-        ) {
-          if (active) active.settings = settings
-          return
-        }
-
         const now = yield* Clock.currentTimeMillis
-        const duration = Duration.toMillis(settings.duration)
-        if (active) {
-          active.last = now
-          active.expires = now + duration
-          active.settings = settings
-          return
-        }
-        sessions.set(event.sessionID, { last: now, expires: now + duration, settings })
-        yield* Effect.logInfo("scheduled session warming", {
-          sessionID: event.sessionID,
-          interval: settings.interval,
-          expires: now + duration,
-        })
-        yield* loop(event.sessionID).pipe(
-          Effect.catchCause((cause) =>
-            Effect.logError("session warming loop failed", { sessionID: event.sessionID, cause }),
+        const expires = now + Duration.toMillis(settings.duration)
+        sessions.set(event.sessionID, { last: now, expires, settings })
+        if (!active)
+          yield* Effect.logInfo("scheduled session warming", {
+            sessionID: event.sessionID,
+            interval: settings.interval,
+            expires,
+          })
+        yield* FiberMap.run(
+          loops,
+          event.sessionID,
+          loop(event.sessionID).pipe(
+            Effect.catchCause((cause) =>
+              Effect.logError("session warming loop failed", { sessionID: event.sessionID, cause }),
+            ),
           ),
-          Effect.forkIn(scope),
         )
       })
     yield* ctx.session.hook("context", (event) =>
       Effect.sync(() => requesting.add(event.sessionID)).pipe(Effect.andThen(hook(event))),
     )
-    yield* ctx.session.hook("compaction", hook)
-    yield* ctx.session.hook("generate", hook)
+    // Compaction is not hooked: it can run on its own model, whose warming settings aren't the session's.
+    yield* ctx.session.hook("generate", (event) => (warming.has(event.sessionID) ? Effect.void : hook(event)))
   }),
 })
 
