@@ -441,7 +441,7 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
             .placeholder_color(theme.text.muted)
             .colors(theme.text.formfield.focused, Color::TRANSPARENT)
             .focused_colors(theme.text.formfield.base, theme.background.formfield.focused)
-            .cursor_color(search_cursor(theme, ""))
+            .cursor_color(theme.text.base)
     });
     let scroll = ScrollBox::new(app).scrollbars(false);
     let body =
@@ -554,12 +554,6 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
     let root =
         layout_view(cx, &head, &handle.0.body, Some(&handle.0.footer_slot), DIALOG_INSET, handle.0.props.footer_gap);
     (root, handle)
-}
-
-/// Terminals paint the glyph under a block cursor in their own color, so a near-white cursor hides the
-/// placeholder's first letter. Until the user types, the cursor matches the highlighted row so that letter shows.
-fn search_cursor(theme: &crate::theme::Theme, filter: &str) -> Color {
-    if filter.is_empty() { theme.background.action.primary.focused } else { theme.text.base }
 }
 
 impl<T: Clone + PartialEq + 'static> Select<T> {
@@ -729,9 +723,6 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
     }
 
     fn filter_changed(&self, value: String) {
-        if let Some(input) = &self.0.input {
-            input.cursor_color(search_cursor(&self.0.cx.theme, &value));
-        }
         let options = (self.props().options)(&value);
         {
             let mut state = self.0.state.borrow_mut();
