@@ -202,6 +202,7 @@ impl Tui {
         let view = routes::mount(self, &route);
         self.frame.main().add(&view.root());
         view.sync(self, &opencode_store::Changes::everything());
+        crate::frame::mount_app(self, remount);
         // A remount under an open dialog (a theme change, a plugin toggled in `/plugins`) must not take the dialog's
         // focus; the new view takes it once the dialog closes, as the old one would have.
         let target = view.focus_target();
@@ -237,6 +238,7 @@ impl Tui {
         if let Some(view) = self.view.borrow().as_ref() {
             view.sync(self, &changes);
         }
+        crate::frame::sync_app(self, &changes);
         crate::features::title::sync(self, &changes);
         crate::features::events::sync(self, &changes);
         crate::plugins::host::sync(self);
@@ -251,6 +253,7 @@ impl Tui {
         if let Some(view) = self.view.borrow().as_ref() {
             view.sync(self, &opencode_store::Changes::everything());
         }
+        crate::frame::sync_app(self, &opencode_store::Changes::everything());
         self.app.request_redraw();
     }
 
@@ -259,6 +262,7 @@ impl Tui {
         if let Some(view) = self.view.borrow().as_ref() {
             view.sync(self, &opencode_store::Changes::default());
         }
+        crate::frame::sync_app(self, &opencode_store::Changes::default());
         self.app.request_redraw();
     }
 

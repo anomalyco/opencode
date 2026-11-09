@@ -84,8 +84,11 @@ skipped), for the plugin manager.
 Call sites wired in this step (minimal edits in other steps' files): the `Tui` field and install call
 (`app.rs`), the `home.footer` slot (`routes/home.rs`), the plugin route's sync (`routes/plugin.rs`), and
 the transcript's code-block renderers (`routes/session/messages/list.rs`). The other slots
-(`prompt.footer*`, `sidebar.*`, `session.composer.top`, `session.panel`, `app`) are mounted by the steps
-that own those views, with the same one call.
+(`prompt.footer*`, `sidebar.*`, `session.composer.top`) are mounted by the steps that own those views, with
+the same one call. `app` is mounted by the frame (`frame::mount_app`) under the tab strip and the route, on
+every route, with no input, as `app.tsx:1466` does; it mounts again with the route on a remount (a theme change, a
+plugin toggled). `session.panel` is published but mounted nowhere, in TS as in Rust, so a claim on it draws
+nothing.
 
 ## Proof
 
@@ -95,3 +98,6 @@ that own those views, with the same one call.
 - P-APP `P.1/slot`: a test plugin appends a line to `home.footer`. The TS side loads it as a local plugin
   directory (`parity/plugins/slot/tui.tsx`, configured in `plugins`); the Rust side registers its Rust twin
   when the recording's `OPENCODE_PARITY_PLUGIN` is `slot`, and lists the configured TS entry as skipped.
+- P-APP `P.1/app-home` and `P.1/app-session`: a second test plugin (`parity/plugins/app/tui.tsx`, Rust twin
+  `app_plugin`, `OPENCODE_PARITY_PLUGIN` `app`) appends a line to `app`; it shows on the last row, under the home
+  footer and under the session's prompt.
