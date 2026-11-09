@@ -45,11 +45,20 @@ export function filename(channel = OPENCODE_CHANNEL) {
 
 export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platform) {
   const port = channelPort(channel)
-  // Windows hands out 0xC000-0xFFFF for outgoing connections, Hyper-V and WinNAT reserve blocks of that range at boot,
-  // and WSL mirrored networking reserves a 4096-port block that usually covers 44620-48715. A reserved port fails as in
-  // use while nothing listens on it. Moving into the 0x7000 block, below 32768, avoids all of them and keeps the low
-  // 12 bits: 0xC0DE becomes 0x70DE.
-  if (platform === "win32" && port >= 0x8000) return 0x7000 | (port & 0xfff)
+  // Keep every channel below 32768 so the managed service never asks for a port the
+  // OS may already have handed to an outgoing connection.
+  //
+  // The 0xC000-detail: Windows hands out 0xC000-0xFFFF for outgoing connections, Hyper-V
+  // and WinNAT reserve blocks of that range at boot, and WSL mirrored networking reserves
+  // a 4096-port block that usually covers 44620-48715. A reserved port fails as in use
+  // while nothing listens on it. Moving into the 0x7000 block, below 32768, avoids all of
+  // them and keeps the low 12 bits: 0xC0DE becomes 0x70DE.
+  //
+  // Linux and macOS have the same failure the other way round: their ephemeral ranges
+  // (32768-60999 and 49152-65535 by default) cover 0xC0DE, so an outgoing loopback
+  // connection can hold the port with nothing listening on it and the service refuses to
+  // start. The same 0x7000 fold clears both ranges on every platform.
+  if (port >= 0x8000) return 0x7000 | (port & 0xfff)
   return port
 }
 
