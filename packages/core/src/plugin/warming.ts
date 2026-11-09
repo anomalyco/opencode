@@ -78,6 +78,8 @@ export const Plugin = define({
 
     const scope = yield* Scope.Scope
     const sessions = new Map<Session.ID, { last: number; expires: number; settings: Settings }>()
+    // Sessions already told their cache outlives the window; the check runs on every request.
+    const outlived = new Set<Session.ID>()
     // A ping during a model request would compete with the request it keeps warm, which stalls single-slot local models.
     // A request counts from its context hook, because `session.step.started` waits for the first response chunk.
     const requesting = new Set<Session.ID>()
@@ -138,12 +140,31 @@ export const Plugin = define({
         if (session.parentID) return
 
         const active = sessions.get(event.sessionID)
-        const decision = yield* decide(event)
-        if (decision._tag !== "Warm") {
+        const stop = Effect.sync(() => {
           sessions.delete(event.sessionID)
-          return
-        }
-        const settings = decision.settings
+          return undefined
+        })
+        const settings = yield* Decision.$match(yield* decide(event), {
+          Warm: (decision) =>
+            Effect.sync(() => {
+              outlived.delete(event.sessionID)
+              return decision.settings
+            }),
+          Off: () => stop,
+          InvalidInterval: () => stop,
+          CacheOutlivesWindow: () =>
+            Effect.gen(function* () {
+              if (!outlived.has(event.sessionID)) {
+                outlived.add(event.sessionID)
+                yield* Effect.logInfo("not warming: the prompt cache outlives the warming window", {
+                  sessionID: event.sessionID,
+                  model: event.model,
+                })
+              }
+              return yield* stop
+            }),
+        })
+        if (!settings) return
 
         // Once generate exposes request metadata to context hooks, tag warm requests instead of matching the prompt.
         const message = event.messages.at(-1)

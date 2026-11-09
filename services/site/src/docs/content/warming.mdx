@@ -71,8 +71,8 @@ every 4.5 minutes. Models without a `cache.ttl` are warmed every four minutes.
 ```
 
 A cache that lasts longer than `duration`, such as `"1h"` with the 30-minute
-default, is not warmed, since it outlives the warming window anyway. Raise
-`duration` to warm it.
+default, is not warmed, since it outlives the warming window anyway. OpenCode
+logs this once per session. Raise `duration` to warm it.
 
 ## Per provider and model
 
