@@ -2,7 +2,7 @@ import { Schema } from "effect"
 import { createEffect, createMemo, Show, onCleanup, untrack, type Accessor, type JSX } from "solid-js"
 import { Key } from "@solid-primitives/keyed"
 import { createStore } from "solid-js/store"
-import { useQuery } from "@tanstack/solid-query"
+import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
 import { Accessibility, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
@@ -13,7 +13,7 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { ScrollView } from "@opencode/ui/scroll-view"
 import { displayName } from "@opencode/ui/project-avatar"
-import { homeSessionsQuery } from "@/home/sessions/queries"
+import { sessionIndexQuery } from "@/runtime/server/session-queries"
 import { createProjectActions } from "@/home/projects/actions"
 import { ProjectMenuItems } from "@/home/projects/menu"
 import { buildHomeSessionRecords } from "@/home/sessions/records"
@@ -228,8 +228,9 @@ function ProjectList(props: {
     untrack(() => props.onReorder(key, ids))
   })
 
+  const queryClient = useQueryClient()
   const sessions = useQuery(() => ({
-    ...homeSessionsQuery(connection(), ctx()),
+    ...sessionIndexQuery(connection(), ctx(), queryClient),
     enabled: ctx()?.sdk.connection.status() === "connected",
   }))
 

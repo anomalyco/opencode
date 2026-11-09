@@ -17,6 +17,7 @@ test("keeps a removed session hidden after its deletion event, for lists cached 
 
   const request = mutation.remove(session.id)
   expect(mutation.apply([session])).toEqual([])
+  expect(mutation.apply([{ id: session.id }, { id: "ses_kept" }])).toEqual([{ id: "ses_kept" }])
   release.resolve()
   await request
   expect(mutation.apply([session])).toEqual([])
@@ -44,6 +45,7 @@ test("rolls back a failed removal", async () => {
   release.resolve()
   await expect(request).rejects.toThrow("offline")
   expect(mutation.apply([session])).toEqual([session])
+  expect(mutation.apply([{ id: session.id }])).toEqual([{ id: session.id }])
 })
 
 test("treats SessionNotFoundError on removal as already deleted", async () => {

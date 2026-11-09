@@ -2,14 +2,14 @@ import { describe, expect, test } from "bun:test"
 import type { SessionInfo } from "@opencode/client/promise"
 import { SESSION_RECENT_LIMIT, SESSION_RECENT_WINDOW } from "@/runtime/server/global-sync/types"
 import {
-  HOME_SESSION_INDEX_LIMIT,
-  HOME_SESSION_LIMIT,
-  HOME_SESSION_PAGE_LIMIT,
-  loadHomeSessionIndex,
-  mergeHomeSessionIndex,
-  parseHomeSessionIndex,
-  retainHomeSessions,
-} from "./index"
+  SESSION_INDEX_LIMIT,
+  SESSION_LIST_LIMIT,
+  SESSION_INDEX_PAGE_LIMIT,
+  loadSessionIndex,
+  mergeSessionIndex,
+  parseSessionIndex,
+  retainSessions,
+} from "./session-index"
 
 const session = (id: string, input: Partial<SessionInfo> = {}) =>
   // SAFETY: fixtures spell every other field of the info they model, and each test only reads those fields.
@@ -39,20 +39,21 @@ const history = (directory: string, count: number) =>
 
 const ids = (sessions: SessionInfo[]) => sessions.map((item) => item.id)
 
-describe("Home session index", () => {
+describe("shared session index", () => {
   test("loads one bounded page of the newest sessions", async () => {
-    const all = history("/repo", HOME_SESSION_PAGE_LIMIT + 1)
+    const all = history("/repo", SESSION_INDEX_PAGE_LIMIT + 1)
     const calls: Array<{ limit: number; order: "desc"; cursor?: string; parentID: null }> = []
 
-    const result = await loadHomeSessionIndex(async (input) => {
+    const result = await loadSessionIndex(async (input) => {
       calls.push(input)
 
       return { data: all.slice(0, input.limit), cursor: { next: "next" } }
     })
 
-    expect(calls).toEqual([{ limit: HOME_SESSION_PAGE_LIMIT, order: "desc", parentID: null }])
+    expect(calls).toEqual([{ limit: SESSION_INDEX_PAGE_LIMIT, order: "desc", parentID: null }])
     // Newest rows in server order, plus the recent window beyond the limit.
-    expect(ids(result)).toEqual(ids(all.slice(0, HOME_SESSION_INDEX_LIMIT + SESSION_RECENT_LIMIT)))
+    expect(ids(result.sessions)).toEqual(ids(all.slice(0, SESSION_INDEX_LIMIT + SESSION_RECENT_LIMIT)))
+    expect(result.inventory.map((session) => session.id)).toEqual(ids(all.slice(0, SESSION_INDEX_PAGE_LIMIT)))
   })
 
   test("keeps each directory's newest sessions within the page", async () => {
@@ -63,14 +64,14 @@ describe("Home session index", () => {
       time: { created: item.time.created - 6000 * minute, updated: item.time.updated - 6000 * minute },
     }))
 
-    const result = await loadHomeSessionIndex(async (input) => ({
+    const result = await loadSessionIndex(async (input) => ({
       data: [...busy.slice(0, input.limit - quiet.length), ...quiet],
       cursor: { next: "next" },
     }))
 
-    expect(ids(result.filter((item) => item.location.directory === "/quiet"))).toEqual(ids(quiet))
-    expect(ids(result.filter((item) => item.location.directory === "/busy"))).toEqual(
-      ids(busy.slice(0, HOME_SESSION_INDEX_LIMIT + SESSION_RECENT_LIMIT)),
+    expect(ids(result.sessions.filter((item) => item.location.directory === "/quiet"))).toEqual(ids(quiet))
+    expect(ids(result.sessions.filter((item) => item.location.directory === "/busy"))).toEqual(
+      ids(busy.slice(0, SESSION_INDEX_LIMIT + SESSION_RECENT_LIMIT)),
     )
   })
 
@@ -83,13 +84,14 @@ describe("Home session index", () => {
       time: { created: item.time.created - 300 * minute, updated: item.time.updated - 300 * minute },
     }))
 
-    const result = await loadHomeSessionIndex(async () => ({ data: [...archived, ...live], cursor: {} }))
-    expect(ids(result)).toEqual(ids(live))
+    const result = await loadSessionIndex(async () => ({ data: [...archived, ...live], cursor: {} }))
+    expect(ids(result.sessions)).toEqual(ids(live))
+    expect(result.inventory).toEqual(live.map(({ id, projectID, location }) => ({ id, projectID, location })))
   })
 
   test("keeps only visible roots", () => {
     expect(
-      parseHomeSessionIndex([
+      parseSessionIndex([
         session("root"),
         session("child", { parentID: "root" }),
         session("archived", { time: { created: 1, updated: 1, archived: 2 } }),
@@ -106,19 +108,19 @@ describe("Home session index parity with the complete index", () => {
 
   const view = (index: SessionInfo[], known: SessionInfo[], removed = new Set<string>()) =>
     ids(
-      retainHomeSessions(
-        mergeHomeSessionIndex(index, known).filter((item) => !removed.has(item.id)),
-        HOME_SESSION_LIMIT,
+      retainSessions(
+        mergeSessionIndex(index, known).filter((item) => !removed.has(item.id)),
+        SESSION_LIST_LIMIT,
         now,
       ),
     ).toSorted()
 
-  const loaded = () => loadHomeSessionIndex(async () => ({ data: complete, cursor: {} }))
+  const loaded = async () => (await loadSessionIndex(async () => ({ data: complete, cursor: {} }))).sessions
 
   test("without local changes", async () => {
     const result = view(await loaded(), [])
     expect(result).toEqual(view(complete, []))
-    expect(result).toHaveLength(HOME_SESSION_LIMIT + SESSION_RECENT_LIMIT + 90 + 5)
+    expect(result).toHaveLength(SESSION_LIST_LIMIT + SESSION_RECENT_LIMIT + 90 + 5)
   })
 
   test("with new, re-timed, and unlisted-directory local sessions", async () => {
@@ -140,7 +142,7 @@ describe("Home session index parity with the complete index", () => {
     const removed = new Set(ids(complete.slice(0, SESSION_RECENT_LIMIT)))
     const result = view(await loaded(), [], removed)
     expect(result).toEqual(view(complete, [], removed))
-    expect(result).toHaveLength(HOME_SESSION_LIMIT + SESSION_RECENT_LIMIT + 90 + 5)
+    expect(result).toHaveLength(SESSION_LIST_LIMIT + SESSION_RECENT_LIMIT + 90 + 5)
     expect(result.some((id) => removed.has(id))).toBe(false)
   })
 
@@ -151,8 +153,8 @@ describe("Home session index parity with the complete index", () => {
     }))
 
     expect(hot.every((item) => item.time.updated > now - SESSION_RECENT_WINDOW)).toBe(true)
-    const index = await loadHomeSessionIndex(async () => ({ data: hot, cursor: {} }))
-    expect(index).toHaveLength(HOME_SESSION_INDEX_LIMIT + SESSION_RECENT_LIMIT)
+    const index = (await loadSessionIndex(async () => ({ data: hot, cursor: {} }))).sessions
+    expect(index).toHaveLength(SESSION_INDEX_LIMIT + SESSION_RECENT_LIMIT)
     expect(view(index, [])).toEqual(view(hot, []))
   })
 })

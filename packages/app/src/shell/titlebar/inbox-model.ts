@@ -11,7 +11,7 @@ import { useLayout } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
 import { sessionBusy, sessionRequests, type SessionRequests } from "@/shell/layout/project-avatar-state"
 import { pathKey } from "@/workspaces/path-key"
-import { parseHomeSessionIndex } from "@/home/sessions/index"
+import { parseSessionIndex } from "@/runtime/server/session-index"
 import { sessionFormRequest, sessionPermissionRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { notifySessionTabsRemoved } from "./session-events"
 import { errorMessage } from "@/shell/layout/helpers"
@@ -126,7 +126,7 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         item.ctx.sdk.api.session
           .list({ limit: INDEX_LIMIT, order: "desc", parentID: null }, { signal })
-          .then((response) => parseHomeSessionIndex(response.data)),
+          .then((response) => parseSessionIndex(response.data)),
       retry: false,
       staleTime: 30_000,
       refetchOnMount: true,

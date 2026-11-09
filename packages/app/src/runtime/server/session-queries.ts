@@ -1,17 +1,25 @@
 import type { SessionInfo } from "@opencode/client/promise"
-import { queryOptions, skipToken } from "@tanstack/solid-query"
+import { queryOptions, skipToken, type QueryClient } from "@tanstack/solid-query"
 import type { ServerConnection } from "@/runtime/server/registry"
 import type { ServerCtx } from "@/runtime/server/runtime"
-import { loadHomeSessionIndex } from "./index"
+import { loadSessionIndex } from "./session-index"
 
 // Keep the immutable result opaque so Solid Query does not recursively unwrap every session on mount.
 const selectSessions = (sessions: SessionInfo[]) => () => sessions
 
-export function homeSessionsQuery(conn: ServerConnection.Any | undefined, ctx: ServerCtx | undefined) {
+export function sessionIndexQuery(
+  conn: ServerConnection.Any | undefined,
+  ctx: ServerCtx | undefined,
+  queryClient: QueryClient,
+) {
   return queryOptions({
     queryKey: ["home-sessions", conn] as const,
     queryFn: ctx
-      ? ({ signal }) => loadHomeSessionIndex((input, options) => ctx.sdk.api.session.list(input, options), signal)
+      ? async ({ signal }) => {
+          const result = await loadSessionIndex((input, options) => ctx.sdk.api.session.list(input, options), signal)
+          queryClient.setQueryData(["home-session-inventory", conn], result.inventory)
+          return result.sessions
+        }
       : skipToken,
     retry: false,
     staleTime: 30_000,
