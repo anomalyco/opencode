@@ -1556,6 +1556,22 @@ test("⌘W past the side panel's last tab keeps the session tab", async ({ page 
   await expect(sessions.alphaTab).toHaveCount(0)
 })
 
+test("⌘W past the side panel's last tab closes the session tab once ⌘W has rested", async ({ page }) => {
+  await page.clock.install()
+  const sessions = await emptySidePanel(page)
+
+  // Pressed straight after the panel closed, ⌘W is swallowed and restarts the rest.
+  await page.keyboard.press("ControlOrMeta+w")
+  await page.clock.fastForward(400)
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(sessions.alphaTab).toHaveCount(1)
+
+  await page.clock.fastForward(500)
+  await page.keyboard.press("ControlOrMeta+w")
+  await expectPath(page, sessionHref(sessions.beta.id))
+  await expect(sessions.alphaTab).toHaveCount(0)
+})
+
 test("⌘⇧T brings back a side tab and opens the side panel it closed with", async ({ page }) => {
   await emptySidePanel(page)
   const panel = page.locator("#review-panel")

@@ -132,12 +132,27 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   // it, where one press too many would close the session tab; the guard swallows that press.
   const [closeGuard, setCloseGuard] = createSignal(createCloseTabGuardState())
   let settleFrame: number | undefined
+  let quietTimer: ReturnType<typeof setTimeout> | undefined
 
   const dispatchCloseGuard = (event: CloseTabGuardEvent) => {
     const next = transitionCloseTabGuard(closeGuard(), event)
 
     if (next.state !== closeGuard()) setCloseGuard(next.state)
     next.effects.forEach((effect) => {
+      if (effect.type === "quiet.schedule" || effect.type === "quiet.cancel") {
+        clearTimeout(quietTimer)
+        quietTimer = undefined
+
+        if (effect.type === "quiet.cancel") return
+        const attempt = effect.attempt
+        quietTimer = setTimeout(() => {
+          quietTimer = undefined
+          dispatchCloseGuard({ type: "quiet.elapsed", attempt })
+        }, effect.timeoutMs)
+
+        return
+      }
+
       if (settleFrame !== undefined) cancelAnimationFrame(settleFrame)
       settleFrame = undefined
 
