@@ -196,9 +196,22 @@ impl Tui {
         let view = routes::mount(self, &route);
         self.frame.main().add(&view.root());
         view.sync(self, &opencode_store::Changes::everything());
-        // A remount under an open dialog (a theme change) must not take the dialog's focus.
+        // A remount under an open dialog (a theme change, a plugin toggled in `/plugins`) must not take the dialog's
+        // focus; the new view takes it once the dialog closes, as the old one would have.
         if !self.dialogs.is_open() {
             view.focus(self);
+        } else {
+            let dialog = self.app.focused();
+            view.focus(self);
+            if let Some(widget) =
+                self.app.focused().filter(|widget| dialog.as_ref().is_none_or(|d| d.id() != widget.id()))
+            {
+                self.dialogs.refocus(&widget);
+            }
+            match dialog {
+                Some(widget) => widget.focus(),
+                None => self.app.blur(),
+            }
         }
         *self.view.borrow_mut() = Some(view);
         crate::features::title::route_changed(self);
