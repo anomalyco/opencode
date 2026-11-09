@@ -7,32 +7,3 @@ export const domain = (() => {
 export const zoneID = "430ba34c138cfb5360826c4909f99be8"
 export const awsStage = $app.stage === "production" ? "production" : "dev"
 export const deployStats = $app.stage === awsStage
-
-if ($app.stage === "production") {
-  // Retained on delete so a follow-up can untrack it without deleting the live record.
-  new cloudflare.DnsRecord(
-    "TrustCenter",
-    {
-      zoneId: zoneID,
-      name: "trust.opencode.ai",
-      type: "CNAME",
-      content: "3a69a5bb27875189.vercel-dns-016.com",
-      proxied: false,
-      ttl: 60,
-    },
-    { retainOnDelete: true },
-  )
-
-  // Retained on delete so a follow-up can untrack it without deleting the live record.
-  new cloudflare.DnsRecord(
-    "TrustCenterVerification",
-    {
-      zoneId: zoneID,
-      name: "opencode.ai",
-      type: "TXT",
-      content: "compai-domain-verification=org_6993a99c6200a2d642bb115d",
-      ttl: 60,
-    },
-    { retainOnDelete: true },
-  )
-}
