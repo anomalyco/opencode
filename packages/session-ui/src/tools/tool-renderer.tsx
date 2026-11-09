@@ -722,6 +722,7 @@ export function CurrentContextToolGroup(props: {
                 id={part.id}
                 content={part}
                 streaming={part.streaming ?? false}
+                row
                 defaultOpen={props.reasoningDefaultOpen}
                 open={props.reasoningOpen?.(part.id)}
                 onOpenChange={(open) => props.onReasoningOpenChange?.(part.id, open)}

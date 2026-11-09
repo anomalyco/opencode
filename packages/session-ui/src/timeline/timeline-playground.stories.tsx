@@ -4,6 +4,8 @@ import { CurrentSessionProviders } from "../storybook/current-session-story"
 import { replayScript, scenarios, ticks, type ScenarioName } from "../storybook/session-replay"
 import { timelinePresets } from "./detail"
 import { timelineStatus, timelineThinking } from "./status"
+import { TimelineStatusLane } from "./status-line"
+import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { SessionTimeline } from "./session-timeline"
 
 export default {
@@ -54,6 +56,8 @@ export const Playground = {
     const tick = createMemo(() => Math.min(state.tick, total()))
     // The playhead is now, so live durations read like a session happening as you watch.
     const replay = createMemo(() => replayScript(script(), tick(), Date.now() - tick() * 1_500))
+
+    const busy = () => replay().document.status.type === "busy"
 
     const status = createMemo(() => {
       const last = replay().document.messages.findLast((message) => message.type === "assistant")
@@ -176,10 +180,23 @@ export const Playground = {
                 turnDiffs={state.turnDiffs}
               />
             </CurrentSessionProviders>
-            <Show when={replay().document.status.type === "busy" && (!state.activity || status())}>
-              <div class="px-6 pt-3 text-13-medium text-v2-text-text-muted" role="status">
-                {state.activity ? statusLabels[status()!] : "Working"}
-              </div>
+            <Show
+              when={state.activity}
+              fallback={
+                <div class="flex h-9 items-center gap-2 pt-3 px-4 text-[13px] font-[530] leading-text-compact md:px-6">
+                  <Show when={busy()}>
+                    <div data-component="session-working" role="status">
+                      <TextShimmer text="Working" active />
+                    </div>
+                  </Show>
+                </div>
+              }
+            >
+              <TimelineStatusLane
+                class="px-4 md:px-6"
+                label={busy() && status() ? statusLabels[status()!] : undefined}
+                collapsed={busy() && !status()}
+              />
             </Show>
           </div>
         </div>

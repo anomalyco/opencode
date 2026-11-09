@@ -532,6 +532,7 @@ export function createSessionTimelineRowRenderer(input: {
                 message={message()}
                 content={content()}
                 contentID={ref()!.partID}
+                reasoningRow={input.activity?.()}
                 showAssistantCopyPartID={copyContentID(row().userMessageID)}
                 turnDurationMs={duration(row().userMessageID)}
                 turnTokensPerSecond={turnTokensPerSecond()}
@@ -1175,13 +1176,14 @@ export function createSessionTimelineRowRenderer(input: {
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <div data-slot="session-turn-thinking-row">
+            <div data-slot="session-turn-thinking-row" data-live-slot={input.activity?.() ? "" : undefined}>
               <Show when={content()}>
                 {(content) => (
                   <AssistantReasoningContent
                     id={current().ref.partID}
                     content={content()}
                     streaming
+                    row={input.activity?.()}
                     defaultOpen={liveThoughtOpen()}
                     open={input.disclosure.value(current().ref.partID) ?? liveThoughtOpen()}
                     onOpenChange={(open) => input.disclosure.set(current().ref.partID, open)}

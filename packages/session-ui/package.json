@@ -12,6 +12,7 @@
     "./timeline/detail": "./src/timeline/detail.ts",
     "./timeline/policy": "./src/timeline/policy.ts",
     "./timeline/status": "./src/timeline/status.ts",
+    "./timeline/status-line": "./src/timeline/status-line.tsx",
     "./timeline/row": "./src/timeline/session-timeline-row.tsx",
     "./timeline": "./src/timeline/session-timeline.tsx",
     "./basic-tool": "./src/components/basic-tool.tsx",

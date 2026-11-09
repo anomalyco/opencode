@@ -1294,7 +1294,8 @@
 
   [data-slot="context-tool-group-verb"],
   [data-slot="context-tool-group-detail"],
-  [data-slot="context-tool-group-separator"] {
+  [data-slot="context-tool-group-separator"],
+  [data-slot="context-tool-group-elapsed"] {
     flex-shrink: 0;
     font-family: var(--v2-font-family-sans);
     font-size: 13px;
@@ -1305,7 +1306,8 @@
   }
 
   [data-slot="context-tool-group-verb"],
-  [data-slot="context-tool-group-separator"] {
+  [data-slot="context-tool-group-separator"],
+  [data-slot="context-tool-group-elapsed"] {
     color: var(--v2-text-text-muted);
   }
 

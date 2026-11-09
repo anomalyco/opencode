@@ -19,6 +19,7 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { Timeline } from "@opencode/session-ui/timeline/projection"
 import { timelineThinkingOpen } from "@opencode/session-ui/timeline/policy"
 import { timelineStatus } from "@opencode/session-ui/timeline/status"
+import { TimelineStatusLane } from "@opencode/session-ui/timeline/status-line"
 import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/row"
 import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
@@ -467,6 +468,22 @@ function MessageTimelineView(
   // The lane keeps its height while empty, so Working and the hint come and go without moving the rows around it.
   // The bottom lane also keeps its height while live status moves into the Activity row, so the tail the activity pill
   // floats in never closes and a pinned timeline does not shift when input waits.
+  const hint = (live: () => boolean) => (
+    <Show when={live() && backgroundHintPresence.present()}>
+      <div
+        ref={setBackgroundHintRef}
+        data-component="session-background-hint-row"
+        class="duration-150 motion-reduce:animate-none"
+        classList={{
+          "animate-in fade-in": backgroundHintPresence.animate() && backgroundHintPresence.show(),
+          "animate-out fade-out fill-mode-forwards": backgroundHintPresence.animate() && !backgroundHintPresence.show(),
+        }}
+      >
+        <BackgroundMoveHint onMove={props.background.move} />
+      </div>
+    </Show>
+  )
+
   const activity = (live: () => boolean) => (
     <div
       classList={{
@@ -474,27 +491,28 @@ function MessageTimelineView(
         "md:max-w-session md:mx-auto": props.centered,
       }}
     >
-      <div class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${turnPadding()}`}>
-        <Show when={live() && working()}>
-          <div data-component="session-working" role="status">
-            <TextShimmer text={workingLabel()} active />
+      <Show
+        when={settings.general.activityTimeline()}
+        fallback={
+          <div class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${turnPadding()}`}>
+            <Show when={live() && working()}>
+              <div data-component="session-working" role="status">
+                <TextShimmer text={workingLabel()} active />
+              </div>
+            </Show>
+            {hint(live)}
           </div>
-        </Show>
-        <Show when={live() && backgroundHintPresence.present()}>
-          <div
-            ref={setBackgroundHintRef}
-            data-component="session-background-hint-row"
-            class="duration-150 motion-reduce:animate-none"
-            classList={{
-              "animate-in fade-in": backgroundHintPresence.animate() && backgroundHintPresence.show(),
-              "animate-out fade-out fill-mode-forwards":
-                backgroundHintPresence.animate() && !backgroundHintPresence.show(),
-            }}
-          >
-            <BackgroundMoveHint onMove={props.background.move} />
-          </div>
-        </Show>
-      </div>
+        }
+      >
+        {/* The thought the model is writing takes this lane's place, so the lane folds away under it. */}
+        <TimelineStatusLane
+          class={turnPadding()}
+          label={live() && working() ? workingLabel() : undefined}
+          collapsed={live() && liveThought() && !working() && !backgroundHintPresence.present()}
+        >
+          {hint(live)}
+        </TimelineStatusLane>
+      </Show>
     </div>
   )
 

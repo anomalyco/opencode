@@ -103,6 +103,13 @@ export const Compare = {
       return statusLabels[status]
     })
 
+    const headCollapsed = createMemo(() => {
+      if (!busy() || !state.activity) return false
+      const last = replay().document.messages.findLast((message) => message.type === "assistant")
+
+      return !headStatus() && timelineThinking(detail(), last?.type === "assistant" ? last.content : [])
+    })
+
     const frames = {
       base: undefined as HTMLIFrameElement | undefined,
       head: undefined as HTMLIFrameElement | undefined,
@@ -118,6 +125,8 @@ export const Compare = {
           turnDiffs: state.turnDiffs,
           width: state.width,
           status: side === "head" ? headStatus() : busy() ? "Working" : undefined,
+          lane: side === "head" && state.activity ? "activity" : "legacy",
+          collapsed: side === "head" && headCollapsed(),
         },
         "*",
       )

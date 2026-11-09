@@ -49,6 +49,11 @@
     margin-top: 12px;
   }
 
+  /* The live thought takes the status line's place, so its label lands where Working sits below the turn. */
+  [data-slot="session-turn-thinking-row"][data-live-slot] {
+    margin-top: 10px;
+  }
+
   [data-slot="session-turn-thinking"] {
     display: flex;
     align-items: center;
@@ -280,4 +285,28 @@
 
 [data-slot="session-turn-list"] {
   gap: 24px;
+}
+
+/* Matches the app's lane geometry: 36px with the label centred below 12px, so a live thought row lands on it. */
+[data-component="timeline-status-lane"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding-top: 12px;
+
+  &[data-collapsed] {
+    height: 0;
+    padding-top: 0;
+    overflow: hidden;
+  }
+
+  [data-slot="timeline-status-label"] {
+    font-family: var(--v2-font-family-sans);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+    color: var(--v2-text-text-muted);
+  }
 }

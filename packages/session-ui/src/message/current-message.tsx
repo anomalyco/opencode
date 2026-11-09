@@ -73,6 +73,8 @@ export function SessionAssistantContent(props: {
   toolOpen?: boolean
   onToolOpenChange?: (open: boolean) => void
   onContentRendered?: () => void
+  /** A thought renders as an activity row, as the Activity timeline shows it at the top level. */
+  reasoningRow?: boolean
 }) {
   return (
     <Switch>
@@ -96,6 +98,7 @@ export function SessionAssistantContent(props: {
             id={props.contentID}
             content={content()}
             streaming={false}
+            row={props.reasoningRow}
             defaultOpen={props.reasoningDefaultOpen}
             open={props.toolOpen}
             onOpenChange={props.onToolOpenChange}

@@ -1281,9 +1281,14 @@ export function AssistantReasoningContent(props: {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   onContentRendered?: () => void
+  /**
+   * A thought at the top level of the Activity timeline reads like an activity row: the label muted, then its heading,
+   * then how long it took.
+   */
+  row?: boolean
 }) {
   const i18n = useI18n()
-  const heading = createMemo(() => (props.streaming ? reasoningHeading(props.content.text) : ""))
+  const heading = createMemo(() => (props.streaming || props.row ? reasoningHeading(props.content.text) : ""))
 
   const duration = createMemo(() => {
     const time = props.content.time
@@ -1316,28 +1321,56 @@ export function AssistantReasoningContent(props: {
           props.onContentRendered?.()
         }}
         trigger={(open) => (
-          <div data-slot="basic-tool-tool-info-structured">
-            <div data-slot="basic-tool-tool-info-main">
-              <span data-slot="basic-tool-tool-title">
-                <TextShimmer
-                  text={i18n.t(props.streaming ? "ui.sessionTurn.status.thinking" : "ui.message.thought")}
-                  active={props.streaming}
-                />
-              </span>
-              <Show
-                when={props.streaming && !open()}
-                fallback={
-                  <Show when={!props.streaming && duration()}>
-                    {(value) => <span data-slot="basic-tool-tool-subtitle">{value()}</span>}
+          <Show
+            when={!props.row}
+            fallback={
+              <div data-component="context-tool-group-trigger">
+                <span data-slot="context-tool-group-title" data-activity="">
+                  <span data-slot="context-tool-group-verb">
+                    <TextShimmer
+                      text={i18n.t(props.streaming ? "ui.sessionTurn.status.thinking" : "ui.message.thought")}
+                      active={props.streaming}
+                    />
+                  </span>
+                  <Show when={heading()}>
+                    {(value) => (
+                      <span data-slot="context-tool-group-detail">
+                        <Show when={props.streaming} fallback={value()}>
+                          <TextReveal text={value()} />
+                        </Show>
+                      </span>
+                    )}
                   </Show>
-                }
-              >
-                <span data-slot="basic-tool-tool-subtitle">
-                  <TextReveal text={heading()} />
+                  <Show when={!props.streaming && duration()}>
+                    {(value) => <span data-slot="context-tool-group-elapsed">{value()}</span>}
+                  </Show>
                 </span>
-              </Show>
+              </div>
+            }
+          >
+            <div data-slot="basic-tool-tool-info-structured">
+              <div data-slot="basic-tool-tool-info-main">
+                <span data-slot="basic-tool-tool-title">
+                  <TextShimmer
+                    text={i18n.t(props.streaming ? "ui.sessionTurn.status.thinking" : "ui.message.thought")}
+                    active={props.streaming}
+                  />
+                </span>
+                <Show
+                  when={props.streaming && !open()}
+                  fallback={
+                    <Show when={!props.streaming && duration()}>
+                      {(value) => <span data-slot="basic-tool-tool-subtitle">{value()}</span>}
+                    </Show>
+                  }
+                >
+                  <span data-slot="basic-tool-tool-subtitle">
+                    <TextReveal text={heading()} />
+                  </span>
+                </Show>
+              </div>
             </div>
-          </div>
+          </Show>
         )}
       >
         <PacedMarkdown text={props.content.text} cacheKey={props.id} streaming={props.streaming} />

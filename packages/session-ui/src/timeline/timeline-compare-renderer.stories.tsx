@@ -1,4 +1,5 @@
-import { Show, onCleanup, onMount } from "solid-js"
+import { TextShimmer } from "@opencode/ui/text-shimmer"
+import { Show, onCleanup, onMount, type Component, type JSX } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import type { SessionDocument } from "../document"
 import { CurrentSessionProviders } from "../storybook/current-session-story"
@@ -23,7 +24,19 @@ type Render = {
   width: number
   /** What the line below a working turn says, as the build comparing it shows it. */
   status?: string
+  /** The Activity timeline's lane, which folds away while a thought takes its place, or the lane the app had before. */
+  lane: "activity" | "legacy"
+  collapsed?: boolean
 }
+
+// A build that has the Activity timeline's lane renders it as the app does; an older one draws the lane it had.
+const ActivityLane = Object.values(
+  import.meta.glob<{
+    TimelineStatusLane: Component<{ label?: string; collapsed?: boolean; class?: string; children?: JSX.Element }>
+  }>("./status-line.tsx", { eager: true }),
+)[0]?.TimelineStatusLane
+
+const padding = "px-4 md:px-6"
 
 type ScrollTo = { type: "timeline-compare:scroll-to"; anchor: string; offset: number }
 
@@ -90,12 +103,27 @@ export const Renderer = {
                   turnDiffs={render().turnDiffs}
                 />
               </CurrentSessionProviders>
-              <Show when={render().status}>
-                {(status) => (
-                  <div class="px-6 pt-3 text-13-medium text-v2-text-text-muted" role="status">
-                    {status()}
+              <Show
+                when={render().lane === "activity" && ActivityLane}
+                fallback={
+                  <div
+                    class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${padding}`}
+                  >
+                    <Show when={render().status}>
+                      {(status) => (
+                        <div data-component="session-working" role="status">
+                          <TextShimmer text={status()} active />
+                        </div>
+                      )}
+                    </Show>
                   </div>
-                )}
+                }
+              >
+                {(Lane) => {
+                  const Current = Lane()
+
+                  return <Current class={padding} label={render().status} collapsed={render().collapsed} />
+                }}
               </Show>
             </div>
           )}
