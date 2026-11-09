@@ -88,15 +88,12 @@ struct State {
     /// TS `costQueued` and `costReload`.
     queued: Option<bool>,
     /// The messages of the last finished run, for TS `setTotal`: the total is priced with the location's models once
-    /// they are loaded.
+    /// they are loaded, and the messages are dropped then, as TS drops its `messageSets`.
     priced: Option<Priced>,
-    /// The total and the run it was priced from.
-    total: Option<(u64, f64)>,
-    runs: u64,
+    total: Option<f64>,
 }
 
 struct Priced {
-    run: u64,
     location: LocationRef,
     sessions: Vec<Vec<SessionMessageInfo>>,
 }
@@ -154,7 +151,6 @@ impl State {
             queued: None,
             priced: None,
             total: None,
-            runs: 0,
         }
     }
 
@@ -280,6 +276,8 @@ impl State {
         loop {
             let Some(run) = &mut self.run else { return };
             let next = match &mut run.stage {
+                // TS `childIDs` reads a parent's pages one after another before it lists the next parent.
+                Stage::Discover { .. } if !run.waiting.is_empty() => Next::Wait,
                 Stage::Discover { ids, frontier, at, next, depth, .. } => {
                     if *at > 0 && *at == frontier.len() {
                         *frontier = std::mem::take(next);
@@ -326,8 +324,7 @@ impl State {
         if let (Some(run), Some(sessions)) = (run, sessions)
             && self.session.as_ref() == Some(&run.session)
         {
-            self.runs += 1;
-            self.priced = Some(Priced { run: self.runs, location: run.location, sessions });
+            self.priced = Some(Priced { location: run.location, sessions });
         }
         if let Some(reload) = self.queued.take() {
             self.refresh_cost(host, reload);
@@ -399,17 +396,15 @@ impl State {
     }
 
     fn render(&mut self, read: &dyn Read, changed: &Changed) -> Render {
-        let models = self.priced.as_ref().filter(|priced| self.total.is_none_or(|(run, _)| run != priced.run));
-        let pricing = models.is_some_and(|priced| changed.location(&priced.location));
+        let pricing = self.priced.as_ref().is_some_and(|priced| changed.location(&priced.location));
         if !(changed.all || changed.woken || changed.local || pricing) {
             return Render::Keep;
         }
         if let Some(priced) = &self.priced
-            && self.total.is_none_or(|(run, _)| run != priced.run)
             && let Some(models) = read.models(Some(&priced.location))
         {
-            let total = priced.sessions.iter().map(|messages| usage::session_cost(messages, &models)).sum();
-            self.total = Some((priced.run, total));
+            self.total = Some(priced.sessions.iter().map(|messages| usage::session_cost(messages, &models)).sum());
+            self.priced = None;
         }
         Render::Show(self.panel())
     }
@@ -417,7 +412,7 @@ impl State {
     /// The panel, as TS `SidebarUsage` draws it.
     fn panel(&self) -> Node {
         let config = &self.config;
-        let estimate = self.total.map_or("…".to_owned(), |(_, total)| usage::money(total));
+        let estimate = self.total.map_or("…".to_owned(), usage::money);
         if config.compact {
             let line = match &self.go {
                 Some(go) if config.show_meters => [&go.rolling, &go.weekly, &go.monthly]
@@ -567,3 +562,68 @@ impl Drop for Clock {
 }
 
 export_plugin!("opencode.sidebar.limit", setup);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use opencode_plugin_abi::{Action, Attention, Dialog, Rgba, ThemeMode, Toast};
+    use serde_json::json;
+
+    /// A host that records the fetches and has the models loaded.
+    #[derive(Default)]
+    struct Fake {
+        fetches: RefCell<Vec<Fetch>>,
+    }
+
+    impl Read for Fake {
+        fn theme_mode(&self) -> ThemeMode {
+            ThemeMode::Dark
+        }
+        fn color(&self, _token: &str) -> Option<Rgba> {
+            None
+        }
+        fn models(&self, _location: Option<&LocationRef>) -> Option<Vec<opencode_plugin_abi::types::ModelInfo>> {
+            Some(Vec::new())
+        }
+    }
+
+    impl Host for Fake {
+        fn storage_set(&self, _key: &str, _value: Value) {}
+        fn dispatch(&self, _name: &str, _input: Option<&str>) {}
+        fn toast(&self, _toast: Toast) {}
+        fn attention(&self, _attention: Attention) {}
+        fn open_route(&self, _name: &str) {}
+        fn navigate(&self, _route: opencode_plugin_abi::Route) {}
+        fn fetch(&self, fetch: Fetch) -> RequestId {
+            let mut fetches = self.fetches.borrow_mut();
+            fetches.push(fetch);
+            RequestId(fetches.len() as u64)
+        }
+        fn dialog(&self, _dialog: Dialog) {}
+        fn copy(&self, _text: &str, _then: Option<Action>) {}
+    }
+
+    // Expected: once the panel has its total, it keeps no message, as TS's `costOfSessions` returns a number and lets
+    // its `messageSets` go.
+    #[test]
+    fn a_priced_run_keeps_no_messages() {
+        let host = Fake::default();
+        let mut state = State::new(Value::Null, config::load(&Value::Null));
+        state.mount(&host, "ses_p".to_owned(), true);
+        let children = RequestId(1);
+        assert_eq!(host.fetches.borrow()[0].path, "/api/session");
+        state.reply(&host, children, Ok(json!({ "data": [], "cursor": {} })));
+        let messages = RequestId(host.fetches.borrow().len() as u64);
+        assert_eq!(host.fetches.borrow().last().unwrap().path, "/api/session/ses_p/message");
+        let message = json!({
+            "id": "msg_1", "type": "assistant", "agent": "build", "model": { "providerID": "p", "id": "m" },
+            "time": { "created": 1 }, "content": [], "cost": 0.25,
+        });
+        state.reply(&host, messages, Ok(json!({ "data": [message], "cursor": {} })));
+        assert!(state.run.is_none() && state.priced.is_some());
+
+        state.render(&host, &Changed { all: true, ..Changed::default() });
+        assert_eq!(state.total, Some(0.25));
+        assert!(state.priced.is_none() && state.run.is_none());
+    }
+}
