@@ -19,6 +19,10 @@ const matches = (text: string) =>
 const allowed: { file: string; text?: string; reason: string }[] = [
   { file: "src/lib/github-snapshot.json", reason: "release notes from GitHub, which are history" },
   {
+    file: "src/lib/legal/history.ts",
+    reason: "earlier versions of the legal documents, whose changed sentences it quotes as they were",
+  },
+  {
     file: "src/routes/zen/index.tsx",
     reason: "the old /zen page, which redirects to /console/models (src/middleware.ts); its testimonials are quotes",
   },
