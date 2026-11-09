@@ -13,7 +13,7 @@ import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
-import { Clock, DateTime, Effect, Queue, Schema, Stream } from "effect"
+import { Clock, DateTime, Duration, Effect, Queue, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { it } from "../lib/effect"
 import { host } from "./host"
@@ -47,12 +47,13 @@ const unreported = { read: 0, write: 0 }
 
 /**
  * Runs the warming plugin with the given top-level `warming` and a catalog holding the test model's `cache`. Each ping
- * reports the next cache usage in `usage`.
+ * reports the next cache usage in `usage` and takes `ping` to respond.
  */
 const run = Effect.fnUntraced(function* (
   warming: unknown,
   cache?: Provider.Cache,
   usage: ReadonlyArray<typeof hit> = [],
+  ping = Duration.zero,
 ) {
   const warms: number[] = []
   const events = yield* Queue.unbounded<SessionEvent.Execution.Succeeded>()
@@ -75,6 +76,7 @@ const run = Effect.fnUntraced(function* (
               warms.push(now / 60_000)
               return { text: "OK", tokens: { input: 0, output: 1, reasoning: 0, cache }, cost: Money.USD.zero }
             }),
+            Effect.tap(() => Effect.sleep(ping)),
           ),
         hook: (name, callback) => {
           if (name === "context") contextHook = callback as (input: SessionContext) => Effect.Effect<void>
@@ -89,9 +91,10 @@ const run = Effect.fnUntraced(function* (
   )
   if (!contextHook) return yield* Effect.die("warming plugin did not register a context hook")
   const hook = contextHook
-  /** One whole turn: the step's context hook, then the turn ending. */
-  const turn = Effect.gen(function* () {
-    yield* hook({ ...context })
+  /** A request being sent: the step's context hook. */
+  const send = hook({ ...context })
+  /** The turn ending. */
+  const end = Effect.gen(function* () {
     yield* Queue.offer(events, {
       id: Event.ID.create(),
       created: 0,
@@ -101,8 +104,10 @@ const run = Effect.fnUntraced(function* (
     })
     yield* Effect.yieldNow
   })
+  /** One whole turn whose response ends right away. */
+  const turn = send.pipe(Effect.andThen(end))
   const at = (minutes: number) => TestClock.setTime(minutes * 60_000).pipe(Effect.andThen(Effect.yieldNow))
-  return { warms, turn, at }
+  return { warms, send, end, turn, at }
 })
 
 describe("WarmingPlugin interval", () => {
@@ -179,6 +184,67 @@ describe("WarmingPlugin cache miss", () => {
       yield* warming.turn
       for (const minutes of [4, 8]) yield* warming.at(minutes)
       expect(warming.warms).toEqual([4, 8])
+    }),
+  )
+
+  it.effect("keeps warming when a request is sent while a missed ping responds", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true, { ttl: "5m" }, [miss, hit], Duration.seconds(30))
+      yield* warming.turn
+      yield* warming.at(4.5)
+      yield* warming.at(4.75)
+      yield* warming.turn
+      for (const minutes of [5, 9.25]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4.5, 9.25])
+    }),
+  )
+})
+
+describe("WarmingPlugin timing", () => {
+  it.effect("counts the interval from when the request was sent, not when its response ended", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true, { ttl: "5m" })
+      yield* warming.send
+      yield* warming.at(1)
+      yield* warming.end
+      for (const minutes of [4.5, 5.5]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4.5])
+    }),
+  )
+
+  it.effect("counts the next interval from when a ping was sent", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true, { ttl: "5m" }, [], Duration.seconds(30))
+      yield* warming.turn
+      for (const minutes of [4.5, 9, 9.5]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4.5, 9])
+    }),
+  )
+
+  it.effect("waits for a request running at the due time, then pings while the cache lasts", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true, { ttl: "5m" })
+      yield* warming.send
+      yield* warming.at(4.5)
+      expect(warming.warms).toEqual([])
+      yield* warming.at(4.75)
+      yield* warming.end
+      for (const minutes of [9, 9.25]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4.75, 9.25])
+    }),
+  )
+
+  it.effect("stops warming when a request outlasts the cache, until the next request", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true, { ttl: "5m" })
+      yield* warming.send
+      yield* warming.at(6)
+      yield* warming.end
+      yield* warming.at(15)
+      expect(warming.warms).toEqual([])
+      yield* warming.turn
+      yield* warming.at(19.5)
+      expect(warming.warms).toEqual([19.5])
     }),
   )
 })
