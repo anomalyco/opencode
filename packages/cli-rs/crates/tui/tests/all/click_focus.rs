@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_api::pty::{self, Incoming, Remote};
+use opencode_plugin::abi;
 use opencode_tui::{Args, Deps};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::AppOptions;
@@ -272,22 +273,45 @@ fn a_click_on_a_panel_focuses_its_host() {
     assert_eq!(h.prompt_text(), "", "keys after a panel click reached the prompt");
 }
 
-// Expected: focus moving into the right pane and back dims the footer's hints and brightens them again (TS
-// `useInteractivity`), which the footer reads; the footer is not mounted again, so its goal is not read again.
+thread_local! {
+    /// The `on_mount(true)` and `on_mount(false)` calls of [`probe`]'s claim.
+    static MOUNTS: std::cell::Cell<(usize, usize)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+/// A plugin whose `prompt.footer` claim counts its mounts and unmounts and always shows the same node.
+fn probe(setup: &mut abi::Setup) -> Result<(), String> {
+    let at = || abi::Placement::append("prompt.footer");
+    setup.slot(at(), |_, _, _| abi::Render::Show(abi::Node::text([abi::Span::new("probe claim")])));
+    setup.on_mount(at(), |_, _, mounted| {
+        MOUNTS.with(|mounts| {
+            let (up, down) = mounts.get();
+            mounts.set(if mounted { (up + 1, down) } else { (up, down + 1) });
+        });
+    });
+    Ok(())
+}
+
+// Expected: focus moving between the session pane and the right pane, back and forth, dims the footer's hints and
+// brightens them again (TS `useInteractivity`, which claims read as `Read::interactive`), and mounts no
+// `prompt.footer` claim again: a probe claim's `on_mount` runs neither way and its widget stays the same, and the
+// goal is not read again.
 #[test]
-fn a_pane_focus_switch_dims_the_footer_hints_without_reading_the_goal_again() {
+fn a_pane_focus_switch_dims_the_footer_hints_without_remounting_the_footer() {
     let h = mount();
+    opencode_tui::plugins::host::add(&h.tui, abi::Plugin { id: "probe", setup: probe }.into());
+    h.wait_for("probe claim");
     h.wait_for("ctrl+p commands");
     let reads = || h.memory.requests().iter().filter(|logged| logged.path == "/api/rpc/opencode.goal/get").count();
     h.wait("the goal read", || reads() >= 1);
-    // The event stream's `server.connected` may read it again.
-    h.app.wait_until(Duration::from_millis(200), || false);
-    let before = reads();
     // The `c` of `ctrl+p commands`, wherever the panel puts it.
     let fg = || {
         h.app.advance(Duration::from_millis(1));
         let (x, y) = h.find("ctrl+p commands", 0);
         h.app.render().cell(u32::from(x), u32::from(y)).unwrap().fg
+    };
+    let claim = || {
+        let (x, y) = h.find("probe claim", 0);
+        h.tui.app.widget_at(x, y).map(|widget| widget.id())
     };
     let active = fg();
     h.tui.keymap.dispatch("diff.open", None);
@@ -295,11 +319,21 @@ fn a_pane_focus_switch_dims_the_footer_hints_without_reading_the_goal_again() {
     assert!(!h.prompt_focused());
     let dimmed = fg();
     assert_ne!(dimmed, active, "the hints did not dim");
-    h.tui.keymap.dispatch("pane.focus.left", None);
-    assert!(h.prompt_focused());
-    h.wait("the hints to brighten", || fg() == active);
-    h.tui.keymap.dispatch("pane.focus.right", None);
-    h.wait("the hints to dim again", || fg() == dimmed);
+    // The event stream's `server.connected` may read the goal again, and the panel's layout may settle.
+    h.app.wait_until(Duration::from_millis(200), || false);
+    let (before, mounts, widget) = (reads(), MOUNTS.with(|mounts| mounts.get()), claim());
+    assert!(widget.is_some() && mounts.0 > mounts.1, "{mounts:?}");
+    for _ in 0..3 {
+        h.tui.keymap.dispatch("pane.focus.left", None);
+        assert!(h.prompt_focused());
+        h.wait("the hints to brighten", || fg() == active);
+        assert_eq!(claim(), widget, "the claim was drawn again");
+        h.tui.keymap.dispatch("pane.focus.right", None);
+        assert!(!h.prompt_focused());
+        h.wait("the hints to dim again", || fg() == dimmed);
+        assert_eq!(claim(), widget, "the claim was drawn again");
+    }
     h.app.wait_until(Duration::from_millis(100), || false);
+    assert_eq!(MOUNTS.with(|mounts| mounts.get()), mounts, "a focus switch mounted the footer's claims again");
     assert_eq!(reads(), before, "a focus switch read the goal again");
 }
