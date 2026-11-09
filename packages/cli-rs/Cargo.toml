@@ -31,7 +31,7 @@ opencode-util = { path = "crates/util" }
 
 # OpenTUI's Rust crates (`packages/rust` of anomalyco/opentui), pinned by commit. The checkout has no native library;
 # see README.md.
-opentui = { git = "https://github.com/anomalyco/opentui", rev = "ee25e46b1d1615950275688147464fe70a924069", features = ["static", "tokio", "tree-sitter"] }
+opentui = { git = "https://github.com/anomalyco/opentui", rev = "3a62498a860ea3b0df9ea93236da6734e1ba03e2", features = ["static", "tokio", "tree-sitter"] }
 
 # Expected third-party crates, declared once so steps rarely edit manifests. A crate takes one with
 # `name.workspace = true` and adds features with `features = [...]`.
