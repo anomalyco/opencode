@@ -274,6 +274,38 @@ test("tabs in a narrow side strip shrink to keep their close buttons, and a tab'
   await expect(side.getByRole("tab", { name: "a.md", exact: true })).toHaveCount(0)
 })
 
+test("a reopened side tab returns to where it closed", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/ReopenPlace"
+  const key = `local\u0000${base64Encode(directory)}/ses_reopenplace`
+  const files = ["a.md", "b.md", "c.md"]
+
+  await openSession(page, {
+    name: "ReopenPlace",
+    fileList: () => [],
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { ses_reopenplace: { review: true } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: { [key]: { all: files.map((file) => `file://${file}`), active: "file://b.md" } },
+        },
+      },
+    },
+  })
+
+  const side = page.locator('[data-pane-content="side"]')
+  await expect(side.getByRole("tab", { name: "b.md", exact: true })).toHaveAttribute("aria-selected", "true")
+
+  await page.getByRole("textbox", { name: "Prompt", exact: true }).click()
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(side.getByRole("tab")).toHaveText(["a.md", "c.md"])
+
+  await page.keyboard.press("ControlOrMeta+Shift+t")
+  await expect(side.getByRole("tab")).toHaveText(["a.md", "b.md", "c.md"])
+  await expect(side.getByRole("tab", { name: "b.md", exact: true })).toHaveAttribute("aria-selected", "true")
+})
+
 async function expectTreeSentinel(page: Page) {
   const tree = page.locator('#review-panel [data-component="file-tree-v2"]')
   await expect(tree.getByRole("treeitem", { name: "action.yml" })).toBeVisible()

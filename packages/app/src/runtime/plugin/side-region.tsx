@@ -209,10 +209,7 @@ export function PaneTabs(props: {
     get entries() {
       return props.region.recent()
     },
-    onReopen: (key: string) => {
-      target(key)
-      props.region.reopen(key)
-    },
+    onReopen: (key: string) => props.region.reopen(key, props.pane.id),
   }
 
   const modifier = closedTabsModifier()
