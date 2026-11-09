@@ -339,7 +339,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       return yield* initialize(transport)
     }
     const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
-    const fetch = yield* McpOAuth.loggedFetch({ server, directory: options.directory })
+    const fetch = yield* McpOAuth.loggedFetch({ server, directory: options.directory }, options.authProvider)
     // Servers that bundle their own Code Mode (Cloudflare and others) expose raw tools when asked
     // with ?codemode=false, which is what our Code Mode wants. The configured URL stays the OAuth identity.
     const url = new URL(config.url)
