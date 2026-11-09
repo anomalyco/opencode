@@ -68,8 +68,8 @@ pub const ABI_MAJOR: u32 = 1;
 /// requests of routes, replies, dialogs, navigation and the clipboard ([`Request::RenderRoute`], [`Request::Reply`],
 /// [`HostRequest::Fetch`], [`HostRequest::Navigate`], [`HostRequest::Dialog`], [`HostRequest::Copy`]), and of mounts and
 /// the prompt ([`Request::Mount`], [`HostRequest::Interactive`], [`HostRequest::Shortcut`],
-/// [`HostRequest::DialogOpen`]), [`Dialog::Select`], [`Request::Wake`], [`Request::RouteMount`] and
-/// [`HostRequest::StorageMerge`].
+/// [`HostRequest::DialogOpen`]), [`Dialog::Select`], [`Request::Wake`], [`Request::RouteMount`],
+/// [`HostRequest::StorageMerge`] and [`Request::FenceGone`].
 pub const ABI_MINOR: u32 = 4;
 
 /// The symbol every plugin exports, of type [`EntryFn`].
@@ -289,6 +289,9 @@ pub struct Manifest {
     /// The routes with [`Setup::on_route_mount`] handlers, which [`Request::RouteMount`] runs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub route_mounts: Vec<String>,
+    /// The plugin has [`Setup::on_fence_gone`] handlers, which [`Request::FenceGone`] runs.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub fence_gone: bool,
 }
 
 /// What [`Manifest::render`] is for the render requests of ABI 1.4.
@@ -498,7 +501,8 @@ pub struct Fence {
     /// The closing fence has arrived.
     pub closed: bool,
     /// The host's name for this block. It stays the same while the block changes, across renders that return
-    /// [`Fenced::Lines`] or [`Fenced::Keep`], so a plugin can keep its own state for the block by key.
+    /// [`Fenced::Lines`] or [`Fenced::Keep`], so a plugin can keep its own state for the block by key, and drop it in
+    /// [`Setup::on_fence_gone`].
     pub key: u64,
     /// The terminal's width in columns, for a plugin that lays out to fit it.
     #[serde(default)]
@@ -1081,6 +1085,11 @@ pub enum Request {
     RouteMount {
         name: String,
         mounted: bool,
+    },
+    /// 1.4: runs the [`Setup::on_fence_gone`] handlers with a [`Fence::key`] the host no longer shows. The host sends
+    /// it only when [`Manifest::fence_gone`] is set.
+    FenceGone {
+        key: u64,
     },
 }
 
@@ -1886,6 +1895,8 @@ pub type MountFn = Rc<dyn Fn(&dyn Host, &SlotInput, bool)>;
 pub type RouteMountFn = Rc<dyn Fn(&dyn Host, bool)>;
 /// A registered wake handler of [`Setup::on_wake`].
 pub type WakeFn = Rc<dyn Fn(&dyn Host)>;
+/// A handler of [`Setup::on_fence_gone`].
+pub type FenceGoneFn = Rc<dyn Fn(u64)>;
 /// A registered dispose callback.
 pub type DisposeFn = Box<dyn FnOnce(&dyn Host)>;
 
@@ -2061,6 +2072,13 @@ impl Setup<'_> {
         self.registered.wakes.push(Rc::new(run));
     }
 
+    /// Calls `run` with the [`Fence::key`] of each block the host no longer shows, once nothing replaced it: the plugin
+    /// drops the state it kept for that block. It runs on the UI thread, after the event that freed the block.
+    pub fn on_fence_gone(&mut self, run: impl Fn(u64) + 'static) {
+        self.registered.manifest.fence_gone = true;
+        self.registered.fence_gone.push(Rc::new(run));
+    }
+
     /// Calls `run` with each reply to the plugin's [`Host::fetch`]es, on the UI thread, with the request's ID. A reply
     /// that arrives after the plugin was disposed is dropped.
     pub fn on_reply(&mut self, run: impl Fn(&dyn Host, RequestId, Result<serde_json::Value, String>) + 'static) {
@@ -2087,6 +2105,7 @@ pub struct Registered {
     mounts: Vec<(usize, MountFn)>,
     route_mounts: Vec<(String, RouteMountFn)>,
     wakes: Vec<WakeFn>,
+    fence_gone: Vec<FenceGoneFn>,
     disposers: Vec<DisposeFn>,
 }
 
@@ -2169,6 +2188,11 @@ impl Registered {
         &self.wakes
     }
 
+    /// The handlers of [`Setup::on_fence_gone`].
+    pub fn fence_gone(&self) -> &[FenceGoneFn] {
+        &self.fence_gone
+    }
+
     /// The reply handlers.
     pub fn replies(&self) -> &[ReplyFn] {
         &self.replies
@@ -2196,6 +2220,7 @@ impl Registered {
             mounts: Vec::new(),
             route_mounts: Vec::new(),
             wakes: Vec::new(),
+            fence_gone: Vec::new(),
             disposers: Vec::new(),
         }
     }
@@ -2253,6 +2278,10 @@ impl Registered {
             Request::RouteMount { name, mounted } => {
                 let runs = self.route_mounts.iter().filter(|(route, _)| *route == name);
                 runs.for_each(|(_, run)| run(&self.host, mounted));
+                Ok(serde_json::Value::Null)
+            }
+            Request::FenceGone { key } => {
+                self.fence_gone.iter().for_each(|run| run(key));
                 Ok(serde_json::Value::Null)
             }
         }

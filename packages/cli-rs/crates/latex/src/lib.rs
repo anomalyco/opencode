@@ -24,12 +24,20 @@ pub fn plugin() -> Plugin {
 
 /// One renderer for both fence languages, as TS registers.
 fn setup(setup: &mut Setup) -> Result<(), String> {
-    let render = Rc::new(renderer());
+    register(setup, Rc::default());
+    Ok(())
+}
+
+fn register(setup: &mut Setup, shown: Shown) {
+    let forget = shown.clone();
+    setup.on_fence_gone(move |key| {
+        forget.borrow_mut().remove(&key);
+    });
+    let render = Rc::new(renderer(shown));
     for language in ["latex", "math"] {
         let render = render.clone();
         setup.code_block(language, move |_, fence| render(fence));
     }
-    Ok(())
 }
 
 /// Lays out `source` as display math (TS `renderLatex` in strict mode).
@@ -41,12 +49,13 @@ pub fn render_with(source: &str, options: &Options) -> Result<Layout, ParseError
     Ok(layout::layout(&parse::parse(source)?, options))
 }
 
+/// The source of each formula shown while streaming, by fence key, so its block can keep it.
+type Shown = Rc<RefCell<HashMap<u64, String>>>;
+
 /// The Markdown code-block renderer (TS `createLatexCodeBlockRenderer`): the formula in a horizontally scrolling
 /// row, or the code view when it does not parse. While the document streams and the fence is open, a block whose
 /// text extends the last formula that rendered keeps showing that formula.
-fn renderer() -> impl Fn(&Fence) -> Fenced {
-    // The source of each formula shown while streaming, by fence key, so its block can keep it.
-    let shown: RefCell<HashMap<u64, String>> = RefCell::default();
+fn renderer(shown: Shown) -> impl Fn(&Fence) -> Fenced {
     move |fence| {
         let streaming = fence.streaming && !fence.closed;
         let layout = render(&fence.code).ok();

@@ -264,8 +264,20 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             let (wakes, scope) = (api.wakes().to_vec(), scope.clone());
             activation.on_wake(Rc::new(move || scope.run(|host| wakes.iter().for_each(|run| run(host)))));
         }
+        // A fence key that goes reaches the plugin's handlers once the event that freed its block is done.
+        let gone = (!api.fence_gone().is_empty()).then(|| {
+            let (runs, scope) = (api.fence_gone().to_vec(), scope.clone());
+            Rc::new(move |key| {
+                let (runs, activation) = (runs.clone(), scope.activation.clone());
+                defer(&scope.host, move |_| {
+                    if !activation.disposed() {
+                        runs.iter().for_each(|run| run(key));
+                    }
+                });
+            }) as node::Gone
+        });
         for (language, render) in api.fences() {
-            let (render, scope, fences) = (render.clone(), scope.clone(), node::Fences::default());
+            let (render, scope, fences) = (render.clone(), scope.clone(), node::Fences::new(gone.clone()));
             let render: CodeBlockRender = Rc::new(move |block, theme| {
                 let host = scope.host.upgrade()?;
                 fences.render(block, theme, |fence| {

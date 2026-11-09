@@ -1,9 +1,21 @@
 //! The sample's code fences, on the one API (ABI 1.4). The loader's tests also compile this file into the host and
 //! run it in process, so the same fence is proven on both paths. `super::VERSION` is the build's version text.
 
+use std::cell::Cell;
+use std::rc::Rc;
+
 use opencode_plugin_abi::{Color, Fenced, Rgba, Setup, Span, ThemeMode};
 
 pub fn setup(setup: &mut Setup) -> Result<(), String> {
+    // How many fence keys the host said it no longer shows, which `sample-gone` draws.
+    let gone = Rc::new(Cell::new(0u64));
+    let counted = gone.clone();
+    setup.on_fence_gone(move |_| counted.set(counted.get() + 1));
+    setup.code_block("sample-gone", move |_, _| Fenced::Lines {
+        lines: vec![vec![Span::new(format!("sample gone {}", gone.get()))]],
+        fg: None,
+        drag: false,
+    });
     setup.code_block("sample", |_, fence| {
         if fence.code.trim().is_empty() {
             return Fenced::Code;

@@ -211,3 +211,38 @@ fn wide_formulas_scroll_sideways() {
     let frame = app.render().text();
     assert!(frame.contains("Finish") && !frame.contains("Start"), "{frame}");
 }
+
+// Expected (bigboi notes): the formula a streaming fence keeps goes once the host frees its block, so N streaming
+// fences drawn and removed leave nothing.
+#[test]
+fn removed_streaming_fences_leave_nothing_kept() {
+    let (app, theme) = app(40, 10);
+    let shown: crate::Shown = Rc::default();
+    let mut registered = opencode_plugin_abi::Registered::new("opencode.latex", None);
+    crate::register(&mut registered.setup(), shown.clone());
+    let registered = Rc::new(registered);
+    let gone: opencode_plugin::node::Gone = {
+        let registered = registered.clone();
+        Rc::new(move |key| registered.fence_gone().iter().for_each(|run| run(key)))
+    };
+    let mut renderers = CodeBlockRenderers::default();
+    for (language, render) in registered.fences() {
+        let (render, theme, fences) = (render.clone(), theme.clone(), Fences::new(Some(gone.clone())));
+        renderers.register(
+            language.clone(),
+            Rc::new(move |block| fences.render(block, &theme, |fence| render(&Dark, &fence))),
+        );
+    }
+    let syntax = opencode_ui::code::syntax_theme(&theme);
+    for _ in 0..5 {
+        let view = opencode_ui::markdown::view(&app, &theme, &syntax, &renderers, true, true);
+        app.root().add(&view);
+        view.append("```latex\nx^2");
+        app.render();
+        assert_eq!(shown.borrow().len(), 1);
+        app.root().clear();
+        drop(view);
+        app.render();
+    }
+    assert!(shown.borrow().is_empty(), "{:?}", shown.borrow());
+}

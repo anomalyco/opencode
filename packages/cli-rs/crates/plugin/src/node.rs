@@ -336,30 +336,40 @@ fn styled(theme: &Theme, span: &abi::Span, fg: Option<Color>) -> Span<'static> {
     Span::styled(span.text.clone(), Style { attributes, ..style })
 }
 
+/// What hears of each fence key that goes: the plugin's [`abi::Setup::on_fence_gone`] handlers.
+pub type Gone = Rc<dyn Fn(u64)>;
+
 /// One fence registration's keys, by the ID of the widget that shows the block. A key moves to the widget that
-/// replaces its block's widget, so it stays the same while the block streams, and goes when that widget is freed.
+/// replaces its block's widget, so it stays the same while the block streams, and goes when that widget is freed or
+/// the block falls back to the code view.
 #[derive(Default)]
 pub struct Fences {
     keys: Rc<RefCell<HashMap<u32, u64>>>,
+    gone: Option<Gone>,
 }
 
 /// Removes a widget's key once the widget, whose handler holds it, is freed.
 struct Forget {
     keys: Weak<RefCell<HashMap<u32, u64>>>,
     id: u32,
+    gone: Option<Gone>,
 }
 
 impl Drop for Forget {
     fn drop(&mut self) {
-        if let Some(keys) = self.keys.upgrade()
-            && let Ok(mut keys) = keys.try_borrow_mut()
-        {
-            keys.remove(&self.id);
+        let key = self.keys.upgrade().and_then(|keys| keys.try_borrow_mut().ok()?.remove(&self.id));
+        if let (Some(key), Some(gone)) = (key, &self.gone) {
+            gone(key);
         }
     }
 }
 
 impl Fences {
+    /// The keys of a registration whose plugin hears of each key that goes through `gone`.
+    pub fn new(gone: Option<Gone>) -> Self {
+        Self { keys: Rc::default(), gone }
+    }
+
     /// Renders `block` through `render`, which gets the block with its key.
     pub fn render(
         &self,
@@ -383,18 +393,24 @@ impl Fences {
             width: block.app.size().0,
         };
         let widget = match render(fence) {
-            Fenced::Code => return None,
-            Fenced::Keep => block.previous?.clone(),
+            Fenced::Code => None,
+            Fenced::Keep => block.previous.cloned(),
             Fenced::Lines { lines, fg, drag } => {
                 let scroll = if drag { Scroll::Drag } else { Scroll::Wheel };
                 let widget = lines_widget(block.app, theme, &lines, fg.as_ref(), scroll);
                 // A focus handler, which never runs on these rows, is what drops with the widget.
-                let forget = Forget { keys: Rc::downgrade(&self.keys), id: widget.id() };
+                let forget = Forget { keys: Rc::downgrade(&self.keys), id: widget.id(), gone: self.gone.clone() };
                 widget.on_focus(move |_, _| {
                     let _ = &forget;
                 });
-                widget
+                Some(widget)
             }
+        };
+        let Some(widget) = widget else {
+            if let Some(gone) = &self.gone {
+                gone(key);
+            }
+            return None;
         };
         self.keys.borrow_mut().insert(widget.id(), key);
         Some(widget)
@@ -560,36 +576,55 @@ mod tests {
     use opentui::testing::TestApp;
 
     // Expected: a fence's key moves to the widget that replaces its block's widget, and goes once that widget is
-    // freed, as when its Markdown is destroyed.
+    // freed, as when its Markdown is destroyed, or once the block falls back to the code view; the plugin hears of
+    // each key that goes, once.
     #[test]
     fn a_fence_key_goes_with_its_widget() {
         let app = TestApp::new(40, 10);
         let theme = Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme;
-        let fences = Fences::default();
-        let block = |previous| CodeBlock {
-            app: &app,
-            language: "x",
-            info: "x",
-            code: "a",
-            closed: true,
-            conceal: true,
-            streaming: false,
-            previous,
-        };
+        let gone = Rc::new(RefCell::new(Vec::new()));
+        let fences = Fences::new(Some({
+            let gone = gone.clone();
+            Rc::new(move |key| gone.borrow_mut().push(key))
+        }));
+        fn block<'a>(app: &'a App, previous: Option<&'a AnyWidget>) -> CodeBlock<'a> {
+            CodeBlock {
+                app,
+                language: "x",
+                info: "x",
+                code: "a",
+                closed: true,
+                conceal: true,
+                streaming: false,
+                previous,
+            }
+        }
         let lines = || Fenced::Lines { lines: vec![vec![abi::Span::new("a")]], fg: None, drag: false };
         let key = Cell::new(0);
-        let first = fences.render(&block(None), &theme, |fence| {
+        let first = fences.render(&block(&app, None), &theme, |fence| {
             key.set(fence.key);
             lines()
         });
         let first = first.unwrap();
-        let second = fences.render(&block(Some(&first)), &theme, |fence| {
+        let second = fences.render(&block(&app, Some(&first)), &theme, |fence| {
             assert_eq!(fence.key, key.get());
             lines()
         });
         drop(first);
         assert_eq!(fences.keys.borrow().len(), 1);
+        assert!(gone.borrow().is_empty());
         drop(second);
         assert!(fences.keys.borrow().is_empty(), "a freed widget keeps its fence key");
+        assert_eq!(*gone.borrow(), [key.get()]);
+        let shown = fences.render(&block(&app, None), &theme, |_| lines()).unwrap();
+        let code = fences.render(&block(&app, Some(&shown)), &theme, |fence| {
+            key.set(fence.key);
+            Fenced::Code
+        });
+        assert!(code.is_none());
+        assert_eq!(*gone.borrow().last().unwrap(), key.get(), "the code view kept the key");
+        assert_eq!(gone.borrow().len(), 2);
+        drop(shown);
+        assert_eq!(gone.borrow().len(), 2);
     }
 }

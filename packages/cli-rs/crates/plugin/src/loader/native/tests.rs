@@ -485,6 +485,24 @@ fn the_sample_fence_draws_the_same_in_process_and_through_the_library() {
     assert_eq!(host.app.render(), cells);
 }
 
+// Expected (bigboi notes): a plugin hears, in process and through the library, of each fence key the host no longer
+// shows, once the Markdown that drew its blocks is gone.
+#[test]
+fn a_plugin_hears_of_the_fences_that_go_on_both_paths() {
+    let host = host();
+    let plugin = abi::Plugin { id: "sample", setup: sample_fence::setup };
+    let in_process = Registry::define(vec![plugin.into()], []);
+    in_process.activate(&dynamic(&host));
+    let library = active(&host, &build(""));
+    for registry in [&in_process, &library] {
+        markdown(&host, registry, "```sample\na\n```\n\n```sample\nb\n```\n\n```sample\nc\n```\n");
+        host.app().root().clear();
+        host.app.advance(Duration::from_millis(1));
+        let screen = markdown(&host, registry, "```sample-gone\nx\n```\n");
+        assert!(screen.contains("sample gone 3"), "{screen}");
+    }
+}
+
 /// Streams `chunks` into one Markdown view with the registry's renderers, returning the frame after each.
 fn stream(host: &Rc<TestHost>, registry: &Registry, chunks: &[&str]) -> Vec<Capture> {
     let theme = host.theme();
