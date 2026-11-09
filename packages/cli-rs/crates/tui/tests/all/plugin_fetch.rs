@@ -61,8 +61,16 @@ impl Transport for Server {
         self.log.lock().unwrap().push((seen.clone(), url));
         let gate = self.gate.clone();
         Box::pin(async move {
+            if let Some(probe) = seen.path.strip_prefix("/probe/") {
+                return Ok(probe_response(probe));
+            }
             let (status, body) = match (seen.method.as_str(), seen.path.as_str()) {
                 ("GET", "/api/experimental/session/stats") => (200, stats()),
+                ("POST", path)
+                    if path.ends_with("/generate") && seen.body["prompt"].as_str().unwrap().ends_with("fail") =>
+                {
+                    (404, json!({ "_tag": "SessionNotFoundError", "message": "Session not found: ses_a" }))
+                }
                 ("POST", path) if path.ends_with("/generate") => {
                     gate.acquire().await.map_err(|error| error.to_string())?.forget();
                     let question = seen.body["prompt"].as_str().unwrap_or_default().lines().last().unwrap_or_default();
@@ -77,6 +85,21 @@ impl Transport for Server {
                 body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(bytes))])),
             })
         })
+    }
+}
+
+/// `/probe/<status>/<body>`: the status with a text, a JSON or an empty body.
+fn probe_response(probe: &str) -> Response {
+    let (status, kind) = probe.split_once('/').unwrap();
+    let (content_type, body) = match kind {
+        "text" => ("text/plain", "no such thing".to_owned()),
+        "json" => ("application/json", json!({ "_tag": "NotFound", "message": "gone" }).to_string()),
+        _ => ("text/plain", String::new()),
+    };
+    Response {
+        status: status.parse().unwrap(),
+        headers: vec![("content-type".into(), content_type.into())],
+        body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(body))])),
     }
 }
 
@@ -307,4 +330,78 @@ fn the_stats_route_fetches_as_it_mounts_however_it_opens() {
     opencode_plugin::Host::navigate(&*h.tui, "other.plugin", &stats);
     h.wait_for("best streak");
     assert_eq!(server.sent("/session/stats").len(), 2, "a revisit asks afresh");
+}
+
+thread_local! {
+    /// The replies the probe plugin got, in order.
+    static PROBED: std::cell::RefCell<Vec<Result<Value, String>>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// A plugin whose `probe.fetch` fetches the path it is given and keeps the reply in [`PROBED`].
+fn probe_setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let command = abi::Command { name: "probe.fetch".to_owned(), ..abi::Command::default() };
+    setup.command(command, |host, path| {
+        let path = path.unwrap_or_default().to_owned();
+        host.fetch(abi::Fetch { method: "GET".to_owned(), path, ..abi::Fetch::default() });
+    });
+    setup.on_reply(|_, _, reply| PROBED.with_borrow_mut(|probed| probed.push(reply)));
+    Ok(())
+}
+
+#[allow(unsafe_code)]
+unsafe extern "C" fn probe_create(
+    host: *const abi::HostApi,
+    options: abi::Bytes,
+    instance: *mut *mut c_void,
+    out: *mut abi::Owned,
+) -> i32 {
+    // SAFETY: the loader passes what `PluginApi::create` documents.
+    unsafe { abi::runtime::create("loopback.probe", probe_setup, host, options, instance, out) }
+}
+
+// Expected (plugin-live R2-2): a fetch that gets 404 or 500 replies with the status and the body's text, or a
+// declared error's message as TS's `errorMessage` shows it, never `UnsupportedContentType`; the same in process and
+// through the C ABI's byte shims.
+#[test]
+fn an_error_status_reaches_the_plugin_with_its_status_and_body() {
+    let want: Vec<Result<Value, String>> = [
+        "UnexpectedStatus: 404: no such thing",
+        "gone",
+        "UnexpectedStatus: 404",
+        "UnexpectedStatus: 500: no such thing",
+        "gone",
+        "UnexpectedStatus: 500",
+    ]
+    .into_iter()
+    .map(|error| Err(error.to_owned()))
+    .collect();
+    for loopback in [false, true] {
+        PROBED.with_borrow_mut(Vec::clear);
+        let server = Server::new(true);
+        let h = mount(&server, &[]);
+        let definition = match loopback {
+            false => abi::Plugin { id: "probe", setup: probe_setup }.into(),
+            true => {
+                let host = opencode_tui::plugins::host::host(&h.tui);
+                opencode_plugin::loader::native::loopback(&host, probe_create).unwrap().0
+            }
+        };
+        opencode_tui::plugins::host::add(&h.tui, definition);
+        for path in ["404/text", "404/json", "404/empty", "500/text", "500/json", "500/empty"] {
+            let count = PROBED.with_borrow(Vec::len);
+            h.tui.keymap.dispatch("probe.fetch", Some(&format!("/probe/{path}")));
+            h.wait(path, || PROBED.with_borrow(Vec::len) > count);
+        }
+        assert_eq!(PROBED.with_borrow(Clone::clone), want, "loopback: {loopback}");
+    }
+}
+
+// Expected: `/btw` toasts a declared error's message alone, as TS's `toast.error` shows it.
+#[test]
+fn a_failed_btw_toasts_the_declared_message() {
+    let server = Server::new(true);
+    let h = mount(&server, &[]);
+    h.tui.keymap.dispatch("session.aside", Some("fail"));
+    h.wait_for("Session not found: ses_a");
+    assert!(!h.app.text().contains("SessionNotFoundError"), "{}", h.app.text());
 }
