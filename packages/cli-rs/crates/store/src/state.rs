@@ -27,8 +27,9 @@ use crate::inbox::PendingUpdate;
 use crate::location::{Location, LocationData};
 use crate::messages::Transcript;
 
-/// How many [`Data::signals`] events a slow receiver may fall behind.
-const SIGNALS: usize = 64;
+/// How many [`Data::signals`] events a slow receiver may fall behind. They are every event but the deltas, so one
+/// batch may hold hundreds (a burst of `filesystem.changed`).
+const SIGNALS: usize = 1024;
 
 /// A store error. Shared, because one keyed read answers every caller.
 pub type Error = Arc<opencode_api::error::Error>;
@@ -332,8 +333,9 @@ impl Data {
         self.inner.revision.subscribe()
     }
 
-    /// Receives the events a view handles itself (`tui.*`, `session.deleted`, `session.moved`),
-    /// after the store applied their batch. A receiver that falls behind skips the oldest.
+    /// Receives every event but the streaming deltas, for the views that handle one themselves (`tui.*`,
+    /// `session.deleted`) and the plugins' `on_event`, after the store applied their batch. A receiver that falls
+    /// behind skips the oldest.
     pub fn signals(&self) -> broadcast::Receiver<opencode_api::generated::V2Event> {
         self.inner.signals.subscribe()
     }
