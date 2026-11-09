@@ -76,6 +76,71 @@ export const DelegateFocusedTasks = {
   ),
 }
 
+const startedAndFinishedDocument = {
+  sessionID: CURRENT_SESSION_ID,
+  messages: [
+    { id: "msg_started_user", type: "user", text: "Delegate the review and the tests.", time: { created: STORY_TIME } },
+    {
+      id: "msg_started_assistant",
+      type: "assistant",
+      agent: "build",
+      model: STORY_MODEL,
+      content: [
+        storyTool(
+          "tool_started_review",
+          "subagent",
+          "completed",
+          { agent: "review", description: "Review current Session fixtures", prompt: "Review the fixtures." },
+          { output: "The fixtures are accurate.", metadata: { sessionID: "session_child_review" } },
+        ),
+        storyTool(
+          "tool_started_tests",
+          "subagent",
+          "running",
+          { agent: "test", description: "Run the focused timeline tests", prompt: "Run the timeline tests." },
+          { metadata: { sessionID: "session_child_tests" } },
+        ),
+        storyTool(
+          "tool_started_long",
+          "subagent",
+          "completed",
+          {
+            agent: "explore",
+            description:
+              "Trace every place the timeline projection groups tool rows, including grouped subagents, hidden notices, and steered runs",
+            prompt: "Trace the grouping rules.",
+          },
+          { output: "Done.", metadata: { sessionID: "session_child_explore" } },
+        ),
+      ],
+      time: { created: STORY_TIME + 1, completed: STORY_TIME + 2 },
+    },
+    {
+      id: "msg_started_review_finished",
+      type: "synthetic",
+      text: "done",
+      description: "Review current Session fixtures",
+      metadata: { source: "subagent", agent: "review", state: "completed", childID: "session_child_review" },
+      time: { created: STORY_TIME + 3 },
+    },
+  ],
+  status: { type: "busy" },
+  diffs: [],
+} satisfies SessionDocument
+
+export const StartedAndFinished = {
+  render: () => (
+    <section class="mx-auto min-h-screen w-full max-w-[720px] bg-v2-background-bg-base p-6">
+      <CurrentSessionProviders document={startedAndFinishedDocument}>
+        <SessionTimeline
+          document={startedAndFinishedDocument}
+          timelineDetail={{ ...timelinePresets[2].value, subagents: { placement: "separate" } }}
+        />
+      </CurrentSessionProviders>
+    </section>
+  ),
+}
+
 const delegationDocument = storyDocument([
   storyTool("tool_delegation_glob", "glob", "completed", { pattern: "src/timeline/**/*.ts" }),
   storyTool("tool_delegation_grep", "grep", "completed", { pattern: "timelineDetail" }),
