@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
+    "@Mackery6969/nav-menus": "workspace:*",
     "@Mackery6969/stats-core": "workspace:*",
     "@Mackery6969/ui": "workspace:*",
     "@solidjs/meta": "catalog:",

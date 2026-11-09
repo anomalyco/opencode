@@ -688,6 +688,7 @@
       "name": "@Mackery6969/stats-app",
       "version": "2.2.5",
       "dependencies": {
+        "@Mackery6969/nav-menus": "workspace:*",
         "@Mackery6969/stats-core": "workspace:*",
         "@Mackery6969/ui": "workspace:*",
         "@kobalte/core": "catalog:",
@@ -925,6 +926,7 @@
     "services/site": {
       "name": "@Mackery6969/site",
       "dependencies": {
+        "@Mackery6969/nav-menus": "workspace:*",
         "@Mackery6969/ui": "workspace:*",
         "@ibm/plex": "6.4.1",
         "@kitlangton/rolling-number": "0.4.1",
