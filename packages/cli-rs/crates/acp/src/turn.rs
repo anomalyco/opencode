@@ -83,6 +83,18 @@ pub struct Turns {
     scope: CancellationToken,
 }
 
+fn files(prepared: &Prepared) -> Vec<PromptInputFileAttachment> {
+    prepared
+        .files
+        .iter()
+        .map(|file| PromptInputFileAttachment {
+            uri: file.uri.clone(),
+            name: file.name.clone(),
+            ..PromptInputFileAttachment::default()
+        })
+        .collect()
+}
+
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
@@ -308,22 +320,54 @@ impl Turns {
         }
     }
 
+    /// `_session/steering`: redirects a running turn; an idle session is left alone so a steer never starts a turn.
+    pub async fn steer(&self, session_id: &str, content: &[Value]) -> Result<Value, Failure> {
+        let attached = self.sessions.require(session_id)?;
+        let active = check(self.client.session_active().await)?;
+        if !active.contains_key(&attached.id) {
+            return Ok(json!({ "outcome": "promptRequired", "reason": "noRunningTurn" }));
+        }
+        let prepared = prompt::prepare(&self.catalogs.get(&attached.cwd).await?, content).await?;
+        self.submit_synthetic(&attached, &prepared).await?;
+        // Without resume, a session that went idle after the check keeps the steer queued instead of starting a turn.
+        check(
+            self.client
+                .session_prompt(&SessionPromptInput {
+                    session_id: SessionID(attached.id.clone()),
+                    id: Some(Some(SessionMessageID(prepared.start.id.clone()))),
+                    text: prepared.text.clone(),
+                    files: Some(files(&prepared)),
+                    delivery: Some(Some(SessionInboxDelivery::Steer)),
+                    resume: Some(Some(false)),
+                    ..SessionPromptInput::default()
+                })
+                .await,
+        )?;
+        Ok(json!({ "outcome": "injected" }))
+    }
+
+    async fn submit_synthetic(&self, attached: &Attached, prepared: &Prepared) -> Result<(), Failure> {
+        if prepared.synthetic.is_empty() {
+            return Ok(());
+        }
+        check(
+            self.client
+                .session_synthetic(&SessionSyntheticInput {
+                    session_id: SessionID(attached.id.clone()),
+                    text: prepared.synthetic.join("\n\n"),
+                    description: Some(Some("ACP embedded context".to_owned())),
+                    delivery: Some(Some(SessionInboxDelivery::Steer)),
+                    resume: Some(Some(false)),
+                    ..SessionSyntheticInput::default()
+                })
+                .await,
+        )
+        .map(|_| ())
+    }
+
     async fn submit(&self, attached: &Attached, prepared: &Prepared) -> Result<(), Failure> {
         let session_id = || SessionID(attached.id.clone());
-        if !prepared.synthetic.is_empty() {
-            check(
-                self.client
-                    .session_synthetic(&SessionSyntheticInput {
-                        session_id: session_id(),
-                        text: prepared.synthetic.join("\n\n"),
-                        description: Some(Some("ACP embedded context".to_owned())),
-                        delivery: Some(Some(SessionInboxDelivery::Steer)),
-                        resume: Some(Some(false)),
-                        ..SessionSyntheticInput::default()
-                    })
-                    .await,
-            )?;
-        }
+        self.submit_synthetic(attached, prepared).await?;
         if prepared.start.kind == StartKind::Compaction {
             check(
                 self.client
@@ -336,17 +380,7 @@ impl Turns {
             )?;
             return Ok(());
         }
-        let files = Some(
-            prepared
-                .files
-                .iter()
-                .map(|file| PromptInputFileAttachment {
-                    uri: file.uri.clone(),
-                    name: file.name.clone(),
-                    ..PromptInputFileAttachment::default()
-                })
-                .collect::<Vec<_>>(),
-        );
+        let files = Some(files(prepared));
         if let Some(command) = &prepared.command {
             return check(
                 self.client

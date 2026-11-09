@@ -1,12 +1,13 @@
 //! The ACP methods (`packages/cli/src/acp/service.ts`).
 
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 use futures_util::future::BoxFuture;
 use opencode_api::client::Client;
 use opencode_api::generated::{
-    AbsolutePath, LocationPublicRef, SessionCreateInput, SessionForkInput, SessionGetInput, SessionID, SessionInfo,
-    SessionListInput, SessionListInputOrder, SessionRemoveInput, SessionsCursor,
+    AbsolutePath, LocationPublicRef, MessageListInput, SessionCreateInput, SessionForkInput, SessionGetInput,
+    SessionID, SessionInfo, SessionListInput, SessionListInputOrder, SessionRemoveInput, SessionsCursor,
 };
 use serde_json::{Map, Value, json};
 
@@ -42,6 +43,9 @@ pub struct Service {
     pub capabilities: Arc<Mutex<Capabilities>>,
     pub turns: Arc<Turns>,
     pub version: String,
+    /// Sessions this connection created and has not prompted. Clients often open a session and close it without
+    /// prompting; closing removes those instead of keeping an empty session.
+    pub unprompted: Mutex<HashSet<String>>,
 }
 
 impl Service {
@@ -88,6 +92,7 @@ impl Service {
                 "_meta": { (CHILD_SESSION_UPDATES): true },
             },
             "authMethods": [auth],
+            "_meta": { "steering": { "supported": true } },
             "agentInfo": { "name": "OpenCode", "version": self.version },
         })
     }
@@ -116,6 +121,7 @@ impl Service {
                 .await,
         )?;
         let (attached, options) = self.sessions.attach(&created, &setup.cwd, &mcp_servers, responded).await?;
+        self.unprompted().insert(attached.id.clone());
         Ok(json!({ "sessionId": attached.id, "configOptions": options }))
     }
 
@@ -181,6 +187,7 @@ impl Service {
     }
 
     pub async fn delete_session(&self, session_id: &str) -> Result<Value, Failure> {
+        self.unprompted().remove(session_id);
         self.turns.cancel(session_id).await;
         if let Ok(id) = decode_session_id(session_id) {
             let result = self.client.session_remove(&SessionRemoveInput { session_id: SessionID(id) }).await;
@@ -206,7 +213,44 @@ impl Service {
     pub async fn close_session(&self, session_id: &str) -> Result<Value, Failure> {
         self.turns.close(session_id).await?;
         self.sessions.detach(session_id);
+        self.discard_unprompted(session_id).await;
         Ok(json!({}))
+    }
+
+    /// Removes a session closed without a prompt, unless another client of the server used it.
+    async fn discard_unprompted(&self, session_id: &str) {
+        if !self.unprompted().remove(session_id) {
+            return;
+        }
+        let result = async {
+            let session_id = SessionID(decode_session_id(session_id)?);
+            let messages = check(
+                self.client
+                    .message_list(&MessageListInput {
+                        session_id: session_id.clone(),
+                        limit: Some(1),
+                        ..MessageListInput::default()
+                    })
+                    .await,
+            )?;
+            if messages.data.is_empty() {
+                check(self.client.session_remove(&SessionRemoveInput { session_id }).await)?;
+            }
+            Ok::<_, Failure>(())
+        }
+        .await;
+        if let Err(failure) = result {
+            log::warn!(cause = format!("{failure:?}").as_str(); "ACP could not remove an unused session");
+        }
+    }
+
+    /// `_session/steering` (an interim extension until ACP has native mid-turn steering).
+    pub async fn steer(&self, session_id: &str, prompt: &[Value]) -> Result<Value, Failure> {
+        self.turns.steer(session_id, prompt).await
+    }
+
+    fn unprompted(&self) -> std::sync::MutexGuard<'_, HashSet<String>> {
+        self.unprompted.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     pub async fn fork_session(&self, setup: Setup, responded: Responded) -> Result<Value, Failure> {
@@ -245,6 +289,7 @@ impl Service {
         cancel: &tokio_util::sync::CancellationToken,
         responded: Responded,
     ) -> BoxFuture<'static, Result<Value, Failure>> {
+        self.unprompted().remove(&session_id);
         match self.turns.start(session_id, prompt, cancel, responded) {
             Ok(result) => Box::pin(async move {
                 result.await.unwrap_or_else(|_| {

@@ -82,6 +82,7 @@ where
         capabilities,
         turns,
         version: options.version,
+        unprompted: std::sync::Mutex::default(),
     });
     connection::run(connection, writer, input, output, Arc::new(agent::Agent { service })).await
 }

@@ -174,3 +174,23 @@ async fn cancels_unsupported_session_forms_so_execution_can_continue() {
     );
     assert!(lock(&acp.elicitations).is_empty());
 }
+
+#[tokio::test]
+async fn steers_a_running_session_and_leaves_an_idle_one_alone() {
+    let acp = start_session(WireOptions::default(), json!({})).await;
+    let steer = || {
+        acp.request(
+            "_session/steering",
+            json!({ "sessionId": acp.session_id, "prompt": [{ "type": "text", "text": "redirect" }] }),
+        )
+    };
+
+    assert_eq!(steer().await.unwrap(), json!({ "outcome": "promptRequired", "reason": "noRunningTurn" }));
+    assert_eq!(acp.server.state().submissions, Vec::<Value>::new());
+
+    acp.server.state().active.push(acp.session_id.clone());
+    assert_eq!(steer().await.unwrap(), json!({ "outcome": "injected" }));
+    let prompts = acp.server.state().prompts();
+    assert_eq!(prompts.len(), 1);
+    assert_matches(&prompts[0], &json!({ "text": "redirect", "delivery": "steer", "resume": false }));
+}
