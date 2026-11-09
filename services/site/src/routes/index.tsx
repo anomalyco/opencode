@@ -506,7 +506,8 @@ export default function Home() {
  * Settings › Announcement: a "New" bar level with the logo, over the hero's three card columns
  * (in the page's flow on phones). It always renders; the site root's data-home-announcement (set
  * before first paint for a saved value) opens it, and changes animate its height and opacity.
- * ⇧A (or the older ⇧N) toggles it, like ⇧S and ⇧D for Settings and Design mode, except while typing.
+ * On the development server ⇧A (or the older ⇧N) toggles it, like ⇧S and ⇧D for Settings and Design
+ * mode, except while typing.
  */
 function Announcement() {
   const language = useLanguage()

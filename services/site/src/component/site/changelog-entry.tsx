@@ -20,6 +20,7 @@ import { CarouselArrows } from "./carousel-arrows"
 import { Chevron, ExternalArrow, NewTab } from "./icons"
 import { Inline, ReleaseItem } from "./release"
 import { prefersReducedMotion } from "./media"
+import { useVisible } from "./visible"
 import {
   changelogCarousels,
   changelogFilters,
@@ -236,29 +237,36 @@ export function ChangelogTimeline(props: {
   const language = useLanguage()
   let list!: HTMLOListElement
 
-  onMount(() => {
+  const visible = useVisible(() => list)
+  // Only while the timeline is near the screen.
+  createEffect(() => {
+    if (!visible()) return
     const frame = { id: 0 }
     const update = () => {
       frame.id = 0
       const line = window.innerHeight * 0.4
       const items = [...list.querySelectorAll<HTMLElement>(":scope > li")]
+      // Every read before any write, so the writes never force a layout mid-loop.
       // The sticky top line (each entry's scroll-margin-top is the same --content-top). The active
       // entry is the one whose date is stuck there, or would be with sticky off: the last entry
       // whose top has reached it, else the first.
       const stickyTop = items[0] ? parseFloat(getComputedStyle(items[0]).scrollMarginTop) : 0
+      const rects = items.map((item) => ({
+        item: item.getBoundingClientRect(),
+        marker: item.querySelector('[data-slot="marker"]')!.getBoundingClientRect(),
+      }))
       const active = Math.max(
         0,
-        items.findLastIndex((item) => item.getBoundingClientRect().top <= stickyTop + 0.5),
+        rects.findLastIndex((rect) => rect.item.top <= stickyTop + 0.5),
       )
       // Both marker styles are kept current, so switching the setting needs no scroll. --fill is
       // how far the progress line runs down this entry's rail, from its marker's centre.
       items.forEach((item, index) => {
-        const marker = item.querySelector('[data-slot="marker"]')!.getBoundingClientRect()
-        const center = marker.top + marker.height / 2
+        const rect = rects[index]
+        const center = rect.marker.top + rect.marker.height / 2
         item.toggleAttribute("data-active", index === active)
         item.toggleAttribute("data-reached", center <= line)
-        const fill = Math.max(0, Math.min(line - center, item.getBoundingClientRect().bottom - center))
-        item.style.setProperty("--fill", `${fill}px`)
+        item.style.setProperty("--fill", `${Math.max(0, Math.min(line - center, rect.item.bottom - center))}px`)
         // Once this marker is passed, the line above it (up to the page top, clipped) is covered too.
         item.style.setProperty("--fill-up", center <= line ? "100000px" : "0px")
       })
@@ -269,6 +277,14 @@ export function ChangelogTimeline(props: {
     update()
     window.addEventListener("scroll", schedule, { passive: true })
     window.addEventListener("resize", schedule)
+    onCleanup(() => {
+      cancelAnimationFrame(frame.id)
+      window.removeEventListener("scroll", schedule)
+      window.removeEventListener("resize", schedule)
+    })
+  })
+
+  onMount(() => {
     // A phone's stuck date row is held back by its title's height, so the two leave together.
     const titles = new ResizeObserver((entries) =>
       entries.forEach((entry) =>
@@ -278,12 +294,7 @@ export function ChangelogTimeline(props: {
     list
       .querySelectorAll(':scope > li > [data-component="changelog-entry"] > [data-slot="title"]')
       .forEach((title) => titles.observe(title))
-    onCleanup(() => {
-      cancelAnimationFrame(frame.id)
-      titles.disconnect()
-      window.removeEventListener("scroll", schedule)
-      window.removeEventListener("resize", schedule)
-    })
+    onCleanup(() => titles.disconnect())
   })
 
   return (
