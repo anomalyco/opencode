@@ -24,8 +24,6 @@ O opencode tem uma lista de atalhos de teclado que você pode personalizar atrav
     "session_timeline": "<leader>g",
     "session_fork": "none",
     "session_rename": "none",
-    "session_share": "none",
-    "session_unshare": "none",
     "session_interrupt": "escape",
     "session_compact": "<leader>c",
     "session_child_first": "<leader>down",

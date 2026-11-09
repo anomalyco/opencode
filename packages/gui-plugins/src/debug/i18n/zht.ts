@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "切換偵錯列",
+  providerAriaLabel: "提供者效能診斷",
+  na: "不適用",
+  "duration.label": "TIME",
+  "duration.tip": "從開啟最近一輪的提示到其回覆完成所需的時間。",
+  "tps.label": "TPS",
+  "tps.tip": "最近一輪模型請求中每秒的輸出與推理 token 數，不含工具耗時。",
+  "focus.label": "FOCUS",
+  "focus.tip": "強制所有互動元素顯示焦點樣式",
+  "focus.on": "開啟",
+  "focus.off": "關閉",
+  "direction.label": "DIR",
+  "direction.tip": "在不變更所選語言的情況下，強制設定整個應用程式的版面配置方向",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

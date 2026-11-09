@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:alibaba-images",
+      "provider:alibaba",
+      "protocol:alibaba-images",
+      "region:ap-southeast-1"
+    ],
+    "name": "alibaba-images/generates-qwen-image-images",
+    "recordedAt": "2026-10-23T07:48:06.823Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"qwen-image-2.0\",\"input\":{\"messages\":[{\"role\":\"user\",\"content\":[{\"text\":\"A simple flat red circle centered on a plain white background.\"}]}]},\"parameters\":{\"size\":\"512*512\",\"n\":2,\"seed\":7,\"prompt_extend\":false,\"watermark\":false}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"output\":{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":[{\"image\":\"https://dashscope-f4de.oss-accelerate.aliyuncs.com/7d/16/20261023/7693227b/425cfd51-077d-45fd-885b-da54b6300703.png?Expires=1793347486&OSSAccessKeyId=LTAI5tRcsWJEymQaTsKbKqGf&Signature=JFfz0Ki%2BDixXKTLhetlkKb1DEbY%3D\"},{\"image\":\"https://dashscope-f4de.oss-accelerate.aliyuncs.com/7d/d7/20261023/7693227b/1cc2b97c-9343-4512-a270-f230d35b18d7.png?Expires=1793347486&OSSAccessKeyId=LTAI5tRcsWJEymQaTsKbKqGf&Signature=1fB%2BMFNOgld2xQ1uXnjiPOAPaMI%3D\"}],\"role\":\"assistant\"}}]},\"usage\":{\"height\":512,\"image_count\":2,\"width\":512},\"request_id\":\"296a0628-da97-99f4-909d-2c0b2a618af8\"}"
+      }
+    }
+  ]
+}

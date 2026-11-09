@@ -48,16 +48,6 @@ OpenCode CLI 还提供以下命令。
 
 ---
 
-### agent
-
-管理 OpenCode 的代理。
-
-```bash
-opencode agent [command]
-```
-
----
-
 ### attach
 
 将终端连接到已通过 `serve` 或 `web` 命令启动的 OpenCode 后端服务器。
@@ -86,28 +76,6 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--fork"}</code></nobr>     |      | 继续时派生会话（与 `--continue` 或 `--session` 一起使用）           |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | 基本认证密码（默认使用 `OPENCODE_SERVER_PASSWORD`）                 |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | 基本认证用户名（默认使用 `OPENCODE_SERVER_USERNAME` 或 `opencode`） |
-
----
-
-#### create
-
-使用自定义配置创建新的代理。
-
-```bash
-opencode agent create
-```
-
-此命令将引导您使用自定义系统提示词和工具配置来创建新的代理。
-
----
-
-#### list
-
-列出所有可用的代理。
-
-```bash
-opencode agent list
-```
 
 ---
 
@@ -345,7 +313,6 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--continue"}</code></nobr> | `-c` | 继续上一个会话                                                      |
 | <nobr><code>{"--session"}</code></nobr>  | `-s` | 要继续的会话 ID                                                     |
 | <nobr><code>{"--fork"}</code></nobr>     |      | 继续时分叉会话（与 `--continue` 或 `--session` 配合使用）           |
-| <nobr><code>{"--share"}</code></nobr>    |      | 分享会话                                                            |
 | <nobr><code>{"--model"}</code></nobr>    | `-m` | 要使用的模型，格式为 provider/model                                 |
 | <nobr><code>{"--agent"}</code></nobr>    |      | 要使用的代理                                                        |
 | <nobr><code>{"--file"}</code></nobr>     | `-f` | 附加到消息的文件                                                    |
@@ -442,17 +409,14 @@ opencode export [sessionID]
 
 ### import
 
-从 JSON 文件或 OpenCode 分享链接导入会话数据。
+从 JSON 文件导入会话数据。
 
 ```bash
 opencode import <file>
 ```
 
-您可以从本地文件或 OpenCode 分享链接导入。
-
 ```bash
 opencode import session.json
-opencode import https://opncd.ai/s/abc123
 ```
 
 ---
@@ -564,7 +528,6 @@ OpenCode 可以通过环境变量进行配置。
 
 | 变量                                  | 类型    | 描述                                    |
 | ------------------------------------- | ------- | --------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | 自动分享会话                            |
 | `OPENCODE_GIT_BASH_PATH`              | string  | Windows 上 Git Bash 可执行文件的路径    |
 | `OPENCODE_CONFIG`                     | string  | 配置文件路径                            |
 | `OPENCODE_TUI_CONFIG`                 | string  | TUI 配置文件路径                        |

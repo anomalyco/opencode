@@ -35,7 +35,7 @@ export const layer = Layer.effect(
       register: (plugin) =>
         Effect.sync(() => {
           plugins.set(plugin.id, { ...plugin, revision: String(++revision), source: { type: "sdk" } })
-        }).pipe(Effect.andThen(bus.publish(Updated, {})), Effect.asVoid),
+        }).pipe(Effect.andThen(bus.publish(Updated, {}, { global: true })), Effect.asVoid),
       all: () => [...plugins.values()],
     })
   }),

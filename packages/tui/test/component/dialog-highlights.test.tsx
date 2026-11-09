@@ -50,7 +50,7 @@ test("scrolls long highlights between a fixed title and footer", async () => {
     await app.waitForFrame((frame) => frame.includes("What's new in 2.0.27") && frame.includes("Highlight 1"))
     const top = app.captureCharFrame()
     expect(top).toContain("command-1")
-    expect(top).toContain("↑/↓ scroll")
+    expect(top).toContain("scroll ↑/↓")
     expect(top).not.toContain("Highlight 5")
     expect(top).not.toContain("`")
 
@@ -58,7 +58,7 @@ test("scrolls long highlights between a fixed title and footer", async () => {
     await app.waitForFrame((frame) => frame.includes("Highlight 5"))
     const bottom = app.captureCharFrame()
     expect(bottom).toContain("What's new in 2.0.27")
-    expect(bottom).toContain("↑/↓ scroll")
+    expect(bottom).toContain("scroll ↑/↓")
     expect(bottom).not.toContain("Highlight 1")
 
     app.mockInput.pressKey("k")

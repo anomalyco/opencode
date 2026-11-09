@@ -1,0 +1,7 @@
+Create and update a todo list for the current session. The user sees it as your working plan.
+
+Use it proactively when a task has 3 or more distinct steps, or when the user gives several tasks or asks for a todo list. Skip it for a single simple task or a purely conversational request. When in doubt, use it.
+
+- Send the full list on every call; it replaces the previous one.
+- Mark items `in_progress` when you start them and `completed` as soon as they're actually done.
+- Only call it when the list changes.

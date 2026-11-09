@@ -154,8 +154,6 @@ opencode server izlaže sljedece API-je.
 | `POST`   | `/session/:id/init`                      | Analiziraj aplikaciju i kreiraj `AGENTS.md` | body: `{ messageID, providerID, modelID }`, returns `boolean`                      |
 | `POST`   | `/session/:id/fork`                      | Granaj postojeću sesiju na poruci           | body: `{ messageID? }`, returns <a href={typesUrl}><code>Session</code></a>        |
 | `POST`   | `/session/:id/abort`                     | Prekini sesiju u toku                       | Returns `boolean`                                                                  |
-| `POST`   | `/session/:id/share`                     | Podijeli sesiju                             | Returns <a href={typesUrl}><code>Session</code></a>                                |
-| `DELETE` | `/session/:id/share`                     | Prestani dijeliti sesiju                    | Returns <a href={typesUrl}><code>Session</code></a>                                |
 | `GET`    | `/session/:id/diff`                      | Dohvati razlike za ovu sesiju               | query: `messageID?`, returns <a href={typesUrl}><code>FileDiff[]</code></a>        |
 | `POST`   | `/session/:id/summarize`                 | Rezimiraj sesiju                            | body: `{ providerID, modelID }`, returns `boolean`                                 |
 | `POST`   | `/session/:id/revert`                    | Vrati poruku                                | body: `{ messageID, partID? }`, returns `boolean`                                  |

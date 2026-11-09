@@ -1,5 +1,16 @@
-import { createEffect, createMemo, createSignal, onCleanup, type ValidComponent } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type ValidComponent } from "solid-js"
 import { Dynamic } from "solid-js/web"
+import { prefersReducedMotion } from "../../motion/reduced"
+import {
+  createTextShimmerState,
+  DISPOSED_TEXT_SHIMMER_EVENT,
+  selectTextShimmerActive,
+  selectTextShimmerRunning,
+  syncTextShimmerEvent,
+  TEXT_SHIMMER_SWAP_MS,
+  transitionTextShimmer,
+  type TextShimmerEvent,
+} from "./machine"
 import "./text-shimmer.css"
 
 export const TextShimmer = <T extends ValidComponent = "span">(props: {
@@ -11,52 +22,58 @@ export const TextShimmer = <T extends ValidComponent = "span">(props: {
 }) => {
   const text = createMemo(() => props.text ?? "")
   const active = createMemo(() => props.active ?? true)
-  const offset = createMemo(() => props.offset ?? 0)
-  const [run, setRun] = createSignal(active())
-  const swap = 220
+  const [state, setState] = createSignal(createTextShimmerState(untrack(active)))
   let timer: ReturnType<typeof setTimeout> | undefined
 
-  createEffect(() => {
-    if (timer) {
-      clearTimeout(timer)
-      timer = undefined
-    }
+  const dispatch = (event: TextShimmerEvent) => {
+    const previous = untrack(state)
+    const next = transitionTextShimmer(previous, event)
 
-    if (active()) {
-      setRun(true)
+    if (next === previous) return
+    clearTimeout(timer)
+    timer = undefined
 
-      return
-    }
+    if (next.status === "disposed") return
+    setState(next)
 
+    if (next.status !== "fading") return
+    const attempt = next.attempt
     timer = setTimeout(() => {
       timer = undefined
-      setRun(false)
-    }, swap)
-  })
+      dispatch({ type: "settled", attempt })
+    }, TEXT_SHIMMER_SWAP_MS)
+  }
 
-  onCleanup(() => {
-    if (!timer) return
-    clearTimeout(timer)
-  })
+  // The first state comes from the initial prop, so a mount dispatches nothing and arms no timer.
+  createEffect(on(active, (value) => dispatch(syncTextShimmerEvent(value, prefersReducedMotion())), { defer: true }))
+
+  onCleanup(() => dispatch(DISPOSED_TEXT_SHIMMER_EVENT))
 
   return (
     <Dynamic
       component={props.as ?? "span"}
       data-component="text-shimmer"
-      data-active={active() ? "true" : "false"}
+      data-active={selectTextShimmerActive(state()) ? "true" : "false"}
       class={props.class}
       aria-label={text()}
       style={{
-        "--text-shimmer-swap": `${swap}ms`,
-        "--text-shimmer-index": `${offset()}`,
+        "--text-shimmer-swap": `${TEXT_SHIMMER_SWAP_MS}ms`,
+        "--text-shimmer-index": `${props.offset ?? 0}`,
       }}
     >
       <span data-slot="text-shimmer-char">
         <span data-slot="text-shimmer-char-base" aria-hidden="true">
           {text()}
         </span>
-        <span data-slot="text-shimmer-char-shimmer" data-run={run() ? "true" : "false"} aria-hidden="true">
+        <span
+          data-slot="text-shimmer-char-shimmer"
+          data-run={selectTextShimmerRunning(state()) ? "true" : "false"}
+          aria-hidden="true"
+        >
           {text()}
+          <span data-slot="text-shimmer-sweep">
+            <span data-slot="text-shimmer-sweep-text">{text()}</span>
+          </span>
         </span>
       </span>
     </Dynamic>

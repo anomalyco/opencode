@@ -160,3 +160,44 @@ test("hydration coalesces a concurrent optimistic compaction even if its POST fa
     setup.dispose()
   }
 })
+
+const transcript = {
+  data: [{ id: item.id, type: "user", text: "Check the remote preview", time: { created: 2 } }],
+  cursor: {},
+}
+
+test("a transcript read clears a prompt whose delivery event was missed", async () => {
+  const setup = fixture(async (request) =>
+    new URL(request.url).pathname.endsWith("/message") ? Response.json(transcript) : Response.json({ data: [] }),
+  )
+  try {
+    setup.emit(enqueued)
+    expect(setup.data.session.input.has(item.sessionID, item.id)).toBe(true)
+    await setup.data.session.message.sync(item.sessionID)
+    expect(setup.data.session.input.has(item.sessionID, item.id)).toBe(false)
+    expect(setup.data.session.message.get(item.sessionID, item.id)?.time.created).toBe(2)
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("a transcript read clears an accepted prompt whose events were all missed", async () => {
+  const setup = fixture(async (request) => {
+    if (request.method === "POST") return Response.json({ data: { id: item.id } })
+    if (new URL(request.url).pathname.endsWith("/message")) return Response.json(transcript)
+    return Response.json({ data: [] })
+  })
+  try {
+    await setup.data.session.prompt({ sessionID: item.sessionID, id: item.id, text: item.payload.text })
+    // An inbox read cannot see a prompt the server already delivered, so it keeps the outbox row.
+    await setup.data.session.pending.sync(item.sessionID)
+    expect(setup.data.session.input.has(item.sessionID, item.id)).toBe(true)
+    await setup.data.session.message.sync(item.sessionID)
+    expect(setup.data.session.input.has(item.sessionID, item.id)).toBe(false)
+    // Later inbox reads no longer resurrect it from the outbox.
+    await setup.data.session.pending.sync(item.sessionID)
+    expect(setup.data.session.input.has(item.sessionID, item.id)).toBe(false)
+  } finally {
+    setup.dispose()
+  }
+})

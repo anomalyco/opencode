@@ -1,53 +1,68 @@
 import { onCleanup } from "solid-js"
+import { Predicate } from "effect"
+import { INITIAL_FOCUS_LOCK_STATE, transitionFocusLock, type FocusLockEvent } from "./focus-lock-machine"
 
 const FOCUS_LOCK = "opencode:notification-focus"
+
+const DELIVERY_LOCK = "opencode:notification-delivery"
 
 const MAX_CLAIMED = 500
 
 export function createNotificationCoordinator() {
   const locks = typeof navigator === "undefined" ? undefined : navigator.locks
+
   const claimed = new Set<string>()
-  const focus = { pending: false, release: undefined as (() => void) | undefined }
 
-  const updateFocus = () => {
-    if (typeof document === "undefined" || !document.hasFocus()) {
-      focus.release?.()
+  if (typeof window !== "undefined" && locks) {
+    let focusState = INITIAL_FOCUS_LOCK_STATE
+    const releases = new Map<number, VoidFunction>()
 
-      return
+    const dispatch = (event: FocusLockEvent) => {
+      const next = transitionFocusLock(focusState, event)
+      focusState = next.state
+      next.effects.forEach((effect) => {
+        const attempt = effect.attempt
+
+        if (effect.type === "lock.release") {
+          releases.get(attempt)?.()
+          releases.delete(attempt)
+
+          return
+        }
+
+        // A shared hold: every focused window keeps it, and an alert's exclusive request fails while any one does.
+        locks
+          .request(
+            FOCUS_LOCK,
+            { mode: "shared" },
+            () =>
+              new Promise<void>((resolve) => {
+                releases.set(attempt, resolve)
+                dispatch({ type: "lock.acquired", attempt })
+              }),
+          )
+          .catch(() => {
+            releases.delete(attempt)
+            dispatch({ type: "lock.failed", attempt })
+          })
+      })
     }
 
-    if (!locks || focus.pending || focus.release) return
+    const syncFocus = () => dispatch({ type: "focus.changed", focused: document.hasFocus() })
 
-    focus.pending = true
-    void locks
-      .request(FOCUS_LOCK, { mode: "shared" }, async () => {
-        focus.pending = false
-
-        if (!document.hasFocus()) return
-        await new Promise<void>((resolve) => {
-          focus.release = resolve
-        })
-        focus.release = undefined
-      })
-      .catch(() => {
-        focus.pending = false
-      })
-  }
-
-  if (typeof window !== "undefined") {
-    window.addEventListener("focus", updateFocus)
-    window.addEventListener("blur", updateFocus)
-    document.addEventListener("visibilitychange", updateFocus)
-    updateFocus()
+    window.addEventListener("focus", syncFocus)
+    window.addEventListener("blur", syncFocus)
+    document.addEventListener("visibilitychange", syncFocus)
+    syncFocus()
     onCleanup(() => {
-      window.removeEventListener("focus", updateFocus)
-      window.removeEventListener("blur", updateFocus)
-      document.removeEventListener("visibilitychange", updateFocus)
-      focus.release?.()
+      window.removeEventListener("focus", syncFocus)
+      window.removeEventListener("blur", syncFocus)
+      document.removeEventListener("visibilitychange", syncFocus)
+      dispatch({ type: "disposed" })
     })
   }
 
-  const once = async (kind: "sound" | "system", eventID: string, run: () => Promise<unknown> | void) => {
+  const once = async <T>(kind: "sound" | "system", eventID: string, run: () => Promise<T> | void) => {
     const key = `${kind}:${eventID}`
 
     const execute = async () => {
@@ -60,18 +75,21 @@ export function createNotificationCoordinator() {
   }
 
   return {
-    sound(eventID: string, run: () => Promise<unknown> | void) {
+    sound<T>(eventID: string, run: () => Promise<T> | void) {
       return once("sound", eventID, run)
     },
-    system(eventID: string, run: () => Promise<unknown> | void) {
+    system<T>(eventID: string, run: () => Promise<T> | void) {
       return once("system", eventID, async () => {
         if (typeof document !== "undefined" && document.hasFocus()) return
 
         if (!locks) return run()
-        await locks.request(FOCUS_LOCK, { mode: "exclusive", ifAvailable: true }, async (lock) => {
-          if (!lock) return
-          await run()
-        })
+        // Another alert holding the focus lock must not look like a focused app window.
+        await locks.request(DELIVERY_LOCK, () =>
+          locks.request(FOCUS_LOCK, { mode: "exclusive", ifAvailable: true }, async (lock) => {
+            if (!lock) return
+            await run()
+          }),
+        )
       })
     },
   }
@@ -84,7 +102,7 @@ function claim(kind: "sound" | "system", eventID: string, claimed: Set<string>) 
     try {
       const storageKey = `opencode:notification-${kind}`
       const value: unknown = JSON.parse(localStorage.getItem(storageKey) ?? "[]")
-      const events = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []
+      const events = Array.isArray(value) ? value.filter(Predicate.isString) : []
 
       if (events.includes(eventID)) {
         claimed.add(eventID)

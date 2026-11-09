@@ -100,25 +100,33 @@ async function lookup(request: Request, env: Env, url: URL, path: string[]) {
       .bind(resolved)
       .first<{ duration_hours: number }>(),
   )
+  const duration = (rollout?.duration_hours ?? 0) * 3_600_000
   const ip = request.headers.get("CF-Connecting-IP")
   const hash =
-    rollout?.duration_hours && ip
+    duration && ip
       ? new DataView(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${resolved}:${ip}`))).getUint32(0)
       : undefined
   // Missing IPs wait for full rollout. The same IP keeps its position across releases.
-  const cutoff =
-    Date.now() - (rollout?.duration_hours ?? 0) * 3_600_000 * (hash === undefined ? 1 : (hash + 1) / 2 ** 32)
+  const now = Date.now()
+  const cutoff = now - duration * (hash === undefined ? 1 : (hash + 1) / 2 ** 32)
   if (path.length === 4) {
-    return artifactDistribution(env.DB, resolved, path[1], path[2], caller, cutoff, path[3])
+    return artifactDistribution(env.DB, resolved, path[1], path[2], caller, cutoff, duration, now, path[3])
   }
-  if (path.length === 1) return channel(env.DB, resolved, caller, cutoff)
-  if (path.length === 2) return artifactName(env.DB, resolved, path[1], caller, cutoff)
-  return artifactDistribution(env.DB, resolved, path[1], path[2], caller, cutoff)
+  if (path.length === 1) return channel(env.DB, resolved, caller, cutoff, duration, now)
+  if (path.length === 2) return artifactName(env.DB, resolved, path[1], caller, cutoff, duration, now)
+  return artifactDistribution(env.DB, resolved, path[1], path[2], caller, cutoff, duration, now)
 }
 
-async function channel(db: D1Database, channel: string, current: string | undefined, cutoff: number) {
+async function channel(
+  db: D1Database,
+  channel: string,
+  current: string | undefined,
+  cutoff: number,
+  duration: number,
+  now: number,
+) {
   const rows = await candidates(db, "channel = ?", [channel])
-  const artifacts = await selectArtifacts(db, rows, current, cutoff)
+  const artifacts = await selectArtifacts(db, rows, current, cutoff, duration, now)
   if (!artifacts.length) return json({ error: "Channel not found" }, 404)
   return updateResponse({ channel, artifacts: artifacts.map(decodeArtifact) })
 }
@@ -129,9 +137,11 @@ async function artifactName(
   name: string,
   current: string | undefined,
   cutoff: number,
+  duration: number,
+  now: number,
 ) {
   const rows = await candidates(db, "channel = ? AND name = ?", [channel, name])
-  const artifacts = await selectArtifacts(db, rows, current, cutoff)
+  const artifacts = await selectArtifacts(db, rows, current, cutoff, duration, now)
   if (!artifacts.length) return json({ error: "Artifact not found" }, 404)
   return updateResponse({ channel, name, artifacts: artifacts.map(decodeArtifact) })
 }
@@ -143,10 +153,12 @@ async function artifactDistribution(
   distribution: string,
   current: string | undefined,
   cutoff: number,
+  duration: number,
+  now: number,
   manifest?: string,
 ) {
   const rows = await candidates(db, "channel = ? AND name = ? AND distribution = ?", [channel, name, distribution])
-  const artifact = (await selectArtifacts(db, rows, current, cutoff))[0]
+  const artifact = (await selectArtifacts(db, rows, current, cutoff, duration, now))[0]
   if (!artifact) return json({ error: "Artifact not found" }, 404)
   if (manifest) {
     const metadata = decodeMetadata(artifact.metadata)
@@ -181,24 +193,33 @@ function candidates(db: D1Database, filter: string, values: string[]) {
   )
 }
 
-async function selectArtifacts(db: D1Database, rows: ArtifactRow[], current: string | undefined, cutoff: number) {
+async function selectArtifacts(
+  db: D1Database,
+  rows: ArtifactRow[],
+  current: string | undefined,
+  cutoff: number,
+  duration: number,
+  now: number,
+) {
   const caller = current === undefined ? undefined : releaseVersion(current)
   const artifacts = await Promise.all(
     rows
       .filter((row) => row.active === 1)
       .map(async (active) => {
-        const minimum = rows.find(
-          (row) => row.minimum === 1 && row.name === active.name && row.distribution === active.distribution,
-        )
+        // Preview build numbers reset, so a minimum outside latest can send clients back to a build they passed.
+        const minimum =
+          active.channel === "latest"
+            ? rows.find(
+                (row) => row.minimum === 1 && row.name === active.name && row.distribution === active.distribution,
+              )
+            : undefined
         const floor = minimum && releaseVersion(minimum.version)
         if (current !== undefined && minimum && (!floor || !caller || semver.lt(caller, floor))) return minimum
         if (active.time_created <= cutoff) return active
-        const previous = await db
-          .prepare(
-            `${select} WHERE channel = ? AND name = ? AND distribution = ? AND time_created < ? AND time_created <= ? ORDER BY time_created DESC, version DESC LIMIT 1`,
-          )
-          .bind(active.channel, active.name, active.distribution, active.time_created, cutoff)
-          .first<ArtifactRow>()
+        const start = now >= active.time_created ? active.time_created : Math.floor(now / readTtl) * readTtl
+        const windowFloor = Math.min(active.time_created - 1, Math.floor(start - duration))
+        const previous =
+          (await rolloutCandidates(db, active, windowFloor)).find((row) => row.time_created <= cutoff) ?? null
         // A rollout must not send an identified client back below its compatibility floor.
         if (current !== undefined && minimum) {
           const version = previous && releaseVersion(previous.version)
@@ -208,6 +229,40 @@ async function selectArtifacts(db: D1Database, rows: ArtifactRow[], current: str
       }),
   )
   return artifacts.filter((artifact) => artifact !== null)
+}
+
+function rolloutCandidates(db: D1Database, active: ArtifactRow, floor: number) {
+  return cachedRead(
+    `history:${active.channel}/${active.name}/${active.distribution}/${active.time_created}/${floor}`,
+    () =>
+      db
+        .prepare(
+          `SELECT * FROM (
+             ${select} INDEXED BY artifact_rollout
+             WHERE channel = ? AND name = ? AND distribution = ? AND time_created < ? AND time_created > ?
+             ORDER BY time_created DESC, version DESC
+           )
+           UNION ALL
+           SELECT * FROM (
+             ${select} INDEXED BY artifact_rollout
+             WHERE channel = ? AND name = ? AND distribution = ? AND time_created <= ?
+             ORDER BY time_created DESC, version DESC LIMIT 1
+           )`,
+        )
+        .bind(
+          active.channel,
+          active.name,
+          active.distribution,
+          active.time_created,
+          floor,
+          active.channel,
+          active.name,
+          active.distribution,
+          floor,
+        )
+        .all<ArtifactRow>()
+        .then((result) => result.results),
+  )
 }
 
 async function configureRollout(request: Request, env: Env, prefix: string) {
@@ -284,14 +339,18 @@ async function admin(request: Request, env: Env, prefix: string) {
                   <button class="btn" data-size="sm" data-variant="outline" type="submit">Activate</button>
                 </form>`
           }
-          <form action="${prefix}/admin/minimum" method="post">
-            <input type="hidden" name="channel" value="${escape(artifact.channel)}">
-            <input type="hidden" name="name" value="${escape(artifact.name)}">
-            <input type="hidden" name="distribution" value="${escape(artifact.distribution)}">
-            <input type="hidden" name="version" value="${escape(artifact.version)}">
-            <input type="hidden" name="enabled" value="${artifact.minimum ? "0" : "1"}">
-            <button class="btn" data-size="sm" data-variant="outline" type="submit">${artifact.minimum ? "Clear minimum" : "Set minimum"}</button>
-          </form>
+          ${
+            artifact.channel === "latest" || artifact.minimum
+              ? `<form action="${prefix}/admin/minimum" method="post">
+                  <input type="hidden" name="channel" value="${escape(artifact.channel)}">
+                  <input type="hidden" name="name" value="${escape(artifact.name)}">
+                  <input type="hidden" name="distribution" value="${escape(artifact.distribution)}">
+                  <input type="hidden" name="version" value="${escape(artifact.version)}">
+                  <input type="hidden" name="enabled" value="${artifact.minimum ? "0" : "1"}">
+                  <button class="btn" data-size="sm" data-variant="outline" type="submit">${artifact.minimum ? "Clear minimum" : "Set minimum"}</button>
+                </form>`
+              : ""
+          }
         </td>
       </tr>`,
     )
@@ -374,7 +433,7 @@ async function publishArtifact(request: Request, env: Env) {
   const input: unknown = await request.json().catch(() => undefined)
   const artifact = parseArtifact(isRecord(input) ? input : {})
   if (artifact instanceof Response) return artifact
-  if (!channelsForRef(claims.ref).includes(artifact.channel)) return json({ error: "Channel is not allowed" }, 403)
+  if (!allowedChannels(claims).includes(artifact.channel)) return json({ error: "Channel is not allowed" }, 403)
   if (!isRecord(artifact.metadata)) return json({ error: "Metadata must be an object" }, 400)
   await activate(env.DB, [
     {
@@ -406,6 +465,9 @@ async function markArtifact(request: Request, env: Env, flag: "active" | "minimu
   })
   if (key instanceof Response) return key
   const enabled = flag === "minimum" && form.get("enabled") === "0" ? 0 : 1
+  if (flag === "minimum" && enabled && key.channel !== "latest") {
+    return json({ error: "Minimum is only supported on the latest channel" }, 400)
+  }
   if (flag === "minimum" && enabled && !releaseVersion(key.version)) {
     return json({ error: "Minimum must have a comparable release version" }, 400)
   }
@@ -521,6 +583,8 @@ type GitHubClaims = JWTPayload & {
   repository_owner_id: string
   workflow_ref: string
   ref: string
+  event_name: string
+  environment: string
   sha: string
   run_id: string
   run_attempt: string
@@ -532,19 +596,18 @@ export function validGitHubClaims(claims: JWTPayload): claims is GitHubClaims {
   if (claims.repository_id !== "975734319") return false
   if (claims.repository_owner_id !== "66570915") return false
   if (typeof claims.workflow_ref !== "string" || typeof claims.ref !== "string") return false
-  if (claims.workflow_ref !== `anomalyco/opencode/.github/workflows/publish.yml@${claims.ref}`) return false
-  if (!channelsForRef(claims.ref).length) return false
+  if (claims.workflow_ref !== `anomalyco/opencode/.github/workflows/release.yml@${claims.ref}`) return false
+  // Only publish jobs run in the release environment, and they never execute repository code.
+  if (claims.environment !== "release") return false
+  if (typeof claims.event_name !== "string") return false
   return [claims.sha, claims.run_id, claims.run_attempt, claims.actor].every((value) => typeof value === "string")
 }
 
-export function channelsForRef(ref: string) {
-  if (ref === "refs/heads/dev") return ["dev", "latest"]
-  if (ref === "refs/heads/v2") return ["dev", "latest"]
-  if (ref === "refs/heads/beta") return ["beta"]
-  if (ref === "refs/heads/ci") return ["ci"]
-  if (ref === "refs/heads/fix/npm-native-binary-install") return ["fix/npm-native-binary-install"]
-  const snapshot = ref.match(/^refs\/heads\/(snapshot-[a-zA-Z0-9._-]+)$/)?.[1]
-  return snapshot ? [snapshot] : []
+// Pushes to dev ship dev builds. Only a manual dispatch of a versioned release may ship to latest.
+export function allowedChannels(claims: Pick<GitHubClaims, "ref" | "event_name">) {
+  if (claims.ref === "refs/heads/dev") return claims.event_name === "workflow_dispatch" ? ["dev", "latest"] : ["dev"]
+  if (claims.ref === "refs/heads/beta") return ["beta"]
+  return []
 }
 
 export function resolveChannel(channel: string) {

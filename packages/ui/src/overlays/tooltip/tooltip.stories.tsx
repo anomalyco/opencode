@@ -1,5 +1,7 @@
 import { Tooltip } from "./tooltip"
+import { Button } from "@opencode/ui/button"
 import { Keybind } from "@opencode/ui/keybind"
+import { Menu } from "@opencode/ui/menu"
 
 const docs = `### Overview
 Floating tooltip built on Kobalte's tooltip primitive.
@@ -68,6 +70,24 @@ export const WithKeybind = {
         }
       >
         <span>Hover me</span>
+      </Tooltip>
+    </div>
+  ),
+}
+
+export const WithMenu = {
+  render: () => (
+    <div style={{ padding: "80px", display: "flex", "justify-content": "center" }}>
+      <Tooltip value="More actions">
+        <Menu gutter={6}>
+          <Menu.Trigger as={Button}>Actions</Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Content>
+              <Menu.Item>Rename</Menu.Item>
+              <Menu.Item>Delete</Menu.Item>
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu>
       </Tooltip>
     </div>
   ),

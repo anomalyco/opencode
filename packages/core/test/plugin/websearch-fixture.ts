@@ -20,12 +20,18 @@ export const requests: WebSearchRequest[] = []
 export const signals: AbortSignal[] = []
 let responseBody = ""
 let responseStatus = 200
+let responseHeaders: Record<string, string> = {}
 
 export function resetWebSearchFixture(body: string, status = 200) {
   requests.length = 0
   signals.length = 0
   responseBody = body
   responseStatus = status
+  responseHeaders = {}
+}
+
+export function setResponseHeaders(headers: Record<string, string>) {
+  responseHeaders = headers
 }
 
 const http = Layer.succeed(
@@ -39,7 +45,10 @@ const http = Layer.succeed(
         headers: request.headers,
         body: JSON.parse(new TextDecoder().decode(request.body.body)),
       })
-      return HttpClientResponse.fromWeb(request, new Response(responseBody, { status: responseStatus }))
+      return HttpClientResponse.fromWeb(
+        request,
+        new Response(responseBody, { status: responseStatus, headers: responseHeaders }),
+      )
     }),
   ),
 )

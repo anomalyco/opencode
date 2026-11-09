@@ -16,7 +16,7 @@ import { testEffect } from "./lib/effect"
 const it = testEffect(Layer.empty)
 
 // Cold Git setup and cloning can exceed Bun's five-second default on Windows.
-setDefaultTimeout(15_000)
+setDefaultTimeout(30_000)
 
 describe("RepositoryCache", () => {
   it.live("persists the daily throttle across cache recreation and serializes competing refreshes", () =>

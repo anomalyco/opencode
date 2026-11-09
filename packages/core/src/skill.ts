@@ -1,7 +1,7 @@
 export * as Skill from "./skill.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import type { FSUtil } from "@opencode/util/fs-util"
+import { FSUtil } from "@opencode/util/fs-util"
 import path from "path"
 import { Context, Effect, Layer, Types } from "effect"
 import { Skill } from "@opencode/schema/skill"
@@ -33,8 +33,12 @@ export { Event } from "@opencode/schema/skill"
 export const available = (skills: ReadonlyArray<Info>, permissions: Permission.Ruleset) =>
   skills.filter((skill) => Permission.evaluate("skill", skill.id, permissions).effect !== "deny")
 
+export const uri = (id: string, file?: string) => (file ? `skill://${id}/${file}` : `skill://${id}`)
+
+export const isUri = (value: string) => value.startsWith("skill://")
+
 export const toModelOutput = (skill: Info, files: ReadonlyArray<string>) => {
-  const directory = path.dirname(skill.path)
+  const directory = isUri(skill.path) ? uri(skill.id) : path.dirname(skill.path)
   return [
     `<skill_content name="${skill.name}">`,
     `# Skill: ${skill.name}`,
@@ -52,11 +56,33 @@ export const toModelOutput = (skill: Info, files: ReadonlyArray<string>) => {
   ].join("\n")
 }
 
-export const prepare = Effect.fn("Skill.prepare")(function* (fs: FSUtil.Interface, skill: Info) {
+export const prepare = Effect.fn("Skill.prepare")(function* (
+  fs: FSUtil.Interface,
+  skill: Info,
+  virtualFiles?: ReadonlyMap<string, string>,
+) {
+  if (isUri(skill.path)) {
+    const directory = uri(skill.id)
+    const files = Array.from(virtualFiles?.keys() ?? [])
+      .filter((file) => file !== "SKILL.md")
+      .toSorted()
+      .slice(0, 10)
+      .map((file) => uri(skill.id, file))
+    return {
+      directory,
+      output: toModelOutput(skill, files),
+    }
+  }
   const directory = path.dirname(skill.path)
   const files =
     path.basename(skill.path) === "SKILL.md"
-      ? (yield* fs.scan("**/*", { cwd: directory, absolute: true, include: "file", dot: true }))
+      ? (yield* fs.scan("**/*", {
+          cwd: directory,
+          absolute: true,
+          include: "file",
+          dot: true,
+          ignore: FSUtil.ignoreGlobs,
+        }))
           .filter((file) => path.basename(file) !== "SKILL.md")
           .toSorted()
           .slice(0, 10)
@@ -69,18 +95,20 @@ export const prepare = Effect.fn("Skill.prepare")(function* (fs: FSUtil.Interfac
 
 export type Data = {
   skills: Map<ID, Types.DeepMutable<Info>>
+  files: Map<ID, ReadonlyMap<string, string>>
 }
 
 export type Editor = {
   list: () => readonly Types.DeepMutable<Info>[]
   get: (id: string) => Types.DeepMutable<Info> | undefined
-  add: (skill: Info) => void
+  add: (skill: Info, files?: Readonly<Record<string, string>>) => void
   update: (id: string, update: (skill: Types.DeepMutable<Info>) => void) => void
   remove: (id: string) => void
 }
 
 export interface Interface extends State.Transformable<Editor> {
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
+  readonly files: (id: ID) => Effect.Effect<ReadonlyMap<string, string> | undefined>
   readonly list: () => Effect.Effect<Info[]>
 }
 
@@ -93,24 +121,43 @@ const layer = Layer.effect(
 
     const state = State.create<Data, Editor>({
       name: "skill",
-      initial: () => ({ skills: new Map() }),
+      initial: () => ({ skills: new Map(), files: new Map() }),
       editor: (editor) => ({
         list: () => Array.from(editor.skills.values()),
         get: (id) => editor.skills.get(ID.make(id)),
-        add: (skill) => {
-          editor.skills.set(skill.id, { ...skill } as Types.DeepMutable<Info>)
+        add: (skill, files) => {
+          editor.skills.set(skill.id, { ...skill })
+          const entries = files
+            ? Object.entries(files)
+                .filter(([file]) => file !== "SKILL.md")
+                .toSorted(([a], [b]) => a.localeCompare(b))
+            : []
+          if (entries.length === 0) {
+            editor.files.delete(skill.id)
+            return
+          }
+          editor.files.set(skill.id, new Map(entries))
         },
         update: (id, update) => {
-          const current = editor.skills.get(ID.make(id))
+          const key = ID.make(id)
+          const current = editor.skills.get(key)
           if (!current) return
           update(current)
-          current.id = ID.make(id)
+          current.id = key
         },
         remove: (id) => {
-          editor.skills.delete(ID.make(id))
+          const key = ID.make(id)
+          editor.skills.delete(key)
+          editor.files.delete(key)
         },
       }),
-      notify: () => bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: State.changes(
+        (data) => [
+          Array.from(data.skills.values()),
+          Array.from(data.files, ([id, entries]) => [id, Array.from(entries)]),
+        ],
+        () => bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid),
+      ),
     })
 
     return Service.of({
@@ -118,6 +165,10 @@ const layer = Layer.effect(
       reload: state.reload,
       get: Effect.fn("Skill.get")(function* (id) {
         return state.get().skills.get(id)
+      }),
+      files: Effect.fn("Skill.files")(function* (id) {
+        const current = state.get()
+        return current.skills.has(id) ? current.files.get(id) : undefined
       }),
       list: Effect.fn("Skill.list")(function* () {
         return Array.from(state.get().skills.values())

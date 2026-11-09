@@ -157,8 +157,6 @@ http://<hostname>:<port>/doc
 | `POST`   | `/session/:id/init`                      | วิเคราะห์แอปและสร้าง `AGENTS.md`   | เนื้อความ: `{ messageID, providerID, modelID }` ส่งคืน `boolean`                 |
 | `POST`   | `/session/:id/fork`                      | แยกเซสชันที่มีอยู่ไปที่ข้อความ     | body: `{ messageID? }` ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>         |
 | `POST`   | `/session/:id/abort`                     | ยกเลิกเซสชันที่ทำงานอยู่           | ส่งคืน `boolean`                                                                 |
-| `POST`   | `/session/:id/share`                     | แบ่งปันเซสชั่น                     | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                |
-| `DELETE` | `/session/:id/share`                     | ยกเลิกการแชร์เซสชัน                | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                |
 | `GET`    | `/session/:id/diff`                      | รับความแตกต่างสำหรับเซสชั่นนี้     | ข้อความค้นหา: `messageID?` ส่งคืน <a href={typesUrl}><code>FileDiff[]</code></a> |
 | `POST`   | `/session/:id/summarize`                 | สรุปเซสชัน                         | เนื้อความ: `{ providerID, modelID }` ส่งคืน `boolean`                            |
 | `POST`   | `/session/:id/revert`                    | คืนค่าข้อความ                      | เนื้อความ: `{ messageID, partID? }` ส่งคืน `boolean`                             |

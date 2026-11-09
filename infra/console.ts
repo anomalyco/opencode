@@ -1,77 +1,31 @@
-import { domain } from "./stage"
-import { EMAILOCTOPUS_API_KEY } from "./app"
-import { SECRET } from "./secret"
+import { domain, zoneID } from "./stage"
 
-// Preview stages have no new Console or inference deployment to forward to.
-const migrationDomain =
-  $app.stage === "production" ? "opencode.ai" : $app.stage === "dev" ? "dev.opencode.ai" : undefined
-const consoleMigration = new sst.Linkable("ConsoleMigration", {
-  properties: {
-    consoleUrl: migrationDomain ? `https://${migrationDomain}/console` : "",
-    inferenceUrl: migrationDomain ? `https://${migrationDomain}/inference` : "",
-  },
-})
-
-////////////////
-// CONSOLE
-////////////////
+// opencode.ai and dev.opencode.ai belong to the site Worker (services/site). Their custom domain used to belong to
+// the old Console Worker and was moved to the site Worker in place, keeping its ID (Cloudflare won't let a placeholder
+// DNS record sit beside a Worker-managed one, and deleting the record first would leave the apex without DNS).
+// SiteDomain adopts that resource so SST never deletes the live hostname: it is retained on delete, and its inputs are
+// ignored so it is never updated or replaced. Its state still records the old Console service; Cloudflare has the
+// site Worker. Keep it declared: dropping it only forgets it (retainOnDelete), but keeping it is a guaranteed no-op.
+if ($app.stage === "production" || $app.stage === "dev") {
+  new cloudflare.WorkersCustomDomain(
+    "SiteDomain",
+    {
+      accountId: "15d29c8639fd3733b1b5486a2acfd968",
+      hostname: domain,
+      service: `opencode-site-${$app.stage}`,
+      zoneId: zoneID,
+      environment: "production",
+    },
+    {
+      aliases: [
+        `urn:pulumi:${$app.stage}::${$app.name}::sst:cloudflare:SolidStart$sst:cloudflare:Worker$cloudflare:index/workersCustomDomain:WorkersCustomDomain::ConsoleWorkerDomain`,
+      ],
+      retainOnDelete: true,
+      ignoreChanges: ["accountId", "hostname", "service", "zoneId", "environment"],
+    },
+  )
+}
 
 // Archived Zen request/response dumps (writer removed May 2026). Retained on purpose; nothing reads or writes them.
 new sst.cloudflare.Bucket("ZenData")
 new sst.cloudflare.Bucket("ZenDataNew")
-
-const DISCORD_INCIDENT_WEBHOOK_URL = new sst.Secret("DISCORD_INCIDENT_WEBHOOK_URL")
-const AWS_SES_ACCESS_KEY_ID = new sst.Secret("AWS_SES_ACCESS_KEY_ID")
-const AWS_SES_SECRET_ACCESS_KEY = new sst.Secret("AWS_SES_SECRET_ACCESS_KEY")
-const ENTERPRISE_SALES_INBOX_EMAIL = new sst.Secret("ENTERPRISE_SALES_INBOX_EMAIL")
-
-const SALESFORCE_CLIENT_ID = new sst.Secret("SALESFORCE_CLIENT_ID")
-const SALESFORCE_CLIENT_SECRET = new sst.Secret("SALESFORCE_CLIENT_SECRET")
-const SALESFORCE_INSTANCE_URL = new sst.Secret("SALESFORCE_INSTANCE_URL")
-
-const logProcessor = new sst.cloudflare.Worker("LogProcessor", {
-  handler: "packages/console/function/src/log-processor.ts",
-  link: [SECRET.HoneycombApiKey],
-})
-
-new sst.cloudflare.x.SolidStart("Console", {
-  domain,
-  path: "packages/console/app",
-  link: [
-    consoleMigration,
-    DISCORD_INCIDENT_WEBHOOK_URL,
-    SECRET.HoneycombWebhookSecret,
-    EMAILOCTOPUS_API_KEY,
-    AWS_SES_ACCESS_KEY_ID,
-    AWS_SES_SECRET_ACCESS_KEY,
-    ENTERPRISE_SALES_INBOX_EMAIL,
-    SALESFORCE_CLIENT_ID,
-    SALESFORCE_CLIENT_SECRET,
-    SALESFORCE_INSTANCE_URL,
-  ],
-  environment: {
-    //VITE_DOCS_URL: web.url.apply((url) => url!),
-    //VITE_API_URL: gateway.url.apply((url) => url!),
-    VITE_CONSOLE_MARKETING_ENABLED: $app.stage === "dev" ? "true" : "false",
-  },
-  transform: {
-    server: {
-      placement: { region: "aws:us-east-2" },
-      transform: {
-        worker: (args) => {
-          args.compatibilityFlags = $resolve(args.compatibilityFlags).apply((flags) => [
-            ...(flags ?? []),
-            "global_fetch_strictly_public",
-          ])
-          // Same-zone fetch to inference re-enters as a public request and loses the client IP.
-          if (migrationDomain)
-            args.bindings = $resolve(args.bindings).apply((bindings) => [
-              ...(bindings ?? []),
-              { type: "service", name: "INFERENCE", service: `opencode-inference-${$app.stage}` },
-            ])
-          args.tailConsumers = [{ service: logProcessor.nodes.worker.scriptName }]
-        },
-      },
-    },
-  },
-})

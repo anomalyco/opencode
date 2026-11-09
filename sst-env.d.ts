@@ -10,45 +10,7 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "AWS_SES_ACCESS_KEY_ID": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "AWS_SES_SECRET_ACCESS_KEY": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
     "Api": import("@cloudflare/workers-types").Service
-    "Bucket": import("@cloudflare/workers-types").R2Bucket
-    "Console": {
-      "type": "sst.cloudflare.SolidStart"
-      "url": string
-    }
-    "DISCORD_INCIDENT_WEBHOOK_URL": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "DISCORD_SUPPORT_BOT_TOKEN": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "DISCORD_SUPPORT_CHANNEL_ID": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "EMAILOCTOPUS_API_KEY": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "EnterpriseStorage": import("@cloudflare/workers-types").R2Bucket
-    "FEISHU_APP_ID": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "FEISHU_APP_SECRET": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
     "GITHUB_APP_ID": {
       "type": "sst.sst.Secret"
       "value": string
@@ -57,43 +19,7 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "HONEYCOMB_API_KEY": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "HoneycombWebhookSecret": {
-      "type": "random.index/randomPassword.RandomPassword"
-      "value": string
-    }
-    "LogProcessor": import("@cloudflare/workers-types").Service
-    "R2AccessKey": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "R2SecretKey": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "SALESFORCE_CLIENT_ID": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "SALESFORCE_CLIENT_SECRET": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "SALESFORCE_INSTANCE_URL": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "SUPPORT_API_KEY": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "Teams": {
-      "type": "sst.cloudflare.SolidStart"
-      "url": string
-    }
+    "Share": import("@cloudflare/workers-types").Service
     "Web": {
       "type": "sst.cloudflare.Astro"
       "url": string

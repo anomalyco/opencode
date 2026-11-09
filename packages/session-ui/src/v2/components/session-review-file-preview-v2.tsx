@@ -5,11 +5,10 @@ import { FileIcon } from "@opencode/ui/file-icon"
 import { useFileComponent } from "@opencode/ui/context/file"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { mediaKindFromPath } from "../../pierre/media"
-import { cloneSelectedLineRange, previewSelectedLines } from "../../pierre/selection-bridge"
+import { previewSelectedLines } from "../../pierre/selection-bridge"
 import type { FileDiffInfo } from "@opencode/client/promise"
 import type { PresentationFileContent, PresentationFileDiff } from "../../file-presentation"
-import { createEffect, createMemo, onCleanup, Show, untrack } from "solid-js"
-import { createStore } from "solid-js/store"
+import { children, createMemo, Show, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { normalize, text, type ViewDiff } from "../../components/session-diff"
 import type {
@@ -23,6 +22,7 @@ import type {
 } from "../../components/session-review"
 import type { SessionReviewExpandMode } from "./session-review-v2"
 import { createLineCommentControllerV2 } from "./line-comment-annotations-v2"
+import { createReviewFocusDriver } from "../../components/review-focus-driver"
 import { shouldVirtualizeReviewDiff } from "./session-review-file-preview-v2-virtualize"
 import { LineCommentOverflowIcon } from "@opencode/ui/line-comment"
 import { Menu } from "@opencode/ui/menu"
@@ -43,6 +43,8 @@ export type SessionReviewFilePreviewV2Props = {
   comments?: SessionReviewComment[]
   focusedComment?: SessionReviewFocus | null
   onFocusedCommentChange?: (focus: SessionReviewFocus | null) => void
+  /** Shown in place of the diff, under the file's header, while the full diff loads or after it failed to load. */
+  placeholder?: JSX.Element
 }
 
 function statusLabel(status: ViewDiff["status"]) {
@@ -105,13 +107,6 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
   const i18n = useI18n()
   const fileComponent = useFileComponent()
   let scrollRef: HTMLDivElement | undefined
-  let focusToken = 0
-
-  const [store, setStore] = createStore({
-    selection: null as SelectedLineRange | null,
-    commenting: null as SelectedLineRange | null,
-    opened: null as string | null,
-  })
 
   const view = createMemo(() => ({
     ...normalize(props.diff),
@@ -128,14 +123,6 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
     comments,
     label: i18n.t("ui.lineComment.submit"),
     draftKey: () => props.file,
-    state: {
-      opened: () => store.opened,
-      setOpened: (id) => setStore("opened", id),
-      selected: () => store.selection,
-      setSelected: (range) => setStore("selection", range),
-      commenting: () => store.commenting,
-      setCommenting: (range) => setStore("commenting", range),
-    },
     getSide: selectionSide,
     onSubmit: ({ comment, selection }) => {
       props.onLineComment?.({
@@ -168,66 +155,27 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
       : undefined,
   })
 
-  onCleanup(() => {
-    focusToken++
-  })
+  const focus = createReviewFocusDriver({
+    focusedComment: () => props.focusedComment,
+    // A focus on another file has no comment here; settle it so it cannot hijack a later diff refresh.
+    isAvailable: (target) => target.file === props.file && (diffCanRender() || !!mediaKind()),
+    root: () => scrollRef,
+    findComment: (_, commentId) => {
+      const anchor = scrollRef?.querySelector(`[data-comment-id="${CSS.escape(commentId)}"]`)
 
-  createEffect(() => {
-    const focus = props.focusedComment
+      return anchor instanceof HTMLElement ? anchor : undefined
+    },
+    scrollTo: (target) => target.scrollIntoView({ block: "center" }),
+    onOpenComment: (_, commentId) => {
+      const comment = comments().find((item) => item.id === commentId)
 
-    if (!focus) return
-
-    if (focus.file !== props.file) {
-      // The focused file has no mounted preview (e.g. not in the current diff
-      // set); clear the focus anyway so it cannot hijack a later diff refresh.
-      // Clear unconditionally so an unavailable file cannot retain stale focus.
-      untrack(() => {
-        const token = focusToken
-        requestAnimationFrame(() => {
-          if (token !== focusToken) return
-          props.onFocusedCommentChange?.(null)
-        })
-      })
-
-      return
-    }
-
-    untrack(() => {
-      setStore("opened", focus.id)
-
-      const comment = (props.comments ?? []).find((item) => item.file === focus.file && item.id === focus.id)
-
-      if (comment) setStore("selection", cloneSelectedLineRange(comment.selection))
-
-      // The diff renders asynchronously, so poll for the comment anchor before
-      // scrolling; clear the focus once handled so revisiting the file does not
-      // re-open a stale comment.
-      focusToken++
-      const token = focusToken
-
-      const scrollTo = (attempt: number) => {
-        if (token !== focusToken) return
-        const anchor = scrollRef?.querySelector(`[data-comment-id="${focus.id}"]`)
-
-        if (anchor instanceof HTMLElement) {
-          anchor.scrollIntoView({ block: "center" })
-
-          return
-        }
-
-        if (attempt >= 120) return
-        requestAnimationFrame(() => scrollTo(attempt + 1))
-      }
-
-      requestAnimationFrame(() => scrollTo(0))
-      requestAnimationFrame(() => {
-        if (token !== focusToken) return
-        props.onFocusedCommentChange?.(null)
-      })
-    })
+      if (comment) commentsUi.focusComment(comment.id, comment.selection)
+    },
+    onAcknowledge: () => props.onFocusedCommentChange?.(null),
   })
 
   const expandUnchanged = () => props.expandMode === "expand"
+  const placeholder = children(() => props.placeholder)
 
   const diffViewer = () => (
     <Dynamic
@@ -236,12 +184,13 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
       fileDiff={view().fileDiff}
       preloadedDiff={view().preloaded}
       diffStyle={props.diffStyle}
-      expandUnchanged={expandUnchanged()}
+      expandUnchanged={expandUnchanged() && !view().fileDiff.isPartial}
       virtualize={shouldVirtualizeReviewDiff({
         additionLines: view().fileDiff.additionLines.length,
         deletionLines: view().fileDiff.deletionLines.length,
       })}
       hunkSeparators={view().fileDiff.isPartial ? "simple" : "line-info-basic"}
+      onRendered={focus.poke}
       enableLineSelection={lineCommentsEnabled()}
       enableGutterUtility={lineCommentsEnabled()}
       onLineSelected={(range: SelectedLineRange | null) => {
@@ -252,11 +201,10 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
         if (!lineCommentsEnabled()) return
         commentsUi.onLineSelectionEnd(range)
       }}
-      onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
       annotations={commentsUi.annotations()}
       renderAnnotation={commentsUi.renderAnnotation}
       renderGutterUtility={lineCommentsEnabled() ? commentsUi.renderGutterUtility : undefined}
-      selectedLines={store.selection}
+      selectedLines={commentsUi.selected()}
       commentedLines={commentedLines()}
       media={{
         mode: "auto",
@@ -291,14 +239,21 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
         data-slot="session-review-v2-diff-scroll"
       >
         <Show
-          when={diffCanRender() || mediaKind()}
+          when={placeholder()}
           fallback={
-            <div data-slot="session-review-v2-empty">
-              <span class="text-12-regular text-text-weak">{i18n.t("ui.fileMedia.binary.title")}</span>
-            </div>
+            <Show
+              when={diffCanRender() || mediaKind()}
+              fallback={
+                <div data-slot="session-review-v2-empty">
+                  <span class="text-12-regular text-text-weak">{i18n.t("ui.fileMedia.binary.title")}</span>
+                </div>
+              }
+            >
+              {diffViewer()}
+            </Show>
           }
         >
-          {diffViewer()}
+          <div data-slot="session-review-v2-empty">{placeholder()}</div>
         </Show>
       </div>
     </>

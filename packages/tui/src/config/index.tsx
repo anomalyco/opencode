@@ -3,9 +3,9 @@ export * as Config from "."
 import { createBindingLookup } from "@opentui/keymap/extras"
 import { Vcs } from "@opencode/schema/vcs"
 import { Schema } from "effect"
-import { createContext, onCleanup, type JSX, useContext } from "solid-js"
+import { createContext, createMemo, onCleanup, type JSX, useContext } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { watch } from "fs"
+import { safeWatch } from "../util/watch"
 import path from "path"
 import { TuiKeybind } from "./keybind"
 
@@ -120,6 +120,9 @@ export const Info = Schema.Struct({
       }),
       tree: Schema.optional(Schema.Boolean).annotate({ description: "Show the diff file tree" }),
       single: Schema.optional(Schema.Boolean).annotate({ description: "Show only the selected file patch" }),
+      fullscreen: Schema.optional(Schema.Boolean).annotate({
+        description: "Open the diff side panel full screen; remembers the last full screen toggle",
+      }),
       view: Schema.optional(Schema.Literals(["auto", "split", "unified"])).annotate({
         description: "Diff layout; 'auto' selects a layout from the available width",
       }),
@@ -152,6 +155,9 @@ export const Info = Schema.Struct({
         description: "Session sidebar visibility; 'auto' shows it when space permits",
       }),
       scrollbar: Schema.optional(Schema.Boolean).annotate({ description: "Show the session transcript scrollbar" }),
+      submit_scroll: Schema.optional(Schema.Literals(["bottom", "keep"])).annotate({
+        description: "Jump to the latest message when sending a prompt, or keep the current transcript position",
+      }),
       thinking: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide model reasoning by default",
       }),
@@ -159,7 +165,8 @@ export const Info = Schema.Struct({
         description: "Group related transcript items automatically or render each item separately",
       }),
       verbosity: Schema.optional(Schema.Literals(["low", "medium", "high"])).annotate({
-        description: "Transcript detail level: low summarizes each run of tools and thoughts, high opens exploration and instruction groups",
+        description:
+          "Transcript detail level: low summarizes each run of tools and thoughts, high opens exploration and instruction groups",
       }),
       image_preview: Schema.optional(Schema.Boolean).annotate({
         description: "Show user attachment and tool-result images in the session transcript",
@@ -263,7 +270,7 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
   keybinds: TuiKeybind.BindingLookupView
   leader: { timeout: number }
   mouse: boolean
-  cursor?: {
+  cursor: {
     style: "block" | "underline" | "line" | "default"
     blinking: boolean
   }
@@ -285,8 +292,7 @@ export function resolve(
   input: Info,
   options: { terminalSuspend: boolean; environment?: Readonly<Record<string, string | undefined>> },
 ): Resolved {
-  const tabsMode =
-    input.tabs?.mode ?? (input.tabs?.enabled === undefined ? "auto" : input.tabs.enabled ? "on" : "off")
+  const tabsMode = input.tabs?.mode ?? (input.tabs?.enabled === undefined ? "auto" : input.tabs.enabled ? "on" : "off")
   const keybinds: TuiKeybind.KeybindOverrides = { ...input.keybinds }
   if (!options.terminalSuspend) {
     keybinds["terminal.suspend"] = "none"
@@ -312,12 +318,10 @@ export function resolve(
     }),
     leader: { timeout: input.leader?.timeout ?? 2000 },
     mouse: input.mouse ?? true,
-    cursor: input.cursor
-      ? {
-          style: input.cursor.style ?? "block",
-          blinking: input.cursor.blinking ?? true,
-        }
-      : undefined,
+    cursor: {
+      style: input.cursor?.style ?? "block",
+      blinking: input.cursor?.blinking ?? true,
+    },
     session: {
       ...input.session,
       new_location: input.session?.new_location ?? "launch",
@@ -358,7 +362,7 @@ export function ConfigProvider(props: {
   }
   let reload = Promise.resolve()
   const watcher = host?.path
-    ? watch(path.dirname(host.path), () => {
+    ? safeWatch(path.dirname(host.path), () => {
         reload = reload
           .then(() => host.get())
           .then(apply)
@@ -375,4 +379,25 @@ export function useConfig() {
   const value = useContext(ConfigContext)
   if (!value) throw new Error("ConfigProvider is missing")
   return value
+}
+
+/**
+ * The configured textarea cursor, replaced only when the cursor config changes. A fresh object on every render effect
+ * would restyle the textarea whenever an unrelated prop changes, discarding a style a plugin set on it.
+ */
+export function useCursorStyle() {
+  const config = useConfig()
+  return createMemo(() => ({ style: config.data.cursor.style, blinking: config.data.cursor.blinking }))
+}
+
+/** Reactive accessor for the temporary "new-designs" experiment. */
+export function useNewDesigns() {
+  const config = useConfig()
+  return () => config.data.experimental?.["new-designs"] === true
+}
+
+/** Reactive accessor for the temporary "client-mcp" experiment. */
+export function useClientMcpExperiment() {
+  const config = useConfig()
+  return () => config.data.experimental?.["client-mcp"] === true
 }

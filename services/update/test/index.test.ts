@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite"
 import { afterEach, expect, setSystemTime, test } from "bun:test"
 import { readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
-import worker from "../src/index"
+import worker, { allowedChannels, validGitHubClaims } from "../src/index"
 
 type Env = Parameters<typeof worker.fetch>[1]
 
@@ -125,13 +125,13 @@ test("retries D1 on the next lookup after a failed read", async () => {
 
 test("selects the minimum and active artifacts from the partial indexes", async () => {
   const db = database()
-  db.insert({ channel: "minimum", version: "1.0.0", time: 1, minimum: true })
-  db.insert({ channel: "minimum", version: "1.5.0", time: 2 })
-  db.insert({ channel: "minimum", version: "2.0.0", time: 3, active: true })
+  db.insert({ channel: "latest", version: "1.0.0", time: 1, minimum: true })
+  db.insert({ channel: "latest", version: "1.5.0", time: 2 })
+  db.insert({ channel: "latest", version: "2.0.0", time: 3, active: true })
 
-  expect(await version(await lookup(db.env, "minimum/cli/opencode?current=0.9.0"))).toBe("1.0.0")
-  expect(await version(await lookup(db.env, "minimum/cli/opencode?current=1.0.0"))).toBe("2.0.0")
-  expect(await version(await lookup(db.env, "minimum/cli/opencode"))).toBe("2.0.0")
+  expect(await version(await lookup(db.env, "latest/cli/opencode?current=0.9.0"))).toBe("1.0.0")
+  expect(await version(await lookup(db.env, "latest/cli/opencode?current=1.0.0"))).toBe("2.0.0")
+  expect(await version(await lookup(db.env, "latest/cli/opencode"))).toBe("2.0.0")
 
   // A release that is both active and minimum is listed once.
   db.insert({ channel: "both", version: "3.0.0", time: 1, active: true, minimum: true })
@@ -139,4 +139,95 @@ test("selects the minimum and active artifacts from the partial indexes", async 
   expect(response.status).toBe(200)
   const body = (await response.json()) as { artifacts: { version: string }[] }
   expect(body.artifacts.map((artifact) => artifact.version)).toEqual(["3.0.0"])
+})
+
+// Dev build numbers reset, so a stray dev minimum kept sending clients to a build they had already passed.
+test("ignores minimum artifacts outside the latest channel", async () => {
+  const db = database()
+  db.insert({ channel: "dev", version: "0.0.0-dev-20000", time: 1, minimum: true })
+  db.insert({ channel: "dev", version: "0.0.0-dev-18952", time: 2, active: true })
+
+  expect(
+    await version(
+      await lookup(db.env, "dev/cli/opencode", { "User-Agent": "opencode/dev/0.0.0-dev-18952/cli" }),
+    ),
+  ).toBe("0.0.0-dev-18952")
+  expect(await version(await lookup(db.env, "dev/cli/opencode?current=garbage"))).toBe("0.0.0-dev-18952")
+})
+
+test("rejects setting a minimum outside the latest channel", async () => {
+  const db = database()
+  const response = await worker.fetch(
+    new Request("https://opencode.ai/update/admin/minimum", {
+      method: "POST",
+      body: new URLSearchParams({ channel: "dev", name: "cli", distribution: "opencode", version: "0.0.0-dev-18952" }),
+    }),
+    db.env,
+    { waitUntil: () => {} },
+  )
+  expect(response.status).toBe(400)
+  expect(await response.json()).toEqual({ error: "Minimum is only supported on the latest channel" })
+})
+
+test("caches rollout fallback reads across caller IPs and overlapping releases", async () => {
+  const db = database()
+  const base = Date.parse("2026-10-13T00:00:00Z")
+  db.sqlite.query("INSERT INTO channel_rollout (channel, duration_hours) VALUES ('rollout', 6)").run()
+  db.insert({ channel: "rollout", version: "1.0.0", time: base })
+  db.insert({ channel: "rollout", version: "1.1.0", time: base + 5 * 3_600_000 })
+  db.insert({ channel: "rollout", version: "1.2.0", time: base + 7 * 3_600_000, active: true })
+  setSystemTime(new Date(base + 7 * 3_600_000 + 1_000))
+
+  // Missing IP waits for full 6h rollout -> cutoff is base + 1h + 1s, selects 1.0.0.
+  expect(await version(await lookup(db.env, "rollout/cli/opencode"))).toBe("1.0.0")
+  expect(db.queries).toHaveLength(3)
+
+  // Different caller IPs evaluate different cutoffs against the cached rollout history without extra D1 reads.
+  const versions = await Promise.all(
+    Array.from({ length: 20 }, (_, i) =>
+      lookup(db.env, "rollout/cli/opencode", { "CF-Connecting-IP": `203.0.113.${i + 1}` }).then(version),
+    ),
+  )
+  expect(new Set(versions)).toEqual(new Set(["1.0.0", "1.1.0"]))
+  expect(db.queries).toHaveLength(3)
+})
+
+function publishClaims(ref: string, event_name = "push", environment = "release") {
+  return {
+    repository: "anomalyco/opencode",
+    repository_id: "975734319",
+    repository_owner_id: "66570915",
+    workflow_ref: `anomalyco/opencode/.github/workflows/release.yml@${ref}`,
+    ref,
+    event_name,
+    environment,
+    sha: "0".repeat(40),
+    run_id: "1",
+    run_attempt: "1",
+    actor: "opencode",
+  }
+}
+
+// Pushes to dev ship 0.0.0-dev-N to "dev". Only a dispatch with a bump or version may ship a release to "latest".
+test.each([
+  ["refs/heads/dev", "push", ["dev"]],
+  ["refs/heads/dev", "workflow_dispatch", ["dev", "latest"]],
+  ["refs/heads/beta", "push", ["beta"]],
+  ["refs/heads/beta", "workflow_dispatch", ["beta"]],
+  // These branches no longer publish (v2 was merged into dev).
+  ["refs/heads/v1", "push", []],
+  ["refs/heads/v2", "push", []],
+  ["refs/heads/ci", "push", []],
+  ["refs/heads/snapshot-otui", "workflow_dispatch", []],
+] as const)("allows %s on %s to publish to %p", (ref, event, channels) => {
+  expect(allowedChannels({ ref, event_name: event })).toEqual([...channels])
+})
+
+// Build jobs run repository code and hold no environment, so their tokens must never publish.
+test.each([
+  ["release", true],
+  ["", false],
+  ["production", false],
+])("accepts publish tokens from environment %p: %p", (environment, valid) => {
+  expect(validGitHubClaims(publishClaims("refs/heads/dev", "push", environment))).toBe(valid)
 })

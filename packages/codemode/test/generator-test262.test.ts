@@ -12,7 +12,7 @@
  */
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CodeMode } from "../src/index.js"
+import { CodeMode } from "./lib/index.js"
 
 const execute = (code: string) => Effect.runPromise(CodeMode.execute({ code, tools: {} }))
 
@@ -1289,5 +1289,23 @@ describe("confined generators", () => {
         return outcomes
       `),
     ).toEqual(["null TypeError", "null TypeError", "throws RangeError", "throws RangeError", "ok quiet", "ok quiet"])
+  })
+})
+
+describe("generator protocol misuse", () => {
+  // test/built-ins/GeneratorPrototype/next/this-val-not-generator.js
+  test("a sync generator method borrowed by an async generator throws a catchable TypeError", async () => {
+    expect(
+      await value(`
+        const next = (function* () {})().next
+        const generator = (async function* () {})()
+        try {
+          next.call(generator)
+          return "no error"
+        } catch (e) {
+          return [e.name, e.message]
+        }
+      `),
+    ).toEqual(["TypeError", "Generator.prototype.next called on incompatible receiver an async generator."])
   })
 })

@@ -24,3 +24,54 @@
     line-height: var(--line-height-compact);
   }
 }
+
+/* The highlight sweeps in reading direction. */
+[data-component="home-session-skeleton"] {
+  opacity: 0;
+  transition: opacity 150ms cubic-bezier(0.4, 0, 1, 1);
+  mask-image: linear-gradient(90deg, rgb(0 0 0 / 0.55) 35%, #000 50%, rgb(0 0 0 / 0.55) 65%);
+  mask-size: 300% 100%;
+  animation: home-session-skeleton-sweep 1.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+[data-component="home-session-skeleton"][data-visible] {
+  opacity: 1;
+  transition: opacity 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  @starting-style {
+    opacity: 0;
+  }
+}
+
+[data-component="home-session-skeleton"]:dir(rtl) {
+  animation-direction: reverse;
+}
+
+[data-slot="home-sessions-list"][data-reveal] > :not([data-component="home-session-skeleton"]) {
+  animation: home-sessions-reveal 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes home-session-skeleton-sweep {
+  from {
+    mask-position: 100% 0;
+  }
+
+  to {
+    mask-position: 0% 0;
+  }
+}
+
+@keyframes home-sessions-reveal {
+  from {
+    opacity: 0;
+  }
+}
+
+:root[data-motion="reduce"] {
+  [data-component="home-session-skeleton"],
+  [data-slot="home-sessions-list"][data-reveal] > :not([data-component="home-session-skeleton"]) {
+    animation: none;
+    mask-image: none;
+    transition: none;
+  }
+}

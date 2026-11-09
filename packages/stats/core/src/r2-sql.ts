@@ -2,7 +2,7 @@ import { Context, Effect, Layer, Schedule, Schema } from "effect"
 import { Resource } from "sst/resource"
 
 const R2_SQL_MAX_ROWS = 10_000
-const R2_SQL_TIMEOUT_MS = 15 * 60_000
+const R2_SQL_TIMEOUT_MS = 10 * 60_000
 const R2SqlValue = Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Null])
 const R2SqlResponse = Schema.Struct({
   success: Schema.Boolean,
@@ -26,8 +26,16 @@ export class R2SqlQueryError extends Error {
   readonly requestId?: string
   readonly status?: number
   readonly code?: number
+  readonly rowLimit: boolean
 
-  constructor(input: { message: string; requestId?: string; status?: number; code?: number; cause?: unknown }) {
+  constructor(input: {
+    message: string
+    requestId?: string
+    status?: number
+    code?: number
+    rowLimit?: boolean
+    cause?: unknown
+  }) {
     super(input.cause instanceof Error ? `${input.message}: ${input.cause.toString()}` : input.message, {
       cause: input.cause,
     })
@@ -35,7 +43,27 @@ export class R2SqlQueryError extends Error {
     this.requestId = input.requestId
     this.status = input.status
     this.code = input.code
+    this.rowLimit = input.rowLimit ?? false
   }
+}
+
+// Retrying these repeats the same R2 SQL spend for the same failure: a rejected
+// query, rejected credentials, or a result that will hit the row limit again.
+export function isDeterministicR2SqlError(error: R2SqlQueryError) {
+  if (isTransientR2SqlError(error)) return false
+  return error.rowLimit || error.status === 400 || error.status === 401 || error.status === 403
+}
+
+// 40005 is a query timeout and 60104 an intermittent "Unprocessable Entity", both
+// sent with 4xx statuses. fetch rejects with a TypeError when the connection drops.
+function isTransientR2SqlError(error: R2SqlQueryError) {
+  return (
+    error.code === 40005 ||
+    error.code === 60104 ||
+    error.status === 429 ||
+    (error.status !== undefined && error.status >= 500) ||
+    error.cause instanceof TypeError
+  )
 }
 
 export declare namespace R2Sql {
@@ -66,18 +94,17 @@ export const queryR2SqlPages = Effect.fn("R2Sql.query")(function* (
     const page = yield* Effect.suspend(() =>
       fetchRows(columns?.length ? pageQuery(query, columns, cursor) : query),
     ).pipe(
-      // Retry only this page; a transient R2 timeout must not discard the whole
-      // display-window backfill. Syntax, auth, and row-limit errors still fail.
+      // Retry only this page; a transient R2 failure must not discard the whole
+      // period. Syntax, auth, row-limit, and request timeout errors still fail.
       Effect.retry({
         times: 2,
         schedule: Schedule.exponential("5 seconds"),
-        while: (error) =>
-          error.code === 40005 || error.status === 429 || (error.status !== undefined && error.status >= 500),
+        while: isTransientR2SqlError,
       }),
     )
     if (page.length >= R2_SQL_MAX_ROWS && !columns?.length)
       return yield* Effect.fail(
-        new R2SqlQueryError({ message: `R2 SQL stats query reached the ${R2_SQL_MAX_ROWS} row limit` }),
+        new R2SqlQueryError({ message: `R2 SQL stats query reached the ${R2_SQL_MAX_ROWS} row limit`, rowLimit: true }),
       )
     rows.push(...page)
     if (page.length < R2_SQL_MAX_ROWS) return rows
@@ -106,8 +133,9 @@ const fetchRows = Effect.fn("R2Sql.fetchRows")(function* (query: string) {
     try: (signal) => {
       const options = {
         method: "POST",
-        // Analytical queries can exceed Bun's default five-minute idle timer.
-        // Bound the whole request and cancel it when the sync is interrupted.
+        // Bun's fetch, used by the local CLI, otherwise stops at a five-minute
+        // idle timer; Workers ignore the option. Bound the whole request and
+        // cancel it when the sync is interrupted.
         timeout: false,
         signal: AbortSignal.any([signal, AbortSignal.timeout(R2_SQL_TIMEOUT_MS)]),
         headers: {
@@ -116,7 +144,7 @@ const fetchRows = Effect.fn("R2Sql.fetchRows")(function* (query: string) {
         },
         body: JSON.stringify({ query }),
       }
-      return Bun.fetch(
+      return fetch(
         `https://api.sql.cloudflarestorage.com/api/v1/accounts/${Resource.R2Sql.accountId}/r2-sql/query/${Resource.R2Sql.bucket}`,
         options,
       )

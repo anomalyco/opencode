@@ -45,10 +45,10 @@ const usage = (input: number, output: number, reasoning = 0, read = 0, write = 0
 const providerError = { type: "provider.error", message: "summary request failed" }
 const compaction = {
   started: (sessionID: string = root) =>
-    durableEvent("session.compaction.started", { sessionID, reason: "manual", recent: "", inputID: "msg_compact" }),
+    durableEvent("session.compaction.started", { sessionID, reason: "manual", inputID: "msg_compact" }),
   delta: (text: string, sessionID: string = root) => ephemeralEvent("session.compaction.delta", { sessionID, text }),
   ended: (text: string, sessionID: string = root) =>
-    durableEvent("session.compaction.ended", { sessionID, reason: "manual", text, recent: "" }),
+    durableEvent("session.compaction.ended", { sessionID, reason: "manual", text }),
   failed: (error: { type: string; message: string }, reason: "auto" | "manual" = "manual") =>
     durableEvent("session.compaction.failed", { sessionID: root, reason, error }),
 }
@@ -533,7 +533,7 @@ const rows: Row[] = [
   {
     name: "replays a completed compaction as one terminal update",
     ctx: { compaction: true },
-    messages: [compactionMessage({ status: "completed", summary: "Summary", recent: "" })],
+    messages: [compactionMessage({ status: "completed", summary: "Summary" })],
     expected: {
       updates: [{ compactionId: "msg_compaction", status: "completed", summary: [{ type: "text", text: "Summary" }] }],
     },
@@ -541,7 +541,7 @@ const rows: Row[] = [
   {
     name: "replays a compaction without a summary as cleared",
     ctx: { compaction: true },
-    messages: [compactionMessage({ status: "completed", summary: "", recent: "" })],
+    messages: [compactionMessage({ status: "completed", summary: "" })],
     expected: { updates: [{ status: "completed", summary: null }] },
   },
   {
@@ -559,12 +559,12 @@ const rows: Row[] = [
   {
     name: "skips a running compaction on replay",
     ctx: { compaction: true },
-    messages: [compactionMessage({ status: "running", summary: "", recent: "" })],
+    messages: [compactionMessage({ status: "running", summary: "" })],
     expected: { updates: [] },
   },
   {
     name: "replays a compaction as a marker when the client lacks the capability",
-    messages: [compactionMessage({ status: "completed", summary: "Summary", recent: "" })],
+    messages: [compactionMessage({ status: "completed", summary: "Summary" })],
     expected: {
       updates: [
         {

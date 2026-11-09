@@ -40,13 +40,18 @@ for (const entrypoint of ["create", "layer"] as const) {
           location: Location.Ref.make({ directory: AbsolutePath.make(directory.path) }),
         })
         expect((yield* client.sessions.get({ sessionID: session.id })).id).toBe(session.id)
-        const events = yield* client.sessions.log({ sessionID: session.id }).pipe(Stream.runCollect)
+        const events = yield* client.experimental.session.log({ sessionID: session.id }).pipe(Stream.runCollect)
         expect(events.some((event) => event.type === "session.created")).toBe(true)
         expect(yield* client.events.subscribe().pipe(Stream.take(1), Stream.runCollect)).toMatchObject([
           { type: "server.connected" },
         ])
-        expect(yield* client.sessions.get({ sessionID: Session.ID.create() }).pipe(Effect.flip)).toMatchObject({
+        const missing = Session.ID.create()
+        // Error responses must decode over the SDK transport too; sessions.get is served by core without HTTP.
+        expect(yield* client.experimental.session.export({ sessionID: missing }).pipe(Effect.flip)).toMatchObject({
           _tag: "SessionNotFoundError",
+        })
+        expect(yield* client.sessions.get({ sessionID: missing }).pipe(Effect.flip)).toMatchObject({
+          _tag: "Session.NotFoundError",
         })
         // Binding the SDK's transport must not change the caller's surrounding context.
         expect(yield* FetchHttpClient.Fetch).toBe(ambient)

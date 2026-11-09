@@ -1,75 +1,84 @@
 import { observeElementOffset, type Virtualizer } from "@tanstack/solid-virtual"
+import {
+  createReconnectState,
+  DISPOSED_RECONNECT_EVENT,
+  isReconnectObserverActive,
+  transitionReconnect,
+  type ReconnectEffect,
+  type ReconnectEvent,
+} from "./reconnect-machine"
 
 export function observeElementOffsetReconnectAware<TScrollElement extends Element, TItemElement extends Element>(
   instance: Virtualizer<TScrollElement, TItemElement>,
   callback: (offset: number, isScrolling: boolean) => void,
   onReconnect?: () => void,
 ) {
-  let active = true
+  const element = instance.scrollElement
+  let state = createReconnectState(!!element?.isConnected)
+  let frame: number | undefined
 
+  // TanStack resets isScrolling on a timer that reports the offset of the last scroll event. A virtualizer
+  // write since then (prepend anchoring, size compensation) may not have dispatched its scroll event yet, and
+  // compensating from that stale offset would undo the write, so a settled scroll reads the live scrollTop
+  // (vertical only, like the reconnect check below).
   const deliver = (offset: number, isScrolling: boolean) => {
-    if (!active) return
-    callback(offset, isScrolling)
+    if (!isReconnectObserverActive(state)) return
+    callback(isScrolling || !element?.isConnected ? offset : element.scrollTop, isScrolling)
   }
 
   const cleanupOffset = observeElementOffset(instance, deliver)
-  const element = instance.scrollElement
   const targetWindow = instance.targetWindow
   const root = element?.closest("main") ?? element?.ownerDocument.body
 
   if (!element || !targetWindow || !root)
     return () => {
-      active = false
+      state = transitionReconnect(state, DISPOSED_RECONNECT_EVENT).state
       cleanupOffset?.()
     }
 
-  // Cached views can be constructed before their first attachment to the page.
-  let removed = !element.isConnected
-  let frame: number | undefined
-
-  const clearCheck = () => {
-    if (frame === undefined) return
-    targetWindow.cancelAnimationFrame(frame)
-    frame = undefined
+  const dispatch = (event: ReconnectEvent) => {
+    const next = transitionReconnect(state, event)
+    state = next.state
+    next.effects.forEach(run)
   }
 
-  const startCheck = () => {
-    clearCheck()
-    const deadline = targetWindow.performance.now() + instance.options.isScrollingResetDelay
-    let framesAfterDeadline = 0
+  const run = (effect: ReconnectEffect) => {
+    if (effect.type === "reconnected") return onReconnect?.()
 
-    const check = (time: number) => {
+    if (effect.type === "offset.deliver") return deliver(effect.offset, false)
+
+    if (frame !== undefined) targetWindow.cancelAnimationFrame(frame)
+    frame = undefined
+
+    if (effect.type === "frame.cancel") return
+    const attempt = effect.attempt
+    frame = targetWindow.requestAnimationFrame((time) => {
       frame = undefined
-
-      if (
-        element.isConnected &&
-        (instance.scrollOffset === null || Math.abs(element.scrollTop - instance.scrollOffset) > 1)
-      )
-        deliver(element.scrollTop, false)
-
-      if (time >= deadline) framesAfterDeadline += 1
-
-      if (framesAfterDeadline >= 2) return
-      frame = targetWindow.requestAnimationFrame(check)
-    }
-
-    frame = targetWindow.requestAnimationFrame(check)
+      dispatch({
+        type: "frame",
+        attempt,
+        time,
+        connected: element.isConnected,
+        nativeTop: element.scrollTop,
+        virtualOffset: instance.scrollOffset,
+      })
+    })
   }
 
   const observer = new targetWindow.MutationObserver((records) => {
-    if (!active) return
-    records.forEach((record) => {
-      if (record.target === element || element.contains(record.target)) return
+    if (!isReconnectObserverActive(state)) return
+    const connected = element.isConnected
 
-      if (mutationNodesContainElement(record.removedNodes, element)) {
-        removed = true
-        clearCheck()
-      }
+    // A detached view stays detached until it is back in the document, whatever else the page changes.
+    if (!connected && state.status === "detached") return
+    const added = connected && state.status !== "detached" && reattached(records, element)
 
-      if (!removed || !element.isConnected || !mutationNodesContainElement(record.addedNodes, element)) return
-      removed = false
-      onReconnect?.()
-      startCheck()
+    if (connected && state.status !== "detached" && !added) return
+    dispatch({
+      type: "mutated",
+      connected,
+      added,
+      deadline: targetWindow.performance.now() + instance.options.isScrollingResetDelay,
     })
   })
 
@@ -77,13 +86,21 @@ export function observeElementOffsetReconnectAware<TScrollElement extends Elemen
   observer.observe(root, { childList: true, subtree: true })
 
   return () => {
-    active = false
     observer.disconnect()
-    clearCheck()
+    dispatch(DISPOSED_RECONNECT_EVENT)
     cleanupOffset?.()
   }
 }
 
-function mutationNodesContainElement(nodes: Iterable<Node>, element: Element) {
-  return [...nodes].some((node) => node === element || node.contains(element))
+// Whether a record outside the element inserted it or one of its ancestors: a move within the page.
+function reattached(records: MutationRecord[], element: Element) {
+  for (const record of records) {
+    if (record.target === element || element.contains(record.target)) continue
+
+    for (const node of record.addedNodes) {
+      if (node === element || node.contains(element)) return true
+    }
+  }
+
+  return false
 }

@@ -13,11 +13,10 @@ type EditorStdio = "inherit" | "pipe" | "ignore" | number | Stream
 
 export async function openEditor(input: { value: string; renderer: CliRenderer; cwd?: string; stdin?: EditorStdio }) {
   const editor = process.env.VISUAL || process.env.EDITOR
-  if (!editor) return
+  if (!editor) throw new Error("Set $VISUAL or $EDITOR to open an external editor")
   const file = path.join(os.tmpdir(), `OpenCode${Date.now()}.md`)
   await writeFile(file, input.value)
-  input.renderer.suspend()
-  input.renderer.currentRenderBuffer.clear()
+  await input.renderer.suspend()
   try {
     await new Promise<void>((resolve, reject) => {
       // shell in https://github.com/oven-sh/bun/blob/bun-v1.4.3/src/js/node/child_process.ts#L1025
@@ -38,9 +37,7 @@ export async function openEditor(input: { value: string; renderer: CliRenderer; 
     return (await readFile(file, "utf8")) || undefined
   } finally {
     await rm(file, { force: true }).catch(() => {})
-    input.renderer.currentRenderBuffer.clear()
-    input.renderer.resume()
-    input.renderer.requestRender()
+    await input.renderer.resume()
   }
 }
 

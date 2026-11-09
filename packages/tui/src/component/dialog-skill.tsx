@@ -1,7 +1,7 @@
 import { TextAttributes } from "@opentui/core"
 import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { createResource, createMemo, createSignal, Match, Switch } from "solid-js"
-import { useDialog } from "../ui/dialog"
+import { DIALOG_LIST_INSET, useDialog } from "../ui/dialog"
 import { useTheme } from "../context/theme"
 import { errorMessage } from "../util/error"
 import { useData } from "../context/data"
@@ -62,13 +62,13 @@ export function DialogSkill(props: DialogSkillProps) {
       emptyView={
         <Switch
           fallback={
-            <box paddingLeft={4} paddingRight={4}>
+            <box paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET}>
               <text fg={theme.text.muted}>No skills available</text>
             </box>
           }
         >
           <Match when={showError()}>
-            <box paddingLeft={4} paddingRight={4}>
+            <box paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET}>
               <text fg={theme.text.feedback.error.base} attributes={TextAttributes.BOLD}>
                 Could not load skills
               </text>
@@ -77,14 +77,14 @@ export function DialogSkill(props: DialogSkillProps) {
             </box>
           </Match>
           <Match when={skills.loading}>
-            <box paddingLeft={4} paddingRight={4}>
+            <box paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET}>
               <text fg={theme.text.muted}>Loading skills…</text>
             </box>
           </Match>
         </Switch>
       }
       noMatchView={
-        <box paddingLeft={4} paddingRight={4}>
+        <box paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET}>
           <text fg={theme.text.muted}>No skills found</text>
         </box>
       }

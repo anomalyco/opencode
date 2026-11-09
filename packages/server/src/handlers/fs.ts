@@ -1,14 +1,19 @@
 import { FileSystem } from "@opencode/core/filesystem"
+import { FileWatch } from "@opencode/core/filesystem/file-watch"
+import { Location } from "@opencode/core/location"
 import { RelativePath } from "@opencode/core/schema"
-import { FileNotFoundError } from "@opencode/protocol/errors"
+import { FileNotFoundError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Effect, Option, Stream } from "effect"
 import { type HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
+import path from "path"
 import { Api } from "../api"
+import { ContentHeaders } from "../content-headers"
 import { response } from "../location"
 
 export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handlers) =>
   Effect.gen(function* () {
+    const fileWatch = yield* FileWatch.Service
     return handlers
       .handleRaw("fs.read", (ctx) =>
         Effect.gen(function* () {
@@ -21,7 +26,7 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
                 (error) => new FileNotFoundError({ path: error.path, message: `File not found: ${error.path}` }),
               ),
             )
-          return serveFile(ctx.request, file)
+          return serveFile(ctx.request, file, ContentHeaders.download({ path, mime: file.mime }))
         }),
       )
       .handle("fs.list", (ctx) =>
@@ -54,6 +59,39 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
           }),
         ),
       )
+      .handle("fs.watch", (ctx) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.Service
+          const location = yield* Location.Service
+          // Same confinement as read: the file must exist inside the location.
+          yield* fs
+            .read({ path: RelativePath.make(ctx.payload.path) })
+            .pipe(
+              Effect.mapError(
+                (error) => new FileNotFoundError({ path: error.path, message: `File not found: ${error.path}` }),
+              ),
+            )
+          yield* fileWatch
+            .watch({
+              location: { directory: location.directory, workspaceID: location.workspaceID },
+              file: path.resolve(location.directory, ctx.payload.path),
+            })
+            .pipe(
+              Effect.mapError(
+                (error) => new ServiceUnavailableError({ message: error.message, service: "filewatcher" }),
+              ),
+            )
+        }),
+      )
+      .handle("fs.unwatch", (ctx) =>
+        Effect.gen(function* () {
+          const location = yield* Location.Service
+          yield* fileWatch.unwatch({
+            location: { directory: location.directory, workspaceID: location.workspaceID },
+            file: path.resolve(location.directory, ctx.payload.path),
+          })
+        }),
+      )
   }),
 )
 
@@ -65,7 +103,11 @@ function decodeRequestPath(url: string) {
   })
 }
 
-function serveFile(request: HttpServerRequest.HttpServerRequest, file: FileSystem.File) {
+function serveFile(
+  request: HttpServerRequest.HttpServerRequest,
+  file: FileSystem.File,
+  content: ReturnType<typeof ContentHeaders.download>,
+) {
   const etag = `W/"${file.size.toString(16)}-${Option.match(file.mtime, {
     onNone: () => "0",
     onSome: (mtime) => mtime.getTime().toString(16),
@@ -77,7 +119,8 @@ function serveFile(request: HttpServerRequest.HttpServerRequest, file: FileSyste
     etag,
     ...(lastModified === undefined ? {} : { "last-modified": lastModified }),
   }
-  if (isNotModified(request, etag, lastModified)) return HttpServerResponse.empty({ status: 304, headers: validators })
+  if (isNotModified(request, etag, lastModified))
+    return HttpServerResponse.empty({ status: 304, headers: { ...validators, ...content } })
 
   const rangeHeader = request.method === "GET" ? request.headers["range"] : undefined
   const range =
@@ -97,8 +140,8 @@ function serveFile(request: HttpServerRequest.HttpServerRequest, file: FileSyste
     contentLength: length,
     headers: {
       ...validators,
+      ...content,
       "accept-ranges": "bytes",
-      "content-type": file.mime,
       ...(range === undefined ? {} : { "content-range": `bytes ${range.start}-${range.end}/${file.size}` }),
     },
   })
