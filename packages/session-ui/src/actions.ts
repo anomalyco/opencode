@@ -38,6 +38,11 @@ export type SessionUserActions = {
   openAttachment?: (file: PromptAttachment) => void
   /** Opens the model picker, which a budget notice offers when a budget pauses the model in use. */
   chooseModel?: () => void
+  /**
+   * Opens the OpenCode Go page of the OpenCode Console workspace the location is signed in to, which the free limit and
+   * the workspace's credit and Go refusals offer. Absent when it isn't signed in.
+   */
+  openGoPage?: () => void
   revert?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
   /** Starts a new session with the history before this message and its prompt in the composer. */
   fork?: (input: { sessionID: string; messageID: string }) => Promise<void> | void

@@ -118,6 +118,7 @@ it.effect("reads the member's Go allowance and budgets from the Console they sig
         id: "wrk_anomaly",
         name: "Anomaly",
         usageURL: "https://dev.opencode.ai/console/wrk_anomaly/activity/overview",
+        goURL: "https://dev.opencode.ai/console/wrk_anomaly/go",
       },
       go: {
         rolling: { percent: 42, limited: false, resetsAt: Date.parse("2026-10-24T17:00:00.000Z") },
@@ -182,6 +183,7 @@ it.effect("has no Go allowance or budgets to show where Console refuses them", (
         id: "wrk_anomaly",
         name: "Anomaly",
         usageURL: "https://dev.opencode.ai/console/wrk_anomaly/activity/overview",
+        goURL: "https://dev.opencode.ai/console/wrk_anomaly/go",
       },
       budgets: [],
     })

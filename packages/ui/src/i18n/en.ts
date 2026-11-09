@@ -94,6 +94,7 @@ const source = {
   "ui.sessionTurn.budgetLimit.models": "Model budget reached · this model is paused until {{time}}",
   "ui.sessionTurn.budgetLimit.modelsUntilReset": "Model budget reached · this model is paused until it resets",
   "ui.sessionTurn.budgetLimit.useFreeModel": "Use a free model",
+  "ui.sessionTurn.goOffer.subscribe": "Subscribe to OpenCode Go",
   "ui.sessionTurn.budgetLimit.switchModel": "Switch model",
   "ui.sessionTurn.goLimit.title": "You've reached your OpenCode Go usage limit.",
   "ui.sessionTurn.goLimit.lineReset": "You've reached your OpenCode Go usage limit. It resets at {{time}}.",

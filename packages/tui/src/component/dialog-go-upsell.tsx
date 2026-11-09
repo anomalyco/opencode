@@ -38,6 +38,8 @@ export function waitForGoUpsellConnect() {
 
 export function DialogGoUpsell(props: {
   reset?: string
+  /** The signed-in workspace's Go page, opened instead of the public one. */
+  url?: string
   canContinue?: () => boolean
   onSubscribe: () => void
   onDontShowAgain: () => void
@@ -59,6 +61,7 @@ export function DialogGoUpsell(props: {
     return RGBA.fromInts(r, g, b, 186)
   }
   const primary = () => theme.background.action.primary.focused
+  const url = () => props.url ?? GO_URL
 
   createEffect(() => {
     if (!short()) return
@@ -82,7 +85,7 @@ export function DialogGoUpsell(props: {
 
   const run = (action: Action) => {
     if (action === "subscribe") {
-      Open.openUrl(GO_URL).catch(() => {})
+      Open.openUrl(url()).catch(() => {})
       dialog.replace(() => <DialogGoUpsellConnect canContinue={props.canContinue} onSubscribed={props.onSubscribe} />)
       return
     }
@@ -171,7 +174,7 @@ export function DialogGoUpsell(props: {
               <text fg={theme.text.muted} bg={textBg()} wrapMode="word">
                 OpenCode Go gives you reliable access to the best open-source models for $10/month.
               </text>
-              <Link href={GO_URL} fg={primary()} bg={textBg()} wrapMode="none" />
+              <Link href={url()} fg={primary()} bg={textBg()} wrapMode="none" />
             </scrollbox>
           }
         >
@@ -184,7 +187,7 @@ export function DialogGoUpsell(props: {
             </text>
           </box>
           <box ref={setAnchor} height={7} paddingBottom={1} alignItems="center" justifyContent="flex-end">
-            <Link href={GO_URL} fg={primary()} bg={textBg()} wrapMode="none" />
+            <Link href={url()} fg={primary()} bg={textBg()} wrapMode="none" />
           </box>
         </Show>
         <Show

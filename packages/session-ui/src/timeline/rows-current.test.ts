@@ -1733,6 +1733,52 @@ describe("current session timeline rows", () => {
     )
   })
 
+  test("marks Console's credit and Go subscription refusals, which offer the workspace's Go page", () => {
+    const user = { id: "msg_user", type: "user", text: "prompt", time: { created: 1 } } satisfies SessionMessageInfo
+
+    const refused = (providerID: string, error: SessionMessageAssistant["error"]) =>
+      Timeline.constructSessionMessageRows(
+        [
+          user,
+          {
+            id: "msg_assistant",
+            type: "assistant",
+            agent: "build",
+            model: { id: "model", providerID },
+            content: [],
+            finish: "error",
+            error,
+            time: { created: 2, completed: 3 },
+          },
+        ],
+        true,
+        { type: "idle" },
+      ).rows.at(-1)
+
+    const funds = { type: "provider.quota", message: "Insufficient account funds", status: 402 }
+
+    const go = {
+      type: "provider.auth",
+      message: "Upstream request failed",
+      status: 403,
+      response: {
+        body: '{"type":"error","error":{"type":"permission_error","message":"An active OpenCode Go subscription is required to use Go models."}}',
+      },
+    }
+
+    expect(refused("opencode", funds)).toEqual(
+      new TimelineRow.Error({ userMessageID: "msg_user", text: "Insufficient account funds", kind: "no-credits" }),
+    )
+    expect(refused("opencode-go", go)).toMatchObject({ kind: "go-required" })
+    // Another provider's 402 and Console's other 403s are not Console's credit or Go refusals.
+    expect(refused("openrouter", funds)).toEqual(
+      new TimelineRow.Error({ userMessageID: "msg_user", text: "Insufficient account funds" }),
+    )
+    expect(
+      refused("opencode-go", { ...go, message: "Model access is disabled", response: { body: "{}" } }),
+    ).not.toHaveProperty("kind")
+  })
+
   test("summarizes a turn's changed files after the idle marker that ends it", () => {
     const step = (id: string, files?: string[]) =>
       ({

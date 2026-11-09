@@ -8,6 +8,7 @@ import {
   Match,
   on,
   onCleanup,
+  onMount,
   Show,
   Switch,
   type Accessor,
@@ -73,7 +74,8 @@ import { DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogGoUpsell } from "../../component/dialog-go-upsell"
-import { UsageLimitNotice, useLimitNotice, useUsageAlerts } from "../../component/usage"
+import { UsageLimitNotice, useLimitNotice, useUsageAlerts, useUsageLimits } from "../../component/usage"
+import { Link } from "../../ui/link"
 import { useStorage } from "../../context/storage"
 import { Composer } from "./composer"
 import { filetype } from "../../util/filetype"
@@ -640,6 +642,7 @@ export function Session(props: {
   )
   const handledLimits = new Set<string>()
   useUsageAlerts(() => route.sessionID)
+  const limits = useUsageLimits()
   let sessionDisposed = false
   onCleanup(() => {
     sessionDisposed = true
@@ -741,6 +744,7 @@ export function Session(props: {
           dialog.replace(() => (
             <DialogGoUpsell
               reset={freeLimitReset(event.data.error.retryAfterMs, event.created)}
+              url={limits.info()?.workspace.goURL}
               canContinue={hasRecalledPrompt}
               onDontShowAgain={() => {
                 updateGoUpsellMemory((draft) => {
@@ -2528,16 +2532,35 @@ function freeLimitReset(delay: number | undefined, base: number) {
 
 function FreeLimitNotice(props: { message: Pick<SessionMessageAssistant, "error" | "time"> }) {
   const theme = useTheme()
+  const limits = useUsageLimits()
   const reset = createMemo(() =>
     freeLimitReset(props.message.error?.retryAfterMs, props.message.time.completed ?? props.message.time.created),
   )
+  onMount(() => {
+    if (limits.info() === undefined) limits.load()
+  })
   return (
     <box paddingLeft={3} flexDirection="column">
       <text fg={theme.text.muted}>You've used today's free messages.{reset() ? ` They reset at ${reset()}.` : ""}</text>
-      <text fg={theme.text.muted}>
-        Upgrade to OpenCode Go → <span style={{ fg: theme.text.base }}>/connect</span> · Switch model →{" "}
-        <span style={{ fg: theme.text.base }}>/models</span>
-      </text>
+      {/* Signing in to OpenCode Console doesn't lift the free limit, so a signed-in member goes to their Go page. */}
+      <Show
+        when={limits.info()?.workspace.goURL}
+        fallback={
+          <text fg={theme.text.muted}>
+            Upgrade to OpenCode Go → <span style={{ fg: theme.text.base }}>/connect</span> · Switch model →{" "}
+            <span style={{ fg: theme.text.base }}>/models</span>
+          </text>
+        }
+      >
+        {(url) => (
+          <>
+            <text fg={theme.text.muted}>
+              Switch model → <span style={{ fg: theme.text.base }}>/models</span> · Subscribe to OpenCode Go:
+            </text>
+            <Link href={url()} fg={theme.text.base} />
+          </>
+        )}
+      </Show>
     </box>
   )
 }

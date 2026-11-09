@@ -19,6 +19,7 @@ export function createTimelineActions(
   view: TimelineActionsView,
   actions: Required<Pick<SessionUserActions, "revert" | "fork" | "chooseModel" | "openAttachment">> & {
     pending: TimelinePendingActions
+    openGoPage: Accessor<SessionUserActions["openGoPage"]>
   },
 ): SessionUserActions {
   const pending: PendingActions = {
@@ -43,6 +44,9 @@ export function createTimelineActions(
     },
     get chooseModel() {
       return view.isChild() ? undefined : actions.chooseModel
+    },
+    get openGoPage() {
+      return view.isChild() ? undefined : actions.openGoPage()
     },
     openAttachment: actions.openAttachment,
   }

@@ -9,6 +9,7 @@ import { useDialog, useI18n } from "@opencode/ui/context"
 import { DialogUsageExceeded } from "@/providers/connect/usage-exceeded"
 import { GoUpsellHero } from "@/providers/connect/go-upsell-hero"
 import { useLocal, type ModelSelection } from "@/providers/models/selection"
+import { useData } from "@/runtime/server/current"
 
 const GO_UPSELL_FREE_TIER_LAST_SEEN_AT = "go_upsell_last_seen_at"
 
@@ -55,6 +56,7 @@ export function useUsageExceededDialogs(input?: {
   onDone?: () => void
 }) {
   const sdk = useWorkspaceLocation()
+  const data = useData()
   const dialog = useDialog()
   const local = useLocal()
   const { params } = useSessionLayout()
@@ -87,6 +89,9 @@ export function useUsageExceededDialogs(input?: {
     setGoUpsellState(GO_UPSELL_FREE_TIER_LAST_SEEN_AT, Date.now())
 
     const reset = formatLimitReset(locale(), evt.created, evt.data.error.retryAfterMs)
+    // Signing in to OpenCode Console doesn't lift the free limit, so a signed-in member subscribes on their workspace's
+    // Go page, and has no provider left to connect.
+    const goURL = data.location.usage.limits(sdk().ref)?.workspace.goURL
 
     dialog.show(() => (
       <DialogUsageExceeded
@@ -97,11 +102,11 @@ export function useUsageExceededDialogs(input?: {
             : t("dialog.usageExceeded.freeTier.description")
         }
         actionLabel={t("dialog.usageExceeded.freeTier.actionLabel")}
-        link={GO_URL}
+        link={goURL ?? GO_URL}
         hero={<GoUpsellHero />}
         onClose={(dontShowAgain) => {
           if (dontShowAgain) setGoUpsellState(GO_UPSELL_FREE_TIER_DONT_SHOW, Date.now())
-          else {
+          else if (!goURL) {
             void import("@/providers/connect/dialog").then((x) => {
               const controller = x.useProviderConnectController()
               controller.select("opencode-go")
@@ -131,7 +136,13 @@ export function useUsageExceededDialogs(input?: {
       if (evt.data.sessionID !== params.id || dialog.active) return
       const error = evt.data.error
 
-      if (error.type === "provider.free-limit") return whenGoUpsellReady(showFreeLimitDialog, evt)
+      // The free limit and OpenCode Console's credit and Go refusals link a signed-in workspace's Go page.
+      if (error.type === "provider.free-limit" || error.status === 402 || error.status === 403) {
+        const synced = data.location.usage.sync(sdk().ref).catch(() => undefined)
+
+        if (error.type === "provider.free-limit")
+          return void synced.then(() => whenGoUpsellReady(showFreeLimitDialog, evt))
+      }
 
       if (error.type !== "provider.chatgpt-limit") return
 

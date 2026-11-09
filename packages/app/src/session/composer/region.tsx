@@ -405,6 +405,11 @@ export function createActiveSessionRegion(input: {
           pending: pendingSteer,
           chooseModel: () => command.trigger("model.choose"),
           openAttachment,
+          openGoPage: () => {
+            const url = data.location.usage.limits(location().ref)?.workspace.goURL
+
+            return url ? () => platform.openExternal(url) : undefined
+          },
         }),
     },
     requests: state,

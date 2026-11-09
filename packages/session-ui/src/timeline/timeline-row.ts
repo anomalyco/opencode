@@ -1,4 +1,5 @@
 import { Data, Match, Predicate } from "effect"
+import type { TurnLimitKind } from "./turn-phase-machine"
 
 export type PartRef = {
   messageID: string
@@ -60,13 +61,14 @@ export namespace TimelineRow {
   /**
    * `free-limit` marks OpenCode Zen's daily free allowance running out and `go-limit` an OpenCode Go subscription's
    * usage limit. `budget-limit` marks an OpenCode Console budget
-   * on all spend pausing paid models, and `model-budget-limit` one pausing only the models it covers. `resetAt` is when
-   * the allowance or budget comes back, if known.
+   * on all spend pausing paid models, and `model-budget-limit` one pausing only the models it covers. `no-credits` is an
+   * OpenCode Console workspace out of credits and `go-required` a Go model used without Go. `resetAt` is when the
+   * allowance or budget comes back, if known.
    */
   export class Error extends Data.TaggedClass("Error")<{
     userMessageID: string
     text: string
-    kind?: "free-limit" | "go-limit" | "budget-limit" | "model-budget-limit"
+    kind?: TurnLimitKind
     resetAt?: number
   }> {}
 
@@ -213,7 +215,7 @@ export type TimelineRowMap = {
   Error: {
     userMessageID: string
     text: string
-    kind?: "free-limit" | "go-limit" | "budget-limit" | "model-budget-limit"
+    kind?: TurnLimitKind
     resetAt?: number
   }
   CompactionQueued: { userMessageID: string; inboxID: string }

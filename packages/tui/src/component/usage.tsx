@@ -18,6 +18,7 @@ import {
   modelUsage,
   goLimitLink,
   goLimitName,
+  goRequired,
   refusalReset,
   retryReset,
   servedByConsole,
@@ -279,10 +280,21 @@ export function useLimitNotice(message: () => SessionMessageAssistant) {
         body: `${resets}Paid models are paused. Switch to a free model with`,
         key: shortcut() ?? "/models",
       }
+    // Credits or Go would keep a signed-in member going, so both refusals link the workspace's Go page.
+    const goURL = limits.info()?.workspace.goURL
+    const go = goURL ? { link: { label: "Or subscribe to OpenCode Go to keep going:", href: goURL } } : undefined
     if (error.status === 402 && limits.served(value.model.providerID))
       return {
         title: `${limits.info()?.workspace.name ?? "Your workspace"} is out of credits`,
         body: "Paid models are paused until an admin adds credits in OpenCode Console.",
+        ...go,
+      }
+    if (goRequired(error) && go)
+      return {
+        title: "OpenCode Go subscription required",
+        body: "Switch model with",
+        key: shortcut() ?? "/models",
+        ...go,
       }
     return undefined
   })

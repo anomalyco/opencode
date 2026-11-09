@@ -43,7 +43,11 @@ const request = (get: UsageLimits.Interface["get"]) =>
 it.live("returns the usage limits of the OpenCode Console workspace a location is signed in to", () =>
   Effect.gen(function* () {
     const limits: UsageLimits.Info = {
-      workspace: { id: "wrk_anomaly", usageURL: "https://opencode.ai/console/wrk_anomaly/activity/overview" },
+      workspace: {
+        id: "wrk_anomaly",
+        usageURL: "https://opencode.ai/console/wrk_anomaly/activity/overview",
+        goURL: "https://opencode.ai/console/wrk_anomaly/go",
+      },
       budgets: [
         {
           id: "rule_monthly",
