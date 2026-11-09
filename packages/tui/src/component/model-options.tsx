@@ -35,8 +35,10 @@ export function sortModelOptions<
   })
 }
 
-export function isFreeModel(model: { cost: ReadonlyArray<{ input: number }> }) {
-  return model.cost.length > 0 && model.cost.every((cost) => cost.input === 0)
+export function isFreeModel(model: { cost?: ReadonlyArray<{ input: number }> }) {
+  // A config-defined model can omit `cost` entirely, so read it as optional even though the type says otherwise.
+  const cost = model.cost ?? []
+  return cost.length > 0 && cost.every((item) => item.input === 0)
 }
 
 /** The favorite marker. A styled span keeps its color on the highlighted row, where plain trailing text turns secondary. */
@@ -46,8 +48,8 @@ export function FavoriteMarker() {
 }
 
 /**
- * Price, input modalities, context window and reasoning support for the selected model, after what its usage limits
- * leave when `usage` says so.
+ * Price, input modalities, context and output limits, reasoning and tool support for the selected model, after what
+ * its usage limits leave when `usage` says so.
  */
 export function ModelDetail(props: {
   model: ModelInfo
@@ -57,16 +59,11 @@ export function ModelDetail(props: {
   const theme = useTheme().surface("dialog")
   const price = () => {
     if (isFreeModel(props.model)) return "Free"
-    const cost = props.model.cost[0]
+    const cost = props.model.cost?.[0]
     if (!cost) return ""
     return `$${dollars(cost.input)}/$${dollars(cost.output)}`
   }
-  const facts = () =>
-    [
-      props.model.capabilities.input.map(modality).join(", "),
-      tokens(props.model.limit.context),
-      ...(props.model.variants.length > 0 ? ["Reasoning"] : []),
-    ].filter(Boolean)
+  const facts = () => modelFacts(props.model)
   const list = (items: string[]) => (
     <text fg={theme.text.muted} wrapMode="none" flexShrink={0}>
       <For each={items}>
@@ -118,4 +115,37 @@ function tokens(value: number) {
   if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))}M`
   if (value >= 1_000) return `${Math.round(value / 1_000)}K`
   return String(value)
+}
+
+/**
+ * Catalog fields a config-defined model may omit, so the picker still reads when one is missing. `ModelDetail`
+ * passes a whole `ModelInfo`, which satisfies it.
+ */
+type FactSource = {
+  capabilities?: ModelInfo["capabilities"]
+  limit?: ModelInfo["limit"]
+  variants?: ModelInfo["variants"]
+}
+
+/** Context window and max output tokens, e.g. `200K/8K`, or `""` when the model declares neither. */
+function limits(model: FactSource) {
+  const context = model.limit?.context ?? 0
+  const output = model.limit?.output ?? 0
+  if (context && output) return `${tokens(context)}/${tokens(output)}`
+  if (context) return tokens(context)
+  if (output) return tokens(output)
+  return ""
+}
+
+/**
+ * What the picker states about a model: accepted input, context and output limits, reasoning and tool support.
+ * Kept separate from `ModelDetail` so a row can be asserted without rendering it.
+ */
+export function modelFacts(model: FactSource) {
+  return [
+    (model.capabilities?.input ?? []).map(modality).join(", "),
+    limits(model),
+    ...(model.variants?.length ? ["Reasoning"] : []),
+    ...(model.capabilities?.tools ? ["Tools"] : []),
+  ].filter(Boolean)
 }

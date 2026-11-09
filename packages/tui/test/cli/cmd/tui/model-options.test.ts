@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import { go } from "fuzzysort"
-import { prioritizeFavorites, sortModelOptions } from "../../../../src/component/model-options"
+import { isFreeModel, modelFacts, prioritizeFavorites, sortModelOptions } from "../../../../src/component/model-options"
+
+function model(overrides: Partial<Parameters<typeof modelFacts>[0]> = {}) {
+  return {
+    capabilities: { tools: true, input: ["text"], output: ["text"] },
+    limit: { context: 10_000, output: 1_000 },
+    variants: [],
+    ...overrides,
+  }
+}
 
 describe("prioritizeFavorites", () => {
   test("uses the favorite order captured when the dialog opened", () => {
@@ -101,5 +110,45 @@ describe("sortModelOptions", () => {
 
     expect(sortModelOptions(options, false).map((model) => model.title)).toEqual(serverOrder)
     expect(sortModelOptions(options, true).map((model) => model.title)).toEqual(serverOrder)
+  })
+})
+
+describe("modelFacts", () => {
+  test("states input, context and output limits, and tool support", () => {
+    expect(
+      modelFacts(
+        model({
+          capabilities: { tools: true, input: ["text", "image", "pdf"], output: ["text"] },
+          limit: { context: 200_000, output: 8_192 },
+        }),
+      ),
+    ).toEqual(["Text, Image, PDF", "200K/8K", "Tools"])
+  })
+
+  test("states the output limit on its own when the model declares no context window", () => {
+    expect(modelFacts(model({ limit: { context: 0, output: 2_048 } }))).toEqual(["Text", "2K", "Tools"])
+  })
+
+  test("leaves the limits out when the model declares neither", () => {
+    expect(modelFacts(model({ limit: { context: 0, output: 0 } }))).toEqual(["Text", "Tools"])
+  })
+
+  test("marks reasoning when the model carries variants", () => {
+    expect(modelFacts(model({ variants: [{ id: "high" }] }))).toEqual(["Text", "10K/1K", "Reasoning", "Tools"])
+  })
+
+  test("reads a hand-built model that has no catalog data at all", () => {
+    expect(modelFacts({ capabilities: undefined, limit: undefined, variants: undefined })).toEqual([])
+  })
+})
+
+describe("isFreeModel", () => {
+  test("is false for a model that declares no cost", () => {
+    expect(isFreeModel({})).toBe(false)
+  })
+
+  test("is true only when every tier is free", () => {
+    expect(isFreeModel({ cost: [{ input: 0 }, { input: 0 }] })).toBe(true)
+    expect(isFreeModel({ cost: [{ input: 0 }, { input: 3 }] })).toBe(false)
   })
 })
