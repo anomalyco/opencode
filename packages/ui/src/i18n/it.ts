@@ -81,6 +81,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "righe {{start}}-{{end}}",
   "ui.fileMedia.kind.image": "immagine",
   "ui.fileMedia.kind.audio": "audio",
+  "ui.fileMedia.kind.video": "video",
   "ui.fileMedia.state.removed": "File {{kind}} rimosso.",
   "ui.fileMedia.state.loading": "Caricamento di {{kind}}…",
   "ui.fileMedia.state.error": "Impossibile caricare {{kind}}.",

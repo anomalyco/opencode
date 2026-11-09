@@ -36,6 +36,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "שורות {{start}}-{{end}}",
   "ui.fileMedia.kind.image": "תמונה",
   "ui.fileMedia.kind.audio": "אודיו",
+  "ui.fileMedia.kind.video": "וידאו",
   "ui.fileMedia.state.removed": "הוסר קובץ {{kind}}.",
   "ui.fileMedia.state.loading": "טוען {{kind}}…",
   "ui.fileMedia.state.error": "לא ניתן לטעון {{kind}}.",

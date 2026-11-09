@@ -36,6 +36,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "baris {{start}}-{{end}}",
   "ui.fileMedia.kind.image": "imej",
   "ui.fileMedia.kind.audio": "audio",
+  "ui.fileMedia.kind.video": "video",
   "ui.fileMedia.state.removed": "Fail {{kind}} telah dipadam.",
   "ui.fileMedia.state.loading": "Memuatkan {{kind}}…",
   "ui.fileMedia.state.error": "Tidak dapat memuatkan {{kind}}.",

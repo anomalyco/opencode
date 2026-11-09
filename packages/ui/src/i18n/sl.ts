@@ -65,6 +65,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "linije {{start}}-{{end}}",
   "ui.fileMedia.kind.image": "slika",
   "ui.fileMedia.kind.audio": "zvok",
+  "ui.fileMedia.kind.video": "video",
   "ui.fileMedia.state.removed": "Odstranjena datoteka {{kind}}.",
   "ui.fileMedia.state.loading": "Nalaganje {{kind}} …",
   "ui.fileMedia.state.error": "Ni mogoče naložiti {{kind}}.",

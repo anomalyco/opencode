@@ -59,6 +59,7 @@ export const dict: Record<Keys, string> = {
   "ui.sessionReview.largeDiff.renderAnyway": "Gjengi likevel",
   "ui.fileMedia.kind.image": "bilde",
   "ui.fileMedia.kind.audio": "lyd",
+  "ui.fileMedia.kind.video": "video",
   "ui.fileMedia.state.removed": "Fjernet: {{kind}}",
   "ui.fileMedia.state.loading": "Laster inn {{kind}}…",
   "ui.fileMedia.state.error": "Feil ved innlasting: {{kind}}",

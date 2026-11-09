@@ -38,6 +38,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "रेखाहरू {{start}}-{{end}}",
   "ui.fileMedia.kind.image": "छवि",
   "ui.fileMedia.kind.audio": "अडियो",
+  "ui.fileMedia.kind.video": "भिडियो",
   "ui.fileMedia.state.removed": "{{kind}} फाइल हटाइयो।",
   "ui.fileMedia.state.loading": "{{kind}} लोड गर्दै…",
   "ui.fileMedia.state.error": "{{kind}} लोड गर्न असमर्थ।",

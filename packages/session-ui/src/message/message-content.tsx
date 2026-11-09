@@ -58,6 +58,7 @@ import { agentLabel } from "./agent-label"
 import { isInterruptedError } from "../timeline/turn-phase-machine"
 import { attached, imageAttachmentPlaceholderStyle, typeLabel } from "../components/message-file"
 import {
+  attachmentMediaKind,
   DISPOSED_ATTACHMENT_MEDIA_EVENT,
   INITIAL_ATTACHMENT_MEDIA_STATE,
   resolveAttachmentMediaTarget,
@@ -562,7 +563,9 @@ export function CurrentUserMessageDisplay(props: {
 
             const mediaView = createMemo(() => viewAttachmentMedia(mediaState(), mediaTarget()))
             const name = () => file().name ?? i18n.t("ui.message.attachment.alt")
-            const image = () => file().mime.startsWith("image/")
+            const media = () => attachmentMediaKind(file().mime)
+            const videoSrc = createMemo(() => (media() === "video" ? mediaView().src : undefined))
+            const audioSrc = createMemo(() => (media() === "audio" ? mediaView().src : undefined))
 
             const width = () => {
               const current = file()
@@ -585,12 +588,16 @@ export function CurrentUserMessageDisplay(props: {
 
             return (
               <Show
-                when={!image()}
+                when={media() === undefined}
                 fallback={
                   <div
                     data-slot="user-message-attachment"
-                    data-type="image"
-                    data-clickable={mediaView().clickable ? "true" : undefined}
+                    data-type={media()}
+                    data-clickable={
+                      mediaView().clickable && (mediaView().status === "failed" || media() === "image")
+                        ? "true"
+                        : undefined
+                    }
                     data-placeholder={mediaView().placeholder ? "true" : undefined}
                     data-width={width()}
                     data-height={height()}
@@ -599,12 +606,37 @@ export function CurrentUserMessageDisplay(props: {
                       const src = mediaView().src
                       const origin = event.currentTarget
 
-                      if (src) return dialog.show(() => <ImagePreview src={src} alt={name()} origin={origin} />)
+                      // The players carry their own controls; only an image tile opens the lightbox.
+                      if (src && media() === "image")
+                        return dialog.show(() => <ImagePreview src={src} alt={name()} origin={origin} />)
 
                       if (mediaView().canRetry) dispatchMedia({ type: "retry.requested", target: mediaTarget() })
                     }}
                   >
                     <Switch>
+                      <Match when={videoSrc()}>
+                        {(src) => (
+                          <video
+                            data-slot="user-message-attachment-video"
+                            src={src()}
+                            controls
+                            playsinline
+                            preload="metadata"
+                            aria-label={name()}
+                          />
+                        )}
+                      </Match>
+                      <Match when={audioSrc()}>
+                        {(src) => (
+                          <audio
+                            data-slot="user-message-attachment-audio"
+                            src={src()}
+                            controls
+                            preload="metadata"
+                            aria-label={name()}
+                          />
+                        )}
+                      </Match>
                       <Match when={mediaView().src}>
                         {(src) => (
                           <img
@@ -621,10 +653,24 @@ export function CurrentUserMessageDisplay(props: {
                           data-slot="user-message-attachment-icon"
                           role="img"
                           aria-label={i18n.t("ui.fileMedia.state.error", {
-                            kind: i18n.t("ui.fileMedia.kind.image"),
+                            kind:
+                              media() === "video"
+                                ? i18n.t("ui.fileMedia.kind.video")
+                                : media() === "audio"
+                                  ? i18n.t("ui.fileMedia.kind.audio")
+                                  : i18n.t("ui.fileMedia.kind.image"),
                           })}
                         >
-                          <Icon name="outline-photo" size="small" />
+                          <Icon
+                            name={
+                              media() === "video"
+                                ? "outline-video"
+                                : media() === "audio"
+                                  ? "outline-audio"
+                                  : "outline-photo"
+                            }
+                            size="small"
+                          />
                         </div>
                       </Match>
                     </Switch>

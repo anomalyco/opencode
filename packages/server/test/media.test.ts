@@ -13,6 +13,7 @@ import { ServerFetch } from "../src/fetch"
 
 const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 const text = Buffer.from("workspace file contents").toString("base64")
+const video = Buffer.from("ftypisom fake mp4 bytes").toString("base64")
 const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>').toString("base64")
 const html = Buffer.from("<!doctype html><script>alert(1)</script>").toString("base64")
 const hash = (base64: string) => createHash("sha256").update(Buffer.from(base64, "base64")).digest("hex")
@@ -24,6 +25,7 @@ const user: SessionMessageInfo = {
   text: "See attached",
   files: [
     { data: png, mime: "image/png", source: { type: "inline" }, name: "shot.png" },
+    { data: video, mime: "video/mp4", source: { type: "inline" }, name: "clip.mp4" },
     {
       data: text,
       mime: "text/plain",
@@ -117,6 +119,13 @@ it.live("serves stored media as refs only to clients that opt in while experimen
                 bytes: size(png),
               },
               {
+                uri: media(video),
+                mime: "video/mp4",
+                source: { type: "inline" },
+                name: "clip.mp4",
+                bytes: size(video),
+              },
+              {
                 uri: media(text),
                 mime: "text/plain",
                 source: { type: "uri", uri: "file:///workspace/readme.txt" },
@@ -158,7 +167,9 @@ it.live("serves stored media as refs only to clients that opt in while experimen
           },
         ])
         const single: unknown = await opted.session.message.get({ sessionID, messageID: "msg_media_user" })
-        expect(single).toMatchObject({ files: [{ uri: media(png) }, { uri: media(text) }, {}, {}] })
+        expect(single).toMatchObject({
+          files: [{ uri: media(png) }, { uri: media(video) }, { uri: media(text) }, {}, {}],
+        })
         expect(await plain.session.message.get({ sessionID, messageID: "msg_media_user" })).toEqual(user)
         expect((await opted.experimental.session.export({ sessionID })).messages).toEqual([user, assistant])
 
@@ -172,6 +183,12 @@ it.live("serves stored media as refs only to clients that opt in while experimen
         expect(image.headers.get("x-content-type-options")).toBe("nosniff")
         expect(image.headers.get("content-security-policy")).toBe(ContentHeaders.CONTENT_SECURITY_POLICY)
         expect(Buffer.from(await image.arrayBuffer()).toString("base64")).toBe(png)
+        // Video types are the players' business: the route keeps their own content type.
+        const clip = await handler(new Request(route(video)))
+        expect(clip.status).toBe(200)
+        expect(clip.headers.get("content-type")).toBe("video/mp4")
+        expect(clip.headers.get("x-content-type-options")).toBe("nosniff")
+        expect(Buffer.from(await clip.arrayBuffer()).toString("base64")).toBe(video)
         for (const unsafe of [svg, html]) {
           const response = await handler(new Request(route(unsafe)))
           expect(response.headers.get("content-type")).toBe("application/octet-stream")

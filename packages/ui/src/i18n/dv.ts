@@ -37,6 +37,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "ލައިންތައް {{start}}-{{end}}",
   "ui.fileMedia.kind.image": "ފޮޓޯ",
   "ui.fileMedia.kind.audio": "އޯޑިއޯ އެވެ",
+  "ui.fileMedia.kind.video": "ވިޑިއޯ",
   "ui.fileMedia.state.removed": "{{kind}} ފައިލް ނައްތާލެވިއްޖެއެވެ.",
   "ui.fileMedia.state.loading": "ލޯޑިންގ {{kind}}…",
   "ui.fileMedia.state.error": "{{kind}} ލޯޑް ނުކުރެވޭ.",

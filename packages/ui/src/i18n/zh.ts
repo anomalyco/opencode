@@ -40,6 +40,7 @@ export const dict = {
   "ui.sessionReviewV2.empty.changes.description": "项目变更将显示在此处",
   "ui.fileMedia.kind.image": "图片",
   "ui.fileMedia.kind.audio": "音频",
+  "ui.fileMedia.kind.video": "视频",
   "ui.fileMedia.state.removed": "{{kind}}已移除",
   "ui.fileMedia.state.loading": "正在加载{{kind}}…",
   "ui.fileMedia.state.error": "加载{{kind}}失败",

@@ -37,6 +37,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "បន្ទាត់ {{start}}–{{end}}",
   "ui.fileMedia.kind.image": "រូបភាព",
   "ui.fileMedia.kind.audio": "សំឡេង",
+  "ui.fileMedia.kind.video": "វីដេអូ",
   "ui.fileMedia.state.removed": "បានលុបឯកសារ {{kind}} ។",
   "ui.fileMedia.state.loading": "កំពុងផ្ទុក {{kind}}…",
   "ui.fileMedia.state.error": "មិនអាចផ្ទុក {{kind}} បានទេ។",

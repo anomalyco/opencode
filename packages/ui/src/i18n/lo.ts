@@ -36,6 +36,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "ສາຍ {{start}}-{{end}}",
   "ui.fileMedia.kind.image": "ຮູບ",
   "ui.fileMedia.kind.audio": "ສຽງ",
+  "ui.fileMedia.kind.video": "ວິດີໂອ",
   "ui.fileMedia.state.removed": "ລຶບໄຟລ໌ {{kind}} ອອກແລ້ວ.",
   "ui.fileMedia.state.loading": "ກຳລັງໂຫລດ {{kind}}…",
   "ui.fileMedia.state.error": "ບໍ່ສາມາດໂຫຼດ {{kind}} ໄດ້.",

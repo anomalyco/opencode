@@ -78,6 +78,31 @@
       height: 48px;
       padding: 0 10px;
     }
+
+    /* video and audio ride the user bubble width; the players fill the tile */
+    &[data-type="video"] {
+      position: relative;
+      width: min(320px, 100%);
+      aspect-ratio: 16 / 9;
+      background: #000;
+    }
+
+    &[data-type="audio"] {
+      width: min(320px, 100%);
+      height: 48px;
+      padding: 0 10px;
+    }
+  }
+
+  [data-slot="user-message-attachment-video"] {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  [data-slot="user-message-attachment-audio"] {
+    width: 100%;
+    height: 100%;
   }
 
   [data-slot="user-message-attachment-image"] {

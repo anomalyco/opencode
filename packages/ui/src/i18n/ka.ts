@@ -36,6 +36,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "ხაზები {{start}}-{{end}}",
   "ui.fileMedia.kind.image": "სურათი",
   "ui.fileMedia.kind.audio": "აუდიო",
+  "ui.fileMedia.kind.video": "ვიდეო",
   "ui.fileMedia.state.removed": "ამოღებულია {{kind}} ფაილი.",
   "ui.fileMedia.state.loading": "იტვირთება {{kind}}…",
   "ui.fileMedia.state.error": "ვერ იტვირთება {{kind}}.",

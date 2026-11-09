@@ -38,6 +38,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "{{start}}-{{end}} chiziqlari",
   "ui.fileMedia.kind.image": "tasvir",
   "ui.fileMedia.kind.audio": "audio",
+  "ui.fileMedia.kind.video": "video",
   "ui.fileMedia.state.removed": "{{kind}} fayli olib tashlandi.",
   "ui.fileMedia.state.loading": "{{kind}} yuklanmoqda…",
   "ui.fileMedia.state.error": "{{kind}} yuklanmadi.",

@@ -66,6 +66,7 @@ export const dict = {
 
   "ui.fileMedia.kind.image": "зображення",
   "ui.fileMedia.kind.audio": "аудіо",
+  "ui.fileMedia.kind.video": "відео",
   "ui.fileMedia.state.removed": "{{kind}} видалено",
   "ui.fileMedia.state.loading": "Завантаження {{kind}}…",
   "ui.fileMedia.state.error": "Не вдалося завантажити {{kind}}",

@@ -36,6 +36,25 @@ describe("transitionFileMedia", () => {
     expect(viewFileMedia(loaded, undefined, diagram.key)).toEqual({ status: "ready", src: png.src, mime: undefined })
   })
 
+  test("a video file reads and shows with its mime", () => {
+    const clip = { key: "video:clip.mp4", kind: "video", path: "clip.mp4" } as const
+    const next = transitionFileMedia(INITIAL_FILE_MEDIA_STATE, { type: "request.changed", target: clip })
+
+    expect(next.effects).toEqual([
+      { type: "read-file", attempt: 1, kind: "video", path: "clip.mp4" },
+      { type: "arm-timeout", attempt: 1, delayMs: FILE_MEDIA_READ_TIMEOUT_MS },
+    ])
+
+    const mp4 = { src: "data:video/mp4;base64,AAAA", mime: "video/mp4" }
+    const ready = transitionFileMedia(next.state, { type: "read.succeeded", attempt: 1, media: mp4 })
+
+    expect(viewFileMedia(ready.state, undefined, clip.key)).toEqual({
+      status: "ready",
+      src: mp4.src,
+      mime: "video/mp4",
+    })
+  })
+
   for (const failure of [
     { type: "read.failed", attempt: 2 },
     { type: "read.timed-out", attempt: 2 },

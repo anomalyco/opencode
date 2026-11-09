@@ -36,6 +36,7 @@ export const dict = {
   "ui.sessionReviewV2.empty.changes.description": "ستظهر تغييرات المشروع هنا",
   "ui.fileMedia.kind.image": "صورة",
   "ui.fileMedia.kind.audio": "صوت",
+  "ui.fileMedia.kind.video": "فيديو",
   "ui.fileMedia.state.removed": "تمت إزالة {{kind}}",
   "ui.fileMedia.state.loading": "جارٍ تحميل {{kind}}…",
   "ui.fileMedia.state.error": "تعذر تحميل {{kind}}.",

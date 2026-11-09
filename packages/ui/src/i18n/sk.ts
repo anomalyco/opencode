@@ -64,6 +64,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "riadky {{start}}–{{end}}",
   "ui.fileMedia.kind.image": "obrázok",
   "ui.fileMedia.kind.audio": "audio",
+  "ui.fileMedia.kind.video": "video",
   "ui.fileMedia.state.removed": "Odstránený súbor typu {{kind}}.",
   "ui.fileMedia.state.loading": "Načítava sa {{kind}}…",
   "ui.fileMedia.state.error": "Nepodarilo sa načítať {{kind}}.",

@@ -36,6 +36,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "línies {{start}}-{{end}}",
   "ui.fileMedia.kind.image": "imatge",
   "ui.fileMedia.kind.audio": "àudio",
+  "ui.fileMedia.kind.video": "vídeo",
   "ui.fileMedia.state.removed": "S'ha eliminat el fitxer {{kind}}.",
   "ui.fileMedia.state.loading": "S'està carregant {{kind}}…",
   "ui.fileMedia.state.error": "No es pot carregar {{kind}}.",

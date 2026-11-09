@@ -40,6 +40,7 @@ export const dict = {
   "ui.sessionReviewV2.empty.changes.description": "Promjene projekta će se prikazati ovdje",
   "ui.fileMedia.kind.image": "slika",
   "ui.fileMedia.kind.audio": "audio",
+  "ui.fileMedia.kind.video": "video",
   "ui.fileMedia.state.removed": "Uklonjena datoteka vrste {{kind}}.",
   "ui.fileMedia.state.loading": "Učitavanje datoteke vrste {{kind}}…",
   "ui.fileMedia.state.error": "Nije moguće učitati datoteku vrste {{kind}}.",

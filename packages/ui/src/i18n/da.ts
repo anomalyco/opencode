@@ -74,6 +74,7 @@ export const dict = {
   "ui.sessionReviewV2.empty.changes.description": "Projektændringer vises her",
   "ui.fileMedia.kind.image": "billede",
   "ui.fileMedia.kind.audio": "lyd",
+  "ui.fileMedia.kind.video": "video",
   "ui.fileMedia.state.removed": "{{kind}} fjernet",
   "ui.fileMedia.state.loading": "Indlæser {{kind}}…",
   "ui.fileMedia.state.error": "Kunne ikke indlæse {{kind}}",

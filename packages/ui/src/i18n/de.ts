@@ -79,6 +79,7 @@ export const dict = {
   "ui.sessionReviewV2.empty.changes.description": "Projektänderungen werden hier angezeigt",
   "ui.fileMedia.kind.image": "Bild",
   "ui.fileMedia.kind.audio": "Audio",
+  "ui.fileMedia.kind.video": "Video",
   "ui.fileMedia.state.removed": "{{kind}} entfernt.",
   "ui.fileMedia.state.loading": "{{kind}} wird geladen…",
   "ui.fileMedia.state.error": "{{kind}} konnte nicht geladen werden.",

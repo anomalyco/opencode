@@ -36,6 +36,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "රේඛා {{start}}-{{end}}",
   "ui.fileMedia.kind.image": "රූපය",
   "ui.fileMedia.kind.audio": "ශ්රව්ය",
+  "ui.fileMedia.kind.video": "වීඩියෝ",
   "ui.fileMedia.state.removed": "{{kind}} ගොනුව ඉවත් කරන ලදී.",
   "ui.fileMedia.state.loading": "{{kind}} පූරණය වෙමින්…",
   "ui.fileMedia.state.error": "{{kind}} පූරණය කළ නොහැක.",

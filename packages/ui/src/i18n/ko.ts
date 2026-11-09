@@ -18,6 +18,7 @@ export const dict = {
   "ui.sessionReview.largeDiff.renderAnyway": "그래도 렌더링",
   "ui.fileMedia.kind.image": "이미지",
   "ui.fileMedia.kind.audio": "오디오",
+  "ui.fileMedia.kind.video": "동영상",
   "ui.fileMedia.state.removed": "{{kind}} 제거됨",
   "ui.fileMedia.state.loading": "{{kind}} 로드 중…",
   "ui.fileMedia.state.error": "{{kind}} 로드 오류",

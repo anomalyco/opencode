@@ -38,6 +38,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "{{start}}-{{end}}. sor",
   "ui.fileMedia.kind.image": "kép",
   "ui.fileMedia.kind.audio": "hang-",
+  "ui.fileMedia.kind.video": "videó",
   "ui.fileMedia.state.removed": "{{kind}} fájl eltávolítva.",
   "ui.fileMedia.state.loading": "{{kind}} betöltése…",
   "ui.fileMedia.state.error": "Nem sikerült betölteni a {{kind}}-t.",

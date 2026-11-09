@@ -3,8 +3,20 @@ import type { PromptAttachment } from "@opencode/client/promise"
 /** A media read that never settles shows the failed tile after this long, as file and markdown images do. */
 export const ATTACHMENT_MEDIA_TIMEOUT_MS = 15_000
 
+/** Media an attachment slot previews inline; anything else stays a file card. */
+export type AttachmentMediaKind = "image" | "video" | "audio"
+
+/** Inline media preview of the given kind, from the attachment's mime; svg counts as an image, as before. */
+export function attachmentMediaKind(mime: string | undefined) {
+  if (!mime) return
+  const type = mime.split(";", 1)[0]?.trim().toLowerCase()
+
+  if (type.startsWith("image/") || type.startsWith("video/") || type.startsWith("audio/"))
+    return type.slice(0, type.indexOf("/")) as AttachmentMediaKind
+}
+
 /**
- * What an attachment slot shows, read from its current attachment: nothing (not an image), a URL already in hand, a
+ * What an attachment slot shows, read from its current attachment: nothing (not inline media), a URL already in hand, a
  * `media:` reference nothing here can read, or a reference the host reads.
  */
 export type AttachmentMediaTarget =
@@ -73,7 +85,7 @@ export function resolveAttachmentMediaTarget(
   file: PromptAttachment,
   options: { readonly peekMedia?: (uri: string, mime: string) => string | undefined; readonly hasReader: boolean },
 ): AttachmentMediaTarget {
-  if (!file.mime.startsWith("image/")) return NONE_ATTACHMENT_MEDIA_TARGET
+  if (!attachmentMediaKind(file.mime)) return NONE_ATTACHMENT_MEDIA_TARGET
 
   if (file.source?.type === "uri") return { kind: "direct", src: file.source.uri }
 

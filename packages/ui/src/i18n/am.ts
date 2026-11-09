@@ -36,6 +36,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "መስመሮች {{start}}-{{end}}",
   "ui.fileMedia.kind.image": "ምስል",
   "ui.fileMedia.kind.audio": "ድምጽ",
+  "ui.fileMedia.kind.video": "ቪዲዮ",
   "ui.fileMedia.state.removed": "{{kind}}ፋይል ተወግዷል።",
   "ui.fileMedia.state.loading": "በመጫን ላይ {{kind}}…",
   "ui.fileMedia.state.error": "{{kind}}ን መጫን አልተቻለም።",

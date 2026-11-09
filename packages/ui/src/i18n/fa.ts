@@ -36,6 +36,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "خطوط {{start}}-{{end}}",
   "ui.fileMedia.kind.image": "تصویر",
   "ui.fileMedia.kind.audio": "صوتی",
+  "ui.fileMedia.kind.video": "ویدیو",
   "ui.fileMedia.state.removed": "فایل {{kind}} حذف شد.",
   "ui.fileMedia.state.loading": "در حال بارگیری {{kind}}…",
   "ui.fileMedia.state.error": "بارگیری {{kind}} ممکن نیست.",

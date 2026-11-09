@@ -27,10 +27,10 @@ export type FileMediaOptions = {
   deleted?: boolean
   readFile?: (path: string) => Promise<PresentationFileContent | undefined>
   onLoad?: () => void
-  onError?: (ctx: { kind: "image" | "audio" | "svg" }) => void
+  onError?: (ctx: { kind: "image" | "video" | "audio" | "svg" }) => void
 }
 
-function mediaValue(cfg: FileMediaOptions, mode: "image" | "audio") {
+function mediaValue(cfg: FileMediaOptions, mode: "image" | "video" | "audio") {
   if (cfg.current !== undefined) return cfg.current
 
   if (mode === "image") return cfg.after ?? cfg.before
@@ -86,7 +86,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
     const media = cfg()
     const k = kind()
 
-    if (!media || (k !== "image" && k !== "audio")) return
+    if (!media || (k !== "image" && k !== "video" && k !== "audio")) return
 
     return dataUrlFromMediaValue(mediaValue(media, k), k)
   })
@@ -95,7 +95,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
     const media = cfg()
     const k = kind()
 
-    if (!media || (k !== "image" && k !== "audio")) return
+    if (!media || (k !== "image" && k !== "video" && k !== "audio")) return
 
     if (media.current !== undefined) return
 
@@ -149,7 +149,8 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
 
           if (!src) return dispatch({ type: "read.failed", attempt: effect.attempt })
 
-          const mime = effect.kind === "audio" ? normalizeMimeType(result?.mimeType) : undefined
+          const mime =
+            effect.kind === "audio" || effect.kind === "video" ? normalizeMimeType(result?.mimeType) : undefined
           dispatch({ type: "read.succeeded", attempt: effect.attempt, media: { src, mime } })
         },
         () => dispatch({ type: "read.failed", attempt: effect.attempt }),
@@ -204,19 +205,25 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
     ),
   )
 
-  const kindLabel = (value: "image" | "audio") =>
-    i18n.t(value === "image" ? "ui.fileMedia.kind.image" : "ui.fileMedia.kind.audio")
+  const kindLabel = (value: "image" | "video" | "audio") =>
+    i18n.t(
+      value === "image"
+        ? "ui.fileMedia.kind.image"
+        : value === "video"
+          ? "ui.fileMedia.kind.video"
+          : "ui.fileMedia.kind.audio",
+    )
 
   return (
     <Switch>
-      <Match when={kind() === "image" || kind() === "audio"}>
+      <Match when={kind() === "image" || kind() === "video" || kind() === "audio"}>
         <Show
           when={view().src}
           fallback={(() => {
             const media = cfg()
             const k = kind()
 
-            if (!media || (k !== "image" && k !== "audio")) return props.fallback()
+            if (!media || (k !== "image" && k !== "video" && k !== "audio")) return props.fallback()
             const label = kindLabel(k)
 
             if (deleted()) {
@@ -253,7 +260,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
           {(value) => {
             const k = kind()
 
-            if (k !== "image" && k !== "audio") return props.fallback()
+            if (k !== "image" && k !== "video" && k !== "audio") return props.fallback()
 
             if (k === "image") {
               return (
@@ -263,6 +270,22 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
                     alt={cfg()?.path}
                     class="max-h-[60vh] max-w-full rounded border border-v2-border-border-base bg-background-base object-contain"
                     onLoad={onLoad}
+                  />
+                </div>
+              )
+            }
+
+            if (k === "video") {
+              return (
+                <div class="flex justify-center bg-background-stronger px-6 py-4">
+                  <video
+                    src={value()}
+                    controls
+                    playsinline
+                    preload="metadata"
+                    aria-label={cfg()?.path}
+                    class="max-h-[60vh] w-full max-w-xl rounded border border-v2-border-border-base bg-black"
+                    onLoadedMetadata={onLoad}
                   />
                 </div>
               )

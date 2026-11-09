@@ -37,6 +37,7 @@ export const dict = {
   "ui.sessionReviewV2.empty.changes.description": "Zmiany w projekcie pojawią się tutaj",
   "ui.fileMedia.kind.image": "obraz",
   "ui.fileMedia.kind.audio": "dźwięk",
+  "ui.fileMedia.kind.video": "wideo",
   "ui.fileMedia.state.removed": "{{kind}} usunięty",
   "ui.fileMedia.state.loading": "Wczytywanie: {{kind}}…",
   "ui.fileMedia.state.error": "Błąd wczytywania: {{kind}}",

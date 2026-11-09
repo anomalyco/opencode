@@ -37,6 +37,7 @@ export const dict = {
   "ui.sessionReviewV2.empty.changes.description": "Изменения проекта появятся здесь",
   "ui.fileMedia.kind.image": "изображение",
   "ui.fileMedia.kind.audio": "аудио",
+  "ui.fileMedia.kind.video": "видео",
   "ui.fileMedia.state.removed": "{{kind}} удалено",
   "ui.fileMedia.state.loading": "Загружается {{kind}}…",
   "ui.fileMedia.state.error": "Не удалось загрузить {{kind}}",

@@ -36,6 +36,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "sətirlər {{start}}-{{end}}",
   "ui.fileMedia.kind.image": "şəkil",
   "ui.fileMedia.kind.audio": "səs",
+  "ui.fileMedia.kind.video": "video",
   "ui.fileMedia.state.removed": "{{kind}} faylı silindi.",
   "ui.fileMedia.state.loading": "{{kind}} yüklənir…",
   "ui.fileMedia.state.error": "{{kind}} yüklənə bilmədi.",

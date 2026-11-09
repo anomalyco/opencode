@@ -36,6 +36,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "read {{start}}-{{end}}",
   "ui.fileMedia.kind.image": "pilt",
   "ui.fileMedia.kind.audio": "heli",
+  "ui.fileMedia.kind.video": "video",
   "ui.fileMedia.state.removed": "Eemaldatud {{kind}} fail.",
   "ui.fileMedia.state.loading": "Laadimine {{kind}}…",
   "ui.fileMedia.state.error": "Ei saa laadida {{kind}}.",

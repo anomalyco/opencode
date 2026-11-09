@@ -37,6 +37,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "လိုင်းများ {{start}}-{{end}}",
   "ui.fileMedia.kind.image": "ပုံ",
   "ui.fileMedia.kind.audio": "အသံ",
+  "ui.fileMedia.kind.video": "ဗီဒီယို",
   "ui.fileMedia.state.removed": "{{kind}} ဖိုင်ကို ဖယ်ရှားခဲ့သည်။",
   "ui.fileMedia.state.loading": "{{kind}} ကို ဖွင့်နေသည်…",
   "ui.fileMedia.state.error": "{{kind}} ကို ဖွင့်၍မရပါ။",

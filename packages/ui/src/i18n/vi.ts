@@ -36,6 +36,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "dòng {{start}}-{{end}}",
   "ui.fileMedia.kind.image": "hình ảnh",
   "ui.fileMedia.kind.audio": "âm thanh",
+  "ui.fileMedia.kind.video": "video",
   "ui.fileMedia.state.removed": "Đã xóa tệp {{kind}}.",
   "ui.fileMedia.state.loading": "Đang tải {{kind}}…",
   "ui.fileMedia.state.error": "Không thể tải {{kind}}.",

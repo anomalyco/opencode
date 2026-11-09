@@ -1,10 +1,12 @@
 import type { PresentationFileContent } from "../file-presentation"
 
-export type MediaKind = "image" | "audio" | "svg"
+export type MediaKind = "image" | "video" | "audio" | "svg"
 
 const imageExtensions = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico", "tif", "tiff", "heic"])
 
 const audioExtensions = new Set(["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus"])
+
+const videoExtensions = new Set(["mp4", "m4v", "webm", "mov", "mkv", "avi", "ogv", "3gp"])
 
 type MediaValue = unknown
 
@@ -49,6 +51,8 @@ export function mediaKindFromPath(path: string | undefined): MediaKind | undefin
   if (imageExtensions.has(ext)) return "image"
 
   if (audioExtensions.has(ext)) return "audio"
+
+  if (videoExtensions.has(ext)) return "video"
 }
 
 export function isBinaryContent(value: MediaValue) {
@@ -63,6 +67,12 @@ function validDataUrl(value: string, kind: MediaKind) {
   if (value.startsWith("data:audio/x-aac;")) return value.replace("data:audio/x-aac;", "data:audio/aac;")
 
   if (value.startsWith("data:audio/x-m4a;")) return value.replace("data:audio/x-m4a;", "data:audio/mp4;")
+
+  if (kind === "video") {
+    if (value.startsWith("data:video/x-m4v;")) return value.replace("data:video/x-m4v;", "data:video/mp4;")
+
+    return value.startsWith("data:video/") ? value : undefined
+  }
 
   if (value.startsWith("data:audio/")) return value
 }
@@ -95,6 +105,8 @@ export function dataUrlFromMediaValue(value: MediaValue, kind: MediaKind) {
   if (kind === "image" && !mime.startsWith("image/")) return
 
   if (kind === "audio" && !mime.startsWith("audio/")) return
+
+  if (kind === "video" && !mime.startsWith("video/")) return
 
   if (record.encoding !== "base64") return
 

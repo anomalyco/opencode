@@ -36,6 +36,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "γραμμές {{start}}-{{end}}",
   "ui.fileMedia.kind.image": "εικόνα",
   "ui.fileMedia.kind.audio": "ήχος",
+  "ui.fileMedia.kind.video": "βίντεο",
   "ui.fileMedia.state.removed": "Καταργήθηκε {{kind}} αρχείο.",
   "ui.fileMedia.state.loading": "Φόρτωση {{kind}}…",
   "ui.fileMedia.state.error": "Δεν είναι δυνατή η φόρτωση του {{kind}}.",

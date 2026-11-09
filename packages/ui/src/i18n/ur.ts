@@ -37,6 +37,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "لائنیں {{start}} تا {{end}}",
   "ui.fileMedia.kind.image": "تصویر",
   "ui.fileMedia.kind.audio": "آڈیو",
+  "ui.fileMedia.kind.video": "ویڈیو",
   "ui.fileMedia.state.removed": "{{kind}} کی فائل ہٹا دی گئی۔",
   "ui.fileMedia.state.loading": "{{kind}} لوڈ ہو رہا ہے…",
   "ui.fileMedia.state.error": "{{kind}} لوڈ کرنے سے قاصر۔",

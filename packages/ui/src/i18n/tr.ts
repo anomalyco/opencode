@@ -42,6 +42,7 @@ export const dict = {
 
   "ui.fileMedia.kind.image": "görsel",
   "ui.fileMedia.kind.audio": "ses",
+  "ui.fileMedia.kind.video": "video",
   "ui.fileMedia.state.removed": "{{kind}} dosyası kaldırıldı.",
   "ui.fileMedia.state.loading": "{{kind}} yükleniyor…",
   "ui.fileMedia.state.error": "{{kind}} yüklenemedi.",

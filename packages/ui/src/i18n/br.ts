@@ -80,6 +80,7 @@ export const dict = {
   "ui.sessionReviewV2.empty.changes.description": "As alterações do projeto aparecerão aqui",
   "ui.fileMedia.kind.image": "imagem",
   "ui.fileMedia.kind.audio": "áudio",
+  "ui.fileMedia.kind.video": "video",
   "ui.fileMedia.state.removed": "Arquivo de {{kind}} removido.",
   "ui.fileMedia.state.loading": "Carregando {{kind}}…",
   "ui.fileMedia.state.error": "Não foi possível carregar {{kind}}.",

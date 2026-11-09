@@ -6,6 +6,13 @@ import { type HttpServerRequest, HttpServerResponse } from "effect/http"
 import { ContentHeaders } from "../content-headers"
 
 const INLINE_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
+
+/** Raster images and media players can read a blob as its own type; svg stays a download, as it can carry scripts. */
+function servesInline(mime: string) {
+  if (mime.startsWith("video/") || mime.startsWith("audio/")) return true
+
+  return INLINE_IMAGE_MIMES.has(mime)
+}
 const CACHE_CONTROL = "private, max-age=31536000, immutable"
 
 /** `media.get` in the `server.experimental` group; serves only blobs a message or inbox item still references. */
@@ -17,7 +24,7 @@ export const makeMediaGet = Effect.gen(function* () {
       const blob = yield* SessionBlob.read(db, hash)
       if (!blob) return yield* new FileNotFoundError({ path, message: `Media blob not found: ${hash}` })
       const etag = `"${hash}"`
-      const inline = INLINE_IMAGE_MIMES.has(blob.mime)
+      const inline = servesInline(blob.mime)
       const headers = {
         "cache-control": CACHE_CONTROL,
         etag,

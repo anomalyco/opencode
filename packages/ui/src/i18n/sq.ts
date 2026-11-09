@@ -36,6 +36,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "linjat {{start}}-{{end}}",
   "ui.fileMedia.kind.image": "imazh",
   "ui.fileMedia.kind.audio": "audio",
+  "ui.fileMedia.kind.video": "video",
   "ui.fileMedia.state.removed": "Skedari {{kind}} u hoq.",
   "ui.fileMedia.state.loading": "{{kind}} po ngarkohet…",
   "ui.fileMedia.state.error": "{{kind}} nuk mund të ngarkohet.",

@@ -1,6 +1,6 @@
 export const FILE_MEDIA_READ_TIMEOUT_MS = 15_000
 
-export type RemoteMediaKind = "image" | "audio"
+export type RemoteMediaKind = "image" | "video" | "audio"
 
 export type LoadedMedia = {
   readonly src: string
@@ -14,7 +14,7 @@ export type RemoteMediaTarget = {
 }
 
 /**
- * A remote image or audio read. `loading` carries the media a same-file refresh replaces, so a refresh that fails or
+ * A remote image, video or audio read. `loading` carries the media a same-file refresh replaces, so a refresh that fails or
  * hangs keeps showing it; `attempt` lets only the latest read and its own timeout settle the load.
  */
 export type FileMediaState =

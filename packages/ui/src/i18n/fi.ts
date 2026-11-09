@@ -73,6 +73,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "rivit {{start}}-{{end}}",
   "ui.fileMedia.kind.image": "Kuva",
   "ui.fileMedia.kind.audio": "Ääni",
+  "ui.fileMedia.kind.video": "video",
   "ui.fileMedia.state.removed": "{{kind}}: tiedosto poistettu.",
   "ui.fileMedia.state.loading": "{{kind}}: ladataan…",
   "ui.fileMedia.state.error": "{{kind}}: lataaminen epäonnistui.",

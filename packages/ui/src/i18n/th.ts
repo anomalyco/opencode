@@ -36,6 +36,7 @@ export const dict = {
   "ui.sessionReviewV2.empty.changes.description": "การเปลี่ยนแปลงในโปรเจกต์จะแสดงที่นี่",
   "ui.fileMedia.kind.image": "รูปภาพ",
   "ui.fileMedia.kind.audio": "เสียง",
+  "ui.fileMedia.kind.video": "วิดีโอ",
   "ui.fileMedia.state.removed": "ลบ{{kind}}แล้ว",
   "ui.fileMedia.state.loading": "กำลังโหลด{{kind}}…",
   "ui.fileMedia.state.error": "เกิดข้อผิดพลาดในการโหลด{{kind}}",

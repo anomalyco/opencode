@@ -169,6 +169,17 @@ describe("transitionAttachmentMedia", () => {
     expect(viewAttachmentMedia(INITIAL_ATTACHMENT_MEDIA_STATE, peeked).src).toBe("blob:cached")
   })
 
+  test("video and audio attachments resolve like images", () => {
+    for (const mime of ["video/mp4", "video/webm", "audio/wav", "audio/mpeg", "image/svg+xml"]) {
+      expect(resolveAttachmentMediaTarget(media(hashA, mime), reader)).toEqual({
+        kind: "remote",
+        key: `${mime}:${hashA}`,
+        uri: hashA,
+        mime,
+      })
+    }
+  })
+
   test("leaving a read for a direct URL or unmounting cancels it, and nothing settles after", () => {
     const loading = transitionAttachmentMedia(INITIAL_ATTACHMENT_MEDIA_STATE, {
       type: "target.synced",

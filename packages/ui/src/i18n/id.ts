@@ -37,6 +37,7 @@ export const dict = {
 
   "ui.fileMedia.kind.image": "gambar",
   "ui.fileMedia.kind.audio": "audio",
+  "ui.fileMedia.kind.video": "video",
   "ui.fileMedia.state.removed": "Berkas {{kind}} dihapus.",
   "ui.fileMedia.state.loading": "Memuat {{kind}}…",
   "ui.fileMedia.state.error": "Tidak dapat memuat {{kind}}.",

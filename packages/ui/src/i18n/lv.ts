@@ -36,6 +36,7 @@ export const dict = {
   "ui.sessionReview.selection.lines": "rindas {{start}}–{{end}}",
   "ui.fileMedia.kind.image": "attēls",
   "ui.fileMedia.kind.audio": "audio",
+  "ui.fileMedia.kind.video": "video",
   "ui.fileMedia.state.removed": "Noņemts {{kind}} fails.",
   "ui.fileMedia.state.loading": "Notiek {{kind}} ielāde…",
   "ui.fileMedia.state.error": "Neizdevās ielādēt {{kind}}.",

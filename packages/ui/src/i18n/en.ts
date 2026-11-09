@@ -42,6 +42,7 @@ const source = {
 
   "ui.fileMedia.kind.image": "image",
   "ui.fileMedia.kind.audio": "audio",
+  "ui.fileMedia.kind.video": "video",
   "ui.fileMedia.state.removed": "Removed {{kind}} file.",
   "ui.fileMedia.state.loading": "Loading {{kind}}…",
   "ui.fileMedia.state.error": "Unable to load {{kind}}.",
