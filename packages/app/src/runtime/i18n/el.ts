@@ -743,6 +743,7 @@ export const dict = {
   "home.workspaceTip":
     "Ξεκινήστε την επόμενη συνεδρία σε νέο χώρο εργασίας για να διατηρήσετε τις αλλαγές απομονωμένες",
   "session.tab.add": "Προσθήκη καρτέλας",
+  "session.tab.closeOthers": "Κλείσιμο των άλλων καρτελών",
   "session.queue.attachments.one": "Συν {{count}} συνημμένο",
   "session.queue.attachments.other": "Συν {{count}} συνημμένα",
   "settings.backToSettings": "Επιστροφή στις ρυθμίσεις",

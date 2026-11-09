@@ -23,6 +23,8 @@ import type {
   FunctionExpression,
   Identifier,
   IfStatement,
+  ImportDeclaration,
+  ImportExpression,
   LabeledStatement,
   LogicalExpression,
   MemberExpression,
@@ -60,6 +62,8 @@ import {
   IteratorSymbol,
   OptionalShortCircuit,
   invalidData,
+  PendingThrow,
+  syntaxError,
   Throw,
   rangeError,
   type StatementResult,
@@ -80,6 +84,7 @@ import {
   IteratorObj,
   type Cursor,
   has,
+  hasOwn,
   hidden,
   hasPrototype,
   keys,
@@ -96,6 +101,8 @@ import {
   set,
   coerceToNumber,
   coerceToString,
+  entries,
+  getOwn,
   type NativeResult,
   type Step,
   type Value,
@@ -116,9 +123,10 @@ import {
   Yield,
   normal,
 } from "./runner.js"
+import { moduleName, resolveModule } from "./modules.js"
 import { describeValue, isOpaque, rejectCircularInsertion, typeofValue } from "./references.js"
 import { fn } from "./native.js"
-import { capability } from "./promises.js"
+import { capability, promiseLike } from "./promises.js"
 import { ScopeStack } from "./scope.js"
 import { constructRegExp } from "../stdlib/regexp.js"
 import { enumerableSource } from "../stdlib/object.js"
@@ -382,6 +390,9 @@ export class Interpreter<R> {
   /** Template objects by site: a tag sees the same `strings` array every time its literal is evaluated, as in JS. */
   readonly templates = new WeakMap<TaggedTemplateExpression, Arr>()
   private readonly root: Frame<R>
+  private readonly globalScope: ReadonlyMap<string, Binding>
+  private readonly modules = new Map<string, Value>()
+  private readonly namespaces = new Map<string, Obj>()
 
   constructor(options: {
     readonly tools: ToolRuntime<R>
@@ -399,9 +410,45 @@ export class Interpreter<R> {
     const globalScope = new Map<string, Binding>([["this", { mutable: false, value: undefined }]])
     // Calling back into the program never reads frame state, so any frame serves; the root is always alive.
     this.root = new Frame(this, new ScopeStack([globalScope]))
+    this.globalScope = globalScope
     for (const [name, value] of [...globals(this), ...(options.globals?.(this) ?? [])]) {
       globalScope.set(name, { mutable: false, value })
     }
+  }
+
+  /** A module, as `require` returns it and a default import binds it: a global, by its Node module name. */
+  module(specifier: string, site?: AstNode): Value {
+    const name = moduleName(specifier)
+    const cached = this.modules.get(name)
+    if (cached !== undefined) return cached
+    const module = resolveModule(name, (global) => {
+      const binding = this.globalScope.get(global)
+      return binding && "value" in binding ? binding.value : undefined
+    })
+    if (module === undefined)
+      throw new PendingThrow(
+        "Error",
+        `Cannot import "${specifier}": it isn't available in Code Mode, which can't load packages or files. Use the provided globals, or call tools through \`tools\`.`,
+        site,
+      )
+    this.modules.set(name, module)
+    return module
+  }
+
+  /**
+   * What `import * as` and `import()` see: the module's own properties, and the module itself as `default`, the way
+   * Node presents a CommonJS module.
+   */
+  namespace(specifier: string, site?: AstNode): Obj {
+    const module = this.module(specifier, site)
+    const name = moduleName(specifier)
+    const cached = this.namespaces.get(name)
+    if (cached) return cached
+    const namespace = new Obj(null)
+    if (module instanceof Obj) for (const [key, value] of entries(module)) define(namespace, key, value)
+    define(namespace, "default", module)
+    this.namespaces.set(name, namespace)
+    return namespace
   }
 
   /** The program's body, as the first job: its completion value, copied out for the host. */
@@ -433,6 +480,11 @@ export class Interpreter<R> {
     for (const arg of args) json.push(yield* toBoundary(this, arg))
     return fromJson(this, (yield this.runner.blocking(run(json))) as Json | undefined)
   }
+
+  /** The built-in search: its result is usable directly, and can also be awaited or chained like a Promise. */
+  *search(args: Array<Value>) {
+    return promiseLike(this, yield* this.tool(this.tools.search, args))
+  }
 }
 
 /** One activation: the top-level program or a single function call, evaluating against its own scope chain. */
@@ -450,11 +502,14 @@ class Frame<R> {
     // Keep top-level declarations separate so they can shadow builtins.
     this.scopes.push()
     try {
+      // Imports load before any code runs, as in a module.
+      for (const statement of program.body) if (statement.type === "ImportDeclaration") this.bindImport(statement)
       this.predeclareLexical(program.body)
       this.hoistFunctions(program.body)
       this.hoistVars(program.body)
       let value: Value = undefined
       for (const [index, statement] of program.body.entries()) {
+        if (statement.type === "ImportDeclaration") continue
         if (index === program.body.length - 1 && statement.type === "ExpressionStatement") {
           value = yield* this.evaluateExpression(statement.expression)
           break
@@ -476,6 +531,24 @@ class Frame<R> {
     } finally {
       this.scopes.pop()
     }
+  }
+
+  private bindImport(node: ImportDeclaration): void {
+    const specifier = String(node.source.value)
+    if (node.specifiers.length === 0) this.ctx.module(specifier, node)
+    for (const binding of node.specifiers) {
+      this.scopes.declare(binding.local.name, this.imported(binding, specifier), false, binding)
+    }
+  }
+
+  // A default import binds the module itself and a named import one of its properties, as Node imports CommonJS.
+  private imported(binding: ImportDeclaration["specifiers"][number], specifier: string): Value {
+    if (binding.type === "ImportDefaultSpecifier") return this.ctx.module(specifier, binding)
+    const namespace = this.ctx.namespace(specifier, binding)
+    if (binding.type === "ImportNamespaceSpecifier") return namespace
+    const name = binding.imported.type === "Identifier" ? binding.imported.name : String(binding.imported.value)
+    if (!hasOwn(namespace, name)) throw syntaxError(`"${specifier}" has no export named "${name}".`, binding)
+    return getOwn(namespace, name)
   }
 
   // The call returns its promise at once. Arguments cross on the caller's stack, since `toJSON` is program code, and a
@@ -560,6 +633,8 @@ class Frame<R> {
         return none
       case "FunctionDeclaration":
         return none
+      case "ImportDeclaration":
+        throw syntaxError("An import declaration may only appear at the top level of the program.", node)
       default:
         throw unsupportedSyntax(node.type, node)
     }
@@ -1092,11 +1167,23 @@ class Frame<R> {
     throw typeError(`${context} must be a function.`, node)
   }
 
-  // for...in over null/undefined iterates nothing, like JS.
+  // for...in over null/undefined iterates nothing, like JS. After the own keys come each prototype's enumerable
+  // string keys, skipping any key a nearer level has, even as a non-enumerable property.
   private enumerableKeys(value: Value, node: AstNode): Array<string> {
     if (value instanceof ToolReference) return [...this.ctx.tools.keys(value.path)]
     if (value === null || value === undefined) return []
-    return keys(enumerableSource(this.ctx, "for...in", value, node))
+    const source = enumerableSource(this.ctx, "for...in", value, node)
+    const chain = [source]
+    // A string's characters stand in an array, but its prototype is String.prototype.
+    let proto = primitivePrototype(this.ctx.builtins, value) ?? source.proto
+    while (proto !== null) {
+      chain.push(proto)
+      proto = proto.proto
+    }
+    return chain.flatMap((target, depth) => {
+      const nearer = chain.slice(0, depth)
+      return keys(target).filter((key) => !nearer.some((level) => hasOwn(level, key)))
+    })
   }
 
   private *evaluateForInStatement(node: ForInStatement, labels?: ReadonlySet<string>): Eval<StatementResult> {
@@ -1506,6 +1593,8 @@ class Frame<R> {
         return this.evaluateYieldExpression(node)
       case "NewExpression":
         return this.evaluateNewExpression(node)
+      case "ImportExpression":
+        return this.evaluateImportExpression(node)
       default:
         throw unsupportedSyntax(node.type, node)
     }
@@ -1830,6 +1919,20 @@ class Frame<R> {
     }
 
     throw typeError("Update target must be an Identifier or MemberExpression.", argument)
+  }
+
+  // A module that fails to load rejects the promise, as a failed dynamic import does.
+  private *evaluateImportExpression(node: ImportExpression): Eval<Value> {
+    const specifier = coerceToString(yield* this.evaluateExpression(node.source))
+    if (node.options) yield* this.evaluateExpression(node.options)
+    const promise = capability(this.ctx, node)
+    try {
+      promise.resolve(this.ctx.namespace(specifier, node))
+    } catch (error) {
+      if (!(error instanceof PendingThrow)) throw error
+      promise.reject(error)
+    }
+    return promise.promise
   }
 
   // EvaluateCall: a member callee supplies its base object as `this`; anything else calls with undefined.

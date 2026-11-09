@@ -15,11 +15,16 @@ import {
   type StoredOAuthClientInformation,
   type StoredOAuthTokens,
 } from "@modelcontextprotocol/client"
-import { OAuthMetadataSchema, OpenIdProviderDiscoveryMetadataSchema } from "@modelcontextprotocol/core"
-import { Cause, Deferred, Effect } from "effect"
+import {
+  OAuthMetadataSchema,
+  OAuthTokensSchema,
+  OpenIdProviderDiscoveryMetadataSchema,
+} from "@modelcontextprotocol/core"
+import { Cause, Data, Deferred, Effect, Option, Schema } from "effect"
+import { FetchHttpClient } from "effect/http"
 import type { ServerResponse } from "node:http"
+import type { AddressInfo } from "node:net"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
-import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
 import { Credential } from "../credential.js"
 import { OauthCallbackPage } from "../oauth/page.js"
 import type { Integration } from "../integration.js"
@@ -31,6 +36,20 @@ export const CLIENT_METADATA_URL = "https://opencode.ai/oauth/opencode/client.js
 // Refresh tokens rotate, so concurrent refreshes of the same token share one request or the second gets invalid_grant.
 const refreshes = new Map<string, ReturnType<FetchLike>>()
 
+/** Sends one refresh request whose body carries `token`, in place of the in-process share. */
+type Refresh = (send: FetchLike, url: string | URL, init: RequestInit, token: string) => ReturnType<FetchLike>
+
+// Providers backed by a stored credential refresh under its cross-process lock; see connectProvider.
+const lockedRefreshes = new WeakMap<OAuthClientProvider, Refresh>()
+
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
+
+class RefreshRejected extends Data.TaggedError("McpOAuth.RefreshRejected")<{
+  readonly status: number
+  readonly headers: Headers
+  readonly body: string
+}> {}
+
 const refreshKey = (url: string | URL, init: RequestInit | undefined) => {
   if (!(init?.body instanceof URLSearchParams) || init.body.get("grant_type") !== "refresh_token") return undefined
   return [String(url), init.body.get("client_id") ?? "", init.body.get("refresh_token") ?? ""].join("\u0000")
@@ -39,24 +58,36 @@ const refreshKey = (url: string | URL, init: RequestInit | undefined) => {
 // Bun's and Node's fetch types both apply here and the SDK's FetchLike wants Bun's Response, so the
 // overload is picked by annotation and clone() is pinned to the type it was called on. A tool call
 // can stay silent for minutes, so Bun's idle deadline is off; the MCP execution timeout still applies.
-const base: FetchLike = noTimeoutFetch
 const share = (pending: ReturnType<FetchLike>) => pending.then((response) => response.clone() as typeof response)
 
-const send: FetchLike = (url, init) => {
-  const key = refreshKey(url, init)
-  if (key === undefined) return base(url, init)
-  const current = refreshes.get(key)
-  if (current) return share(current)
-  const pending = base(url, init).finally(() => {
-    if (refreshes.get(key) === pending) refreshes.delete(key)
-  })
-  refreshes.set(key, pending)
-  return share(pending)
-}
+// Requests use `FetchHttpClient.Fetch`, which an embedder can replace, rather than the global fetch.
+const sender = Effect.fnUntraced(function* (refresh?: Refresh) {
+  const fetch = yield* FetchHttpClient.Fetch
+  const base: FetchLike = (url, init) => fetch(url, { ...init, timeout: false } as BunFetchRequestInit)
+  const send: FetchLike = (url, init) => {
+    const key = refreshKey(url, init)
+    if (key === undefined) return base(url, init)
+    if (refresh && init?.body instanceof URLSearchParams)
+      return refresh(base, url, init, init.body.get("refresh_token") ?? "")
+    const current = refreshes.get(key)
+    if (current) return share(current)
+    const pending = base(url, init).finally(() => {
+      if (refreshes.get(key) === pending) refreshes.delete(key)
+    })
+    refreshes.set(key, pending)
+    return share(pending)
+  }
+  return send
+})
 
-export const loggedFetch = (fields: { readonly server: string; readonly directory?: string }) =>
+/** Pass the connection's provider so a stored credential's refresh runs under the credential lock. */
+export const loggedFetch = (
+  fields: { readonly server: string; readonly directory?: string },
+  provider?: OAuthClientProvider,
+) =>
   Effect.gen(function* () {
     const run = Effect.runPromiseWith(yield* Effect.context())
+    const send = yield* sender(provider && lockedRefreshes.get(provider))
     const request: FetchLike = (url, init) => {
       const grant = init?.body instanceof URLSearchParams ? init.body.get("grant_type") : undefined
       const operation = grant === "refresh_token" ? "refresh" : grant === "authorization_code" ? "exchange" : undefined
@@ -106,7 +137,7 @@ export const loggedFetch = (fields: { readonly server: string; readonly director
 
 // A configured authorization server document stands in for RFC 9728 discovery: the SDK reuses this
 // state instead of probing the resource server, whose well-known path may not exist.
-export const configuredDiscovery = async (input: {
+const configuredDiscovery = async (input: {
   readonly config: typeof ConfigMCP.Remote.Type
   readonly fetchFn: FetchLike
 }): Promise<OAuthDiscoveryState | undefined> => {
@@ -123,7 +154,7 @@ export const configuredDiscovery = async (input: {
   }
 }
 
-export interface Store {
+interface Store {
   readonly tokens: () => Promise<StoredOAuthTokens | undefined>
   readonly saveTokens: (tokens: StoredOAuthTokens) => Promise<void>
   readonly clientInformation: () => Promise<StoredOAuthClientInformation | undefined>
@@ -132,9 +163,10 @@ export interface Store {
   readonly saveCodeVerifier: (verifier: string) => Promise<void>
 }
 
-export interface Options {
+interface Options {
   readonly config: typeof ConfigMCP.Remote.Type
   readonly store: Store
+  readonly fetch: FetchLike
   /** Absent on connect: the provider then refuses to register a client or redirect, ending in needs_auth. */
   readonly redirect?: {
     readonly url: string
@@ -146,7 +178,7 @@ export interface Options {
   readonly invalidate?: OAuthClientProvider["invalidateCredentials"]
 }
 
-export const provider = (options: Options): OAuthClientProvider => {
+const provider = (options: Options): OAuthClientProvider => {
   const oauth = options.config.oauth || undefined
   const client = oauth?.client_id ? { client_id: oauth.client_id, client_secret: oauth.client_secret } : undefined
   const redirect = options.redirect
@@ -159,7 +191,7 @@ export const provider = (options: Options): OAuthClientProvider => {
   return {
     redirectUrl,
     discoveryState: async () => {
-      discovery ??= await configuredDiscovery({ config: options.config, fetchFn: send })
+      discovery ??= await configuredDiscovery({ config: options.config, fetchFn: options.fetch })
       return discovery
     },
     saveDiscoveryState: (state) => {
@@ -184,6 +216,7 @@ export const provider = (options: Options): OAuthClientProvider => {
       redirect_uris: [redirectUrl],
       client_name: "opencode",
       client_uri: "https://opencode.ai",
+      logo_uri: "https://opencode.ai/web-app-manifest-512x512.png",
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       token_endpoint_auth_method: client?.client_secret ? "client_secret_post" : "none",
@@ -201,7 +234,9 @@ export const provider = (options: Options): OAuthClientProvider => {
     redirectToAuthorization: (url) => {
       if (!redirect) throw refuse("user authorization")
       if (url.protocol !== "http:" && url.protocol !== "https:")
-        throw new Error(`MCP server "${options.config.url}" returned a ${url.protocol} authorization URL; only http and https are supported`)
+        throw new Error(
+          `MCP server "${options.config.url}" returned a ${url.protocol} authorization URL; only http and https are supported`,
+        )
       return redirect.open(url)
     },
     ...(options.invalidate ? { invalidateCredentials: options.invalidate } : {}),
@@ -214,7 +249,7 @@ export const provider = (options: Options): OAuthClientProvider => {
   }
 }
 
-export const memoryStore = (): Store => {
+const memoryStore = (): Store => {
   let tokens: StoredOAuthTokens | undefined
   let client: StoredOAuthClientInformation | undefined
   let verifier: string | undefined
@@ -237,7 +272,7 @@ export const memoryStore = (): Store => {
 export const clientFromCredential = (credential: Credential.OAuth) =>
   credential.metadata?.client as StoredOAuthClientInformation | undefined
 
-export const toCredential = (input: {
+const toCredential = (input: {
   readonly methodID: Integration.MethodID
   readonly serverUrl: string
   readonly tokens: StoredOAuthTokens
@@ -259,7 +294,7 @@ export const toCredential = (input: {
     },
   })
 
-export const toTokens = (credential: Credential.OAuth): StoredOAuthTokens => {
+const toTokens = (credential: Credential.OAuth): StoredOAuthTokens => {
   const metadata = credential.metadata ?? {}
   return {
     access_token: credential.access,
@@ -271,14 +306,19 @@ export const toTokens = (credential: Credential.OAuth): StoredOAuthTokens => {
   }
 }
 
+/**
+ * A provider for one credential the caller already selected, or none. It never looks up the active credential
+ * itself: it reads and refreshes only the selected row, and a provider made without one stays anonymous.
+ */
 export const connectProvider = Effect.fnUntraced(function* (input: {
   readonly config: typeof ConfigMCP.Remote.Type
-  readonly integrationID: Integration.ID
+  readonly credential: Credential.Info | undefined
 }) {
   const credentials = yield* Credential.Service
   const run = Effect.runPromiseWith(yield* Effect.context())
-  const found = (yield* credentials.list(input.integrationID)).at(-1)
-  if (!found || found.value.type !== "oauth") return provider({ config: input.config, store: memoryStore() })
+  const fetch = yield* sender()
+  const found = input.credential
+  if (!found || found.value.type !== "oauth") return provider({ config: input.config, store: memoryStore(), fetch })
   const id = found.id
   const methodID = found.value.methodID
   const read = async () => {
@@ -287,8 +327,66 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
   }
   // Refresh tokens rotate and the row is shared across connections: only drop it while it still holds ours.
   let presented = found.value.refresh
-  return provider({
+  // Every process and Location sharing the database refreshes this row under one lock, and the lock is held
+  // until the rotated tokens are saved. A caller holding a refresh token the row no longer has gets the
+  // stored tokens instead of spending it: servers that rotate refresh tokens revoke the grant on reuse.
+  const refresh: Refresh = (send, url, init, token) =>
+    run(
+      credentials
+        .lock(
+          id,
+          Effect.gen(function* () {
+            const current = yield* credentials.get(id)
+            if (current?.value.type !== "oauth") return undefined
+            if (current.value.refresh !== token) {
+              yield* Effect.logInfo("mcp oauth refresh skipped", { credentialID: id, reason: "already_rotated" })
+              return current.value
+            }
+            // Bounds reading the body too, so a server that stalls after its headers cannot hold the lock.
+            const { response, body } = yield* Effect.tryPromise(async (signal) => {
+              const response = await send(url, { ...init, signal })
+              return { response, body: await response.text() }
+            }).pipe(Effect.timeout("30 seconds"))
+            const parsed = OAuthTokensSchema.safeParse(
+              response.ok ? Option.getOrUndefined(decodeJson(body)) : undefined,
+            )
+            if (!parsed.success)
+              return yield* new RefreshRejected({ status: response.status, headers: response.headers, body })
+            const latest = yield* credentials.get(id)
+            if (latest?.value.type !== "oauth") return undefined
+            if (latest.value.refresh !== token) {
+              yield* Effect.logWarning("mcp oauth refresh discarded", { credentialID: id, reason: "rotated_meanwhile" })
+              return latest.value
+            }
+            // The SDK ignores an issuer in the token response; keep the one this credential was stamped with.
+            const issuer = latest.value.metadata?.issuer
+            const value = toCredential({
+              methodID,
+              serverUrl: input.config.url,
+              tokens: { refresh_token: token, ...parsed.data, issuer: typeof issuer === "string" ? issuer : undefined },
+              client: clientFromCredential(latest.value),
+            })
+            yield* credentials.update(id, { value })
+            return value
+          }),
+        )
+        .pipe(
+          Effect.map((value) =>
+            value
+              ? Response.json(toTokens(value))
+              : // The credential was signed out meanwhile; the SDK drops it and reports needs_auth.
+                Response.json({ error: "invalid_grant" }, { status: 400 }),
+          ),
+          Effect.catch((error) =>
+            error instanceof RefreshRejected
+              ? Effect.succeed(new Response(error.body, { status: error.status, headers: error.headers }))
+              : Effect.fail(error),
+          ),
+        ),
+    )
+  const result = provider({
     config: input.config,
+    fetch,
     invalidate: async (scope) => {
       if (scope === "verifier" || scope === "discovery") return
       const oauth = await read()
@@ -305,6 +403,8 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
       },
       saveTokens: async (tokens) => {
         const previous = await read()
+        // Another connection rotated past the token this one presented; its tokens win.
+        if (previous && previous.refresh !== presented && previous.refresh !== (tokens.refresh_token ?? "")) return
         const value = toCredential({
           methodID,
           serverUrl: input.config.url,
@@ -327,6 +427,8 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
       saveCodeVerifier: async () => {},
     },
   })
+  lockedRefreshes.set(result, refresh)
+  return result
 })
 
 export const authorize = (input: {
@@ -351,7 +453,7 @@ export const authorize = (input: {
       const client = clientFromCredential(previous)
       if (client) yield* Effect.promise(() => store.saveClientInformation(client))
     }
-    const code = yield* Deferred.make<{ code: string; iss: string | undefined; response: ServerResponse }, Error>()
+    const code = yield* Deferred.make<{ code: string; iss: string | undefined; response?: ServerResponse }, Error>()
     const redirect = oauth?.redirect_uri ? new URL(oauth.redirect_uri) : undefined
     const redirectPath = redirect?.pathname ?? "/callback"
     const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")
@@ -387,7 +489,9 @@ export const authorize = (input: {
       if (!value) return fail("Missing authorization code", "missing_code")
       // The page waits for the token exchange so the browser never reports success for a rejected code.
       if (
-        !Effect.runSync(Deferred.succeed(code, { code: value, iss: url.searchParams.get("iss") ?? undefined, response }))
+        !Effect.runSync(
+          Deferred.succeed(code, { code: value, iss: url.searchParams.get("iss") ?? undefined, response }),
+        )
       )
         response.writeHead(409).end("OAuth callback already received")
     })
@@ -397,12 +501,7 @@ export const authorize = (input: {
     const port = yield* Effect.callback<number, Error>((resume) => {
       server.once("error", (error) => resume(Effect.fail(error)))
       server.listen(oauth?.callback_port ?? redirectPort ?? 0, "127.0.0.1", () => {
-        const address = server.address()
-        resume(
-          address && typeof address === "object"
-            ? Effect.succeed(address.port)
-            : Effect.fail(new Error("Could not determine MCP OAuth callback port")),
-        )
+        resume(Effect.succeed((server.address() as AddressInfo).port))
       })
     })
     yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))
@@ -453,6 +552,7 @@ export const authorize = (input: {
     const oauthProvider = provider({
       config: input.config,
       store,
+      fetch: fetchFn,
       clientMetadataUrl: cimd ? CLIENT_METADATA_URL : undefined,
       discovery: { ...discovery, resourceMetadataUrl: resourceMetadataUrl?.toString() },
       redirect: {
@@ -491,7 +591,7 @@ export const authorize = (input: {
         const respond = (error?: string) =>
           Effect.sync(() =>
             value.response
-              .writeHead(error ? 400 : 200, { "Content-Type": "text/html" })
+              ?.writeHead(error ? 400 : 200, { "Content-Type": "text/html" })
               .end(
                 error
                   ? OauthCallbackPage.error(error, { provider: input.name })
@@ -512,7 +612,7 @@ export const authorize = (input: {
           Effect.flatMap(() => finalize),
           Effect.tap(() => respond()),
           Effect.tapError((error) => respond(error.message)),
-          Effect.onInterrupt(() => Effect.sync(() => value.response.destroy())),
+          Effect.onInterrupt(() => Effect.sync(() => value.response?.destroy())),
         )
       }),
       Effect.onErrorIf(
@@ -531,6 +631,25 @@ export const authorize = (input: {
       instructions: `Authorize ${input.name} in your browser. This window will close automatically.`,
       mode: "auto" as const,
       callback: Deferred.await(completed),
+      // A pasted URL is held to the same checks as the browser's redirect, but a wrong paste keeps the login waiting.
+      submit: (pasted: string) =>
+        Effect.gen(function* () {
+          const text = pasted.trim()
+          if (!URL.canParse(text))
+            return yield* Effect.fail(new Error("Paste the full URL from the browser's address bar"))
+          const url = new URL(text)
+          if (url.searchParams.get("state") !== state)
+            return yield* Effect.fail(new Error("This URL belongs to a different sign-in"))
+          const error = url.searchParams.get("error_description") ?? url.searchParams.get("error")
+          if (error) {
+            yield* Deferred.fail(code, new Error(error))
+            return
+          }
+          const value = url.searchParams.get("code")
+          if (!value) return yield* Effect.fail(new Error("The URL does not contain an authorization code"))
+          yield* Effect.logInfo("mcp oauth redirect pasted", fields)
+          yield* Deferred.succeed(code, { code: value, iss: url.searchParams.get("iss") ?? undefined })
+        }),
     }
   }).pipe(
     Effect.onError((cause) =>

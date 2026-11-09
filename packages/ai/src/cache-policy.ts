@@ -11,7 +11,17 @@
 // Manual `cache: CacheHint` placements on individual parts are preserved and
 // count against the four-breakpoint budget; auto only fills remaining slots.
 import { CacheHint, type CachePolicy, type CachePolicyObject, type CacheTTL } from "./schema/options.js"
-import { LLMRequest, Message, ToolDefinition, type ContentPart, type ToolEntry } from "./schema/messages.js"
+import {
+  AssistantMessage,
+  type LLMRequest,
+  type Message,
+  SystemMessage,
+  ToolDefinition,
+  ToolMessage,
+  UserMessage,
+  type ContentPart,
+  type ToolEntry,
+} from "./schema/messages.js"
 import { effortUpdate } from "./effort-updates.js"
 
 const AUTO: CachePolicyObject = {
@@ -141,8 +151,7 @@ const markMessageAt = (
   const existing = target.content[markAt]
   if (!existing || !isCacheablePart(existing) || existing.cache || budget.remaining === 0) return messages
   budget.remaining -= 1
-  const nextContent = target.content.map((part, i) => (i === markAt ? { ...existing, cache: hint } : part))
-  const next = new Message({ ...target, content: nextContent })
+  const next = cachePartAt(target, markAt, hint)
   // Single pass over `messages`, substituting the one updated entry. Long
   // conversations call this on every request, so avoid `.map()` here — its
   // closure dispatch and identity copies show up in profiling.
@@ -150,6 +159,22 @@ const markMessageAt = (
   result[index] = next
   return result
 }
+
+const cachePartAt = (message: Message, index: number, hint: CacheHint): Message => {
+  switch (message.role) {
+    case "system":
+      return new SystemMessage({ ...message, content: cacheContentAt(message.content, index, hint) })
+    case "user":
+      return new UserMessage({ ...message, content: cacheContentAt(message.content, index, hint) })
+    case "assistant":
+      return new AssistantMessage({ ...message, content: cacheContentAt(message.content, index, hint) })
+    case "tool":
+      return new ToolMessage({ ...message, content: cacheContentAt(message.content, index, hint) })
+  }
+}
+
+const cacheContentAt = <Part extends ContentPart>(content: ReadonlyArray<Part>, index: number, hint: CacheHint) =>
+  content.map((part, i) => (i === index ? { ...part, cache: hint } : part))
 
 const markMessages = (
   messages: ReadonlyArray<Message>,
@@ -198,7 +223,7 @@ export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
   const messages = policy.messages ? markMessages(request.messages, policy.messages, hint, budget) : request.messages
 
   if (tools === request.tools && system === request.system && messages === request.messages) return request
-  return LLMRequest.update(request, { tools, system, messages })
+  return { ...request, tools, system, messages }
 }
 
 /** Whether the cache policy places inline markers, which then carry the requested lifetime. */

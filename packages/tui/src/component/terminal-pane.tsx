@@ -1,6 +1,8 @@
 import { EmbeddedTerminalRenderable, type RGBA } from "@opentui/core"
+import { decodePersistentPtyMessage, persistentPtyFrame } from "@opencode/client/solid"
 import { rgbToOklch, type ResolvedThemeTokens } from "@opencode/theme/tui"
 import { extend, useRenderer } from "@opentui/solid"
+import { Option } from "effect"
 import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useClient } from "../context/client"
 import { Keymap } from "../context/keymap"
@@ -77,7 +79,7 @@ export function TerminalPane(props: {
       return
     }
     if (!size) return
-    send(interactionFrame(size))
+    send(persistentPtyFrame(size))
   }
 
   createEffect(() => {
@@ -89,7 +91,7 @@ export function TerminalPane(props: {
       pendingInput.push(data)
       return
     }
-    if (size) send(interactionFrame(size, data))
+    if (size) send(persistentPtyFrame(size, data))
   }
 
   onCleanup(terminals.attachWriter(props.ptyID, sendInput))
@@ -206,21 +208,14 @@ export function TerminalPane(props: {
         return
       }
       if (typeof event.data !== "string") return
-      const message: unknown = JSON.parse(event.data)
-      if (!message || typeof message !== "object" || !("type" in message)) return
+      const decoded = decodePersistentPtyMessage(event.data)
+      if (Option.isNone(decoded)) return
+      const message = decoded.value
       if (message.type === "exited") {
         exited = true
         return
       }
-      if (
-        message.type === "resized" &&
-        "cols" in message &&
-        typeof message.cols === "number" &&
-        "rows" in message &&
-        typeof message.rows === "number" &&
-        "checkpoint" in message &&
-        typeof message.checkpoint === "string"
-      ) {
+      if (message.type === "resized") {
         enqueue({
           type: "resize",
           size: { cols: message.cols, rows: message.rows },
@@ -232,36 +227,20 @@ export function TerminalPane(props: {
         enqueue({ type: "ready" })
         return
       }
-      if (
-        message.type === "controller_changed" &&
-        "attachmentID" in message &&
-        (typeof message.attachmentID === "string" || message.attachmentID === undefined)
-      ) {
+      if (message.type === "controller_changed") {
         const previous = controller
         controller = message.attachmentID === attachmentID
         if (controller && !previous && restored) interact()
         return
       }
       if (message.type !== "attached") return
-      if (!("inputProtocol" in message) || message.inputProtocol !== 1) {
+      if (message.inputProtocol !== 1) {
         setFailure("Persistent terminal server is out of date; restart OpenCode")
         next.close()
         return
       }
-      if (
-        "info" in message &&
-        message.info &&
-        typeof message.info === "object" &&
-        "size" in message.info &&
-        message.info.size &&
-        typeof message.info.size === "object" &&
-        "cols" in message.info.size &&
-        typeof message.info.size.cols === "number" &&
-        "rows" in message.info.size &&
-        typeof message.info.size.rows === "number"
-      )
-        enqueue({ type: "resize", size: { cols: message.info.size.cols, rows: message.info.size.rows } })
-      controller = "role" in message && message.role === "controller"
+      enqueue({ type: "resize", size: { cols: message.info.size.cols, rows: message.info.size.rows } })
+      controller = message.role === "controller"
       attached = true
     })
     next.addEventListener("error", () => {
@@ -395,14 +374,4 @@ function hex(color: RGBA) {
     .slice(0, 3)
     .map((value) => value.toString(16).padStart(2, "0"))
     .join("")}`
-}
-
-function interactionFrame(size: { cols: number; rows: number }, data?: Uint8Array) {
-  const frame = new Uint8Array(5 + (data?.byteLength ?? 0))
-  const view = new DataView(frame.buffer)
-  frame[0] = data ? 1 : 0
-  view.setUint16(1, size.cols)
-  view.setUint16(3, size.rows)
-  if (data) frame.set(data, 5)
-  return frame
 }

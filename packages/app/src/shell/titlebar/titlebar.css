@@ -10,11 +10,23 @@
 
 [data-slot="vertical-tabs-sidebar"] [data-slot="vertical-tabs-scroll"] {
   min-height: 0;
-  /* Leave enough space to scroll the final tab clear of the fade above Settings. */
   padding-block-end: 16px;
-  scroll-padding-block-end: 16px;
-  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 16px), transparent);
-  mask-image: linear-gradient(to bottom, black calc(100% - 16px), transparent);
+  /* Keyboard navigation scrolls a tab clear of the feathered edges, which TitlebarTabStrip sizes from the scroll. */
+  scroll-padding-block: 16px;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black var(--vertical-tabs-fade-top, 0px),
+    black calc(100% - var(--vertical-tabs-fade-bottom, 0px)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black var(--vertical-tabs-fade-top, 0px),
+    black calc(100% - var(--vertical-tabs-fade-bottom, 0px)),
+    transparent
+  );
 }
 
 [data-slot="mobile-tabs-trigger"][aria-expanded="true"] {

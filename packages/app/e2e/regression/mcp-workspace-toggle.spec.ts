@@ -20,7 +20,16 @@ type Surface = "popover" | "dialog" | "settings"
 // Extensions page opened (Ctrl+,) from the session.
 async function open(
   page: Page,
-  input: { surface: Surface } & Pick<MockServerConfig, "mcp" | "onMcpAction" | "integrations" | "onIntegrationOAuth">,
+  input: { surface: Surface } & Pick<
+    MockServerConfig,
+    | "mcp"
+    | "onMcpAction"
+    | "integrations"
+    | "onIntegrationOAuth"
+    | "onIntegrationOAuthStatus"
+    | "onIntegrationOAuthComplete"
+    | "mcpResourceFailures"
+  >,
 ) {
   const requests: { path: string; directory: string }[] = []
   page.on("request", (request) => {
@@ -41,18 +50,20 @@ async function open(
     onMcpAction: input.onMcpAction,
     integrations: input.integrations,
     onIntegrationOAuth: input.onIntegrationOAuth,
+    onIntegrationOAuthStatus: input.onIntegrationOAuthStatus,
+    onIntegrationOAuthComplete: input.onIntegrationOAuthComplete,
+    mcpResourceFailures: input.mcpResourceFailures,
   })
 
   await page.goto(sessionHref(sessionID))
   await expectSessionTitle(page, title)
   await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeEditable()
 
-  const panel =
-    input.surface === "settings"
-      ? page.getByTestId("settings-screen")
-      : input.surface === "popover"
-        ? page.getByRole("group", { name: "MCP", exact: true })
-        : page.getByRole("dialog", { name: "MCPs", exact: true })
+  const panel = {
+    settings: page.getByTestId("settings-screen"),
+    popover: page.getByRole("group", { name: "MCP", exact: true }),
+    dialog: page.getByRole("dialog", { name: "MCPs", exact: true }),
+  }[input.surface]
 
   const show = async () => {
     if (input.surface === "dialog") return page.keyboard.press("Control+;")
@@ -148,12 +159,29 @@ for (const surface of ["popover", "dialog"] as const) {
 
 test("the MCP popover shows a failed server and reconnects it from its details", async ({ page }) => {
   const error = "Streamable HTTP error: Error POSTing to endpoint: 404 Not Found"
+  const again = "Streamable HTTP error: Error POSTing to endpoint: 503 Service Unavailable"
+  const retries = { connecting: false, failing: true }
 
   const view = await open(page, {
     surface: "popover",
     mcp: (target) => [
-      { name: "figma-desktop", status: target !== workspace ? { status: "connected" } : { status: "failed", error } },
+      {
+        name: "figma-desktop",
+        status:
+          target !== workspace
+            ? { status: "connected" }
+            : retries.connecting
+              ? { status: "pending" }
+              : { status: "failed", error },
+      },
     ],
+    // The first retry fails again with another error, reported by the refreshed status; the second connects.
+    onMcpAction: (input) => {
+      if (input.action !== "connect" || !retries.failing) return
+      retries.failing = false
+
+      return { status: "failed", error: again }
+    },
   })
 
   const row = view.panel.locator(".session-mcp-row").filter({ hasText: "figma-desktop" })
@@ -165,14 +193,153 @@ test("the MCP popover shows a failed server and reconnects it from its details",
   const details = page.getByRole("dialog", { name: "figma-desktop", exact: true })
   await expect(details).toHaveAccessibleDescription("Connection failed")
   await expect(details.getByText(error, { exact: true })).toBeVisible()
-  await details.getByRole("button", { name: "Try again", exact: true }).click()
+  const retry = details.getByRole("button", { name: "Try again", exact: true })
+  const connect = await holdRoute(page, /\/api\/experimental\/mcp\/figma-desktop\/connect(?:\?|$)/, { method: "POST" })
+  await retry.click()
+  await connect.arrived
+  // The server reports that it is connecting; the details stay open while the retry runs, and take no second retry.
+  retries.connecting = true
+
+  const listed = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+
+    return (
+      response.request().method() === "GET" &&
+      url.pathname === "/api/mcp" &&
+      url.searchParams.get("location[directory]") === workspace
+    )
+  })
+
+  await view.push([
+    {
+      id: "evt_mcp_connecting",
+      created: 1,
+      type: "mcp.status.changed",
+      location: { directory: workspace },
+      data: { server: "figma-desktop" },
+    },
+  ])
+  await listed
+  await expect(details.getByText(error, { exact: true })).toBeVisible()
+  await expect(retry).toBeDisabled()
+  await expect(details.getByRole("button", { name: "Disable", exact: true })).toBeDisabled()
+  connect.release()
+  // A retry that fails again shows its new error in place.
+  await expect(details.getByText(again, { exact: true })).toBeVisible()
+  await expect(retry).toBeEnabled()
+
+  const reconnect = await holdRoute(page, /\/api\/experimental\/mcp\/figma-desktop\/connect(?:\?|$)/, {
+    method: "POST",
+  })
+
+  await retry.click()
+  await reconnect.arrived
+  await page.keyboard.press("Escape")
   await expect(details).toBeHidden()
+
+  // The details closed and opened again still show the retry the dialog started, and take no second connect.
+  if (await view.panel.isVisible()) await page.getByRole("button", { name: "Session details", exact: true }).click()
+  await expect(view.panel).toBeHidden()
+  await view.show()
+  await expect(view.toggle).toBeDisabled()
+  reconnect.release()
+  await expect(view.toggle).toHaveAccessibleDescription("Connected")
+  await expect(view.toggle).toBeEnabled()
   expect(view.requests.filter((request) => request.path.endsWith("/connect"))).toEqual([
     { path: "/api/experimental/mcp/figma-desktop/connect", directory: workspace },
+    { path: "/api/experimental/mcp/figma-desktop/connect", directory: workspace },
   ])
+})
 
-  if (!(await view.panel.isVisible())) await view.show()
-  await expect(view.toggle).toHaveAccessibleDescription("Connected")
+test("the MCP dialog keeps a retrying server's error open, and its other servers stay free", async ({ page }) => {
+  const error = "Streamable HTTP error: Error POSTing to endpoint: 404 Not Found"
+  const again = "Streamable HTTP error: Error POSTing to endpoint: 503 Service Unavailable"
+  const retries = { connecting: false, failing: true }
+
+  const view = await open(page, {
+    surface: "dialog",
+    mcp: (target) => [
+      {
+        name: "figma-desktop",
+        status:
+          target !== workspace
+            ? { status: "connected" }
+            : retries.connecting
+              ? { status: "pending" }
+              : { status: "failed", error },
+      },
+      { name: "zeta-mcp", status: { status: "disabled" } },
+    ],
+    // The first retry fails again with another error, reported by the refreshed status; the second connects.
+    onMcpAction: (input) => {
+      if (input.server !== "figma-desktop" || input.action !== "connect" || !retries.failing) return
+      retries.failing = false
+
+      return { status: "failed", error: again }
+    },
+  })
+
+  const details = page.getByRole("dialog", { name: "figma-desktop", exact: true })
+  const retry = details.getByRole("button", { name: "Try again", exact: true })
+  const figma = view.panel.getByRole("switch", { name: "figma-desktop", exact: true })
+  const zeta = view.panel.getByRole("switch", { name: "zeta-mcp", exact: true })
+  await view.panel.getByRole("button", { name: "View error for figma-desktop", exact: true }).click()
+  await expect(details.getByText(error, { exact: true })).toBeVisible()
+
+  const connect = await holdRoute(page, /\/api\/experimental\/mcp\/figma-desktop\/connect(?:\?|$)/, { method: "POST" })
+  await retry.click()
+  await connect.arrived
+  // The server reports that it is connecting; the error stays open while the retry runs, and takes no second retry.
+  retries.connecting = true
+
+  const listed = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+
+    return (
+      response.request().method() === "GET" &&
+      url.pathname === "/api/mcp" &&
+      url.searchParams.get("location[directory]") === workspace
+    )
+  })
+
+  await view.push([
+    {
+      id: "evt_mcp_dialog_connecting",
+      created: 1,
+      type: "mcp.status.changed",
+      location: { directory: workspace },
+      data: { server: "figma-desktop" },
+    },
+  ])
+  await listed
+  await expect(details.getByText(error, { exact: true })).toBeVisible()
+  await expect(retry).toBeDisabled()
+  await expect(details.getByRole("button", { name: "Disable", exact: true })).toBeDisabled()
+  connect.release()
+  // A retry that fails again shows its new error in place.
+  await expect(details.getByText(again, { exact: true })).toBeVisible()
+  await expect(retry).toBeEnabled()
+
+  const reconnect = await holdRoute(page, /\/api\/experimental\/mcp\/figma-desktop\/connect(?:\?|$)/, {
+    method: "POST",
+  })
+
+  await retry.click()
+  await reconnect.arrived
+  await details.getByRole("button", { name: "Navigate back", exact: true }).click()
+  await expect(details).toBeHidden()
+
+  // While figma-desktop connects, only its own row waits; another server still toggles.
+  await expect(figma).toBeDisabled()
+  await expect(zeta).toBeEnabled()
+  view.requests.length = 0
+  await view.panel.getByRole("option").filter({ hasText: "zeta-mcp" }).locator('[data-slot="switch-control"]').click()
+  await expect(zeta).toBeChecked()
+  expect(view.requests).toContainEqual({ path: "/api/experimental/mcp/zeta-mcp/connect", directory: workspace })
+  await expect(figma).toBeDisabled()
+  reconnect.release()
+  await expect(figma).toHaveAccessibleDescription("Connected")
+  await expect(figma).toBeEnabled()
 })
 
 for (const surface of ["dialog"] as const) {
@@ -255,6 +422,49 @@ for (const surface of ["dialog"] as const) {
   })
 }
 
+test("the MCP list shrinks with matches and keeps its search anchored while scrolling", async ({ page }) => {
+  const view = await open(page, {
+    surface: "dialog",
+    mcp: ["figma-desktop", ...Array.from({ length: 24 }, (_, index) => `server-${String(index).padStart(2, "0")}`)].map(
+      (name) => ({ name, status: { status: "disabled" } }),
+    ),
+  })
+
+  const input = view.panel.getByRole("combobox", { name: "Search MCPs", exact: true })
+  const container = page.locator('[data-component="dialog-v2"] [data-slot="dialog-container"]')
+
+  const geometry = () =>
+    container.evaluate((element) => ({
+      height: element.getBoundingClientRect().height,
+      inputTop: element.querySelector('[role="combobox"]')!.getBoundingClientRect().top,
+    }))
+
+  await expect(input).toBeFocused()
+  await expect(view.panel.getByRole("option")).toHaveCount(25)
+  await input.hover()
+  const initial = await geometry()
+
+  await input.fill("figma-desktop")
+  await expect(view.panel.getByRole("option")).toHaveCount(1)
+  await expect.poll(async () => (await geometry()).height).toBeLessThan(initial.height - 100)
+  await expect.poll(async () => (await geometry()).inputTop).toBeCloseTo(initial.inputTop, 0)
+
+  await input.clear()
+  await expect(view.panel.getByRole("option")).toHaveCount(25)
+  const scroll = view.panel.locator('[data-slot="search-list-scroll"]')
+
+  await expect.poll(() => scroll.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0)
+  await expect.poll(async () => (await geometry()).height).toBeLessThanOrEqual(480)
+  await input.press("End")
+  const last = view.panel.getByRole("option", { name: "server-23", exact: true })
+
+  await expect(last).toHaveAttribute("aria-selected", "true")
+  await expect(last).toBeInViewport()
+  await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+  await expect.poll(async () => (await geometry()).inputTop).toBeCloseTo(initial.inputTop, 0)
+  await expect(input).toBeFocused()
+})
+
 test("toggling an MCP from the dialog keeps it highlighted", async ({ page }) => {
   const connected = new Set<string>()
   const names = ["alpha-mcp", "figma-desktop", "zeta-mcp"]
@@ -269,6 +479,8 @@ test("toggling an MCP from the dialog keeps it highlighted", async ({ page }) =>
   const row = view.panel.getByRole("option").filter({ hasText: "figma-desktop" })
   const toggle = row.getByRole("switch", { name: "figma-desktop", exact: true })
 
+  // The dialog focuses its search a task after it opens; keys pressed before then go to the composer behind it.
+  await expect(view.panel.getByRole("combobox", { name: "Search MCPs", exact: true })).toBeFocused()
   // From the keyboard, Enter toggles the highlighted server and the highlight stays on it.
   await page.keyboard.press("ArrowDown")
   await expect(row).toHaveAttribute("aria-selected", "true")
@@ -347,6 +559,74 @@ for (const surface of ["popover", "dialog"] as const) {
         "Connected",
       )
     await expect(view.panel.getByRole("button", { name: "Sign in to figma-desktop", exact: true })).toHaveCount(0)
+  })
+}
+
+for (const surface of ["popover", "dialog"] as const) {
+  test(`a pasted MCP sign-in from the ${surface} submits once and recovers from a failed refresh`, async ({
+    page,
+    context,
+  }) => {
+    const state = { signedIn: false, recovered: false }
+    const pasted: unknown[] = []
+    await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
+
+    const view = await open(page, {
+      surface,
+      mcp: () => [
+        {
+          name: "figma-desktop",
+          integrationID: "figma-oauth",
+          status: state.signedIn ? { status: "connected" } : { status: "needs_auth", error: "Sign in required" },
+        },
+      ],
+      integrations: [{ id: "figma-oauth", name: "Figma", methods: [{ id: "oauth", type: "oauth" }], connections: [] }],
+      onIntegrationOAuth: () => ({ url: "https://auth.example.test/authorize", paste: true }),
+      onIntegrationOAuthStatus: () => (state.signedIn ? "complete" : "pending"),
+      // The server accepts the pasted URL and finishes the sign-in.
+      onIntegrationOAuthComplete: (input) => {
+        pasted.push(input.body)
+        state.signedIn = true
+      },
+      // The MCP lists fail to reload after the sign-in until the user retries.
+      mcpResourceFailures: () => state.signedIn && !state.recovered,
+    })
+
+    const complete = await holdRoute(
+      page,
+      /\/api\/integration\/figma-oauth\/connect\/oauth\/[^/?]+\/complete(?:\?|$)/,
+      {
+        method: "POST",
+      },
+    )
+
+    await view.panel.getByRole("button", { name: "Sign in to figma-desktop", exact: true }).click()
+    const dialog = page.getByRole("dialog", { name: "Sign in to figma-desktop", exact: true })
+    const redirect = dialog.getByRole("textbox", { name: "Redirect URL", exact: true })
+
+    // The details popover closes behind the dialog and returns focus to its trigger; type once that settled.
+    if (surface === "popover") await expect(view.panel).toBeHidden()
+
+    await redirect.fill("http://127.0.0.1:19876/callback?code=abc")
+
+    // A second Enter while the paste is in flight does not send it again.
+    await redirect.press("Enter")
+    await expect(redirect).toHaveAttribute("readonly", "")
+    await redirect.press("Enter")
+    await complete.arrived
+    complete.release()
+
+    // The sign-in succeeded but the lists did not reload: the dialog offers a retry instead of waiting forever.
+    const retry = dialog.getByRole("button", { name: "Try again", exact: true })
+    await expect(retry).toBeVisible()
+    await expect(dialog.getByText("Waiting for authorization…", { exact: true })).toHaveCount(0)
+    await expect(redirect).toHaveCount(0)
+
+    state.recovered = true
+    await retry.click()
+    await expect(dialog).toHaveCount(0)
+    expect(pasted).toEqual([expect.objectContaining({ code: "http://127.0.0.1:19876/callback?code=abc" })])
+    expect(complete.requests).toHaveLength(1)
   })
 }
 

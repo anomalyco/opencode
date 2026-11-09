@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CodeMode } from "../src/index.js"
+import { CodeMode } from "./lib/index.js"
 
 // One failure is one program error object, and rethrowing it keeps the diagnostic it started with.
 const run = (code: string) => Effect.runPromise(CodeMode.execute({ code, tools: {} }))
@@ -25,16 +25,12 @@ describe("source syntax", () => {
     })
   })
 
-  test("explains that imports and exports aren't available", async () => {
-    expect(await error(`import x from "y"`)).toEqual({
+  test("explains that exports aren't available", async () => {
+    expect(await error(`const x = 1\nexport { x }`)).toEqual({
       kind: "ParseError",
-      message:
-        "SyntaxError: Imports and exports aren't available. Call tools through `tools` and use the built-in globals. (line 1, col 1)",
-      location: { line: 1, column: 1 },
+      message: "SyntaxError: Exports aren't available. Return the result instead. (line 2, col 1)",
+      location: { line: 2, column: 1 },
     })
-    expect((await error(`export const x = 1`)).message).toStartWith(
-      "SyntaxError: Imports and exports aren't available.",
-    )
   })
 
   test("rejects TypeScript-only syntax", async () => {
@@ -151,11 +147,11 @@ describe("source locations", () => {
   test("names a missing method on a call instead of the previous line", async () => {
     const failure = await error(`// Try search with different namespaces
 for (const ns of ["github", "tools.github", "tools", ""]) {
-  const s = await search({query: "star", namespace: ns, limit: 100}).catch(e=>({items:[],error:String(e)}));
+  const s = await search({query: "star", namespace: ns, limit: 100}).filter((item) => item.path);
   return s
 }`)
     expect(failure.location).toEqual({ line: 3, column: 19 })
-    expect(failure.message).toBe("TypeError: search(...).catch is not a function. (line 3, col 19)")
+    expect(failure.message).toBe("TypeError: search(...).filter is not a function. (line 3, col 19)")
   })
 })
 

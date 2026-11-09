@@ -8,7 +8,7 @@ const source = (input: {
   key: string
   value: string | Instructions.Unavailable | Instructions.Removed
   initial?: (value: string) => string
-  changed?: (previous: string, current: string) => string
+  changed?: (previous: string, current: string) => string | undefined
   removed?: (value: string) => string
 }) =>
   Instructions.make({
@@ -47,7 +47,9 @@ describe("Instructions", () => {
         delta: { "core/date": hash },
         blobs: { [hash]: "2026-07-09" },
       })
-      expect(Instructions.renderInitial(instructions, { "core/date": "2026-07-09" })).toBe("Today's date: 2026-07-09")
+      expect(Instructions.join(Instructions.renderInitial(instructions, { "core/date": "2026-07-09" }))).toBe(
+        "Today's date: 2026-07-09",
+      )
     }),
   )
 
@@ -189,9 +191,9 @@ describe("Instructions", () => {
       source({ key: "core/location", value: "location" }),
     ])
 
-    expect(Instructions.renderInitial(instructions, { "core/date": "date", "core/location": "location" })).toBe(
-      "date\n\nlocation",
-    )
+    expect(
+      Instructions.join(Instructions.renderInitial(instructions, { "core/date": "date", "core/location": "location" })),
+    ).toBe("date\n\nlocation")
   })
 
   test("rejects duplicate source keys", () => {
@@ -200,12 +202,19 @@ describe("Instructions", () => {
     ).toThrow(new Instructions.DuplicateKeyError({ key: key("core/date") }))
   })
 
-  test("rejects empty model-visible renderings", () => {
-    const instructions = source({ key: "core/empty", value: "value", initial: () => "" })
+  test("rejects empty model-visible renderings while allowing silent updates", () => {
+    const empty = source({ key: "core/empty", value: "value", initial: () => "", changed: () => "" })
+    const silent = source({ key: "core/silent", value: "value", changed: () => undefined })
 
-    expect(() => Instructions.renderInitial(instructions, { "core/empty": "value" })).toThrow(
+    expect(() => Instructions.renderInitial(empty, { "core/empty": "value" })).toThrow(
       "Instruction source core/empty rendered an empty initial",
     )
+    expect(() =>
+      Instructions.renderUpdate(empty, { "core/empty": "before" }, { "core/empty": Option.some("after") }),
+    ).toThrow("Instruction source core/empty rendered an empty changed")
+    expect(
+      Instructions.renderUpdate(silent, { "core/silent": "before" }, { "core/silent": Option.some("after") }),
+    ).toBe("")
   })
 
   test("diffs list values by key", () => {

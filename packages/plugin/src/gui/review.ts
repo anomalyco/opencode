@@ -20,7 +20,8 @@ export interface Changes {
    */
   diffs(session: SessionRef): readonly FileDiffInfo[]
   /**
-   * False while the current mode's diffs load.
+   * True once the current mode's diffs loaded, or the project has no repository. False while they load, after their
+   * request failed or timed out, while the server is unreachable, and before anything requested them.
    *
    * @param session - The session to read.
    * @returns Whether the diffs loaded.

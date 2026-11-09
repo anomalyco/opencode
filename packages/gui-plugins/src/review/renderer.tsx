@@ -10,7 +10,7 @@ import {
   Suspense,
   untrack,
 } from "solid-js"
-import { createStore } from "solid-js/store"
+import { Icon } from "@opencode/ui/icon"
 import type { FileDiffInfo } from "@opencode/client/promise"
 import {
   Command,
@@ -28,7 +28,17 @@ import {
 import { BuiltinPanel, onIdle, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import { Changes, type ChangeKind } from "@opencode/plugin/gui/review"
 import type Review from "./index"
+import { ReviewDetails, type ReviewDetailsView } from "./contract"
 import { createReviewModel, type Demand, type ReviewModel } from "./model"
+import {
+  INITIAL_REVIEW_SCREEN_STATE,
+  reviewScreenDemand,
+  reviewScreenModel,
+  reviewScreenModels,
+  transitionReviewScreen,
+  type ReviewScreenEvent,
+  type ReviewScreenState,
+} from "./screen-machine"
 
 const TAB = "changes"
 
@@ -41,79 +51,130 @@ const setup: Plugin.Setup<typeof Review> = (ctx) => {
   const diff = ctx.stores.diff
   const panel = ctx.stores.panel
 
-  // Who shows a screen's changes: the review render, the file tree, and file tabs. Keyed by the session screen, which
-  // stays while it routes another session, so a session switch keeps the demand.
-  const demands = new WeakMap<SessionScreen, ReturnType<typeof createStore<Demand>>>()
+  // One review model per session screen, like the review the screen created before plugins. The screen keeps it while
+  // it is routed, a review panel renders it, or a view watches its changes; it follows the routed session through `view`.
+  const [screens, setScreens] = createSignal<ReviewScreenState>(INITIAL_REVIEW_SCREEN_STATE)
+  const screenIDs = new WeakMap<SessionScreen, number>()
+  const runtimes = new Map<number, { attempt: number; model: ReviewModel; dispose: () => void }>()
+  const ids = { screen: 0, lease: 0 }
 
-  const demand = (screen: SessionScreen) => {
-    const existing = demands.get(screen)
+  const screenID = (screen: SessionScreen) => {
+    const existing = screenIDs.get(screen)
 
-    if (existing) return existing
+    if (existing !== undefined) return existing
+    ids.screen += 1
+    screenIDs.set(screen, ids.screen)
 
-    const created = createStore<Demand>({ tree: 0, files: 0, panel: 0, details: 0 })
+    return ids.screen
+  }
 
-    demands.set(screen, created)
+  /** `origin` is the screen and session of the event, which a model the event creates starts from. */
+  const dispatchScreen = (event: ReviewScreenEvent, origin?: { screen: SessionScreen; session: MountedSession }) => {
+    const next = transitionReviewScreen(untrack(screens), event)
 
-    return created
+    // One batch, so readers of the state find the models its effects created.
+    batch(() => {
+      setScreens(next.state)
+      next.effects.forEach((effect) => {
+        if (effect.type === "model.dispose") {
+          const runtime = runtimes.get(effect.screenID)
+
+          if (runtime?.attempt !== effect.attempt) return
+          runtimes.delete(effect.screenID)
+          runtime.dispose()
+
+          return
+        }
+
+        if (!origin) return
+        const screen = origin.screen
+        const id = effect.screenID
+
+        runtimes.set(
+          id,
+          createRoot((dispose) => {
+            // The routed session of this screen; the last one stays while it routes none.
+            const view = createMemo<MountedSession>(
+              (last) => (ctx.screen.current() === screen ? sessions.current() : undefined) ?? last,
+              origin.session,
+            )
+
+            const demand = createMemo(() => reviewScreenDemand(screens(), id), undefined, { equals: sameDemand })
+
+            const model = createReviewModel({
+              ctx,
+              screen,
+              view,
+              demand: {
+                get tree() {
+                  return demand().tree
+                },
+                get files() {
+                  return demand().files
+                },
+                get panel() {
+                  return demand().panel
+                },
+                get details() {
+                  return demand().details
+                },
+              },
+            })
+
+            return { attempt: effect.attempt, model, dispose }
+          }, owner),
+        )
+      })
+    })
   }
 
   // Views receive their screen before the public attachment is published, so initial render effects can watch it.
   const watch = (screen: SessionScreen, source: keyof Demand) => {
-    const set = demand(screen)[1]
+    ids.lease += 1
+    const watchID = ids.lease
+    const id = screenID(screen)
 
-    set(source, (count) => count + 1)
+    dispatchScreen({ type: "watch.added", screenID: id, watchID, source })
 
-    return () => set(source, (count) => Math.max(0, count - 1))
+    return () => dispatchScreen({ type: "watch.removed", screenID: id, watchID })
   }
-
-  // One review model per session screen, like the review the screen created before plugins, created once the
-  // screen routes a session. It follows the routed session, a new object on each switch, through `view`.
-  const [entry, setEntry] = createSignal<{ screen: SessionScreen; model: ReviewModel; dispose: () => void }>()
 
   createKeyed(
-    ctx.screen.current,
-    (screen) => {
-      const current = untrack(entry)
-      const initial = untrack(sessions.current)
+    () => {
+      const screen = ctx.screen.current()
+      const session = sessions.current()
 
-      if (current?.screen === screen || !initial) return
-
-      current?.dispose()
-      setEntry(
-        createRoot((dispose) => {
-          // The routed session of this screen; the last one stays while none is routed for a moment.
-          const view = createMemo<MountedSession>(
-            (last) => (ctx.screen.current() === screen ? sessions.current() : undefined) ?? last,
-            initial,
-          )
-
-          return { screen, model: createReviewModel({ ctx, screen, view, demand: demand(screen)[0] }), dispose }
-        }, owner),
-      )
+      return screen && session ? { screen, session } : undefined
     },
+    (current) => dispatchScreen({ type: "route.entered", screenID: screenID(current.screen) }, current),
     {
-      // A screen that unmounts and remounts in one update keeps its model.
-      otherwise: () => {
-        const current = untrack(entry)
-
-        queueMicrotask(() => {
-          if (sessions.current() || untrack(entry) !== current) return
-
-          current?.dispose()
-          setEntry(undefined)
-        })
-      },
+      // The model follows a session switch on the same screen through `view`.
+      equals: (previous, next) => previous.screen === next.screen,
+      otherwise: () => dispatchScreen({ type: "route.left" }),
     },
   )
-  onCleanup(() => untrack(entry)?.dispose())
+  onCleanup(() => dispatchScreen({ type: "disposed" }))
 
-  const modelFor = (session: SessionRef) => {
-    const model = entry()?.model
+  const liveModel = (state: ReviewScreenState, id: number) => {
+    const attempt = reviewScreenModel(state, id)
+    const runtime = runtimes.get(id)
 
-    return model && model.view().key === session.key ? model : undefined
+    return attempt !== undefined && runtime?.attempt === attempt ? runtime.model : undefined
   }
 
-  const count = () => entry()?.model.count() ?? 0
+  const modelFor = (session: SessionRef) => {
+    const state = screens()
+
+    return reviewScreenModels(state)
+      .map((id) => liveModel(state, id))
+      .find((model) => model?.view().key === session.key)
+  }
+
+  const count = () => {
+    const session = sessions.current()
+
+    return session ? (modelFor(session)?.count() ?? 0) : 0
+  }
 
   // One tab object for every session, so a session switch never renders its trigger again.
   const tab: BuiltinPanelTab = {
@@ -121,6 +182,13 @@ const setup: Plugin.Setup<typeof Review> = (ctx) => {
     get title() {
       return count() > 0 ? ctx.plural("tab.count", count()) : ctx.t("tab.title")
     },
+    // The same icon as the empty changes view.
+    label: () => (
+      <div class="flex items-center gap-1.5">
+        <Icon name="review" size="small" />
+        <span>{tab.title}</span>
+      </div>
+    ),
     // Without focusable content the panel itself joins the tab order.
     get tabbable() {
       return !(count() > 0 || layout.sidebar.opened())
@@ -153,13 +221,18 @@ const setup: Plugin.Setup<typeof Review> = (ctx) => {
     closed: (): ClosedPanelTab => ({ title: ctx.t("tab.title"), icon: "review" }),
     render: (props) => {
       const frame = usePanel()
+      const id = screenID(props.screen)
+      ids.lease += 1
+      const panelID = ids.lease
 
-      // A server switch mounts a new screen before the owned model effect runs. Never render the old screen's model.
-      const model = () => {
-        const current = entry()
+      // The panel holds its screen's model, so a screen it renders before the route publishes it has one at once.
+      dispatchScreen(
+        { type: "panel.mounted", screenID: id, panelID },
+        { screen: props.screen, session: untrack(() => props.session) },
+      )
+      onCleanup(() => dispatchScreen({ type: "panel.unmounted", screenID: id, panelID }))
 
-        return current?.screen === props.screen ? current.model : undefined
-      }
+      const model = () => liveModel(screens(), id)
 
       return (
         <Show when={model()} keyed>
@@ -171,7 +244,7 @@ const setup: Plugin.Setup<typeof Review> = (ctx) => {
                 when={frame.placement() === "mobile"}
                 fallback={
                   <div class="flex flex-col h-full overflow-hidden bg-v2-background-bg-base contain-strict">
-                    <Show when={model.panelRendered()}>
+                    <Show when={model.panelReady()}>
                       <Suspense>
                         <ReviewPanel
                           review={model}
@@ -289,13 +362,21 @@ const setup: Plugin.Setup<typeof Review> = (ctx) => {
 
   const none: readonly FileDiffInfo[] = []
   const noKinds: ReadonlyMap<string, ChangeKind> = new Map()
+  const detailsLoading: ReviewDetailsView = { status: "loading" }
 
   ctx.provide(Changes, {
     diffs: (session) => modelFor(session)?.diffs() ?? none,
     ready: (session) => modelFor(session)?.ready() ?? false,
     kinds: (session) => modelFor(session)?.kinds() ?? noKinds,
     active: (session) => modelFor(session)?.activeFile(),
-    details: (session) => modelFor(session)?.details(),
+    details: (session) => {
+      const current = modelFor(session)?.details()
+
+      if (current?.status === "ready") return current.rows
+
+      // The documented contract: empty once the load failed. The details row reads `ReviewDetails` instead.
+      return current?.status === "error" ? none : undefined
+    },
     focus: (session, path) => modelFor(session)?.focusFile(path),
     open(session) {
       // The session details' changes row: narrow screens switch to the Changes view; wide ones open the review tab.
@@ -303,6 +384,20 @@ const setup: Plugin.Setup<typeof Review> = (ctx) => {
     },
     watch,
   })
+
+  ctx.provide(ReviewDetails, {
+    view: (session) => modelFor(session)?.details() ?? detailsLoading,
+    retry: (session) => modelFor(session)?.retryDetails(),
+  })
+}
+
+function sameDemand(previous: Demand, next: Demand) {
+  return (
+    previous.tree === next.tree &&
+    previous.files === next.files &&
+    previous.panel === next.panel &&
+    previous.details === next.details
+  )
 }
 
 export default setup

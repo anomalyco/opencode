@@ -127,7 +127,11 @@ export function createEmbeds() {
 
       if (!resizing.has(window)) {
         resizing.add(window)
-        window.on("resize", () => entries.forEach((entry) => entry.window === window && apply(entry)))
+        const refresh = () => entries.forEach((entry) => entry.window === window && apply(entry))
+        window.on("resize", refresh)
+        window.on("move", refresh)
+        screen.on("display-metrics-changed", refresh)
+        window.once("closed", () => screen.off("display-metrics-changed", refresh))
       }
 
       const corners = [new ImageView(), new ImageView()]

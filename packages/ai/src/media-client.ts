@@ -26,6 +26,7 @@ export const make = <Self, Req extends RoutedRequest<Req, Event, Response>, Even
     readonly responseEvents: (response: Response) => ReadonlyArray<Event>
   },
 ) => ({
+  responseEvents: input.responseEvents,
   layer: Layer.effect(
     service,
     Effect.gen(function* () {
