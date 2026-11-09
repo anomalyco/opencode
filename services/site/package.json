@@ -23,6 +23,7 @@
   "dependencies": {
     "@ibm/plex": "6.4.1",
     "@kitlangton/rolling-number": "0.4.1",
+    "@Mackery6969/nav-menus": "workspace:*",
     "@Mackery6969/ui": "workspace:*",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
