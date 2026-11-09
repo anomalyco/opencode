@@ -67,8 +67,8 @@ export function ModelDetail(props: {
       tokens(props.model.limit.context),
       ...(props.model.variants.length > 0 ? ["Reasoning"] : []),
     ].filter(Boolean)
-  const list = (items: string[]) => (
-    <text fg={theme.text.muted} wrapMode="none" flexShrink={0}>
+  const list = (items: string[], shrink = 0) => (
+    <text fg={theme.text.muted} wrapMode="none" flexShrink={shrink}>
       <For each={items}>
         {(fact, index) => (
           <>
@@ -95,10 +95,14 @@ export function ModelDetail(props: {
     >
       {(usage) => (
         <box flexDirection="row" justifyContent="space-between" gap={2}>
-          <text fg={usage().danger ? theme.text.feedback.error.base : theme.text.muted} wrapMode="none">
+          {/* The usage label stays whole; when the line runs out of room, the trailing facts are cut instead. */}
+          <text fg={usage().danger ? theme.text.feedback.error.base : theme.text.muted} wrapMode="none" flexShrink={0}>
             {usage().text}
           </text>
-          {list([...(price() && price() !== "Free" ? [`${price()} per 1M`] : [price()]), ...facts()].filter(Boolean))}
+          {list(
+            [...(price() && price() !== "Free" ? [`${price()} per 1M`] : [price()]), ...facts()].filter(Boolean),
+            1,
+          )}
         </box>
       )}
     </Show>

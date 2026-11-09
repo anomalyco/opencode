@@ -101,7 +101,21 @@ test("shows what the workspace's limits leave and why a refused turn stopped", a
       if (url.pathname === "/api/model")
         return json({
           location,
-          data: [model("gpt-5.6-sol", "GPT 5.6 Sol", 4), model("claude-opus-5", "Claude Opus 5", 5)],
+          data: [
+            model("gpt-5.6-sol", "GPT 5.6 Sol", 4),
+            model("claude-opus-5", "Claude Opus 5", 5),
+            {
+              ...model("deepseek-v4.1-flash", "DeepSeek V4.1 Flash", 0.3),
+              capabilities: {
+                input: ["text", "image"],
+                output: ["text"],
+                reasoning: true,
+                toolCall: true,
+                attachment: true,
+              },
+              variants: ["high"],
+            },
+          ],
         })
       if (url.pathname === "/api/integration")
         return json({
@@ -150,13 +164,20 @@ test("shows what the workspace's limits leave and why a refused turn stopped", a
       frame.includes("Only you · GPT 5.6 Sol, Claude Opus 5"),
   )
 
-  // The model picker says what's left on the model it highlights, and opens the same usage list.
+  // The model picker says what's left on the model it highlights; /usage stays the way to the full list.
   setup.mockInput.pressEscape()
   await setup.waitForFrame((frame) => !frame.includes("Usage › Claude Opus 5"))
   await setup.mockInput.typeText("/models")
   setup.mockInput.pressEnter()
   await setup.waitForFrame(
     (frame) =>
-      frame.includes("Search models") && /\$6 left +\$4\/\$20 per 1M/.test(frame) && frame.includes("usage ctrl+u"),
+      frame.includes("Search models") &&
+      /\$6 left +\$4\/\$20 per 1M/.test(frame) &&
+      frame.includes("favorite ctrl+f") &&
+      !frame.includes("usage ctrl+u"),
   )
+
+  // A model without a limit keeps its whole label even when its facts fill the line.
+  await setup.mockInput.typeText("deepseek")
+  await setup.waitForFrame((frame) => /No limit +\$0\.3\/\$1\.5 per 1M · Text, Image/.test(frame))
 })
