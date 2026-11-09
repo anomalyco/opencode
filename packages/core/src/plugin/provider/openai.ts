@@ -7,6 +7,7 @@ import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
+import { OauthRedirect } from "../../oauth/redirect.js"
 import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
@@ -106,6 +107,13 @@ const browser = (app: App.Info) =>
             Effect.flatMap((value) => exchange(value, redirect, pkce, app)),
             Effect.map((tokens) => credential(browserMethodID, tokens)),
           ),
+          submit: (pasted: string) =>
+            OauthRedirect.pasted(pasted, state).pipe(
+              Effect.flatMap((result) =>
+                "error" in result ? Deferred.fail(code, new Error(result.error)) : Deferred.succeed(code, result.code),
+              ),
+              Effect.asVoid,
+            ),
         }
       }),
     refresh: (value) => refresh(browserMethodID, value, app),

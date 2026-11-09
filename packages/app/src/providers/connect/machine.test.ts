@@ -17,11 +17,12 @@ const oauth: ProviderConnectMethod = { id: "oauth", type: "oauth", label: "Sign 
 
 const command: ProviderConnectMethod = { id: "cli", type: "command", label: "CLI", command: ["login"] }
 
-const authorization = (mode: "auto" | "code", attemptID = "att_1"): ProviderAuthorization => ({
+const authorization = (mode: "auto" | "code", attemptID = "att_1", paste = false): ProviderAuthorization => ({
   attemptID,
   url: `https://auth.example.test/${attemptID}`,
   instructions: "",
   mode,
+  ...(paste ? { paste: true as const } : {}),
   time: { created: 0, expires: 1 },
 })
 
@@ -290,6 +291,92 @@ test("an unreachable OAuth status resumes the same attempt, and Back from it can
   expect(transitionProviderConnect(failed.state, { type: "back" }).effects).toEqual([
     { type: "cancel", target: "oauth", attemptID: "att_1" },
   ])
+})
+
+// The browser can't reach a remote server's callback, so the user pastes the URL it landed on instead.
+function waitingWithPaste() {
+  const starting = replay([loaded([oauth]), { type: "method.selected", index: 0 }])
+  const start = starting.effects.find((effect) => effect.type === "start")
+
+  if (start?.type !== "start") throw new Error("expected a start effect")
+
+  return {
+    attempt: start.attempt,
+    state: transitionProviderConnect(starting.state, {
+      type: "oauth.started",
+      attempt: start.attempt,
+      authorization: authorization("auto", "att_1", true),
+    }).state,
+  }
+}
+
+test("a browser sign-in offers a paste box only when its attempt takes a pasted redirect", () => {
+  expect(selectProviderConnectView(waitingWithPaste().state).paste).toEqual({ status: "editing" })
+
+  const plain = replay([
+    loaded([oauth]),
+    { type: "method.selected", index: 0 },
+    { type: "oauth.started", attempt: 1, authorization: authorization("auto") },
+  ])
+  expect(selectProviderConnectView(plain.state).paste).toBeUndefined()
+  expect(transitionProviderConnect(plain.state, { type: "paste.submitted", value: "http://x" }).effects).toEqual([])
+})
+
+test("a rejected paste shows the server error and keeps polling the same attempt", () => {
+  const waiting = waitingWithPaste()
+
+  const empty = transitionProviderConnect(waiting.state, { type: "paste.submitted", value: "  " })
+  expect(empty.effects).toEqual([])
+  expect(selectProviderConnectView(empty.state).paste).toEqual({ status: "editing", error: { type: "required" } })
+
+  const sent = transitionProviderConnect(empty.state, {
+    type: "paste.submitted",
+    value: " http://127.0.0.1:1/callback?code=c&state=s ",
+  })
+  expect(sent.effects).toMatchObject([
+    { type: "paste", attempt: waiting.attempt, value: "http://127.0.0.1:1/callback?code=c&state=s" },
+  ])
+  // A second submit while the first is in flight sends nothing.
+  expect(transitionProviderConnect(sent.state, { type: "paste.submitted", value: "again" }).effects).toEqual([])
+
+  const rejected = transitionProviderConnect(sent.state, {
+    type: "paste.rejected",
+    attempt: waiting.attempt,
+    error: "This URL belongs to a different sign-in",
+  })
+  expect(selectProviderConnectView(rejected.state)).toMatchObject({
+    screen: "browser",
+    paste: { status: "editing", error: { type: "rejected", message: "This URL belongs to a different sign-in" } },
+  })
+
+  // Polling still decides how the sign-in ends.
+  const done = transitionProviderConnect(rejected.state, {
+    type: "polled",
+    attempt: waiting.attempt,
+    outcome: { status: "complete" },
+  })
+  expect(done.state.status).toBe("refreshing")
+})
+
+test("a paste result after Back is ignored, and a resumed sign-in starts editable", () => {
+  const waiting = waitingWithPaste()
+  const sent = transitionProviderConnect(waiting.state, { type: "paste.submitted", value: "http://x" })
+
+  const back = transitionProviderConnect(sent.state, { type: "back" })
+  expect(transitionProviderConnect(back.state, { type: "paste.accepted", attempt: waiting.attempt }).state).toBe(
+    back.state,
+  )
+
+  const failed = transitionProviderConnect(sent.state, {
+    type: "polled",
+    attempt: waiting.attempt,
+    outcome: { status: "unreachable", error: "offline" },
+  })
+  const resumed = transitionProviderConnect(failed.state, { type: "retry" })
+  expect(selectProviderConnectView(resumed.state).paste).toEqual({ status: "editing" })
+  expect(
+    transitionProviderConnect(resumed.state, { type: "paste.rejected", attempt: waiting.attempt, error: "late" }).state,
+  ).toBe(resumed.state)
 })
 
 test("a failed refresh retries the refresh, not the sign-in", () => {

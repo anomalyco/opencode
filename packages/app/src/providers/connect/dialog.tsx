@@ -443,11 +443,10 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
     const userCode = new URL(authorization.url).searchParams.get("user_code")
 
     if (userCode) return userCode
+    // Device sign-ins put the code after a colon ("Enter code: ABCD-1234"); other instructions are not a code.
     const instructions = authorization.instructions
 
     if (instructions?.includes(":")) return instructions.split(":").pop()?.trim()
-
-    return instructions
   })
 
   // Asks one visible field at a time, like the TUI, so `when` conditions see every earlier answer.
@@ -911,9 +910,28 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
   }
 
   function OAuthAutoView() {
+    let pasteInput: HTMLInputElement | undefined
+    const pasteErrorID = createUniqueId()
+
+    const pasteError = () => {
+      const error = connect().paste
+      if (error?.status !== "editing" || !error.error) return
+
+      return error.error.type === "rejected"
+        ? error.error.message
+        : language.t("provider.connect.oauth.auto.paste.required")
+    }
+
     return (
       <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
-        <div>{language.t("provider.connect.oauth.auto.description", { provider: name() })}</div>
+        <div>
+          {language.t(
+            connect().paste
+              ? "provider.connect.oauth.auto.paste.description"
+              : "provider.connect.oauth.auto.description",
+            { provider: name() },
+          )}
+        </div>
         <StatusRow>{language.t("provider.connect.status.waiting")}</StatusRow>
         <div class="flex flex-wrap items-center gap-2">
           <Button
@@ -934,6 +952,47 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
               readOnly
               copyable
             />
+          )}
+        </Show>
+        <Show when={connect().paste}>
+          {(paste) => (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault()
+                props.controller.input({ type: "paste.submitted", value: pasteInput?.value ?? "" })
+              }}
+              class="flex flex-col items-start gap-5 self-stretch"
+            >
+              <label class="flex w-full flex-col gap-2 font-[530] leading-4 text-v2-text-text-base">
+                {language.t("provider.connect.oauth.auto.paste.label")}
+                <TextInput
+                  ref={pasteInput}
+                  class="!w-full"
+                  name="redirect"
+                  placeholder={language.t("provider.connect.oauth.auto.paste.placeholder")}
+                  readOnly={paste().status === "submitting"}
+                  invalid={pasteError() !== undefined}
+                  aria-describedby={pasteError() ? pasteErrorID : undefined}
+                  autocomplete="off"
+                  spellcheck={false}
+                />
+              </label>
+              <Show when={pasteError()}>
+                {(error) => (
+                  <div id={pasteErrorID} role="alert" class="-mt-4 text-xs text-v2-state-fg-danger">
+                    {error()}
+                  </div>
+                )}
+              </Show>
+              <Button
+                type="submit"
+                variant="contrast"
+                disabled={paste().status === "submitting"}
+                aria-busy={paste().status === "submitting"}
+              >
+                {language.t("common.continue")}
+              </Button>
+            </form>
           )}
         </Show>
       </div>

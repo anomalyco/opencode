@@ -6,6 +6,7 @@ import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
+import { OauthRedirect } from "../../oauth/redirect.js"
 import { Provider } from "../../provider.js"
 import { configuredSettings } from "./configured.js"
 import { ProviderRefresh } from "./refresh.js"
@@ -164,6 +165,15 @@ export const SnowflakeCortexPlugin = define({
                   code_verifier: verifier,
                 })
               }),
+              submit: (pasted: string) =>
+                OauthRedirect.pasted(pasted, state).pipe(
+                  Effect.flatMap((result) =>
+                    "error" in result
+                      ? Deferred.fail(code, new Error(result.error))
+                      : Deferred.succeed(code, result.code),
+                  ),
+                  Effect.asVoid,
+                ),
             }
           }),
       })
