@@ -438,7 +438,20 @@ function MessageTimelineView(
     })
   })
 
-  const working = () => (settings.general.activityTimeline() ? !!activityStatus() : showWorking())
+  // A thought the model is writing stands in for Working, as its row says Thinking. A wait still shows, so the user
+  // sees what to act on.
+  const liveThought = createMemo(() => {
+    const active = projection.activeMessageID()
+
+    return projection.rows().some((row) => Predicate.isTagged(row, "Thinking") && row.userMessageID === active)
+  })
+
+  const working = () => {
+    if (!settings.general.activityTimeline()) return showWorking()
+    const status = activityStatus()
+
+    return !!status && (status !== "working" || !liveThought())
+  }
 
   const workingLabel = () => {
     const status = activityStatus()

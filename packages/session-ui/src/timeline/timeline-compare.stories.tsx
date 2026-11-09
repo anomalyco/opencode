@@ -3,7 +3,7 @@ import { For, Show, createEffect, createMemo, onCleanup, onMount, type JSX } fro
 import { createStore } from "solid-js/store"
 import { replayScript, replaySession, scenarios, sessionSteps, ticks } from "../storybook/session-replay"
 import { timelinePresets } from "./detail"
-import { timelineStatus } from "./status"
+import { timelineStatus, timelineThinking } from "./status"
 
 /**
  * Compares the same session in two builds of the timeline: `base`, another checkout's stories server, and `head`, this
@@ -94,8 +94,13 @@ export const Compare = {
 
       if (!state.activity) return "Working"
       const last = replay().document.messages.findLast((message) => message.type === "assistant")
+      const content = last?.type === "assistant" ? last.content : []
+      const status = timelineStatus({ content })
 
-      return statusLabels[timelineStatus({ content: last?.type === "assistant" ? last.content : [] })]
+      // The thought the model is writing says Thinking in its own row, in place of Working.
+      if (status === "working" && timelineThinking(detail(), content)) return undefined
+
+      return statusLabels[status]
     })
 
     const frames = {

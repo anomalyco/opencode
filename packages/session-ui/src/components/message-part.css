@@ -2008,3 +2008,10 @@
   color: var(--v2-text-text-muted);
   transition: none;
 }
+
+/* A stretch of thoughts alone, in the Activity timeline, lists them without a group around them. */
+[data-component="thought-rows"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

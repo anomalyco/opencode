@@ -372,10 +372,13 @@ export namespace Timeline {
       turns.findLast((turn) => !pendingInputIDs?.has(turn.id) || turn.entries.some((entry) => entry.type === "idle"))
         ?.id ?? turns.at(-1)?.id
 
+    // In the Activity timeline, the thought the model is writing stands at the end of the turn in place of the status
+    // line, wherever thinking shows. Once finished, it settles where the setting puts thoughts.
+    const livePlacement = activity && detail.thinking.placement !== "hidden" ? "separate" : detail.thinking.placement
+
     const turnPhaseByID = new Map(
       turns.map(
-        (turn) =>
-          [turn.id, turnPhase(turn.entries, turn.id === activeMessageID, status, detail.thinking.placement)] as const,
+        (turn) => [turn.id, turnPhase(turn.entries, turn.id === activeMessageID, status, livePlacement)] as const,
       ),
     )
 

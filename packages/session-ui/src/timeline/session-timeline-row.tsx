@@ -1169,6 +1169,9 @@ export function createSessionTimelineRowRenderer(input: {
         return content?.type === "reasoning" ? content : undefined
       })
 
+      // In the Activity timeline the live thought stands in for the status line, so it streams in view.
+      const liveThoughtOpen = () => !!input.activity?.() || timelineThinkingOpen(input.timelineDetail())
+
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
@@ -1179,8 +1182,8 @@ export function createSessionTimelineRowRenderer(input: {
                     id={current().ref.partID}
                     content={content()}
                     streaming
-                    defaultOpen={timelineThinkingOpen(input.timelineDetail())}
-                    open={input.disclosure.value(current().ref.partID) ?? timelineThinkingOpen(input.timelineDetail())}
+                    defaultOpen={liveThoughtOpen()}
+                    open={input.disclosure.value(current().ref.partID) ?? liveThoughtOpen()}
                     onOpenChange={(open) => input.disclosure.set(current().ref.partID, open)}
                     onContentRendered={onSizeChange}
                   />

@@ -3,7 +3,7 @@ import { createStore } from "solid-js/store"
 import { CurrentSessionProviders } from "../storybook/current-session-story"
 import { replayScript, scenarios, ticks, type ScenarioName } from "../storybook/session-replay"
 import { timelinePresets } from "./detail"
-import { timelineStatus } from "./status"
+import { timelineStatus, timelineThinking } from "./status"
 import { SessionTimeline } from "./session-timeline"
 
 export default {
@@ -58,7 +58,11 @@ export const Playground = {
     const status = createMemo(() => {
       const last = replay().document.messages.findLast((message) => message.type === "assistant")
 
-      return timelineStatus({ content: last?.type === "assistant" ? last.content : [] })
+      const content = last?.type === "assistant" ? last.content : []
+      const value = timelineStatus({ content })
+
+      // The thought the model is writing says Thinking in its own row, in place of Working.
+      return value === "working" && state.activity && timelineThinking(detail(), content) ? undefined : value
     })
 
     const receive = (event: MessageEvent<PlaygroundMessage>) => {
@@ -172,9 +176,9 @@ export const Playground = {
                 turnDiffs={state.turnDiffs}
               />
             </CurrentSessionProviders>
-            <Show when={replay().document.status.type === "busy"}>
+            <Show when={replay().document.status.type === "busy" && (!state.activity || status())}>
               <div class="px-6 pt-3 text-13-medium text-v2-text-text-muted" role="status">
-                {state.activity ? statusLabels[status()] : "Working"}
+                {state.activity ? statusLabels[status()!] : "Working"}
               </div>
             </Show>
           </div>

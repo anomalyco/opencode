@@ -584,19 +584,13 @@ export function CurrentContextToolGroup(props: {
   const activity = createMemo(() => {
     if (!props.activity) return
 
-    const value = activityLabel(tools(), i18n)
-
-    // A stretch of thoughts alone says whether the model is still thinking, so a thought is never hidden behind Working.
-    if (!value)
-      return {
-        verb: i18n.t(reasoning().at(-1)?.streaming ? "ui.timeline.activity.thinking" : "ui.timeline.activity.thought"),
-        main: "",
-        code: false,
-        others: [],
-      }
-
-    return value
+    return activityLabel(tools(), i18n)
   })
+
+  // In the Activity timeline a stretch of thoughts alone is those thoughts, without a group around them.
+  const thoughtsOnly = createMemo(
+    () => !!props.activity && reasoning().length > 0 && reasoning().length === props.parts.length,
+  )
 
   const label = createMemo(() => {
     const value = activity()
@@ -718,284 +712,307 @@ export function CurrentContextToolGroup(props: {
   }
 
   return (
-    <div
-      ref={root}
-      data-component="collapsed-tool-group"
-      data-timeline-part-ids={props.parts.map((part) => part.id).join(",")}
+    <Show
+      when={!thoughtsOnly()}
+      fallback={
+        <div data-component="thought-rows" data-timeline-part-ids={props.parts.map((part) => part.id).join(",")}>
+          <For each={reasoning()}>
+            {(part) => (
+              <AssistantReasoningContent
+                id={part.id}
+                content={part}
+                streaming={part.streaming ?? false}
+                defaultOpen={props.reasoningDefaultOpen}
+                open={props.reasoningOpen?.(part.id)}
+                onOpenChange={(open) => props.onReasoningOpenChange?.(part.id, open)}
+                onContentRendered={props.onSizeChange}
+              />
+            )}
+          </For>
+        </div>
+      }
     >
-      <BasicTool
-        icon="glasses"
-        status={pending() ? "running" : "completed"}
-        compact
-        hasContent
-        allowOpenWhilePending
-        open={props.open}
-        onOpenChange={change}
-        trigger={
-          <div data-component="context-tool-group-trigger" aria-label={label().text}>
-            <Show
-              when={activity()}
-              fallback={
-                <span data-slot="context-tool-group-title">
-                  <Show when={label().before || label().count || label().between}>
-                    <span data-slot="context-tool-group-usage">
-                      <Show when={label().before}>
-                        {(before) => <span data-slot="context-tool-group-prefix">{before()}</span>}
-                      </Show>
-                      <Show when={label().count}>
-                        {(count) => (
-                          <span data-slot="context-tool-group-count">
-                            <AnimatedNumber value={count()} />
-                          </span>
-                        )}
-                      </Show>
-                      <Show when={label().between}>
-                        {(between) => <span data-slot="context-tool-group-prefix">{between()}</span>}
-                      </Show>
-                    </span>
-                  </Show>
-                  <Show when={label().title}>
-                    {(title) => (
-                      <span data-slot="basic-tool-tool-title">
-                        <Show when={thinking()} fallback={title()}>
-                          <TextShimmer text={title()} active />
+      <div
+        ref={root}
+        data-component="collapsed-tool-group"
+        data-timeline-part-ids={props.parts.map((part) => part.id).join(",")}
+      >
+        <BasicTool
+          icon="glasses"
+          status={pending() ? "running" : "completed"}
+          compact
+          hasContent
+          allowOpenWhilePending
+          open={props.open}
+          onOpenChange={change}
+          trigger={
+            <div data-component="context-tool-group-trigger" aria-label={label().text}>
+              <Show
+                when={activity()}
+                fallback={
+                  <span data-slot="context-tool-group-title">
+                    <Show when={label().before || label().count || label().between}>
+                      <span data-slot="context-tool-group-usage">
+                        <Show when={label().before}>
+                          {(before) => <span data-slot="context-tool-group-prefix">{before()}</span>}
+                        </Show>
+                        <Show when={label().count}>
+                          {(count) => (
+                            <span data-slot="context-tool-group-count">
+                              <AnimatedNumber value={count()} />
+                            </span>
+                          )}
+                        </Show>
+                        <Show when={label().between}>
+                          {(between) => <span data-slot="context-tool-group-prefix">{between()}</span>}
                         </Show>
                       </span>
-                    )}
-                  </Show>
-                  <Show when={elapsed()}>{(value) => <span data-slot="basic-tool-tool-subtitle">{value()}</span>}</Show>
-                  <Show when={label().after}>
-                    {(after) => <span data-slot="context-tool-group-prefix">{after()}</span>}
-                  </Show>
-                </span>
-              }
-            >
-              {(value) => (
-                <span data-slot="context-tool-group-title" data-activity="">
-                  <span data-slot="context-tool-group-verb">{value().verb}</span>
-                  <Show when={value().main}>
-                    <span data-slot="context-tool-group-detail" data-code={value().code ? "" : undefined}>
-                      {value().main}
-                    </span>
-                  </Show>
-                  <Show when={value().others.length > 0}>
-                    <span data-slot="context-tool-group-separator" aria-hidden="true">
-                      ·
-                    </span>
-                    <span data-slot="context-tool-group-detail">{value().others.join(", ")}</span>
-                  </Show>
-                </span>
-              )}
-            </Show>
-          </div>
-        }
-      >
-        <div data-component="context-tool-group-list">
-          <Index each={items()}>
-            {(item) => {
-              const group = createMemo(() => {
-                const value = item()
-
-                return Array.isArray(value) ? value : undefined
-              })
-
-              const reasoning = createMemo(() => {
-                const value = item()
-
-                return !Array.isArray(value) && value.type === "reasoning" ? value : undefined
-              })
-
-              const callback = createMemo(() => {
-                const value = item()
-
-                return !Array.isArray(value) && (value.type === "notice" || value.type === "text") ? value : undefined
-              })
-
-              return (
-                <Show
-                  when={group()}
-                  fallback={
-                    <Show
-                      when={reasoning()}
-                      fallback={
-                        <Show when={callback()}>
-                          {(part) => <div data-slot="context-tool-group-item">{part().render()}</div>}
-                        </Show>
-                      }
-                    >
-                      {(part) => (
-                        <div data-slot="context-tool-group-item">
-                          <AssistantReasoningContent
-                            id={part().id}
-                            content={part()}
-                            streaming={part().streaming ?? false}
-                            // The group already reads as Thinking, so opening it shows the thoughts themselves.
-                            defaultOpen={thinking() || props.reasoningDefaultOpen}
-                            open={props.reasoningOpen?.(part().id)}
-                            onOpenChange={(open) => props.onReasoningOpenChange?.(part().id, open)}
-                            onContentRendered={props.onSizeChange}
-                          />
-                        </div>
+                    </Show>
+                    <Show when={label().title}>
+                      {(title) => (
+                        <span data-slot="basic-tool-tool-title">
+                          <Show when={thinking()} fallback={title()}>
+                            <TextShimmer text={title()} active />
+                          </Show>
+                        </span>
                       )}
                     </Show>
-                  }
-                >
-                  {(group) => {
-                    const tool = createMemo(() => group()[0]!)
-                    const trigger = createMemo(() => currentContextToolTrigger(tool(), i18n))
+                    <Show when={elapsed()}>
+                      {(value) => <span data-slot="basic-tool-tool-subtitle">{value()}</span>}
+                    </Show>
+                    <Show when={label().after}>
+                      {(after) => <span data-slot="context-tool-group-prefix">{after()}</span>}
+                    </Show>
+                  </span>
+                }
+              >
+                {(value) => (
+                  <span data-slot="context-tool-group-title" data-activity="">
+                    <span data-slot="context-tool-group-verb">{value().verb}</span>
+                    <Show when={value().main}>
+                      <span data-slot="context-tool-group-detail" data-code={value().code ? "" : undefined}>
+                        {value().main}
+                      </span>
+                    </Show>
+                    <Show when={value().others.length > 0}>
+                      <span data-slot="context-tool-group-separator" aria-hidden="true">
+                        ·
+                      </span>
+                      <span data-slot="context-tool-group-detail">{value().others.join(", ")}</span>
+                    </Show>
+                  </span>
+                )}
+              </Show>
+            </div>
+          }
+        >
+          <div data-component="context-tool-group-list">
+            <Index each={items()}>
+              {(item) => {
+                const group = createMemo(() => {
+                  const value = item()
 
-                    const skills = createMemo(() =>
-                      group().flatMap((item) => {
-                        const name = currentSkillName(item)
+                  return Array.isArray(value) ? value : undefined
+                })
 
-                        return name ? [name] : []
-                      }),
-                    )
+                const reasoning = createMemo(() => {
+                  const value = item()
 
-                    const marker = "__OPENCODE_LOADED_SKILL__"
+                  return !Array.isArray(value) && value.type === "reasoning" ? value : undefined
+                })
 
-                    const loaded = createMemo(() =>
-                      i18n.plural("ui.tool.loadedSkills", skills().length, { name: marker }),
-                    )
+                const callback = createMemo(() => {
+                  const value = item()
 
-                    return (
-                      <div data-slot="context-tool-group-item">
-                        <Show
-                          when={!currentToolGroupedRead(tool())}
-                          fallback={
-                            <CurrentReadToolGroup
-                              tools={group()}
-                              open={props.toolOpen?.(tool().id)}
-                              onOpenChange={(open) => props.onToolOpenChange?.(tool().id, open)}
-                              onSizeChange={props.onSizeChange}
+                  return !Array.isArray(value) && (value.type === "notice" || value.type === "text") ? value : undefined
+                })
+
+                return (
+                  <Show
+                    when={group()}
+                    fallback={
+                      <Show
+                        when={reasoning()}
+                        fallback={
+                          <Show when={callback()}>
+                            {(part) => <div data-slot="context-tool-group-item">{part().render()}</div>}
+                          </Show>
+                        }
+                      >
+                        {(part) => (
+                          <div data-slot="context-tool-group-item">
+                            <AssistantReasoningContent
+                              id={part().id}
+                              content={part()}
+                              streaming={part().streaming ?? false}
+                              // The group already reads as Thinking, so opening it shows the thoughts themselves.
+                              defaultOpen={thinking() || props.reasoningDefaultOpen}
+                              open={props.reasoningOpen?.(part().id)}
+                              onOpenChange={(open) => props.onReasoningOpenChange?.(part().id, open)}
+                              onContentRendered={props.onSizeChange}
                             />
-                          }
-                        >
+                          </div>
+                        )}
+                      </Show>
+                    }
+                  >
+                    {(group) => {
+                      const tool = createMemo(() => group()[0]!)
+                      const trigger = createMemo(() => currentContextToolTrigger(tool(), i18n))
+
+                      const skills = createMemo(() =>
+                        group().flatMap((item) => {
+                          const name = currentSkillName(item)
+
+                          return name ? [name] : []
+                        }),
+                      )
+
+                      const marker = "__OPENCODE_LOADED_SKILL__"
+
+                      const loaded = createMemo(() =>
+                        i18n.plural("ui.tool.loadedSkills", skills().length, { name: marker }),
+                      )
+
+                      return (
+                        <div data-slot="context-tool-group-item">
                           <Show
-                            when={tool().state.status !== "error" && ["glob", "grep", "list"].includes(tool().name)}
+                            when={!currentToolGroupedRead(tool())}
                             fallback={
-                              <Show
-                                when={
-                                  tool().name === "skill" && group().length > 1 && skills().length === group().length
-                                }
-                                fallback={
-                                  <Show
-                                    when={isFileChangeTool(tool())}
-                                    fallback={
-                                      <ToolDisplay
-                                        id={tool().id}
-                                        tool={tool().name}
-                                        input={currentToolInput(tool())}
-                                        metadata={currentToolMetadata(tool())}
-                                        output={currentToolOutput(tool())}
-                                        error={currentToolError(tool())}
-                                        status={tool().state.status}
-                                        defaultOpen={props.toolDefaultOpen?.(tool()) ?? false}
-                                        open={props.toolOpen?.(tool().id) ?? props.toolDefaultOpen?.(tool())}
-                                        onOpenChange={(open) => props.onToolOpenChange?.(tool().id, open)}
-                                        deferContent
-                                        virtualizeDiff={false}
-                                        onContentRendered={props.onSizeChange}
-                                      />
-                                    }
-                                  >
-                                    <CurrentFileToolGroup
-                                      tools={group()}
-                                      fileOpen={
-                                        props.fileOpen &&
-                                        ((path) => props.fileOpen?.(`${patchKeys().get(tool())}:${path}`))
-                                      }
-                                      onFileOpenChange={
-                                        props.onFileOpenChange &&
-                                        ((path, open) =>
-                                          props.onFileOpenChange?.(`${patchKeys().get(tool())}:${path}`, open))
-                                      }
-                                      onSizeChange={props.onSizeChange}
-                                    />
-                                  </Show>
-                                }
-                              >
-                                <div
-                                  data-component="tool-loaded-item"
-                                  data-timeline-part-ids={group()
-                                    .map((item) => item.id)
-                                    .join(",")}
-                                  aria-label={i18n.plural("ui.tool.loadedSkills", skills().length, {
-                                    name: skills().join(", "),
-                                  })}
-                                >
-                                  <span data-slot="tool-loaded-label" aria-hidden="true">
-                                    {loaded().split(marker)[0]?.trim()}
-                                  </span>
-                                  <span data-slot="tool-loaded-value" aria-hidden="true">
-                                    <For each={skills()}>
-                                      {(name, index) => (
-                                        <>
-                                          <Show when={index() > 0}>, </Show>
-                                          <TextShimmer
-                                            as="span"
-                                            text={name}
-                                            active={["streaming", "running"].includes(group()[index()]!.state.status)}
-                                          />
-                                        </>
-                                      )}
-                                    </For>
-                                  </span>
-                                  <Show when={loaded().split(marker)[1]?.trim()}>
-                                    {(suffix) => (
-                                      <span data-slot="tool-loaded-kind" aria-hidden="true">
-                                        {suffix()}
-                                      </span>
-                                    )}
-                                  </Show>
-                                </div>
-                              </Show>
+                              <CurrentReadToolGroup
+                                tools={group()}
+                                open={props.toolOpen?.(tool().id)}
+                                onOpenChange={(open) => props.onToolOpenChange?.(tool().id, open)}
+                                onSizeChange={props.onSizeChange}
+                              />
                             }
                           >
-                            <div data-component="tool-trigger">
-                              <div data-slot="basic-tool-tool-trigger-content">
-                                <div data-slot="basic-tool-tool-info">
-                                  <div data-slot="basic-tool-tool-info-structured">
-                                    <div data-slot="basic-tool-tool-info-main">
-                                      <span data-slot="basic-tool-tool-title">
-                                        <TextShimmer
-                                          text={trigger().title}
-                                          active={
-                                            tool().state.status === "streaming" || tool().state.status === "running"
-                                          }
+                            <Show
+                              when={tool().state.status !== "error" && ["glob", "grep", "list"].includes(tool().name)}
+                              fallback={
+                                <Show
+                                  when={
+                                    tool().name === "skill" && group().length > 1 && skills().length === group().length
+                                  }
+                                  fallback={
+                                    <Show
+                                      when={isFileChangeTool(tool())}
+                                      fallback={
+                                        <ToolDisplay
+                                          id={tool().id}
+                                          tool={tool().name}
+                                          input={currentToolInput(tool())}
+                                          metadata={currentToolMetadata(tool())}
+                                          output={currentToolOutput(tool())}
+                                          error={currentToolError(tool())}
+                                          status={tool().state.status}
+                                          defaultOpen={props.toolDefaultOpen?.(tool()) ?? false}
+                                          open={props.toolOpen?.(tool().id) ?? props.toolDefaultOpen?.(tool())}
+                                          onOpenChange={(open) => props.onToolOpenChange?.(tool().id, open)}
+                                          deferContent
+                                          virtualizeDiff={false}
+                                          onContentRendered={props.onSizeChange}
                                         />
-                                      </span>
-                                      <Show when={trigger().subtitle}>
-                                        {(subtitle) => <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>}
-                                      </Show>
-                                      <For each={trigger().args}>
-                                        {(arg) => <span data-slot="basic-tool-tool-arg">{arg}</span>}
+                                      }
+                                    >
+                                      <CurrentFileToolGroup
+                                        tools={group()}
+                                        fileOpen={
+                                          props.fileOpen &&
+                                          ((path) => props.fileOpen?.(`${patchKeys().get(tool())}:${path}`))
+                                        }
+                                        onFileOpenChange={
+                                          props.onFileOpenChange &&
+                                          ((path, open) =>
+                                            props.onFileOpenChange?.(`${patchKeys().get(tool())}:${path}`, open))
+                                        }
+                                        onSizeChange={props.onSizeChange}
+                                      />
+                                    </Show>
+                                  }
+                                >
+                                  <div
+                                    data-component="tool-loaded-item"
+                                    data-timeline-part-ids={group()
+                                      .map((item) => item.id)
+                                      .join(",")}
+                                    aria-label={i18n.plural("ui.tool.loadedSkills", skills().length, {
+                                      name: skills().join(", "),
+                                    })}
+                                  >
+                                    <span data-slot="tool-loaded-label" aria-hidden="true">
+                                      {loaded().split(marker)[0]?.trim()}
+                                    </span>
+                                    <span data-slot="tool-loaded-value" aria-hidden="true">
+                                      <For each={skills()}>
+                                        {(name, index) => (
+                                          <>
+                                            <Show when={index() > 0}>, </Show>
+                                            <TextShimmer
+                                              as="span"
+                                              text={name}
+                                              active={["streaming", "running"].includes(group()[index()]!.state.status)}
+                                            />
+                                          </>
+                                        )}
                                       </For>
-                                    </div>
-                                    <Show when={trigger().matches}>
-                                      {(matches) => (
-                                        <>
-                                          <span data-slot="context-tool-group-dot" />
-                                          <span data-slot="context-tool-group-matches">{matches()}</span>
-                                        </>
+                                    </span>
+                                    <Show when={loaded().split(marker)[1]?.trim()}>
+                                      {(suffix) => (
+                                        <span data-slot="tool-loaded-kind" aria-hidden="true">
+                                          {suffix()}
+                                        </span>
                                       )}
                                     </Show>
                                   </div>
+                                </Show>
+                              }
+                            >
+                              <div data-component="tool-trigger">
+                                <div data-slot="basic-tool-tool-trigger-content">
+                                  <div data-slot="basic-tool-tool-info">
+                                    <div data-slot="basic-tool-tool-info-structured">
+                                      <div data-slot="basic-tool-tool-info-main">
+                                        <span data-slot="basic-tool-tool-title">
+                                          <TextShimmer
+                                            text={trigger().title}
+                                            active={
+                                              tool().state.status === "streaming" || tool().state.status === "running"
+                                            }
+                                          />
+                                        </span>
+                                        <Show when={trigger().subtitle}>
+                                          {(subtitle) => <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>}
+                                        </Show>
+                                        <For each={trigger().args}>
+                                          {(arg) => <span data-slot="basic-tool-tool-arg">{arg}</span>}
+                                        </For>
+                                      </div>
+                                      <Show when={trigger().matches}>
+                                        {(matches) => (
+                                          <>
+                                            <span data-slot="context-tool-group-dot" />
+                                            <span data-slot="context-tool-group-matches">{matches()}</span>
+                                          </>
+                                        )}
+                                      </Show>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
+                            </Show>
                           </Show>
-                        </Show>
-                      </div>
-                    )
-                  }}
-                </Show>
-              )
-            }}
-          </Index>
-        </div>
-      </BasicTool>
-    </div>
+                        </div>
+                      )
+                    }}
+                  </Show>
+                )
+              }}
+            </Index>
+          </div>
+        </BasicTool>
+      </div>
+    </Show>
   )
 }
 
