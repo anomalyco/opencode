@@ -21,10 +21,21 @@ export function createVideoFile(item: Accessor<MediaItem>) {
   return () => ({ path: state().value, failed: state().failed })
 }
 
-function createResolved<T>(item: Accessor<MediaItem>, resolve: (item: MediaItem, sources: MediaSources) => Promise<T>) {
+/** Where media bytes come from: this machine, the media files, or the server. */
+export function useMediaSources(): MediaSources {
   const media = useMedia()
   const client = useContext(ClientContext)
-  const environment = useTuiTerminalEnvironment()
+  return {
+    files: media.files,
+    localServer: useTuiTerminalEnvironment().localServer === true,
+    media: client?.media,
+    readFile: client && ((input) => client.api.file.read(input)),
+    listFiles: client && ((input) => client.api.file.list(input).then((result) => result.data)),
+  }
+}
+
+function createResolved<T>(item: Accessor<MediaItem>, resolve: (item: MediaItem, sources: MediaSources) => Promise<T>) {
+  const sources = useMediaSources()
   const [state, setState] = createSignal<{ value?: T; failed: boolean }>({ failed: false })
   const source = createMemo(item, undefined, {
     equals: (a, b) =>
@@ -39,12 +50,7 @@ function createResolved<T>(item: Accessor<MediaItem>, resolve: (item: MediaItem,
       setState({ failed: false })
       let active = true
       onCleanup(() => (active = false))
-      resolve(current, {
-        files: media.files,
-        localServer: environment.localServer === true,
-        media: client?.media,
-        readFile: client ? (input) => client.api.file.read(input) : undefined,
-      }).then(
+      resolve(current, sources).then(
         (value) => active && setState({ value, failed: false }),
         () => active && setState({ failed: true }),
       )

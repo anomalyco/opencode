@@ -1,6 +1,6 @@
 import type { SessionMessageInfo, SessionMessageToolStateCompleted } from "@opencode/client"
 import { expect, test } from "bun:test"
-import { collectSessionMedia, isPlayableVideo, mediaKind } from "../../src/component/media/model"
+import { collectSessionMedia, isPlayableVideo, mediaKind, mentionedVideoPaths } from "../../src/component/media/model"
 import { formatDuration, posterTime } from "../../src/component/media/tile"
 import {
   actualZoom,
@@ -87,6 +87,88 @@ test("collects session media in transcript order with stable ids", () => {
   expect(
     collectSessionMedia([...messages, { id: "next", type: "user", time, text: "more" }], { directory: "/work" }),
   ).toEqual(items)
+})
+
+test.each([
+  // Forms of a path.
+  ["/srv/out/demo.mp4", ["/srv/out/demo.mp4"]],
+  ["out/demo.mp4 ./here.MOV ../up.m4v bare.mp4", ["/work/out/demo.mp4", "/work/here.MOV", "/up.m4v", "/work/bare.mp4"]],
+  ["~/Videos/a.mp4", ["/home/me/Videos/a.mp4"]],
+  ["file:///srv/my%20clip.mp4 file://localhost/srv/b.mp4", ["/srv/my clip.mp4", "/srv/b.mp4"]],
+  // Delimiters and punctuation.
+  ["Saved to out/demo.mp4.", ["/work/out/demo.mp4"]],
+  ["(paren.mp4), <angle.mp4>; **bold.mp4**!", ["/work/paren.mp4", "/work/angle.mp4", "/work/bold.mp4"]],
+  ["Saved to `out/my demo.mp4`.", ["/work/out/my demo.mp4"]],
+  [`"quoted clip.mp4" and 'single clip.mov'`, ["/work/quoted clip.mp4", "/work/single clip.mov"]],
+  [`it's 'my clip.mp4', isn't it, or "use out.mp4 now"`, ["/work/my clip.mp4", "/work/out.mp4"]],
+  ['[the clip](out/my clip.mp4 "Title") [x](<a b.m4v>)', ["/work/out/my clip.mp4", "/work/a b.m4v"]],
+  ["unquoted my clip.mp4", ["/work/clip.mp4"]],
+  // Duplicates by resolved path, first mention first.
+  ["b.mp4 a.mp4 ./b.mp4 /work/a.mp4 `b.mp4`", ["/work/b.mp4", "/work/a.mp4"]],
+  // Not a playable video, or not a server file.
+  ["the .mp4 format, mp4s, clip.mp4x, clip.mp4.txt, shot.png, clip.webm, *.mp4", []],
+  ["https://example.com/a.mp4 data:video/mp4;base64,AAAA media:abc.mp4 ftp://host/b.mp4", []],
+  ["file://host/share/a.mp4 file:///bad%E0.mp4 C:\\work\\a.mp4 C:/work/b.mp4", []],
+] as const)("finds the videos %p names", (text, files) => {
+  expect(mentionedVideoPaths(text, "/work", "/home/me")).toEqual([...files])
+})
+
+test("finds Windows paths for a Windows server, and `~/` paths only for a local one", () => {
+  const text = "C:\\work\\a.mp4 D:/b.mp4 rel\\c.mp4 file:///E:/d%20e.mp4 ~/f.mp4"
+  expect(mentionedVideoPaths(text, "C:\\work")).toEqual([
+    "C:\\work\\a.mp4",
+    "D:\\b.mp4",
+    "C:\\work\\rel\\c.mp4",
+    "E:\\d e.mp4",
+  ])
+  expect(mentionedVideoPaths("~/f.mp4", "/work")).toEqual([])
+})
+
+test("collects the existing videos a finished reply names, in order with its tool files", () => {
+  const content: SessionMessageToolStateCompleted["content"] = [
+    { type: "file", uri: "data:video/mp4;base64,AAAA", mime: "video/mp4", name: "tool.mp4" },
+  ]
+  const tool = {
+    type: "tool" as const,
+    id: "call",
+    name: "render",
+    time,
+    state: { status: "completed" as const, input: {}, content },
+  }
+  const reply = (id: string, completed?: number): SessionMessageInfo => ({
+    id,
+    type: "assistant",
+    time: { created: 1, completed },
+    agent: "build",
+    model: { id: "m", providerID: "p" },
+    content: [
+      { type: "text", text: "" },
+      { type: "text", text: "Rendered gone.mp4 and out/a.mp4" },
+      tool,
+      { type: "text", text: "Also /work/out/a.mp4 and C:\\b.mp4 b.mp4" },
+    ],
+  })
+  const asked: string[] = []
+  const mentioned = {
+    exists: (file: string, _: unknown, messageID: string) => {
+      asked.push(`${messageID} ${file}`)
+      return file !== "/work/gone.mp4"
+    },
+  }
+  const location = { directory: "/work" }
+
+  const items = collectSessionMedia([reply("done", 2), reply("streaming")], location, mentioned)
+  expect(items.map((item) => [item.id, item.mime, item.uri, item.name])).toEqual([
+    ["done:text:1:1", "video/mp4", "file:///work/out/a.mp4", "a.mp4"],
+    ["done:tool:call:0", "video/mp4", "data:video/mp4;base64,AAAA", "tool.mp4"],
+    ["done:text:2:1", "video/mp4", "file:///work/b.mp4", "b.mp4"],
+    ["streaming:tool:call:0", "video/mp4", "data:video/mp4;base64,AAAA", "tool.mp4"],
+  ])
+  expect(items[0]?.location).toEqual(location)
+  // A file named twice is asked about once; the streaming reply asks about none.
+  expect(asked).toEqual(["done /work/gone.mp4", "done /work/out/a.mp4", "done /work/b.mp4"])
+  // Without existence checks, text adds nothing.
+  expect(collectSessionMedia([reply("done", 2)], location).map((item) => item.id)).toEqual(["done:tool:call:0"])
 })
 
 test.each([
