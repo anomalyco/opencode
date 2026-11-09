@@ -11,6 +11,7 @@ import { Integration } from "../../integration.js"
 // import { IntegrationConnection } from "../../integration/connection.js"
 import { Model } from "../../model.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
+import { OauthRedirect } from "../../oauth/redirect.js"
 import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
@@ -109,7 +110,8 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
         const state = randomValue()
         const nonce = randomValue()
         const savedID = savedClientID()
-        const received = yield* Deferred.make<{ code: string; clientID?: string; response: ServerResponse }, Error>()
+        // `response` is the browser's pending callback request; a pasted redirect has none.
+        const received = yield* Deferred.make<{ code: string; clientID?: string; response?: ServerResponse }, Error>()
         // Lazy so runtimes without a loopback listener (workerd) never evaluate node:http.
         const { createServer } = yield* Effect.promise(() => import("node:http"))
         const server = createServer((request, response) => {
@@ -158,7 +160,7 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
             const respond = (error?: string) =>
               Effect.sync(() =>
                 result.response
-                  .writeHead(error ? 400 : 200, { "Content-Type": "text/html" })
+                  ?.writeHead(error ? 400 : 200, { "Content-Type": "text/html" })
                   .end(
                     error
                       ? OauthCallbackPage.error(error, { provider: "ChatGPT" })
@@ -187,9 +189,21 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
             }).pipe(
               Effect.tap(() => respond()),
               Effect.tapError((error) => respond(error instanceof Error ? error.message : "ChatGPT sign-in failed")),
-              Effect.onInterrupt(() => Effect.sync(() => result.response.destroy())),
+              Effect.onInterrupt(() => Effect.sync(() => result.response?.destroy())),
             )
           }),
+          submit: (pasted: string) =>
+            OauthRedirect.pasted(pasted, state).pipe(
+              Effect.flatMap((result) =>
+                "error" in result
+                  ? Deferred.fail(received, new Error(result.error))
+                  : Deferred.succeed(received, {
+                      code: result.code,
+                      clientID: result.params.get("client_id") ?? undefined,
+                    }),
+              ),
+              Effect.asVoid,
+            ),
         }
       }),
     refresh: (value) => refresh(value, app),

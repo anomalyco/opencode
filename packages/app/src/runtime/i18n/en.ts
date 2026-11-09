@@ -271,6 +271,11 @@ export const dict = {
     "Check that your browser shows the same code before you authorize.",
   "provider.connect.oauth.auto.description":
     "Your browser opens so you can sign in to {{provider}}. Come back here when you are done.",
+  "provider.connect.oauth.auto.paste.description":
+    "Your browser opens so you can sign in to {{provider}}. If it can't reach the machine running OpenCode, paste the URL it was redirected to below.",
+  "provider.connect.oauth.auto.paste.label": "Redirect URL",
+  "provider.connect.oauth.auto.paste.placeholder": "http://127.0.0.1:…/callback?code=…",
+  "provider.connect.oauth.auto.paste.required": "Paste the URL from the browser's address bar",
   "provider.connect.oauth.code.description":
     "Your browser opens so you can sign in to {{provider}}. Paste the authorization code it gives you below.",
   "provider.connect.oauth.openBrowser": "Open browser",
