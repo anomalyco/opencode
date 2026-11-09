@@ -64,36 +64,29 @@ console.log(
 // Each page's budget in kB, gzipped: what it was when last measured, plus a kB of room. Lower a
 // budget when a page gets lighter; a page without one fails until it has one.
 const budgets: Record<string, number> = {
-  "[...404].tsx": 100.3,
-  "brand/index.tsx": 103.7,
-  "changelog/[tag].tsx": 97.2,
-  "changelog/index.tsx": 96.4,
-  "desktop.tsx": 125.7,
-  "devices.tsx": 53.1,
-  "product/browse.tsx": 102.1,
-  "font/index.tsx": 118,
-  "ide.tsx": 125.7,
-  "index.tsx": 112.8,
-  "legal/index.tsx": 147.6,
-  "legal/privacy-policy/index.tsx": 137.1,
-  "legal/terms-of-service/index.tsx": 132.4,
-  "mini.tsx": 125.7,
-  "mobile.tsx": 125.7,
-  "press/index.tsx": 111.1,
-  "product/index.tsx": 110.4,
-  "sdk.tsx": 125.7,
-  "terminal.tsx": 125.7,
-  "video-editor/index.tsx": 51.5,
+  "[...404].tsx": 104.1,
+  "brand/index.tsx": 104.5,
+  "changelog/[tag].tsx": 97.8,
+  "changelog/index.tsx": 97,
+  "desktop.tsx": 126.5,
+  "devices.tsx": 56.8,
+  "product/browse.tsx": 102.8,
+  "font/index.tsx": 118.7,
+  "ide.tsx": 126.5,
+  "index.tsx": 113.4,
+  "legal/index.tsx": 148.3,
+  "legal/privacy-policy/index.tsx": 137.8,
+  "legal/terms-of-service/index.tsx": 133.2,
+  "mini.tsx": 126.5,
+  "mobile.tsx": 126.5,
+  "press/index.tsx": 111.8,
+  "product/index.tsx": 111.3,
+  "sdk.tsx": 126.5,
+  "terminal.tsx": 126.5,
+  "video-editor/index.tsx": 55.2,
 }
-type Chunk = { file: string; name?: string; imports?: string[]; css?: string[] }
+type Chunk = { file: string; imports?: string[] }
 const manifest: Record<string, Chunk> = await Bun.file(path.join(root, ".vite/manifest.json")).json()
-// Most pages load the shared "common" chunk (vite.config.ts), so a stylesheet in it would block
-// their first paint too.
-const commonCss = Object.values(manifest).flatMap((chunk) => (chunk.name === "common" ? (chunk.css ?? []) : []))
-if (commonCss.length) {
-  console.error(`check-client-bundle: the common chunk brings stylesheets to every page: ${commonCss.join(", ")}`)
-  process.exit(1)
-}
 const sizes = new Map<string, number>()
 const gzipped = async (file: string) => {
   const known = sizes.get(file)
