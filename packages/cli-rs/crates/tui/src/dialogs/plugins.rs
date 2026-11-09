@@ -47,6 +47,22 @@ pub fn activate(tui: &Rc<Tui>) -> Disposer {
     })
 }
 
+thread_local! {
+    /// The plugin managers shown, which a local reload refreshes while they are open.
+    static SHOWN: RefCell<Vec<Weak<Manager>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Refreshes `tui`'s plugin manager, if it is open, after the external plugins changed (TS's list follows the plugin
+/// store).
+pub fn refresh(tui: &Tui) {
+    let shown: Vec<Rc<Manager>> = SHOWN.with(|shown| {
+        let mut shown = shown.borrow_mut();
+        shown.retain(|manager| manager.strong_count() > 0);
+        shown.iter().filter_map(Weak::upgrade).collect()
+    });
+    shown.iter().filter(|manager| std::ptr::eq(manager.tui.as_ptr(), tui)).for_each(|manager| manager.refresh());
+}
+
 /// `PluginsDialog`, in place of any open dialog.
 pub fn show(tui: &Tui) {
     let manager = Rc::new(Manager {
@@ -61,6 +77,7 @@ pub fn show(tui: &Tui) {
         open: Cell::new(false),
         following: RefCell::new(None),
     });
+    SHOWN.with(|shown| shown.borrow_mut().push(Rc::downgrade(&manager)));
     manager.open(None);
     manager.refetch();
     manager.follow();
