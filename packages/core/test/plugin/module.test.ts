@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { cp } from "node:fs/promises"
 import path from "node:path"
-import { Brand, Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schedule, Schema, Scope, Stream } from "effect"
+import { Brand, Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Scope, Stream } from "effect"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
