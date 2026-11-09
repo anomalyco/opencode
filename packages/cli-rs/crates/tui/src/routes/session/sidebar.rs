@@ -10,10 +10,10 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use opencode_api::generated::{LocationPublicRef, SessionID};
+use opencode_api::generated::SessionID;
 use opencode_local::cli_config::Sidebar as SidebarSetting;
 use opencode_plugin::{SlotInput, SlotMount, slot};
-use opencode_store::{Changes, State};
+use opencode_store::Changes;
 use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opentui::keymap::{Condition, Disposer};
@@ -294,32 +294,4 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
             Err(error) => log::error!("sidebar keymap layer: {error}"),
         }
     }
-}
-
-/// Whether `changes` touch what a view of `session` reads: the info, status, messages, pending items and
-/// permissions of its family, its location, and the projects. A session the store does not know takes every
-/// change, since its views read the default location.
-pub fn touches(state: &State, changes: &Changes, session: &SessionID) -> bool {
-    if changes.all || changes.projects {
-        return true;
-    }
-    let Some(info) = state.session(session) else {
-        return !changes.is_empty();
-    };
-    let changed = |id: &SessionID| {
-        changes.session.contains(id)
-            || changes.status.contains(id)
-            || changes.messages.contains(id)
-            || changes.message.contains_key(id)
-            || changes.pending.contains(id)
-            || changes.permissions.contains(id)
-    };
-    // The family lookup allocates, so the session itself goes first.
-    location_changed(changes, &info.location) || changed(session) || state.family(session).iter().any(changed)
-}
-
-/// [`Changes::location`] of a session's location, without building a [`opencode_store::Location`].
-pub fn location_changed(changes: &Changes, location: &LocationPublicRef) -> bool {
-    changes.all
-        || changes.locations.iter().any(|item| item.directory == location.directory.0 && item.workspace_id.is_none())
 }
