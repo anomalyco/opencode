@@ -94,6 +94,9 @@ export function createBrowserPane(input: {
   const machine: PaneMachine = { state: createPaneState() }
   const handles = new Map<string, Handle>()
   const records = new Map<string, SessionRecord>()
+  /** One createRecord per session at a time; concurrent registrations share the same record. */
+  const creating = new Map<string, Promise<SessionRecord>>()
+  let disposed = false
   const restore = createBrowserRestoreStore(input.storage)
   const shared: Shared = { ref: createRefs(input.refs) }
   // Page disposals in flight. Finishing a trace or CPU profile can hold a page open, and the pane's own disposal waits
@@ -109,7 +112,7 @@ export function createBrowserPane(input: {
       if (input.locked()) throw new Error("browser.pane.locked")
       const server = input.serverEndpoints.get(target.server)
 
-      if (isPaneDisposed(machine.state) || !server || !destinationOrigin(server.url))
+      if (disposed || isPaneDisposed(machine.state) || !server || !destinationOrigin(server.url))
         throw new Error("browser.pane.registration.invalid")
 
       const win = input.windows.get(window)
@@ -125,13 +128,15 @@ export function createBrowserPane(input: {
 
       if (existing?.binding && selectBinding(machine.state, existing.binding))
         throw new Error("browser.pane.owner.invalid")
-      const record = existing ?? (await createRecord(storageKey))
 
-      if (input.locked()) throw new Error("browser.pane.locked")
+      // Watch the owner before the record is awaited: a window that navigates or closes while a record is being
+      // created must not leave a registration behind.
+      let ownerGone = false
 
-      record.binding = binding
-
-      const closed = () => dispatchBinding(binding, { type: "owner.closed" })
+      const closed = () => {
+        ownerGone = true
+        dispatchBinding(binding, { type: "owner.closed" })
+      }
 
       const navigate = (event: Electron.Event<{ isMainFrame: boolean; isSameDocument: boolean }>) => {
         if (event.isMainFrame && !event.isSameDocument) closed()
@@ -140,17 +145,47 @@ export function createBrowserPane(input: {
       win.webContents.once("destroyed", closed)
       win.webContents.on("did-start-navigation", navigate)
 
+      const cleanup = () => {
+        if (win.isDestroyed()) return
+        win.webContents.off("destroyed", closed)
+        win.webContents.off("did-start-navigation", navigate)
+      }
+
+      const record = existing ?? (await createRecordOnce(storageKey))
+
+      if (disposed || isPaneDisposed(machine.state) || records.get(storageKey) !== record) {
+        cleanup()
+
+        if (records.get(storageKey) === record && !record.binding) await discardRecord(record)
+        throw new Error("browser.pane.disposed")
+      }
+
+      if (input.locked()) {
+        cleanup()
+
+        if (!existing && records.get(storageKey) === record && !record.binding) await discardRecord(record)
+        throw new Error("browser.pane.locked")
+      }
+
+      if (ownerGone) {
+        cleanup()
+        throw new Error("browser.pane.registration.closed")
+      }
+
+      if (record.binding && selectBinding(machine.state, record.binding)) {
+        cleanup()
+        throw new Error("browser.pane.owner.invalid")
+      }
+
+      record.binding = binding
+
       const handle: Handle = {
         window,
         win,
         record,
         abort: new AbortController(),
         registered: Promise.withResolvers(),
-        cleanup: () => {
-          if (win.isDestroyed()) return
-          win.webContents.off("destroyed", closed)
-          win.webContents.off("did-start-navigation", navigate)
-        },
+        cleanup,
         pages: new Map(),
         requests: new Map(),
       }
@@ -416,7 +451,11 @@ export function createBrowserPane(input: {
      * suspended attachment, like an idle server eviction, and register again once the pane is back.
      */
     async dispose() {
+      disposed = true
       dispatch({ type: "disposed" })
+      // A register may be waiting for a record; let it settle so its record is in the map (or discarded) before the
+      // runtime and its proxies go away.
+      await Promise.allSettled(Array.from(creating.values()))
       await Promise.all(Array.from(records.keys(), (storageKey) => releaseLater(storageKey)))
       await Promise.all(releasingRecords)
       await Promise.all(releasing)
@@ -510,6 +549,22 @@ export function createBrowserPane(input: {
     void settled.finally(() => releasing.delete(settled))
   }
 
+  function createRecordOnce(storageKey: string) {
+    const existing = records.get(storageKey)
+
+    if (existing) return Promise.resolve(existing)
+    const pending = creating.get(storageKey)
+
+    if (pending) return pending
+    let promise: Promise<SessionRecord>
+    promise = createRecord(storageKey).finally(() => {
+      if (creating.get(storageKey) === promise) creating.delete(storageKey)
+    })
+    creating.set(storageKey, promise)
+
+    return promise
+  }
+
   async function createRecord(storageKey: string) {
     const partition = `opencode-browser-${crypto.randomUUID()}`
 
@@ -549,17 +604,21 @@ export function createBrowserPane(input: {
     return record
   }
 
-  async function releaseRecord(storageKey: string) {
-    const record = records.get(storageKey)
-
-    if (!record) return
-    records.delete(storageKey)
+  async function discardRecord(record: SessionRecord) {
     record.upstream = undefined
     await record.network.disconnect().catch(() => undefined)
     record.pages.forEach((entry) => release(entry.page))
     record.pages.clear()
     await Promise.all(releasing)
     await runtime.runPromise(Scope.close(record.scoped, Exit.void)).catch(() => undefined)
+  }
+
+  async function releaseRecord(storageKey: string) {
+    const record = records.get(storageKey)
+
+    if (!record) return
+    records.delete(storageKey)
+    await discardRecord(record)
   }
 
   function releaseLater(storageKey: string) {

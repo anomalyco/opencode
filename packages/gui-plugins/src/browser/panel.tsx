@@ -721,15 +721,6 @@ export default function SessionBrowserPane(props: {
           {error()}
         </div>
       </Show>
-      <Show when={connection() !== "connected"}>
-        <div
-          data-slot="browser-connection-notice"
-          role="status"
-          class="shrink-0 px-3 py-1.5 text-12-regular text-v2-text-text-muted border-b border-v2-border-border-muted"
-        >
-          {plugin.t("connection.disconnected")}
-        </div>
-      </Show>
       <embeds.View
         id={embed()}
         visible={shown()}

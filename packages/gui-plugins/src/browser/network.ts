@@ -29,6 +29,21 @@ export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function*
     return upstream
   }
 
+  // A tunnel belongs to the binding that opened it. Read/write/close never resolve the upstream again: after a
+  // disconnect or reconnect, an old tunnel ID fails locally instead of being sent to the new binding.
+  const tunnels = new Map<string, BrowserNetworkUpstream>()
+
+  const tunnel = (tunnelID: string) => {
+    const upstream = tunnels.get(tunnelID)
+
+    if (!upstream || upstream !== input.upstream()) {
+      tunnels.delete(tunnelID)
+      throw new Error("browser.network.tunnel.closed")
+    }
+
+    return upstream
+  }
+
   const proxy = yield* Effect.acquireRelease(
     Effect.tryPromise(() =>
       BrowserProxy.make({
@@ -38,10 +53,14 @@ export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function*
           return Effect.runPromise(
             upstream.rpc["tunnel.open"]({ ...upstream.attachment, target }, { location: upstream.location }),
             { signal },
-          )
+          ).then((tunnelID) => {
+            tunnels.set(tunnelID, upstream)
+
+            return tunnelID
+          })
         },
         read: (tunnelID, signal) => {
-          const upstream = current()
+          const upstream = tunnel(tunnelID)
 
           return Effect.runPromise(
             upstream.rpc["tunnel.read"]({ ...upstream.attachment, tunnelID }, { location: upstream.location }),
@@ -49,7 +68,7 @@ export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function*
           )
         },
         write: (tunnelID, data, end, signal) => {
-          const upstream = current()
+          const upstream = tunnel(tunnelID)
 
           return Effect.runPromise(
             upstream.rpc["tunnel.write"](
@@ -60,7 +79,11 @@ export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function*
           )
         },
         close: (tunnelID) => {
-          const upstream = current()
+          const upstream = tunnels.get(tunnelID)
+          tunnels.delete(tunnelID)
+
+          // A stale tunnel's attachment is gone; never send its ID over a replacement connection.
+          if (!upstream || upstream !== input.upstream()) return Promise.resolve()
 
           return Effect.runPromise(
             upstream.rpc["tunnel.close"]({ ...upstream.attachment, tunnelID }, { location: upstream.location }).pipe(
@@ -108,7 +131,11 @@ export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function*
       return () => contents.off("login", login)
     },
     /** Ends the page connections that still run through the old binding; new requests fail fast. */
-    disconnect: () => partition.closeAllConnections(),
+    disconnect: () => {
+      tunnels.clear()
+
+      return partition.closeAllConnections()
+    },
     /**
      * Fetches a page icon through the server's network, as the page loaded it. Resolves undefined for anything but a
      * small image: a failure, a timeout, another content type, or more than `MAX_ICON_BYTES`.

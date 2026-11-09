@@ -44,6 +44,30 @@ describe("screen lock machine", () => {
     expect(replay([{ type: "suspended" }, { type: "resumed", idle: "unknown" }])).toEqual([true, false])
   })
 
+  test("idle probes never clear an explicit lock or sleep", () => {
+    expect(
+      replay([
+        { type: "screen", locked: true },
+        { type: "probed", idle: "active" },
+        { type: "probed", idle: "idle" },
+      ]),
+    ).toEqual([true, true, true])
+
+    expect(
+      replay([{ type: "suspended" }, { type: "probed", idle: "active" }, { type: "resumed", idle: "active" }]),
+    ).toEqual([true, true, false])
+  })
+
+  test("an explicit unlock clears a stale probe", () => {
+    expect(
+      replay([
+        { type: "probed", idle: "locked" },
+        { type: "screen", locked: false },
+        { type: "probed", idle: "active" },
+      ]),
+    ).toEqual([true, false, false])
+  })
+
   test("stays locked while another login session is active, whatever the idle state says", () => {
     expect(
       replay([
