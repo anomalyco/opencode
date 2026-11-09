@@ -59,7 +59,7 @@ pub(crate) fn call_of(fetch: abi::Fetch) -> Result<Call, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use opencode_api::client::Client;
+    use opencode_api::client::{Auth, Client};
     use opencode_api::generated::{
         ExperimentalSessionStatsInput, ExperimentalSessionStatsInputTools, SessionGenerateInput, SessionID,
     };
@@ -87,5 +87,8 @@ mod tests {
             assert_eq!((want.method, want.url, want.headers, want.body), (got.method, got.url, got.headers, got.body));
         }
         assert!(call_of(abi::Fetch { method: "TRACE".into(), path: "/x".into(), ..abi::Fetch::default() }).is_err());
+        let elsewhere =
+            abi::Fetch { method: "GET".into(), path: "/https://outside.invalid/x".into(), ..Default::default() };
+        assert!(client.auth(Auth::password("secret")).prepare(call_of(elsewhere).unwrap()).is_err());
     }
 }

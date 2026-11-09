@@ -117,10 +117,17 @@ impl Client {
         &self.transport
     }
 
-    /// The URL of `path` (which starts with `/`) on this server, with `query` and no credentials.
+    /// The URL of `path` (which starts with `/`) on this server, with `query` and no credentials. A path that resolves
+    /// to another origin, such as `/https://elsewhere/`, is an error, so the server's credentials never leave it.
     pub fn url(&self, path: &str, query: &[(String, String)]) -> Result<url::Url, Error> {
         let mut url = crate::js::join_url(&self.base_url, path.trim_start_matches('/'))
             .map_err(|error| Error::Transport(format!("{path}: {error}")))?;
+        let base = &self.base_url;
+        if (url.scheme(), url.host(), url.port_or_known_default())
+            != (base.scheme(), base.host(), base.port_or_known_default())
+        {
+            return Err(Error::Transport(format!("{path}: not on the server {}", base.origin().ascii_serialization())));
+        }
         if !query.is_empty() {
             url.set_query(Some(&query::encode(query)));
         }
@@ -355,4 +362,36 @@ fn is_content_type(response: &Response, expected: &str) -> bool {
         .header("content-type")
         .and_then(|value| value.split(';').next())
         .is_some_and(|value| value.trim().eq_ignore_ascii_case(expected))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Expected: a path that resolves to another origin is refused before credentials are added, in both credential
+    // modes, while a path on the server, its prefix kept, still prepares.
+    #[test]
+    fn a_request_stays_on_the_configured_origin() {
+        let base = Client::new("https://server.invalid:4096/base").unwrap();
+        let credentials = [
+            Auth::Basic { username: "opencode".into(), password: "secret".into() },
+            Auth::Query { username: "opencode".into(), password: "secret".into() },
+        ];
+        for auth in credentials {
+            let client = base.clone().auth(auth);
+            for path in [
+                "/https://outside.invalid/x",
+                "/http://server.invalid:4096/x",
+                "/\\\\outside.invalid/x",
+                "/ //outside.invalid/x",
+            ] {
+                let error = client.prepare(Call::new("GET", path.to_owned(), 200, &[])).unwrap_err();
+                assert!(matches!(error, Error::Transport(_)), "{path}: {error:?}");
+            }
+            for (path, url) in [("/api/x", "/base/api/x"), ("//outside.invalid/x", "/base/outside.invalid/x")] {
+                let request = client.prepare(Call::new("GET", path.to_owned(), 200, &[])).unwrap();
+                assert_eq!(request.url.path(), url);
+            }
+        }
+    }
 }
