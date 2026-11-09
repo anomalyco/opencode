@@ -1,4 +1,4 @@
-import { ProviderIcon } from "@opencode/ui/provider-icon"
+import { ProviderIcon, hasProviderIcon } from "@opencode/ui/provider-icon"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Show } from "solid-js"
 
@@ -25,7 +25,8 @@ export function TimelineSeparator(props: {
     <div class="flex h-8 w-full items-center gap-3 text-v2-text-text-faint">
       <span class="h-px min-w-0 flex-1 bg-v2-border-border-base" />
       <span class="flex min-w-0 items-center gap-1 text-[13px] font-[440] leading-text-compact tracking-[-0.04px]">
-        <Show when={props.providerID}>
+        {/* A provider without its own icon shows none, rather than the generic fallback. */}
+        <Show when={props.providerID && hasProviderIcon(props.providerID) ? props.providerID : undefined}>
           {(providerID) => <ProviderIcon id={providerID()} class="text-v2-icon-icon-faint" aria-hidden="true" />}
         </Show>
         <span class="flex min-w-0 items-center gap-1.5">
