@@ -431,6 +431,76 @@ fn the_tui_disposes_its_plugins_as_it_exits() {
     assert_eq!(DISPOSED_WITH.take().as_deref(), Some("9.9.9"));
 }
 
+/// Stores `{"saved":true}` as it is disposed, then creates the file `OPENCODE_TEST_DISPOSED` names.
+fn saving(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.storage_key("state");
+    setup.on_dispose(|host| {
+        host.storage_set("state", json!({ "saved": true }));
+        std::fs::write(std::env::var_os("OPENCODE_TEST_DISPOSED").unwrap(), "").unwrap();
+    });
+    Ok(())
+}
+
+/// The child of [`a_storage_write_made_on_exit_reaches_the_disk`]: runs the TUI with storage under
+/// `OPENCODE_TEST_HOME` until it quits.
+#[test]
+#[ignore = "run by a_storage_write_made_on_exit_reaches_the_disk"]
+fn exit_with_a_saving_plugin() {
+    let home = std::path::PathBuf::from(std::env::var_os("OPENCODE_TEST_HOME").unwrap());
+    let options = opentui::AppOptions { exit_on_ctrl_c: false, ..opentui::AppOptions::default() };
+    let app = opentui::App::headless(opentui::app::HeadlessOptions { width: 80, height: 24, app: options }).unwrap();
+    let launch = opencode_tui::app::Launch {
+        deps: Deps {
+            route: Route::Home,
+            roots: support::roots(support::home_paths(&home), "test"),
+            ..support::deps(Arc::new(support::empty()))
+        },
+        args: opencode_tui::Args::default(),
+        keep: Box::new(()),
+        plugins: None,
+    };
+    opencode_tui::app::run_on(app, launch, |tui| {
+        opencode_tui::plugins::host::add(tui, abi::Plugin { id: "saving", setup: saving }.into());
+        tui.app.quit();
+        Ok(())
+    })
+    .unwrap();
+}
+
+// Expected (bigboi-2): a storage write a plugin makes as it is disposed on exit is on disk once the process ended,
+// even when the write waited for the storage lock another client held.
+#[test]
+fn a_storage_write_made_on_exit_reaches_the_disk() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let home = root.path().join("home");
+    let disposed = root.path().join("disposed");
+    let storage = opencode_local::storage::Storage::new(&support::home_paths(&home).state, "test").unwrap();
+    let mut child = None;
+    storage
+        .update("plugin.saving.state", &json!({}), |_| {
+            let spawned = Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "plugins::exit_with_a_saving_plugin", "--ignored", "--test-threads=1"])
+                .env("OPENCODE_TEST_HOME", &home)
+                .env("OPENCODE_TEST_DISPOSED", &disposed)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .unwrap();
+            child = Some(spawned);
+            let start = std::time::Instant::now();
+            while !disposed.exists() && start.elapsed() < Duration::from_secs(30) {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            // Holding the lock a while longer lets a child that does not wait exit first.
+            std::thread::sleep(Duration::from_millis(300));
+        })
+        .unwrap();
+    let output = child.unwrap().wait_with_output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success() && stdout.contains("1 passed"), "{stdout}{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(storage.load("plugin.saving.state", &Value::Null).unwrap(), json!({ "saved": true }));
+}
+
 // Expected (R2-1): a plugin toggled in the plugin manager mounts the route again, and the route view it replaced and
 // the closed manager are freed with every widget they showed.
 #[test]
