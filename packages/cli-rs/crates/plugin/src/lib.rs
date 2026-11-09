@@ -971,6 +971,11 @@ impl Registry {
         active.into_iter().for_each(|(_, registration)| registration.dispose());
     }
 
+    /// Whether a plugin was loaded from `target`.
+    pub fn loaded(&self, target: &str) -> bool {
+        self.with_target(target, |_| ()).is_some()
+    }
+
     /// Whether `target` is a selector of a plugin, rather than a plugin to load.
     pub fn selects(&self, target: &str) -> bool {
         self.plugins.borrow().iter().any(|plugin| matches(target, &plugin.definition.id))
