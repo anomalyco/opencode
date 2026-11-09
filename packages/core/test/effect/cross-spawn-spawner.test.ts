@@ -10,6 +10,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Teardown } from "@opencode/util/teardown"
 import { appExecutionAlias } from "../fixture/app-execution-alias"
 import { testEffect } from "../lib/effect"
+import { waitUntil } from "../lib/eventually"
 
 const live = LayerNode.compile(CrossSpawnSpawner.node)
 const fx = testEffect(live)
@@ -384,28 +385,33 @@ describe("cross-spawn spawner", () => {
     )
 
     fx.live(
-      "forceKillAfter empties the process group after its leader exits",
+      "forceKillAfter kills the rest of the process group after its leader exits",
       Effect.gen(function* () {
         if (process.platform === "win32") return
 
-        // The leader exits on SIGTERM. Its child ignores SIGTERM and starts one short sleep after another for about
-        // 10 seconds, so nothing is left behind even if the stop fails.
+        // The leader exits on SIGTERM. Its child ignores SIGTERM and lets go of the output, so "close" doesn't wait
+        // for it.
         const handle = yield* ChildProcess.make(
           "sh",
-          [
-            "-c",
-            '(trap "" TERM; i=0; while [ $i -lt 200 ]; do sleep 0.05; i=$((i + 1)); done) >/dev/null 2>&1 & echo $!; wait',
-          ],
+          ["-c", '(trap "" TERM; sleep 30) >/dev/null 2>&1 & echo $!; wait'],
           { stdin: "ignore" },
         )
-        const group = -Number(handle.pid)
-        yield* Effect.addFinalizer(() => Effect.try(() => process.kill(group, "SIGKILL")).pipe(Effect.ignore))
+        yield* Effect.addFinalizer(() =>
+          Effect.try(() => process.kill(-Number(handle.pid), "SIGKILL")).pipe(Effect.ignore),
+        )
         const child = Number(new TextDecoder().decode(Option.getOrThrow(yield* Stream.runHead(handle.stdout))))
         expect(alive(child)).toBe(true)
 
         yield* handle.kill({ forceKillAfter: 100 })
 
-        expect(alive(group)).toBe(false)
+        // With no reaping init the killed child stays a zombie, which alive() still reports, so "Z" in /proc counts as
+        // stopped. macOS has no /proc but always reaps orphans.
+        yield* waitUntil(
+          Effect.tryPromise(() => fs.readFile(`/proc/${child}/stat`, "utf8")).pipe(
+            Effect.map((stat) => stat.charAt(stat.lastIndexOf(")") + 2) === "Z"),
+            Effect.orElseSucceed(() => !alive(child)),
+          ),
+        )
       }),
     )
 

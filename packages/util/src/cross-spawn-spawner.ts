@@ -11,7 +11,6 @@ import {
   PlatformError,
   Predicate,
   Redacted,
-  Schedule,
   Sink,
   Stream,
 } from "effect"
@@ -515,19 +514,15 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
       )
     const attempt = terminate(opts?.killSignal ?? "SIGTERM")
     if (opts?.forceKillAfter === undefined) return attempt
-    // Descendants can outlive the leader in its group. A group ID stays reserved until its last member is reaped, so
-    // signalling the group until ESRCH stays on this group.
-    const grouped = globalThis.process.platform !== "win32" && (command.options.detached ?? true)
-    const untilGroupGone = (signal: NodeJS.Signals | 0) =>
-      Effect.try(() => grouped && globalThis.process.kill(-proc.pid!, signal)).pipe(
-        Effect.orElseSucceed(() => false),
-        Effect.repeat({ while: Boolean, schedule: Schedule.spaced("10 millis") }),
-      )
-    return Effect.timeoutOrElse(Effect.andThen(attempt, untilGroupGone(0)), {
-      duration: opts.forceKillAfter,
-      orElse: () =>
-        terminate("SIGKILL").pipe(Effect.andThen(untilGroupGone("SIGKILL").pipe(Effect.timeoutOption("1 second")))),
-    })
+    // A descendant that doesn't hold the output pipes can outlive the leader in its group, and "close" doesn't wait for
+    // it. Once the leader has closed, kill what is left of the group. Waiting for the group to empty instead never ends
+    // where nothing reaps orphans (opencode as PID 1 in a container), since zombies keep the group alive.
+    return Effect.timeoutOrElse(
+      globalThis.process.platform !== "win32" && (command.options.detached ?? true)
+        ? Effect.andThen(attempt, Effect.ignore(killGroup(command, proc, "SIGKILL")))
+        : attempt,
+      { duration: opts.forceKillAfter, orElse: () => terminate("SIGKILL") },
+    )
   }
 
   const source = (handle: ChildProcessHandle, from: ChildProcess.PipeFromOption | undefined) => {
