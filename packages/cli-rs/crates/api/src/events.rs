@@ -7,7 +7,7 @@
 //!   `server.connected`, and a subscriber that falls 4,096 events behind fails alone.
 //! - [`connect`] ports `createClientConnection` (`packages/client/src/solid/connection.ts`): the stream
 //!   must start with `server.connected` within 2 s, any received bytes count as activity, 45 s of
-//!   silence replaces the stream, a disconnect reconnects after 1 s, and events reach the consumer in
+//!   silence and 1 s of grace replace the stream (deviation `parity/deviations/A09-stall-grace.md`), a disconnect reconnects after 1 s, and events reach the consumer in
 //!   10 ms batches with adjacent deltas merged. The batch queue is bounded: when it is full the loop
 //!   drops the stream and reconnects, and the consumer resynchronizes on the next `server.connected`
 //!   (deviation `parity/deviations/A09-bounded-queue.md`).
@@ -405,6 +405,9 @@ pub enum RecordStatus {
 
 const HISTORY_LIMIT: usize = 50;
 
+/// How long a stream past its idle deadline may still deliver before it counts as stalled.
+const STALL_GRACE: Duration = Duration::from_secs(1);
+
 /// A running connection loop. Dropping it stops the loop and closes the stream.
 pub struct Connection {
     cancel: CancellationToken,
@@ -573,14 +576,27 @@ impl<E: Event, S: Source<E>> Runner<E, S> {
         // A resync requested before this stream connected is stale.
         lock(&self.resync.reason).take();
         let mut idle = Instant::now() + self.options.idle_timeout;
+        // Set once the idle deadline passed and the stream got its grace to deliver what is buffered.
+        let mut probing = false;
         let mut flush = Some(Instant::now() + self.options.flush_interval);
         self.pending.push(first);
 
         let end = loop {
             tokio::select! {
                 _ = self.cancel.cancelled() => break End::Stopped,
-                _ = activity.notified() => idle = Instant::now() + self.options.idle_timeout,
-                _ = tokio::time::sleep_until(idle) => break failed("Event stream stalled", connected_at),
+                _ = activity.notified() => {
+                    idle = Instant::now() + self.options.idle_timeout;
+                    probing = false;
+                }
+                // The clock keeps counting while the process is stopped (Ctrl+Z), so on resume the
+                // deadline can fire before the runtime sees the events buffered in the socket.
+                _ = tokio::time::sleep_until(idle) => {
+                    if probing {
+                        break failed("Event stream stalled", connected_at);
+                    }
+                    probing = true;
+                    idle = Instant::now() + STALL_GRACE;
+                }
                 _ = self.resync.notify.notified() => {
                     if let Some(reason) = lock(&self.resync.reason).take() {
                         log::info!("event stream resync: {reason}");
@@ -598,6 +614,7 @@ impl<E: Event, S: Source<E>> Runner<E, S> {
                     Some(Err(error)) => break failed(&error.to_string(), connected_at),
                     Some(Ok(event)) => {
                         idle = Instant::now() + self.options.idle_timeout;
+                        probing = false;
                         self.pending.push(event);
                         flush.get_or_insert_with(|| Instant::now() + self.options.flush_interval);
                     }
@@ -1141,6 +1158,34 @@ mod tests {
         let mut events = Vec::new();
         drain(&mut batches, &mut events).await;
         assert_eq!(events.len(), 1);
+    }
+
+    // R4-1: after a Ctrl+Z the idle deadline has passed when the process resumes, and the runtime can
+    // see the timer before the socket's buffered events. Those events must not be dropped.
+    #[tokio::test(start_paused = true)]
+    async fn events_buffered_while_stopped_survive_an_elapsed_idle_deadline() {
+        let fake = Fake::default();
+        let (connection, mut batches) = connect(fake.clone(), options(60));
+        until(|| fake.count() == 1).await;
+        fake.at(0).push(ev(CONNECTED, 1));
+        until(|| connection.state().status == Status::Connected).await;
+
+        tokio::time::advance(Duration::from_secs(90)).await;
+        settle().await;
+        fake.at(0).push(ev("session.updated", 2));
+        fake.at(0).push(ev("session.updated", 3));
+        let mut events = Vec::new();
+        drain(&mut batches, &mut events).await;
+        assert_eq!(events, vec![ev(CONNECTED, 1), ev("session.updated", 2), ev("session.updated", 3)]);
+        assert_eq!(fake.count(), 1);
+        assert!(!fake.at(0).dropped());
+        assert!(!records(&connection).contains(&disconnected(1, "Event stream stalled")));
+
+        // A stream that stays silent through the grace still counts as stalled.
+        let silent = Instant::now();
+        until(|| fake.count() == 2).await;
+        assert!(silent.elapsed() >= Duration::from_millis(60) + STALL_GRACE);
+        assert!(records(&connection).contains(&disconnected(1, "Event stream stalled")));
     }
 
     #[tokio::test(start_paused = true)]
