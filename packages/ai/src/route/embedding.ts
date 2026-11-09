@@ -1,6 +1,12 @@
 import { Effect } from "effect"
 import type { HttpClientResponse } from "effect/http"
-import { EmbeddingModel, type EmbeddingOptions, type EmbeddingRequest, type EmbeddingResponse } from "../embedding.js"
+import {
+  EmbeddingModel,
+  EmbeddingResponse,
+  EmbeddingUsage,
+  type EmbeddingOptions,
+  type EmbeddingRequest,
+} from "../embedding.js"
 import { ProviderID, type HttpOptions, type AIError, type ProviderOptions } from "../schema/index.js"
 import { Auth } from "./auth.js"
 import { Endpoint } from "./endpoint.js"
@@ -31,6 +37,11 @@ export interface Patch {
   readonly auth?: Auth.Definition
   readonly headers?: Record<string, string>
   readonly http?: HttpOptions
+  /**
+   * Most values one HTTP request may carry. Longer requests are split into requests of this size, sent a few at a
+   * time, and joined back in value order.
+   */
+  readonly maxValues?: number
 }
 
 export interface Route {
@@ -42,6 +53,7 @@ export interface Route {
   readonly auth: Auth.Definition
   readonly headers?: Record<string, string>
   readonly http?: HttpOptions
+  readonly maxValues?: number
   readonly with: (patch: Patch) => Route
   readonly model: <Options extends EmbeddingOptions = EmbeddingOptions>(input: {
     readonly id: string
@@ -67,6 +79,7 @@ export const make = (input: MakeInput): Route => {
     auth: input.auth ?? Auth.none,
     headers: input.headers,
     http: input.http,
+    maxValues: input.maxValues,
   }
   return {
     ...route,
@@ -80,6 +93,7 @@ export const make = (input: MakeInput): Route => {
         endpoint: patch.endpoint === undefined ? route.endpoint : Endpoint.merge(route.endpoint, patch.endpoint),
         headers: patch.headers === undefined ? route.headers : { ...route.headers, ...patch.headers },
         http: patch.http ?? route.http,
+        maxValues: patch.maxValues ?? route.maxValues,
       }),
     model: <Options extends EmbeddingOptions>(model: {
       readonly id: string
@@ -90,10 +104,50 @@ export const make = (input: MakeInput): Route => {
         provider,
         http: route.http,
         providerOptions: model.providerOptions,
-        route: { id: route.id, generate: transport(route).generate },
+        route: { id: route.id, generate: split(route.maxValues, transport(route).generate) },
       }),
   }
 }
+
+const CONCURRENCY = 4
+
+/**
+ * Splits a request whose values exceed `maxValues` and joins the parts: vectors in value order, `inputTokens` summed
+ * when every part reports it, and each part's metadata in order under `providerMetadata[key].responses`.
+ */
+const split =
+  (maxValues: number | undefined, generate: Generate): Generate =>
+  (request, execute) => {
+    if (maxValues === undefined || request.values.length <= maxValues) return generate(request, execute)
+    const chunks = Array.from({ length: Math.ceil(request.values.length / maxValues) }, (_, index) =>
+      request.values.slice(index * maxValues, (index + 1) * maxValues),
+    )
+    return Effect.forEach(chunks, (values) => generate({ ...request, values }, execute), {
+      concurrency: CONCURRENCY,
+    }).pipe(
+      Effect.map((responses) => {
+        const tokens = responses.map((response) => response.usage?.inputTokens)
+        const keys = [...new Set(responses.flatMap((response) => Object.keys(response.providerMetadata ?? {})))]
+        return new EmbeddingResponse({
+          embeddings: responses.flatMap((response) => response.embeddings),
+          usage: tokens.every((count) => count !== undefined)
+            ? new EmbeddingUsage({ inputTokens: tokens.reduce((sum, count) => sum + count, 0) })
+            : undefined,
+          providerMetadata:
+            keys.length === 0
+              ? undefined
+              : Object.fromEntries(
+                  keys.map((key) => [
+                    key,
+                    { responses: responses.map((response) => response.providerMetadata?.[key] ?? {}) },
+                  ]),
+                ),
+        })
+      }),
+    )
+  }
+
+type Generate = EmbeddingModel["route"]["generate"]
 
 // The HTTP plumbing (URL, query, auth, headers, `http` overlays, surrogate sanitizing) is the one media routes use.
 const transport = (route: Omit<Route, "with" | "model">) =>

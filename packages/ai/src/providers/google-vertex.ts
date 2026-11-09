@@ -1,10 +1,12 @@
 import { Effect } from "effect"
 import type { ProviderPackage } from "../provider-package.js"
 import { Gemini } from "../protocols/gemini.js"
+import { GoogleEmbedContent, type VertexOptionsInput } from "../protocols/google-embed-content.js"
 import { GoogleImages } from "../protocols/google-images.js"
 import { ProviderShared } from "../protocols/shared.js"
 import { Auth } from "../route/auth.js"
 import { Route } from "../route/client.js"
+import { EmbeddingRoute } from "../route/embedding.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
 import {
@@ -82,6 +84,18 @@ const route = Route.make({
 
 export const routes = [route]
 
+export type { VertexOptionsInput as GoogleVertexEmbeddingOptions } from "../protocols/google-embed-content.js"
+
+const embeddingRoute = EmbeddingRoute.make({
+  id: "google-vertex-embed-content",
+  provider: id,
+  providerMetadataKey: "vertex",
+  protocol: GoogleEmbedContent.vertexProtocol,
+  endpoint: Endpoint.path(({ request }) => `/models/${request.model.id}:embedContent`),
+  // Vertex embedContent embeds one content per request.
+  maxValues: 1,
+})
+
 const configuredRoute = (input: Config, modelID: string | ModelID) => {
   const {
     accessToken: _accessToken,
@@ -129,6 +143,18 @@ export const configure = (input: Config = {}) => {
         providerOptions,
       })
     },
+    /** `gemini-embedding-2` through Vertex `embedContent`; it needs project credentials, not an Express Mode key. */
+    embedding: (modelID: string | ModelID, providerOptions?: ProviderOptions) => {
+      const target = connection(input, modelID)
+      if (GoogleVertexShared.apiKey(input) !== undefined && input.baseURL === undefined)
+        throw new ProviderConfigurationError({
+          provider: id,
+          message: "Google Vertex embedContent does not support Express Mode API keys; use project credentials",
+        })
+      return embeddingRoute
+        .with({ endpoint: target.endpoint, auth: target.auth, headers: input.headers, http: input.http })
+        .model<VertexOptionsInput>({ id: modelID, providerOptions })
+    },
     configure,
   }
 }
@@ -142,6 +168,10 @@ export const model: ProviderPackage.Model<Settings, GeminiProviderOptionsInput> 
 export const imageModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
   return configure(input).image(modelID, input.providerOptions)
+}
+export const embeddingModel = (modelID: string, settings?: Settings) => {
+  const input = config(settings)
+  return configure(input).embedding(modelID, input.providerOptions)
 }
 
 function config({ accessToken, apiKey, baseURL, body, headers, location, project, ...providerOptions }: Settings = {}) {
