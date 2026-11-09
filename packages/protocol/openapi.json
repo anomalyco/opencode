@@ -24388,9 +24388,15 @@
             "properties": {
               "text": {
                 "type": "string"
+              },
+              "tokens": {
+                "$ref": "#/components/schemas/TokenUsage.Info"
+              },
+              "cost": {
+                "$ref": "#/components/schemas/Money.USD"
               }
             },
-            "required": ["text"],
+            "required": ["text", "tokens", "cost"],
             "additionalProperties": false
           }
         },
