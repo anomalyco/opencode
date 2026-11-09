@@ -183,8 +183,8 @@ export const layer = (options?: Options) =>
         const auth = entry.manifest.auth
         const credential = (yield* credentials.list(entry.integrationID)).at(-1)
         const variables = auth && credential?.value.type === "key" ? { [auth.env]: credential.value.key } : undefined
-        // Without a credential the source supplies nothing, so logging out stops its remote config from applying.
-        if (!variables) return []
+        // Logging out drops the saved remote config, so the source supplies nothing until a fresh fetch succeeds.
+        if (!variables) return yield* wellknown.clearCached(entry.origin).pipe(Effect.as([]))
         // A failed refresh keeps the last resolved config so remote providers and allowlists do not disappear.
         const configs = yield* wellknown.resolve(entry, variables).pipe(
           Effect.catch((error) =>

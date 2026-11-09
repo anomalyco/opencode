@@ -948,6 +948,7 @@ describe("Config", () => {
               resolve: (_entry, variables) =>
                 available ? Effect.succeed([{ shell: variables.TOKEN }]) : Effect.fail(new Error("expired credential")),
               cached: () => Effect.succeed([]),
+              clearCached: () => Effect.void,
             }),
           ),
           deps: [],
@@ -1093,9 +1094,12 @@ describe("Config", () => {
           key = undefined
           expect(yield* warm.reload("logged-out", warm.switched)).toEqual(removed)
 
-          // Logging back in while the remote config is still unavailable restores the last resolved config.
+          // Logging out drops the saved config, so logging back in while the remote is down supplies nothing.
           key = "secret"
+          expect(yield* warm.reload("logged-in-unavailable", warm.switched)).toEqual(removed)
+          configStatus = 200
           expect(yield* warm.reload("logged-in", warm.switched)).toEqual(loaded)
+          configStatus = 503
 
           manifestStatus = 503
           const updated = yield* warm.bus
@@ -1182,6 +1186,7 @@ describe("Config", () => {
               // Exercise the loader boundary against a malformed implementation response.
               resolve: () => Effect.succeed([null as unknown as WellKnown.Config]),
               cached: () => Effect.succeed([]),
+              clearCached: () => Effect.void,
             }),
           ),
           deps: [],
