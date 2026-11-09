@@ -120,7 +120,7 @@ test("generates syntax with one categorical hue", () => {
   }
 })
 
-test("keeps paste chip text readable on its warning background", () => {
+test("draws paste chip text dark in dark mode and light in light mode", () => {
   for (const mode of ["dark", "light"] as const) {
     const theme = resolveThemeDocument(getOpenCode2Theme(), mode)
     const owner = new ResourceContext({ objectCapacity: 1, renderCellsMax: 1 })
@@ -128,7 +128,8 @@ test("keeps paste chip text readable on its warning background", () => {
     try {
       const style = syntax.getStyle("extmark.paste")!
       expect(style.bg!.equals(theme.text.feedback.warning.base)).toBeTrue()
-      expect(luminance(style.fg!)).toBeLessThan(luminance(style.bg!))
+      if (mode === "dark") expect(luminance(style.fg!)).toBeLessThan(luminance(style.bg!))
+      else expect(luminance(style.fg!)).toBeGreaterThan(luminance(style.bg!))
     } finally {
       syntax.destroy()
       owner.destroy()

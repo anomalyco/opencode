@@ -16,7 +16,11 @@ export function generateSyntax(theme: ResolvedThemeTokens, owner: NativeResource
     rule(["extmark.skill"], (theme.categorical[1] ?? theme.categorical[0])[step], { bold: true }),
     rule(
       ["extmark.paste"],
-      readableOn(feedback.warning.base, [theme.text.action.primary.focused, theme.background.base, theme.text.base]),
+      oppositeOf(theme.text.base, [
+        theme.background.base,
+        theme.text.action.primary.focused,
+        theme.background.raised.base,
+      ]),
       {
         background: feedback.warning.base,
         bold: true,
@@ -98,9 +102,9 @@ function rule(
   return { scope, style: { foreground, ...style } }
 }
 
-// The paste chip sits on a solid warning fill, so pick whichever text candidate reads best on it.
-function readableOn(background: RGBA, candidates: RGBA[]) {
+// The paste chip's text is the inverse of the theme's text: dark in dark mode, light in light mode.
+function oppositeOf(text: RGBA, candidates: RGBA[]) {
   const opaque = candidates.filter((color) => color.a === 1)
   if (!opaque.length) return candidates[0]!
-  return opaque.reduce((best, color) => (contrast(color, background) > contrast(best, background) ? color : best))
+  return opaque.reduce((best, color) => (contrast(color, text) > contrast(best, text) ? color : best))
 }
