@@ -220,3 +220,29 @@ async fn event_stream_decodes_generated_events() {
     let error = client(&script).event_subscribe(&EventSubscribeInput::default()).await.unwrap_err();
     assert!(matches!(error, Error::UnsupportedContentType(_)), "{error:?}");
 }
+
+// Expected: `reply`, which takes any status, makes an error status a declared error when its body has a tag or a
+// message, and else the status with the body's text, whatever the content type: never `UnsupportedContentType`.
+#[tokio::test]
+async fn a_reply_error_carries_the_status_and_the_body() {
+    let long = "x".repeat(300);
+    let cases = [
+        (404, "text/plain", "no such page\n", "UnexpectedStatus: 404: no such page"),
+        (500, "text/html", "<p>boom</p>", "UnexpectedStatus: 500: <p>boom</p>"),
+        (404, "application/json", r#"{"_tag":"NotFound","message":"gone"}"#, "gone"),
+        (500, "application/json", r#"{"name":"Bare"}"#, "Bare"),
+        (500, "application/json", r#"{"error":"x"}"#, r#"UnexpectedStatus: 500: {"error":"x"}"#),
+        (404, "application/json", "", "UnexpectedStatus: 404"),
+        (500, "", "", "UnexpectedStatus: 500"),
+    ];
+    for (status, content_type, body, want) in cases {
+        let script = Script::new(status, content_type, body);
+        let call = opencode_api::client::Call::new("GET", "/x".to_owned(), 200, &[]);
+        let error = client(&script).reply(call).await.unwrap_err();
+        assert_eq!((error.tui_message(), error.reason() != "UnsupportedContentType"), (want.to_owned(), true));
+    }
+    let script = Script::new(500, "text/plain", long);
+    let call = opencode_api::client::Call::new("GET", "/x".to_owned(), 200, &[]);
+    let error = client(&script).reply(call).await.unwrap_err().to_string();
+    assert_eq!(error, format!("UnexpectedStatus: 500: {}…", "x".repeat(200)));
+}

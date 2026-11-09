@@ -6,17 +6,6 @@ use opencode_plugin::abi;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
-/// Every error status: a plugin decodes the body of the error it gets itself.
-const STATUSES: [u16; 200] = {
-    let mut statuses = [0; 200];
-    let mut index = 0;
-    while index < 200 {
-        statuses[index] = 400 + index as u16;
-        index += 1;
-    }
-    statuses
-};
-
 /// The fetch of `call`, as a generated builder made it. Its headers and a byte body do not cross; no builder a
 /// built-in uses sets them.
 pub fn fetch_of(call: Call) -> abi::Fetch {
@@ -50,7 +39,7 @@ pub(crate) fn call_of(fetch: abi::Fetch) -> Result<Call, String> {
     if !fetch.path.starts_with('/') {
         return Err(format!("the path {} does not start with /", fetch.path));
     }
-    let mut call = Call::new(method, fetch.path, 200, &STATUSES);
+    let mut call = Call::new(method, fetch.path, 200, &[]);
     call.query = fetch.query;
     call.body = fetch.body.map(Body::Json);
     Ok(call)

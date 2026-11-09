@@ -13,6 +13,10 @@ pub enum Error {
     /// A status that is neither the success status nor a declared error status.
     #[error("UnexpectedStatus: {status}")]
     UnexpectedStatus { status: u16 },
+    /// An error status a caller that accepts any status got, such as a plugin's fetch, with a body that is not a
+    /// declared error: the status and the body's text, cut short.
+    #[error("UnexpectedStatus: {status}{}", if .body.is_empty() { String::new() } else { format!(": {}", .body) })]
+    Status { status: u16, body: String },
     /// The response has the wrong content type.
     #[error("UnsupportedContentType: {}", .0.as_deref().unwrap_or("none"))]
     UnsupportedContentType(Option<String>),
@@ -32,7 +36,7 @@ impl Error {
     pub fn reason(&self) -> &str {
         match self {
             Self::Transport(_) => "Transport",
-            Self::UnexpectedStatus { .. } => "UnexpectedStatus",
+            Self::UnexpectedStatus { .. } | Self::Status { .. } => "UnexpectedStatus",
             Self::UnsupportedContentType(_) => "UnsupportedContentType",
             Self::MalformedResponse(_) => "MalformedResponse",
             Self::SseEventTooLarge => "SseEventTooLarge",

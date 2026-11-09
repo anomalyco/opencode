@@ -206,7 +206,7 @@ impl Host for Tui {
         let client = self.data.client().clone();
         let call = super::fetch::call_of(fetch);
         self.app
-            .spawn(async move { client.reply(call?).await.map_err(|error| error.to_string()) }, move |_, result| {
+            .spawn(async move { client.reply(call?).await.map_err(|error| error.tui_message()) }, move |_, result| {
                 reply(result)
             });
     }

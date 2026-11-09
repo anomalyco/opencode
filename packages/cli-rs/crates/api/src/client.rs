@@ -191,13 +191,13 @@ impl Client {
     }
 
     /// Sends `call` and accepts any 2xx status: the JSON body, or `null` without one. For a caller that does not know
-    /// which status a call answers with, such as a plugin's fetch.
+    /// which status a call answers with, such as a plugin's fetch. Any other status is an error: a declared error when
+    /// the body is a JSON object with a tag or a message, else the status with the body's text.
     pub async fn reply(&self, call: Call) -> Result<Value, Error> {
-        let declared = call.declared_statuses;
         let request = self.prepare(call)?;
         let response = self.transport.send(request).await.map_err(Error::Transport)?;
         if !(200..300).contains(&response.status) {
-            return Err(response_error(response, declared).await);
+            return Err(status_error(response).await);
         }
         let bytes = response.bytes().await.map_err(Error::Transport)?;
         if bytes.is_empty() {
@@ -339,6 +339,32 @@ async fn response_error(response: Response, declared: &[u16]) -> Error {
         Ok(body) => Error::Declared(Box::new(DeclaredError::new(status, body))),
         Err(error) => Error::MalformedResponse(error.to_string()),
     }
+}
+
+async fn status_error(response: Response) -> Error {
+    const LIMIT: usize = 200;
+    let json = is_content_type(&response, "application/json")
+        || response.header("content-type").is_some_and(|value| value.contains("+json"));
+    let status = response.status;
+    let bytes = match response.bytes().await {
+        Ok(bytes) => bytes,
+        Err(error) => return Error::Transport(error),
+    };
+    let declared = json
+        .then(|| serde_json::from_slice(&bytes).ok())
+        .flatten()
+        .map(|body| DeclaredError::new(status, body))
+        .filter(|declared| declared.tag.is_some() || declared.message.is_some());
+    if let Some(declared) = declared {
+        return Error::Declared(Box::new(declared));
+    }
+    let text = String::from_utf8_lossy(&bytes);
+    let text = text.trim();
+    let body = match text.char_indices().nth(LIMIT) {
+        Some((end, _)) => format!("{}…", &text[..end]),
+        None => text.to_owned(),
+    };
+    Error::Status { status, body }
 }
 
 /// The body of a JSON response: checks the content type and rejects an empty body, as `json` does in
