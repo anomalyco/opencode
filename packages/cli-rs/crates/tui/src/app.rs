@@ -616,7 +616,7 @@ fn install_keys(tui: &Rc<Tui>) {
 
 fn install_theme(tui: &Rc<Tui>) {
     if let Some(colors) = tui.app.palette().as_ref().map(TerminalColors::from_palette) {
-        tui.theme.borrow_mut().palette(colors);
+        tui.theme.borrow_mut().startup_palette(colors);
     }
     tui.app.on_theme_mode(bind!(tui, |tui, _, mode| {
         tui.theme.borrow_mut().terminal_mode(mode);

@@ -220,6 +220,15 @@ impl ThemeState {
         self.effects.push(Effect::CachePalette(colors));
     }
 
+    /// The palette the terminal reported at startup. It stands in for TS's first probe, which only `system` makes
+    /// (`refreshPalette` returns early), so other themes neither take it nor cache it. A cached palette still sets
+    /// their mode when the terminal reports none.
+    pub fn startup_palette(&mut self, colors: TerminalColors) {
+        if self.active == "system" {
+            self.palette(colors);
+        }
+    }
+
     /// The terminal said its colors changed (`CSI ? 997 ; 1 n` or `; 2 n`), or the TUI got `SIGUSR2`.
     pub fn colors_changed(&mut self) {
         self.refresh_palette();
@@ -361,6 +370,47 @@ mod tests {
         assert_eq!(state.mode(), ThemeMode::Light);
         let state = ThemeState::new(ThemeStateOptions { palette: light, terminal: Some(ThemeMode::Dark), ..options() });
         assert_eq!(state.mode(), ThemeMode::Dark);
+    }
+
+    // Expected: each terminal reply, with and without a cached light palette, starts in TS's mode, and only `system`
+    // caches the startup palette (TS `refreshPalette` returns early for other themes). Actual: every theme cached it,
+    // so a later terminal that answers nothing started in the last terminal's mode.
+    #[test]
+    fn the_startup_palette_is_cached_only_under_system() {
+        let light = |palette: TerminalColors| TerminalColors {
+            default_background: Some("#fdf6e3".to_owned()),
+            default_foreground: Some("#333333".to_owned()),
+            ..palette
+        };
+        let mode_only = light(TerminalColors::default());
+        let full = light(palette("#fdf6e3"));
+        let night = palette("#1d1f21");
+        let (dark, bright) = (Some(ThemeMode::Dark), Some(ThemeMode::Light));
+        // (reply, terminal mode, startup palette, cached palette, mode under `opencode` and `system`)
+        let cases = [
+            ("none or DA1 only", None, None, None, ThemeMode::Dark),
+            ("none or DA1 only, cached", None, None, Some(full.clone()), ThemeMode::Light),
+            ("mode", bright, Some(mode_only.clone()), None, ThemeMode::Light),
+            ("mode, cached dark", bright, Some(mode_only), Some(night.clone()), ThemeMode::Light),
+            ("full", bright, Some(full.clone()), None, ThemeMode::Light),
+            ("full dark, cached light", dark, Some(night), Some(full), ThemeMode::Dark),
+        ];
+        for (reply, terminal, startup, cached, want) in cases {
+            for name in ["opencode", "system"] {
+                let mut state = ThemeState::new(ThemeStateOptions {
+                    name: Some(name.to_owned()),
+                    terminal,
+                    palette: cached.clone(),
+                    ..options()
+                });
+                if let Some(colors) = startup.clone() {
+                    state.startup_palette(colors);
+                }
+                assert_eq!(state.mode(), want, "{reply} under {name}");
+                let caches = state.take_effects().iter().any(|effect| matches!(effect, Effect::CachePalette(_)));
+                assert_eq!(caches, name == "system" && startup.is_some(), "{reply} under {name}");
+            }
+        }
     }
 
     #[test]
