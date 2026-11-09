@@ -2,289 +2,193 @@
 //!
 //! - the running subagents and shells of the session (a click opens the first child), its goal (`goal.rs`),
 //!   and its context use and cost, as far as they fit;
-//! - otherwise the `agents` and `commands` hints;
+//! - otherwise the `agents` and `commands` hints, which read as disabled while the session pane does not own the input;
 //! - in shell mode, `esc exit shell mode`.
+//!
+//! It is a plugin of the one API (O-67). Each mount of a session's footer counts in [`Goals`], which reads the goal.
 
 use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 
-use opencode_api::generated::SessionID;
-use opencode_plugin::{Definition, Placement, SlotInput, Slotted, slot};
-use opencode_store::{Changes, SessionStatus, State};
-use opencode_ui::bind;
-use opentui::prelude::*;
+use opencode_plugin::abi::{self, Changed, Click, Layout, Node, Placement, PromptInput, Render, SlotInput, Span, Wrap};
+use opencode_plugin::slot;
 use unicode_width::UnicodeWidthStr;
 
-use super::goal::{self, Goal, Goals, Tracker};
-use super::sidebar_context::{SessionUsage, Usage, money};
-use crate::app::Tui;
+use super::goal::{self, Goal, Goals};
+use super::sidebar_context::{self, Last, Usage, money};
 
-pub fn plugin() -> Definition<Tui> {
-    Definition::new("opencode.prompt.footer", |cx| {
-        let goals = Rc::new(Goals::default());
-        goals.install(cx.host());
-        let dispose = goals.clone();
-        cx.on_dispose(move || dispose.dispose());
-        cx.slot(Placement::append(slot::PROMPT_FOOTER), move |tui, input| Box::new(Footer::new(tui, &goals, input)));
-    })
+pub fn plugin() -> abi::Plugin {
+    abi::Plugin { id: "opencode.prompt.footer", setup }
 }
 
-/// One mounted footer; the prompt mounts it again when its input changes.
-struct Footer(Rc<Inner>);
-
-struct Inner {
-    root: View,
-    session: Option<SessionID>,
-    shell: bool,
-    show_details: bool,
-    goal: Option<Rc<Tracker>>,
-    shown: RefCell<Option<Model>>,
-    /// What the footer reads from the store, read again only on the changes that touch it.
-    stored: RefCell<Option<Stored>>,
-    usage: SessionUsage,
+fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let goals = Rc::new(Goals::default());
+    goals.register(setup);
+    let shown = goals.clone();
+    let footer: RefCell<Footer> = RefCell::default();
+    setup.slot(Placement::append(slot::PROMPT_FOOTER), move |read, input, changed| {
+        footer.borrow_mut().render(read, input, changed, &shown)
+    });
+    setup.on_mount(Placement::append(slot::PROMPT_FOOTER), move |host, input, mounted| {
+        if let Some(session) = &input.session_id {
+            goals.mounted(host, session, mounted);
+        }
+    });
+    Ok(())
 }
 
-#[derive(Clone, Default)]
-struct Stored {
-    subagents: usize,
-    shells: usize,
-    usage: Option<Usage>,
-    cost: f64,
+/// What the footer last read and showed. One footer renders at a time: a prompt mounts it again when its input
+/// changes, and drops the last one right after.
+#[derive(Default)]
+struct Footer {
+    input: Option<SlotInput>,
+    /// The session's usage, cost, running subagents and shells.
+    last: Option<Last>,
     /// The usage and the cost as the footer prints them.
     status: Rc<[String]>,
+    printed: sidebar_context::Model,
+    width: u16,
+    shown: Option<Model>,
 }
 
 /// What the footer shows; it renders again only when this changes.
 #[derive(Clone, Debug, PartialEq)]
 struct Model {
+    prompt: PromptInput,
     width: u16,
-    live: Option<Live>,
-    goal: Option<Goal>,
+    subagents: usize,
+    shells: usize,
+    goal: Option<Rc<Goal>>,
     status: Rc<[String]>,
-    usage: bool,
-    shortcuts: bool,
-    agents: String,
-    commands: String,
+    keys: Keys,
     /// The session pane owns the input; the hints read as disabled while a right pane has it.
     interactive: bool,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-struct Live {
-    key: Option<String>,
-    subagents: Option<String>,
-    shells: Option<String>,
+#[derive(Clone, Debug, Default, PartialEq)]
+struct Keys {
+    child: Option<String>,
+    agents: String,
+    commands: Option<String>,
 }
 
 impl Footer {
-    fn new(tui: &Tui, goals: &Goals, input: &SlotInput) -> Self {
-        let prompt =
-            input.prompt.clone().unwrap_or(opencode_plugin::slot::PromptFooter { shell: false, show_details: true });
-        let session = input.session_id.clone().map(SessionID);
-        let inner = Rc::new_cyclic(|this: &Weak<Inner>| {
-            let goal = session.clone().map(|session| {
-                goals.track(tui, session, bind!(this, |inner, tui| inner.refresh(tui, &Changes::default())))
-            });
-            Inner {
-                root: View::new(&tui.app).row().gap(2).min_width(0),
-                session,
-                shell: prompt.shell,
-                show_details: prompt.show_details,
-                goal,
-                shown: RefCell::new(None),
-                stored: RefCell::new(None),
-                usage: SessionUsage::default(),
+    fn render(&mut self, read: &dyn abi::Read, input: &SlotInput, changed: &Changed, goals: &Goals) -> Render {
+        let fresh = changed.all || self.input.as_ref() != Some(input);
+        if fresh {
+            *self = Footer { input: Some(input.clone()), width: read.info().size.0, ..Footer::default() };
+        } else if changed.size {
+            self.width = read.info().size.0;
+        }
+        if let Some(session) = &input.session_id {
+            let last = self.last.get_or_insert_with(|| Last::new(session));
+            let printed = last.update(read, changed, fresh);
+            if fresh || printed != self.printed {
+                self.status = printed
+                    .map(|(usage, cost)| {
+                        [usage.map(format_usage), (cost > 0.0).then(|| money(cost))].into_iter().flatten().collect()
+                    })
+                    .unwrap_or_default();
+                self.printed = printed;
             }
-        });
-        inner.refresh(tui, &Changes::everything());
-        Self(inner)
+        }
+        let last = self.last.as_ref();
+        let live = last.is_some_and(|last| last.running + last.shells > 0);
+        let model = Model {
+            prompt: input.prompt.unwrap_or(PromptInput { shell: false, show_details: true }),
+            width: self.width,
+            subagents: last.map_or(0, |last| last.running),
+            shells: last.map_or(0, |last| last.shells),
+            goal: input.session_id.as_deref().and_then(|session| goals.goal(session)),
+            status: self.status.clone(),
+            // A key read costs, and the footer reads them with each change batch; the first child's only while one
+            // runs.
+            keys: Keys {
+                child: live.then(|| read.shortcut("session.child.first")).flatten(),
+                agents: read.shortcut("agent.cycle").unwrap_or_default(),
+                commands: read.shortcut("command.palette.show"),
+            },
+            interactive: read.interactive(),
+        };
+        if !fresh && self.shown.as_ref() == Some(&model) {
+            return Render::Keep;
+        }
+        let node = view(&model, input.session_id.as_deref().unwrap_or_default());
+        self.shown = Some(model);
+        Render::Show(node)
     }
 }
 
-impl Slotted<Tui> for Footer {
-    fn root(&self) -> View {
-        self.0.root.clone()
+fn view(model: &Model, session: &str) -> Node {
+    let text = |spans: Vec<Span>| Node::text(spans).wrap(Wrap::None).layout(Layout::default().shrink(false));
+    let root =
+        |shrink: bool, children| Node::row(children).gap(2).layout(Layout::default().shrink(shrink).min_width_zero());
+    if model.prompt.shell {
+        let label = if model.width < 44 { "shell" } else { "exit shell mode" };
+        let hint = Node::text([Span::new("esc ").fg("text.base"), Span::new(label).fg("text.muted")])
+            .layout(Layout::default().shrink(false));
+        return root(false, vec![hint]);
     }
-
-    // The width, the shortcuts and the goal live outside the store, so any change reads them again.
-    fn sync(&self, tui: &Tui, changes: &Changes) {
-        if !changes.is_empty() {
-            self.0.refresh(tui, changes);
+    let plural =
+        |count: usize, what: &str| (count > 0).then(|| format!("{count} {what}{}", if count == 1 { "" } else { "s" }));
+    let live: Vec<String> =
+        [plural(model.subagents, "subagent"), plural(model.shells, "shell")].into_iter().flatten().collect();
+    let (usage, shortcuts) = match model.status.is_empty() {
+        true => (false, model.width >= 44),
+        false => layout(
+            i64::from(model.width) - 8,
+            &model.status,
+            model.keys.commands.as_ref().map(|key| format!("{key} commands")).as_slice(),
+        ),
+    };
+    let details = model.prompt.show_details;
+    let hint = |key: &str, label: &str| match model.interactive {
+        true => text(vec![Span::new(format!("{key} ")).fg("text.base"), Span::new(label).fg("text.muted")]),
+        false => {
+            let span = Span { dim: true, ..Span::new(format!("{key} {label}")).fg("text.action.primary.disabled") };
+            text(vec![span])
         }
-    }
-}
-
-impl Inner {
-    fn model(&self, tui: &Tui, changes: &Changes) -> Model {
-        let width = tui.app.size().0;
-        if let Some(session) = &self.session {
-            // A shell of the session may run in any location.
-            tui.data.read(|state| {
-                let stale = self.stored.borrow().is_none()
-                    || !changes.locations.is_empty()
-                    || crate::routes::session::sidebar::touches(state, changes, session);
-                if stale {
-                    let stored = self.read(state, changes, session);
-                    *self.stored.borrow_mut() = Some(stored);
-                }
-            });
+    };
+    let busy = model.goal.is_some() || !live.is_empty() || !model.status.is_empty();
+    let mut children = Vec::new();
+    let shrink = !busy || !(details && usage);
+    if busy {
+        let mut status = Vec::new();
+        if !live.is_empty() {
+            let mut spans: Vec<Span> =
+                model.keys.child.iter().map(|key| Span::new(format!("{key} ")).fg("text.base")).collect();
+            spans.push(Span::new(live.join(" · ")));
+            status.push(
+                text(spans)
+                    .fg("text.muted")
+                    .hover_fg("text.base")
+                    .on_click(Click::command("session.child.first", None)),
+            );
         }
-        let stored = self.stored.borrow().clone().unwrap_or_default();
-        let plural = |count: usize, what: &str| {
-            (count > 0).then(|| format!("{count} {what}{}", if count == 1 { "" } else { "s" }))
-        };
-        let (subagents, shells) = (plural(stored.subagents, "subagent"), plural(stored.shells, "shell"));
-        // The keymap reads the store, so it is asked after the read above.
-        let keymap = &tui.keymap;
-        let live = (subagents.is_some() || shells.is_some()).then(|| Live {
-            key: keymap.shortcut("session.child.first"),
-            subagents,
-            shells,
-        });
-        let commands = keymap.shortcut("command.palette.show");
-        let (usage, shortcuts) = if stored.status.is_empty() {
-            (false, width >= 44)
-        } else {
-            layout(
-                i64::from(width) - 8,
-                &stored.status,
-                commands.as_ref().map(|key| format!("{key} commands")).as_slice(),
-            )
-        };
-        Model {
-            width,
-            live,
-            goal: self.goal.as_ref().and_then(|goal| goal.goal()),
-            status: stored.status,
-            usage,
-            shortcuts,
-            agents: keymap.shortcut("agent.cycle").unwrap_or_default(),
-            commands: commands.unwrap_or_default(),
-            interactive: crate::frame::session_interactive(tui),
-        }
-    }
-
-    fn read(&self, state: &State, changes: &Changes, session: &SessionID) -> Stored {
-        let subagents = state
-            .family(session)
-            .iter()
-            .filter(|id| *id != session && state.status(id) == SessionStatus::Running)
-            .count();
-        let shells = state.session_shells(session).len();
-        let usage = self.usage.read(state, changes, session);
-        let cost = state.cost(session);
-        let status = match self.stored.borrow().as_ref() {
-            Some(stored) if stored.usage == usage && stored.cost == cost => stored.status.clone(),
-            _ => [usage.map(|usage| format_usage(usage.tokens, usage.percent)), (cost > 0.0).then(|| money(cost))]
-                .into_iter()
-                .flatten()
-                .collect(),
-        };
-        Stored { subagents, shells, usage, cost, status }
-    }
-
-    fn refresh(&self, tui: &Tui, changes: &Changes) {
-        let model = self.model(tui, changes);
-        if self.shown.borrow().as_ref() == Some(&model) {
-            return;
-        }
-        self.root.clear();
-        self.render(tui, &model);
-        *self.shown.borrow_mut() = Some(model);
-        tui.app.request_redraw();
-    }
-
-    fn render(&self, tui: &Tui, model: &Model) {
-        let theme = tui.page();
-        let app = &tui.app;
-        let root = &self.root;
-        if self.shell {
-            let label = if model.width < 44 { "shell" } else { "exit shell mode" };
-            root.shrink(0.0);
-            root.add(&Text::new(app, vec!["esc ".fg(theme.text.base), label.fg(theme.text.muted)]).shrink(0.0));
-            return;
-        }
-        let details = self.show_details;
-        let hint = |key: &str, label: &str| {
-            if !model.interactive {
-                return Text::new(app, format!("{key} {label}"))
-                    .fg(theme.text.action.primary.disabled)
-                    .dim()
-                    .wrap(WrapMode::None)
-                    .shrink(0.0);
+        if let Some(goal) = &model.goal {
+            if !live.is_empty() {
+                status.push(text(vec![Span::new(" · ").fg("text.muted")]));
             }
-            Text::new(app, vec![format!("{key} ").fg(theme.text.base), label.fg(theme.text.muted)])
-                .wrap(WrapMode::None)
-                .shrink(0.0)
-        };
-        let busy = model.goal.is_some() || model.live.is_some() || !model.status.is_empty();
-        if busy {
-            let shrink = if details && model.usage { 0.0 } else { 1.0 };
-            root.shrink(shrink);
-            let status = View::new(app).row().shrink(shrink).min_width(0);
-            if let Some(live) = &model.live {
-                status.add(&live_view(tui, live));
-            }
-            if let (Some(goal), Some(tracker)) = (&model.goal, &self.goal) {
-                if model.live.is_some() {
-                    status.add(&Text::new(app, " · ").fg(theme.text.muted).wrap(WrapMode::None).shrink(0.0));
-                }
-                status.add(&goal::status(tui, tracker, goal));
-            }
-            if details && model.usage {
-                let lead = if model.live.is_some() || model.goal.is_some() { " · " } else { "" };
-                status.add(
-                    &Text::new(app, format!("{lead}{}", model.status.join(" · ")))
-                        .fg(theme.text.muted)
-                        .wrap(WrapMode::None)
-                        .shrink(0.0),
-                );
-            }
-            root.add(&status);
-        } else {
-            root.shrink(0.0);
-            if details && model.shortcuts {
-                root.add(&hint(&model.agents, "agents"));
-            }
+            status.push(goal::status(session, goal));
         }
-        if details && model.shortcuts {
-            root.add(&hint(&model.commands, "commands"));
+        if details && usage {
+            let lead = if !live.is_empty() || model.goal.is_some() { " · " } else { "" };
+            status.push(text(vec![Span::new(format!("{lead}{}", model.status.join(" · "))).fg("text.muted")]));
         }
+        children.push(Node::row(status).layout(Layout::default().shrink(shrink).min_width_zero()));
+    } else if details && shortcuts {
+        children.push(hint(&model.keys.agents, "agents"));
     }
-}
-
-/// The running subagents and shells; they brighten under the pointer, and a click opens the first child.
-fn live_view(tui: &Tui, live: &Live) -> View {
-    let theme = tui.page();
-    let app = &tui.app;
-    let mut spans = Vec::new();
-    if let Some(key) = &live.key {
-        spans.push(format!("{key} ").fg(theme.text.base));
+    if details && shortcuts {
+        children.push(hint(model.keys.commands.as_deref().unwrap_or_default(), "commands"));
     }
-    let parts: Vec<&str> = [&live.subagents, &live.shells].into_iter().flatten().map(String::as_str).collect();
-    spans.push(parts.join(" · ").into());
-    let text = Text::new(app, spans).fg(theme.text.muted).wrap(WrapMode::None);
-    let hover = text.clone();
-    let (base, muted) = (theme.text.base, theme.text.muted);
-    text.on_hover(move |cx, hovered| {
-        hover.fg(if hovered { base } else { muted });
-        cx.app().request_redraw();
-    });
-    let weak = tui.weak();
-    text.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
-        if matches!(event.kind, MouseEventKind::Up(_))
-            && let Some(tui) = weak.upgrade()
-        {
-            tui.keymap.dispatch("session.child.first", None);
-        }
-    });
-    View::new(app).shrink(0.0).child(&text)
+    root(busy && shrink, children)
 }
 
 /// `formatContextUsage`: `12.3K (45%)`.
-fn format_usage(tokens: f64, percent: Option<i64>) -> String {
-    let value = crate::routes::session::messages::compaction::number(tokens);
-    match percent {
+fn format_usage(usage: Usage) -> String {
+    let value = crate::routes::session::messages::compaction::number(usage.tokens);
+    match usage.percent {
         Some(percent) => format!("{value} ({percent}%)"),
         None => value,
     }
@@ -324,7 +228,7 @@ mod tests {
         assert_eq!(layout(40, &usage, &commands), (true, false));
         assert_eq!(layout(20, &usage, &commands), (false, false));
         assert_eq!(layout(40, &[], &commands), (false, true));
-        assert_eq!(format_usage(12_345.0, Some(4)), "12.3K (4%)");
-        assert_eq!(format_usage(800.0, None), "800");
+        assert_eq!(format_usage(Usage { tokens: 12_345.0, percent: Some(4) }), "12.3K (4%)");
+        assert_eq!(format_usage(Usage { tokens: 800.0, percent: None }), "800");
     }
 }

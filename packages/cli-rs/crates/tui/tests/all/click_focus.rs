@@ -82,15 +82,17 @@ fn routes() -> Vec<MemoryRoute> {
 struct Focus {
     harness: support::Harness,
     remotes: Arc<Mutex<Vec<Remote>>>,
+    memory: Memory,
 }
 
 support::deref_harness!(Focus);
 
 fn mount() -> Focus {
+    let memory = Memory::new(routes());
     let deps = Deps {
         config: support::config(support::decode(r#"{"animations":false}"#)),
         events: true,
-        ..support::deps(Arc::new(Memory::new(routes())))
+        ..support::deps(Arc::new(memory.clone()))
     };
     // The TUI's own options, as `app::run` builds the app.
     let options = AppOptions { capture_stderr: false, ..opencode_tui::app::options() };
@@ -102,7 +104,7 @@ fn mount() -> Focus {
         opened.lock().unwrap().push(remote);
         Ok(socket)
     }));
-    let harness = Focus { harness, remotes };
+    let harness = Focus { harness, remotes, memory };
     harness.wait_for("Fix the parser");
     harness
 }
@@ -268,4 +270,36 @@ fn a_click_on_a_panel_focuses_its_host() {
     assert!(!h.prompt_focused(), "a click on the panel left the prompt focused");
     h.app.type_text("h");
     assert_eq!(h.prompt_text(), "", "keys after a panel click reached the prompt");
+}
+
+// Expected: focus moving into the right pane and back dims the footer's hints and brightens them again (TS
+// `useInteractivity`), which the footer reads; the footer is not mounted again, so its goal is not read again.
+#[test]
+fn a_pane_focus_switch_dims_the_footer_hints_without_reading_the_goal_again() {
+    let h = mount();
+    h.wait_for("ctrl+p commands");
+    let reads = || h.memory.requests().iter().filter(|logged| logged.path == "/api/rpc/opencode.goal/get").count();
+    h.wait("the goal read", || reads() >= 1);
+    // The event stream's `server.connected` may read it again.
+    h.app.wait_until(Duration::from_millis(200), || false);
+    let before = reads();
+    // The `c` of `ctrl+p commands`, wherever the panel puts it.
+    let fg = || {
+        h.app.advance(Duration::from_millis(1));
+        let (x, y) = h.find("ctrl+p commands", 0);
+        h.app.render().cell(u32::from(x), u32::from(y)).unwrap().fg
+    };
+    let active = fg();
+    h.tui.keymap.dispatch("diff.open", None);
+    h.wait_for("src/main.rs");
+    assert!(!h.prompt_focused());
+    let dimmed = fg();
+    assert_ne!(dimmed, active, "the hints did not dim");
+    h.tui.keymap.dispatch("pane.focus.left", None);
+    assert!(h.prompt_focused());
+    h.wait("the hints to brighten", || fg() == active);
+    h.tui.keymap.dispatch("pane.focus.right", None);
+    h.wait("the hints to dim again", || fg() == dimmed);
+    h.app.wait_until(Duration::from_millis(100), || false);
+    assert_eq!(reads(), before, "a focus switch read the goal again");
 }

@@ -195,14 +195,18 @@ impl opencode_plugin::Host for Tui {
         // The client of the moment, on the transport that follows a restarted service.
         let client = self.data.client().clone();
         let call = super::fetch::call_of(fetch);
-        self.app.spawn(
-            async move { client.json::<Value>(call?).await.map_err(|error| error.to_string()) },
-            move |_, result| reply(result),
-        );
+        self.app
+            .spawn(async move { client.reply(call?).await.map_err(|error| error.to_string()) }, move |_, result| {
+                reply(result)
+            });
     }
 
     fn dialog(&self, id: &str, dialog: abi::Dialog) {
         super::panel::show(self, id, dialog);
+    }
+
+    fn dialog_open(&self, id: &str, key: &str) -> bool {
+        super::panel::open(self, id, key)
     }
 
     fn copy(&self, text: &str) -> bool {
@@ -470,6 +474,7 @@ impl abi::Read for Reader<'_> {
                 })
                 .collect(),
             cost: state.cost(id),
+            shells: state.session_shells(id).len(),
         })
     }
 
@@ -530,6 +535,14 @@ impl abi::Read for Reader<'_> {
             Route::Plugin { id, name } => abi::Route::Plugin { id, name },
         }
     }
+
+    fn interactive(&self) -> bool {
+        crate::frame::session_interactive(self.tui)
+    }
+
+    fn shortcut(&self, name: &str) -> Option<String> {
+        self.tui.keymap.shortcut(name)
+    }
 }
 
 fn status(status: opencode_store::SessionStatus) -> abi::SessionStatus {
@@ -544,7 +557,7 @@ fn status(status: opencode_store::SessionStatus) -> abi::SessionStatus {
 pub fn builtins(external: Vec<Definition<Tui>>) -> Vec<Definition<Tui>> {
     let mut builtins = vec![
         super::home_footer::plugin().into(),
-        super::prompt_footer::plugin(),
+        super::prompt_footer::plugin().into(),
         super::btw::plugin().into(),
         super::sidebar_context::plugin().into(),
         super::sidebar_limit::plugin().into(),
