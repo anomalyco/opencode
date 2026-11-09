@@ -427,9 +427,21 @@ const response = await ai.embedding.generate({
 GoogleVertex.configure({ project, location: "global" }).embedding("gemini-embedding-2")
 ```
 
-The Gemini API sends up to 100 values per `batchEmbedContents` request. Vertex `embedContent` takes one value per
-request, so a call sends one request per value, four at a time, and needs project credentials: Vertex Express Mode API
-keys can't call `embedContent`. `gemini-embedding-2` runs in the `global`, `us` and `eu` Vertex locations. When a call
+`GoogleVertex.configure().embedding(id)` picks the API from the model id: `gemini-embedding-2*` uses `embedContent`,
+and every other model (`gemini-embedding-001`, `text-embedding-005`, `text-multilingual-embedding-002`) uses the
+text-only `:predict` API, which also works with Express Mode keys. On `:predict`, `inputType` and the `taskType` and
+`title` options go on each instance (`task_type`, `title`), and `dimensions`, `autoTruncate` and other options go under
+`parameters`.
+
+```ts
+GoogleVertex.configure({ apiKey }).embedding("text-embedding-005")
+GoogleVertex.configure({ apiKey }).embedding("gemini-embedding-001")
+```
+
+The Gemini API sends up to 100 values per `batchEmbedContents` request, and Vertex `:predict` up to 250 per request
+(one for `gemini-embedding-001`, as Google documents). Vertex `embedContent` takes one value per request, so a call
+sends one request per value, four at a time, and needs project credentials: Vertex Express Mode API keys can't call
+`embedContent`. `gemini-embedding-2` runs in the `global`, `us` and `eu` Vertex locations. When a call
 is split into several requests, the vectors stay in value order, `usage.inputTokens` is their sum, and each request's
 metadata is listed in order under `providerMetadata.<provider>.responses`. Google has no `/embeddings` entry point yet;
 use `embeddingModel` from `@opencode/ai/providers/google` or `@opencode/ai/providers/google-vertex`.

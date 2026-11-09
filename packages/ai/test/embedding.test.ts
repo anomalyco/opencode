@@ -308,4 +308,148 @@ describe("Embedding", () => {
       "does not support Express Mode API keys",
     )
   })
+
+  it.effect("sends Vertex text embedding models through :predict with instances and parameters", () =>
+    ai.embedding
+      .generate({
+        model: GoogleVertex.configure({ apiKey: "vertex-key" }).embedding("text-embedding-005"),
+        values: ["first", "second"],
+        dimensions: 256,
+        inputType: "query",
+        providerOptions: { title: "Docs", autoTruncate: false },
+      })
+      .pipe(
+        Effect.tap((response) =>
+          Effect.sync(() => {
+            expect(response.embeddings).toEqual([[0.1], [0.2]])
+            expect(response.usage).toEqual(new EmbeddingUsage({ inputTokens: 5 }))
+            expect(response.providerMetadata).toEqual({
+              vertex: {
+                statistics: [
+                  { token_count: 2, truncated: false },
+                  { token_count: 3, truncated: false },
+                ],
+                metadata: { billableCharacterCount: 11 },
+              },
+            })
+          }),
+        ),
+        Effect.provide(
+          client((input) => {
+            expect(input.request.url).toBe(
+              "https://aiplatform.googleapis.com/v1/publishers/google/models/text-embedding-005:predict",
+            )
+            expect(input.request.headers["x-goog-api-key"]).toBe("vertex-key")
+            expect(JSON.parse(input.text)).toEqual({
+              instances: [
+                { content: "first", task_type: "RETRIEVAL_QUERY", title: "Docs" },
+                { content: "second", task_type: "RETRIEVAL_QUERY", title: "Docs" },
+              ],
+              parameters: { outputDimensionality: 256, autoTruncate: false },
+            })
+            return Effect.succeed(
+              json(input, {
+                predictions: [
+                  { embeddings: { values: [0.1], statistics: { token_count: 2, truncated: false } } },
+                  { embeddings: { values: [0.2], statistics: { token_count: 3, truncated: false } } },
+                ],
+                metadata: { billableCharacterCount: 11 },
+              }),
+            )
+          }),
+        ),
+      ),
+  )
+
+  it.effect("sends gemini-embedding-001 on Vertex one text per :predict request", () =>
+    Effect.gen(function* () {
+      const sent: Array<string> = []
+      const response = yield* ai.embedding
+        .generate({
+          model: GoogleVertex.configure({ apiKey: "vertex-key" }).embedding("gemini-embedding-001"),
+          values: ["0", "1", "2"],
+          providerOptions: { taskType: "CLUSTERING" },
+        })
+        .pipe(
+          Effect.provide(
+            client((input) => {
+              const body = JSON.parse(input.text)
+              expect(body.instances).toHaveLength(1)
+              expect(body.instances[0].task_type).toBe("CLUSTERING")
+              expect(body.parameters).toBeUndefined()
+              sent.push(body.instances[0].content)
+              return Effect.succeed(
+                json(input, {
+                  predictions: [{ embeddings: { values: [Number(body.instances[0].content)] } }],
+                }),
+              )
+            }),
+          ),
+        )
+      expect(sent.toSorted()).toEqual(["0", "1", "2"])
+      expect(response.embeddings).toEqual([[0], [1], [2]])
+      expect(response.usage).toBeUndefined()
+    }),
+  )
+
+  it.effect("splits more than 250 Vertex :predict values", () =>
+    Effect.gen(function* () {
+      const sizes: Array<number> = []
+      const response = yield* ai.embedding
+        .generate({
+          model: GoogleVertex.configure({ apiKey: "vertex-key" }).embedding("text-multilingual-embedding-002"),
+          values: Array.from({ length: 251 }, (_, index) => `${index}`),
+        })
+        .pipe(
+          Effect.provide(
+            client((input) => {
+              const instances: Array<{ content: string }> = JSON.parse(input.text).instances
+              sizes.push(instances.length)
+              return Effect.succeed(
+                json(input, {
+                  predictions: instances.map((instance) => ({ embeddings: { values: [Number(instance.content)] } })),
+                }),
+              )
+            }),
+          ),
+        )
+      expect(sizes.toSorted((a, b) => a - b)).toEqual([1, 250])
+      expect(response.embeddings).toEqual(Array.from({ length: 251 }, (_, index) => [index]))
+    }),
+  )
+
+  it.effect("rejects media values before sending them to Vertex :predict", () =>
+    Effect.gen(function* () {
+      const error = yield* ai.embedding
+        .generate({
+          model: GoogleVertex.configure({ apiKey: "vertex-key" }).embedding("text-embedding-005"),
+          values: [Media.bytes(new Uint8Array([1, 2, 3]), "image/png")],
+        })
+        .pipe(Effect.flip)
+      expect(error.reason._tag).toBe("UnsupportedOperation")
+      expect(error.message).toContain("embeds text only")
+    }).pipe(Effect.provide(offline)),
+  )
+
+  it.effect("sends tuned Vertex embedding endpoints through :predict", () =>
+    ai.embedding
+      .generate({
+        model: GoogleVertex.configure({
+          accessToken: "vertex-token",
+          project: "proj",
+          location: "us-central1",
+        }).embedding("endpoints/123"),
+        values: ["text"],
+      })
+      .pipe(
+        Effect.provide(
+          client((input) => {
+            expect(input.request.url).toBe(
+              "https://us-central1-aiplatform.googleapis.com/v1beta1/projects/proj/locations/us-central1/endpoints/123:predict",
+            )
+            return Effect.succeed(json(input, { predictions: [{ embeddings: { values: [1] } }] }))
+          }),
+        ),
+      ),
+  )
 })

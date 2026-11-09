@@ -3,6 +3,11 @@ import type { ProviderPackage } from "../provider-package.js"
 import { Gemini } from "../protocols/gemini.js"
 import { GoogleEmbedContent, type VertexOptionsInput } from "../protocols/google-embed-content.js"
 import { GoogleImages } from "../protocols/google-images.js"
+import {
+  GoogleVertexPredictEmbeddings,
+  MAX_INSTANCES,
+  type OptionsInput as PredictOptionsInput,
+} from "../protocols/google-vertex-predict-embeddings.js"
 import { ProviderShared } from "../protocols/shared.js"
 import { Auth } from "../route/auth.js"
 import { Route } from "../route/client.js"
@@ -85,8 +90,9 @@ const route = Route.make({
 export const routes = [route]
 
 export type { VertexOptionsInput as GoogleVertexEmbeddingOptions } from "../protocols/google-embed-content.js"
+export type { OptionsInput as GoogleVertexPredictEmbeddingOptions } from "../protocols/google-vertex-predict-embeddings.js"
 
-const embeddingRoute = EmbeddingRoute.make({
+const embedContentRoute = EmbeddingRoute.make({
   id: "google-vertex-embed-content",
   provider: id,
   providerMetadataKey: "vertex",
@@ -95,6 +101,30 @@ const embeddingRoute = EmbeddingRoute.make({
   // Vertex embedContent embeds one content per request.
   maxValues: 1,
 })
+
+const predictRoute = EmbeddingRoute.make({
+  id: "google-vertex-predict-embeddings",
+  provider: id,
+  providerMetadataKey: "vertex",
+  protocol: GoogleVertexPredictEmbeddings.protocol,
+  // Tuned embedding models are deployed to `endpoints/{id}`, which serve `:predict` outside `publishers/google`.
+  endpoint: Endpoint.path(({ request }) => {
+    const model = request.model.id
+    return `/${model.startsWith("endpoints/") ? model : `models/${model}`}:predict`
+  }),
+  maxValues: MAX_INSTANCES,
+})
+
+/**
+ * `gemini-embedding-2*` models use `embedContent`, which takes media; every other embedding model uses the older
+ * text-only `:predict` API. `gemini-embedding-001` takes one text per `:predict` request.
+ */
+const embeddingTarget = (modelID: string) => {
+  if (modelID.startsWith("gemini-embedding-2")) return { route: embedContentRoute, embedContent: true }
+  if (modelID.startsWith("gemini-embedding-001"))
+    return { route: predictRoute.with({ maxValues: 1 }), embedContent: false }
+  return { route: predictRoute, embedContent: false }
+}
 
 const configuredRoute = (input: Config, modelID: string | ModelID) => {
   const {
@@ -143,17 +173,18 @@ export const configure = (input: Config = {}) => {
         providerOptions,
       })
     },
-    /** `gemini-embedding-2` through Vertex `embedContent`; it needs project credentials, not an Express Mode key. */
+    /** `gemini-embedding-2*` through `embedContent`, other models through `:predict`; see `embeddingTarget`. */
     embedding: (modelID: string | ModelID, providerOptions?: ProviderOptions) => {
       const target = connection(input, modelID)
-      if (GoogleVertexShared.apiKey(input) !== undefined && input.baseURL === undefined)
+      const selected = embeddingTarget(modelID)
+      if (selected.embedContent && GoogleVertexShared.apiKey(input) !== undefined && input.baseURL === undefined)
         throw new ProviderConfigurationError({
           provider: id,
           message: "Google Vertex embedContent does not support Express Mode API keys; use project credentials",
         })
-      return embeddingRoute
+      return selected.route
         .with({ endpoint: target.endpoint, auth: target.auth, headers: input.headers, http: input.http })
-        .model<VertexOptionsInput>({ id: modelID, providerOptions })
+        .model<VertexOptionsInput & PredictOptionsInput>({ id: modelID, providerOptions })
     },
     configure,
   }
