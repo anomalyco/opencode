@@ -314,7 +314,9 @@ fn home_with(
 ) -> Harness {
     let h = support::mount(100, 30, Deps { route: Route::Home, ..deps });
     let definition = match loopback {
-        true => opencode_plugin::loader::native::loopback(&h.tui, create).unwrap().0,
+        true => {
+            opencode_plugin::loader::native::loopback(&opencode_tui::plugins::host::host(&h.tui), create).unwrap().0
+        }
         false => abi::Plugin { id: "probe", setup }.into(),
     };
     opencode_tui::plugins::host::add(&h.tui, definition);

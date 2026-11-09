@@ -14,21 +14,21 @@ use opentui::prelude::*;
 use opentui::style::Color;
 use opentui::widget::CodeBlock;
 
-use crate::{Host, SlotInput, SlotMount, Slotted, slot};
+use crate::{Claimed, Host, SlotInput, SlotMount, slot};
 
 /// A slot claim's render on either path: in process it reads the host directly, over the C ABI it asks the plugin.
-pub type SlotRender<H> = Rc<dyn Fn(&H, &abi::SlotInput, &abi::Changed) -> abi::Render>;
+pub(crate) type SlotRender = Rc<dyn Fn(&dyn Host, &abi::SlotInput, &abi::Changed) -> abi::Render>;
 /// A slot claim's mount handler on either path: `true` as a claim mounts, before its first render, `false` as it goes.
-pub type MountFn<H> = Rc<dyn Fn(&H, &abi::SlotInput, bool)>;
+pub(crate) type MountFn = Rc<dyn Fn(&dyn Host, &abi::SlotInput, bool)>;
 
 /// A mounted slot claim of the one API: the node its render returned, rendered again with each change batch, each
 /// change the host pushes ([`Host::watch`]), and each wake. Its widgets are rebuilt only when the node differs. The
 /// slots its node nests ([`abi::Node::Slot`]) stay mounted until then, and get each change batch it gets.
-pub struct Mount<H: Host> {
+pub(crate) struct Mount {
     root: View,
-    owner: Weak<H>,
-    render: SlotRender<H>,
-    mount: Option<MountFn<H>>,
+    owner: Weak<dyn Host>,
+    render: SlotRender,
+    mount: Option<MountFn>,
     /// The slot it renders in.
     path: String,
     slot_input: SlotInput,
@@ -36,22 +36,20 @@ pub struct Mount<H: Host> {
     /// What it shows: `None` before the first render, `Some(None)` while hidden.
     shown: RefCell<Option<Option<abi::Node>>>,
     /// The slots its node nests.
-    slots: RefCell<Vec<SlotMount<H>>>,
+    slots: RefCell<Vec<SlotMount>>,
     /// The texts its node's hover handlers change, which hold them weakly so the texts drop with the node.
     hovers: RefCell<Vec<Rc<Text>>>,
-    /// Refilled with each change batch, so a batch like the one before costs no allocation.
-    changed: RefCell<abi::Changed>,
     watch: RefCell<Option<Disposer>>,
 }
 
-impl<H: Host> Mount<H> {
+impl Mount {
     pub fn new(
-        host: &H,
-        owner: Weak<H>,
+        host: &dyn Host,
+        owner: Weak<dyn Host>,
         path: &str,
         slot_input: &SlotInput,
-        render: SlotRender<H>,
-        on_mount: Option<MountFn<H>>,
+        render: SlotRender,
+        on_mount: Option<MountFn>,
     ) -> Rc<Self> {
         let input = abi::SlotInput {
             session_id: slot_input.session_id.clone(),
@@ -74,13 +72,12 @@ impl<H: Host> Mount<H> {
             shown: RefCell::new(None),
             slots: RefCell::default(),
             hovers: RefCell::default(),
-            changed: RefCell::default(),
             watch: RefCell::new(None),
         });
         let weak = Rc::downgrade(&mount);
         let watch = host.watch(Rc::new(move |changed| {
             if let (Some(mount), Some(host)) = (weak.upgrade(), owner.upgrade()) {
-                mount.draw(&host, changed);
+                mount.draw(&*host, changed);
             }
         }));
         *mount.watch.borrow_mut() = watch;
@@ -88,7 +85,7 @@ impl<H: Host> Mount<H> {
         mount
     }
 
-    pub fn draw(&self, host: &H, changed: &abi::Changed) {
+    pub fn draw(&self, host: &dyn Host, changed: &abi::Changed) {
         let node = match (self.render)(host, &self.input, changed) {
             abi::Render::Keep => return,
             abi::Render::Hide => None,
@@ -135,10 +132,10 @@ impl<H: Host> Mount<H> {
     }
 }
 
-impl<H: Host> Drop for Mount<H> {
+impl Drop for Mount {
     fn drop(&mut self) {
         if let (Some(on_mount), Some(host)) = (&self.mount, self.owner.upgrade()) {
-            on_mount(&host, &self.input, false);
+            on_mount(&*host, &self.input, false);
         }
     }
 }
@@ -148,20 +145,14 @@ fn nests(path: &str, nested: &str) -> bool {
     slot::PATHS.contains(&nested) && slot::contains(path, nested)
 }
 
-impl<H: Host> Slotted<H> for Rc<Mount<H>> {
+impl Claimed for Rc<Mount> {
     fn root(&self) -> View {
         self.root.clone()
     }
 
-    fn sync(&self, host: &H, changes: &H::Changes) {
-        if H::unchanged(changes) {
-            return;
-        }
-        let mut changed = self.changed.take();
-        H::changed(changes, &mut changed);
-        self.draw(host, &changed);
-        self.changed.replace(changed);
-        self.slots.borrow().iter().for_each(|slots| slots.sync(host, changes));
+    fn sync(&self, host: &dyn Host, changed: &abi::Changed) {
+        self.draw(host, changed);
+        self.slots.borrow().iter().for_each(|slots| slots.sync(host, Some(changed)));
     }
 }
 
@@ -189,7 +180,7 @@ pub fn assign(text: &mut String, value: &str) {
 pub type Act = Rc<dyn Fn(&abi::Action)>;
 
 /// Runs `action` on `host` once the event that caused it is handled, outside every plugin callback.
-fn act<H: Host>(host: &Weak<H>, action: &abi::Action) {
+fn act(host: &Weak<dyn Host>, action: &abi::Action) {
     let Some(strong) = host.upgrade() else { return };
     let (host, action) = (host.clone(), action.clone());
     strong.app().defer(move |_| {

@@ -4,6 +4,7 @@
 
 use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
@@ -19,9 +20,9 @@ use opencode_local::serial::Serial;
 use opencode_local::storage::Storage;
 use opencode_plugin::abi;
 use opencode_plugin::loader::native::Native;
-use opencode_plugin::loader::{Backend, Configured, Loader};
+use opencode_plugin::loader::{Configured, Loader};
 use opencode_plugin::node::{assign, refill, theme_color};
-use opencode_plugin::{Definition, Registry, SlotInput, SlotMount, Slotted, Status};
+use opencode_plugin::{Builtin, Definition, Host, Registry, RouteMount, SlotInput, SlotMount, Status};
 use opencode_store::location::{Catalog, Location, LocationData};
 use opencode_store::{Changes, State};
 use opencode_ui::bind;
@@ -38,11 +39,23 @@ use crate::features::attention::focus::When;
 use crate::features::attention::notify::{self, Request, Sound};
 use crate::routes::Route;
 
-pub type Plugins = Registry<Tui>;
+/// The plugin registry, and what its host entries ([`Builtin::Host`]) reach the TUI through once `Rc<Tui>` exists.
+pub struct Plugins {
+    registry: Registry,
+    tui: Rc<OnceCell<Weak<Tui>>>,
+    /// The diff viewer's state while it is active, which its route shows.
+    pub(crate) diffs: RefCell<Option<Rc<super::diffs::viewer::Shared>>>,
+}
 
-impl opencode_plugin::Host for Tui {
-    type Changes = Changes;
+impl Deref for Plugins {
+    type Target = Registry;
 
+    fn deref(&self) -> &Registry {
+        &self.registry
+    }
+}
+
+impl Host for Tui {
     fn app(&self) -> &App {
         &self.app
     }
@@ -57,10 +70,6 @@ impl opencode_plugin::Host for Tui {
 
     fn keymap(&self) -> &DialogKeymap {
         &self.keymap
-    }
-
-    fn unchanged(changes: &Changes) -> bool {
-        changes.is_empty()
     }
 
     fn storage_read(&self, key: &str) -> Option<String> {
@@ -162,7 +171,7 @@ impl opencode_plugin::Host for Tui {
         Some(crate::features::events::subscribe(self, move |_, event| run(event)))
     }
 
-    fn slot(&self, parent: &View, path: &str, input: &SlotInput) -> Option<SlotMount<Self>> {
+    fn slot(&self, parent: &View, path: &str, input: &SlotInput) -> Option<SlotMount> {
         Some(self.plugins.mount(self, parent, path, input, |_| {}))
     }
 
@@ -237,27 +246,6 @@ impl opencode_plugin::Host for Tui {
         f(&Reader { tui: self, theme: OnceCell::new() });
     }
 
-    fn changed(changes: &Changes, changed: &mut abi::Changed) {
-        changed.all = changes.all;
-        // A selection is part of the session's info to a plugin.
-        let sessions = changes.session.iter().chain(&changes.status).chain(changes.selected.keys());
-        refill(&mut changed.sessions, sessions, |into, id| assign(into, &id.0));
-        refill(&mut changed.lists, &changes.messages, |into, id| assign(into, &id.0));
-        let messages = changes.message.iter().flat_map(|(session, ids)| ids.iter().map(move |id| (session, id)));
-        refill(&mut changed.messages, messages, |(into_session, into_id), (session, id)| {
-            assign(into_session, &session.0);
-            assign(into_id, &id.0);
-        });
-        refill(&mut changed.locations, &changes.locations, |into, location| {
-            assign(&mut into.directory, &location.directory);
-            match &location.workspace_id {
-                Some(workspace) => assign(into.workspace.get_or_insert_default(), workspace),
-                None => into.workspace = None,
-            }
-        });
-        (changed.local, changed.size, changed.woken) = (false, false, false);
-    }
-
     fn watch(&self, push: Rc<dyn Fn(&abi::Changed)>) -> Option<Disposer> {
         let local = abi::Changed { local: true, ..abi::Changed::default() };
         let listener = {
@@ -283,6 +271,36 @@ impl opencode_plugin::Host for Tui {
             drop(push);
         }))
     }
+}
+
+/// Calls `sync` with what change batch `changes` changed for the plugins' claims and routes, or with `None` when it
+/// changed nothing.
+pub fn changed(tui: &Tui, changes: &Changes, sync: impl FnOnce(Option<&abi::Changed>)) {
+    if changes.is_empty() {
+        return sync(None);
+    }
+    // Refilled with each change batch, so a batch like the one before costs no allocation.
+    let mut changed = tui.reads.batch.take();
+    changed.all = changes.all;
+    // A selection is part of the session's info to a plugin.
+    let sessions = changes.session.iter().chain(&changes.status).chain(changes.selected.keys());
+    refill(&mut changed.sessions, sessions, |into, id| assign(into, &id.0));
+    refill(&mut changed.lists, &changes.messages, |into, id| assign(into, &id.0));
+    let messages = changes.message.iter().flat_map(|(session, ids)| ids.iter().map(move |id| (session, id)));
+    refill(&mut changed.messages, messages, |(into_session, into_id), (session, id)| {
+        assign(into_session, &session.0);
+        assign(into_id, &id.0);
+    });
+    refill(&mut changed.locations, &changes.locations, |into, location| {
+        assign(&mut into.directory, &location.directory);
+        match &location.workspace_id {
+            Some(workspace) => assign(into.workspace.get_or_insert_default(), workspace),
+            None => into.workspace = None,
+        }
+    });
+    (changed.local, changed.size, changed.woken) = (false, false, false);
+    sync(Some(&changed));
+    tui.reads.batch.replace(changed);
 }
 
 /// Shows `shown` under storage key `key` at once, and queues `change` of the latest stored value under the storage
@@ -356,6 +374,8 @@ pub struct Reads {
     telling: Cell<bool>,
     /// The server plugins of the default location (TS `plugins.server()`), and that location.
     server: RefCell<(Option<Location>, Vec<PluginInfo>)>,
+    /// What the last change batch changed, for the plugins.
+    batch: RefCell<abi::Changed>,
     /// The plugin panel on screen.
     pub(super) panel: RefCell<Option<super::panel::Live>>,
 }
@@ -553,8 +573,9 @@ fn status(status: opencode_store::SessionStatus) -> abi::SessionStatus {
 }
 
 /// The built-ins in TS order (`plugin/builtins.ts`), with the ones from other crates ([`crate::Deps::builtins`],
-/// Mermaid and LaTeX) in their TS place after `stats`. The storybook (F14) is excepted (Q17).
-pub fn builtins(external: Vec<Definition<Tui>>) -> Vec<Definition<Tui>> {
+/// Mermaid and LaTeX) in their TS place after `stats`. The storybook (F14) is excepted (Q17). The plugin manager and
+/// the diff viewer are host entries, which reach the TUI through `tui` once it exists.
+fn builtins(tui: &Rc<OnceCell<Weak<Tui>>>, external: Vec<Builtin>) -> Vec<Builtin> {
     let mut builtins = vec![
         super::home_footer::plugin().into(),
         super::prompt_footer::plugin().into(),
@@ -565,21 +586,43 @@ pub fn builtins(external: Vec<Definition<Tui>>) -> Vec<Definition<Tui>> {
         super::sidebar_todo::plugin().into(),
         super::sidebar_footer::plugin().into(),
         crate::plugins::notifications::plugin().into(),
-        crate::dialogs::plugins::plugin(),
+        hosted(tui, crate::dialogs::plugins::ID, crate::dialogs::plugins::activate),
         super::stats::plugin().into(),
     ];
     builtins.extend(external);
-    builtins.push(super::diffs::viewer::plugin());
+    builtins.push(hosted(tui, super::diffs::viewer::ID, super::diffs::viewer::activate));
     builtins
 }
 
+/// A part of the TUI that the plugin manager lists and toggles like a plugin, which is not plugin API: `activate` runs
+/// on activation once the TUI exists, and the disposer it returns runs on deactivation.
+fn hosted(tui: &Rc<OnceCell<Weak<Tui>>>, id: &'static str, activate: fn(&Rc<Tui>) -> Disposer) -> Builtin {
+    let active: Rc<RefCell<Option<Disposer>>> = Rc::default();
+    let (tui, disposer) = (tui.clone(), active.clone());
+    Builtin::Host {
+        id,
+        activate: Rc::new(move || {
+            if let Some(tui) = tui.get().and_then(Weak::upgrade) {
+                *disposer.borrow_mut() = Some(activate(&tui));
+            }
+        }),
+        dispose: Rc::new(move || drop(active.take())),
+    }
+}
+
 /// The registry of the built-ins and the `plugins` config, not yet active.
-pub fn registry(info: &opencode_local::cli_config::Info, external: Vec<Definition<Tui>>) -> Plugins {
+pub fn registry(info: &opencode_local::cli_config::Info, external: Vec<Builtin>) -> Plugins {
     let targets = info.plugins.iter().flatten().map(|plugin| match plugin {
         opencode_local::cli_config::Plugin::Name(name) => name.as_str(),
         opencode_local::cli_config::Plugin::Package { package, .. } => package.as_str(),
     });
-    Registry::new(builtins(external), targets)
+    let tui = Rc::default();
+    Plugins { registry: Registry::new(builtins(&tui, external), targets), tui, diffs: RefCell::default() }
+}
+
+/// The TUI as the plugin registry takes it.
+pub fn host(tui: &Rc<Tui>) -> Rc<dyn Host> {
+    tui.clone()
 }
 
 /// Activates the plugins once the TUI is built, and logs the configured plugins it skipped.
@@ -587,7 +630,8 @@ pub fn install(tui: &Rc<Tui>) {
     for target in tui.plugins.skipped() {
         log::warn!("plugin {target} skipped: {}", opencode_plugin::SKIPPED);
     }
-    tui.plugins.activate(tui);
+    let _ = tui.plugins.tui.set(tui.weak());
+    tui.plugins.activate(&host(tui));
     crate::features::events::subscribe(tui, |tui, event| {
         if matches!(event, V2Event::PluginUpdated(_) | V2Event::ServerConnected(_)) {
             sync_server_plugins(tui);
@@ -682,13 +726,12 @@ pub fn external(tui: &Rc<Tui>, external: External) {
     };
     let configured =
         tui.plugins.skipped().into_iter().map(|target| Configured { options: options(&target), target }).collect();
-    let loader =
-        Rc::new(Loader::new(Rc::new(Native) as Rc<dyn Backend<Tui>>, external.config_dir, external.cwd, configured));
-    loader.reconcile(tui, &tui.plugins);
+    let loader = Rc::new(Loader::new(Rc::new(Native), external.config_dir, external.cwd, configured));
+    loader.reconcile(&host(tui), &tui.plugins);
     let watches: Rc<RefCell<Vec<Watched>>> = Rc::default();
     watch(tui, &loader, &watches);
     tui.app.on_message(bind!(tui, |tui, _, _: &PluginsChanged| {
-        loader.reconcile(&tui, &tui.plugins);
+        loader.reconcile(&host(&tui), &tui.plugins);
         watch(&tui, &loader, &watches);
     }));
 }
@@ -698,7 +741,7 @@ type Watched<W = opencode_local::watch::Watch> = (PathBuf, Option<u64>, W);
 
 /// Watches the loader's directories: keeps the watches that still see them, and replaces one whose directory
 /// went away or was made again, which the old watch no longer sees.
-fn watch(tui: &Tui, loader: &Loader<Tui>, watches: &RefCell<Vec<Watched>>) {
+fn watch(tui: &Tui, loader: &Loader, watches: &RefCell<Vec<Watched>>) {
     let fresh = unwatched(&mut watches.borrow_mut(), loader.watch_dirs());
     for (dir, id) in fresh {
         let proxy = tui.app.proxy();
@@ -744,19 +787,19 @@ fn identity(dir: &std::path::Path) -> Option<u64> {
 }
 
 /// Adds and activates one more plugin, then remounts the route so its claims show.
-pub fn add(tui: &Rc<Tui>, plugin: Definition<Tui>) {
+pub fn add(tui: &Rc<Tui>, plugin: Definition) {
     tui.plugins.add(plugin);
-    tui.plugins.activate(tui);
+    tui.plugins.activate(&host(tui));
     tui.navigate(tui.route());
 }
 
 /// Mounts slot `path` with the host's `content` into `parent`. The view that owns the slot syncs the result.
-pub fn slot(tui: &Tui, parent: &View, path: &str, input: &SlotInput, content: impl FnOnce(&View)) -> SlotMount<Tui> {
+pub fn slot(tui: &Tui, parent: &View, path: &str, input: &SlotInput, content: impl FnOnce(&View)) -> SlotMount {
     tui.plugins.mount(tui, parent, path, input, content)
 }
 
 /// The view of plugin route `id`/`name`, if a plugin registers it.
-pub fn route(tui: &Tui, id: &str, name: &str) -> Option<Box<dyn Slotted<Tui>>> {
+pub fn route(tui: &Tui, id: &str, name: &str) -> Option<RouteMount> {
     tui.plugins.route(tui, id, name)
 }
 

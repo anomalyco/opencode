@@ -1,0 +1,17 @@
+# What a plugin author writes: a native plugin on the public SDK, `opencode-plugin-abi`, alone. The SDK's
+# `sdk` test builds it and checks its dependency tree. Not a workspace member.
+[package]
+name = "opencode-author-plugin"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+opencode-plugin-abi = { path = "../../../plugin-abi" }
+serde_json = "1"
+
+[workspace]

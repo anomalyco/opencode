@@ -41,7 +41,7 @@ struct Inner {
     content: View,
     footer: View,
     /// The `sidebar.content` and `sidebar.footer` slots, mounted while the sidebar shows (TS `<Show>`).
-    slots: RefCell<Vec<SlotMount<Tui>>>,
+    slots: RefCell<Vec<SlotMount>>,
     /// `sidebarOpen`: opened with the toggle, beyond what `session.sidebar` shows by itself.
     open: Cell<bool>,
     /// Where the panel is now.
@@ -140,7 +140,9 @@ impl Sidebar {
             self.inner.retitle(tui);
         }
         self.inner.layout(tui);
-        self.inner.slots.borrow().iter().for_each(|slot| slot.sync(tui, changes));
+        crate::plugins::host::changed(tui, changes, |changed| {
+            self.inner.slots.borrow().iter().for_each(|slot| slot.sync(tui, changed));
+        });
     }
 
     /// Whether the sidebar is the right pane (`sidebarVisible` of the session view).

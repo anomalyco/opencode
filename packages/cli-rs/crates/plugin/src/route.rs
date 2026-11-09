@@ -10,7 +10,7 @@ use opentui::keymap::Disposer;
 use opentui::prelude::*;
 
 use crate::node::{Mount, SlotRender};
-use crate::{Host, SlotInput, Slotted, abi};
+use crate::{Claimed, Host, SlotInput, abi};
 
 /// A plugin's commands: the global ones, and the ones of each route.
 type Split = (Vec<TuiCommand>, Vec<(String, TuiCommand)>);
@@ -32,15 +32,15 @@ pub(crate) fn commands(scoped: &[(String, TuiCommand)], name: &str) -> Vec<TuiCo
     scoped.iter().filter(|(route, _)| route == name).map(|(_, command)| command.clone()).collect()
 }
 
-pub(crate) struct View<H: Host> {
+pub(crate) struct View {
     root: opentui::prelude::View,
-    pub mount: Rc<Mount<H>>,
+    pub mount: Rc<Mount>,
     layer: RefCell<Option<Disposer>>,
     app: App,
 }
 
-impl<H: Host> View<H> {
-    pub fn new(host: &H, owner: Weak<H>, render: SlotRender<H>, commands: Vec<TuiCommand>) -> Self {
+impl View {
+    pub fn new(host: &dyn Host, owner: Weak<dyn Host>, render: SlotRender, commands: Vec<TuiCommand>) -> Self {
         let app = host.app();
         let theme = host.theme();
         let scroll = ScrollBox::new(app).scrollbars(false).grow(1.0);
@@ -59,17 +59,17 @@ impl<H: Host> View<H> {
     }
 }
 
-impl<H: Host> Slotted<H> for View<H> {
+impl Claimed for View {
     fn root(&self) -> opentui::prelude::View {
         self.root.clone()
     }
 
-    fn sync(&self, host: &H, changes: &H::Changes) {
-        self.mount.sync(host, changes);
+    fn sync(&self, host: &dyn Host, changed: &abi::Changed) {
+        self.mount.sync(host, changed);
     }
 }
 
-impl<H: Host> Drop for View<H> {
+impl Drop for View {
     fn drop(&mut self) {
         // A route command that navigates drops the route while the keymap runs its layer.
         if let Some(layer) = self.layer.borrow_mut().take() {

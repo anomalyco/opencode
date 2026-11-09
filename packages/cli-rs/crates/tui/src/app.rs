@@ -40,7 +40,7 @@ pub struct Deps {
     pub events: bool,
     /// The built-ins from other crates, in TS order: Mermaid and LaTeX. `tui` does not depend on them, so an edit
     /// there does not rebuild it.
-    pub builtins: Vec<opencode_plugin::Definition<Tui>>,
+    pub builtins: Vec<opencode_plugin::Builtin>,
 }
 
 pub struct Roots {

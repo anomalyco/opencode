@@ -9,7 +9,7 @@ use opentui::keymap::RunResult;
 use opentui::testing::Capture;
 
 use super::*;
-use crate::loader::tests::{TestHost, entry, host};
+use crate::loader::tests::{TestHost, dynamic, entry, host};
 use crate::loader::{Configured, Loader, entry_file};
 use crate::{Registry, SlotInput, Status, slot};
 
@@ -39,16 +39,16 @@ pub(crate) fn build(features: &str) -> Vec<u8> {
 }
 
 /// The sample, loaded from `library` and active in a fresh registry.
-fn active(host: &Rc<TestHost>, library: &[u8]) -> Registry<TestHost> {
-    let (definition, error) = Native.load(host, library, None).unwrap();
+fn active(host: &Rc<TestHost>, library: &[u8]) -> Registry {
+    let (definition, error) = Native.load(&dynamic(host), library, None).unwrap();
     assert_eq!(definition.id, "sample");
-    let registry = Registry::new(Vec::new(), []);
-    registry.load(host, definition.external("sample.so", error));
+    let registry = Registry::define(Vec::new(), []);
+    registry.load(&dynamic(host), definition.external("sample.so", error));
     registry
 }
 
 /// The screen after a transcript-like Markdown view draws `markdown` with the registry's renderers.
-fn markdown(host: &Rc<TestHost>, registry: &Registry<TestHost>, text: &str) -> String {
+fn markdown(host: &Rc<TestHost>, registry: &Registry, text: &str) -> String {
     let view = opencode_ui::markdown::view(
         host.app(),
         &host.theme(),
@@ -64,7 +64,7 @@ fn markdown(host: &Rc<TestHost>, registry: &Registry<TestHost>, text: &str) -> S
     host.app.text()
 }
 
-fn status(registry: &Registry<TestHost>) -> Status {
+fn status(registry: &Registry) -> Status {
     entry(&registry.entries(), "sample.so").status.clone()
 }
 
@@ -122,7 +122,7 @@ fn a_panicking_fence_fails_the_plugin_and_falls_back_to_the_code() {
     assert!(host.storage.borrow().is_empty());
 
     // Enabling it again starts a fresh instance.
-    registry.set_active(&host, "sample", true);
+    registry.set_active(&dynamic(&host), "sample", true);
     assert_eq!(status(&registry), Status::Active);
     let screen = markdown(&host, &registry, "```sample\nback\n```\n");
     assert!(screen.contains("SAMPLE v1 BACK"), "{screen}");
@@ -150,15 +150,15 @@ fn a_panicking_command_fails_the_plugin() {
     host.app.advance(Duration::from_millis(1));
     assert!(matches!(host.keymap().dispatch("sample.hello", None), RunResult::NotFound));
     assert!(entry(&registry.entries(), "sample.so").active);
-    assert!(registry.set_active(&host, "sample", false));
+    assert!(registry.set_active(&dynamic(&host), "sample", false));
     assert_eq!(status(&registry), Status::Inactive);
-    assert!(registry.set_active(&host, "sample", true));
+    assert!(registry.set_active(&dynamic(&host), "sample", true));
     assert!(matches!(host.keymap().dispatch("sample.hello", None), RunResult::Ok));
 }
 
 #[test]
 fn versions_follow_the_abi_rules() {
-    let load = |library: &[u8], options: Option<&str>| Native.load(&host(), library, options).err();
+    let load = |library: &[u8], options: Option<&str>| Native.load(&dynamic(&host()), library, options).err();
     // The current build is 1.4; a 1.0 build has the shorter table and still loads and works on this 1.4 host.
     let current = build("");
     assert_eq!(Native.inspect(&current).unwrap(), Inspected { major: 1, minor: 4, version: Some("0.1.0".to_owned()) });
@@ -228,9 +228,9 @@ fn versions_follow_the_abi_rules() {
     );
     assert!(load(b"not a library", None).unwrap().starts_with("cannot load the library"));
     // Setup runs on activation, so a setup that fails fails the plugin there.
-    let (definition, error) = Native.load(&host, &current, Some("{\"fail\":true}")).unwrap();
-    let registry = Registry::new(Vec::new(), []);
-    registry.load(&host, definition.external("sample.so", error));
+    let (definition, error) = Native.load(&dynamic(&host), &current, Some("{\"fail\":true}")).unwrap();
+    let registry = Registry::define(Vec::new(), []);
+    registry.load(&dynamic(&host), definition.external("sample.so", error));
     assert_eq!(status(&registry), Status::Failed("sample setup failed".to_owned()));
 }
 
@@ -240,21 +240,21 @@ fn versions_follow_the_abi_rules() {
 fn setup_runs_on_activation_and_the_instance_is_destroyed_after() {
     let host = host();
     let stored = |key: &str| host.storage.borrow_mut().remove(&format!("plugin.sample.{key}"));
-    let (definition, error) = Native.load(&host, &build(""), Some("{\"probe\":true}")).unwrap();
+    let (definition, error) = Native.load(&dynamic(&host), &build(""), Some("{\"probe\":true}")).unwrap();
     assert_eq!(definition.id, "sample");
-    let registry = Registry::new(Vec::new(), ["-sample"]);
-    registry.load(&host, definition.external("sample.so", error));
+    let registry = Registry::define(Vec::new(), ["-sample"]);
+    registry.load(&dynamic(&host), definition.external("sample.so", error));
     assert_eq!(status(&registry), Status::Inactive);
     host.app.advance(Duration::from_millis(1));
     assert!(host.toasts.borrow().is_empty() && host.storage.borrow().is_empty());
 
-    assert!(registry.set_active(&host, "sample", true));
+    assert!(registry.set_active(&dynamic(&host), "sample", true));
     assert_eq!(stored("count").as_deref(), Some("{\"count\":1}"));
-    assert!(registry.set_active(&host, "sample", false));
+    assert!(registry.set_active(&dynamic(&host), "sample", false));
     assert_eq!(stored("destroyed").as_deref(), Some("{\"destroyed\":true}"));
-    assert!(registry.set_active(&host, "sample", true));
+    assert!(registry.set_active(&dynamic(&host), "sample", true));
     assert_eq!(stored("destroyed"), None);
-    registry.unload(&host, "sample.so");
+    registry.unload(&dynamic(&host), "sample.so");
     assert_eq!(stored("destroyed").as_deref(), Some("{\"destroyed\":true}"));
 }
 
@@ -266,18 +266,14 @@ fn the_loader_reloads_a_rebuilt_library() {
     fs::create_dir_all(&dir).unwrap();
     fs::write(dir.join(entry_file()), build("")).unwrap();
     let host = host();
-    let registry = Registry::<TestHost>::new(Vec::new(), []);
-    let loader = Loader::new(
-        Rc::new(Native) as Rc<dyn Backend<TestHost>>,
-        config,
-        root.path().to_path_buf(),
-        Vec::<Configured>::new(),
-    );
-    assert!(loader.reconcile(&host, &registry));
+    let registry = Registry::define(Vec::new(), []);
+    let loader =
+        Loader::new(Rc::new(Native) as Rc<dyn Backend>, config, root.path().to_path_buf(), Vec::<Configured>::new());
+    assert!(loader.reconcile(&dynamic(&host), &registry));
     let screen = markdown(&host, &registry, "```sample\nhi\n```\n");
     assert!(screen.contains("SAMPLE v1 HI"), "{screen}");
     fs::write(dir.join(entry_file()), build("v2")).unwrap();
-    assert!(loader.reconcile(&host, &registry));
+    assert!(loader.reconcile(&dynamic(&host), &registry));
     let screen = markdown(&host, &registry, "```sample\nhi\n```\n");
     assert!(screen.contains("SAMPLE v2 HI"), "{screen}");
     assert_eq!(registry.entries().len(), 1);
@@ -293,16 +289,12 @@ fn a_rebuild_whose_setup_fails_keeps_the_running_version() {
     fs::create_dir_all(&dir).unwrap();
     fs::write(dir.join(entry_file()), build("")).unwrap();
     let host = host();
-    let registry = Registry::<TestHost>::new(Vec::new(), []);
-    let loader = Loader::new(
-        Rc::new(Native) as Rc<dyn Backend<TestHost>>,
-        config,
-        root.path().to_path_buf(),
-        Vec::<Configured>::new(),
-    );
-    assert!(loader.reconcile(&host, &registry));
+    let registry = Registry::define(Vec::new(), []);
+    let loader =
+        Loader::new(Rc::new(Native) as Rc<dyn Backend>, config, root.path().to_path_buf(), Vec::<Configured>::new());
+    assert!(loader.reconcile(&dynamic(&host), &registry));
     fs::write(dir.join(entry_file()), build("setup-fails")).unwrap();
-    assert!(loader.reconcile(&host, &registry));
+    assert!(loader.reconcile(&dynamic(&host), &registry));
     let target = dir.to_string_lossy().into_owned();
     let entry = entry(&registry.entries(), &target).clone();
     assert!(entry.active);
@@ -352,9 +344,9 @@ fn a_malformed_table_is_refused_without_reading_it() {
 #[test]
 fn a_wake_from_a_plugin_thread_draws_its_claims_again() {
     let host = host();
-    let (definition, error) = Native.load(&host, &build(""), Some("{\"tick_ms\":5}")).unwrap();
-    let registry = Registry::new(Vec::new(), []);
-    registry.load(&host, definition.external("sample.so", error));
+    let (definition, error) = Native.load(&dynamic(&host), &build(""), Some("{\"tick_ms\":5}")).unwrap();
+    let registry = Registry::define(Vec::new(), []);
+    registry.load(&dynamic(&host), definition.external("sample.so", error));
     let parent = View::new(host.app());
     let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
     host.app().root().add(&parent);
@@ -368,12 +360,12 @@ fn a_wake_from_a_plugin_thread_draws_its_claims_again() {
 
 /// The sample, active with `options`, its home footer claim mounted, after the app's task queue is filled, so the
 /// plugin's wakes find it full.
-fn woken_into_a_full_queue(host: &Rc<TestHost>, options: &str) -> (Registry<TestHost>, impl Sized) {
+fn woken_into_a_full_queue(host: &Rc<TestHost>, options: &str) -> (Registry, impl Sized) {
     let proxy = host.app().proxy();
     while proxy.post(|_| {}).is_ok() {}
-    let (definition, error) = Native.load(host, &build(""), Some(options)).unwrap();
-    let registry = Registry::new(Vec::new(), []);
-    registry.load(host, definition.external("sample.so", error));
+    let (definition, error) = Native.load(&dynamic(host), &build(""), Some(options)).unwrap();
+    let registry = Registry::define(Vec::new(), []);
+    registry.load(&dynamic(host), definition.external("sample.so", error));
     let parent = View::new(host.app());
     let mounted = registry.mount(&**host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
     host.app().root().add(&parent);
@@ -403,11 +395,11 @@ fn a_wake_after_deactivation_does_nothing() {
     let (registry, mounted) = woken_into_a_full_queue(&host, "{\"tick_ms\":50,\"ticks\":1}");
     drop(mounted);
     host.app().root().clear();
-    assert!(registry.set_active(&host, "sample", false));
+    assert!(registry.set_active(&dynamic(&host), "sample", false));
     host.app.wait_until(Duration::from_millis(100), || false);
     assert_eq!(status(&registry), Status::Inactive);
     assert!(host.toasts.borrow().is_empty());
-    assert!(registry.set_active(&host, "sample", true));
+    assert!(registry.set_active(&dynamic(&host), "sample", true));
     let screen = markdown(&host, &registry, "```sample\nagain\n```\n");
     assert!(screen.contains("SAMPLE v1 AGAIN"), "{screen}");
 }
@@ -419,9 +411,9 @@ fn setup_reaches_the_host() {
     let host = host();
     host.mode.set(ThemeMode::Light);
     host.storage.borrow_mut().insert("plugin.sample.count".to_owned(), "{\"count\":5}".to_owned());
-    let (definition, error) = Native.load(&host, &build(""), Some("{\"probe\":true}")).unwrap();
-    let registry = Registry::new(Vec::new(), []);
-    registry.load(&host, definition.external("sample.so", error));
+    let (definition, error) = Native.load(&dynamic(&host), &build(""), Some("{\"probe\":true}")).unwrap();
+    let registry = Registry::define(Vec::new(), []);
+    registry.load(&dynamic(&host), definition.external("sample.so", error));
     assert_eq!(status(&registry), Status::Active);
     host.app.advance(Duration::from_millis(1));
     assert_eq!(*host.toasts.borrow(), [abi::Toast::new(abi::Variant::Info, "sample setup: count 5, light, stored")]);
@@ -441,8 +433,8 @@ mod sample_fence;
 fn the_sample_fence_draws_the_same_in_process_and_through_the_library() {
     let host = host();
     let plugin = abi::Plugin { id: "sample", setup: sample_fence::setup };
-    let in_process = Registry::new(vec![plugin.into()], []);
-    in_process.activate(&host);
+    let in_process = Registry::define(vec![plugin.into()], []);
+    in_process.activate(&dynamic(&host));
     let library = active(&host, &build(""));
     let text = "```sample\nhello\n```\n\n```sample-mode\nx\n```\n\n```sample-color\nlabel\n```\n";
     let direct = markdown(&host, &in_process, text);
@@ -454,7 +446,7 @@ fn the_sample_fence_draws_the_same_in_process_and_through_the_library() {
 }
 
 /// Streams `chunks` into one Markdown view with the registry's renderers, returning the frame after each.
-fn stream(host: &Rc<TestHost>, registry: &Registry<TestHost>, chunks: &[&str]) -> Vec<Capture> {
+fn stream(host: &Rc<TestHost>, registry: &Registry, chunks: &[&str]) -> Vec<Capture> {
     let theme = host.theme();
     let syntax = opencode_ui::code::syntax_theme(&theme);
     let view = opencode_ui::markdown::view(host.app(), &theme, &syntax, &registry.code_blocks(&theme), true, true);
@@ -495,10 +487,10 @@ unsafe extern "C" fn mermaid_create(
 fn loopback(
     host: &Rc<TestHost>,
     create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
-) -> Registry<TestHost> {
-    let (definition, error) = super::loopback(host, create).unwrap();
-    let loopback = Registry::new(Vec::new(), []);
-    loopback.load(host, definition.external("loopback.so", error));
+) -> Registry {
+    let (definition, error) = super::loopback(&dynamic(host), create).unwrap();
+    let loopback = Registry::define(Vec::new(), []);
+    loopback.load(&dynamic(host), definition.external("loopback.so", error));
     assert_eq!(entry(&loopback.entries(), "loopback.so").status, Status::Active);
     loopback
 }
@@ -510,7 +502,7 @@ mod sample_slot;
 /// The frames of `registry`'s `sidebar.content` claims for `ses_1`: as mounted, after a message arrives and the host
 /// syncs them, with the pointer over the click count, and after two clicks on it, which the claim reads back from
 /// storage when the host syncs it again.
-fn sidebar(host: &Rc<TestHost>, registry: &Registry<TestHost>) -> Vec<Capture> {
+fn sidebar(host: &Rc<TestHost>, registry: &Registry) -> Vec<Capture> {
     host.messages.borrow_mut().clear();
     host.storage.borrow_mut().clear();
     let parent = View::new(host.app()).column();
@@ -520,7 +512,7 @@ fn sidebar(host: &Rc<TestHost>, registry: &Registry<TestHost>) -> Vec<Capture> {
     host.app().root().add(&parent);
     let first = host.app.render();
     host.messages.borrow_mut().push(abi::types::SessionMessageInfo::Unknown(serde_json::json!({ "type": "x" })));
-    mounted.sync(host, &());
+    mounted.sync(&**host, Some(&abi::Changed::everything()));
     let synced = host.app.render();
     host.app.hover(2, 2);
     let hovered = host.app.render();
@@ -528,7 +520,7 @@ fn sidebar(host: &Rc<TestHost>, registry: &Registry<TestHost>) -> Vec<Capture> {
         host.app.click(2, 2);
         host.app.advance(Duration::from_millis(1));
     }
-    mounted.sync(host, &());
+    mounted.sync(&**host, Some(&abi::Changed::everything()));
     vec![first, synced, hovered, host.app.render()]
 }
 
@@ -540,8 +532,8 @@ fn sidebar(host: &Rc<TestHost>, registry: &Registry<TestHost>) -> Vec<Capture> {
 fn the_sample_slot_draws_the_same_in_process_and_through_the_library() {
     let host = host();
     let plugin = abi::Plugin { id: "sample", setup: sample_slot::setup };
-    let in_process = Registry::new(vec![plugin.into()], []);
-    in_process.activate(&host);
+    let in_process = Registry::define(vec![plugin.into()], []);
+    in_process.activate(&dynamic(&host));
     let direct = sidebar(&host, &in_process);
     let text: Vec<String> = direct.iter().map(Capture::text).collect();
     assert!(text[0].contains("Sample: 0 messages") && text[0].contains("opencode/big"), "{}", text[0]);
@@ -551,7 +543,7 @@ fn the_sample_slot_draws_the_same_in_process_and_through_the_library() {
     let stored = host.storage.borrow().get("plugin.sample.clicks").cloned();
     assert_eq!(stored.as_deref(), Some(r#"{"count":2,"input":"ses_1"}"#));
     // Its hidden command leaves the keymap with it, so the library's runs the clicks.
-    in_process.set_active(&host, "sample", false);
+    in_process.set_active(&dynamic(&host), "sample", false);
     let library = active(&host, &build("still"));
     assert_eq!(sidebar(&host, &library), direct);
     assert_eq!(host.storage.borrow().get("plugin.sample.clicks").cloned(), stored);
@@ -562,8 +554,8 @@ fn the_sample_slot_draws_the_same_in_process_and_through_the_library() {
 #[test]
 fn latex_streams_the_same_through_the_c_abi_loopback() {
     let host = host();
-    let in_process = Registry::new(vec![opencode_latex::plugin().into()], []);
-    in_process.activate(&host);
+    let in_process = Registry::define(vec![opencode_latex::plugin().into()], []);
+    in_process.activate(&dynamic(&host));
     let loopback = loopback(&host, latex_create);
 
     let chunks = ["```latex\n\\frac{a_1+b_1}{c_1+d_1}", "+\\frac{a_", "2+b_2}{c_2+d_2}"];
@@ -581,8 +573,8 @@ fn latex_streams_the_same_through_the_c_abi_loopback() {
 #[test]
 fn mermaid_streams_the_same_through_the_c_abi_loopback() {
     let host = host();
-    let in_process = Registry::new(vec![opencode_mermaid::plugin().into()], []);
-    in_process.activate(&host);
+    let in_process = Registry::define(vec![opencode_mermaid::plugin().into()], []);
+    in_process.activate(&dynamic(&host));
     let loopback = loopback(&host, mermaid_create);
 
     let chunks = ["```mermaid\nflowchart LR\n  A -->|go| B", "\n  B --> C", "\n  C((cir"];
@@ -608,7 +600,7 @@ fn succeeded(session: &str) -> abi::types::V2Event {
 
 /// The sample's home row as `registry` mounts `home.footer`, before and after a session's run succeeds, with the
 /// toasts the event showed.
-fn home(host: &Rc<TestHost>, registry: &Rc<Registry<TestHost>>) -> (Vec<String>, Vec<abi::Toast>) {
+fn home(host: &Rc<TestHost>, registry: &Rc<Registry>) -> (Vec<String>, Vec<abi::Toast>) {
     host.toasts.borrow_mut().clear();
     *host.registry.borrow_mut() = Rc::downgrade(registry);
     let parent = View::new(host.app()).column();
@@ -636,13 +628,13 @@ fn home(host: &Rc<TestHost>, registry: &Rc<Registry<TestHost>>) -> (Vec<String>,
 fn the_sample_home_and_event_act_the_same_in_process_and_through_the_library() {
     let host = host();
     let plugin = abi::Plugin { id: "sample", setup: sample_home::setup };
-    let in_process = Rc::new(Registry::new(vec![plugin.into()], []));
-    in_process.activate(&host);
+    let in_process = Rc::new(Registry::define(vec![plugin.into()], []));
+    in_process.activate(&dynamic(&host));
     let direct = home(&host, &in_process);
     assert_eq!(direct.0, ["sample home: 0 done", "sample home: 2 done"]);
     let toast = |id: &str| abi::Toast::new(abi::Variant::Info, format!("sample: {id} is done")).session(id);
     assert_eq!(direct.1, [toast("ses_1"), toast("ses_2")]);
-    in_process.set_active(&host, "sample", false);
+    in_process.set_active(&dynamic(&host), "sample", false);
     let library = Rc::new(active(&host, &build("still")));
     assert_eq!(home(&host, &library), direct);
 }
@@ -665,8 +657,8 @@ fn nesting(setup: &mut abi::Setup) -> Result<(), String> {
 #[test]
 fn a_nested_slot_must_be_a_published_slot_inside_the_claims_own() {
     let host = host();
-    let registry = Rc::new(Registry::new(vec![abi::Plugin { id: "nesting", setup: nesting }.into()], []));
-    registry.activate(&host);
+    let registry = Rc::new(Registry::define(vec![abi::Plugin { id: "nesting", setup: nesting }.into()], []));
+    registry.activate(&dynamic(&host));
     *host.registry.borrow_mut() = Rc::downgrade(&registry);
     let parent = View::new(host.app()).column();
     let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
@@ -707,8 +699,8 @@ unsafe extern "C" fn first_create(
 fn effects_of_both_paths_run_in_call_order() {
     let host = host();
     let _native = loopback(&host, first_create);
-    let direct = Registry::new(vec![abi::Plugin { id: "second", setup: second }.into()], []);
-    direct.activate(&host);
+    let direct = Registry::define(vec![abi::Plugin { id: "second", setup: second }.into()], []);
+    direct.activate(&dynamic(&host));
     host.emit(&succeeded("ses_1"));
     host.app.advance(Duration::from_millis(1));
     let toasts: Vec<String> = host.toasts.borrow().iter().map(|toast| toast.message.clone()).collect();
@@ -722,30 +714,30 @@ fn the_instance_is_destroyed_at_once_while_its_route_is_mounted() {
     let host = host();
     let destroyed = || host.storage.borrow_mut().remove("plugin.sample.destroyed");
     let load = |build: &[u8]| {
-        let (definition, error) = Native.load(&host, build, Some("{\"probe\":true}")).unwrap();
+        let (definition, error) = Native.load(&dynamic(&host), build, Some("{\"probe\":true}")).unwrap();
         definition.external("sample.so", error)
     };
-    let registry = Registry::new(Vec::new(), []);
-    registry.load(&host, load(&build("")));
+    let registry = Registry::define(Vec::new(), []);
+    registry.load(&dynamic(&host), load(&build("")));
     let route = registry.route(&*host, "sample", "hello").unwrap();
-    assert!(registry.set_active(&host, "sample", false));
+    assert!(registry.set_active(&dynamic(&host), "sample", false));
     assert_eq!(destroyed().as_deref(), Some("{\"destroyed\":true}"));
 
-    assert!(registry.set_active(&host, "sample", true));
+    assert!(registry.set_active(&dynamic(&host), "sample", true));
     let route = (route, registry.route(&*host, "sample", "hello").unwrap());
     host.storage.borrow_mut().remove("plugin.sample.count");
-    registry.load(&host, load(&build("v2")));
+    registry.load(&dynamic(&host), load(&build("v2")));
     // The rebuild's setup stored its count, then the old instance was destroyed.
     assert_eq!(destroyed().as_deref(), Some("{\"destroyed\":true}"));
     assert_eq!(host.storage.borrow().get("plugin.sample.count").map(String::as_str), Some("{\"count\":1}"));
-    route.1.sync(&*host, &());
+    route.1.sync(&*host, Some(&abi::Changed::everything()));
     host.app().root().clear();
     host.app().root().add(&route.1.root());
     host.app.render();
     assert!(!host.app.text().contains("Sample route hello"), "{}", host.app.text());
 
     let _route = registry.route(&*host, "sample", "hello").unwrap();
-    registry.unload(&host, "sample.so");
+    registry.unload(&dynamic(&host), "sample.so");
     assert_eq!(destroyed().as_deref(), Some("{\"destroyed\":true}"));
 }
 
@@ -796,8 +788,8 @@ unsafe extern "C" fn fenced_create(
 #[test]
 fn a_fence_reads_and_renders_the_same_in_process_and_through_the_c_abi() {
     let host = host();
-    let in_process = Registry::new(vec![abi::Plugin { id: "fenced", setup: fenced }.into()], []);
-    in_process.activate(&host);
+    let in_process = Registry::define(vec![abi::Plugin { id: "fenced", setup: fenced }.into()], []);
+    in_process.activate(&dynamic(&host));
     let direct = markdown(&host, &in_process, "```ts\nlet a = 1\n```\n");
     assert!(direct.contains("custom typescript big"), "{direct}");
     let loopback = loopback(&host, fenced_create);
@@ -833,8 +825,8 @@ fn ticking(setup: &mut abi::Setup) -> Result<(), String> {
 #[test]
 fn a_wake_from_an_in_process_plugin_thread_draws_its_claims_again() {
     let host = host();
-    let registry = Registry::new(vec![abi::Plugin { id: "ticking", setup: ticking }.into()], []);
-    registry.activate(&host);
+    let registry = Registry::define(vec![abi::Plugin { id: "ticking", setup: ticking }.into()], []);
+    registry.activate(&dynamic(&host));
     let parent = View::new(host.app());
     let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
     host.app().root().add(&parent);
@@ -843,7 +835,7 @@ fn a_wake_from_an_in_process_plugin_thread_draws_its_claims_again() {
         host.app.text().contains("ticks 3")
     });
     assert!(ticked, "{}", host.app.text());
-    assert!(registry.set_active(&host, "ticking", false));
+    assert!(registry.set_active(&dynamic(&host), "ticking", false));
 }
 
 /// The sample's server request and live panel, compiled in rather than loaded.
@@ -852,7 +844,7 @@ mod sample_fetch;
 
 /// The sample's fetch row before and after the reply, the fetches it sent, and the panels it showed, as `registry` has
 /// them.
-fn fetched(host: &Rc<TestHost>, registry: &Rc<Registry<TestHost>>) -> (Vec<String>, Vec<abi::Fetch>, Vec<abi::Dialog>) {
+fn fetched(host: &Rc<TestHost>, registry: &Rc<Registry>) -> (Vec<String>, Vec<abi::Fetch>, Vec<abi::Dialog>) {
     host.dialogs.borrow_mut().clear();
     *host.registry.borrow_mut() = Rc::downgrade(registry);
     let parent = View::new(host.app()).column();
@@ -884,8 +876,9 @@ fn fetched(host: &Rc<TestHost>, registry: &Rc<Registry<TestHost>>) -> (Vec<Strin
 #[test]
 fn the_sample_fetch_and_panel_act_the_same_in_process_and_through_the_library() {
     let host = host();
-    let in_process = Rc::new(Registry::new(vec![abi::Plugin { id: "sample", setup: sample_fetch::setup }.into()], []));
-    in_process.activate(&host);
+    let in_process =
+        Rc::new(Registry::define(vec![abi::Plugin { id: "sample", setup: sample_fetch::setup }.into()], []));
+    in_process.activate(&dynamic(&host));
     let direct = fetched(&host, &in_process);
     assert_eq!(direct.0, ["sample fetch: none", "sample fetch: /api/sample"]);
     assert_eq!(direct.1, [abi::Fetch { method: "GET".into(), path: "/api/sample".into(), ..abi::Fetch::default() }]);
@@ -899,7 +892,7 @@ fn the_sample_fetch_and_panel_act_the_same_in_process_and_through_the_library() 
         .collect();
     let body = |count: u64| abi::Node::text([abi::Span::new(format!("shown {count} times"))]);
     assert_eq!(bodies, [("live".to_owned(), body(1)), ("live".to_owned(), body(2))]);
-    in_process.set_active(&host, "sample", false);
+    in_process.set_active(&dynamic(&host), "sample", false);
     let library = Rc::new(active(&host, &build("still")));
     assert_eq!(fetched(&host, &library), direct);
 }
@@ -931,11 +924,11 @@ unsafe extern "C" fn replying_create(
 fn a_slow_reply_across_a_disable_delivers_nothing() {
     let host = host();
     let registries = [
-        Registry::new(vec![abi::Plugin { id: "replying", setup: replying }.into()], []),
+        Registry::define(vec![abi::Plugin { id: "replying", setup: replying }.into()], []),
         loopback(&host, replying_create),
     ];
     for registry in registries {
-        registry.activate(&host);
+        registry.activate(&dynamic(&host));
         host.keymap().dispatch("x.fetch", None);
         host.app.advance(Duration::from_millis(1));
         host.reply();
@@ -946,7 +939,7 @@ fn a_slow_reply_across_a_disable_delivers_nothing() {
         assert_eq!(host.fetches.borrow().len(), 1);
         let parent = View::new(host.app()).column();
         let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
-        registry.set_active(&host, "replying", false);
+        registry.set_active(&dynamic(&host), "replying", false);
         host.reply();
         host.app.advance(Duration::from_millis(1));
         assert!(host.toasts.borrow().is_empty(), "{:?}", host.toasts.borrow());
@@ -959,7 +952,7 @@ mod sample_prompt;
 
 /// The sample's prompt row as `registry` mounts `prompt.footer` for `ses_1`: as mounted, after its fetch is answered,
 /// once the session pane lost the input, and as mounted again beside the first mount and then alone; with the fetches.
-fn prompted(host: &Rc<TestHost>, registry: &Registry<TestHost>) -> (Vec<String>, Vec<abi::Fetch>) {
+fn prompted(host: &Rc<TestHost>, registry: &Registry) -> (Vec<String>, Vec<abi::Fetch>) {
     host.interactive.set(true);
     let input = SlotInput {
         session_id: Some("ses_1".to_owned()),
@@ -982,14 +975,14 @@ fn prompted(host: &Rc<TestHost>, registry: &Registry<TestHost>) -> (Vec<String>,
     host.reply();
     rows.push(row(host, &parent));
     host.interactive.set(false);
-    first.sync(host, &());
+    first.sync(&**host, Some(&abi::Changed::everything()));
     rows.push(row(host, &parent));
     // A remount mounts the next before the last goes.
     let again = View::new(host.app()).column();
     let second = registry.mount(&**host, &again, "prompt.footer", &input, |_| {});
     rows.push(row(host, &again));
     drop(first);
-    second.sync(host, &());
+    second.sync(&**host, Some(&abi::Changed::everything()));
     rows.push(row(host, &again));
     take(host);
     host.reply();
@@ -1003,8 +996,8 @@ fn prompted(host: &Rc<TestHost>, registry: &Registry<TestHost>) -> (Vec<String>,
 #[test]
 fn the_sample_prompt_mounts_fetch_and_read_the_same_in_process_and_through_the_library() {
     let host = host();
-    let in_process = Registry::new(vec![abi::Plugin { id: "sample", setup: sample_prompt::setup }.into()], []);
-    in_process.activate(&host);
+    let in_process = Registry::define(vec![abi::Plugin { id: "sample", setup: sample_prompt::setup }.into()], []);
+    in_process.activate(&dynamic(&host));
     let direct = prompted(&host, &in_process);
     assert_eq!(
         direct.0,
@@ -1018,7 +1011,7 @@ fn the_sample_prompt_mounts_fetch_and_read_the_same_in_process_and_through_the_l
     );
     let fetch = abi::Fetch { method: "GET".into(), path: "/api/sample/ses_1".into(), ..abi::Fetch::default() };
     assert_eq!(direct.1, [fetch.clone(), fetch]);
-    in_process.set_active(&host, "sample", false);
+    in_process.set_active(&dynamic(&host), "sample", false);
     let library = active(&host, &build("still"));
     assert_eq!(prompted(&host, &library), direct);
 }
@@ -1070,11 +1063,13 @@ unsafe extern "C" fn waking_create(
 #[test]
 fn a_wake_runs_the_wake_handlers_then_renders_on_both_paths() {
     let host = host();
-    let registries =
-        [Registry::new(vec![abi::Plugin { id: "waking", setup: waking }.into()], []), loopback(&host, waking_create)];
+    let registries = [
+        Registry::define(vec![abi::Plugin { id: "waking", setup: waking }.into()], []),
+        loopback(&host, waking_create),
+    ];
     for registry in registries {
         host.fetches.borrow_mut().clear();
-        registry.activate(&host);
+        registry.activate(&dynamic(&host));
         let parent = View::new(host.app());
         let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
         host.app().root().clear();
@@ -1087,6 +1082,6 @@ fn a_wake_runs_the_wake_handlers_then_renders_on_both_paths() {
         let paths: Vec<String> = host.fetches.borrow().iter().map(|(fetch, _)| fetch.path.clone()).collect();
         assert_eq!(paths, ["/api/woken"]);
         drop(_mounted);
-        registry.set_active(&host, "waking", false);
+        registry.set_active(&dynamic(&host), "waking", false);
     }
 }

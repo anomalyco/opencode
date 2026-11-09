@@ -129,7 +129,9 @@ fn stats_frames(loopback: bool) -> Vec<Vec<opentui::testing::Cell>> {
     let server = Server::new(true);
     let h = mount(&server, if loopback { &["-opencode.stats"] } else { &[] });
     if loopback {
-        let (definition, _) = opencode_plugin::loader::native::loopback(&h.tui, stats_create).unwrap();
+        let (definition, _) =
+            opencode_plugin::loader::native::loopback(&opencode_tui::plugins::host::host(&h.tui), stats_create)
+                .unwrap();
         opencode_tui::plugins::host::add(&h.tui, definition);
         h.wait_for("Fix the parser");
     }
@@ -226,7 +228,7 @@ fn a_slow_btw_reply_across_a_disable_delivers_nothing() {
     h.wait("the question to go out", || server.sent("/generate").len() == 1);
     h.wait_for("/btw");
     // The spinner's claim stays mounted until the route mounts again, and it holds the plugin's state.
-    h.tui.plugins.set_active(&h.tui, "opencode.btw", false);
+    h.tui.plugins.set_active(&opencode_tui::plugins::host::host(&h.tui), "opencode.btw", false);
     server.release();
     h.app.wait_until(Duration::from_millis(300), || false);
     assert!(!h.app.text().contains("answer to one"), "{}", h.app.text());

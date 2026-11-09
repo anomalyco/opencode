@@ -13,12 +13,10 @@ struct TestHost {
     app: TestApp,
     keymap: DialogKeymap,
     /// The registry nested slots mount from.
-    registry: std::cell::RefCell<std::rc::Weak<Registry<TestHost>>>,
+    registry: std::cell::RefCell<std::rc::Weak<Registry>>,
 }
 
 impl Host for TestHost {
-    type Changes = ();
-
     fn app(&self) -> &App {
         &self.app
     }
@@ -31,9 +29,14 @@ impl Host for TestHost {
         &self.keymap
     }
 
-    fn slot(&self, parent: &View, path: &str, input: &SlotInput) -> Option<SlotMount<Self>> {
+    fn slot(&self, parent: &View, path: &str, input: &SlotInput) -> Option<SlotMount> {
         Some(self.registry.borrow().upgrade()?.mount(self, parent, path, input, |_| {}))
     }
+}
+
+/// `host` as the registry takes it.
+fn dynamic(host: &Rc<TestHost>) -> Rc<dyn Host> {
+    host.clone()
 }
 
 fn host() -> Rc<TestHost> {
@@ -45,9 +48,9 @@ fn host() -> Rc<TestHost> {
 }
 
 /// A plugin that claims `placements`, each rendering a text of the plugin ID and its index.
-fn claiming(id: &str, placements: Vec<Placement>) -> Definition<TestHost> {
+fn claiming(id: &str, placements: Vec<Placement>) -> Definition {
     let id = id.to_owned();
-    Definition::new(id.clone(), move |cx: &mut Setup<'_, TestHost>| {
+    Definition::new(id.clone(), move |cx: &mut Setup<'_>| {
         for (index, placement) in placements.iter().enumerate() {
             let label = format!("{id}{index}");
             cx.slot(placement.clone(), move |host, _| {
@@ -160,9 +163,9 @@ fn selectors_match_as_in_ts() {
 #[test]
 fn config_disables_builtins_and_skips_typescript_plugins() {
     let builtins = ["opencode.home.footer", "opencode.sidebar.todo", "opencode.sidebar.mcp", "opencode.stats"]
-        .map(|id| Definition::<TestHost>::new(id, |_| {}))
+        .map(|id| Definition::new(id, |_| {}))
         .to_vec();
-    let registry = Registry::new(
+    let registry = Registry::define(
         builtins,
         [
             "-opencode.sidebar.*",
@@ -178,7 +181,7 @@ fn config_disables_builtins_and_skips_typescript_plugins() {
         ],
     );
     let host = host();
-    registry.activate(&host);
+    registry.activate(&dynamic(&host));
     let status = |id: &str| {
         registry.entries().into_iter().find(|entry| entry.id == id).map(|entry| (entry.source, entry.status)).unwrap()
     };
@@ -192,14 +195,14 @@ fn config_disables_builtins_and_skips_typescript_plugins() {
 #[test]
 fn mount_orders_claims_around_the_content() {
     let host = host();
-    let registry = Registry::new(
+    let registry = Registry::define(
         vec![
             claiming("a", vec![Placement::append("home.footer"), Placement::before("home.footer")]),
             claiming("b", vec![Placement::prepend("home.footer"), Placement::after("home.footer")]),
         ],
         [],
     );
-    registry.activate(&host);
+    registry.activate(&dynamic(&host));
     let parent = View::new(host.app()).column();
     let mount = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |parent| {
         parent.add(&Text::new(host.app(), "content"));
@@ -213,14 +216,14 @@ fn mount_orders_claims_around_the_content() {
 #[test]
 fn a_replacement_drops_the_content_and_inside_claims() {
     let host = host();
-    let registry = Registry::new(
+    let registry = Registry::define(
         vec![
             claiming("a", vec![Placement::append("home.footer")]),
             claiming("b", vec![Placement::replace("home.footer")]),
         ],
         [],
     );
-    registry.activate(&host);
+    registry.activate(&dynamic(&host));
     let parent = View::new(host.app()).column();
     registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |parent| {
         parent.add(&Text::new(host.app(), "content"));
@@ -235,9 +238,10 @@ fn a_replacement_drops_the_content_and_inside_claims() {
 fn an_external_plugin_replaces_a_built_in_of_its_id_in_place() {
     let host = host();
     let footer = || vec![Placement::append("home.footer")];
-    let registry = Registry::new(vec![claiming("a", footer()), claiming("b", footer()), claiming("c", footer())], []);
-    registry.activate(&host);
-    let rows = |registry: &Registry<TestHost>| {
+    let registry =
+        Registry::define(vec![claiming("a", footer()), claiming("b", footer()), claiming("c", footer())], []);
+    registry.activate(&dynamic(&host));
+    let rows = |registry: &Registry| {
         let parent = View::new(host.app()).column();
         let _mount = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
         host.app().root().clear();
@@ -248,7 +252,7 @@ fn an_external_plugin_replaces_a_built_in_of_its_id_in_place() {
     assert_eq!(rows(&registry), ["a0", "b0", "c0"]);
     let external = |label: &str| {
         let label = label.to_owned();
-        Definition::new("b", move |cx: &mut Setup<'_, TestHost>| {
+        Definition::new("b", move |cx: &mut Setup<'_>| {
             let label = label.clone();
             cx.slot(Placement::append("home.footer"), move |host, _| {
                 Box::new(View::new(host.app()).child(&Text::new(host.app(), label.clone())))
@@ -257,15 +261,15 @@ fn an_external_plugin_replaces_a_built_in_of_its_id_in_place() {
         .external("b.so", Rc::new(|| None))
     };
     assert!(!registry.id_taken("b", "b.so"));
-    assert_eq!(registry.load(&host, external("ext")), None);
+    assert_eq!(registry.load(&dynamic(&host), external("ext")), None);
     assert_eq!(rows(&registry), ["a0", "ext", "c0"]);
     let entries = registry.entries();
     assert_eq!((entries[1].source, entries[1].target.as_deref()), (Source::External, Some("b.so")));
     assert!(registry.id_taken("b", "other.so"));
     // A rebuild keeps the place too.
-    assert_eq!(registry.load(&host, external("ext2")), None);
+    assert_eq!(registry.load(&dynamic(&host), external("ext2")), None);
     assert_eq!(rows(&registry), ["a0", "ext2", "c0"]);
-    registry.unload(&host, "b.so");
+    registry.unload(&dynamic(&host), "b.so");
     assert_eq!(rows(&registry), ["a0", "b0", "c0"]);
     assert_eq!((registry.entries()[1].source, registry.entries()[1].status.clone()), (Source::Builtin, Status::Active));
 }
@@ -278,8 +282,7 @@ fn deactivation_undoes_every_registration() {
     let plugin = {
         let disposed = disposed.clone();
         let ran = ran.clone();
-        Definition::new("test.plugin", move |cx: &mut Setup<'_, TestHost>| {
-            assert_eq!(cx.storage_key("state"), "plugin.test.plugin.state");
+        Definition::new("test.plugin", move |cx: &mut Setup<'_>| {
             let ran = ran.clone();
             cx.layer(KeymapLayer {
                 mode: Some(GLOBAL_MODE.to_owned()),
@@ -293,20 +296,20 @@ fn deactivation_undoes_every_registration() {
             cx.on_dispose(move || disposed.set(disposed.get() + 1));
         })
     };
-    let registry = Registry::new(vec![], []);
+    let registry = Registry::define(vec![], []);
     registry.add(plugin);
-    registry.activate(&host);
+    registry.activate(&dynamic(&host));
     assert!(matches!(host.keymap.dispatch("test.run", None), RunResult::Ok));
     assert_eq!(ran.get(), 1);
     assert!(registry.route(&*host, "test.plugin", "page").is_some());
     assert!(registry.route(&*host, "test.plugin", "other").is_none());
-    let mounted = |registry: &Registry<TestHost>| {
+    let mounted = |registry: &Registry| {
         let parent = View::new(host.app());
         !registry.mount(&*host, &parent, slot::SIDEBAR_CONTENT, &SlotInput::default(), |_| {}).is_empty()
     };
     assert!(mounted(&registry));
 
-    assert!(registry.set_active(&host, "test.plugin", false));
+    assert!(registry.set_active(&dynamic(&host), "test.plugin", false));
     assert_eq!(disposed.get(), 1);
     assert!(!matches!(host.keymap.dispatch("test.run", None), RunResult::Ok));
     assert!(registry.route(&*host, "test.plugin", "page").is_none());
@@ -314,10 +317,10 @@ fn deactivation_undoes_every_registration() {
     assert_eq!(registry.entries()[0].status, Status::Inactive);
 
     // Reactivation runs setup again.
-    assert!(registry.set_active(&host, "test.plugin", true));
+    assert!(registry.set_active(&dynamic(&host), "test.plugin", true));
     assert!(matches!(host.keymap.dispatch("test.run", None), RunResult::Ok));
     assert_eq!(ran.get(), 2);
-    assert!(!registry.set_active(&host, "missing", true));
+    assert!(!registry.set_active(&dynamic(&host), "missing", true));
 }
 
 #[test]
@@ -326,7 +329,7 @@ fn code_blocks_follow_activation_order() {
     let languages = Rc::new(std::cell::RefCell::new(Vec::new()));
     let renderer = |id: &'static str| {
         let languages = languages.clone();
-        Definition::new(id, move |cx: &mut Setup<'_, TestHost>| {
+        Definition::new(id, move |cx: &mut Setup<'_>| {
             let languages = languages.clone();
             cx.code_block("math", move |block, _| {
                 languages.borrow_mut().push((id, block.code.trim().to_owned()));
@@ -334,11 +337,11 @@ fn code_blocks_follow_activation_order() {
             });
         })
     };
-    let registry = Registry::new(vec![renderer("first"), renderer("second")], []);
-    registry.activate(&host);
+    let registry = Registry::define(vec![renderer("first"), renderer("second")], []);
+    registry.activate(&dynamic(&host));
     // Toggling `first` makes it the last enabled, so it wins.
-    registry.set_active(&host, "first", false);
-    registry.set_active(&host, "first", true);
+    registry.set_active(&dynamic(&host), "first", false);
+    registry.set_active(&dynamic(&host), "first", true);
     let markdown = opencode_ui::markdown::view(
         host.app(),
         &host.theme(),
@@ -361,9 +364,9 @@ fn placement_constructors_name_their_kind() {
 }
 
 /// A plugin whose one claim at `placement` renders what `render` returns.
-fn rendering(id: &str, placement: Placement, render: impl Fn() -> abi::Render + 'static) -> Definition<TestHost> {
-    let render: node::SlotRender<TestHost> = Rc::new(move |_, _, _| render());
-    Definition::new(id, move |cx: &mut Setup<'_, TestHost>| {
+fn rendering(id: &str, placement: Placement, render: impl Fn() -> abi::Render + 'static) -> Definition {
+    let render: node::SlotRender = Rc::new(move |_, _, _| render());
+    Definition::new(id, move |cx: &mut Setup<'_>| {
         let activation = crate::activation::Activation::new(cx.host(), Arc::new(crate::activation::Wake::new(None)));
         cx.claim(placement.clone(), render.clone(), None, &activation);
     })
@@ -388,8 +391,8 @@ fn a_claim_root_grows_in_a_row_slot() {
                 .layout(Layout::default().grow()),
         )
     });
-    let registry = Registry::new(vec![grow], []);
-    registry.activate(&host);
+    let registry = Registry::define(vec![grow], []);
+    registry.activate(&dynamic(&host));
     let parent = View::new(host.app()).row().width(30);
     let _mount = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |parent| {
         parent.add(&Text::new(host.app(), "content").shrink(0.0));
@@ -410,8 +413,8 @@ fn a_claim_root_shrinks_in_a_row_slot() {
                 .layout(Layout::default().shrink(true).min_width_zero()),
         )
     });
-    let registry = Registry::new(vec![shrink], []);
-    registry.activate(&host);
+    let registry = Registry::define(vec![shrink], []);
+    registry.activate(&dynamic(&host));
     let parent = View::new(host.app()).row().width(20);
     let _mount = registry.mount(&*host, &parent, slot::PROMPT_FOOTER, &SlotInput::default(), |parent| {
         parent.add(&Text::new(host.app(), "0123456789").shrink(0.0));
@@ -437,15 +440,15 @@ fn a_replaced_hover_text_drops_its_handlers() {
                 .on_click(Click::command("test.run", None)),
         )
     });
-    let registry = Registry::new(vec![text], []);
-    registry.activate(&host);
+    let registry = Registry::define(vec![text], []);
+    registry.activate(&dynamic(&host));
     let parent = View::new(host.app()).column();
     let mount = registry.mount(&*host, &parent, slot::SIDEBAR_CONTENT, &SlotInput::default(), |_| {});
     host.app().root().add(&parent);
     host.app.render();
     let weak = Rc::weak_count(&host);
     for _ in 0..10 {
-        mount.sync(&host, &());
+        mount.sync(&*host, Some(&abi::Changed::everything()));
     }
     assert_eq!(rows(&host)[0], "hover 11");
     assert_eq!(Rc::weak_count(&host), weak);
@@ -468,10 +471,10 @@ fn a_claim_on_an_unmounted_child_slot_degrades_to_its_parent() {
     let status = rendering("status", Placement::append(slot::HOME_FOOTER_STATUS), || {
         Render::Show(Node::text([Span::new("status")]))
     });
-    let registry = Rc::new(Registry::new(vec![footer, status], []));
+    let registry = Rc::new(Registry::define(vec![footer, status], []));
     *host.registry.borrow_mut() = Rc::downgrade(&registry);
-    registry.activate(&host);
-    let mount = |registry: &Registry<TestHost>| {
+    registry.activate(&dynamic(&host));
+    let mount = |registry: &Registry| {
         let parent = View::new(host.app()).column();
         host.app().root().clear();
         host.app().root().add(&parent);
@@ -483,14 +486,14 @@ fn a_claim_on_an_unmounted_child_slot_degrades_to_its_parent() {
     assert_eq!(rows(&host)[..2], ["content", "footer status"]);
 
     hidden.set(true);
-    mounted.sync(&host, &());
+    mounted.sync(&*host, Some(&abi::Changed::everything()));
     assert_eq!(rows(&host)[..2], ["content", "status"]);
     hidden.set(false);
-    mounted.sync(&host, &());
+    mounted.sync(&*host, Some(&abi::Changed::everything()));
     assert_eq!(rows(&host)[..3], ["content", "footer status", ""]);
     drop(mounted);
 
-    registry.set_active(&host, "footer", false);
+    registry.set_active(&dynamic(&host), "footer", false);
     let _mounted = mount(&registry);
     assert_eq!(rows(&host)[..2], ["content", "status"]);
 }
@@ -504,7 +507,7 @@ fn a_claim_on_a_child_slot_moves_when_a_wake_or_an_invalidation_redraws_its_pare
     let host = host();
     let hidden = Rc::new(Cell::new(false));
     let hide = hidden.clone();
-    let render: node::SlotRender<TestHost> = Rc::new(move |_, _, _| match hide.get() {
+    let render: node::SlotRender = Rc::new(move |_, _, _| match hide.get() {
         true => Render::Hide,
         false => {
             Render::Show(Node::row(vec![Node::text([Span::new("footer ")]), Node::slot(slot::HOME_FOOTER_STATUS)]))
@@ -513,7 +516,7 @@ fn a_claim_on_a_child_slot_moves_when_a_wake_or_an_invalidation_redraws_its_pare
     let activation = Rc::new(std::cell::RefCell::new(None));
     let footer = {
         let activation = activation.clone();
-        Definition::new("footer", move |cx: &mut Setup<'_, TestHost>| {
+        Definition::new("footer", move |cx: &mut Setup<'_>| {
             let wake = Arc::new(crate::activation::Wake::new(None));
             let created = crate::activation::Activation::new(cx.host(), wake);
             cx.claim(Placement::append(slot::HOME_FOOTER), render.clone(), None, &created);
@@ -523,9 +526,9 @@ fn a_claim_on_a_child_slot_moves_when_a_wake_or_an_invalidation_redraws_its_pare
     let status = rendering("status", Placement::append(slot::HOME_FOOTER_STATUS), || {
         Render::Show(Node::text([Span::new("status")]))
     });
-    let registry = Rc::new(Registry::new(vec![footer, status], []));
+    let registry = Rc::new(Registry::define(vec![footer, status], []));
     *host.registry.borrow_mut() = Rc::downgrade(&registry);
-    registry.activate(&host);
+    registry.activate(&dynamic(&host));
     let parent = View::new(host.app()).column();
     host.app().root().add(&parent);
     let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |parent| {

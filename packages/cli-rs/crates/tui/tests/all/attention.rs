@@ -80,7 +80,11 @@ fn notified(loopback: bool) -> String {
     let (harness, memory) =
         mount(if loopback { config } else { r#"{"animations":false,"attention":{"sound":true,"volume":0.5}}"# });
     if loopback {
-        let (definition, _) = opencode_plugin::loader::native::loopback(&harness.tui, notifications_create).unwrap();
+        let (definition, _) = opencode_plugin::loader::native::loopback(
+            &opencode_tui::plugins::host::host(&harness.tui),
+            notifications_create,
+        )
+        .unwrap();
         opencode_tui::plugins::host::add(&harness.tui, definition);
         harness.wait_for("Fix the parser");
     }

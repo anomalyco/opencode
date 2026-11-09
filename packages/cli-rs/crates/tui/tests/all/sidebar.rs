@@ -209,7 +209,8 @@ unsafe extern "C" fn mcp_create(
 fn mcp_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
     let h = mount(if loopback { &["-opencode.sidebar.mcp"] } else { &[] }, false);
     if loopback {
-        let (definition, _) = opencode_plugin::loader::native::loopback(&h.tui, mcp_create).unwrap();
+        let (definition, _) =
+            opencode_plugin::loader::native::loopback(&opencode_tui::plugins::host::host(&h.tui), mcp_create).unwrap();
         opencode_tui::plugins::host::add(&h.tui, definition);
     }
     h.servers();
