@@ -8,41 +8,9 @@ import { startServer } from "./fixture/server"
 
 it.live("persists disabling and enabling a failed MCP server in its config file", () =>
   Effect.gen(function* () {
-    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-mcp-toggle-")))
-    const global = path.join(tmp.path, "global")
-    const project = path.join(tmp.path, "project")
-    const config = path.join(project, "opencode.json")
-    yield* Effect.promise(() =>
-      Promise.all([fs.mkdir(global, { recursive: true }), fs.mkdir(project, { recursive: true })]),
-    )
-    yield* Effect.promise(() =>
-      fs.writeFile(
-        config,
-        JSON.stringify({
-          mcp: { servers: { broken: { type: "local", command: [path.join(project, "missing-mcp-server")] } } },
-        }),
-      ),
-    )
-    const server = yield* startServer(global)
-    const request = (route: string, method = "GET") => {
-      const url = new URL(route, server.base)
-      url.searchParams.set("location[directory]", project)
-      return Effect.promise(() => fetch(url, { method, headers: server.headers }))
-    }
-    const status = Effect.fn(function* (expected: string) {
-      const deadline = Date.now() + 10_000
-      while (Date.now() < deadline) {
-        const response = yield* request("/api/mcp")
-        const body: { data: { name: string; status: { status: string } }[] } = yield* Effect.promise(() =>
-          response.json(),
-        )
-        const current = body.data.find((item) => item.name === "broken")?.status.status
-        if (current === expected) return current
-        yield* Effect.promise(() => Bun.sleep(50))
-      }
-      throw new Error(`MCP server did not reach ${expected}`)
-    })
-    const read = () => Effect.promise(() => fs.readFile(config, "utf8").then((text) => JSON.parse(text)))
+    const { request, status, read } = yield* setup((command) => ({
+      mcp: { servers: { broken: { type: "local", command } } },
+    }))
 
     yield* status("failed")
     expect((yield* request("/api/experimental/mcp/broken/disconnect", "POST")).status).toBe(204)
@@ -54,3 +22,50 @@ it.live("persists disabling and enabling a failed MCP server in its config file"
     yield* status("failed")
   }),
 )
+
+// A reload rebuilds the Location from config, as an idle eviction does, so a runtime-only toggle was undone (#62868).
+it.live("keeps a V1 MCP server disabled after the Location is rebuilt", () =>
+  Effect.gen(function* () {
+    const { request, status, read } = yield* setup((command) => ({ mcp: { broken: { type: "local", command } } }))
+
+    yield* status("failed")
+    expect((yield* request("/api/experimental/mcp/broken/disconnect", "POST")).status).toBe(204)
+    expect((yield* read()).mcp.broken.enabled).toBe(false)
+
+    expect((yield* request("/api/location/reload", "POST")).status).toBe(204)
+    yield* status("disabled")
+    expect((yield* read()).mcp.broken.enabled).toBe(false)
+  }),
+)
+
+const setup = Effect.fnUntraced(function* (config: (command: string[]) => unknown) {
+  const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-mcp-toggle-")))
+  const global = path.join(tmp.path, "global")
+  const project = path.join(tmp.path, "project")
+  const file = path.join(project, "opencode.json")
+  yield* Effect.promise(() =>
+    Promise.all([fs.mkdir(global, { recursive: true }), fs.mkdir(project, { recursive: true })]),
+  )
+  yield* Effect.promise(() => fs.writeFile(file, JSON.stringify(config([path.join(project, "missing-mcp-server")]))))
+  const server = yield* startServer(global)
+  const request = (route: string, method = "GET") => {
+    const url = new URL(route, server.base)
+    url.searchParams.set("location[directory]", project)
+    return Effect.promise(() => fetch(url, { method, headers: server.headers }))
+  }
+  const status = Effect.fn(function* (expected: string) {
+    const deadline = Date.now() + 10_000
+    while (Date.now() < deadline) {
+      const response = yield* request("/api/mcp")
+      const body: { data: { name: string; status: { status: string } }[] } = yield* Effect.promise(() =>
+        response.json(),
+      )
+      const current = body.data.find((item) => item.name === "broken")?.status.status
+      if (current === expected) return current
+      yield* Effect.promise(() => Bun.sleep(50))
+    }
+    throw new Error(`MCP server did not reach ${expected}`)
+  })
+  const read = () => Effect.promise(() => fs.readFile(file, "utf8").then((text) => JSON.parse(text)))
+  return { request, status, read }
+})
