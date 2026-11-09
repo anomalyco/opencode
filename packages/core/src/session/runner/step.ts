@@ -113,12 +113,11 @@ export const make = Effect.gen(function* () {
     const providerStream = llm.stream(input.prepared.request, input.prepared.options).pipe(
       Stream.runForEach((event) =>
         Effect.gen(function* () {
-          if (publisher.record().providerFailed) return
+          if (publisher.hasProviderFailed()) return
           // Wait here, where cancellation still works, rather than inside the uninterruptible publish.
           if (!publisher.hasStarted()) yield* Fiber.join(pendingStartSnapshot)
           yield* publisher.publish(event)
-          if (firstOutputAt === undefined && publisher.record().outputStarted)
-            firstOutputAt = yield* Clock.currentTimeMillis
+          if (firstOutputAt === undefined && publisher.hasOutput()) firstOutputAt = yield* Clock.currentTimeMillis
           if (event.type !== "tool-call" || event.providerExecuted) return
           toolRuns.push({
             call: event,

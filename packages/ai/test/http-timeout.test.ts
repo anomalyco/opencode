@@ -123,7 +123,8 @@ describe("HTTP transport timeouts", () => {
       )
       yield* Deferred.await(server.stalled)
       yield* Effect.yieldNow
-      yield* TestClock.adjust("10 minutes")
+      // Longer than the normal chunk deadline: neither a chunk nor a whole-body timer is active.
+      yield* TestClock.adjust("30 minutes")
       server.resume()
       const response = yield* Fiber.join(fiber)
 

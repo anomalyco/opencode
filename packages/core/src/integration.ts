@@ -177,6 +177,8 @@ export interface Interface extends State.Transformable<Editor> {
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
   /** Returns all integrations with their methods and current connections. */
   readonly list: () => Effect.Effect<Info[]>
+  /** Registration and first connection identity, without projecting the user-facing methods or statuses. */
+  readonly activeKeys: () => Effect.Effect<ReadonlyMap<ID, string | undefined>>
   readonly connection: {
     /** Returns the active connection for one integration. */
     readonly active: (id: ID) => Effect.Effect<IntegrationConnection.Info | undefined>
@@ -682,6 +684,15 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       revision: state.revision,
+      activeKeys: Effect.fn("Integration.activeKeys")(function* () {
+        const saved = Map.groupBy(yield* credentials.all(), (credential) => credential.integrationID)
+        return new Map(
+          Array.from(state.get().integrations, ([id, entry]) => [
+            id,
+            IntegrationConnection.key(resolveConnections(entry, saved.get(id) ?? [])[0]),
+          ]),
+        )
+      }),
       get: Effect.fn("Integration.get")(function* (id) {
         const entry = state.get().integrations.get(id)
         if (!entry) return undefined
