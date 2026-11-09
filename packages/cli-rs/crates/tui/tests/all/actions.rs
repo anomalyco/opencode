@@ -396,9 +396,9 @@ fn copies_and_the_parent_report_their_outcome() {
     kit.wait_for("No assistant messages found");
 }
 
-/// The export written to the temporary directory for `session`, removed once read.
+/// The export written to the working directory for `session`, removed once read.
 fn take_export(extension: &str, session: &str) -> Option<String> {
-    let entries = std::fs::read_dir(std::env::temp_dir()).ok()?;
+    let entries = std::fs::read_dir(std::env::current_dir().ok()?).ok()?;
     entries.flatten().find_map(|entry| {
         let name = entry.file_name().to_string_lossy().into_owned();
         if !(name.starts_with("session-") && name.ends_with(extension)) {
