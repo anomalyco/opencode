@@ -23,7 +23,7 @@ use opentui::prelude::*;
 use crate::app::Tui;
 
 /// The input mode the composer pushes while it is open.
-const MODE: &str = "composer";
+pub(crate) const MODE: &str = "composer";
 /// `maxHeight={5}` of each tab's list.
 const ROWS: usize = 5;
 
