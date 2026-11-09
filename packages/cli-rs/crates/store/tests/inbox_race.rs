@@ -187,3 +187,60 @@ async fn hydration_coalesces_a_concurrent_optimistic_compaction_even_if_its_post
     assert!(compacting.await.is_err());
     assert_eq!(pending(&data), items(json!([canonical])));
 }
+
+fn transcript() -> Value {
+    json!({
+        "data": [{ "id": "msg_remote", "type": "user", "text": "Check the remote preview", "time": { "created": 2 } }],
+        "cursor": {},
+    })
+}
+
+#[tokio::test]
+async fn a_transcript_read_clears_a_prompt_whose_delivery_event_was_missed() {
+    let data = data(
+        handler(|req: Req| async move {
+            if req.path.ends_with("/message") { ok(transcript()) } else { ok(json!({ "data": [] })) }
+        }),
+        Options::default(),
+    );
+    emit(&data, enqueued());
+    assert!(data.read(|state| state.has_input(&session(), "msg_remote")));
+    data.message_sync(&session()).await.unwrap();
+    assert!(!data.read(|state| state.has_input(&session(), "msg_remote")));
+    let created = data.read(|state| state.message(&session(), "msg_remote").map(|message| message.created()));
+    assert_eq!(created, Some(2.0));
+}
+
+#[tokio::test]
+async fn a_transcript_read_clears_an_accepted_prompt_whose_events_were_all_missed() {
+    let data = data(
+        handler(|req: Req| async move {
+            if req.method == "POST" {
+                // Rust decodes the admitted item, which TS reads only for its ID.
+                return ok(json!({ "data": item() }));
+            }
+            if req.path.ends_with("/message") { ok(transcript()) } else { ok(json!({ "data": [] })) }
+        }),
+        Options::default(),
+    );
+    data.prompt(Prompt {
+        input: SessionPromptInput {
+            session_id: session(),
+            id: Some(Some(SessionMessageID("msg_remote".into()))),
+            text: "Check the remote preview".into(),
+            ..Default::default()
+        },
+        gate: None,
+        prepare: None,
+    })
+    .await
+    .unwrap();
+    // An inbox read cannot see a prompt the server already delivered, so it keeps the outbox row.
+    data.pending_sync(&session()).await.unwrap();
+    assert!(data.read(|state| state.has_input(&session(), "msg_remote")));
+    data.message_sync(&session()).await.unwrap();
+    assert!(!data.read(|state| state.has_input(&session(), "msg_remote")));
+    // Later inbox reads no longer resurrect it from the outbox.
+    data.pending_sync(&session()).await.unwrap();
+    assert!(!data.read(|state| state.has_input(&session(), "msg_remote")));
+}
