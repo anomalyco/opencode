@@ -462,10 +462,12 @@ impl Open {
                 .chain(state.sessions.iter())
                 .chain(matched)
                 .filter(|session| {
-                    if session.parent_id.is_some() || seen.contains(&session.id) {
+                    // The session whose exact ID was typed is listed even when it is a child or archived.
+                    let exact = Some(&session.id) == matched.map(|matched| &matched.id);
+                    if (session.parent_id.is_some() && !exact) || seen.contains(&session.id) {
                         return false;
                     }
-                    if session.time.archived.is_some() && Some(&session.id) != matched.map(|matched| &matched.id) {
+                    if session.time.archived.is_some() && !exact {
                         return false;
                     }
                     seen.insert(session.id.clone());
