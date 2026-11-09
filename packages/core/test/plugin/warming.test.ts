@@ -13,7 +13,7 @@ import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
-import { Clock, DateTime, Duration, Effect, Queue, Schema, Stream } from "effect"
+import { Clock, DateTime, Duration, Effect, Exit, Queue, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { it } from "../lib/effect"
 import { host } from "./host"
@@ -56,8 +56,10 @@ const run = Effect.fnUntraced(function* (
   ping = Duration.zero,
 ) {
   const warms: number[] = []
-  const events = yield* Queue.unbounded<SessionEvent.Execution.Succeeded>()
-  let contextHook: ((input: SessionContext) => Effect.Effect<void>) | undefined
+  const events = yield* Queue.unbounded<
+    SessionEvent.Execution.Succeeded | SessionEvent.Compaction.Failed | SessionEvent.Deleted
+  >()
+  const hooks = new Map<string, (input: SessionContext) => Effect.Effect<void>>()
   yield* WarmingPlugin.Plugin.effect(
     host({
       model: {
@@ -79,7 +81,7 @@ const run = Effect.fnUntraced(function* (
             Effect.tap(() => Effect.sleep(ping)),
           ),
         hook: (name, callback) => {
-          if (name === "context") contextHook = callback as (input: SessionContext) => Effect.Effect<void>
+          hooks.set(name, callback as (input: SessionContext) => Effect.Effect<void>)
           return Effect.succeed({ dispose: Effect.void })
         },
       },
@@ -89,25 +91,43 @@ const run = Effect.fnUntraced(function* (
       Config.testLayer([new Document({ type: "document", info: Schema.decodeUnknownSync(Info)({ warming }) })]),
     ),
   )
-  if (!contextHook) return yield* Effect.die("warming plugin did not register a context hook")
-  const hook = contextHook
+  const hook = (name: string) => {
+    const callback = hooks.get(name)
+    return callback ? callback({ ...context }) : Effect.die(`warming plugin did not register a ${name} hook`)
+  }
+  const durable = { aggregateID: sessionID, seq: Event.Seq.make(0), version: Event.Version.make(1) }
+  const emit = (event: Effect.Effect<void>) => event.pipe(Effect.andThen(Effect.yieldNow))
   /** A request being sent: the step's context hook. */
-  const send = hook({ ...context })
+  const send = hook("context")
+  /** A compaction request being sent. */
+  const compact = hook("compaction")
   /** The turn ending. */
-  const end = Effect.gen(function* () {
-    yield* Queue.offer(events, {
+  const end = emit(
+    Queue.offer(events, {
       id: Event.ID.create(),
       created: 0,
-      durable: { aggregateID: sessionID, seq: Event.Seq.make(0), version: Event.Version.make(1) },
+      durable,
       type: "session.execution.succeeded",
       data: { sessionID },
-    })
-    yield* Effect.yieldNow
-  })
+    }),
+  )
+  /** The compaction ending without a summary. */
+  const compactionFailed = emit(
+    Queue.offer(events, {
+      id: Event.ID.create(),
+      created: 0,
+      durable,
+      type: "session.compaction.failed",
+      data: { sessionID, reason: "auto", error: { type: "compaction.failed", message: "no summary" } },
+    }),
+  )
+  const remove = emit(
+    Queue.offer(events, { id: Event.ID.create(), created: 0, durable, type: "session.deleted", data: { sessionID } }),
+  )
   /** One whole turn whose response ends right away. */
   const turn = send.pipe(Effect.andThen(end))
   const at = (minutes: number) => TestClock.setTime(minutes * 60_000).pipe(Effect.andThen(Effect.yieldNow))
-  return { warms, send, end, turn, at }
+  return { warms, send, end, compact, compactionFailed, remove, turn, at }
 })
 
 describe("WarmingPlugin interval", () => {
@@ -245,6 +265,59 @@ describe("WarmingPlugin timing", () => {
       yield* warming.turn
       yield* warming.at(19.5)
       expect(warming.warms).toEqual([19.5])
+    }),
+  )
+})
+
+describe("WarmingPlugin lifecycle", () => {
+  it.effect("keeps one loop when warming is turned off and on again before the next ping", () =>
+    Effect.gen(function* () {
+      const cache: { warming: boolean } = { warming: true }
+      const warming = yield* run(false, cache, [], Duration.seconds(30))
+      yield* warming.turn
+      yield* warming.at(1)
+      cache.warming = false
+      yield* warming.turn
+      yield* warming.at(2)
+      cache.warming = true
+      yield* warming.turn
+      for (let minutes = 3; minutes <= 40; minutes++) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([6, 10, 14, 18, 22, 26, 30])
+    }),
+  )
+
+  it.effect("doesn't ping during a running compaction", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true, { ttl: "5m" })
+      yield* warming.compact
+      yield* warming.at(4.5)
+      expect(warming.warms).toEqual([])
+      yield* warming.at(4.75)
+      yield* warming.compactionFailed
+      for (const minutes of [9, 9.25]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4.75, 9.25])
+    }),
+  )
+
+  it.effect("stops warming a deleted session", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true)
+      yield* warming.turn
+      yield* warming.at(4)
+      yield* warming.remove
+      for (const minutes of [8, 12]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4])
+    }),
+  )
+
+  it.effect("stops every loop when the plugin closes", () =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make()
+      const warming = yield* run(true).pipe(Scope.provide(scope))
+      yield* warming.turn
+      yield* Scope.close(scope, Exit.void)
+      for (const minutes of [4, 8]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([])
     }),
   )
 })
