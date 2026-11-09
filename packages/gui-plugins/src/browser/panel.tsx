@@ -47,7 +47,7 @@ import {
   type OverlayEvent,
 } from "./overlay-machine"
 import { PageIcon } from "./page-icon"
-import { createPillOverlay } from "./pill"
+import { createPillPresentation } from "./pill"
 import {
   initialSiteState,
   SITE_CLEAR_TIMEOUT_MS,
@@ -378,9 +378,9 @@ export default function SessionBrowserPane(props: {
     () => box,
     (rect) => setSize({ width: rect.width, height: rect.height }),
   )
-  createPillOverlay({
-    frame: () => box,
-    visible: () => shown() && connection() !== "connected",
+  const pillVisible = () => shown() && connection() !== "connected"
+  createPillPresentation({
+    visible: pillVisible,
     label: () => plugin.t("disconnected"),
     mode: () => plugin.appearance.mode(),
     send: (pill) => props.model.pill(pill),
@@ -730,15 +730,16 @@ export default function SessionBrowserPane(props: {
           {error()}
         </div>
       </Show>
-      <embeds.View
-        id={embed()}
-        visible={shown()}
-        frozen={overlayed().frozen}
-        // A navigation, in-page or not, or a reload starting is another page.
-        page={JSON.stringify([state()?.id, state()?.generation, state()?.url, !!state()?.loading])}
-        radius={10}
-        class="relative min-h-0 flex-1 bg-v2-background-bg-base flex items-center justify-center"
-      >
+      <div class="relative min-h-0 flex-1">
+        <embeds.View
+          id={embed()}
+          visible={shown()}
+          frozen={overlayed().frozen}
+          // A navigation, in-page or not, or a reload starting is another page.
+          page={JSON.stringify([state()?.id, state()?.generation, state()?.url, !!state()?.loading])}
+          radius={10}
+          class="size-full bg-v2-background-bg-base flex items-center justify-center"
+        >
         <div ref={box} aria-hidden="true" class="pointer-events-none absolute inset-0" />
         <Show when={empty() && !failed() && !suspended()}>
           <div dir="auto" class="size-full overflow-y-auto">
@@ -932,7 +933,17 @@ export default function SessionBrowserPane(props: {
             </div>
           )}
         </Show>
-      </embeds.View>
+        </embeds.View>
+        <Show when={props.model.pillEmbed()}>
+          {(pill) => (
+            <embeds.View
+              id={pill()}
+              visible={pillVisible()}
+              class="absolute left-1/2 top-[2px] h-11 w-36 -translate-x-1/2"
+            />
+          )}
+        </Show>
+      </div>
       <p class="sr-only" role="status" aria-live="polite">
         {picking() ? plugin.t("inspect.active") : ""}
       </p>

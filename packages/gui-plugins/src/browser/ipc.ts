@@ -11,13 +11,22 @@ const binding = text(128)
 /** The longest page icon data URL main reports: a 32px PNG is a few kilobytes; larger icons are dropped. */
 export const MAX_ICON_URL = 24_576
 
-/** The bitmap and window bounds of the floating connection pill, drawn by the app renderer. */
+/** The resolved app appearance the renderer gives the small native connection-pill view. */
+export const PillPresentation = Schema.Struct({
+  label: text(256),
+  background: text(128),
+  border: text(128),
+  color: text(128),
+  muted: text(128),
+  font: text(1_024),
+})
+
+export type PillPresentation = typeof PillPresentation.Type
+
+/** The connection pill's visibility and current appearance; the renderer sends it only when they change. */
 export const PillOverlay = Schema.Struct({
   visible: Schema.Boolean,
-  image: Schema.optionalKey(text(400_000).check(Schema.isStartingWith("data:image/png;base64,"))),
-  bounds: Schema.optionalKey(
-    Schema.Struct({ x: Schema.Finite, y: Schema.Finite, width: Schema.Finite, height: Schema.Finite }),
-  ),
+  presentation: Schema.optionalKey(PillPresentation),
 })
 
 export type PillOverlay = typeof PillOverlay.Type
@@ -114,8 +123,8 @@ export type PaneCloseReason = typeof PaneCloseReason.Type
  */
 export const BrowserPane = Ipc.define({
   id: "browser.pane",
-  // The authoritative lock snapshot; main pushes it with provider.changed().
-  state: Schema.Struct({ locked: Schema.Boolean }),
+  // The authoritative lock snapshot and this window's native pill embed, pushed with provider.changed().
+  state: Schema.Struct({ locked: Schema.Boolean, pill: Schema.optionalKey(text(256)) }),
   methods: {
     register: {
       input: Schema.Struct({

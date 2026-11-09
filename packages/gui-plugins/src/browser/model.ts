@@ -662,12 +662,14 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       return code === undefined ? undefined : describe(code)
     },
     suspended: (session: Session) => sessionSuspended(machine(), session.key),
-    /** Sends the app renderer's pill bitmap to the native overlay for this window. */
+    /** Sends the pill's visibility and resolved appearance to its small native view. */
     pill(input: PillOverlay) {
       void client()
         ?.pill(input)
         .catch(() => undefined)
     },
+    /** The host embed id of this window's native pill view. */
+    pillEmbed: () => client()?.state()?.pill,
     /** The screen lock currently holds every attachment; its notice replaces the reconnect one. */
     locked() {
       const current = machine()

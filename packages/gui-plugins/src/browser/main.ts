@@ -13,6 +13,7 @@ import {
 
 const setup: Plugin.MainSetup = (ctx) => {
   let paneState = createMainPaneState<Pane>()
+  const pillEmbeds = new Map<number, string>()
   const loads = new Map<number, ReturnType<typeof Promise.withResolvers<Pane>>>()
   let disposing: Promise<void> | undefined
   const refs = ctx.storage.store("refs", RefsStore)
@@ -41,6 +42,11 @@ const setup: Plugin.MainSetup = (ctx) => {
                   refs,
                   embeds: ctx.embeds,
                   locked: () => screenLock.locked(),
+                  pillEmbed: (window, embed) => {
+                    if (embed) pillEmbeds.set(window, embed)
+                    else pillEmbeds.delete(window)
+                    provider.changed(window)
+                  },
                   emit: (window, value) => provider.emit("event", value, window),
                 }),
               })
@@ -81,7 +87,7 @@ const setup: Plugin.MainSetup = (ctx) => {
   }
 
   const provider = ctx.provide(BrowserPane, {
-    state: () => ({ locked: screenLock.locked() }),
+    state: (window: number) => ({ locked: screenLock.locked(), pill: pillEmbeds.get(window) }),
     register: async (input, caller) => {
       // Refused before the pane loads, so a locked screen starts no browser.
       if (screenLock.locked()) throw new Error("browser.pane.locked")

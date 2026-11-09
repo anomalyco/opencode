@@ -6,13 +6,13 @@ import electron, { type BrowserWindow } from "electron"
 import { Cause, Deferred, Effect, Exit, ManagedRuntime, Option, Queue, Schedule, Schema, Scope, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
-import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plugin/gui/main"
+import type { Embed, Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plugin/gui/main"
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure } from "./errors"
 import { createBrowserNetwork, type BrowserNetwork, type BrowserNetworkUpstream } from "./network"
 import { destinationOrigin, fileURLWithin, refusal } from "./policy"
 import { createRefs } from "./refs"
-import type { PaneEvent, PillOverlay } from "./ipc"
+import type { PaneEvent, PillOverlay, PillPresentation } from "./ipc"
 import {
   attachmentFailure,
   createPaneState,
@@ -69,14 +69,13 @@ type SessionRecord = {
   cleanup: () => void
 }
 
-/** A window's closed image-overlay shell; created only after the first visible disconnected page. */
+/** One small native WebContentsView per window, laid out by the host embed above the page. */
 type PillEntry = {
   readonly win: BrowserWindow
-  readonly shell: Electron.BaseWindow
-  readonly view: Electron.ImageView
-  wanted: boolean
-  bounds?: { x: number; y: number; width: number; height: number }
-  cleanup: () => void
+  readonly view: Electron.WebContentsView
+  readonly embed: Embed
+  ready: boolean
+  presentation?: PillPresentation
 }
 
 /** The Electron and Effect handles of one binding; its phase lives in the pane machine. */
@@ -110,6 +109,8 @@ export function createBrowserPane(input: {
   /** The screen is locked: no attachment may start. */
   readonly locked: () => boolean
   readonly emit: (window: number, value: { readonly binding: string; readonly event: PaneEvent }) => void
+  /** Tells the renderer which host embed is this window's connection pill. */
+  readonly pillEmbed: (window: number, embed: string | undefined) => void
 }) {
   const machine: PaneMachine = { state: createPaneState() }
   const handles = new Map<string, Handle>()
@@ -478,47 +479,25 @@ export function createBrowserPane(input: {
     release(window: number, server: string, session: string) {
       releaseKey(`${window}\n${server}\n${session}`)
     },
-    /** Draws the connection pill: a bitmap from the app renderer in a parented, click-through image shell. */
-    pill(window: number, input: PillOverlay) {
+    /** Shows or hides the small native pill view, and gives it the renderer's current presentation. */
+    pill(window: number, overlay: PillOverlay) {
       const current = pillViews.get(window)
 
-      if (!input.visible) {
-        if (current) {
-          current.wanted = false
-          current.shell.hide()
-        }
+      if (!overlay.visible) {
+        if (current) current.embed.show(false)
 
         return
       }
 
-      const entry = pillView(window)
+      const entry = current ?? pillView(window)
 
-      if (!entry || !input.image || !input.bounds) return
+      if (!entry) return
+      input.pillEmbed(window, entry.embed.id)
+      entry.embed.show(true)
 
-      if (entry.win.webContents.isDestroyed()) return
-      const image = electron.nativeImage.createFromDataURL(input.image)
-
-      if (image.isEmpty()) {
-        entry.wanted = false
-        entry.shell.hide()
-
-        return
-      }
-
-      const zoom = entry.win.webContents.getZoomFactor()
-
-      entry.wanted = true
-      entry.bounds = {
-        x: Math.round(input.bounds.x * zoom),
-        y: Math.round(input.bounds.y * zoom),
-        width: Math.round(input.bounds.width * zoom),
-        height: Math.round(input.bounds.height * zoom),
-      }
-      entry.view.setImage(image)
-      clipPillWindow(entry)
-      placePill(entry)
-
-      if (entry.win.isVisible()) entry.shell.showInactive()
+      if (!overlay.presentation) return
+      entry.presentation = overlay.presentation
+      applyPill(entry)
     },
     /** The screen locked: every attachment ends, so the server drops this desktop's browser tools until it unlocks. */
     lock() {
@@ -542,44 +521,32 @@ export function createBrowserPane(input: {
       await Promise.all(Array.from(records.keys(), (storageKey) => releaseLater(storageKey)))
       await Promise.all(releasingRecords)
       await Promise.all(releasing)
-      pillViews.forEach((entry) => entry.cleanup())
+      pillViews.forEach((entry) => {
+        input.pillEmbed(entry.win.id, undefined)
+        entry.embed.dispose()
+
+        if (!entry.view.webContents.isDestroyed()) entry.view.webContents.close()
+      })
       pillViews.clear()
       await runtime.dispose()
     },
   }
 
-  // BaseWindow transparency is unreliable on some Linux compositors; shape the window to the pill body there.
-  function clipPillWindow(entry: PillEntry) {
-    if (process.platform !== "linux" || !entry.bounds || entry.shell.isDestroyed()) return
-    const bodyWidth = Math.max(1, entry.bounds.width - 12)
-    const bodyHeight = Math.max(1, entry.bounds.height - 12)
-    const radius = 8
-    const rects: Electron.Rectangle[] = []
+  function applyPill(entry: PillEntry) {
+    if (!entry.ready || !entry.presentation || entry.view.webContents.isDestroyed()) return
+    const presentation = entry.presentation
 
-    for (let row = 0; row < bodyHeight; row++) {
-      const edge = Math.min(row, bodyHeight - 1 - row)
-      const inset = edge >= radius ? 0 : Math.round(radius - Math.sqrt(radius * radius - (radius - edge - 0.5) ** 2))
-      rects.push({ x: 6 + inset, y: 6 + row, width: Math.max(1, bodyWidth - inset * 2), height: 1 })
-    }
+    const script = `(() => {
+      const root = document.documentElement.style
+      root.setProperty("--pill-bg", ${JSON.stringify(presentation.background)})
+      root.setProperty("--pill-border", ${JSON.stringify(presentation.border)})
+      root.setProperty("--pill-fg", ${JSON.stringify(presentation.color)})
+      root.setProperty("--pill-muted", ${JSON.stringify(presentation.muted)})
+      root.setProperty("--pill-font", ${JSON.stringify(presentation.font)})
+      document.getElementById("label").textContent = ${JSON.stringify(presentation.label)}
+    })()`
 
-    try {
-      entry.shell.setShape(rects)
-    } catch {
-      // A platform that cannot shape keeps the image background.
-    }
-  }
-
-  function placePill(entry: PillEntry) {
-    if (entry.win.isDestroyed() || entry.shell.isDestroyed() || !entry.bounds) return
-    const content = entry.win.getContentBounds()
-
-    entry.shell.setBounds({
-      x: content.x + entry.bounds.x,
-      y: content.y + entry.bounds.y,
-      width: entry.bounds.width,
-      height: entry.bounds.height,
-    })
-    entry.view.setBounds({ x: 0, y: 0, width: entry.bounds.width, height: entry.bounds.height })
+    void entry.view.webContents.executeJavaScript(script).catch(() => undefined)
   }
 
   function pillView(window: number) {
@@ -590,74 +557,54 @@ export function createBrowserPane(input: {
 
     if (!win || win.isDestroyed()) return undefined
 
-    const shell = new electron.BaseWindow({
-      parent: win,
-      width: 1,
-      height: 1,
-      frame: false,
-      transparent: true,
-      show: false,
-      focusable: false,
-      fullscreenable: false,
-      skipTaskbar: true,
-      hasShadow: false,
+    const view = new electron.WebContentsView({
+      webPreferences: {
+        sandbox: true,
+        contextIsolation: true,
+        nodeIntegration: false,
+        devTools: false,
+        backgroundThrottling: false,
+      },
     })
 
-    const view = new electron.ImageView()
+    const embed = input.embeds.create(view, win)
 
-    shell.setIgnoreMouseEvents(true)
-    shell.setBackgroundColor("#00000000")
-    view.setBackgroundBlur(0)
-    shell.contentView.addChildView(view)
+    view.setBackgroundColor("#00000000")
+    embed.show(false)
+    const entry: PillEntry = { win, view, embed, ready: false }
 
-    const entry: PillEntry = {
-      win,
-      shell,
-      view,
-      wanted: false,
-      bounds: undefined,
-      cleanup: () => undefined,
-    }
-
-    const place = () => placePill(entry)
-
-    const hide = () => {
-      if (!shell.isDestroyed()) shell.hide()
-    }
-
-    const show = () => {
-      if (entry.wanted && !win.isDestroyed() && win.isVisible() && !shell.isDestroyed()) {
-        place()
-        shell.showInactive()
-      }
-    }
-
-    const cleanup = () => {
-      if (!win.isDestroyed()) {
-        win.off("move", place)
-        win.off("resize", place)
-        win.off("hide", hide)
-        win.off("minimize", hide)
-        win.off("show", show)
-        win.off("restore", show)
-      }
-
-      if (!shell.isDestroyed()) shell.destroy()
-
-      if (pillViews.get(window) === entry) pillViews.delete(window)
-    }
-
-    entry.cleanup = cleanup
     pillViews.set(window, entry)
-    win.on("move", place)
-    win.on("resize", place)
-    win.on("hide", hide)
-    win.on("minimize", hide)
-    win.on("show", show)
-    win.on("restore", show)
-    win.once("closed", cleanup)
+    view.webContents.on("did-finish-load", () => {
+      entry.ready = true
+      applyPill(entry)
+    })
+    win.once("closed", () => {
+      if (pillViews.get(window) === entry) pillViews.delete(window)
+    })
+    void view.webContents
+      .loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(pillMarkup())}`)
+      .catch(() => undefined)
 
     return entry
+  }
+
+  function raisePill(window: number) {
+    const entry = pillViews.get(window)
+
+    if (entry && !entry.win.isDestroyed() && !entry.view.webContents.isDestroyed())
+      entry.win.contentView.addChildView(entry.view)
+  }
+
+  function pillMarkup() {
+    return `<!doctype html><html><head><meta charset="utf-8"><style>
+    html,body{margin:0;background:transparent;overflow:hidden}
+    body{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-family:var(--pill-font,system-ui);-webkit-font-smoothing:antialiased}
+    .pill{display:inline-flex;align-items:center;gap:8px;height:32px;max-width:calc(100% - 12px);padding:0 10px;border:0.5px solid var(--pill-border,CanvasText);border-radius:8px;background:var(--pill-bg,Canvas);color:var(--pill-fg,CanvasText);box-shadow:0 2px 4px rgba(0,0,0,0.12);font-size:13px;font-weight:440;line-height:16px;letter-spacing:-0.04px;white-space:nowrap}
+    svg{display:block;flex:none;color:var(--pill-muted,GrayText)}
+  </style></head><body><div class="pill" role="status" aria-live="polite">
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.45 12.2h6.95a2.7 2.7 0 0 0 .35-5.38 3.85 3.85 0 0 0-7.3-1.02 3 3 0 0 0-.1 6.4Z"/><path d="m2.3 2.3 11.4 11.4"/></svg>
+    <span id="label"></span>
+  </div></body></html>`
   }
 
   function dispatch(event: PaneMachineEvent) {
@@ -1072,6 +1019,7 @@ export function createBrowserPane(input: {
       },
     })
 
+    raisePill(win.id)
     live = { tabID: id, page, owner }
     handle.record.pages.set(id, live)
     handle.pages.set(attempt, live)
