@@ -97,7 +97,10 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     });
     let copied = state.clone();
     setup.command(hidden("btw.copied"), move |host, _| {
-        if let Some(answer) = copied.shown.borrow().as_ref() {
+        // A copy that completes after the answer closed leaves it closed.
+        if let Some(answer) = copied.shown.borrow().as_ref()
+            && host.dialog_open(&answer.key)
+        {
             host.dialog(Dialog::Panel(panel(answer, true)));
         }
     });

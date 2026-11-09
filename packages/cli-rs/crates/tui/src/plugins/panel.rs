@@ -25,16 +25,35 @@ pub struct Live {
     cx: Rc<DialogCx>,
     title: View,
     content: View,
-    scroll: ScrollBox,
-    /// The most rows the body takes: 60% of the screen.
-    max: u32,
-    /// The rows of the body's padding.
-    padding: u32,
+    fit: Rc<RefCell<Option<Fit>>>,
     footer: View,
     body: RefCell<abi::Node>,
     binds: Rc<RefCell<Option<Disposer>>>,
     /// The texts the body's hover handlers change.
     hovers: RefCell<Vec<Rc<Text>>>,
+}
+
+/// What sizes the body's box. Its resize handlers reach it through a slot that closing the panel empties, so a closed
+/// panel's widgets hold nothing that holds them.
+struct Fit {
+    scroll: ScrollBox,
+    content: View,
+    /// The rows of the body's padding.
+    padding: u32,
+}
+
+impl Fit {
+    /// `maxHeight`: the box is as high as the body and its padding, up to 60% of the screen.
+    fn apply(&self, app: &App) {
+        let height: f32 = self.content.children().iter().map(|child| child.rect().height).sum();
+        self.scroll.height((height.ceil() as u32 + self.padding).clamp(1, max_rows(app)));
+        app.request_redraw();
+    }
+}
+
+/// The most rows the body takes: 60% of the screen, as it is now.
+fn max_rows(app: &App) -> u32 {
+    (u32::from(app.size().1) * 6 / 10).max(8)
 }
 
 /// Shows plugin `id`'s `dialog`.
@@ -153,7 +172,6 @@ fn panel(tui: &Tui, id: &str, panel: abi::Panel) {
 
 fn build(tui: &Tui, cx: &Rc<DialogCx>, page: &Theme, key: String, plugin: String, panel: abi::Panel) -> (View, Live) {
     let app = &cx.app;
-    let max = (u32::from(app.size().1) * 6 / 10).max(8);
     let title = View::new(app).row().gap(2).grow(1.0).min_width(0);
     let header =
         dialog::header(cx, HeaderProps { gap: Some(2), title_view: Some(title.as_any()), ..HeaderProps::default() });
@@ -170,18 +188,20 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, page: &Theme, key: String, plugin: String
     };
     let footer = View::new(app);
     let layout = dialog::layout_view(cx, &header, &body, Some(&footer), DIALOG_INSET, 1);
-    let step = |delta: f64| {
-        let scroll = scroll.clone();
+    // A page is the body's most rows, as the screen is now.
+    let step = |delta: f64, page: bool| {
+        let (scroll, app) = (scroll.clone(), app.clone());
         move |_: Option<&str>, _: Option<&opentui::input::KeyEvent>| {
-            scroll.scroll_by(0.0, delta);
+            let rows = if page { f64::from(max_rows(&app)) } else { 1.0 };
+            scroll.scroll_by(0.0, delta * rows);
         }
     };
-    let (top, bottom, rows) = (scroll.clone(), scroll.clone(), f64::from(max));
+    let (top, bottom) = (scroll.clone(), scroll.clone());
     cx.layer(KeymapLayer::new(vec![
-        TuiCommand::inline("up,k", step(-1.0)).group("Dialog"),
-        TuiCommand::inline("down,j", step(1.0)).group("Dialog"),
-        TuiCommand::inline("pageup", step(-rows)).group("Dialog"),
-        TuiCommand::inline("pagedown", step(rows)).group("Dialog"),
+        TuiCommand::inline("up,k", step(-1.0, false)).group("Dialog"),
+        TuiCommand::inline("down,j", step(1.0, false)).group("Dialog"),
+        TuiCommand::inline("pageup", step(-1.0, true)).group("Dialog"),
+        TuiCommand::inline("pagedown", step(1.0, true)).group("Dialog"),
         TuiCommand::inline("home", move |_, _| {
             top.scroll_to(0.0, 0.0);
         })
@@ -191,18 +211,35 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, page: &Theme, key: String, plugin: String
         })
         .group("Dialog"),
     ]));
+    let fit = Rc::new(RefCell::new(Some(Fit {
+        scroll: scroll.clone(),
+        content: content.clone(),
+        padding: if panel.bleed { 2 } else { 0 },
+    })));
+    // A terminal that only gets shorter resizes no body widget, so the box follows the screen too.
+    let screen = fit.clone();
+    let resize = app.on_resize(move |cx, _, _| {
+        if let Some(fit) = &*screen.borrow() {
+            fit.apply(cx.app());
+        }
+    });
     let binds: Rc<RefCell<Option<Disposer>>> = Rc::default();
-    let held = binds.clone();
-    cx.on_close(Disposer::new(move || drop(held.borrow_mut().take())));
+    let (held, emptied, weak, closed, app) = (binds.clone(), fit.clone(), tui.weak(), key.clone(), app.clone());
+    cx.on_close(Disposer::new(move || {
+        drop(held.borrow_mut().take());
+        drop(emptied.borrow_mut().take());
+        app.remove_handler(resize);
+        let Some(tui) = weak.upgrade() else { return };
+        let live = tui.reads.panel.borrow_mut().take_if(|live| live.key == closed);
+        app.defer(move |_| drop(live));
+    }));
     let live = Live {
         key,
         plugin,
         cx: cx.clone(),
         title,
         content,
-        scroll: scroll.clone(),
-        max,
-        padding: if panel.bleed { 2 } else { 0 },
+        fit,
         footer,
         body: RefCell::new(panel.body.clone()),
         binds,
@@ -304,13 +341,12 @@ impl Live {
             },
         );
         *self.hovers.borrow_mut() = hovers;
-        // `maxHeight`: the box is as high as the body and its padding, up to 60% of the screen.
         for child in self.content.children() {
-            let (fit, content, max, padding) = (self.scroll.clone(), self.content.clone(), self.max, self.padding);
+            let fit = self.fit.clone();
             child.on_resize(move |cx, _| {
-                let height: f32 = content.children().iter().map(|child| child.rect().height).sum();
-                fit.height((height.ceil() as u32 + padding).clamp(1, max));
-                cx.app().request_redraw();
+                if let Some(fit) = &*fit.borrow() {
+                    fit.apply(cx.app());
+                }
             });
         }
     }
@@ -335,4 +371,21 @@ fn run(tui: &Tui, _id: &str, action: &abi::Action, value: Option<&str>) {
             tui.keymap.dispatch(&name, input.as_deref());
         }
     });
+}
+
+#[doc(hidden)]
+pub mod testing {
+    use super::*;
+
+    /// Gives each widget of the open panel's body a handler that holds `marker`, so its count shows whether they are
+    /// freed.
+    pub fn mark(tui: &Tui, marker: &Rc<()>) {
+        let Some(live) = &*tui.reads.panel.borrow() else { return };
+        for child in live.content.children() {
+            let marker = marker.clone();
+            child.on_resize(move |_, _| {
+                let _ = &marker;
+            });
+        }
+    }
 }
