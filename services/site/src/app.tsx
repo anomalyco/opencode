@@ -6,6 +6,7 @@ import { isServer } from "solid-js/web"
 import { Favicon } from "@opencode/ui/favicon"
 import { Font } from "@opencode/ui/font"
 import "./style/ibm-plex-mono.dev.css"
+import "./style/fonts.css"
 import "./app.css"
 import { LanguageProvider } from "~/context/language"
 import { I18nProvider, useI18n } from "~/context/i18n"
@@ -18,7 +19,6 @@ import { viewportContent } from "~/lib/viewport"
 import { quietPreloads, setNavigating } from "~/lib/route-preloads"
 // Before the router, so its popstate listener comes first.
 import "~/component/site/popstate"
-import { monoFontFaces } from "~/component/site/mono-fonts"
 
 // Pages that set their own og:image.
 const shareImagePages = [
@@ -111,9 +111,6 @@ export default function App() {
           <I18nProvider>
             <HeadMetaProvider>
               <AppMeta />
-              {/* OpenTUI Mono for every page, with or without the site shell (--font-mono and the
-                  token stack name it). A plain style element, which hydration keeps. */}
-              <style innerHTML={monoFontFaces} />
               <Suspense>{props.children}</Suspense>
             </HeadMetaProvider>
           </I18nProvider>
