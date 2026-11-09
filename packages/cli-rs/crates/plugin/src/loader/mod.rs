@@ -23,11 +23,12 @@ pub fn entry_file() -> String {
 }
 
 /// Loads native builds.
-pub trait Backend<H: Host> {
+pub trait Backend {
     /// Loads the build `library` against `host`, returning the definition, not yet active, and its failure while
     /// it runs. Setup runs with `options` (JSON text) on each activation, not here. An error is why the build
     /// cannot load.
-    fn load(&self, host: &Rc<H>, library: &[u8], options: Option<&str>) -> Result<(Definition<H>, ErrorFn), String>;
+    fn load(&self, host: &Rc<dyn Host>, library: &[u8], options: Option<&str>)
+    -> Result<(Definition, ErrorFn), String>;
 }
 
 /// A `plugins` entry of `cli.json` that names no built-in: a TypeScript package or path, or a native build.
@@ -68,8 +69,8 @@ struct Seen {
     reload: Rc<RefCell<Option<String>>>,
 }
 
-pub struct Loader<H: Host> {
-    backend: Rc<dyn Backend<H>>,
+pub struct Loader {
+    backend: Rc<dyn Backend>,
     /// The global config directory, whose `plugins` directory is always searched and which relative
     /// `plugins` paths start from (TS `path.dirname(config.path)`).
     config_dir: PathBuf,
@@ -82,8 +83,8 @@ pub struct Loader<H: Host> {
     failed: RefCell<HashMap<String, String>>,
 }
 
-impl<H: Host> Loader<H> {
-    pub fn new(backend: Rc<dyn Backend<H>>, config_dir: PathBuf, cwd: PathBuf, configured: Vec<Configured>) -> Self {
+impl Loader {
+    pub fn new(backend: Rc<dyn Backend>, config_dir: PathBuf, cwd: PathBuf, configured: Vec<Configured>) -> Self {
         Self {
             backend,
             config_dir,
@@ -151,7 +152,7 @@ impl<H: Host> Loader<H> {
 
     /// Brings the registry in line with the targets and their builds, then remounts the host's route when
     /// anything changed. Returns whether it did.
-    pub fn reconcile(&self, host: &Rc<H>, registry: &Registry<H>) -> bool {
+    pub fn reconcile(&self, host: &Rc<dyn Host>, registry: &Registry) -> bool {
         let targets = self.targets();
         let mut changed = false;
         let stale: Vec<String> = self
@@ -185,7 +186,7 @@ impl<H: Host> Loader<H> {
         changed
     }
 
-    fn reconcile_target(&self, host: &Rc<H>, registry: &Registry<H>, target: &Target) -> bool {
+    fn reconcile_target(&self, host: &Rc<dyn Host>, registry: &Registry, target: &Target) -> bool {
         let name = target.target.as_str();
         let skip = |reason: &str| {
             let status = Some(Status::Skipped(reason.to_owned()));
@@ -206,7 +207,7 @@ impl<H: Host> Loader<H> {
         let bytes = match std::fs::read(&file) {
             Ok(bytes) => bytes,
             Err(error) => {
-                return self.fail(host, registry, name, 0, format!("{}: {error}", file.display()));
+                return self.fail(&**host, registry, name, 0, format!("{}: {error}", file.display()));
             }
         };
         let mut hasher = DefaultHasher::new();
@@ -223,7 +224,7 @@ impl<H: Host> Loader<H> {
         });
         let (definition, error) = match loaded {
             Ok(loaded) => loaded,
-            Err(error) => return self.fail(host, registry, name, digest, error),
+            Err(error) => return self.fail(&**host, registry, name, digest, error),
         };
         log::info!("plugin {} loaded from {}", definition.id, file.display());
         let reload: Rc<RefCell<Option<String>>> = Rc::default();
@@ -236,7 +237,7 @@ impl<H: Host> Loader<H> {
         let definition = Definition {
             setup: Rc::new({
                 let reload = reload.clone();
-                move |registering: &mut crate::Setup<'_, H>| {
+                move |registering: &mut crate::Setup<'_>| {
                     reload.take();
                     setup(registering);
                 }
@@ -244,7 +245,7 @@ impl<H: Host> Loader<H> {
             ..definition
         };
         if let Some(error) = registry.load(host, definition.external(name, failure)) {
-            return self.fail(host, registry, name, digest, error);
+            return self.fail(&**host, registry, name, digest, error);
         }
         self.seen.borrow_mut().insert(name.to_owned(), Seen { digest, reload });
         self.failed.borrow_mut().remove(name);
@@ -253,7 +254,7 @@ impl<H: Host> Loader<H> {
 
     /// Records that the build of `target` failed: the running previous version, if any, keeps running and
     /// reports the failure; otherwise the target is listed as failed. A new failure tells the host.
-    fn fail(&self, host: &H, registry: &Registry<H>, target: &str, digest: u64, error: String) -> bool {
+    fn fail(&self, host: &dyn Host, registry: &Registry, target: &str, digest: u64, error: String) -> bool {
         log::error!("plugin {target} failed to load: {error}");
         let new = self.failed.borrow_mut().insert(target.to_owned(), error.clone()).as_ref() != Some(&error);
         let mut seen = self.seen.borrow_mut();

@@ -23,7 +23,7 @@ pub struct Home {
     /// The global form overlay (E.9b); while it holds the keys, the prompt must not take the focus.
     forms: crate::features::home_forms::HomeForms,
     /// The `home.footer` slot's plugin claims (P.1).
-    slot: std::rc::Rc<opencode_plugin::SlotMount<Tui>>,
+    slot: std::rc::Rc<opencode_plugin::SlotMount>,
 }
 
 impl Home {
@@ -79,7 +79,7 @@ impl Home {
             }
             center.padding_x(padding(width));
             paint_logo(&tui.app, &logo, &tui.page(), width, height);
-            footer_slot.sync(&tui, &Changes::everything());
+            crate::plugins::host::changed(&tui, &Changes::everything(), |changed| footer_slot.sync(&*tui, changed));
             tui.app.request_redraw();
         }));
         Self { root, prompt, forms, slot }
@@ -94,7 +94,7 @@ impl RouteView for Home {
     fn sync(&self, tui: &Tui, changes: &Changes) {
         crate::features::location::follow_default(tui);
         self.prompt.sync(tui, changes);
-        self.slot.sync(tui, changes);
+        crate::plugins::host::changed(tui, changes, |changed| self.slot.sync(tui, changed));
         // The last form closed: the prompt takes the keys back, after any open dialog.
         let closed = self.forms.sync(tui, changes);
         self.prompt.set_disabled(self.forms.active());

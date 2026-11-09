@@ -13,46 +13,24 @@ of each API.
 
 ## Shape
 
-`opencode-plugin` depends on opentui and opencode-ui only. It is generic over the host, so the TUI is
-never a dependency of the plugins crate, and LaTeX and Mermaid can be written against any host:
+Since O-67 (`api-no-tui`) there is one plugin API, `opencode-plugin-abi`, for built-ins and external plugins
+alike: a plugin is an `abi::Plugin { id, setup }` and registers slots, routes, commands, fences and handlers on
+`abi::Setup`. It reads through `abi::Read` and acts through `abi::Host`, never through the TUI or a widget.
+LaTeX, Mermaid, the ten feature built-ins and the three ports under `crates/plugin/examples` all use it, and
+none of them depends on OpenTUI. `crates/plugin-abi/tests/sdk.rs` checks that for an author's fixture and the
+ports.
 
-```rust
-pub trait Host: 'static {
-    /// What changed since the last sync (the TUI: `opencode_store::Changes`).
-    type Changes;
-    fn app(&self) -> &App;
-    /// The page theme (`context.theme`).
-    fn theme(&self) -> Theme;
-    /// The keymap plugin layers register on (`context.keymap`).
-    fn keymap(&self) -> &DialogKeymap;
-}
+`opencode-plugin` is the host side: `Registry`, slot resolution, the loader, and the renderer that turns a
+`Node` into widgets. Its `Host` trait is what the adapters of both paths call; the TUI implements it once
+(`crates/tui/src/plugins/host.rs`). It is not plugin API.
 
-pub struct Definition<H> { id, setup: Rc<dyn Fn(&mut Setup<H>)> }   // TS `Plugin.define`
-```
+`Registry::new` takes `Builtin`s: `Builtin::Plugin(abi::Plugin)`, or `Builtin::Host { id, activate, dispose }`
+for the two parts of the TUI that the plugin manager lists and toggles but that are not plugins: the plugin
+manager itself (`opencode.plugins`) and the diff viewer (`opencode.diffs`). They reach the TUI through a
+`OnceCell<Weak<Tui>>` that `install` sets once `Rc<Tui>` exists.
 
-The TUI implements `Host for Tui` (`crates/tui/src/plugins/host.rs`). A built-in is a
-`Definition<Tui>` and reads the store, dialogs, and toasts from the `Rc<Tui>` that `Setup::host` returns.
-LaTeX and Mermaid are `Definition<H>` for any `H: Host`.
-
-`Setup` is TS's `Context` reduced to registrations. Each registration is undone when the plugin
-deactivates:
-
-| `Setup` | TS | Notes |
-| --- | --- | --- |
-| `host()` | the context itself | `&Rc<H>`; closures keep a `Weak` |
-| `id()`, `storage_key(key)` | `storage.store(key)` | `plugin.<id>.<key>`, the key TS stores under, for `Storage` on the host |
-| `slot(Placement, render)` | `ui.slot(claim)` | `render(&H, &SlotInput) -> Box<dyn Slotted<H>>` |
-| `layer(KeymapLayer)` | `keymap.layer(factory)` | Commands, palette and slash entries, and keybinds; disposed explicitly on deactivation (O-32) |
-| `route(name, render)` | `ui.router.register(page)` | `render(&H) -> Box<dyn Slotted<H>>`, shown by `Route::Plugin { id, name }` |
-| `code_block(language, render)` | `markdown.registerCodeBlockRenderer` | `render(&CodeBlock, &Theme) -> Option<AnyWidget>`; the U.4c `CodeBlockRenderers` slot |
-| `on_dispose(f)` | the cleanup `setup` returns | |
-
-Keybinds need no API of their own: a plugin's commands use `Bind::Default`, so their keys come from the
-`keybinds` config and the generated defaults (`diff.*`, `plugins.*` are already in the U.2 table).
-
-A rendered slot or route is a `Slotted<H>`: its root `View` and a `sync(&H, &H::Changes)` that the owner
-of the slot calls with each change batch, as route views do (plan 6.8). A plain `View` is a `Slotted` that
-never changes. There is no reactive framework, so this replaces Solid's reactive render.
+A mounted slot (`SlotMount`) or plugin route (`RouteMount`) syncs with `abi::Changed`, which the TUI builds
+from each store change batch (`host::changed`), or with `None` for a batch that changed nothing.
 
 ## Slots
 
@@ -76,7 +54,7 @@ not, which never shows in a frame.
 
 ## Registry and configuration
 
-`Registry<H>` holds the definitions in enable order: the built-ins first, then any added later (a test
+`Registry` holds the plugins in enable order: the built-ins first, then any added later (a test
 plugin). `activate` runs `setup` for every enabled plugin; `set_active(id, bool)` toggles one (the plugin
 manager, E.18b). Code-block renderers are rebuilt per theme with `code_blocks(&Theme)`.
 
@@ -96,10 +74,10 @@ skipped), for the plugin manager.
 `crates/tui/src/plugins/host.rs`:
 
 - `impl Host for Tui`;
-- `builtins()`: the built-in IDs in TS order (`plugin/builtins.ts`). Until their steps land, each has an
-  empty setup; E.14, E.15a, E.18b, E.19a, P.2 and P.3 each replace their own line with their plugin;
-- `install(&Rc<Tui>)`: builds the registry from `builtins()` and the config, logs skipped entries, and
-  activates; `add(&Rc<Tui>, Definition<Tui>)` adds and activates one more and remounts the route;
+- `builtins()`: the built-ins in TS order (`plugin/builtins.ts`), with the two host entries in their places;
+- `registry(info, external)` builds the registry from them and the config; `install(&Rc<Tui>)` sets the host
+  entries' `OnceCell`, logs skipped entries, and activates; `add(&Rc<Tui>, Definition)` adds and activates one
+  more and remounts the route;
 - `slot(tui, parent, path, input, content)`, `route(tui, id, name)`, and `code_blocks(tui)` for the TUI
   call sites.
 
