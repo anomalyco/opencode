@@ -15,7 +15,13 @@ export default defineApp({
     {
       method: "POST",
       path: "/api/session/:sessionID/generate",
-      json: { data: { text: "It was an **off-by-one** in the tokenizer.\n\n- one\n- two\n" } },
+      json: {
+        data: {
+          text: "It was an **off-by-one** in the tokenizer.\n\n- one\n- two\n",
+          tokens: { input: 120, output: 14, reasoning: 0, cache: { read: 0, write: 0 } },
+          cost: 0.0004,
+        },
+      },
     },
   ],
   steps: [
