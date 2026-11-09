@@ -177,6 +177,12 @@ impl Loader {
             registry.set_unloaded(&target, None);
             changed = true;
         }
+        if changed {
+            // A build that did not load, such as one refused for an ID the removed plugin had, loads again.
+            let retry: Vec<String> =
+                self.failed.borrow().keys().filter(|target| !registry.loaded(target)).cloned().collect();
+            retry.iter().for_each(|target| drop(self.seen.borrow_mut().remove(target)));
+        }
         self.listed.replace(targets.iter().map(|target| target.target.clone()).collect());
         for target in &targets {
             changed |= self.reconcile_target(host, registry, target);
