@@ -15,6 +15,8 @@ crate-type = ["cdylib"]
 v2 = []
 # A build whose setup fails, for the reload tests.
 setup-fails = []
+# Claims the `app` slot under the routes, for the TUI's slot test.
+app = []
 # Starts no ticker, so the slot changes only when the host draws it again for a change batch.
 still = []
 # Builds that pretend to target another ABI version, for the version tests.

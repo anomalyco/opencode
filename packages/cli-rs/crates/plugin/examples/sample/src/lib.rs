@@ -27,7 +27,8 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use opencode_plugin_abi::{
-    Command, Line, Read, Setup, SlotKind, Span, ThemeMode, Toast, Variant, Waker, export_plugin,
+    Command, Line, Node, Placement, Read, Render, Setup, SlotKind, Span, ThemeMode, Toast, Variant, Waker,
+    export_plugin,
 };
 use serde_json::json;
 
@@ -70,6 +71,11 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     home::setup(setup)?;
     fetch::setup(setup)?;
     prompt::setup(setup)?;
+    if cfg!(feature = "app") {
+        setup.slot(Placement::append("app"), |_, _, _| {
+            Render::Show(Node::text([Span::new("sample app: under the route")]))
+        });
+    }
     // Ticks every `tick_ms` (a second by default), `ticks` times (no limit by default), on a host that offers a
     // waker (ABI 1.3).
     let option = |name: &str| {
