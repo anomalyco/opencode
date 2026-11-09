@@ -15,6 +15,7 @@ import { showToast } from "@/shell/notifications/toast"
 import { useSessionExporter } from "@/session/commands/export-session"
 import { usePlatform } from "@/runtime/platform/platform"
 import type { SessionModel } from "@/session/model"
+import { sessionLabel } from "@/session/title"
 import type { SessionRevert } from "@/session/revert"
 import { usePluginClaims, usePluginScoped } from "@/runtime/plugin/commands"
 import type { Region } from "@/runtime/plugin/panels"
@@ -442,12 +443,59 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (actions.session.identity.params.id) openDialog("fork")
   }
 
+  const saveTitle = async (sessionID: string, title: string) => {
+    await serverSDK.api.session.update({ sessionID, title })
+    const current = data.session.get(sessionID)
+
+    if (current) data.session.remember({ ...current, title })
+  }
+
+  // An empty title asks the server to generate one, as the TUI's bare `/rename` does.
+  const generateTitle = async (sessionID: string) => {
+    await serverSDK.api.session.update({ sessionID, title: "" })
+    data.session.invalidate(sessionID)
+    await data.session.sync(sessionID)
+  }
+
+  // Mirrors the TUI's `/rename`: `/rename <title>` sets the title, a bare `/rename` regenerates it, and the palette
+  // opens the rename dialog.
+  const renameSession = async (input?: string) => {
+    const sessionID = actions.session.identity.params.id
+
+    if (!sessionID) return
+
+    if (input === undefined) {
+      const { SessionRenameDialog } = await import("@/shell/titlebar/session-rename-dialog")
+      const info = actions.session.data.info()
+
+      void dialog.show(() => (
+        <SessionRenameDialog title={info ? sessionLabel(info) : ""} onRename={(title) => saveTitle(sessionID, title)} />
+      ))
+
+      return
+    }
+
+    const title = input.trim()
+
+    await (title ? saveTitle(sessionID, title) : generateTitle(sessionID)).catch((cause: unknown) =>
+      showToast({ title: formatServerError(cause, language.t, language.t("common.requestFailed")) }),
+    )
+  }
+
   const sessionCmds = () => [
     sessionCommand({
       id: "session.new",
       title: language.t("command.session.new"),
       slash: "new",
       onSelect: (source) => command.trigger("tab.new", source),
+    }),
+    sessionCommand({
+      id: "session.rename",
+      title: language.t("command.session.rename"),
+      slash: "rename",
+      slashArguments: true,
+      disabled: !actions.session.identity.params.id,
+      onSelect: (_source, input) => renameSession(input),
     }),
     sessionCommand({
       id: "session.undo",
