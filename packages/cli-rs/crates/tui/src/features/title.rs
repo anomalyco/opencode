@@ -24,6 +24,7 @@ pub struct Title {
 
 impl Title {
     fn set(&self, tui: &Tui, title: String) {
+        let title = opencode_ui::terminal_title(&title);
         if self.sent.borrow().as_deref() == Some(title.as_str()) {
             return;
         }
