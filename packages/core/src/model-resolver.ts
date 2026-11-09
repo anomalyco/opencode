@@ -127,6 +127,8 @@ export interface Resolved {
   readonly cost: Info["cost"]
   /** Catalog token limits used by Core for context management. */
   readonly limit: Info["limit"]
+  /** Catalog variants, used to tell which variant switches change the reasoning effort. */
+  readonly variants: Info["variants"]
   /** Model policy overrides the provider policy; omitted means summary compaction. */
   readonly compaction?: Provider.Compaction
   /** Prompt-cache settings from the provider, model and variant; omitted keeps the provider defaults. */
@@ -500,6 +502,7 @@ export const layer = Layer.effect(
         capabilities: selected.capabilities,
         cost: selected.cost,
         limit: selected.limit,
+        variants: selected.variants,
         compaction: runtimeInfo.settings?.compaction,
         cache: runtimeInfo.settings?.cache,
         transport: provider?.settings?.transport,

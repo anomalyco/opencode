@@ -185,11 +185,11 @@ it.effect("loads and replays a pre-v2.1 providerContext checkpoint with pre-2.0.
     ).not.toHaveProperty("native")
     yield* s.prompt("continue")
     const history = yield* SessionHistory.load(s.db, sessionID, target)
-    expect(toLLMMessages(history, model.ref).slice(0, 2)).toEqual([...decode(legacyCheckpoint)])
+    expect(toLLMMessages(history, model).slice(0, 2)).toEqual([...decode(legacyCheckpoint)])
     expect(history.some(SessionHistory.isNativeCompaction)).toBe(true)
     const local = yield* SessionHistory.load(s.db, sessionID, "local")
     expect(local.some(SessionHistory.isNativeCompaction)).toBe(false)
-    expect(toLLMMessages(local, model.ref).map((message) => message.content)).toEqual([
+    expect(toLLMMessages(local, model).map((message) => message.content)).toEqual([
       [Message.text("original request")],
       [Message.text("continue")],
     ])
@@ -249,7 +249,7 @@ it.effect(
         expect(
           toLLMMessages(
             replayed.entries.map((entry) => entry.message),
-            model.ref,
+            model,
           ),
         ).toEqual([
           ...replacement,
@@ -266,7 +266,7 @@ it.effect(
           expect(
             toLLMMessages(
               expanded.entries.map((entry) => entry.message),
-              model.ref,
+              model,
             ).map((message) => message.content),
           ).toEqual([
             [Message.text("original request")],
@@ -332,7 +332,7 @@ it.effect("falls back to an earlier compatible native or local checkpoint", () =
     expect(
       toLLMMessages(
         replayed.entries.map((entry) => entry.message),
-        model.ref,
+        model,
       ).filter((message) => message.role === "system"),
     ).toEqual([Message.system("post-epoch update")])
     const local = yield* s.load("local")
@@ -349,7 +349,7 @@ it.effect("skips a malformed native window and replays the history before it", (
     yield* s.compact({ messages: [{ role: "invalid", content: [] }] })
     yield* s.prompt("after")
     const history = yield* SessionHistory.load(s.db, sessionID, target)
-    expect(toLLMMessages(history, model.ref).map((message) => message.content)).toEqual([
+    expect(toLLMMessages(history, model).map((message) => message.content)).toEqual([
       [Message.text("before")],
       [Message.text("after")],
     ])

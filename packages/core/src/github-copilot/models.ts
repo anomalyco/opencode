@@ -5,6 +5,7 @@ import { Effect, Option, Schema } from "effect"
 import { Headers, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Model } from "../model.js"
 import { Provider } from "../provider.js"
+import { Variant } from "../variant.js"
 
 const RemoteModel = Schema.Struct({
   model_picker_enabled: Schema.Boolean,
@@ -228,26 +229,28 @@ function fallbackEndpoint(modelID: string): Endpoint {
 function variants(remote: UsableModel, messages: boolean): Model.Info["variants"] {
   const efforts = remote.capabilities.supports.reasoning_effort ?? []
   if (!messages && efforts.length) {
-    return efforts.map((effort) => ({
-      id: Model.VariantID.make(effort),
-      settings: {
-        reasoningEffort: effort,
-        reasoningSummary: "auto",
-        include: ["reasoning.encrypted_content"],
-      },
-    }))
+    return efforts.map((effort) =>
+      Variant.effortVariant(effort, {
+        settings: {
+          reasoningEffort: effort,
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"],
+        },
+      }),
+    )
   }
   if (efforts.length && remote.capabilities.supports.adaptive_thinking) {
-    return efforts.map((effort) => ({
-      id: Model.VariantID.make(effort),
-      settings: {
-        thinking: {
-          type: "adaptive",
-          display: "summarized",
+    return efforts.map((effort) =>
+      Variant.effortVariant(effort, {
+        settings: {
+          thinking: {
+            type: "adaptive",
+            display: "summarized",
+          },
+          effort,
         },
-        effort,
-      },
-    }))
+      }),
+    )
   }
   const max = remote.capabilities.supports.max_thinking_budget
   if (max === undefined) return []

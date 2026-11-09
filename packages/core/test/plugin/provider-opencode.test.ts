@@ -652,7 +652,7 @@ describe("OpencodePlugin", () => {
 
           const reasoner = required(yield* models.get(Provider.ID.make("remote"), Model.ID.make("reasoner")))
           expect(reasoner.time.released).toBe(Date.UTC(2026, 1, 3))
-          expect(reasoner.variants).toEqual([
+          expect(reasoner.variants).toMatchObject([
             {
               id: Model.VariantID.make("low"),
               settings: { reasoningEffort: "low", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
@@ -674,7 +674,7 @@ describe("OpencodePlugin", () => {
           ])
           const gemini = required(yield* models.get(Provider.ID.make("remote"), Model.ID.make("gemini-3.1-pro")))
           expect(gemini.package).toBe("@opencode/ai/providers/google")
-          expect(gemini.variants).toEqual([
+          expect(gemini.variants).toMatchObject([
             {
               id: Model.VariantID.make("low"),
               settings: { thinkingConfig: { includeThoughts: true, thinkingLevel: "low" } },
@@ -686,7 +686,7 @@ describe("OpencodePlugin", () => {
           ])
           const magistral = required(yield* models.get(Provider.ID.make("remote"), Model.ID.make("magistral-medium")))
           expect(magistral.package).toBe("@opencode/ai/providers/mistral")
-          expect(magistral.variants).toEqual([
+          expect(magistral.variants).toMatchObject([
             { id: Model.VariantID.make("low"), settings: { reasoningEffort: "low" } },
             { id: Model.VariantID.make("high"), settings: { reasoningEffort: "high" } },
           ])

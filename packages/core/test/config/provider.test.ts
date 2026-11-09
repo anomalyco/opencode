@@ -7,6 +7,7 @@ import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { ConfigNormalize } from "@opencode/core/config/normalize"
 import { Integration } from "@opencode/core/integration"
 import { Model } from "@opencode/core/model"
+import { Variant } from "@opencode/core/variant"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
@@ -912,10 +913,12 @@ describe("ConfigProviderPlugin.Plugin", () => {
 
       const model = required(yield* models.get(providerID, modelID))
       expect(model.package).toBe("@opencode/ai/providers/amazon-bedrock/mantle/messages")
-      expect(model.variants.find((variant) => variant.id === "high")).toEqual({
+      const high = required(model.variants.find((variant) => variant.id === "high"))
+      expect(high).toMatchObject({
         id: Model.VariantID.make("high"),
         settings: { effort: "high", thinking: { type: "adaptive", display: "summarized" } },
       })
+      expect(Variant.effort(high)).toBe("high")
     }),
   )
 
@@ -989,7 +992,8 @@ describe("ConfigProviderPlugin.Plugin", () => {
       ])
 
       const effort = required(yield* models.get(providerID, Model.ID.make("effort")))
-      expect(effort.variants).toEqual([
+      expect(effort.variants.map(Variant.effort)).toEqual(["low", "high"])
+      expect(effort.variants).toMatchObject([
         {
           id: Model.VariantID.make("low"),
           settings: { reasoningEffort: "low", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
@@ -1011,7 +1015,8 @@ describe("ConfigProviderPlugin.Plugin", () => {
       ])
       const gemini = required(yield* models.get(providerID, Model.ID.make("gemini-3.1-pro")))
       expect(gemini.package).toBe("@opencode/ai/providers/google")
-      expect(gemini.variants).toEqual([
+      expect(gemini.variants.map(Variant.effort)).toEqual(["low", "high"])
+      expect(gemini.variants).toMatchObject([
         {
           id: Model.VariantID.make("low"),
           settings: { thinkingConfig: { includeThoughts: true, thinkingLevel: "low" } },
@@ -1023,12 +1028,49 @@ describe("ConfigProviderPlugin.Plugin", () => {
       ])
       const magistral = required(yield* models.get(providerID, Model.ID.make("magistral-medium")))
       expect(magistral.package).toBe("@opencode/ai/providers/mistral")
-      expect(magistral.variants).toEqual([
+      expect(magistral.variants).toMatchObject([
         { id: Model.VariantID.make("low"), settings: { reasoningEffort: "low" } },
         { id: Model.VariantID.make("high"), settings: { reasoningEffort: "high" } },
       ])
       expect(required(yield* models.get(providerID, Model.ID.make("fixed"))).variants).toEqual([])
       expect(required(yield* models.get(providerID, Model.ID.make("plain"))).variants).toEqual([])
+    }),
+  )
+
+  it.effect("labels only built-in effort variants that config leaves unchanged", () =>
+    Effect.gen(function* () {
+      const models = yield* Model.Service
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "@opencode/ai/providers/anthropic",
+                models: {
+                  "claude-haiku-5-5": {
+                    capabilities: { reasoning: { supported: true, toggle: true, effort: ["low", "high", "max"] } },
+                    variants: [
+                      { id: "low", headers: { "x-tier": "low" } },
+                      { id: "high", settings: { effort: "max" } },
+                      { id: "turbo", settings: { effort: "max" } },
+                    ],
+                  },
+                },
+              },
+            },
+          }),
+        }),
+      ])
+
+      const model = required(yield* models.get(Provider.ID.make("custom"), Model.ID.make("claude-haiku-5-5")))
+      expect(Object.fromEntries(model.variants.map((variant) => [variant.id, Variant.effort(variant)]))).toEqual({
+        none: undefined,
+        low: "low",
+        high: undefined,
+        max: "max",
+        turbo: undefined,
+      })
     }),
   )
 

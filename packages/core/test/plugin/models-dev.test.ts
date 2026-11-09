@@ -9,6 +9,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
+import { Variant } from "@opencode/core/variant"
 import { ModelsDev } from "@opencode/core/models-dev"
 import { ModelsDevPlugin } from "@opencode/core/plugin/models-dev"
 import { Plugin } from "@opencode/core/plugin"
@@ -1046,22 +1047,17 @@ describe("ModelsDevPlugin", () => {
         Model.VariantID.make("low"),
         Model.VariantID.make("high"),
       ])
-      expect(model?.variants).toContainEqual({
-        id: Model.VariantID.make("low"),
-        settings: {
-          reasoningEffort: "low",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"],
+      expect(model?.variants?.map(Variant.effort)).toEqual(["low", "high"])
+      expect(model?.variants).toMatchObject([
+        {
+          id: Model.VariantID.make("low"),
+          settings: { reasoningEffort: "low", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
         },
-      })
-      expect(model?.variants).toContainEqual({
-        id: Model.VariantID.make("high"),
-        settings: {
-          reasoningEffort: "high",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"],
+        {
+          id: Model.VariantID.make("high"),
+          settings: { reasoningEffort: "high", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
         },
-      })
+      ])
 
       const mode = yield* modelState.get(Provider.ID.openai, Model.ID.make("gpt-reasoning-high"))
       expect(mode).toMatchObject({
@@ -1092,7 +1088,7 @@ describe("ModelsDevPlugin", () => {
       })
 
       const anthropicEffortModel = yield* modelState.get(Provider.ID.anthropic, Model.ID.make("claude-opus-4.7"))
-      expect(anthropicEffortModel?.variants).toEqual([
+      expect(anthropicEffortModel?.variants).toMatchObject([
         { id: Model.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
         {
           id: Model.VariantID.make("low"),
@@ -1101,7 +1097,7 @@ describe("ModelsDevPlugin", () => {
       ])
 
       const anthropicToggleModel = yield* modelState.get(Provider.ID.anthropic, Model.ID.make("claude-toggle"))
-      expect(anthropicToggleModel?.variants).toEqual([
+      expect(anthropicToggleModel?.variants).toMatchObject([
         { id: Model.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
         {
           id: Model.VariantID.make("thinking"),
@@ -1110,7 +1106,7 @@ describe("ModelsDevPlugin", () => {
       ])
 
       const opus45 = yield* modelState.get(Provider.ID.anthropic, Model.ID.make("claude-opus-4-5"))
-      expect(opus45?.variants).toEqual([
+      expect(opus45?.variants).toMatchObject([
         {
           id: Model.VariantID.make("low"),
           settings: { effort: "low", thinking: { type: "enabled", budgetTokens: 8191 } },
@@ -1122,7 +1118,7 @@ describe("ModelsDevPlugin", () => {
       ])
 
       const grok = yield* modelState.get(Provider.ID.make("xai"), Model.ID.make("grok-4.5"))
-      expect(grok?.variants).toEqual(
+      expect(grok?.variants).toMatchObject(
         ["low", "medium", "high"].map((id) => ({
           id: Model.VariantID.make(id),
           settings: { reasoningEffort: id, reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
@@ -1130,7 +1126,7 @@ describe("ModelsDevPlugin", () => {
       )
 
       const minimax = yield* modelState.get(Provider.ID.make("opencode-go"), Model.ID.make("minimax-m3"))
-      expect(minimax?.variants).toEqual([
+      expect(minimax?.variants).toMatchObject([
         { id: Model.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
         {
           id: Model.VariantID.make("thinking"),
@@ -1139,13 +1135,13 @@ describe("ModelsDevPlugin", () => {
       ])
 
       const toggle = yield* modelState.get(Provider.ID.make("alibaba"), Model.ID.make("toggle-only"))
-      expect(toggle?.variants).toEqual([
+      expect(toggle?.variants).toMatchObject([
         { id: Model.VariantID.make("none"), settings: { enableThinking: false } },
         { id: Model.VariantID.make("thinking"), settings: { enableThinking: true } },
       ])
 
       const combined = yield* modelState.get(Provider.ID.make("alibaba"), Model.ID.make("toggle-budget"))
-      expect(combined?.variants).toEqual([
+      expect(combined?.variants).toMatchObject([
         { id: Model.VariantID.make("none"), settings: { enableThinking: false } },
         {
           id: Model.VariantID.make("high"),
@@ -1158,7 +1154,7 @@ describe("ModelsDevPlugin", () => {
       ])
 
       const gateway = yield* modelState.get(Provider.ID.make("vercel"), Model.ID.make("alibaba/qwen-toggle"))
-      expect(gateway?.variants).toEqual([
+      expect(gateway?.variants).toMatchObject([
         { id: Model.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
         {
           id: Model.VariantID.make("high"),
@@ -1171,7 +1167,7 @@ describe("ModelsDevPlugin", () => {
       ])
 
       const gatewayNova = yield* modelState.get(Provider.ID.make("vercel"), Model.ID.make("amazon/nova-2-lite"))
-      expect(gatewayNova?.variants).toEqual([
+      expect(gatewayNova?.variants).toMatchObject([
         {
           id: Model.VariantID.make("none"),
           settings: { thinking: { type: "disabled" } },
@@ -1190,7 +1186,7 @@ describe("ModelsDevPlugin", () => {
         Provider.ID.make("vercel"),
         Model.ID.make("deepseek/deepseek-toggle"),
       )
-      expect(gatewayFallback?.variants).toEqual([
+      expect(gatewayFallback?.variants).toMatchObject([
         {
           id: Model.VariantID.make("none"),
           settings: { thinking: { type: "disabled" } },
@@ -1206,13 +1202,13 @@ describe("ModelsDevPlugin", () => {
       ])
 
       const openrouter = yield* modelState.get(Provider.ID.make("openrouter"), Model.ID.make("openrouter-toggle"))
-      expect(openrouter?.variants).toEqual([
+      expect(openrouter?.variants).toMatchObject([
         { id: Model.VariantID.make("none"), settings: { reasoning: { enabled: false } } },
         { id: Model.VariantID.make("thinking"), settings: { reasoning: { enabled: true } } },
       ])
 
       const google = yield* modelState.get(Provider.ID.make("google"), Model.ID.make("gemini-2.5-flash"))
-      expect(google?.variants).toEqual([
+      expect(google?.variants).toMatchObject([
         {
           id: Model.VariantID.make("none"),
           settings: { thinkingConfig: { includeThoughts: false, thinkingBudget: 0 } },
@@ -1228,7 +1224,7 @@ describe("ModelsDevPlugin", () => {
       ])
 
       const vertex = yield* modelState.get(Provider.ID.make("google-vertex"), Model.ID.make("gemini-2.5-flash-lite"))
-      expect(vertex?.variants).toEqual([
+      expect(vertex?.variants).toMatchObject([
         {
           id: Model.VariantID.make("none"),
           settings: { thinkingConfig: { includeThoughts: false, thinkingBudget: 0 } },
@@ -1247,7 +1243,7 @@ describe("ModelsDevPlugin", () => {
         Provider.ID.make("amazon-bedrock"),
         Model.ID.make("us.amazon.nova-2-lite-v1:0"),
       )
-      expect(bedrock?.variants).toEqual([
+      expect(bedrock?.variants).toMatchObject([
         {
           id: Model.VariantID.make("none"),
           body: { additionalModelRequestFields: { reasoningConfig: { type: "disabled" } } },
@@ -1263,7 +1259,7 @@ describe("ModelsDevPlugin", () => {
       ])
 
       const sapGemini = yield* modelState.get(Provider.ID.make("sap-ai-core"), Model.ID.make("gemini-2.5-flash"))
-      expect(sapGemini?.variants).toEqual([
+      expect(sapGemini?.variants).toMatchObject([
         {
           id: Model.VariantID.make("none"),
           settings: { modelParams: { thinkingConfig: { includeThoughts: false, thinkingBudget: 0 } } },
@@ -1279,7 +1275,7 @@ describe("ModelsDevPlugin", () => {
       ])
 
       const sapNova = yield* modelState.get(Provider.ID.make("sap-ai-core"), Model.ID.make("amazon--nova-lite"))
-      expect(sapNova?.variants).toEqual([
+      expect(sapNova?.variants).toMatchObject([
         {
           id: Model.VariantID.make("none"),
           settings: {
@@ -1304,7 +1300,7 @@ describe("ModelsDevPlugin", () => {
         Provider.ID.make("sap-ai-core"),
         Model.ID.make("cohere--command-a-reasoning"),
       )
-      expect(sapCohere?.variants).toEqual([
+      expect(sapCohere?.variants).toMatchObject([
         {
           id: Model.VariantID.make("none"),
           settings: { modelParams: { thinking: { type: "disabled" } } },
@@ -1323,7 +1319,7 @@ describe("ModelsDevPlugin", () => {
         Provider.ID.make("sap-ai-core"),
         Model.ID.make("anthropic--claude-4.7-opus"),
       )
-      expect(sapAnthropicEffort?.variants).toEqual([
+      expect(sapAnthropicEffort?.variants).toMatchObject([
         {
           id: Model.VariantID.make("low"),
           settings: {
@@ -1341,7 +1337,7 @@ describe("ModelsDevPlugin", () => {
         Provider.ID.make("sap-ai-core"),
         Model.ID.make("anthropic--claude-4-sonnet"),
       )
-      expect(sapAnthropicBudget?.variants).toEqual([
+      expect(sapAnthropicBudget?.variants).toMatchObject([
         {
           id: Model.VariantID.make("high"),
           settings: {

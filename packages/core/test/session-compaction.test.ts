@@ -295,7 +295,7 @@ it.effect("history from the latest completed compaction matches the full transcr
         all.findLastIndex((message) => message.type === "compaction" && message.status === "completed"),
       )
       const history = yield* SessionHistory.load(db, id, resolved.ref)
-      expect(toLLMMessages(history, resolved.ref)).toEqual(toLLMMessages(all.slice(start), resolved.ref))
+      expect(toLLMMessages(history, resolved)).toEqual(toLLMMessages(all.slice(start), resolved))
     }
   }),
 )
@@ -329,10 +329,10 @@ it.effect("history never decodes rows before the latest compaction or its kept t
     expect(yield* store.messages({ sessionID: id }).pipe(Effect.flip)).toBeInstanceOf(MessageDecodeError)
 
     const history = yield* SessionHistory.load(db, id, resolved.ref)
-    expect(toLLMMessages(history, resolved.ref)).toEqual(
+    expect(toLLMMessages(history, resolved)).toEqual(
       toLLMMessages(
         [{ ...compaction, metadata: { keepID: kept.id, recent: "[User]: Kept question" } }, tail],
-        resolved.ref,
+        resolved,
       ),
     )
   }),
@@ -1201,7 +1201,7 @@ it.effect("summary measured recovery reuses usage only for the matching agent", 
     expect(requests[1]).toMatchObject({
       tools: fixture.context.tools.definitions,
       messages: [
-        ...toLLMMessages(fixture.context.messages, resolved.ref),
+        ...toLLMMessages(fixture.context.messages, resolved),
         Message.user(SessionCompaction.buildPrompt(false)),
       ],
       maxTokens: summaryBuffer,

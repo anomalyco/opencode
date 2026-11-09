@@ -252,8 +252,11 @@ function overlay(
           existing = { id: variant.id }
           model.variants.push(existing)
         }
-        if (variant.settings !== undefined)
+        if (variant.settings !== undefined) {
           existing.settings = Provider.mergeOverlay(existing.settings, variant.settings)
+          // Configured settings may change what the variant sends, so it no longer carries a known effort.
+          Variant.clearEffort(existing)
+        }
         if (variant.headers !== undefined) existing.headers = Provider.mergeHeaders(existing.headers, variant.headers)
         if (variant.body !== undefined) existing.body = Provider.mergeOverlay(existing.body, variant.body)
       }

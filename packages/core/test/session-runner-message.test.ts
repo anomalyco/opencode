@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Message, Media } from "@opencode/ai/effect"
 import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
+import { Variant } from "@opencode/core/variant"
 import { SessionMessage } from "@opencode/core/session/message"
 import { AgentAttachment, Base64, FileAttachment, SkillAttachment } from "@opencode/schema/prompt"
 import { Skill } from "@opencode/schema/skill"
@@ -16,7 +17,10 @@ import { pathToFileURL } from "url"
 
 const created = DateTime.makeUnsafe(0)
 const id = (value: string) => SessionMessage.ID.make(`msg_${value}`)
-const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
+const model = {
+  ref: Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }),
+  variants: [],
+}
 const build = Agent.defaultID
 
 describe("toLLMMessages", () => {
@@ -231,12 +235,18 @@ Earlier work
   })
 
   describe("model-switched", () => {
-    const ref = (variant?: string) =>
-      Model.Ref.make({
-        id: Model.ID.make("model"),
-        providerID: Provider.ID.make("provider"),
-        ...(variant === undefined ? {} : { variant: Model.VariantID.make(variant) }),
-      })
+    const resolved = (packageName: string, modelID: string, supports: readonly Variant.Support[]) => {
+      const info = Model.Info.default(Provider.ID.make("provider"), Model.ID.make(modelID)) as Model.MutableInfo
+      info.package = packageName
+      return {
+        ref: Model.Ref.make({ id: info.id, providerID: info.providerID }),
+        variants: Variant.resolve(Model.Info.make(info), supports),
+      }
+    }
+    const anthropic = "@opencode/ai/providers/anthropic"
+    const opus = resolved(anthropic, "claude-opus-5", [{ type: "effort", values: ["low", "high", "max"] }])
+    const ref = (target: typeof opus, variant?: string) =>
+      Model.Ref.make({ ...target.ref, ...(variant === undefined ? {} : { variant: Model.VariantID.make(variant) }) })
     const switched = (to: Model.Ref, previous?: Model.Ref) =>
       SessionMessage.ModelSelected.make({
         id: id("model"),
@@ -247,24 +257,56 @@ Earlier work
       })
 
     test("records a same-model effort switch as an effort update", () => {
-      expect(toLLMMessages([switched(ref("low"), ref("high"))], ref("low"))).toEqual([
+      expect(toLLMMessages([switched(ref(opus, "low"), ref(opus, "high"))], opus)).toEqual([
         Message.effort({ effort: "low", previous: "high" }),
       ])
     })
 
     test("maps the default variant and no variant to the model default effort", () => {
-      expect(toLLMMessages([switched(ref("low"), ref())], ref("low"))).toEqual([Message.effort({ effort: "low" })])
-      expect(toLLMMessages([switched(ref("default"), ref("max"))], ref())).toEqual([
+      expect(toLLMMessages([switched(ref(opus, "low"), ref(opus))], opus)).toEqual([Message.effort({ effort: "low" })])
+      expect(toLLMMessages([switched(ref(opus, "default"), ref(opus, "max"))], opus)).toEqual([
         Message.effort({ previous: "max" }),
       ])
     })
 
     test("ignores switches that are not effort changes on the requested model", () => {
-      const other = Model.Ref.make({ id: Model.ID.make("other"), providerID: Provider.ID.make("provider") })
-      expect(toLLMMessages([switched(ref("low"))], ref("low"))).toEqual([])
-      expect(toLLMMessages([switched(ref("low"), other)], ref("low"))).toEqual([])
-      expect(toLLMMessages([switched(ref("thinking"), ref("high"))], ref("thinking"))).toEqual([])
-      expect(toLLMMessages([switched(ref("low"), ref("high"))], other)).toEqual([])
+      const other = resolved(anthropic, "claude-sonnet-5-5", [{ type: "effort", values: ["low", "high"] }])
+      // A configured variant has no effort label, even when its settings name an effort.
+      const custom = {
+        ...opus,
+        variants: [...opus.variants, { id: Model.VariantID.make("custom"), settings: { effort: "max" } }],
+      }
+      expect(toLLMMessages([switched(ref(opus, "low"))], opus)).toEqual([])
+      expect(toLLMMessages([switched(ref(opus, "low"), ref(other, "high"))], opus)).toEqual([])
+      expect(toLLMMessages([switched(ref(opus, "low"), ref(opus, "high"))], other)).toEqual([])
+      expect(toLLMMessages([switched(ref(opus, "custom"), ref(opus, "high"))], custom)).toEqual([])
+    })
+
+    test("ignores variants that set no effort, whatever their name", () => {
+      const haiku = resolved(anthropic, "claude-haiku-5-5", [
+        { type: "toggle" },
+        { type: "effort", values: ["low", "high", "max"] },
+      ])
+      const budgets = resolved(anthropic, "claude-haiku-4-5", [{ type: "budget_tokens", min: 1024 }])
+      expect(toLLMMessages([switched(ref(haiku, "max"), ref(haiku, "none"))], haiku)).toEqual([])
+      expect(toLLMMessages([switched(ref(haiku, "none"), ref(haiku, "max"))], haiku)).toEqual([])
+      expect(toLLMMessages([switched(ref(budgets, "max"), ref(budgets, "high"))], budgets)).toEqual([])
+    })
+
+    test("records effort switches whatever setting carries the effort", () => {
+      const gemini = resolved("@opencode/ai/providers/google", "gemini-3.5-pro", [
+        { type: "effort", values: ["low", "high"] },
+      ])
+      expect(toLLMMessages([switched(ref(gemini, "low"), ref(gemini, "high"))], gemini)).toEqual([
+        Message.effort({ effort: "low", previous: "high" }),
+      ])
+    })
+
+    test("records `none` when the variant sends it as an effort", () => {
+      const gpt = resolved("@opencode/ai/providers/openai", "gpt-6", [{ type: "effort", values: ["none", "high"] }])
+      expect(toLLMMessages([switched(ref(gpt, "high"), ref(gpt, "none"))], gpt)).toEqual([
+        Message.effort({ effort: "high", previous: "none" }),
+      ])
     })
   })
 
@@ -913,7 +955,7 @@ Earlier work
           time: { created, completed: created },
         }),
       ],
-      opencode,
+      { ref: opencode, variants: [] },
       "anthropic",
     )
 
@@ -1154,7 +1196,7 @@ Earlier work
           time: { created, completed: created },
         }),
       ],
-      Model.Ref.make({ id: Model.ID.make("fast"), providerID: Provider.ID.make("provider") }),
+      { ref: Model.Ref.make({ id: Model.ID.make("fast"), providerID: Provider.ID.make("provider") }), variants: [] },
     )
 
     expect(messages[0]?.content).toEqual([
@@ -1185,7 +1227,7 @@ Earlier work
           time: { created, completed: created },
         }),
       ],
-      Model.Ref.make({ id: Model.ID.make("new"), providerID: Provider.ID.make("provider") }),
+      { ref: Model.Ref.make({ id: Model.ID.make("new"), providerID: Provider.ID.make("provider") }), variants: [] },
     )
 
     expect(messages[0]?.content).toEqual([
@@ -1215,7 +1257,7 @@ Earlier work
           time: { created, completed: created },
         }),
       ],
-      Model.Ref.make({ id: Model.ID.make("same"), providerID: Provider.ID.make("provider") }),
+      { ref: Model.Ref.make({ id: Model.ID.make("same"), providerID: Provider.ID.make("provider") }), variants: [] },
     )
 
     expect(messages[0]?.content).toEqual([

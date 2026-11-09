@@ -726,7 +726,7 @@ export const layer = Layer.effect(
       // TODO: Read the previous summary from the hooked request once it no longer merges summary and recent into one
       // message. Until then it is rebuilt from storage, which drops a compaction hook's edits to that message.
       const lead = summary
-        ? toLLMMessages([{ ...summary, metadata: { ...summary.metadata, recent: "" } }], context.model.ref)
+        ? toLLMMessages([{ ...summary, metadata: { ...summary.metadata, recent: "" } }], context.model)
         : request.messages.slice(0, end)
       const recent = summary ? SessionRecentText.kept(summary) : ""
 
@@ -1109,14 +1109,14 @@ const clip = (value: string) => {
 /** The newest whole, real user messages within `keep` tokens: no synthetic guidance, no half of an attachment. */
 export const recentUserMessages = (
   messages: ReadonlyArray<SessionMessage.Info>,
-  model: Pick<SessionContext.Loaded["model"], "ref" | "capabilities">,
+  model: Pick<SessionContext.Loaded["model"], "ref" | "variants" | "capabilities">,
   keep: number,
 ) => {
   const users = messages
     .filter((message) => message.type === "user")
     .map((message) => ({ ...message, skills: undefined }))
   const sendable = SessionModelRequest.boundImages(
-    SessionModelRequest.unsupportedParts(toLLMMessages(users, model.ref), model.capabilities),
+    SessionModelRequest.unsupportedParts(toLLMMessages(users, model), model.capabilities),
   )
   return sendable.slice(oldestToDrop(sendable, estimateMessage, keep))
 }
