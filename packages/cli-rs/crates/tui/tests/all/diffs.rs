@@ -157,8 +157,15 @@ fn the_file_tree_and_menu_are_freed_with_their_view() {
     h.open_menu();
     // The label, its row, and the overlay.
     support::mark_at(&h.app, "Mark complete", 3, &marker);
-    h.app.press("escape");
+    let (x, y) = h.find("Mark complete");
+    h.app.hover(x, y);
+    h.app.click(x, y);
     h.assert_menu_closed();
+    h.wait_for("1/1");
+    // A tree row still takes the pointer while it shows.
+    let (x, y) = h.find("≡ main.rs");
+    h.app.hover(x, y);
+    h.app.click(x, y);
     h.tui.navigate(Route::Home);
     h.app.render();
     assert_eq!(Rc::strong_count(&marker), 1);

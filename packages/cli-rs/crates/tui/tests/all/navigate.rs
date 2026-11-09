@@ -430,6 +430,12 @@ fn navigation_frees_the_view_it_replaces() {
     }
     h.wait_for("Answer 3 three.");
     support::mark(&h.app, &h.tui.frame.main(), 0, &marker);
+    // The rows still take the pointer: a click on a prompt opens its actions.
+    let (x, y) = h.find("Question 3");
+    h.app.hover(x, y);
+    h.app.click(x, y);
+    h.wait_for("Message Actions");
+    h.app.press("escape");
     h.tui.navigate(Route::Home);
     h.idle();
     assert_eq!(Rc::strong_count(&marker), 1);
