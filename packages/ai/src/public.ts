@@ -1,3 +1,4 @@
+export { keepAlive, placesMarkers } from "./cache-policy.js"
 export { isContextOverflow, isContextOverflowFailure, isRetryable } from "./provider-error.js"
 export {
   ProtocolID,

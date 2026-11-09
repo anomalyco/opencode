@@ -23,6 +23,7 @@ import {
   type ToolEntry,
 } from "./schema/messages.js"
 import { effortUpdate } from "./effort-updates.js"
+import { isRecord } from "./utils/record.js"
 
 const AUTO: CachePolicyObject = {
   tools: true,
@@ -230,6 +231,39 @@ export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
 export const placesMarkers = (request: LLMRequest) => {
   const policy = selectPolicy(request)
   return Boolean(policy.tools || policy.system || policy.messages)
+}
+
+/** The lifetime of an ephemeral marker that names none; Anthropic-style caches default to five minutes. */
+const DEFAULT_MARKER_TTL: CacheTTL = "5m"
+
+/**
+ * A request that refreshes `request`'s prompt cache entry without new work: the same prompt with a one-token output
+ * limit, and the lifetime of the entry it refreshes.
+ *
+ * Undefined when resending can't refresh an entry:
+ * - routes without inline markers cache implicitly, so there is no entry with a known lifetime;
+ * - a thinking budget fitted below the output limit would shrink with it, and changed thinking parameters invalidate
+ *   the cached messages.
+ */
+export const keepAlive = (request: LLMRequest) => {
+  if (!placesMarkers(request) || fitsThinkingBudget(request.providerOptions)) return
+  return {
+    request: { ...request, maxTokens: 1 },
+    ttl: requestTTL(request) ?? DEFAULT_MARKER_TTL,
+  }
+}
+
+// The budgets the marker routes fit below the output limit: Anthropic-style `thinking` (Anthropic, Bedrock, Alibaba
+// Messages), Alibaba Chat's `thinkingBudget` and OpenRouter's `reasoning.max_tokens`.
+const fitsThinkingBudget = (options: LLMRequest["providerOptions"]) => {
+  if (options === undefined) return false
+  const thinking = options.thinking
+  const reasoning = options.reasoning
+  return (
+    (isRecord(thinking) && (thinking.budgetTokens !== undefined || thinking.budget_tokens !== undefined)) ||
+    options.thinkingBudget !== undefined ||
+    (isRecord(reasoning) && reasoning.max_tokens !== undefined)
+  )
 }
 
 // A declared cache format overrides the route allowlist and its model-ID heuristics.

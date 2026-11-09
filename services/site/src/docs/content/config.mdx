@@ -395,16 +395,17 @@ budgeting and overflow recovery.
 
 ### Warming
 
-Keep recently active model sessions warm with periodic transient requests.
-Warming is disabled by default; set it to `true` to use the four-minute idle
-interval and 30-minute active window.
+Keep a session's prompt cache alive between prompts by resending its last
+model request just before the provider's cache entry expires. Warming is
+disabled by default; set it to `true` to refresh at 90% of the cache lifetime,
+for up to 30 minutes while a turn runs and 15 minutes after it ends.
 
 ```jsonc
 {
   "warming": {
-    "prompt": "Do not perform any work. Reply with exactly: OK",
-    "interval": "4 minutes",
+    "interval": "auto",
     "duration": "30 minutes",
+    "idle": "15 minutes",
   },
 }
 ```
