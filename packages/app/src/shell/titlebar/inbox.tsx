@@ -30,8 +30,11 @@ import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import type { LocalProject } from "@/shell/state/layout"
 import { sessionTabTitle } from "./tab-title"
 import { sessionTitle } from "@/session/title"
-import { createSessionInbox, inboxArchived, type InboxEntry, type InboxStatus } from "./inbox-model"
+import { createSessionInbox, inboxArchived, inboxUnread, type InboxEntry, type InboxStatus } from "./inbox-model"
 import { compareWorking, workingSince } from "./inbox-working"
+import { adjacentTabKey } from "./tab-order"
+import { nextSessionCommand, previousSessionCommand } from "./session-navigation"
+import { useCommand } from "@/shell/commands/command"
 
 const RECENT_LIMIT = 10
 
@@ -47,6 +50,7 @@ export function SidebarInbox() {
   const language = useLanguage()
   const dialog = useDialog()
   const servers = useServers()
+  const command = useCommand()
   const inbox = createSessionInbox({ archived: true })
 
   const [state, setState, , ready] = persisted(Persist.global("sidebar.inbox"), InboxState, {
@@ -240,6 +244,72 @@ export function SidebarInbox() {
       ),
     },
   ]
+
+  // The rows in the order they appear: Current, then the scrolling sections, then a collapsed Working shelf's open row
+  // so the session a shortcut just opened stays reachable.
+  const visibleEntries = createMemo(() => {
+    const list = sections()
+
+    return [
+      ...list.current,
+      ...list.needs,
+      ...list.unread,
+      ...list.recent,
+      ...list.working.filter((entry) => state.workingExpanded || inbox.selected(entry)),
+    ]
+  })
+
+  // Rows a shift-move may land on: a waiting request, an unread result, or a failure to look at.
+  const unreadKeys = createMemo(
+    () => new Set(visibleEntries().flatMap((entry) => (inboxUnread(entry) ? [entry.key] : []))),
+  )
+
+  // The tab strip registers these commands for the layouts that show tabs. Inbox shows its own list instead, so it
+  // owns the same ids here and moves by the rows' vertical order rather than by the tab order.
+  command.register("inbox-session-navigation", () => [
+    {
+      ...previousSessionCommand,
+      category: language.t("command.category.session"),
+      title: language.t("command.session.previous"),
+      onSelect: () => openAdjacent(-1),
+    },
+    {
+      ...nextSessionCommand,
+      category: language.t("command.category.session"),
+      title: language.t("command.session.next"),
+      onSelect: () => openAdjacent(1),
+    },
+    {
+      id: "session.previous.unseen",
+      category: language.t("command.category.session"),
+      title: language.t("command.session.previous.unseen"),
+      keybind: "shift+alt+arrowup",
+      onSelect: () => openAdjacent(-1, (key) => unreadKeys().has(key)),
+    },
+    {
+      id: "session.next.unseen",
+      category: language.t("command.category.session"),
+      title: language.t("command.session.next.unseen"),
+      keybind: "shift+alt+arrowdown",
+      onSelect: () => openAdjacent(1, (key) => unreadKeys().has(key)),
+    },
+  ])
+
+  // The rows replace the tab strip's visible order here: previous and next walk them top to bottom, wrapping. A
+  // function declaration so the registration above can name it, as the tab strip does with its own navigation.
+  function openAdjacent(offset: -1 | 1, include?: (key: string) => boolean) {
+    const list = visibleEntries()
+    const current = list.find((entry) => inbox.selected(entry))
+    const key = adjacentTabKey(
+      list.map((entry) => entry.key),
+      current?.key,
+      offset,
+      include,
+    )
+    const next = list.find((entry) => entry.key === key)
+
+    if (next) inbox.open(next)
+  }
 
   return (
     <InboxSessionList

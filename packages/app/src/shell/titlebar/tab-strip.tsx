@@ -45,11 +45,8 @@ import {
   type SessionTabView,
 } from "./tab-load-machine"
 import { setSidebarUnread } from "@/shell/sidebar-peek"
+import { nextSessionCommand, previousSessionCommand } from "./session-navigation"
 import type { SessionInfo } from "@opencode/client/promise"
-
-export const previousSessionCommand = { id: "session.previous", keybind: "alt+arrowup" }
-
-export const nextSessionCommand = { id: "session.next", keybind: "alt+arrowdown" }
 
 // A row the For loop still renders for a tab just removed from the strip.
 const hiddenTabView: SessionTabView = {

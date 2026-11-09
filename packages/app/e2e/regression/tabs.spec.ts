@@ -1757,6 +1757,62 @@ async function emptySidePanel(page: Page) {
   return { beta, alphaTab: page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(alpha.id)}"])`) }
 }
 
+test("option arrows walk the inbox rows in their vertical order, including unread ones", async ({ page }) => {
+  const first = { id: "ses_inbox_keys_a", title: "Inbox key session A" }
+  const second = { id: "ses_inbox_keys_b", title: "Inbox key session B" }
+  const unread = { id: "ses_inbox_keys_c", title: "Inbox key session C", outcome: "succeeded" }
+
+  await mockWorkspace(page, {
+    name: "InboxKeys",
+    sessions: [
+      { ...first, time: { created: T0, updated: T0 + 3, idle: T0 + 3, viewed: T0 + 3 } },
+      { ...second, time: { created: T0, updated: T0 + 2, idle: T0 + 2, viewed: T0 + 2 } },
+      // A finished run nobody has viewed sits in Unread, below the Recent rows it follows in the list.
+      { ...unread, time: { created: T0, updated: T0 + 1, idle: T0 + 1 } },
+    ],
+    seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
+  })
+  await page.goto("/")
+
+  const rows = page.locator('[data-slot="sidebar-inbox"] [data-slot="sidebar-inbox-item"]')
+
+  const row = (title: string) => rows.filter({ hasText: title })
+
+  await expect(rows).toHaveCount(3)
+  await row(first.title).click()
+  await expectPath(page, sessionHref(first.id))
+  await expect(row(first.title)).toHaveAttribute("data-state", "active")
+
+  // Down follows the list: Current, then Recent, then Unread.
+  await page.keyboard.press("Alt+ArrowDown")
+  await expectPath(page, sessionHref(second.id))
+  await expect(row(second.title)).toHaveAttribute("data-state", "active")
+
+  await page.keyboard.press("Alt+ArrowDown")
+  await expectPath(page, sessionHref(unread.id))
+  await expect(row(unread.title)).toHaveAttribute("data-state", "active")
+
+  // Up comes back through the same order, and the ends wrap.
+  await page.keyboard.press("Alt+ArrowUp")
+  await expectPath(page, sessionHref(second.id))
+  await page.keyboard.press("Alt+ArrowUp")
+  await expectPath(page, sessionHref(first.id))
+  await page.keyboard.press("Alt+ArrowUp")
+  await expectPath(page, sessionHref(unread.id))
+  await page.keyboard.press("Alt+ArrowDown")
+  await expectPath(page, sessionHref(first.id))
+
+  // With shift, the move skips past read rows to the next result nobody has read, in either direction.
+  await page.keyboard.press("Alt+ArrowDown")
+  await expectPath(page, sessionHref(second.id))
+  await page.keyboard.press("Shift+Alt+ArrowDown")
+  await expectPath(page, sessionHref(unread.id))
+  await page.keyboard.press("Alt+ArrowUp")
+  await expectPath(page, sessionHref(second.id))
+  await page.keyboard.press("Shift+Alt+ArrowUp")
+  await expectPath(page, sessionHref(unread.id))
+})
+
 test("opening a session from the inbox keeps the list's scroll position and rows", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 480 })
 
