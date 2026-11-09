@@ -31,9 +31,6 @@ export const Overrides = Context.Reference<string | undefined>("@opencode/Flag/O
   defaultValue: () => process.env.OPENCODE_FLAGS,
 })
 
-// Any other channel, such as a release or a branch preview build, keeps flags off so none turns on by accident.
-const onByDefault = (channel: string) => channel === "local" || channel === "dev"
-
 /**
  * Resolves every flag: `OPENCODE_FLAGS` (`-key`, then `all`), then `experimental.<key>` from the highest-priority
  * document that sets `experimental` (the same document every other `experimental` setting reads), then `all_flags: true`
@@ -46,13 +43,7 @@ export function resolve(input: {
   readonly channel: string
   readonly overrides?: string
 }) {
-  const env = new Map(
-    (input.overrides ?? "")
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .map((item): [string, boolean] => (item.startsWith("-") ? [item.slice(1), false] : [item, true])),
-  )
+  const env = ConfigFlag.overrides(input.overrides)
   const all = env.get(ConfigFlag.wildcard) === true
   const experimental = Config.latest(input.entries, "experimental")
   const allFlags =
@@ -67,7 +58,7 @@ export function resolve(input: {
         ? [override, "env"]
         : configured !== undefined
           ? [configured, "config"]
-          : [onByDefault(input.channel), "default"]
+          : [ConfigFlag.onByDefault(input.channel), "default"]
     return { enabled, source }
   })
 }

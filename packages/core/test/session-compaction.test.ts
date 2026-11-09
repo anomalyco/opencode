@@ -540,7 +540,7 @@ it.effect("auto compaction estimates current content against the buffered prompt
     ]
     // Without the rich_media flag the clip is left out of the request, so it costs nothing.
     expect(SessionCompaction.estimateContext({ ...watching, video: false, messages: clip(1_000_000) })).toBe(20)
-    expect(SessionCompaction.recentUserMessages(clip(1_000_000), watching.model, 1_000)).toHaveLength(0)
+    expect(SessionCompaction.recentUserMessages(clip(1_000_000), watching.model, 1_000, false)).toHaveLength(0)
     expect(SessionCompaction.estimateContext({ ...watching, messages: clip(1_000_000) })).toBe(2_020)
     expect(SessionCompaction.estimateContext({ ...watching, messages: clip(100_000) })).toBe(1_520)
     // A protocol that cannot send video gets the unsupported-media text instead, so the clip costs only that text.

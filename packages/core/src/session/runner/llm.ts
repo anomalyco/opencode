@@ -148,7 +148,7 @@ const layer = Layer.effect(
                         model,
                         initial: history.initial,
                         messages: history.messages,
-                        video: yield* context.video,
+                        video: selected.video,
                       },
                     })
                   }).pipe(

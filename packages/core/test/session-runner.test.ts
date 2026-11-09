@@ -60,6 +60,7 @@ import { IdentityPlugin } from "@opencode/core/plugin/identity"
 import { QuestionTool } from "@opencode/core/tool/plugin/question"
 import { Agent } from "@opencode/core/agent"
 import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigCompaction } from "@opencode/schema/config/compaction"
 import { Tool } from "@opencode/core/tool"
@@ -220,6 +221,7 @@ const makeRunnerState = (compaction?: SessionRunnerModel.Resolved["compaction"])
     }).pipe(Effect.andThen(Deferred.succeed(barrier.release, undefined)), Effect.asVoid)
   return {
     currentModel: model,
+    richMedia: false,
     compaction,
     modelResolveHook: resolvesModel,
     systemBaseline: "Initial context",
@@ -338,7 +340,7 @@ const layer = Layer.unwrap(
           Effect.map(() => {
             const selected = session.model?.id === "replacement" ? replacementModel : state.currentModel
             return SessionRunnerModel.resolved(selected, {
-              capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+              capabilities: { tools: true, input: ["text", "image", "video"], output: ["text"] },
               cost: [],
               limit: modelLimits.get(String(selected.id)) ?? defaultModelLimit,
               variant: session.model?.variant,
@@ -434,6 +436,13 @@ const layer = Layer.unwrap(
       ReferenceInstructions.node.replace(referenceInstructions),
       Permission.node.replace(permission),
       Config.node.replace(config),
+      // The runner is built apart from the rest, with its own Config, so tests turn rich_media on through the state.
+      Flag.node.replace(
+        Layer.mock(Flag.Service)({
+          resolve: (entries) => Flag.resolve({ entries, channel: "test" }),
+          enabled: (key) => Effect.sync(() => key === "rich_media" && state.richMedia),
+        }),
+      ),
       PluginSupervisor.node.replace(Layer.empty),
       Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.suspend(() => state.activationHook) })),
       SessionModelTransport.node.replace(modelTransport),
@@ -3247,6 +3256,27 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(s.requests[4])[0].length).toBeLessThan(userTexts(s.requests[3])[0].length)
     expect(userTexts(s.requests[5])[0].length).toBeLessThan(userTexts(s.requests[4])[0].length)
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "failed" })
+  })
+
+  scenario("sends attached videos only while the rich_media flag is on", function* (s) {
+    const videos = (request: LLMRequest | undefined) =>
+      request?.messages.flatMap((message) =>
+        message.content.flatMap((part) => (part.type === "media" ? [part.media.mediaType] : [])),
+      )
+    yield* s.session.prompt({
+      sessionID,
+      text: "Watch this",
+      // An MP4 `ftyp` box: admission detects the type from the bytes.
+      files: [{ uri: "data:video/mp4;base64,AAAAGGZ0eXBpc29tAAACAGlzb21pc28y" }],
+      resume: false,
+    })
+    yield* s.llm.push(TestLLM.text("Not sent", "off"), TestLLM.text("Sent", "on"))
+    yield* s.resume
+    expect(videos(s.requests[0])).toEqual([])
+
+    s.richMedia = true
+    yield* s.runPrompt("And now?")
+    expect(videos(s.requests[1])).toEqual(["video/mp4"])
   })
 
   scenario("shortens the only exchange's user text when it does not fit", function* (s) {

@@ -32,6 +32,8 @@ export interface Selection {
   readonly agent: Agent.Selection & { readonly info: Agent.Info }
   readonly instructions: Instructions.List
   readonly tools: Tool.Snapshot
+  /** Whether attached videos reach the model, from the `rich_media` flag. */
+  readonly video: boolean
 }
 
 export interface Loaded {
@@ -56,8 +58,6 @@ export interface Interface {
   readonly select: (sessionID: SessionSchema.ID) => Effect.Effect<Selection, AgentNotFoundError>
   /** Resolves the model and active history for that selection. */
   readonly load: (selection: Selection) => Effect.Effect<Loaded, SessionRunnerModel.Error>
-  /** Whether attached videos reach the model, from the `rich_media` flag. */
-  readonly video: Effect.Effect<boolean>
   readonly resolveModel: (
     session: SessionSchema.Info,
     request: { readonly kind: SessionRequestKind; readonly agent: Agent.ID },
@@ -85,7 +85,6 @@ const layer = Layer.effect(
     const model = yield* Model.Service
     const db = (yield* Database.Service).db
     const flags = yield* Flag.Service
-    const video = flags.enabled("rich_media")
     const discovery = yield* InstructionDiscovery.Service
     const entries = yield* InstructionEntry.Service
     const location = yield* Location.Service
@@ -160,6 +159,7 @@ const layer = Layer.effect(
           references: referenceInstructions.load(),
           mcp: mcpInstructions.load(permissions),
           entries: entries.load(sessionID),
+          video: flags.enabled("rich_media"),
         },
         { concurrency: "unbounded" },
       )
@@ -179,6 +179,7 @@ const layer = Layer.effect(
           loaded.entries,
         ]),
         tools: loaded.tools,
+        video: loaded.video,
       }
     })
 
@@ -197,11 +198,11 @@ const layer = Layer.effect(
         initial: history.initial,
         messages: history.entries.map((entry) => entry.message),
         tools: selection.tools,
-        video: yield* video,
+        video: selection.video,
       }
     })
 
-    return Service.of({ select, load, video, resolveModel, selectTitle, request })
+    return Service.of({ select, load, resolveModel, selectTitle, request })
   }),
 )
 

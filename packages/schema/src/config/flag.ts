@@ -4,6 +4,22 @@ export * as ConfigFlag from "./flag.js"
 export const wildcard = "all"
 
 /**
+ * `OPENCODE_FLAGS`, a comma-separated list such as `schedules,-media_blob`, as the setting of each key it names; a
+ * leading `-` turns a key off, and a later entry for the same key wins.
+ */
+export const overrides = (list: string | undefined) =>
+  new Map(
+    (list ?? "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((item): [string, boolean] => (item.startsWith("-") ? [item.slice(1), false] : [item, true])),
+  )
+
+/** Any other channel, such as a release or a branch preview build, keeps flags off so none turns on by accident. */
+export const onByDefault = (channel: string) => channel === "local" || channel === "dev"
+
+/**
  * Every feature flag, by key, with what it turns on. A flag is on in local and dev builds and off in released ones;
  * `experimental.<key>` in config and `OPENCODE_FLAGS` override that, and `OPENCODE_FLAGS=all` or
  * `experimental.all_flags: true` turn every flag on. Read one with Core's `Flag.enabled("<key>")`.
