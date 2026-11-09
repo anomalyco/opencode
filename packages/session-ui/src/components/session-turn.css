@@ -20,10 +20,11 @@
     display: none;
   }
 
+  /* Rows fill the column, so shell output and other cards span the timeline whatever their content. */
   [data-slot="session-turn-message-container"] {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     align-self: stretch;
     min-width: 0;
     gap: 0px;

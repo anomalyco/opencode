@@ -13,11 +13,11 @@ import { currentToolFailed, currentToolGroupedRead } from "../message/current-to
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
 import { defaultTimelineDetail, type TimelineDetail } from "./detail"
 import {
-  shellFailed,
   timelineCategory,
   timelineNoticePlacement,
   timelineNoticeRequired,
   timelineRenders,
+  timelineTextShows,
 } from "./policy"
 import { errorInfo } from "./errors"
 import {
@@ -154,7 +154,7 @@ export function createReactiveTimelineProjection(input: {
       // re-checked each of its thousands of sources to find nothing changed. A signal set from a computation
       // notifies only when visibility actually flips.
       const [visible, setVisible] = createSignal(false)
-      createComputed(() => setVisible(!!content.text.trim()))
+      createComputed(() => setVisible(timelineTextShows(content)))
 
       return [content, visible] as const
     },
@@ -391,7 +391,8 @@ export namespace Timeline {
     const visibleTurns = turns.filter((turn) => {
       if (turn.user) return true
 
-      if (turn.shell && (detail.shell.placement !== "hidden" || shellFailed(turn.shell))) return true
+      // A command the user ran shows at every setting, as their messages do.
+      if (turn.shell) return true
 
       return turn.entries.some((entry) =>
         entry.type === "notice"
@@ -414,9 +415,7 @@ export namespace Timeline {
         if (turn.shell)
           return [
             ...(index > 0 ? [new TimelineRow.TurnGap({ userMessageID: turn.id })] : []),
-            ...(detail.shell.placement !== "hidden" || shellFailed(turn.shell)
-              ? [new TimelineRow.Shell({ userMessageID: turn.id, messageID: turn.shell.id })]
-              : []),
+            new TimelineRow.Shell({ userMessageID: turn.id, messageID: turn.shell.id }),
             ...turn.entries.flatMap((entry) =>
               entry.type === "notice" && visibleNotice(entry.message)
                 ? [new TimelineRow.Notice({ userMessageID: turn.id, messageID: entry.message.id })]
@@ -455,14 +454,7 @@ export namespace Timeline {
         rows,
         detail,
         new Set(
-          messages.flatMap((message) =>
-            message.type === "compaction" ||
-            message.type === "model-switched" ||
-            message.type === "location-switched" ||
-            (message.type === "synthetic" && timelineNoticePlacement(detail, message) === "separate")
-              ? [message.id]
-              : [],
-          ),
+          messages.flatMap((message) => (timelineNoticePlacement(detail, message) === "separate" ? [message.id] : [])),
         ),
       ),
     }
@@ -483,7 +475,6 @@ export namespace Timeline {
     const lastAssistant = assistantMessages.at(-1)
     const lastStep = entries.findLast((entry) => entry.type === "assistant" || entry.type === "idle")
     const previousUserMessage = index > 0
-    const compaction = entries.some((entry) => entry.type === "notice" && entry.message.type === "compaction")
     const view = viewTurnPhase(phase)
     const thinking = view.separateThinkingRef
 
@@ -530,9 +521,9 @@ export namespace Timeline {
 
       appendGroups(before)
 
+      // The user stopped the turn, so the timeline confirms it at every setting.
       if (interruptedAt >= 0) {
-        if (!compaction && detail.notices.placement !== "hidden")
-          rows.push(new TimelineRow.TurnDivider({ userMessageID: turnID }))
+        rows.push(new TimelineRow.TurnDivider({ userMessageID: turnID }))
         appendGroups(after)
       }
 
@@ -692,9 +683,7 @@ function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, 
     const above = Predicate.isTagged(previous, "Activity") ? result.at(-2) : previous
 
     const current =
-      ((Predicate.isTagged(row, "Notice") && detail.notices.placement === "grouped") ||
-        (Predicate.isTagged(row, "Shell") && detail.shell.placement === "grouped")) &&
-      !separate.has(row.messageID)
+      Predicate.isTagged(row, "Notice") && detail.notices.placement === "grouped" && !separate.has(row.messageID)
         ? new TimelineRow.AssistantPart({
             userMessageID: row.userMessageID,
             previousAssistantPart: Predicate.isTagged(above, "AssistantPart"),
@@ -939,7 +928,7 @@ function toolGroupType(content: Extract<Content, { type: "tool" }>, detail: Time
 
   if (currentToolFailed(content)) return undefined
 
-  if (content.name === "patch" || content.name === "edit" || content.name === "write") return "file"
+  if (timelineCategory(content) === "edit") return "file"
 
   return undefined
 }

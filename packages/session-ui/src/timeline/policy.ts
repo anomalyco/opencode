@@ -1,5 +1,5 @@
 import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageShell } from "@opencode/client/promise"
-import { currentToolFailed, shellResultFailed } from "../message/current-tool-state"
+import { canonicalToolName, currentToolFailed, shellResultFailed } from "../message/current-tool-state"
 import type { TimelineDetail, TimelinePlacement } from "./detail"
 
 type Content = SessionMessageAssistant["content"][number]
@@ -14,20 +14,22 @@ export function timelineCategory(content: Content): keyof TimelineDetail | undef
 
   if (content.type === "reasoning") return "thinking"
 
-  if (["shell", "execute", "bash"].includes(content.name)) return "shell"
+  const name = canonicalToolName(content.name)
 
-  if (["edit", "write", "patch", "apply_patch"].includes(content.name)) return "edit"
+  if (name === "shell" || name === "execute") return "shell"
 
-  if (["subagent", "task"].includes(content.name)) return "subagents"
+  if (name === "edit" || name === "write" || name === "patch") return "edit"
+
+  if (name === "subagent") return "subagents"
 
   return "tools"
 }
 
 /** Whether a part of an assistant message shows at all. */
 export function timelineRenders(detail: TimelineDetail, content: Content) {
-  if (content.type === "text") return !!content.text.trim()
+  if (content.type === "text") return timelineTextShows(content)
 
-  if (content.type === "reasoning") return detail.thinking.placement !== "hidden" && !!content.text.trim()
+  if (content.type === "reasoning") return detail.thinking.placement !== "hidden" && timelineTextShows(content)
 
   if (currentToolFailed(content)) return true
 
@@ -38,10 +40,18 @@ export function timelineRenders(detail: TimelineDetail, content: Content) {
   return detail[timelineCategory(content)!].placement !== "hidden"
 }
 
+// A thought shows while it streams, before its first words arrive, so the timeline never hides that the model is
+// thinking. Once finished, a thought without text has nothing to open.
+export function timelineTextShows(content: Exclude<Content, { type: "tool" }>) {
+  if (content.text.trim()) return true
+
+  return content.type === "reasoning" && content.time?.completed === undefined
+}
+
 /** Whether an item starts open. What the user opened or closed always wins over this. */
 export function timelineDefaultOpen(detail: TimelineDetail, item: Content | SessionMessageShell) {
-  if (item.type === "shell")
-    return detail.shell.details === "expanded" || (detail.shell.placement === "hidden" && shellFailed(item))
+  // The user ran this command, so it opens to confirm it went through, whatever the setting.
+  if (item.type === "shell") return true
 
   if (item.type === "tool" && item.name === "execute") return true
 
@@ -72,12 +82,29 @@ export function timelineDiffOpen(detail: TimelineDetail) {
 // Like the TUI, background work reports its outcome as its own row where it finished, never folded into a group.
 // A subagent's outcome follows the subagent setting, so it shows wherever its launch does.
 export function timelineNoticePlacement(detail: TimelineDetail, message: SessionMessageInfo): TimelinePlacement {
+  if (timelineEvent(message)) return "separate"
   const source = message.type === "synthetic" ? message.metadata?.source : undefined
   const placement = source === "subagent" ? detail.subagents.placement : detail.notices.placement
 
   if (placement === "hidden") return timelineNoticeRequired(message) ? "separate" : "hidden"
 
   return source === "subagent" || source === "shell" ? "separate" : placement
+}
+
+/**
+ * What the user did and what changed the session: a goal, a switch of agent, model or place, and a compaction. These
+ * always stand on their own, whatever the setting, so the timeline confirms them.
+ */
+export function timelineEvent(message: SessionMessageInfo) {
+  if (
+    message.type === "agent-switched" ||
+    message.type === "model-switched" ||
+    message.type === "location-switched" ||
+    message.type === "compaction"
+  )
+    return true
+
+  return message.type === "synthetic" && message.metadata?.source === "goal"
 }
 
 export function timelineNoticeRequired(message: SessionMessageInfo) {

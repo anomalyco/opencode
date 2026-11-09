@@ -72,6 +72,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
       ["list", "ui.tool.list"],
       ["glob", "ui.tool.glob"],
       ["grep", "ui.tool.grep"],
+      ["browser", "ui.tool.browser"],
       ["subagent", "ui.tool.agent.default"],
       ["webfetch", "ui.tool.webfetch"],
       ["websearch", "ui.tool.websearch"],
@@ -87,8 +88,6 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     const key = map.get(split.tool)
 
     if (!key) return split.tool
-
-    if (!key.includes(".")) return key
 
     return i18n.t(key)
   })

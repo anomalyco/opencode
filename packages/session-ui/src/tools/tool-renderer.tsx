@@ -14,6 +14,7 @@ import {
   Show,
   Switch,
   Index,
+  mergeProps,
   on,
   untrack,
   type JSX,
@@ -54,6 +55,7 @@ import type {
   SessionMessageShell,
 } from "@opencode/client/promise"
 import {
+  canonicalToolName,
   currentToolError,
   currentToolGroupedRead,
   currentToolInput,
@@ -291,7 +293,7 @@ function currentSkillName(tool: SessionMessageAssistantTool) {
 
 // Context group labels name each tool once; detailed subtitles belong to the tool rows.
 function toolTitle(tool: SessionMessageAssistantTool, i18n: UiI18n) {
-  switch (tool.name) {
+  switch (canonicalToolName(tool.name)) {
     case "read":
       return i18n.t("ui.tool.read")
     case "list":
@@ -414,7 +416,7 @@ function ExaOutput(props: { output?: string }) {
 export type ContextGroupPart =
   | SessionMessageAssistantTool
   | (SessionMessageAssistantReasoning & { id: string; streaming?: boolean })
-  | { type: "notice" | "shell" | "text"; id: string; render: () => JSX.Element }
+  | { type: "notice" | "text"; id: string; render: () => JSX.Element }
 
 export function CurrentContextToolGroup(props: {
   parts: ContextGroupPart[]
@@ -443,9 +445,9 @@ export function CurrentContextToolGroup(props: {
     i18n.list([
       ...new Set(
         props.parts.flatMap((part) => {
-          if (part.type !== "tool" && part.type !== "shell") return []
+          if (part.type !== "tool") return []
 
-          return [part.type === "tool" ? toolTitle(part, i18n) : i18n.t("ui.tool.shell")]
+          return [toolTitle(part, i18n)]
         }),
       ),
     ]),
@@ -501,7 +503,7 @@ export function CurrentContextToolGroup(props: {
     }
 
     const title = names() || i18n.plural("ui.messagePart.context.thought", thoughts)
-    const count = props.parts.filter((part) => part.type === "tool" || part.type === "shell").length || thoughts
+    const count = props.parts.filter((part) => part.type === "tool").length || thoughts
     const text = i18n.plural("ui.messagePart.tools.used", count, { tools: title })
     const index = text.indexOf(title)
     const before = text.slice(0, index).trim()
@@ -663,10 +665,7 @@ export function CurrentContextToolGroup(props: {
               const callback = createMemo(() => {
                 const value = item()
 
-                return !Array.isArray(value) &&
-                  (value.type === "notice" || value.type === "shell" || value.type === "text")
-                  ? value
-                  : undefined
+                return !Array.isArray(value) && (value.type === "notice" || value.type === "text") ? value : undefined
               })
 
               return (
@@ -1085,7 +1084,9 @@ function scrollParent(element: HTMLElement): HTMLElement | undefined {
 }
 
 function isFileChangeTool(tool: SessionMessageAssistantTool) {
-  return tool.state.status !== "error" && (tool.name === "edit" || tool.name === "write" || tool.name === "patch")
+  const name = canonicalToolName(tool.name)
+
+  return tool.state.status !== "error" && (name === "edit" || name === "write" || name === "patch")
 }
 
 function samePatchFile(a: FileDiffInfo, b: FileDiffInfo) {
@@ -1337,11 +1338,17 @@ function ToolFileAccordion(props: {
 }
 
 export function ToolDisplay(
-  props: ToolProps & {
+  input: ToolProps & {
     id: string
     error?: string
   },
 ) {
+  // A call stored under a tool's old name renders as that tool.
+  const props = mergeProps(input, {
+    get tool() {
+      return canonicalToolName(input.tool)
+    },
+  })
   const data = useData()
   const i18n = useI18n()
 

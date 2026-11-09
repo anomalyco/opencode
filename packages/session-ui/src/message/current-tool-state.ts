@@ -5,6 +5,14 @@ const decodeInput = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Reco
 
 const empty = {}
 
+// Sessions migrated from v1 keep the tools' old names.
+const renamedTools: Record<string, string | undefined> = { bash: "shell", task: "subagent", apply_patch: "patch" }
+
+/** A tool's current name, for calls stored under the name it had before. */
+export function canonicalToolName(name: string) {
+  return renamedTools[name] ?? name
+}
+
 export function currentToolInput(tool: SessionMessageAssistantTool): Record<string, unknown> {
   if (tool.state.status !== "streaming") return tool.state.input
 
@@ -40,7 +48,9 @@ export function currentToolFailed(tool: SessionMessageAssistantTool) {
   return (
     tool.state.status === "error" ||
     (tool.name === "execute" && executeToolFailed(currentToolMetadata(tool))) ||
-    (tool.name === "shell" && tool.state.status === "completed" && shellResultFailed(currentToolMetadata(tool)))
+    (canonicalToolName(tool.name) === "shell" &&
+      tool.state.status === "completed" &&
+      shellResultFailed(currentToolMetadata(tool)))
   )
 }
 

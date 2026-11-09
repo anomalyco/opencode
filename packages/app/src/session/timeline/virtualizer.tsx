@@ -24,7 +24,7 @@ import {
   type Accessor,
   type JSX,
 } from "solid-js"
-import { createStore, reconcile } from "solid-js/store"
+import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import type { createTimelineProjection } from "./projection"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
@@ -166,15 +166,14 @@ export function createTimelineVirtualizer(input: Input) {
   const [visibleArea, setVisibleArea] = createSignal<HTMLDivElement>()
   const [viewRoot, setViewRoot] = createSignal<HTMLDivElement>()
   const bottomInset = () => input.bottomInset?.() ?? 0
-  const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>(cached?.toolOpen ?? {})
+  // What the user opened or closed survives a change of detail setting, which only decides what starts open. The
+  // file-change subgroups regroup with the rows, so their anchors start over.
+  const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>(entry?.toolOpen ?? {})
   const patchGroupKeys = cached?.patchGroupKeys ?? new Map<string, string>()
   createEffect(
     on(
       () => input.presentationKey?.(),
-      () => {
-        patchGroupKeys.clear()
-        setToolOpen(reconcile({}))
-      },
+      () => patchGroupKeys.clear(),
       { defer: true },
     ),
   )

@@ -49,7 +49,7 @@ import { GenericTool } from "../components/basic-tool"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
 import type { TimelineDetail } from "./detail"
-import { timelineDefaultOpen, timelineDiffOpen, timelineThinkingOpen } from "./policy"
+import { timelineCategory, timelineDefaultOpen, timelineDiffOpen, timelineThinkingOpen } from "./policy"
 import { userMessageRuns, userRunSpring } from "./user-runs"
 import { attached } from "../components/message-file"
 import { createReactiveTimelineProjection, Timeline, TimelineRow, unwrapErrorMessage, type PartRef } from "./projection"
@@ -127,12 +127,7 @@ export function createSessionTimelineRowRenderer(input: {
       row.group.refs.forEach((ref) => {
         const content = Timeline.resolveContent(input.projection.messageByID().get(ref.messageID), ref.partID)
 
-        if (
-          content?.type !== "tool" ||
-          !["edit", "write", "patch"].includes(content.name) ||
-          content.state.status === "error"
-        )
-          return
+        if (content?.type !== "tool" || timelineCategory(content) !== "edit" || content.state.status === "error") return
         const part = `${ref.messageID}:${ref.partID}`
         const key = patchGroupKeys.get(part)
 
@@ -369,9 +364,6 @@ export function createSessionTimelineRowRenderer(input: {
             ]
 
           if (ref.messageID !== ref.partID || !message) return []
-
-          if (message.type === "shell")
-            return [{ type: "shell", id: ref.partID, render: () => <Shell messageID={ref.messageID} grouped /> }]
 
           if (message.type !== "assistant" && message.type !== "user")
             return [{ type: "notice", id: ref.partID, render: () => <Notice messageID={ref.messageID} grouped /> }]
@@ -857,7 +849,7 @@ export function createSessionTimelineRowRenderer(input: {
     )
   }
 
-  function Shell(props: { messageID: string; grouped?: boolean }) {
+  function Shell(props: { messageID: string }) {
     const message = createMemo(() => {
       const value = input.projection.messageByID().get(props.messageID)
 
@@ -873,7 +865,7 @@ export function createSessionTimelineRowRenderer(input: {
     return (
       <Show when={message()}>
         {(message) => (
-          <div data-slot="session-turn-message-container" class={`w-full ${props.grouped ? "" : padding()}`}>
+          <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
             <SessionShellMessage
               message={message()}
               defaultOpen={defaultOpen()}
