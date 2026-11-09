@@ -337,10 +337,26 @@ fn styled(theme: &Theme, span: &abi::Span, fg: Option<Color>) -> Span<'static> {
 }
 
 /// One fence registration's keys, by the ID of the widget that shows the block. A key moves to the widget that
-/// replaces its block's widget, so it stays the same while the block streams.
+/// replaces its block's widget, so it stays the same while the block streams, and goes when that widget is freed.
 #[derive(Default)]
 pub struct Fences {
-    keys: RefCell<HashMap<u32, u64>>,
+    keys: Rc<RefCell<HashMap<u32, u64>>>,
+}
+
+/// Removes a widget's key once the widget, whose handler holds it, is freed.
+struct Forget {
+    keys: Weak<RefCell<HashMap<u32, u64>>>,
+    id: u32,
+}
+
+impl Drop for Forget {
+    fn drop(&mut self) {
+        if let Some(keys) = self.keys.upgrade()
+            && let Ok(mut keys) = keys.try_borrow_mut()
+        {
+            keys.remove(&self.id);
+        }
+    }
 }
 
 impl Fences {
@@ -371,7 +387,13 @@ impl Fences {
             Fenced::Keep => block.previous?.clone(),
             Fenced::Lines { lines, fg, drag } => {
                 let scroll = if drag { Scroll::Drag } else { Scroll::Wheel };
-                lines_widget(block.app, theme, &lines, fg.as_ref(), scroll)
+                let widget = lines_widget(block.app, theme, &lines, fg.as_ref(), scroll);
+                // A focus handler, which never runs on these rows, is what drops with the widget.
+                let forget = Forget { keys: Rc::downgrade(&self.keys), id: widget.id() };
+                widget.on_focus(move |_, _| {
+                    let _ = &forget;
+                });
+                widget
             }
         };
         self.keys.borrow_mut().insert(widget.id(), key);
@@ -528,5 +550,46 @@ fn color(theme: &Theme, value: Option<&abi::Color>) -> Option<Color> {
     match value? {
         abi::Color::Rgba(rgba) => Some(Color::rgba(rgba.r, rgba.g, rgba.b, rgba.a)),
         abi::Color::Token(token) => resolve(theme, token),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use opencode_ui::theme::{Catalog, ThemeMode};
+    use opentui::testing::TestApp;
+
+    // Expected: a fence's key moves to the widget that replaces its block's widget, and goes once that widget is
+    // freed, as when its Markdown is destroyed.
+    #[test]
+    fn a_fence_key_goes_with_its_widget() {
+        let app = TestApp::new(40, 10);
+        let theme = Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme;
+        let fences = Fences::default();
+        let block = |previous| CodeBlock {
+            app: &app,
+            language: "x",
+            info: "x",
+            code: "a",
+            closed: true,
+            conceal: true,
+            streaming: false,
+            previous,
+        };
+        let lines = || Fenced::Lines { lines: vec![vec![abi::Span::new("a")]], fg: None, drag: false };
+        let key = Cell::new(0);
+        let first = fences.render(&block(None), &theme, |fence| {
+            key.set(fence.key);
+            lines()
+        });
+        let first = first.unwrap();
+        let second = fences.render(&block(Some(&first)), &theme, |fence| {
+            assert_eq!(fence.key, key.get());
+            lines()
+        });
+        drop(first);
+        assert_eq!(fences.keys.borrow().len(), 1);
+        drop(second);
+        assert!(fences.keys.borrow().is_empty(), "a freed widget keeps its fence key");
     }
 }
