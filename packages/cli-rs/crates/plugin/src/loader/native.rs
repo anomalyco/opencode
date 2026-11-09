@@ -695,11 +695,25 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
             Err(error) => log::error!("plugin {} keymap layer: {error}", setup.id()),
         }
     }
+    // A fence key that goes reaches the plugin once the event that freed its block is done.
+    let gone = manifest.fence_gone.then(|| {
+        let guest = Rc::downgrade(guest);
+        Rc::new(move |key| {
+            let guest = guest.clone();
+            if let Some(host) = guest.upgrade().map(|guest| guest.host.clone()) {
+                defer(&host, move |_| {
+                    if let Some(guest) = guest.upgrade() {
+                        guest.request::<serde_json::Value>("fence-gone", &Request::FenceGone { key });
+                    }
+                });
+            }
+        }) as crate::node::Gone
+    });
     for (index, language) in manifest.fences.iter().enumerate() {
         let (guest, language) = (guest.clone(), language.clone());
         // A 1.4 plugin renders through `RenderFence`, which names the registration, as the host may have normalized
         // the language the block has; a 1.3 plugin gets the 1.3 request, with the language it registered.
-        let fences = (manifest.render >= abi::RENDER).then(Fences::default);
+        let fences = (manifest.render >= abi::RENDER).then(|| Fences::new(gone.clone()));
         setup.code_block(language.clone(), move |block, theme| {
             if let Some(fences) = &fences {
                 return fences.render(block, theme, |fence| {
