@@ -17,7 +17,7 @@ import solid from "vite-plugin-solid"
 import { cssVariantsForProduction, devOnlyCss } from "../../../script/css-variants-plugin"
 import { foldSettingsForProduction } from "../../../script/fold-settings"
 import { config } from "../../config"
-import { base, files } from "../config"
+import { docsSets, latestDocs } from "../config"
 import { docsHref, docsMarkdownHref } from "../lib/navigation"
 import type { docsSlugs, renderDocsMarkdown, renderDocsPage, renderLlmsTxt, renderSitemap } from "../render"
 import { docs } from "../vite"
@@ -31,6 +31,8 @@ const inputs = { stylesheet: "src/docs/styles/docs.css", script: "src/docs/clien
 // llms.txt and the sitemap list opencode.ai's URLs on dev.opencode.ai too, as the pages' canonical links do:
 // search engines must not take dev.opencode.ai's for the real ones (src/lib/noindex.ts).
 const site = new URL(config.baseUrl)
+// Every set's pages load the latest docs' stylesheet, script and fonts.
+const base = latestDocs.base
 
 await rm(cache, { recursive: true, force: true })
 
@@ -97,14 +99,16 @@ const write = (href: string, body: string) => Bun.write(path.join(output, href),
 // client build's; the render's own code stays in the cache.
 const emitted = new Set<string>()
 await Promise.all([
-  ...render.docsSlugs.map(async (slug) => {
-    const html = await render.renderDocsPage(slug, assets)
-    if (html === undefined) throw new Error(`docs: ${slug} did not render`)
-    for (const match of html.matchAll(/\/docs\/_build\/([^"')\s]+)/g)) emitted.add(match[1])
-    await write(`${docsHref(slug).replace(/\/?$/, "/")}index.html`, html)
-    const markdown = await render.renderDocsMarkdown(slug)
-    if (markdown !== undefined) await write(docsMarkdownHref(slug), markdown)
-  }),
+  ...docsSets.flatMap((set) =>
+    render.docsSlugs[set.id].map(async (slug) => {
+      const html = await render.renderDocsPage(set, slug, assets)
+      if (html === undefined) throw new Error(`docs: ${set.base}${slug} did not render`)
+      for (const match of html.matchAll(/\/docs\/_build\/([^"')\s]+)/g)) emitted.add(match[1])
+      await write(`${docsHref(slug, set).replace(/\/?$/, "/")}index.html`, html)
+      const markdown = await render.renderDocsMarkdown(set, slug)
+      if (markdown !== undefined) await write(docsMarkdownHref(slug, set), markdown)
+    }),
+  ),
   write(`${base}llms.txt`, render.renderLlmsTxt(site)),
   write(`${base}sitemap.xml`, render.renderSitemap(site)),
   // The logos, favicon and generated files the pages link (the site build has copied them already).
@@ -118,17 +122,20 @@ await Promise.all(
   }),
 )
 
-const pagefind = path.join(output, base)
-await mkdir(pagefind, { recursive: true })
-// The phone Contents bar repeats the page's headings, and code headers and screen reader text
-// ("Copy", "Copied", "Opens in a new tab") aren't content, so they stay out of the index.
+// One search index per set, so each searches only its own pages. The phone Contents bar repeats the
+// page's headings, and code headers and screen reader text ("Copy", "Copied", "Opens in a new tab")
+// aren't content, so they stay out of the index.
 const exclude =
   "[data-component=contents-menu], [data-slot=code-head], [data-component=code-tabs] [data-slot=copy], [data-slot=sr-only]"
-await Bun.$`${path.join(root, "node_modules/.bin/pagefind")} --site ${pagefind} --exclude-selectors ${exclude}`.quiet()
+for (const set of docsSets) {
+  const pagefind = path.join(output, set.base)
+  await mkdir(pagefind, { recursive: true })
+  await Bun.$`${path.join(root, "node_modules/.bin/pagefind")} --site ${pagefind} --exclude-selectors ${exclude}`.quiet()
+}
 checkFileNames()
 await checkAssetPrefix()
 await Bun.$`bun ${path.join(import.meta.dir, "validate-links.ts")} ${output}`
-console.log(`docs: built ${render.docsSlugs.length} pages`)
+console.log(`docs: built ${Object.values(render.docsSlugs).flat().length} pages`)
 
 /**
  * Fails when the docs' first JavaScript or stylesheet outgrows its budget (gzipped): every docs
@@ -150,16 +157,22 @@ async function checkBudget() {
   }
 }
 
-/** Fails when a page's first path segment is the name of one of the docs' files, which it would hide. */
+/** Fails when a page's first path segment is the name of one of its set's files, which it would hide. */
 function checkFileNames() {
-  const taken = render.docsSlugs.filter((slug) => files.includes(slug.split("/")[0]))
+  const taken = docsSets.flatMap((set) =>
+    render.docsSlugs[set.id].filter((slug) => set.files.includes(slug.split("/")[0])).map((slug) => set.base + slug),
+  )
   if (taken.length) throw new Error(`docs: these pages use a name reserved for the docs' files: ${taken.join(", ")}`)
 }
 
-/** Fails when a docs page, or a stylesheet it links, loads a file from outside /docs. */
+/** Fails when a docs page, or a stylesheet it links, loads a file from outside the docs' sets. */
 async function checkAssetPrefix() {
   const origin = "https://opencode.local"
-  const pages = await Array.fromAsync(new Bun.Glob(`${base.slice(1)}**/*.html`).scan({ cwd: output }))
+  const pages = (
+    await Promise.all(
+      docsSets.map((set) => Array.fromAsync(new Bun.Glob(`${set.base.slice(1)}**/*.html`).scan({ cwd: output }))),
+    )
+  ).flat()
   const found = new Map<string, string>()
   for (const page of pages) {
     const html = await Bun.file(path.join(output, page)).text()
@@ -176,9 +189,9 @@ async function checkAssetPrefix() {
     for (const match of css.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g))
       if (!match[1].startsWith("data:")) found.set(new URL(match[1], style).href, pathname)
   }
-  const outside = [...found].filter(([url]) => !url.startsWith(origin + base))
+  const outside = [...found].filter(([url]) => !docsSets.some((set) => url.startsWith(origin + set.base)))
   if (!outside.length) return
   throw new Error(
-    `docs: these files load from outside ${base}:\n${outside.map(([url, from]) => `  ${url.replace(origin, "")} (from ${from})`).join("\n")}`,
+    `docs: these files load from outside the docs:\n${outside.map(([url, from]) => `  ${url.replace(origin, "")} (from ${from})`).join("\n")}`,
   )
 }

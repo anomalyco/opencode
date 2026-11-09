@@ -1,14 +1,14 @@
 import { SearchIcon } from "~/component/site/icons"
 import { searchLook } from "~/component/site/search-palette"
 import { siteSettingsDefaults } from "~/component/site/settings"
-import { base } from "../config"
+import type { DocsSet } from "../config"
 
 /**
  * The site's ⌘K palette (search-palette.css) with the default look, searching the docs' full text
  * with Pagefind. Hidden until client.ts opens it and fills in the results. With nothing typed it is
  * just the field: the results list stays empty, so docs.css hides it and the field's divider.
  */
-export function DocsSearchDialog() {
+export function DocsSearchDialog(props: { set: DocsSet }) {
   const look = siteSettingsDefaults
   return (
     <div
@@ -19,7 +19,7 @@ export function DocsSearchDialog() {
       data-motion={look.searchMotion}
       style={searchLook(look)}
       data-search-dialog
-      data-pagefind-path={`${base}pagefind/pagefind.js`}
+      data-pagefind-path={`${props.set.base}pagefind/pagefind.js`}
       hidden
     >
       <div data-slot="backdrop" aria-hidden="true" />
