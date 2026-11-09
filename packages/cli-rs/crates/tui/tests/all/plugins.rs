@@ -530,6 +530,27 @@ fn toggling_a_plugin_frees_the_view_and_the_manager() {
     assert_eq!(Rc::strong_count(&marker), 1);
 }
 
+// Expected: an external plugin's `app` claim shows on the last row, under the route, on home and in a session, as
+// TS's `<Slot path="app" />` under the routes (`app.tsx:1466`); disabling the plugin takes it away.
+#[test]
+fn an_app_claim_shows_under_every_route() {
+    let h = open(Route::Home, "Done here.", &build("app"));
+    let last =
+        |screen: &str| screen.lines().rev().find(|line| !line.trim().is_empty()).unwrap_or_default().trim().to_owned();
+    let screen = h.wait_for("sample app: under the route");
+    assert_eq!(last(&screen), "sample app: under the route", "{screen}");
+    h.tui.navigate(session_route());
+    let screen = h.wait_for("Done here.");
+    assert_eq!(last(&screen), "sample app: under the route", "{screen}");
+    h.tui.keymap.dispatch("plugins.list", None);
+    let (x, y) = h.find("disable enter");
+    h.app.hover(x, y);
+    h.app.click(x, y);
+    h.wait("the plugin toggled", || h.status() == opencode_plugin::Status::Inactive);
+    h.app.press("escape");
+    h.wait_gone("sample app: under the route");
+}
+
 // Expected: once a plugin panics, the fences it drew before fall back to the code view too, as `docs/P.4.md` says.
 #[test]
 fn a_panic_turns_the_fences_already_drawn_back_into_code() {

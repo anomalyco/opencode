@@ -15,6 +15,7 @@ use opencode_api::generated::SessionID;
 use opencode_local::cli_config::TabsLayout;
 use opencode_local::serial::Serial;
 use opencode_local::storage::Storage;
+use opencode_plugin::{SlotInput, SlotMount, slot};
 use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opentui::keymap::Condition;
@@ -34,6 +35,10 @@ pub struct Frame {
     rail_handle: Custom<resize::Handle>,
     strip: Custom<strip::Strip>,
     main: View,
+    /// The column under the routes that holds the `app` slot.
+    column: View,
+    /// The `app` slot's claims under the routes, in their own column.
+    app: RefCell<Option<(View, Rc<SlotMount>)>>,
     tabs_resize: Rc<PaneResize>,
     pane_resize: Rc<PaneResize>,
     /// The `layout` storage key as last read or written.
@@ -47,7 +52,9 @@ impl Frame {
     pub fn new(app: &App, tui: Weak<Tui>) -> Self {
         let main = View::new(app).column().grow(1.0).basis(Length::Auto).min_height(0);
         let strip = strip::new(app, tui.clone());
-        let column = View::new(app).column().grow(1.0).min_width(0).min_height(0).child(&strip).child(&main);
+        let routes = View::new(app).column().grow(1.0).min_height(0).child(&strip).child(&main);
+        // `<Slot path="app" />` follows the routes' box (`app.tsx:1466`); [`mount_app`] adds it.
+        let column = View::new(app).column().grow(1.0).min_width(0).min_height(0).child(&routes);
         let rail = rail::new(app, tui.clone());
         let tabs_resize = PaneResize::new(tabs_rules());
         let pane_resize = PaneResize::new(pane_rules());
@@ -78,6 +85,8 @@ impl Frame {
             rail_handle,
             strip,
             main,
+            column,
+            app: RefCell::default(),
             tabs_resize,
             pane_resize,
             layout: RefCell::new(json!({})),
@@ -132,6 +141,31 @@ pub fn install(tui: &Rc<Tui>, shell: &View) {
     tui.app.on_resize(bind!(tui, |tui, _, _, _| refresh(&tui)));
     install_commands(tui);
     refresh(tui);
+}
+
+/// Mounts the `app` slot under the routes once, and again on a `remount` of the route (a theme change, a plugin
+/// toggled), so its claims follow the theme and the plugins as the route's slots do. TS passes no input.
+pub fn mount_app(tui: &Tui, remount: bool) {
+    if !remount && tui.frame.app.borrow().is_some() {
+        return;
+    }
+    if let Some((old, _)) = tui.frame.app.borrow_mut().take() {
+        old.detach();
+    }
+    let holder = View::new(&tui.app).column().shrink(0.0);
+    let slot = crate::plugins::host::slot(tui, &holder, slot::APP, &SlotInput::default(), |_| {});
+    tui.frame.column.add(&holder);
+    *tui.frame.app.borrow_mut() = Some((holder, Rc::new(slot)));
+    sync_app(tui, &opencode_store::Changes::everything());
+}
+
+/// Passes a change batch to the `app` slot's claims.
+pub fn sync_app(tui: &Tui, changes: &opencode_store::Changes) {
+    // A claim's handler may remount the slot while it syncs.
+    let slot = tui.frame.app.borrow().as_ref().map(|(_, slot)| slot.clone());
+    if let Some(slot) = slot {
+        crate::plugins::host::changed(tui, changes, |changed| slot.sync(tui, changed));
+    }
 }
 
 /// Rereads `layout` after the storage directory changed.

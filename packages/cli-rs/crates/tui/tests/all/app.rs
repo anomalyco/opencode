@@ -84,8 +84,10 @@ fn run(recording: &Recording) -> (bool, String) {
         },
     );
     // The Rust twins of the TS test plugins under parity/plugins, which the Rust TUI lists as skipped (P.1).
-    if recording.env.get("OPENCODE_PARITY_PLUGIN").is_some_and(|plugin| plugin == "slot") {
-        opencode_tui::plugins::host::add(&tui, slot_plugin().into());
+    match recording.env.get("OPENCODE_PARITY_PLUGIN").map(String::as_str) {
+        Some("slot") => opencode_tui::plugins::host::add(&tui, slot_plugin().into()),
+        Some("app") => opencode_tui::plugins::host::add(&tui, app_plugin().into()),
+        _ => {}
     }
     // The editor context's sources (E.5): the fake IDE server and the Zed database the TS side had.
     let ide = recording.ide.as_ref().map(|_| ide::Ide::start());
@@ -311,6 +313,16 @@ fn slot_plugin() -> abi::Plugin {
         Ok(())
     }
     abi::Plugin { id: "parity.slot", setup }
+}
+
+/// `parity/plugins/app/tui.tsx`: one line appended to `app`.
+fn app_plugin() -> abi::Plugin {
+    fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+        let node = Node::column(vec![Node::text([Span::new("app plugin: app")]).fg("text.muted")]);
+        setup.slot(Placement::append(slot::APP), move |_, _, _| Render::Show(node.clone().padding(2, 0)));
+        Ok(())
+    }
+    abi::Plugin { id: "parity.app", setup }
 }
 
 /// The scenario routes first, then each recorded read by its exact query, then by path alone.
