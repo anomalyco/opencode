@@ -1,6 +1,7 @@
 import { defineConfig } from "cf/config"
 
-// opncd.ai is the retired session-sharing hostname. The Worker only answers the tombstone page and the
+// Deprecated: session sharing is retired and V2 has no sharing; delete this service once old links and V1
+// clients no longer need an answer. opncd.ai is the retired session-sharing hostname. The Worker only answers the tombstone page and the
 // V1 share API stubs, so it deploys on its own instead of through SST.
 export default defineConfig(({ mode }) => {
   const dev = mode === "dev"

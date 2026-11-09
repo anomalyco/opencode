@@ -1,4 +1,8 @@
-# Share
+# Share (deprecated)
+
+> **Deprecated.** Session sharing was retired in #55716 and V2 has no sharing. Don't add features here.
+> This Worker only exists so old share links and V1 clients get a clear "discontinued" answer, and it
+> can be deleted whenever we're fine breaking those.
 
 The retired session-sharing host. `opncd.ai` (production) and `dev.opncd.ai` (development) serve the
 "Session sharing has been discontinued" page, and the old `/api/share` endpoints still answer so V1
