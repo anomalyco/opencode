@@ -61,8 +61,6 @@ export function createDesktopData(input: { data: Data; remove: (sessionID: strin
       ...input.data.session,
       list: () => apply(input.data.session.list()),
       apply,
-      // Lightweight projections use the same pending deletions as full session rows.
-      filterRemoved: mutation.apply,
       remove: (sessionID: string) =>
         mutation.remove(sessionID).then(() => {
           setActivity(sessionID, undefined)
@@ -83,7 +81,7 @@ export function createSessionMutations(remove: (sessionID: string) => Promise<vo
     [...current.filter((mutation) => mutation.sessionID !== next.sessionID), next].slice(-REMOVED_SESSION_LIMIT)
 
   return {
-    apply<T extends { id: string }>(sessions: readonly T[]) {
+    apply(sessions: readonly SessionInfo[]) {
       const removed = new Set(
         store.session.flatMap((mutation) => (mutation.type === "remove" ? [mutation.sessionID] : [])),
       )

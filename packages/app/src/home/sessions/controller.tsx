@@ -185,7 +185,7 @@ export function createHomeSessionsController(home: HomeController) {
     }
 
     // Through the shared query, so a fetch the sidebar already started is joined and the result lands in its cache.
-    void queryClient.fetchQuery({ ...sessionIndexQuery(conn, ctx, queryClient), staleTime: 0 }).then(
+    void queryClient.fetchQuery({ ...sessionIndexQuery(conn, ctx), staleTime: 0 }).then(
       () => dispatchLoad({ type: "fetch.succeeded", attempt, reducedMotion: prefersReducedMotion() }),
       (cause) =>
         dispatchLoad({
@@ -278,7 +278,9 @@ export function createHomeSessionsController(home: HomeController) {
     if (!ctx || !conn) return []
 
     return retainSessions(
-      ctx.data.session.apply(mergeSessionIndex([...fetchedSessions(), ...scopedSessions()], ctx.data.session.list())),
+      ctx.data.session.apply(
+        mergeSessionIndex([...fetchedSessions(), ...scopedSessions()], ctx.data.session.list()),
+      ),
       SESSION_LIST_LIMIT,
       Date.now(),
     )

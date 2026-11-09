@@ -29,18 +29,8 @@ export async function loadSessionIndex(
 ) {
   const response = await list({ limit: SESSION_INDEX_PAGE_LIMIT, order: "desc", parentID: null }, { signal })
 
-  const sessions = parseSessionIndex(response.data)
-  return {
-    sessions: retainSessions(sessions, SESSION_INDEX_LIMIT, Date.now()),
-    inventory: sessions.map((session) => ({
-      id: session.id,
-      projectID: session.projectID,
-      location: session.location,
-    })),
-  }
+  return retainSessions(parseSessionIndex(response.data), SESSION_INDEX_LIMIT, Date.now())
 }
-
-export type SessionInventory = Awaited<ReturnType<typeof loadSessionIndex>>["inventory"]
 
 // Keep this filter for locally known sessions merged into the fetched index.
 export function parseSessionIndex(sessions: SessionInfo[]) {

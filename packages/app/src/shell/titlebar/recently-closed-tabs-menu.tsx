@@ -1,7 +1,7 @@
 import { createMemo, For, Show, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { useQueries, useQueryClient } from "@tanstack/solid-query"
+import { useQueries } from "@tanstack/solid-query"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Keybind } from "@opencode/ui/keybind"
@@ -30,7 +30,6 @@ export function RecentlyClosedTabsMenu(props: {
   const language = useLanguage()
   const tabs = useTabs()
   const global = useGlobal()
-  const queryClient = useQueryClient()
   const [state, setState] = createStore({ query: "", open: false })
   let search: HTMLInputElement | undefined
 
@@ -57,7 +56,7 @@ export function RecentlyClosedTabsMenu(props: {
       const ctx = global.serverCtx(ServerConnection.key(conn))
 
       return {
-        ...sessionIndexQuery(conn, ctx, queryClient),
+        ...sessionIndexQuery(conn, ctx),
         enabled: state.open && recent().length < 10 && ctx?.sdk.connection.status() === "connected",
       }
     }),

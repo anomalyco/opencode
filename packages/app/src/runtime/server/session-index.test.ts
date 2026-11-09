@@ -39,7 +39,7 @@ const history = (directory: string, count: number) =>
 
 const ids = (sessions: SessionInfo[]) => sessions.map((item) => item.id)
 
-describe("shared session index", () => {
+describe("Home session index", () => {
   test("loads one bounded page of the newest sessions", async () => {
     const all = history("/repo", SESSION_INDEX_PAGE_LIMIT + 1)
     const calls: Array<{ limit: number; order: "desc"; cursor?: string; parentID: null }> = []
@@ -52,8 +52,7 @@ describe("shared session index", () => {
 
     expect(calls).toEqual([{ limit: SESSION_INDEX_PAGE_LIMIT, order: "desc", parentID: null }])
     // Newest rows in server order, plus the recent window beyond the limit.
-    expect(ids(result.sessions)).toEqual(ids(all.slice(0, SESSION_INDEX_LIMIT + SESSION_RECENT_LIMIT)))
-    expect(result.inventory.map((session) => session.id)).toEqual(ids(all.slice(0, SESSION_INDEX_PAGE_LIMIT)))
+    expect(ids(result)).toEqual(ids(all.slice(0, SESSION_INDEX_LIMIT + SESSION_RECENT_LIMIT)))
   })
 
   test("keeps each directory's newest sessions within the page", async () => {
@@ -69,8 +68,8 @@ describe("shared session index", () => {
       cursor: { next: "next" },
     }))
 
-    expect(ids(result.sessions.filter((item) => item.location.directory === "/quiet"))).toEqual(ids(quiet))
-    expect(ids(result.sessions.filter((item) => item.location.directory === "/busy"))).toEqual(
+    expect(ids(result.filter((item) => item.location.directory === "/quiet"))).toEqual(ids(quiet))
+    expect(ids(result.filter((item) => item.location.directory === "/busy"))).toEqual(
       ids(busy.slice(0, SESSION_INDEX_LIMIT + SESSION_RECENT_LIMIT)),
     )
   })
@@ -85,8 +84,7 @@ describe("shared session index", () => {
     }))
 
     const result = await loadSessionIndex(async () => ({ data: [...archived, ...live], cursor: {} }))
-    expect(ids(result.sessions)).toEqual(ids(live))
-    expect(result.inventory).toEqual(live.map(({ id, projectID, location }) => ({ id, projectID, location })))
+    expect(ids(result)).toEqual(ids(live))
   })
 
   test("keeps only visible roots", () => {
@@ -115,7 +113,7 @@ describe("Home session index parity with the complete index", () => {
       ),
     ).toSorted()
 
-  const loaded = async () => (await loadSessionIndex(async () => ({ data: complete, cursor: {} }))).sessions
+  const loaded = () => loadSessionIndex(async () => ({ data: complete, cursor: {} }))
 
   test("without local changes", async () => {
     const result = view(await loaded(), [])
@@ -153,7 +151,7 @@ describe("Home session index parity with the complete index", () => {
     }))
 
     expect(hot.every((item) => item.time.updated > now - SESSION_RECENT_WINDOW)).toBe(true)
-    const index = (await loadSessionIndex(async () => ({ data: hot, cursor: {} }))).sessions
+    const index = await loadSessionIndex(async () => ({ data: hot, cursor: {} }))
     expect(index).toHaveLength(SESSION_INDEX_LIMIT + SESSION_RECENT_LIMIT)
     expect(view(index, [])).toEqual(view(hot, []))
   })
