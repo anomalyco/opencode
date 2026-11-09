@@ -31,7 +31,10 @@ describe("pack", () => {
 
     const tarball = await pack(directory, { source: true })
     cleanup.push(tarball)
-    const manifest = JSON.parse(await $`tar -xOzf ${tarball} package/package.json`.text())
+    // A relative name, since Windows' GNU tar reads the `C:` in an absolute path as a remote host.
+    const manifest = JSON.parse(
+      await $`tar -xOzf ${path.basename(tarball)} package/package.json`.cwd(path.dirname(tarball)).text(),
+    )
 
     expect(manifest.exports["./button"]).toEqual({ types: "./dist/button.d.ts", import: "./src/button.tsx" })
     expect(Object.keys(manifest.exports["./button"])).toEqual(["types", "import"])
