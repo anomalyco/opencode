@@ -45,13 +45,19 @@ export type PromptSend = { settled: (restore: () => boolean) => Promise<boolean>
 /** Settles the caller of `submit` or `submitQuote`; `sent` is false when nothing was sent. */
 export type SubmitDone = (sent: boolean) => void
 
+/** A held prompt that already shows in its Session's timeline; `cleared` is the composer it left, once cleared. */
+export type ShownHold = { session: ComposerSession; cleared: Prompt | undefined }
+
 export type ComposerSubmitState =
   | { type: "idle"; attempt: number }
-  // A send pressed while a cold Location loads its agents and models; it goes through once they load.
-  | { type: "held"; attempt: number; draft: string; alternate: boolean; done: SubmitDone }
+  // A send pressed while a cold Location loads its agents and models; it goes through once they load. A prompt to a
+  // Session shows in its timeline at once and leaves the composer (`shown`); any other send waits in the composer,
+  // where an edit cancels it.
+  | { type: "held"; attempt: number; snapshot: SubmitSnapshot; shown: ShownHold | undefined; done: SubmitDone }
   // A client command or a quote runs; neither takes the draft, but the composer submits nothing else meanwhile.
   | { type: "running"; attempt: number; done: SubmitDone }
-  // Image attachments resolve and, for a new Session, the Session starts. Nothing is sent yet.
+  // Image attachments resolve and, for a new Session, the Session starts. Nothing is sent yet. `cleared` is the
+  // composer a shown hold already cleared.
   | {
       type: "preparing"
       attempt: number
@@ -59,6 +65,7 @@ export type ComposerSubmitState =
       value: ComposerSubmission
       kind: SubmissionKind
       comments: PromptHistoryComment[]
+      cleared: Prompt | undefined
       done: SubmitDone
     }
   // The Session exists and a prompt is in flight; the draft stays until the Session's composer is ready to clear.
@@ -69,6 +76,7 @@ export type ComposerSubmitState =
       value: ComposerSubmission
       kind: SubmissionKind
       comments: PromptHistoryComment[]
+      cleared: Prompt | undefined
       session: ComposerSession
       done: SubmitDone
     }
@@ -88,6 +96,8 @@ export type SubmitSnapshot = {
   commands: readonly { name: string }[] | undefined
   clientCommand: (() => void | Promise<void>) | undefined
   comments: PromptHistoryComment[]
+  /** The active Session, whose timeline can show a held prompt; a new-session draft has none yet. */
+  session: ComposerSession | undefined
 }
 
 export type QuoteSnapshot = {
@@ -106,7 +116,14 @@ export type ComposerSubmitEvent =
   | { type: "stop" }
   | { type: "unmounted" }
   | { type: "hold.changed"; attempt: number }
-  | { type: "hold.loaded"; attempt: number }
+  | { type: "hold.cleared"; attempt: number; cleared: Prompt }
+  /** The Location's agents and models loaded; `selection` is what the composer resolved from them. */
+  | {
+      type: "hold.loaded"
+      attempt: number
+      selection: ComposerSelection | undefined
+      commands: readonly { name: string }[] | undefined
+    }
   | { type: "run.settled"; attempt: number; sent: boolean }
   | {
       type: "session.started"
@@ -126,6 +143,10 @@ export type ComposerSubmitEffect =
   | { type: "notify.unqueueable" }
   | { type: "interrupt" }
   | { type: "submit.retry"; alternate: boolean; done: SubmitDone }
+  /** Shows a held prompt in its Session's timeline and clears the composer it came from. */
+  | { type: "hold.show"; attempt: number; session: ComposerSession; snapshot: SubmitSnapshot }
+  /** Removes a cancelled held prompt from the timeline and returns it to the composer it left. */
+  | { type: "hold.cancel"; session: ComposerSession; snapshot: SubmitSnapshot; cleared: Prompt | undefined }
   | { type: "command.run"; attempt: number; prompt: Prompt; run: () => void | Promise<void> }
   | {
       type: "quote.send"
@@ -162,6 +183,8 @@ export type ComposerSubmitEffect =
       comments: PromptHistoryComment[]
       session: ComposerSession
       prompt: PromptSend | undefined
+      /** Set when a shown hold already cleared the composer, which may hold a new draft by now. */
+      cleared: Prompt | undefined
     }
 
 export type ComposerSubmitTransition = { state: ComposerSubmitState; effects: ComposerSubmitEffect[] }
@@ -180,21 +203,40 @@ export function transitionComposerSubmit(
 
   // Stopping a held send cancels it and leaves the prompt in the composer.
   if (event.type === "stop")
-    return state.type === "held" ? settle(state, false, []) : { state, effects: [{ type: "interrupt" }] }
+    return state.type === "held" ? cancelHold(state, []) : { state, effects: [{ type: "interrupt" }] }
 
   // A promoted new-session composer unmounts while its first prompt hands off, so only a held send ends here.
-  if (event.type === "unmounted") return state.type === "held" ? settle(state, false, []) : unchanged(state)
+  if (event.type === "unmounted") return state.type === "held" ? cancelHold(state, []) : unchanged(state)
 
+  // Only a prompt still in the composer cancels on an edit; a shown one left it, so the composer holds a new draft.
   if (event.type === "hold.changed")
-    return current(state, "held", event.attempt) ? settle(state, false, []) : unchanged(state)
+    return current(state, "held", event.attempt) && !state.shown ? settle(state, false, []) : unchanged(state)
+
+  if (event.type === "hold.cleared") {
+    if (!current(state, "held", event.attempt) || !state.shown) return unchanged(state)
+
+    return { state: { ...state, shown: { ...state.shown, cleared: event.cleared } }, effects: [] }
+  }
 
   if (event.type === "hold.loaded") {
     if (!current(state, "held", event.attempt)) return unchanged(state)
 
-    return {
-      state: { type: "idle", attempt: state.attempt },
-      effects: [{ type: "submit.retry", alternate: state.alternate, done: state.done }],
-    }
+    if (!state.shown)
+      return {
+        state: { type: "idle", attempt: state.attempt },
+        effects: [{ type: "submit.retry", alternate: state.snapshot.alternate, done: state.done }],
+      }
+
+    // The composer already cleared, so the send goes on from what was captured at Enter.
+    if (!event.selection) return cancelHold(state, [{ type: "notify.missing-selection" }])
+
+    return prepare(
+      state.attempt,
+      { ...state.snapshot, selection: event.selection, commands: event.commands, loading: false },
+      event.selection,
+      state.done,
+      state.shown.cleared,
+    )
   }
 
   if (event.type === "run.settled") {
@@ -210,7 +252,8 @@ export function transitionComposerSubmit(
     return {
       state: { ...state, type: "handing-off", value, session: event.session },
       effects: [
-        { type: "history.record", prompt: value.prompt, mode: value.mode },
+        // A shown hold recorded it when it left the composer.
+        ...(state.cleared ? [] : [{ type: "history.record" as const, prompt: value.prompt, mode: value.mode }]),
         {
           type: "handoff",
           attempt: state.attempt,
@@ -254,6 +297,7 @@ export function transitionComposerSubmit(
       comments: state.comments,
       session: state.session,
       prompt: event.prompt,
+      cleared: state.cleared,
     },
   ])
 }
@@ -286,11 +330,16 @@ function submit(state: ComposerSubmitState, snapshot: SubmitSnapshot, done: Subm
 
   if (!snapshot.selection) {
     // A cold Location lists its agents and models only after its plugins activate, so hold the send until then.
-    if (snapshot.loading)
+    if (snapshot.loading) {
+      // A prompt that steers a Session shows in its timeline at once, like any sent prompt. A slash command, a shell
+      // command or a queued prompt has no timeline row before the server takes it, so it waits in the composer.
+      const session = snapshot.session && showsWhileHeld(snapshot) ? snapshot.session : undefined
+
       return {
-        state: { type: "held", attempt, draft: snapshot.serialized, alternate: snapshot.alternate, done },
-        effects: [],
+        state: { type: "held", attempt, snapshot, shown: session && { session, cleared: undefined }, done },
+        effects: session ? [{ type: "hold.show", attempt, session, snapshot }] : [],
       }
+    }
 
     return { state, effects: [{ type: "notify.missing-selection" }, { type: "done", done, sent: false }] }
   }
@@ -299,6 +348,16 @@ function submit(state: ComposerSubmitState, snapshot: SubmitSnapshot, done: Subm
   if (snapshot.mode === "shell" && snapshot.delivery === "queue")
     return { state, effects: [{ type: "notify.unqueueable" }, { type: "done", done, sent: false }] }
 
+  return prepare(attempt, snapshot, snapshot.selection, done, undefined)
+}
+
+function prepare(
+  attempt: number,
+  snapshot: SubmitSnapshot,
+  selection: ComposerSelection,
+  done: SubmitDone,
+  cleared: Prompt | undefined,
+): ComposerSubmitTransition {
   // Capture command intent before starting a session in a worktree whose catalog has not loaded.
   const command = snapshot.mode === "normal" ? findCommand(snapshot.commands, snapshot.text) : undefined
 
@@ -311,7 +370,7 @@ function submit(state: ComposerSubmitState, snapshot: SubmitSnapshot, done: Subm
     context: snapshot.draft.context,
     text: snapshot.text,
     images: snapshot.draft.prompt.filter((part): part is ImageAttachmentPart => part.type === "image"),
-    selection: snapshot.selection,
+    selection,
     delivery: snapshot.delivery,
   }
 
@@ -322,9 +381,32 @@ function submit(state: ComposerSubmitState, snapshot: SubmitSnapshot, done: Subm
   }
 
   return {
-    state: { type: "preparing", attempt, draft: snapshot.draft, value, kind, comments: snapshot.comments, done },
+    state: {
+      type: "preparing",
+      attempt,
+      draft: snapshot.draft,
+      value,
+      kind,
+      comments: snapshot.comments,
+      cleared,
+      done,
+    },
     effects: [{ type: "session.start", attempt, target: snapshot.draft.target, value }],
   }
+}
+
+function showsWhileHeld(snapshot: SubmitSnapshot) {
+  return snapshot.mode === "normal" && snapshot.delivery === "steer" && !parseSlashCommand(snapshot.text)
+}
+
+// A shown hold returns its prompt to the composer it left and removes it from the timeline.
+function cancelHold(state: Extract<ComposerSubmitState, { type: "held" }>, effects: ComposerSubmitEffect[]) {
+  if (!state.shown) return settle(state, false, effects)
+
+  return settle(state, false, [
+    ...effects,
+    { type: "hold.cancel", session: state.shown.session, snapshot: state.snapshot, cleared: state.shown.cleared },
+  ])
 }
 
 function quote(state: ComposerSubmitState, snapshot: QuoteSnapshot, done: SubmitDone): ComposerSubmitTransition {

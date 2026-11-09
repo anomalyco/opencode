@@ -339,7 +339,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       return yield* initialize(transport)
     }
     const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
-    const fetch = yield* McpOAuth.loggedFetch({ server, directory: options.directory })
+    const fetch = yield* McpOAuth.loggedFetch({ server, directory: options.directory }, options.authProvider)
     // Servers that bundle their own Code Mode (Cloudflare and others) expose raw tools when asked
     // with ?codemode=false, which is what our Code Mode wants. The configured URL stays the OAuth identity.
     const url = new URL(config.url)
@@ -419,9 +419,9 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       instructions: client.getInstructions()?.trim() || undefined,
       // Tool lists skip the SDK response cache: it re-stringifies every list, and on the first tools/call
       // re-parses it and compiles an output validator for every listed tool. Each call passes its own
-      // checked definition instead, so only that tool's outputSchema is compiled and modern Mcp-Param-*
-      // header mirroring still sees the schema. Tools are relisted on connect, list_changed and a stale
-      // header declaration; the SDK cache never relisted an expired list before a call either.
+      // checked definition instead, so modern Mcp-Param-* header mirroring still sees the input schema.
+      // Tools are relisted on connect, list_changed and a stale header declaration; the SDK cache never
+      // relisted an expired list before a call either.
       tools: () =>
         advertised("tools")
           ? list("list MCP tools", (signal) =>
@@ -522,11 +522,13 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                 onprogress: () => {},
                 // Always passed, even for a tool we haven't listed, so the SDK never falls back to listing
                 // and caching the raw tools itself. Its types are narrower than what it reads (JSON values,
-                // a string `$schema`); ours keep the server's values.
-                toolDefinition: (listed.get(input.name) ?? {
-                  name: input.name,
-                  inputSchema: { type: "object" },
-                }) as CallToolRequestOptions["toolDefinition"],
+                // a string `$schema`); ours keep the server's values. Leaving out `outputSchema` skips the
+                // SDK's output check: servers return results that miss or break their own schema (Zoom
+                // answers a 204 with nothing), and failing the call would report a completed action as failed.
+                toolDefinition: {
+                  ...(listed.get(input.name) ?? { name: input.name, inputSchema: { type: "object" } }),
+                  outputSchema: undefined,
+                } as CallToolRequestOptions["toolDefinition"],
               },
             ),
           catch: (error) => error,

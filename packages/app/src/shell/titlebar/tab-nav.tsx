@@ -111,10 +111,13 @@ export function TabNavItem(
 
     if (props.attention) return "attention"
 
-    if (props.unread) return "unread"
+    if (!props.unread) return
+
+    // As in the inbox, an unread run that ended in failure gets the danger dot instead of the accent one.
+    return props.session.outcome === "failed" ? "failed" : "unread"
   }
 
-  const dotted = () => status() === "attention" || status() === "unread"
+  const dotted = () => status() === "attention" || status() === "unread" || status() === "failed"
 
   const project = createMemo(() => {
     const session = props.session
@@ -509,6 +512,7 @@ export function TabNavItem(
           <ActivityRing data-mark="busy" />
           <span data-mark="attention" data-slot="tab-status-dot" />
           <span data-mark="unread" data-slot="tab-status-dot" />
+          <span data-mark="failed" data-slot="tab-status-dot" />
         </span>
         <IconButton
           size="small"

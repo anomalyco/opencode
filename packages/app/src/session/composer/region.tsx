@@ -14,7 +14,7 @@ import { setCursorPosition } from "@/composer/editor/dom"
 import { promptLength } from "@/composer/prompt-parts"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useData } from "@/runtime/server/current"
+import { useData, useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { showToast } from "@/shell/notifications/toast"
 import { errorMessage } from "@/shell/layout/helpers"
@@ -293,8 +293,12 @@ export function createActiveSessionRegion(input: {
     showToast({ title: language.t("common.requestFailed") })
   }
 
+  const handoffs = useServer().ctx.handoff
+
   const pendingSteer: TimelinePendingActions = {
-    status: (sessionID, messageID) => data.session.pending.status(sessionID, messageID),
+    // A prompt held for its Location's agents and models shows as sending until it has a server row.
+    status: (sessionID, messageID) =>
+      handoffs.held(sessionID, messageID) ? "sending" : data.session.pending.status(sessionID, messageID),
     queue: ({ sessionID, messageID }) =>
       server.api.session.inbox
         .update({ sessionID, inboxID: messageID, delivery: "queue" })
@@ -334,11 +338,11 @@ export function createActiveSessionRegion(input: {
     state,
     parentID: input.session.data.parentID,
     centered: input.screen.centered,
-    // Submitting reads past the automatic unread marker. Keep a reader's own scroll or revealed tool in place.
+    // A reader far enough up to see the jump-to-latest button stays put; anyone closer is taken to the new prompt.
     onResponseSubmit: () => {
-      const anchor = input.timeline.follow.anchor()
+      const scroll = input.timeline.scroll
 
-      if (input.timeline.follow.following() || (anchor && !anchor.partID)) input.timeline.actions.resume()
+      if (input.timeline.follow.following() || !(scroll.overflow && scroll.jump)) input.timeline.actions.resume()
     },
     openParent,
     focusPrompt: () => focusPrompt(),

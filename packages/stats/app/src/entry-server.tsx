@@ -1,6 +1,6 @@
 // @refresh reload
 import { createHandler, StartServer, type Asset, type PageEvent } from "@solidjs/start/server"
-import ibmPlexMonoMediumLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Medium-Latin1.woff2?url"
+import openTuiMonoRegularLatin from "./asset/fonts/opentui-mono-regular-latin.woff2?url"
 import { getRequestEvent } from "solid-js/web"
 import { dir, localeFromRequest, tag } from "./lib/language"
 import statsStylesheetUrl from "./routes/index.css?url"
@@ -33,7 +33,7 @@ export default createHandler(
               <meta charset="utf-8" />
               <meta name="viewport" content="width=device-width, initial-scale=1" />
               <script id="stats-theme-preload-script">{statsThemePreloadScript}</script>
-              <link rel="preload" href={ibmPlexMonoMediumLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
+              <link rel="preload" href={openTuiMonoRegularLatin} as="font" type="font/woff2" crossorigin="anonymous" />
               {stylesheetHref ? <link rel="stylesheet" href={stylesheetHref} /> : null}
               {assets}
             </head>

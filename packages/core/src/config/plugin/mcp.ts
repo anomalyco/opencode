@@ -1,7 +1,7 @@
 export * as ConfigMcpPlugin from "./mcp.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
-import { Document } from "@opencode/schema/config"
+import { Document, type Entry } from "@opencode/schema/config"
 import type { ServerConfig } from "@opencode/schema/mcp"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config.js"
@@ -19,19 +19,25 @@ export const register = Effect.fn("ConfigMCPPlugin.register")(function* (
 ) {
   const config = yield* Config.Service
   const mcp = yield* Mcp.Service
+  const loaded = { entries: [] as Entry[] }
 
   yield* events.pipe(
     Stream.filter((event) => event.type === "config.updated"),
     Stream.runForEach(() =>
-      mcp.reload().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload MCP config", { cause }))),
+      config.entries().pipe(
+        Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),
+        Effect.andThen(mcp.reload()),
+        Effect.catchCause((cause) => Effect.logError("failed to reload MCP config", { cause })),
+      ),
     ),
     Effect.ignore,
     Effect.forkScoped({ startImmediately: true }),
   )
 
-  // Read at reload time, so a reload right after a config change sees it before `config.updated` arrives.
+  // Subscribe before the initial load so updates racing it trigger a rebuild.
+  loaded.entries = yield* config.entries()
   yield* mcp.transform((editor) => {
-    const documents = config.snapshot().filter((entry): entry is Document => entry.type === "document")
+    const documents = loaded.entries.filter((entry): entry is Document => entry.type === "document")
     // Global timeout defaults merge in config order; each server can override them.
     const timeout = Object.assign(
       {},

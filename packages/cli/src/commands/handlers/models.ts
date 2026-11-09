@@ -5,6 +5,7 @@ import { EOL } from "node:os"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { ServerConnection } from "../../services/server-connection"
+import { waitForPlugins } from "../../services/plugin-startup"
 
 export default Runtime.handler(
   Commands.commands.models,
@@ -14,6 +15,7 @@ export default Runtime.handler(
       baseUrl: server.endpoint.url,
       headers: Service.headers(server.endpoint),
     })
+    yield* waitForPlugins(client, process.cwd())
     const response = yield* Effect.promise(() => client.model.list({ location: { directory: process.cwd() } }))
     const models = response.data
       .map((model) => `${model.providerID}/${model.id}`)

@@ -1,9 +1,8 @@
-import type { RouteDefaultsInput } from "../route/client.js"
 import { Auth } from "../route/auth.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { MediaRoute } from "../route/media.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
+import { ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
 import { Gemini } from "../protocols/gemini.js"
 import { GoogleInteractions } from "../protocols/google-interactions.js"
 import { GoogleImages } from "../protocols/google-images.js"
@@ -24,7 +23,7 @@ export const id = ProviderID.make("google")
 
 export const routes = [Gemini.route, GoogleInteractions.route]
 
-export type Config = RouteDefaultsInput &
+export type Config = RequestOptions &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: Gemini.ProviderOptionsInput & GoogleInteractions.ProviderOptionsInput
