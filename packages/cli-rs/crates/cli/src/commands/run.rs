@@ -35,7 +35,7 @@ pub fn run(context: &Context, args: &RunArgs) -> error::Result<()> {
                 return report(json, &exit, &error.to_string(), None);
             }
         };
-        if let Err(failure) = execute(args, &context.args, &server, json, &exit).await {
+        if let Err(failure) = execute(args, &server, json, &exit).await {
             report(json, &exit, &failure.message, failure.session.as_deref());
         }
     });
@@ -58,7 +58,6 @@ impl<T: std::fmt::Display> From<T> for Failure {
 
 async fn execute(
     args: &RunArgs,
-    argv: &[String],
     server: &Connected,
     json: bool,
     exit: &Rc<Cell<u8>>,
@@ -78,7 +77,7 @@ async fn execute(
         std::io::stdin().read_to_end(&mut bytes)?;
         Some(String::from_utf8_lossy(&bytes).into_owned())
     };
-    let message = merge_input(format_message(&words(args, argv)), piped).unwrap_or_default();
+    let message = merge_input(format_message(&args.message), piped).unwrap_or_default();
     if message.trim().is_empty() {
         return Err("You must provide a message".into());
     }
@@ -145,13 +144,6 @@ async fn execute(
     .map_err(failed)
 }
 
-/// The message words, then the words of `argv` after `--` again, as the TS handler appends `process.argv` after
-/// the separator to the parsed message.
-fn words(args: &RunArgs, argv: &[String]) -> Vec<String> {
-    let after = argv.iter().position(|arg| arg == "--").map_or(&[][..], |at| &argv[at + 1..]);
-    args.message.iter().chain(after).cloned().collect()
-}
-
 /// Words with spaces are quoted, with their quotes escaped.
 fn format_message(words: &[String]) -> Option<String> {
     let value = words
@@ -211,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    fn words_after_the_separator_repeat_from_the_decoded_arguments() {
+    fn words_after_the_separator_are_submitted_once() {
         let argv: Vec<String> = ["run", "a", "--", "b\u{fffd}"].map(String::from).into();
         let crate::parse::Outcome::Run(invocation) = crate::parse::parse(&argv, "opencode") else {
             panic!("{argv:?} does not run");
@@ -219,7 +211,7 @@ mod tests {
         let Some(crate::args::Command::Run(args)) = &invocation.cli.command else {
             panic!("{argv:?} is not run");
         };
-        assert_eq!(words(args, &argv), ["a", "b\u{fffd}", "b\u{fffd}"]);
+        assert_eq!(args.message, ["a", "b\u{fffd}"]);
     }
 
     #[test]
