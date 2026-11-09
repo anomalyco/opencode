@@ -409,8 +409,10 @@ interval and 30-minute active window.
 }
 ```
 
-See the [warming guide](/warming) for request behavior, customization,
-and cost considerations.
+A provider's or model's `settings.cache.warming` overrides it, and
+`settings.cache.ttl` sets how long the provider keeps the cache. See the
+[warming guide](/warming) for request behavior, customization, and cost
+considerations, and [cache lifetime](/models#cache-lifetime) for `cache.ttl`.
 
 ### Skills
 
