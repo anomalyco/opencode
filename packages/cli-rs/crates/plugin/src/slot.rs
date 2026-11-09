@@ -1,9 +1,10 @@
 //! The slot tree: the `SlotMap` paths (`packages/plugin/src/tui/context.ts:191-202`), their inputs, and
 //! the pure resolution of claims into placements (`packages/tui/src/plugin/structure.ts`).
 
+use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 pub const APP: &str = "app";
 pub const HOME_FOOTER: &str = "home.footer";
@@ -37,6 +38,8 @@ pub struct Live {
     counts: RefCell<HashMap<String, usize>>,
     /// Changes when a path appears or goes.
     version: Cell<u64>,
+    /// The mounted slots whose appended claims follow the live paths.
+    followers: RefCell<Vec<Weak<dyn Any>>>,
 }
 
 impl Live {
@@ -57,6 +60,17 @@ impl Live {
 
     pub fn version(&self) -> u64 {
         self.version.get()
+    }
+
+    /// Keeps `follower` in [`Live::followers`] while it lives.
+    pub fn follow(&self, follower: Weak<dyn Any>) {
+        let mut followers = self.followers.borrow_mut();
+        followers.retain(|follower| follower.strong_count() > 0);
+        followers.push(follower);
+    }
+
+    pub fn followers(&self) -> Vec<Rc<dyn Any>> {
+        self.followers.borrow().iter().filter_map(Weak::upgrade).collect()
     }
 }
 
