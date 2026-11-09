@@ -261,7 +261,7 @@ impl Loader {
         match registry.load(host, definition.external(name, failure)) {
             Some(failed) if failed.kept => return self.fail(&**host, registry, name, digest, failed.error),
             // The plugin is listed as failed, and enabling it runs this build's setup again.
-            Some(failed) => self.tell(&**host, name, failed.error),
+            Some(failed) => self.tell(&**host, registry, name, failed.error),
             None => drop(self.failed.borrow_mut().remove(name)),
         }
         self.seen.borrow_mut().insert(name.to_owned(), Seen { digest, reload });
@@ -282,14 +282,16 @@ impl Loader {
         if registry.failed_load(target, &error) {
             *reload.borrow_mut() = Some(format!("{error} (previous version still active)"));
         }
-        self.tell(host, target, error);
+        self.tell(host, registry, target, error);
         true
     }
 
-    /// Tells the host that `target` failed with `error`, unless it said so last.
-    fn tell(&self, host: &dyn Host, target: &str, error: String) {
+    /// Tells the host that `target` failed with `error`, unless it said so last. The host names the plugin by the ID
+    /// its build described, and by `target` only when no build of it ever described one.
+    fn tell(&self, host: &dyn Host, registry: &Registry, target: &str, error: String) {
         if self.failed.borrow_mut().insert(target.to_owned(), error.clone()).as_ref() != Some(&error) {
-            host.failed(target);
+            let id = registry.with_target(target, |plugin| plugin.definition.id.clone());
+            host.failed(id.as_deref().unwrap_or(target));
         }
     }
 }

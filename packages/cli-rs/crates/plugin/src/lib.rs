@@ -68,8 +68,9 @@ pub trait Host: 'static {
     }
     /// Shows `toast`; with a session, it offers to open the session unless the session's family is on screen.
     fn toast(&self, _toast: &abi::Toast) {}
-    /// Says that external plugin `id` failed: it did not load or set up (`id` is its target then), or it panicked
-    /// while it ran, after its claims drew empty. Called outside every plugin callback.
+    /// Says that external plugin `id` failed: it did not load or set up (`id` is its target when no build of it
+    /// described an ID), or it panicked while it ran, after its claims drew empty. Called outside every plugin
+    /// callback.
     fn failed(&self, id: &str) {
         self.toast(
             &abi::Toast::new(abi::Variant::Error, "Run /plugins to view details.")
@@ -1055,8 +1056,7 @@ impl Registry {
         }
         if self.start(host, id).is_some() {
             // Like a failed load, a setup that fails as the plugin manager enables it says so (TS `plugins.tsx`).
-            let target = self.with_plugin(id, |plugin| plugin.definition.target().map(str::to_owned)).flatten();
-            host.failed(target.as_deref().unwrap_or(id));
+            host.failed(id);
         }
         true
     }
