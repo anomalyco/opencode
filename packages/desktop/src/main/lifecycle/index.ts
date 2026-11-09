@@ -67,9 +67,9 @@ const runtime = Layer.effect(
             }),
           ),
         ),
-      confirm: () =>
+      notice: () =>
         runPromise(
-          Effect.tryPromise(QuitBehavior.confirmFirstQuit).pipe(
+          Effect.tryPromise(QuitBehavior.showQuitNotice).pipe(
             Effect.catch((error) => Effect.logError("first-quit service notice failed", { error })),
           ),
         ),
@@ -128,7 +128,7 @@ const runtime = Layer.effect(
 
     const beforeQuit = (event: Event) => {
       if (preventsQuit(driver.state())) event.preventDefault()
-      driver.dispatch({ type: "before.quit", confirm: QuitBehavior.isQuitNoticePending() })
+      driver.dispatch({ type: "before.quit", notify: QuitBehavior.isQuitNoticePending() })
     }
 
     const willQuit = () => driver.dispatch({ type: "will.quit" })

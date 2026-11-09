@@ -319,9 +319,8 @@ export const DESKTOP_NATIVE_ENGLISH = {
 
   "desktop.quit.serviceNotice.message": "OpenCode keeps running in the background",
   "desktop.quit.serviceNotice.detail":
-    "After you quit, the OpenCode server keeps running so agents, terminals, and MCP servers can finish their work. You can change this anytime in Settings.",
-  "desktop.quit.serviceNotice.keepRunning": "Keep Running",
-  "desktop.quit.serviceNotice.stopOnQuit": "Stop When I Quit",
+    "After you quit, the OpenCode server keeps running so agents, terminals, and MCP servers can finish their work. You can change this in Settings → General.",
+  "desktop.quit.serviceNotice.ok": "OK",
 } as const
 
 export type DesktopNativeKey = keyof typeof DESKTOP_NATIVE_ENGLISH
