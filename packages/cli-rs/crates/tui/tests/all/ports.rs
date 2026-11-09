@@ -345,19 +345,21 @@ fn priced_model() -> Value {
 }
 
 /// `ses_p` has 150 messages at $0.01 reported, over two pages; its child `ses_c` reports nothing, so it is priced from
-/// the catalog: one message of a million input tokens, and a second once `grown` is set.
-fn usage(grown: Arc<Mutex<bool>>) -> impl Fn(&Seen) -> Option<Reply> + Send + Sync {
+/// the catalog: one message of a million input tokens, and a second once `grown` is set. With `paged`, `ses_p`'s
+/// children come on a second page, after an empty first one.
+fn usage(grown: Arc<Mutex<bool>>, paged: bool) -> impl Fn(&Seen) -> Option<Reply> + Send + Sync {
     let resets = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64
         + (4 * 24 + 9) * 3_600_000
         + 1_800_000;
     move |seen| match (seen.method.as_str(), seen.path.as_str()) {
         ("GET", "/api/session") => {
-            let data = match seen.param("parentID").as_str() {
-                "" => vec![session("ses_p", "Tree", None, 1)],
-                "ses_p" => vec![session("ses_c", "Child", Some("ses_p"), 2)],
-                _ => Vec::new(),
+            let (data, next) = match (seen.param("parentID").as_str(), seen.param("cursor").as_str()) {
+                ("", _) => (vec![session("ses_p", "Tree", None, 1)], None),
+                ("ses_p", "") if paged => (Vec::new(), Some("more")),
+                ("ses_p", _) => (vec![session("ses_c", "Child", Some("ses_p"), 2)], None),
+                _ => (Vec::new(), None),
             };
-            Some((200, json!({ "data": data, "cursor": {} })))
+            Some((200, json!({ "data": data, "cursor": { "next": next } })))
         }
         ("GET", "/api/session/ses_p") => Some((200, json!({ "data": session("ses_p", "Tree", None, 1) }))),
         ("GET", "/api/session/ses_c") => Some((200, json!({ "data": session("ses_c", "Child", Some("ses_p"), 2) }))),
@@ -391,7 +393,7 @@ fn usage(grown: Arc<Mutex<bool>>) -> impl Fn(&Seen) -> Option<Reply> + Send + Sy
 #[test]
 fn session_usage_totals_the_paged_history_and_follows_usage_events() {
     let grown = Arc::new(Mutex::new(false));
-    let h = open("session-usage", 170, usage(grown.clone()));
+    let h = open("session-usage", 170, usage(grown.clone(), false));
     h.wait_for("≈ $2.50 session total");
     let pages = h.sent("/api/session/ses_p/message");
     assert!(pages.contains(&"GET /api/session/ses_p/message?limit=100&cursor=page100".to_owned()), "{pages:#?}");
@@ -432,6 +434,23 @@ fn session_usage_totals_the_paged_history_and_follows_usage_events() {
         "data": { "sessionID": "ses_c", "cost": 0, "tokens": { "input": 2_000_000, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } } },
     }));
     h.wait_for("≈ $3.50 session total");
+}
+
+// Expected: as TS `childIDs`, the panel reads a parent's next page of children only after the page before, and lists
+// the next parent only after the last page: `ses_p`'s children are asked for once per page, and the child found on the
+// second page is in the total.
+#[test]
+fn session_usage_pages_the_children_one_parent_at_a_time() {
+    let h = open("session-usage", 170, usage(Arc::new(Mutex::new(false)), true));
+    h.wait_for("≈ $2.50 session total");
+    let log = h.log.lock().unwrap();
+    let cursors: Vec<String> = log
+        .iter()
+        // The host's own list of the family asks for 200 at a time.
+        .filter(|seen| seen.path == "/api/session" && seen.param("parentID") == "ses_p" && seen.param("limit") == "100")
+        .map(|seen| seen.param("cursor"))
+        .collect();
+    assert_eq!(cursors, ["", "more"]);
 }
 
 // --- Dialog::Select on both paths
