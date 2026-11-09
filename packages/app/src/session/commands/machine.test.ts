@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  CLOSE_TAB_GUARD_QUIET_MS,
   SESSION_DIALOG_LOAD_TIMEOUT_MS,
   createCloseTabGuardState,
   createSessionCommandsState,
@@ -194,7 +195,7 @@ describe("transitionCloseTabGuard", () => {
     ])
 
     expect(armed?.state).toEqual({ status: "armed", attempt: 1, tabKey: "alpha", settling: true })
-    expect(armed?.effects).toEqual([{ type: "settle.schedule", attempt: 1 }])
+    expect(armed?.effects).toEqual([{ type: "settle.schedule", attempt: 1 }, { type: "quiet.schedule", attempt: 1, timeoutMs: CLOSE_TAB_GUARD_QUIET_MS }])
     expect(focused?.state).toBe(armed!.state)
     expect(selectCloseTabSwallowed(focused!.state)).toBe(true)
     expect(settled?.state).toEqual({ status: "armed", attempt: 1, tabKey: "alpha", settling: false })
@@ -211,7 +212,7 @@ describe("transitionCloseTabGuard", () => {
 
     expect(synced?.state).toBe(armed!.state)
     expect(otherTab?.state).toEqual({ status: "disarmed", issued: 1 })
-    expect(otherTab?.effects).toEqual([{ type: "settle.cancel" }])
+    expect(otherTab?.effects).toEqual([{ type: "settle.cancel" }, { type: "quiet.cancel" }])
   })
 
   test("the panel reopening disarms the guard", () => {
@@ -229,12 +230,12 @@ describe("transitionCloseTabGuard", () => {
     const [, , settled] = replayGuard([closedPanel, { type: "settle.completed", attempt: 1 }, event])
 
     expect(settling?.state).toEqual({ status: "disarmed", issued: 1 })
-    expect(settling?.effects).toEqual([{ type: "settle.cancel" }])
+    expect(settling?.effects).toEqual([{ type: "settle.cancel" }, { type: "quiet.cancel" }])
     expect(settled?.state).toEqual({ status: "disarmed", issued: 1 })
-    expect(settled?.effects).toEqual([])
+    expect(settled?.effects).toEqual([{ type: "quiet.cancel" }])
   })
 
-  test("modifier keys and repeated ⌘W keep swallowing", () => {
+  test("modifier keys and repeated ⌘W keep swallowing, each ⌘W restarting the rest", () => {
     const [armed, modifier, close] = replayGuard([
       closedPanel,
       { type: "key.down", key: "Meta", matchesClose: false },
@@ -242,7 +243,22 @@ describe("transitionCloseTabGuard", () => {
     ])
 
     expect(modifier?.state).toBe(armed!.state)
+    expect(modifier?.effects).toEqual([])
     expect(close?.state).toBe(armed!.state)
+    expect(close?.effects).toEqual([{ type: "quiet.schedule", attempt: 1, timeoutMs: CLOSE_TAB_GUARD_QUIET_MS }])
+  })
+
+  test("once ⌘W rests, the next ⌘W closes the session tab again", () => {
+    const [, , stale, rested] = replayGuard([
+      closedPanel,
+      { type: "key.down", key: "w", matchesClose: true },
+      { type: "quiet.elapsed", attempt: 0 },
+      { type: "quiet.elapsed", attempt: 1 },
+    ])
+
+    expect(selectCloseTabSwallowed(stale!.state)).toBe(true)
+    expect(rested?.state).toEqual({ status: "disarmed", issued: 1 })
+    expect(selectCloseTabSwallowed(rested!.state)).toBe(false)
   })
 
   test("a close from the palette, or one that leaves the panel open, does not arm", () => {
@@ -255,7 +271,11 @@ describe("transitionCloseTabGuard", () => {
   test("re-arming fences the previous frame, and a stale settle is dropped", () => {
     const [, rearmed, stale] = replayGuard([closedPanel, closedPanel, { type: "settle.completed", attempt: 1 }])
 
-    expect(rearmed?.effects).toEqual([{ type: "settle.cancel" }, { type: "settle.schedule", attempt: 2 }])
+    expect(rearmed?.effects).toEqual([
+      { type: "settle.cancel" },
+      { type: "settle.schedule", attempt: 2 },
+      { type: "quiet.schedule", attempt: 2, timeoutMs: CLOSE_TAB_GUARD_QUIET_MS },
+    ])
     expect(stale?.state).toBe(rearmed!.state)
   })
 
@@ -269,6 +289,7 @@ describe("transitionCloseTabGuard", () => {
       { type: "key.down", key: "a", matchesClose: false },
       { type: "layout.synced", tabKey: "beta", sideOpened: true },
       { type: "settle.completed", attempt: 1 },
+      { type: "quiet.elapsed", attempt: 1 },
     ]
 
     events.forEach((event) => expect(transitionCloseTabGuard(disarmed, event).state).toBe(disarmed))
@@ -277,7 +298,7 @@ describe("transitionCloseTabGuard", () => {
   test("disposing cancels a pending frame and ignores everything after", () => {
     const [, disposed, late] = replayGuard([closedPanel, { type: "disposed" }, closedPanel])
 
-    expect(disposed?.effects).toEqual([{ type: "settle.cancel" }])
+    expect(disposed?.effects).toEqual([{ type: "settle.cancel" }, { type: "quiet.cancel" }])
     expect(late?.state).toBe(disposed!.state)
     expect(late?.effects).toEqual([])
   })
