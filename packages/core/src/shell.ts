@@ -32,6 +32,7 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Shell.No
 const EXITED_LIMIT = 25
 export const RETENTION = Duration.days(7)
 export const DIRECTORY = "shell"
+const SPAN_COMMAND_LIMIT = 200
 
 type Info = Shell.Info
 type CreateInput = Shell.CreateInput & {
@@ -182,7 +183,7 @@ const layer = () =>
       })
 
       const remove = Effect.fn("Shell.remove")(function* (id: Shell.ID) {
-        yield* require(id)
+        yield* annotate((yield* require(id)).info)
         yield* removeCommand(id)
       })
 
@@ -193,15 +194,22 @@ const layer = () =>
       })
 
       const get = Effect.fn("Shell.get")(function* (id: Shell.ID) {
-        return (yield* require(id)).info
+        const { info } = yield* require(id)
+        yield* annotate(info)
+        return info
       })
 
       const wait = Effect.fn("Shell.wait")(function* (id: Shell.ID) {
-        return yield* Deferred.await((yield* require(id)).done)
+        const command = yield* require(id)
+        yield* annotate(command.info)
+        const info = yield* Deferred.await(command.done)
+        yield* annotate(info)
+        return info
       })
 
       const timeout = Effect.fn("Shell.timeout")(function* (id: Shell.ID, duration: number) {
         const command = yield* require(id)
+        yield* annotate(command.info)
         if (command.info.status !== "running" || !command.timeout) return command.info
         yield* command.timeout(duration)
         return command.info
@@ -242,11 +250,13 @@ const layer = () =>
       })
 
       const result = Effect.fn("Shell.result")(function* (started: Shell.Info) {
+        yield* annotate(started)
         const info = yield* wait(started.id).pipe(
           Effect.catchTag("Shell.NotFoundError", () =>
             Effect.succeed({ ...started, status: "killed" as const, time: { ...started.time, completed: Date.now() } }),
           ),
         )
+        yield* annotate(info)
         const capture = yield* Effect.gen(function* () {
           const limits = Config.latest(yield* config.entries(), "tool_output")
           const maxLines = limits?.max_lines ?? ToolOutput.MAX_LINES
@@ -322,6 +332,7 @@ const layer = () =>
           metadata: input.metadata ?? {},
           time: { started: Date.now() },
         }
+        yield* annotate(info)
 
         // Spawn through the Environment and stream combined output to the file. The handle is scope-bound, so
         // the managing fiber keeps its scope open until the command terminates (it awaits `done` at the
@@ -485,6 +496,26 @@ const layer = () =>
       return Service.of({ create, list, get, wait, result, timeout, output, remove })
     }),
   )
+
+// Spans carry only the command text, truncated; never env, stdin or output. Shells outlive the turn that started
+// them, so the session comes from the shell's own metadata rather than the caller's span annotations.
+function annotate(info: Info) {
+  const sessionID = info.metadata.sessionID
+  return Effect.annotateCurrentSpan({
+    "opencode.shell.id": info.id,
+    "opencode.shell.command": spanCommand(info.command),
+    ...(typeof sessionID === "string" ? { "session.id": sessionID } : {}),
+    ...(info.metadata.background === true ? { "opencode.shell.background": true } : {}),
+    ...(info.status === "running" ? {} : { "opencode.shell.status": info.status }),
+    ...(info.exit === undefined ? {} : { "process.exit.code": info.exit }),
+  })
+}
+
+// Strict OTLP JSON parsers reject a lone surrogate, which a cut through an emoji would leave.
+function spanCommand(command: string) {
+  if (command.length <= SPAN_COMMAND_LIMIT) return command.toWellFormed()
+  return `${command.slice(0, SPAN_COMMAND_LIMIT).toWellFormed()}…`
+}
 
 // Moves past UTF-8 continuation bytes (at most 3) so a byte cut never splits a character.
 function charBoundary(bytes: Buffer, offset: number) {
