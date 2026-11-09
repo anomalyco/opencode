@@ -18,7 +18,7 @@ pub(crate) fn is_hex(value: &str) -> bool {
 }
 
 /// Core's `RGBA.fromHex`: an optional `#`, 3, 4, 6, or 8 digits; anything else is magenta.
-pub(crate) fn from_hex(value: &str) -> Color {
+pub fn from_hex(value: &str) -> Color {
     let digits = value.strip_prefix('#').unwrap_or(value);
     let expanded: String = match digits.len() {
         3 | 4 => digits.chars().flat_map(|c| [c, c]).collect(),
