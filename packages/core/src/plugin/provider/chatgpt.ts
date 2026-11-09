@@ -51,6 +51,7 @@ const fallbackModels = new Set([
 ])
 const nonRetryableSharingCodes = [
   "subscription_sharing_usage_limit_exceeded",
+  "subscription_sharing_workplace_individual_usage_limit_exceeded",
   "subscription_sharing_user_not_eligible",
   "subscription_sharing_unsupported_capability",
   "subscription_sharing_route_not_supported",
