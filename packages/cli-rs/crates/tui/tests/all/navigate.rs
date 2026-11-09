@@ -2,12 +2,13 @@
 
 use crate::support::{self, Fake, Harness, WAIT, deref_harness};
 
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use opencode_local::cli_config::{Info, Session, Verbosity};
-use opencode_tui::Deps;
+use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
 
 /// Serves the same messages for every session, newest page first, `limit` at a time, with a cursor that
@@ -414,6 +415,24 @@ fn a_tab_reopens_where_the_reader_left_it() {
     switch("ses_n");
     let found = h.app.wait_until(WAIT, || transcript(&h.app.text()) == first);
     assert!(found, "{first:#?}\n=====\n{}", h.app.text());
+}
+
+// Expected (R2-1): a view that navigation replaces is freed with every widget it showed, whether the route changes or
+// the same route mounts again.
+#[test]
+fn navigation_frees_the_view_it_replaces() {
+    let h = open(turns(3), Info::default());
+    let marker = Rc::new(());
+    for route in [Route::Home, support::session_route("ses_n"), support::session_route("ses_n")] {
+        assert!(support::mark(&h.app, &h.tui.frame.main(), 0, &marker) > 0);
+        h.tui.navigate(route);
+        h.idle();
+    }
+    h.wait_for("Answer 3 three.");
+    support::mark(&h.app, &h.tui.frame.main(), 0, &marker);
+    h.tui.navigate(Route::Home);
+    h.idle();
+    assert_eq!(Rc::strong_count(&marker), 1);
 }
 
 /// Lets frames and follow-up timers run, then reads the screen.

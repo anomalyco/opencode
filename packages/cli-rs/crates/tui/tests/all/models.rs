@@ -551,6 +551,21 @@ fn go_upsell_is_offered_once_a_day_and_remembers_dont_show() {
     assert_no_writes(&h.fixture);
 }
 
+// Expected (R2-1): the closed upsell is freed with every widget it showed.
+#[test]
+fn a_closed_go_upsell_is_freed() {
+    let h = mount();
+    let offer = Offer { reset: None, can_continue: Rc::new(|| true), on_subscribe: Rc::new(|| {}) };
+    go_upsell::offer(&h.tui.local, offer, 1_800_000_000_000.0);
+    h.wait_for("Free limit reached");
+    let marker = Rc::new(());
+    // The host, its backdrop and its panel stay for the next dialog.
+    assert!(support::mark(&h.app, h.tui.dialogs.host(), 2, &marker) > 0);
+    h.app.press("escape");
+    h.app.render();
+    assert_eq!(Rc::strong_count(&marker), 1);
+}
+
 fn assert_no_writes(fixture: &Server) {
     let seen = fixture.seen();
     assert!(seen.iter().all(|(method, _)| method == "GET"), "a dialog sent a mutating request: {seen:?}");

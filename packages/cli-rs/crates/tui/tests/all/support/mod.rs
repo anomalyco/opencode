@@ -470,6 +470,43 @@ impl Harness {
     }
 }
 
+/// Gives each widget on screen under `root` a handler that holds `marker`, leaving out the `keep` levels below `root`
+/// that outlive what they show. Once those widgets are freed, `marker` is the only reference left. Returns how many
+/// widgets it marked.
+pub fn mark(app: &TestApp, root: &impl Widget, keep: usize, marker: &Rc<()>) -> usize {
+    app.render();
+    let (width, height) = app.app().size();
+    let mut marked = std::collections::HashSet::new();
+    for (x, y) in (0..height).flat_map(|y| (0..width).map(move |x| (x, y))) {
+        let chain: Vec<AnyWidget> =
+            std::iter::successors(app.app().widget_at(x, y), |widget| widget.parent()).collect();
+        let Some(level) = chain.iter().position(|widget| widget.id() == root.id()) else {
+            continue;
+        };
+        for widget in &chain[..level.saturating_sub(keep)] {
+            if marked.insert(widget.id()) {
+                let marker = marker.clone();
+                widget.on_resize(move |_, _| {
+                    let _ = &marker;
+                });
+            }
+        }
+    }
+    marked.len()
+}
+
+/// [`mark`] for the widget at the cell where `needle` starts and its parents, `levels` widgets in all.
+#[track_caller]
+pub fn mark_at(app: &TestApp, needle: &str, levels: usize, marker: &Rc<()>) {
+    let (x, y) = at(&app.text(), needle).unwrap_or_else(|| panic!("{needle:?} is not on screen:\n{}", app.text()));
+    for widget in std::iter::successors(app.app().widget_at(x, y), |widget| widget.parent()).take(levels) {
+        let marker = marker.clone();
+        widget.on_resize(move |_, _| {
+            let _ = &marker;
+        });
+    }
+}
+
 /// Waits until `app` shows `text`, and returns the screen.
 #[track_caller]
 pub fn wait_for(app: &TestApp, text: &str) -> String {

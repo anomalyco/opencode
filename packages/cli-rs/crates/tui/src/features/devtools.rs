@@ -152,6 +152,9 @@ struct Bar {
     dump: RefCell<Option<Result<String, String>>>,
     focus: RefCell<Option<AnyWidget>>,
     first_draw: Cell<Option<f64>>,
+    /// The items and actions their hover handlers restyle, until the next render. The handlers hold them weakly: a
+    /// widget whose handler holds the widget is never freed.
+    hovers: RefCell<Vec<Rc<View>>>,
     _layer: RefCell<Option<Disposer>>,
 }
 
@@ -171,6 +174,7 @@ pub fn mount(tui: &Rc<Tui>, parent: &View) {
         dump: RefCell::new(None),
         focus: RefCell::new(None),
         first_draw: Cell::new(None),
+        hovers: RefCell::default(),
         _layer: RefCell::new(None),
     });
     install_escape(tui, &bar);
@@ -306,6 +310,7 @@ impl Bar {
         let app = &tui.app;
         let theme = tui.page();
         self.root.clear();
+        self.hovers.borrow_mut().clear();
         self.root.visible(enabled(&info));
         if !enabled(&info) {
             if self.panel.take().is_some() {
@@ -408,6 +413,13 @@ impl Bar {
         tui.app.request_redraw();
     }
 
+    fn hold(&self, view: &View) -> std::rc::Weak<View> {
+        let held = Rc::new(view.clone());
+        let weak = Rc::downgrade(&held);
+        self.hovers.borrow_mut().push(held);
+        weak
+    }
+
     /// `BarItem`: one cell of padding, the hover and active backgrounds, and a click that does not end a
     /// selection. `panel` is what it toggles; `None` opens the experiments dialog.
     fn item(self: &Rc<Self>, tui: &Tui, active: bool, panel: Option<Panel>) -> View {
@@ -418,10 +430,12 @@ impl Bar {
         } else {
             // Restyled in place: a rebuild between press and release would drop the pressed widget.
             let hovered = theme.background.action.primary.hovered;
-            let view = item.clone();
+            let view = self.hold(&item);
             item.on_hover(move |cx, on| {
-                view.bg(if on { hovered } else { Color::TRANSPARENT });
-                cx.app().request_redraw();
+                if let Some(view) = view.upgrade() {
+                    view.bg(if on { hovered } else { Color::TRANSPARENT });
+                    cx.app().request_redraw();
+                }
             });
         }
         let weak = Rc::downgrade(self);
@@ -577,10 +591,12 @@ impl Bar {
             theme.text.action.primary.base
         }));
         if !disabled {
-            let (high, target) = (theme.background.raised.high, view.clone());
+            let (high, target) = (theme.background.raised.high, self.hold(&view));
             view.on_hover(move |cx, on| {
-                target.bg(if on { high } else { Color::TRANSPARENT });
-                cx.app().request_redraw();
+                if let Some(target) = target.upgrade() {
+                    target.bg(if on { high } else { Color::TRANSPARENT });
+                    cx.app().request_redraw();
+                }
             });
         }
         let weak = Rc::downgrade(self);

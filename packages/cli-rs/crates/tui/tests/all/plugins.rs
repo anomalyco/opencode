@@ -431,6 +431,28 @@ fn the_tui_disposes_its_plugins_as_it_exits() {
     assert_eq!(DISPOSED_WITH.take().as_deref(), Some("9.9.9"));
 }
 
+// Expected (R2-1): a plugin toggled in the plugin manager mounts the route again, and the route view it replaced and
+// the closed manager are freed with every widget they showed.
+#[test]
+fn toggling_a_plugin_frees_the_view_and_the_manager() {
+    let h = open(session_route(), "Here:\n\n```sample\nhello plugin\n```", &build("still"));
+    h.wait_for("SAMPLE v1 HELLO PLUGIN");
+    let marker = Rc::new(());
+    for status in [opencode_plugin::Status::Inactive, opencode_plugin::Status::Active] {
+        assert!(support::mark(&h.app, &h.tui.frame.main(), 0, &marker) > 0);
+        h.tui.keymap.dispatch("plugins.list", None);
+        h.wait_for("able enter");
+        // The host, its backdrop and its panel stay for the next dialog.
+        assert!(support::mark(&h.app, h.tui.dialogs.host(), 2, &marker) > 0);
+        h.app.press("enter");
+        h.wait("the plugin toggled", || h.status() == status);
+        h.app.press("escape");
+        h.app.render();
+    }
+    h.wait_for("SAMPLE v1 HELLO PLUGIN");
+    assert_eq!(Rc::strong_count(&marker), 1);
+}
+
 // Expected: once a plugin panics, the fences it drew before fall back to the code view too, as `docs/P.4.md` says.
 #[test]
 fn a_panic_turns_the_fences_already_drawn_back_into_code() {

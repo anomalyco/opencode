@@ -307,9 +307,9 @@ pub fn pane(
         let hover = theme.background.raised.high;
         let container =
             View::new(app).column().width(Length::percent(100.0)).height(1).shrink(0.0).bg(base).child(&line);
-        let hovered = container.clone();
+        // The line fills the row. A handler holding the row itself would keep the row alive forever.
         container.on_hover(move |cx, over| {
-            hovered.bg(if over { hover } else { base });
+            line.bg(if over { hover } else { base });
             cx.request_redraw();
         });
         if let Some(file) = row.file {

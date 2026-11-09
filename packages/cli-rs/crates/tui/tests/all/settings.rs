@@ -8,6 +8,8 @@
 
 use crate::support::{self, WAIT, wait_for};
 
+use std::rc::Rc;
+
 use opencode_local::cli_config::CliConfig;
 use opencode_parity::{Fixture, compare, fixtures_dir};
 use opencode_tui::app::Roots;
@@ -257,6 +259,23 @@ fn the_devtools_bar_follows_the_setting_and_opens_panels() {
     app.press("right");
     app.press("escape");
     assert!(!app.text().contains("Experiments"), "{}", app.text());
+}
+
+// Expected (R2-1): the devtools bar draws its items and panels again on each change, and frees the ones it replaced.
+#[test]
+fn the_devtools_bar_frees_what_it_draws_again() {
+    let app = TestApp::new(100, 30);
+    let _tui = support::mount_empty(&app, support::component_info(json!({ "debug": { "devtools": true } })), None);
+    let bar = wait_for(&app, "Experiments").lines().last().unwrap().to_owned();
+    let marker = Rc::new(());
+    // A label and its item.
+    support::mark_at(&app, "Theme", 2, &marker);
+    app.click(column(&bar, "Tools"), app.size().1 - 1);
+    wait_for(&app, "[ ] Time to first draw");
+    support::mark_at(&app, "[ ] Time to first draw", 2, &marker);
+    app.press("escape");
+    app.render();
+    assert_eq!(Rc::strong_count(&marker), 1);
 }
 
 // P-FILE ------------------------------------------------------------------------------------------------------

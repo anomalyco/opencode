@@ -765,6 +765,21 @@ fn the_home_notice_opens_the_dialog_and_skip_hides_it_for_good() {
     wait_for(&app, "/exit restart to use v2.0.29");
 }
 
+// Expected (R2-1): the home notice draws its row again on each change, and frees the row it replaced.
+#[test]
+fn the_home_notice_frees_the_row_it_replaces() {
+    let app = TestApp::new(80, 30);
+    let (tui, _updater) = with_updater(&app, Some(mount(&app, support::component_info(json!({})))));
+    update_notification::client_notice(&tui, available("2.0.28"));
+    wait_for(&app, "to install v2.0.28");
+    let marker = Rc::new(());
+    // The text, its line, and the row.
+    support::mark_at(&app, "/update", 3, &marker);
+    update_notification::client_notice(&tui, available("2.0.29"));
+    wait_for(&app, "to install v2.0.29");
+    assert_eq!(Rc::strong_count(&marker), 1);
+}
+
 #[test]
 fn without_an_updater_there_is_no_update_command_or_notice() {
     let app = TestApp::new(80, 30);
