@@ -129,7 +129,6 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Op
         },
         SelectAction {
             title: Rc::new(favorite_title),
-            hidden: !connected,
             ..SelectAction::new("model.dialog.favorite", "Favorite", {
                 bind!(local, |local, option| local.toggle_favorite(&option.value))
             })
@@ -233,7 +232,7 @@ fn catalog_options(
         .map(|model| {
             let value = Model::new(&model.provider_id.0, &model.id);
             let name = provider_name(&model.provider_id.0);
-            let favorite = connected && favorite_now.contains(&value);
+            let favorite = favorite_now.contains(&value);
             Row {
                 provider_id: model.provider_id.0.clone(),
                 provider_name: name.clone(),
@@ -279,6 +278,10 @@ fn catalog_options(
                 option
             })
             .collect();
+    }
+    if !connected {
+        prioritize(&mut rows, |row| &row.value, &favorite_priority);
+        return rows.into_iter().map(to_option).collect();
     }
     let (free, paid): (Vec<Row>, Vec<Row>) = rows.into_iter().partition(|row| row.category.as_deref() == Some("Free"));
     favorite_options
