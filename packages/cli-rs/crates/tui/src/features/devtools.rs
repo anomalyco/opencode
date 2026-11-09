@@ -152,9 +152,10 @@ struct Bar {
     dump: RefCell<Option<Result<String, String>>>,
     focus: RefCell<Option<AnyWidget>>,
     first_draw: Cell<Option<f64>>,
-    /// The items and actions their hover handlers restyle, until the next render. The handlers hold them weakly: a
-    /// widget whose handler holds the widget is never freed.
-    hovers: RefCell<Vec<Rc<View>>>,
+    /// The items and actions of this render and of the one before. Their hover handlers hold them weakly, since a
+    /// widget whose handler holds the widget is never freed; the previous render's stay so that a release after a
+    /// redraw still reaches the item it pressed.
+    shown: RefCell<[Vec<Rc<View>>; 2]>,
     _layer: RefCell<Option<Disposer>>,
 }
 
@@ -174,7 +175,7 @@ pub fn mount(tui: &Rc<Tui>, parent: &View) {
         dump: RefCell::new(None),
         focus: RefCell::new(None),
         first_draw: Cell::new(None),
-        hovers: RefCell::default(),
+        shown: RefCell::default(),
         _layer: RefCell::new(None),
     });
     install_escape(tui, &bar);
@@ -310,7 +311,9 @@ impl Bar {
         let app = &tui.app;
         let theme = tui.page();
         self.root.clear();
-        self.hovers.borrow_mut().clear();
+        let mut shown = self.shown.borrow_mut();
+        shown[1] = std::mem::take(&mut shown[0]);
+        drop(shown);
         self.root.visible(enabled(&info));
         if !enabled(&info) {
             if self.panel.take().is_some() {
@@ -416,7 +419,7 @@ impl Bar {
     fn hold(&self, view: &View) -> std::rc::Weak<View> {
         let held = Rc::new(view.clone());
         let weak = Rc::downgrade(&held);
-        self.hovers.borrow_mut().push(held);
+        self.shown.borrow_mut()[0].push(held);
         weak
     }
 
@@ -425,14 +428,14 @@ impl Bar {
     fn item(self: &Rc<Self>, tui: &Tui, active: bool, panel: Option<Panel>) -> View {
         let theme = tui.page();
         let item = View::new(&tui.app).row().height(1).padding_x(1);
+        let held = self.hold(&item);
         if active {
             item.z_index(2500).bg(theme.background.action.primary.focused);
         } else {
             // Restyled in place: a rebuild between press and release would drop the pressed widget.
             let hovered = theme.background.action.primary.hovered;
-            let view = self.hold(&item);
             item.on_hover(move |cx, on| {
-                if let Some(view) = view.upgrade() {
+                if let Some(view) = held.upgrade() {
                     view.bg(if on { hovered } else { Color::TRANSPARENT });
                     cx.app().request_redraw();
                 }
@@ -590,8 +593,9 @@ impl Bar {
         } else {
             theme.text.action.primary.base
         }));
+        let target = self.hold(&view);
         if !disabled {
-            let (high, target) = (theme.background.raised.high, self.hold(&view));
+            let high = theme.background.raised.high;
             view.on_hover(move |cx, on| {
                 if let Some(target) = target.upgrade() {
                     target.bg(if on { high } else { Color::TRANSPARENT });
