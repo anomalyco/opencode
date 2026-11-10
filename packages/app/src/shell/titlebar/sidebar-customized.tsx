@@ -51,6 +51,9 @@ const ViewState = Persistence.struct({
 
 const RECENT_STEP = 5
 
+// One ungrouped list holds every project's sessions, so it shows more before "Show more".
+const RECENT_STEP_UNGROUPED = 10
+
 const ARCHIVED_LIMIT = 50
 
 type Row = SidebarRow & {
@@ -378,7 +381,9 @@ export function SidebarCustomized(props: {
 
     const topLevel = footerRows.filter((row) => anchorOf(row, byKey) === row)
 
-    const limit = local.limits[group.key] ?? RECENT_STEP
+    const step = group.kind === "all" ? RECENT_STEP_UNGROUPED : RECENT_STEP
+
+    const limit = local.limits[group.key] ?? step
 
     const shown = new Set(topLevel.slice(0, limit))
 
@@ -398,7 +403,7 @@ export function SidebarCustomized(props: {
               variant="ghost-muted"
               size="small"
               class="ms-[23px] self-start"
-              onClick={() => setLocal("limits", group.key, limit + RECENT_STEP)}
+              onClick={() => setLocal("limits", group.key, limit + step)}
             >
               {language.t("sidebar.organize.showMore")}
             </Button>
