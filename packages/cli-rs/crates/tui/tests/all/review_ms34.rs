@@ -384,7 +384,8 @@ fn startup_agent_and_model_reach_the_selection() {
 // (`local.tsx:184-196,266-283`, `app.tsx:666-686`).
 #[test]
 fn startup_model_keeps_a_saved_session_model_and_leads_the_fallback() {
-    let h = mount(session_route("ses_m"), Args { model: Some("demo/other".into()), ..Args::default() }, animations_off());
+    let h =
+        mount(session_route("ses_m"), Args { model: Some("demo/other".into()), ..Args::default() }, animations_off());
     h.wait_for("Saved model");
     h.wait("the recent model", || h.tui.local.recent() == [Model::new("demo", "other")]);
     assert_eq!(h.tui.local.current(), Some(Model::new("opencode", "big")));

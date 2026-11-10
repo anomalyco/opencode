@@ -48,6 +48,8 @@ struct Inner {
     placed: Cell<Place>,
     /// Whether a plugin panel of this session showed at the last layout.
     panel_shown: Cell<bool>,
+    /// The terminal of this session shown at the last layout.
+    terminal: RefCell<Option<String>>,
     layers: RefCell<Vec<Disposer>>,
 }
 
@@ -111,6 +113,7 @@ pub fn mount(tui: &Tui, row: &View, session: &SessionID) -> Sidebar {
         open: Cell::new(false),
         placed: Cell::new(Place::Hidden),
         panel_shown: Cell::new(false),
+        terminal: RefCell::default(),
         layers: RefCell::default(),
     });
     let weak = Rc::downgrade(&inner);
@@ -183,12 +186,20 @@ impl Inner {
         if panel {
             return false;
         }
+        // So does a terminal that opens; it takes the pane unless the toggle opened the sidebar.
+        let terminal = tui.terminals.selected(&self.session.0);
+        if terminal.is_some() && self.terminal.replace(terminal.clone()) != terminal {
+            self.open.set(false);
+        }
+        if terminal.is_none() {
+            self.terminal.replace(None);
+        }
         let child =
             tui.data.read(|state| state.session(&self.session).is_some_and(|session| session.parent_id.is_some()));
         if child {
             return false;
         }
-        self.open.get() || (setting(tui) == SidebarSetting::Auto && Self::wide(tui))
+        self.open.get() || (terminal.is_none() && setting(tui) == SidebarSetting::Auto && Self::wide(tui))
     }
 
     fn layout(&self, tui: &Tui) {
@@ -237,6 +248,9 @@ impl Inner {
         if !visible && tui.panels.current().is_some_and(|panel| panel.session == self.session.0) {
             tui.panels.close(tui);
             self.panel_shown.set(false);
+        }
+        if !visible && tui.terminals.selected(&self.session.0).is_some() {
+            crate::terminal::select(tui, &self.session.0, None, true);
         }
         self.layout(tui);
     }

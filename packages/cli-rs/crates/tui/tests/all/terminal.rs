@@ -64,6 +64,10 @@ struct Terminal {
 deref_harness!(Terminal);
 
 fn mount(persistent_pty: bool, selection: Option<Value>) -> Terminal {
+    mount_at(100, persistent_pty, selection)
+}
+
+fn mount_at(width: u16, persistent_pty: bool, selection: Option<Value>) -> Terminal {
     let home = opencode_util::temp::tempdir().unwrap();
     let paths = support::home_paths(home.path());
     let tui_state = paths.state.join(CHANNEL).join("tui");
@@ -79,7 +83,7 @@ fn mount(persistent_pty: bool, selection: Option<Value>) -> Terminal {
         events: true,
         ..support::deps(Arc::new(memory.clone()))
     };
-    let harness = support::mount(100, 30, deps);
+    let harness = support::mount(width, 30, deps);
     let remotes: Arc<Mutex<Vec<Remote>>> = Arc::default();
     let opened = remotes.clone();
     harness.tui.terminals.set_connector(Arc::new(move |_| {
@@ -177,6 +181,28 @@ fn input_written_before_the_pane_mounts_waits_for_the_replay_and_replaces_the_cl
     harness.app.wait_until(Duration::from_millis(200), || false);
     // `processStream`: pending input goes out instead of the size-only claim.
     assert_eq!(harness.frames(1), [[&[1, 0, 48, 0, 29][..], b"pwd\r"].concat()]);
+}
+
+// `session-frame.tsx:93-130`: one right pane. A terminal that opens closes the docked sidebar, and the sidebar
+// toggle closes the terminal.
+#[test]
+fn the_terminal_and_the_docked_sidebar_take_turns() {
+    let harness = mount_at(140, true, None);
+    // The docked sidebar shows the title at its left padding, two columns into its 42.
+    let docked = |harness: &Terminal| {
+        harness.app.render();
+        harness.app.text().lines().any(|line| line.chars().skip(100).collect::<String>().starts_with("Fix the parser"))
+    };
+    assert!(harness.wait(docked), "{}", harness.app.text());
+    assert!(
+        harness.wait(|harness| { !harness.requests("GET", "/api/experimental/session/ses_a/terminal").is_empty() })
+    );
+    harness.run("terminal.toggle");
+    assert!(harness.wait(|harness| harness.selection()["sessions"]["ses_a"] == "pty_1"));
+    assert!(harness.wait(|harness| !docked(harness)), "{}", harness.app.text());
+    harness.tui.keymap.dispatch("session.sidebar.toggle", None);
+    assert!(harness.wait(|harness| harness.selection()["sessions"]["ses_a"].is_null()));
+    assert!(harness.wait(docked), "{}", harness.app.text());
 }
 
 #[test]
