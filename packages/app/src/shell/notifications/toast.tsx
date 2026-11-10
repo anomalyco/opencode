@@ -9,7 +9,7 @@ type AppToastOptions = Omit<ToastOptions, "icon"> & {
   icon?: IconProps["name"]
 }
 
-export function ToastRegion() {
+export function ToastRegion(props: { pauseWhenPageIsHidden?: boolean }) {
   const language = useLanguage()
 
   // A write can fail before this region mounts, so the notice waits in storage state until shown once.
@@ -23,7 +23,7 @@ export function ToastRegion() {
     })
   })
 
-  return <Toast.Region />
+  return <Toast.Region pauseWhenPageIsHidden={props.pauseWhenPageIsHidden} />
 }
 
 function showAppToast(options: AppToastOptions | string) {

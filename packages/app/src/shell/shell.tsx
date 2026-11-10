@@ -321,7 +321,10 @@ export default function Layout(props: ParentProps) {
           Last in order, so it stays below a bottom titlebar (also order-last, but earlier in the DOM). */}
       <div data-slot="composer-touch-bar-mount" class="order-last shrink-0" />
       <PluginSlot at="window.bottom" input={{}} />
-      <ToastRegion />
+      {/* An Electron renderer can report itself hidden while its window is on screen: the window is created with
+          `show: false` and revealed later, and no `visibilitychange` arrives to lift the pause. A toast then waits
+          on a timer that never resumes, so the desktop build lets it expire and the web build keeps the default. */}
+      <ToastRegion pauseWhenPageIsHidden={platform.platform === "desktop" ? false : undefined} />
       <UploadToastHost />
     </div>
   )
