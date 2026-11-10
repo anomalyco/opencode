@@ -106,14 +106,12 @@ const write = (href: string, body: string) => Bun.write(path.join(output, href),
 // The files the server render emitted that pages link (the fonts they preload and declare), beside the
 // client build's; the render's own code stays in the cache.
 const emitted = new Set<string>()
-const images = new Set<string>()
 await Promise.all([
   ...docsSets.flatMap((set) =>
     render.docsSlugs[set.id].map(async (slug) => {
       const html = await render.renderDocsPage(set, slug, assets)
       if (html === undefined) throw new Error(`docs: ${set.base}${slug} did not render`)
       for (const match of html.matchAll(/\/docs\/_build\/([^"')\s]+)/g)) emitted.add(match[1])
-      for (const match of html.matchAll(/\/v1\/docs\/assets\/([^"')\s]+)/g)) images.add(match[1])
       await write(`${docsHref(slug, set).replace(/\/?$/, "/")}index.html`, html)
       const markdown = await render.renderDocsMarkdown(set, slug)
       if (markdown !== undefined) await write(docsMarkdownHref(slug, set), markdown)
@@ -123,13 +121,8 @@ await Promise.all([
   write(`${v1Docs.base}llms.txt`, render.renderLlmsTxt(site, v1Docs, [await render.v1EnglishSection()])),
   // Only the latest docs are in the sitemap: the V1 docs are noindex.
   write(`${base}sitemap.xml`, render.renderSitemap(site)),
-  // The logos, favicon and generated files the pages link (the site build has copied them already).
-  cp(path.join(root, "public", base), path.join(output, base), { recursive: true }),
-  // The V1 docs' theme schema, from their Starlight app until it is retired.
-  Bun.write(
-    path.join(output, v1Docs.base, "theme.json"),
-    Bun.file(path.join(root, "../../packages/web/public/theme.json")),
-  ),
+  // The logos, images, favicon and generated files the pages link (the site build has copied them already).
+  ...docsSets.map((set) => cp(path.join(root, "public", set.base), path.join(output, set.base), { recursive: true })),
 ])
 
 await Promise.all(
@@ -137,15 +130,6 @@ await Promise.all(
     const source = Bun.file(path.join(cache, "render/_build", file))
     if (await source.exists()) await Bun.write(path.join(output, base, "_build", file), source)
   }),
-)
-// The images the V1 pages show, from their Starlight app's assets (remark-starlight.ts).
-await Promise.all(
-  [...images].map((file) =>
-    Bun.write(
-      path.join(output, v1Docs.base, "assets", file),
-      Bun.file(path.join(root, "../../packages/web/src/assets", file)),
-    ),
-  ),
 )
 
 // One search index per set, so each searches only its own pages. The phone Contents bar repeats the
