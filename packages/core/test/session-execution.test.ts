@@ -202,7 +202,9 @@ describe("SessionExecution lifecycle", () => {
 
       expect(yield* execution.resume(sessionID).pipe(Effect.exit)).toEqual(Exit.fail(error))
       expect(yield* execution.isActive(sessionID)).toBe(false)
-      expect(failures.map((event) => event.data.error)).toEqual([{ type: "provider.transport", message: "Disconnected" }])
+      expect(failures.map((event) => event.data.error)).toEqual([
+        { type: "provider.transport", message: "Disconnected" },
+      ])
       expect((yield* claims(database))[sessionID]).toBe(false)
     }),
   )
@@ -311,65 +313,82 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
-  it.effect("does not resume a user-cancelled background child whose notification was not admitted", () =>
-    Effect.gen(function* () {
-      const database = yield* Database.Service
-      const parent = Session.ID.make("ses_cancelled_background_parent")
-      const child = Session.ID.make("ses_cancelled_background_child")
-      yield* seedSessions(database, [parent])
-      yield* seedSessions(database, [child], { parent_id: parent })
+  for (const deleted of [false, true]) {
+    it.effect(`records user cancellation before notification admission (deleted child: ${deleted})`, () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const sessions = yield* Session.Service
+        const bus = yield* Bus.Service
+        const interrupted: SessionEvent.Execution.Interrupted[] = []
+        yield* bus.project(SessionEvent.Execution.Interrupted, (event) =>
+          Effect.sync(() => void interrupted.push(event)),
+        )
+        const parent = Session.ID.make("ses_cancelled_background_parent")
+        const child = Session.ID.make("ses_cancelled_background_child")
+        yield* seedSessions(database, [parent])
+        yield* seedSessions(database, [child], { parent_id: parent })
 
-      const running = yield* Deferred.make<void>()
-      const scope = yield* Scope.make()
-      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
-      const jobs = yield* Job.make.pipe(Scope.provide(scope))
-      const context = yield* buildExecution(
-        scope,
-        () => Deferred.succeed(running, undefined).pipe(Effect.andThen(Effect.never)),
-        undefined,
-        jobs,
-      )
-      const execution = Context.get(context, SessionExecution.Service)
-      yield* jobs.start({
-        id: child,
-        type: "subagent",
-        recovery: {
-          kind: "subagent",
-          parentSessionID: parent,
-          childSessionID: child,
-          agent: "general",
-          description: "Cancelled inspection",
-        },
-        run: execution.resume(child).pipe(Effect.as("unused")),
-      })
-      yield* jobs.background(child)
-      yield* Deferred.await(running)
-      expect(yield* execution.interrupt(child)).toBeTrue()
-      yield* execution.awaitIdle(child)
-      expect((yield* jobs.wait({ id: child })).info?.status).toBe("cancelled")
-      expect(yield* jobs.pendingBackground).toMatchObject([{ id: child, status: "cancelled" }])
-      expect((yield* claims(database))[child]).toBe(false)
-      yield* Scope.close(scope, Exit.void)
+        const running = yield* Deferred.make<void>()
+        const scope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+        const jobs = yield* Job.make.pipe(Scope.provide(scope))
+        const context = yield* buildExecution(
+          scope,
+          () => Deferred.succeed(running, undefined).pipe(Effect.andThen(Effect.never)),
+          undefined,
+          jobs,
+        )
+        const execution = Context.get(context, SessionExecution.Service)
+        yield* jobs.start({
+          id: child,
+          type: "subagent",
+          recovery: {
+            kind: "subagent",
+            parentSessionID: parent,
+            childSessionID: child,
+            agent: "general",
+            description: "Cancelled inspection",
+          },
+          run: execution.resume(child).pipe(Effect.as("unused")),
+        })
+        yield* jobs.background(child)
+        yield* Deferred.await(running)
+        if (deleted) {
+          // A different execution context removes durable state, not this process-local job.
+          yield* sessions.remove(child)
+          expect(yield* jobs.get(child)).toMatchObject({ status: "running" })
+        }
+        expect(yield* execution.interrupt(child)).toBeTrue()
+        yield* execution.awaitIdle(child)
+        expect((yield* jobs.wait({ id: child })).info?.status).toBe("cancelled")
+        expect(yield* jobs.pendingBackground).toMatchObject([{ id: child, status: "cancelled" }])
+        if (deleted) expect((yield* claims(database))[child]).toBeUndefined()
+        if (!deleted) expect((yield* claims(database))[child]).toBe(false)
+        expect(interrupted.map((event) => event.data.sessionID)).toEqual(deleted ? [] : [child])
+        yield* Scope.close(scope, Exit.void)
 
-      const restartedScope = yield* Scope.make()
-      yield* Effect.addFinalizer(() => Scope.close(restartedScope, Exit.void))
-      const restartedJobs = yield* Job.make.pipe(Scope.provide(restartedScope))
-      const drained: Session.ID[] = []
-      const restarted = yield* buildExecution(
-        restartedScope,
-        ({ sessionID }) => Effect.sync(() => void drained.push(sessionID)),
-        undefined,
-        restartedJobs,
-      )
-      yield* Context.get(restarted, SessionRestart.Service).resumeSuspendedSessions
-      yield* Context.get(restarted, SessionExecution.Service).awaitIdle(parent)
-      expect(drained).toEqual([parent])
-      expect(yield* SessionInbox.list(database.db, parent)).toMatchObject([
-        { payload: { text: expect.stringContaining("Subagent cancelled"), metadata: { state: "cancelled" } } },
-      ])
-      expect(yield* restartedJobs.pendingBackground).toEqual([])
-    }),
-  )
+        const restartedScope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(restartedScope, Exit.void))
+        const restartedJobs = yield* Job.make.pipe(Scope.provide(restartedScope))
+        const drained: Session.ID[] = []
+        const restarted = yield* buildExecution(
+          restartedScope,
+          ({ sessionID }) => Effect.sync(() => void drained.push(sessionID)),
+          undefined,
+          restartedJobs,
+        )
+        yield* Context.get(restarted, SessionRestart.Service).resumeSuspendedSessions
+        yield* Context.get(restarted, SessionExecution.Service).awaitIdle(parent)
+        expect(drained).toEqual(deleted ? [] : [parent])
+        expect(yield* SessionInbox.list(database.db, parent)).toMatchObject(
+          deleted
+            ? []
+            : [{ payload: { text: expect.stringContaining("Subagent cancelled"), metadata: { state: "cancelled" } } }],
+        )
+        expect(yield* restartedJobs.pendingBackground).toEqual([])
+      }),
+    )
+  }
 
   it.effect("starts every claimed execution without waiting for earlier drains to finish", () =>
     Effect.gen(function* () {

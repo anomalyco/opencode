@@ -131,34 +131,40 @@ export const layer = Layer.effect(
       drain: (sessionID, force, promotable) => drain(sessionID, force, undefined, promotable),
       // One terminal observation per busy period, covering every coalesced drain.
       settled: (sessionID, exit, reason) =>
-        reportLifecycle(
-          sessionID,
-          Effect.gen(function* () {
-            const outcome = terminal(exit, reason)
-            if (outcome.type === "succeeded") {
-              yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, releaseOnCommit(sessionID))
-              return
-            }
-            if (outcome.type === "interrupted") {
-              // Deliberate stops release the claim; shutdown keeps it for restart continuity.
-              if (outcome.reason !== "shutdown") yield* jobs.cancel(sessionID)
-              yield* bus.publish(
+        Effect.gen(function* () {
+          const outcome = terminal(exit, reason)
+          if (outcome.type === "succeeded") {
+            yield* reportLifecycle(
+              sessionID,
+              bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, releaseOnCommit(sessionID)),
+            )
+            return
+          }
+          if (outcome.type === "interrupted") {
+            // Deliberate stops release the claim; shutdown keeps it for restart continuity.
+            if (outcome.reason !== "shutdown") yield* jobs.cancel(sessionID)
+            yield* reportLifecycle(
+              sessionID,
+              bus.publish(
                 SessionEvent.Execution.Interrupted,
                 { sessionID, reason: outcome.reason },
                 outcome.reason === "shutdown" ? undefined : releaseOnCommit(sessionID),
-              )
-              return
-            }
-            yield* bus.publish(
+              ),
+            )
+            return
+          }
+          yield* reportLifecycle(
+            sessionID,
+            bus.publish(
               SessionEvent.Execution.Failed,
               {
                 sessionID,
                 error: outcome.error,
               },
               releaseOnCommit(sessionID),
-            )
-          }),
-        ),
+            ),
+          )
+        }),
     })
 
     return Service.of({
