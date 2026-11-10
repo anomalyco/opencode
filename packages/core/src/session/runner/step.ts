@@ -105,7 +105,8 @@ export const make = Effect.gen(function* () {
     // A user's stop asks each tool awaiting `cancel` to stop and settle its own call, and interrupts every other
     // tool. A tool that does not settle in time is interrupted too. Teardown interrupts every tool.
     const stopTools = Effect.suspend(() => {
-      const user = input.interruption?.() === "user" && !input.isLocationClosed()
+      // A reloaded Location still serves the steps that borrow it, so its tools can stop on their own too.
+      const user = input.interruption?.() === "user"
       const immediate = toolRuns.flatMap((run) => (user && run.cancel.trigger() ? [] : [run.fiber]))
       return Fiber.interruptAll(immediate).pipe(
         Effect.andThen(Fiber.awaitAll(toolRuns.map((run) => run.fiber)).pipe(Effect.timeoutOption(COOPERATIVE_STOP))),
@@ -356,9 +357,11 @@ const COOPERATIVE_STOP = "5 seconds"
 
 type Cancel = ReturnType<typeof makeCancel>
 
-// A tool call's `cancel`. `trigger` completes it, and reports whether the tool was awaiting it, so would stop on its
-// own; a tool that was not is interrupted instead.
-const makeCancel = () => {
+/**
+ * A tool call's `cancel`. `trigger` completes it, and reports whether the tool was awaiting it, so would stop on its
+ * own; a tool that was not is interrupted instead.
+ */
+export const makeCancel = () => {
   let listeners = 0
   let cancelled = false
   const gate = Deferred.makeUnsafe<void>()

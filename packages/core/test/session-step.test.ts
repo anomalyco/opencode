@@ -319,52 +319,51 @@ const stopTwoTools = (how: { reason: "user" | "shutdown"; locationClosed: boolea
     return { exit, data: message?.data, requests: (yield* llm.requests()).length, interrupted }
   })
 
-it.live("lets a tool the user stopped fail with its own error and interrupts the others at once", () =>
+for (const locationClosed of [false, true])
+  it.live(
+    `lets a tool the user stopped fail with its own error and interrupts the others at once${locationClosed ? ", after a Location reload" : ""}`,
+    () =>
+      Effect.gen(function* () {
+        const started = Date.now()
+        const { exit, data, requests, interrupted } = yield* stopTwoTools({ reason: "user", locationClosed })
+        expect(Exit.hasInterrupts(exit)).toBe(true)
+        expect(requests).toBe(1)
+        expect(interrupted).toBe(true)
+        expect(Date.now() - started).toBeLessThan(2_000)
+        expect(data).toMatchObject({
+          error: { type: "aborted", message: "Step interrupted" },
+          content: [
+            {
+              type: "tool",
+              id: "call-cooperative",
+              state: {
+                status: "error",
+                error: { type: "tool.execution", message: "partial output" },
+                metadata: { interrupted: true },
+              },
+            },
+            {
+              type: "tool",
+              id: "call-stuck",
+              state: { status: "error", error: { type: "aborted", message: "Tool execution interrupted" } },
+            },
+          ],
+        })
+      }),
+  )
+
+it.live("interrupts every tool on a server shutdown", () =>
   Effect.gen(function* () {
-    const started = Date.now()
-    const { exit, data, requests, interrupted } = yield* stopTwoTools({ reason: "user", locationClosed: false })
+    const { exit, data, requests } = yield* stopTwoTools({ reason: "shutdown", locationClosed: false })
     expect(Exit.hasInterrupts(exit)).toBe(true)
     expect(requests).toBe(1)
-    expect(interrupted).toBe(true)
-    expect(Date.now() - started).toBeLessThan(2_000)
+    const generic = { status: "error", error: { type: "aborted", message: "Tool execution interrupted" } }
     expect(data).toMatchObject({
       error: { type: "aborted", message: "Step interrupted" },
       content: [
-        {
-          type: "tool",
-          id: "call-cooperative",
-          state: {
-            status: "error",
-            error: { type: "tool.execution", message: "partial output" },
-            metadata: { interrupted: true },
-          },
-        },
-        {
-          type: "tool",
-          id: "call-stuck",
-          state: { status: "error", error: { type: "aborted", message: "Tool execution interrupted" } },
-        },
+        { type: "tool", id: "call-cooperative", state: generic },
+        { type: "tool", id: "call-stuck", state: generic },
       ],
     })
   }),
 )
-
-for (const how of [
-  { name: "a server shutdown", reason: "shutdown" as const, locationClosed: false },
-  { name: "a closed Location", reason: "user" as const, locationClosed: true },
-])
-  it.live(`interrupts every tool on ${how.name}`, () =>
-    Effect.gen(function* () {
-      const { exit, data, requests } = yield* stopTwoTools(how)
-      expect(Exit.hasInterrupts(exit)).toBe(true)
-      expect(requests).toBe(1)
-      const generic = { status: "error", error: { type: "aborted", message: "Tool execution interrupted" } }
-      expect(data).toMatchObject({
-        error: { type: "aborted", message: "Step interrupted" },
-        content: [
-          { type: "tool", id: "call-cooperative", state: generic },
-          { type: "tool", id: "call-stuck", state: generic },
-        ],
-      })
-    }),
-  )

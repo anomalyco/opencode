@@ -2119,6 +2119,25 @@ describe("ShellTool stopped", () => {
       )
     }))
 
+  test("ends a call the user stopped before its command started, without starting it", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const shell = yield* Shell.Service
+          const result = yield* executeTool(registry, {
+            ...call({ command: "printf started > started" }, "call-early-stop"),
+            // Already stopped, as when the user stops the step while the call waits for permission.
+            cancel: Effect.void,
+          })
+          expect(result.error?.message).toContain("Command interrupted by the user before it started.")
+          expect(yield* shell.list()).toEqual([])
+          expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "started")).exists())).toBe(false)
+        }),
+      )
+    }),
+  )
+
   test("says once that a stopped command wrote nothing", () =>
     withTempDir((tmp) => {
       reset()
