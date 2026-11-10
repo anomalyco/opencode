@@ -21,6 +21,8 @@ export type BackgroundActivity = Settings["general"]["backgroundActivity"]
 
 export type TimelineWidth = Settings["general"]["timelineWidth"]
 
+export type SidebarOrganize = Settings["general"]["sidebarOrganize"]
+
 export type TabLayout = Settings["appearance"]["tabLayout"]
 
 export type ReduceMotion = Settings["appearance"]["reduceMotion"]
@@ -133,7 +135,7 @@ const generalSchema = Persistence.struct({
   foldUserMessages: Schema.Boolean,
   // The redesigned keyboard-first question dock, off until it ships.
   newQuestionUI: Schema.Boolean,
-  sidebarOrganize: Schema.Literals(["projects", "list"]),
+  sidebarOrganize: Schema.Literals(["projects", "list", "customize"]),
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
   // Owned by the review plugin, which copies it out once; kept so settings rewrites cannot drop it first.
   mobileDiffWrap: Persistence.optional(Schema.Boolean),
@@ -427,7 +429,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
           setStore("general", "newQuestionUI", value)
         },
         sidebarOrganize: withFallback(() => store.general?.sidebarOrganize, defaultSettings.general.sidebarOrganize),
-        setSidebarOrganize(value: "projects" | "list") {
+        setSidebarOrganize(value: SidebarOrganize) {
           setStore("general", "sidebarOrganize", value)
         },
         mobileTitlebarPosition: withFallback(

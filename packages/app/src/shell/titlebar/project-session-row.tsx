@@ -34,6 +34,10 @@ export function ProjectSessionRow(props: {
   session: SessionInfo
   openTab: boolean
   active: boolean
+  /** A faint trailing label, such as the server a session belongs to. */
+  label?: string
+  /** Extra nesting steps of 14px, for subagent sessions and nested groups. */
+  depth?: number
   onOpen: () => void
 }) {
   const language = useLanguage()
@@ -125,6 +129,7 @@ export function ProjectSessionRow(props: {
         classList={{ "text-v2-text-text-base": props.active, "text-v2-text-text-faint": !props.active }}
         aria-current={props.active ? "page" : undefined}
         title={sessionLabel(props.session)}
+        style={props.depth ? { "padding-inline-start": `calc(2rem + ${props.depth * 14}px)` } : undefined}
         onClick={props.onOpen}
       >
         <Show when={props.openTab}>
@@ -140,6 +145,13 @@ export function ProjectSessionRow(props: {
         <span class="min-w-0 flex-1 truncate" dir="auto">
           {sessionLabel(props.session)}
         </span>
+        <Show when={props.label}>
+          {(label) => (
+            <span class="max-w-[40%] shrink-0 truncate text-[11px] leading-[var(--line-height-compact)] text-v2-text-text-faint [font-weight:400]">
+              {label()}
+            </span>
+          )}
+        </Show>
         <span class="flex size-4 shrink-0 items-center justify-center">
           <Show
             when={status.loading()}

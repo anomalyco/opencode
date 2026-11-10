@@ -16,8 +16,10 @@ import { useSettings } from "@/settings/model"
 import { WindowsAppMenu } from "./windows-menu"
 import { createTitlebarHistory } from "./history"
 import { TitlebarTabStrip } from "@/shell/titlebar/tab-strip"
+import type { SidebarStripGrouping } from "@/shell/titlebar/sidebar-customized"
 import { macVerticalTrafficLights, SidebarToggle } from "@/shell/sidebar-toggle"
 import { SidebarInbox } from "@/shell/titlebar/inbox"
+import { SidebarCustomized } from "@/shell/titlebar/sidebar-customized"
 import { SidebarOrganized } from "@/shell/titlebar/sidebar-organized"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
@@ -206,7 +208,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             createEffect(() => {
               if (
                 settings.appearance.tabLayout() === "vertical" &&
-                settings.general.sidebarOrganize() === "projects" &&
+                settings.general.sidebarOrganize() !== "list" &&
                 !mobile()
               )
                 return
@@ -305,10 +307,17 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
             const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
 
-            const verticalTabStrip = (highlightActive?: () => boolean, onNavigate?: () => void) => (
+            const verticalTabStrip = (
+              highlightActive?: () => boolean,
+              onNavigate?: () => void,
+              grouped?: SidebarStripGrouping,
+            ) => (
               <TitlebarTabStrip
                 orientation="vertical"
                 highlightActive={highlightActive?.()}
+                sections={grouped?.sections}
+                tabFooter={grouped?.tabFooter}
+                tabLabel={grouped?.tabLabel}
                 tabs={tabsStore}
                 currentTab={currentTab()}
                 onNavigate={(tab, el) => {
@@ -802,12 +811,16 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               <Show
                                 when={settings.appearance.tabLayout() === "inbox"}
                                 fallback={
-                                  <Show
-                                    when={settings.general.sidebarOrganize() === "projects"}
-                                    fallback={verticalTabStrip()}
-                                  >
-                                    <SidebarOrganized currentTab={currentTab()}>{verticalTabStrip}</SidebarOrganized>
-                                  </Show>
+                                  <Switch fallback={verticalTabStrip()}>
+                                    <Match when={settings.general.sidebarOrganize() === "projects"}>
+                                      <SidebarOrganized currentTab={currentTab()}>{verticalTabStrip}</SidebarOrganized>
+                                    </Match>
+                                    <Match when={settings.general.sidebarOrganize() === "customize"}>
+                                      <SidebarCustomized currentTab={currentTab()} onNewSession={openNewTab}>
+                                        {(grouped) => verticalTabStrip(undefined, undefined, grouped)}
+                                      </SidebarCustomized>
+                                    </Match>
+                                  </Switch>
                                 }
                               >
                                 <SidebarInbox />

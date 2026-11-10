@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test"
 import {
   REMOTE_SERVER,
   SERVER,
+  T0,
   expectPath,
   holdRoute,
   project,
@@ -385,4 +386,80 @@ test("a project's auto-accept choice overrides the default in both directions", 
   await settings.locator('[data-action="settings-project-auto-accept-permissions"]').click()
   await page.getByRole("option", { name: "Use default (On)" }).click()
   await expect.poll(() => replies).toEqual(["permission-api", "permission-web"])
+})
+
+test("customized vertical sidebar merges a project across servers and narrows it with the view menu", async ({
+  page,
+}) => {
+  // The same repo on two machines shares its project ID, so both servers' sessions share one group.
+  const shared = (directory: string) => project({ id: "proj_shared", directory, name: "shared" })
+
+  const local = session({ id: "ses_local_open", directory: directoryA, title: "Local open", projectID: "proj_shared" })
+
+  const recent = session({
+    id: "ses_local_recent",
+    directory: directoryA,
+    title: "Local recent",
+    projectID: "proj_shared",
+    created: T0 - 60_000,
+  })
+
+  const remote = session({
+    id: "ses_remote_open",
+    directory: directoryB,
+    title: "Remote open",
+    projectID: "proj_shared",
+  })
+
+  const config = (directory: string, sessions: ReturnType<typeof session>[]) => ({
+    directory,
+    project: shared(directory),
+    provider: { all: [], connected: [], default: {} },
+    sessions,
+    pageMessages: () => ({ items: [] }),
+  })
+
+  await mockServers(page, {
+    [SERVER]: config(directoryA, [local, recent]),
+    [REMOTE_SERVER]: config(directoryB, [remote]),
+  })
+  await seed(page, {
+    servers: [REMOTE_SERVER],
+    tabs: [local.id, { session: remote.id, server: REMOTE_SERVER }],
+    settings: { appearance: { tabLayout: "vertical" }, general: { sidebarOrganize: "customize" } },
+  })
+  await page.goto(sessionHref(local.id))
+  await expectSessionTitle(page, local.title)
+
+  const sidebar = page.locator('[data-slot="vertical-tabs"]')
+
+  const groups = sidebar.locator("[data-sidebar-group]")
+
+  const titles = sidebar.locator("[data-titlebar-tab-slot] [data-titlebar-tab-title]")
+
+  await expect(groups).toHaveText([/shared\s*2/])
+  await expect(titles).toHaveText([local.title, remote.title])
+  // Only the tab from the other machine names its server.
+  await expect(sidebar.locator('[data-slot="tab-label"]')).toHaveCount(1)
+  await expect(sidebar.getByRole("button", { name: recent.title })).toBeVisible()
+
+  const menu = page.getByRole("menu")
+
+  await page.getByRole("button", { name: "View options" }).click()
+  await menu.getByRole("menuitem", { name: /^Grouping/ }).click()
+  await page.getByRole("menuitemradio", { name: "Server → Project" }).click()
+  await page.keyboard.press("Escape")
+  await expect(groups).toHaveCount(4)
+  await expect(sidebar.locator('[data-slot="tab-label"]')).toHaveCount(0)
+
+  // A server filter hides the other server's rows, but never the active tab.
+  await page.getByRole("button", { name: "View options" }).click()
+  await page.getByRole("menuitem", { name: /^Server/ }).click()
+  await page.getByRole("menuitemcheckbox").last().click()
+  await page.keyboard.press("Escape")
+  await page.keyboard.press("Escape")
+  await expect(titles).toHaveText([local.title, remote.title])
+  await expect(sidebar.getByRole("button", { name: recent.title })).toHaveCount(0)
+  await page.getByRole("button", { name: /^Remove filter/ }).click()
+  await expect(sidebar.getByRole("button", { name: recent.title })).toBeVisible()
 })
