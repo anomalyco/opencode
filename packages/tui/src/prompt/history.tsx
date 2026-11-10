@@ -203,6 +203,7 @@ const { use: useHistoryEntries, provider: PromptHistoryProvider } = createSimple
   init: () => {
     const paths = useTuiPaths()
     const historyPath = path.join(paths.state, "prompt-history.jsonl")
+    const loaded = Promise.withResolvers<void>()
     onMount(async () => {
       const lines = parsePromptHistory(await readText(historyPath).catch(() => ""))
       setStore("history", lines)
@@ -211,17 +212,21 @@ const { use: useHistoryEntries, provider: PromptHistoryProvider } = createSimple
       if (lines.length > 0)
         await writeText(historyPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
       await prunePromptMedia(paths.state)
+      loaded.resolve()
     })
 
     const [store, setStore] = createStore({ history: [] as PromptInfo[] })
 
     return {
+      /** Settles once the entries are read and the kept videos none of them name are pruned. */
+      loaded: loaded.promise,
       get entries() {
         return store.history
       },
+      /** Returns once the entry is written, and the kept videos it no longer names are pruned. */
       append(item: PromptInfo) {
         const entry = structuredClone(persistablePrompt(unwrap(item), paths.state))
-        if (isDuplicateEntry(store.history.at(-1), entry)) return
+        if (isDuplicateEntry(store.history.at(-1), entry)) return Promise.resolve()
         let trimmed = false
         setStore(
           produce((draft) => {
@@ -233,13 +238,11 @@ const { use: useHistoryEntries, provider: PromptHistoryProvider } = createSimple
           }),
         )
 
-        if (trimmed) {
-          writeText(historyPath, store.history.map((line) => JSON.stringify(line)).join("\n") + "\n")
+        if (trimmed)
+          return writeText(historyPath, store.history.map((line) => JSON.stringify(line)).join("\n") + "\n")
             .then(() => prunePromptMedia(paths.state))
             .catch(() => {})
-          return
-        }
-        appendText(historyPath, JSON.stringify(entry) + "\n").catch(() => {})
+        return appendText(historyPath, JSON.stringify(entry) + "\n").catch(() => {})
       },
     }
   },
@@ -271,9 +274,12 @@ export function usePromptHistory(currentDraft = emptyPrompt) {
       return restored
     },
     reset,
+    /** Settles once the entries are read and the kept videos none of them name are pruned. */
+    loaded: history.loaded,
+    /** Returns once the entry is written, and the kept videos it no longer names are pruned. */
     append(item: PromptInfo) {
       reset()
-      history.append(item)
+      return history.append(item)
     },
   }
 }

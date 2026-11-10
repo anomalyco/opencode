@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import path from "path"
-import { mkdir, mkdtemp, rm } from "fs/promises"
+import { mkdir, mkdtemp, rm, stat } from "fs/promises"
 import { tmpdir } from "os"
 import { appendText, readJson, readText, writeJsonAtomic, writeText } from "../../src/util/persistence"
 
@@ -22,48 +22,31 @@ test("persistence creates parent directories and supports text, append, and JSON
   }
 })
 
-test("a reader sees the old or the new text while it is rewritten, never part of it", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "opencode-tui-persistence-"))
-  try {
-    const file = path.join(root, "prompt-history.jsonl")
-    const [old, next] = ["a", "b"].map((line) => `${line.repeat(1023)}\n`.repeat(16 * 1024))
-    await writeText(file, old!)
-    let done = false
-    const write = writeText(file, next!).finally(() => (done = true))
-    const reads: string[] = []
-    while (!done) reads.push(await readText(file))
-    await write
-    expect(reads.filter((text) => text !== old && text !== next).length).toBe(0)
-    expect(await readText(file)).toBe(next!)
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
+// So a reader sees the old or the new text, never part of it.
+test("a rewrite replaces the file instead of writing into it", async () => {
+  await using root = await temporaryRoot()
+  const file = path.join(root.path, "prompt-history.jsonl")
+  await writeText(file, "old\n")
+  const replaced = (await stat(file)).ino
+  await writeText(file, "new\n")
+  expect((await stat(file)).ino).not.toBe(replaced)
+  expect(await readText(file)).toBe("new\n")
 })
 
-test("an append made while the file is rewritten lands in the new file", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "opencode-tui-persistence-"))
-  try {
-    const file = path.join(root, "prompt-stash.jsonl")
-    await writeText(file, "A\n")
-    await Promise.all([writeText(file, ""), appendText(file, "B\n")])
-    expect(await readText(file)).toBe("B\n")
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
+// An append made during a rewrite would otherwise go to the file the rename replaces.
+test("an append made during a rewrite lands in the new file, after a failed write and under another spelling of its path", async () => {
+  await using root = await temporaryRoot()
+  const file = path.join(root.path, "prompt-stash.jsonl")
+  // A directory with an entry cannot be renamed over.
+  await mkdir(path.join(file, "entry"), { recursive: true })
+  await expect(writeText(file, "A\n")).rejects.toThrow()
+  await rm(file, { recursive: true })
+  await writeText(file, "A\n")
+  await Promise.all([writeText(path.relative(process.cwd(), file), ""), appendText(file, "B\n")])
+  expect(await readText(file)).toBe("B\n")
 })
 
-test("a write after a failed one to the same file, under any spelling of its path, still runs in order", async () => {
+async function temporaryRoot() {
   const root = await mkdtemp(path.join(tmpdir(), "opencode-tui-persistence-"))
-  try {
-    const file = path.join(root, "prompt-stash.jsonl")
-    // A directory with an entry cannot be renamed over.
-    await mkdir(path.join(file, "entry"), { recursive: true })
-    await expect(writeText(file, "A\n")).rejects.toThrow()
-    await rm(file, { recursive: true })
-    await writeText(file, "A\n")
-    await Promise.all([writeText(path.relative(process.cwd(), file), ""), appendText(file, "B\n")])
-    expect(await readText(file)).toBe("B\n")
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
-})
+  return { path: root, [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }) }
+}

@@ -61,16 +61,17 @@ function init(directory: string) {
   })
   // OpenTUI learns the pixel resolution after startup and after every resize, without an event. Some terminals never
   // report it, so stop asking 10 seconds after startup, a resize, or enabling rich media.
-  let poll: ReturnType<typeof setInterval> | undefined
+  let poll: TimerHandle | undefined
   let polls = 0
+  const stop = () => {
+    if (poll) renderer.clock.clearTimeout(poll)
+    poll = undefined
+  }
   const update = () => {
+    stop()
     setTerminal(read())
-    if (renderer.resolution || !richMedia() || polls++ >= 40) {
-      clearInterval(poll)
-      poll = undefined
-      return
-    }
-    poll ??= setInterval(update, 250)
+    if (renderer.resolution || !richMedia() || polls++ >= 40) return
+    poll = renderer.clock.setTimeout(update, 250)
   }
   const restart = () => {
     polls = 0
@@ -82,7 +83,7 @@ function init(directory: string) {
   onCleanup(() => {
     renderer.off(CliRenderEvents.CAPABILITIES, restart)
     renderer.off(CliRenderEvents.RESIZE, restart)
-    clearInterval(poll)
+    stop()
   })
 
   // Kitty frames pass through temporary files instead of base64 in the output. OpenTUI keeps sending them inline

@@ -1,4 +1,4 @@
-import type { BoxRenderable, MouseEvent, TimerHandle, VideoMetadata, VideoRenderable } from "@opentui/core"
+import type { BoxRenderable, Clock, MouseEvent, TimerHandle, VideoMetadata, VideoRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, Index, onCleanup, Show, type JSX } from "solid-js"
 import { useMedia, type MediaPlayback } from "../../context/media"
@@ -15,7 +15,7 @@ export function createTransport(start: MediaPlayback) {
   const [playing, setPlaying] = createSignal(false)
   const [tier, setTier] = createSignal(0)
   const [scrubTime, setScrubTime] = createSignal<number>()
-  const seeker = createSeekThrottle((target) => {
+  const seeker = createSeekThrottle(useRenderer().clock, (target) => {
     const video = player()
     if (!video) return
     video.seek(target)
@@ -225,10 +225,14 @@ function SeekPreview(props: {
   const height = () => Math.max(3, Math.min(10, Math.round((width() - 2) / (props.aspect * media.cellAspect()))))
   // After a scrub, its frame is from before the scrub until it catches up with where the scrub ended.
   const [behind, setBehind] = createSignal(false)
-  const seek = createSeekThrottle((time) => {
-    player?.seek(time)
-    setBehind(false)
-  }, PREVIEW_REST_MS)
+  const seek = createSeekThrottle(
+    useRenderer().clock,
+    (time) => {
+      player?.seek(time)
+      setBehind(false)
+    },
+    PREVIEW_REST_MS,
+  )
   createEffect(() => {
     if (!ready()) return
     if (props.scrubbing) {
@@ -286,8 +290,7 @@ function formatTimecode(seconds: number) {
  * twice the time the last call took. A paused seek decodes on the JS thread, so slow seeks keep it at least half free.
  * It never calls `run` twice in a row with the same time, since OpenTUI decodes even an unchanged seek again.
  */
-function createSeekThrottle(run: (time: number) => void, rest = 0) {
-  const clock = useRenderer().clock
+export function createSeekThrottle(clock: Clock, run: (time: number) => void, rest = 0) {
   let timer: TimerHandle | undefined
   const [pending, setPending] = createSignal<number>()
   let last: number | undefined

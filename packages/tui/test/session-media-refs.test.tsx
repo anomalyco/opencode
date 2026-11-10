@@ -218,7 +218,7 @@ test("/undo against a remote server sends the files the server read from its own
 
   expect((await sent.promise).files?.map((file) => file.uri)).toEqual(files.map((file) => file.source.uri))
   expect(app.calls.filter((call) => call.startsWith(MEDIA))).toEqual([])
-}, 20000)
+})
 
 // Starts an undo, leaves the session while its media read waits, then lets the read finish.
 async function undoAfterLeaving(input: { inbox: unknown[]; undo: (app: App) => Promise<void> }) {
