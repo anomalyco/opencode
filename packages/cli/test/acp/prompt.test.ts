@@ -155,6 +155,53 @@ test("a command that returns before its expanded prompt starts still streams", a
   expect((await prompt).stopReason).toBe("end_turn")
 })
 
+test("a returned command waits for an execution started after the previous terminal", async () => {
+  const gate = Promise.withResolvers<Response>()
+  await using acp = await startSession({
+    fetch: (request) => (request.method === "POST" && request.path.endsWith("/command") ? gate.promise : undefined),
+  })
+  let responded = false
+  const prompt = acp.prompt(acp.sessionId, "/review now").then((result) => {
+    responded = true
+    return result
+  })
+  await acp.until(() => acp.server.requests.some((request) => request.path.endsWith("/command")))
+  acp.server.send(
+    delivered(acp.sessionId, "msg_first"),
+    durableEvent("session.execution.started", { sessionID: acp.sessionId }),
+    textDelta(acp.sessionId, "msg_first_text", "first"),
+    succeeded(acp.sessionId),
+  )
+  await acp.waitForUpdate(
+    (item) =>
+      item.update.sessionUpdate === "agent_message_chunk" &&
+      item.update.content.type === "text" &&
+      item.update.content.text === "first",
+  )
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  acp.server.send(
+    delivered(acp.sessionId, "msg_second"),
+    durableEvent("session.execution.started", { sessionID: acp.sessionId }),
+    textDelta(acp.sessionId, "msg_second_start", "second start"),
+  )
+  await acp.waitForUpdate(
+    (item) =>
+      item.update.sessionUpdate === "agent_message_chunk" &&
+      item.update.content.type === "text" &&
+      item.update.content.text === "second start",
+  )
+  gate.resolve(new Response(null, { status: 204 }))
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  expect(responded).toBe(false)
+  acp.server.send(textDelta(acp.sessionId, "msg_second_text", "second final"), succeeded(acp.sessionId))
+  await acp.waitForUpdate(
+    (item) =>
+      item.update.sessionUpdate === "agent_message_chunk" &&
+      item.update.content.type === "text" &&
+      item.update.content.text === "second final",
+  )
+  expect((await prompt).stopReason).toBe("end_turn")
+})
 
 describe("acp prompt turns over the wire", () => {
   test("streams an admitted turn and resolves with usage after its terminal event", async () => {

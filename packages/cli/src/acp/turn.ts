@@ -242,6 +242,7 @@ export const make = Effect.fnUntraced(function* (input: {
     yield* Effect.forEach(folded.outputs, (output) => interpret(turn, output), { discard: true })
     if (turn.ctx.command && event.type === "session.execution.started") {
       yield* Deferred.succeed(turn.commandStarted, undefined)
+      yield* Ref.set(turn.commandTerminal, undefined)
     }
     if (turn.ctx.command && folded.terminal) {
       yield* Ref.set(turn.commandTerminal, folded.terminal)
