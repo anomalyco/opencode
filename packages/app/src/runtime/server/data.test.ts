@@ -393,7 +393,7 @@ test("a shutdown interruption does not refresh the session", async () => {
   }
 })
 
-test.each([true, false])("an execution end refetches the session once (already loaded: %s)", async (loaded) => {
+test.each(["loaded", "listed"] as const)("an execution end refreshes a %s root exactly once", async (source) => {
   let gets = 0
   const requested = Promise.withResolvers<void>()
   const refreshed = { ...session, time: { created: 0, updated: 50 } }
@@ -412,7 +412,8 @@ test.each([true, false])("an execution end refetches the session once (already l
   })
 
   try {
-    if (loaded) setup.seed(10)
+    if (source === "loaded") setup.seed(10)
+    else setup.data.session.apply([session])
     setup.emit("session.execution.succeeded", 50)
     await requested.promise
     await setup.data.session.sync(session.id)
@@ -421,6 +422,27 @@ test.each([true, false])("an execution end refetches the session once (already l
     const info = setup.data.session.get(session.id)
     expect(info?.time.updated).toBe(50)
     expect(setup.data.session.apply(info ? [info] : [])[0]?.time.updated).toBe(50)
+  } finally {
+    setup.dispose()
+  }
+})
+
+test.each(["child", "unknown"] as const)("an execution end skips an unloaded %s session", async (source) => {
+  let gets = 0
+
+  const setup = setupDesktop(async () => {
+    gets++
+
+    return Response.json({ data: session })
+  })
+
+  try {
+    if (source === "child") setup.data.session.apply([{ ...session, parentID: "ses_parent" }])
+    setup.emit("session.execution.succeeded", 50)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(gets).toBe(0)
+    expect(setup.data.session.get(session.id)).toBeUndefined()
   } finally {
     setup.dispose()
   }

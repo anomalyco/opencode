@@ -64,7 +64,7 @@ export function createDesktopData(input: { data: Data; remove: (sessionID: strin
         // Shutdown interruptions do not advance the projected idle/updated markers.
         if (event.type === "session.execution.interrupted" && event.data.reason === "shutdown") return
         queueMicrotask(() => {
-          if (input.data.session.get(event.data.sessionID)) return
+          if (input.data.session.get(event.data.sessionID) || !recency.wasListedRoot(event.data.sessionID)) return
           refresh(event.data.sessionID)
         })
       }),
@@ -127,6 +127,8 @@ export function createSessionRecency() {
   // Raw non-rename values already rendered, newest first. A rename with no live record recovers its pre-rename
   // value from here even when a refetched rename record landed before the SSE event.
   const observed = new Map<string, ObservedRecency>()
+  // Run-end refresh eligibility comes from list reads. A send or rename can also populate timestamp history.
+  const listedRoots = new Map<string, true>()
   let mutated = false
 
   const keep = <Key, Value>(map: Map<Key, Value>, key: Key, value: Value) => {
@@ -180,6 +182,7 @@ export function createSessionRecency() {
 
   return {
     project,
+    wasListedRoot: (sessionID: string) => listedRoots.has(sessionID),
     acceptSend(sessionID: string, info: SessionInfo | undefined, sentAt: number) {
       const previous = sends.get(sessionID)
       const renamedAt = renames.get(sessionID)?.latest ?? 0
@@ -236,7 +239,11 @@ export function createSessionRecency() {
         const updated = rawTime(info)
         const renameTime = rename?.ats.has(updated) ?? false
 
-        if (index < RECENCY_SESSION_LIMIT && !renameTime) observe(info.id, updated)
+        if (index < RECENCY_SESSION_LIMIT) {
+          if (!info.parentID) keep(listedRoots, info.id, true)
+
+          if (!renameTime) observe(info.id, updated)
+        }
 
         if (!sends.has(info.id) && !rename) continue
 
@@ -284,6 +291,7 @@ export function createSessionRecency() {
       renames.delete(sessionID)
       floors.delete(sessionID)
       observed.delete(sessionID)
+      listedRoots.delete(sessionID)
     },
   }
 }
