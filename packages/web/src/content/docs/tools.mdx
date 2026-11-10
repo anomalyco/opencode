@@ -312,6 +312,48 @@ Each question includes a header, the question text, and a list of options. Users
 
 ---
 
+### ask
+
+Ask another OpenCode session one question.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "ask": "allow"
+  }
+}
+```
+
+This tool sends one question to another top-level session and returns immediately. The question is queued into the target's inbox and wakes the target if it is idle; the target answers it with the `answer` tool when it runs, and the answer arrives as a message at your next step. You are not woken by the answer, so do not wait on it or poll for it.
+
+Use it when work spans sessions, such as checking a session that is running a background job. The only other cross-session path is parent-to-child delegation, which only reaches that session's own children.
+
+The `session` argument is an exact session ID or an exact title, resolved among top-level sessions in your project. Lookup reads session IDs and titles only. The current session, a caller or target that is a child session, and archived, cross-project, unknown, or ambiguous targets are refused. An ambiguous title is refused with up to 10 matching candidates.
+
+The target sees the question framed as data, not as a user instruction, and the answer is an observation, not approval. Each text is capped at 4000 characters, and a session pair can hold at most 3 unanswered questions, whether they are still queued or already delivered; asking an identical question while it is still unanswered is refused. These limits are computed from message metadata only, never from message text or system prompts.
+
+---
+
+### answer
+
+Answer a question another session asked you.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "answer": "allow"
+  }
+}
+```
+
+This tool replies once to a question in your session's inbox and delivers the reply to the asking session. The `replyTo` argument is the question ID from the message you received, and `answer` is your reply, capped at 4000 characters.
+
+Only the session that was asked can answer, and each question can be answered once. The reply is steered into the asking session without waking it, so it arrives at that session's next step boundary ahead of queued prompts. It reaches the asking session as data framed with its question, not as user input, so it cannot approve permissions or replace instructions.
+
+---
+
 ## Custom tools
 
 Custom tools let you define your own functions that the LLM can call. These are defined in your config file and can execute arbitrary code.
