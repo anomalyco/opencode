@@ -37,14 +37,16 @@ if (found.length) {
 const imports = new Map(
   files.map((file) => [
     file,
-    [...texts.get(file)!.matchAll(/^(?:import|export)\b[^;"']*?(?:from\s*)?["'](\.{1,2}\/[^"']+)["']/gm)].map(
-      (match) => path.posix.join(path.posix.dirname(file), match[1]),
+    [...texts.get(file)!.matchAll(/^(?:import|export)\b[^;"']*?(?:from\s*)?["'](\.{1,2}\/[^"']+)["']/gm)].map((match) =>
+      path.posix.join(path.posix.dirname(file), match[1]),
     ),
   ]),
 )
 const cycle = files.map((file) => cycleFrom(file, [file])).find(Boolean)
 if (cycle) {
-  console.error(`check-server-bundle: server files import each other, which workerd can't load:\n  ${cycle.join(" → ")}`)
+  console.error(
+    `check-server-bundle: server files import each other, which workerd can't load:\n  ${cycle.join(" → ")}`,
+  )
   process.exit(1)
 }
 console.log(`check-server-bundle: ${files.length} server files, no import cycles, no three.js/WebGL code`)

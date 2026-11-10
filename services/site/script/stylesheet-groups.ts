@@ -46,7 +46,7 @@ export function stylesheetGroups(): PluginOption {
 }
 
 /** The group a stylesheet goes in: the shell's, a group of pages', or none (it loads on demand). */
-function group(id: string, info: (id: string) => { importers: string[] } | null) {
+export function group(id: string, info: (id: string) => { importers: string[] } | null) {
   const groups = new Set<string>()
   const seen = new Set<string>()
   // Up the static imports only, to the shell and the page routes.

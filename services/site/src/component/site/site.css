@@ -845,6 +845,11 @@ html:has([data-site][data-theme="dark"]) {
       transform-origin: bottom var(--x-start, left);
       animation: menu-in 160ms var(--ease-out);
 
+      /* Closed: in the page (site-menu.tsx), but not shown. */
+      &[hidden] {
+        display: none;
+      }
+
       [data-slot="install"],
       [data-slot="store"],
       [data-slot="item"] {

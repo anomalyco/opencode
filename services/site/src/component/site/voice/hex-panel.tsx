@@ -1,6 +1,6 @@
 import "./voice-mode.css"
 import { createEffect, onCleanup, onMount, type Setter, Show } from "solid-js"
-import { useI18n } from "~/context/i18n"
+import { useI18n } from "~/context/i18n-context"
 import { ExternalArrow, HexMark, NewTab } from "../icons"
 import { menuOpen } from "../menu-open"
 import { prefersSheet, Sheet, type SheetControl } from "../sheet"
