@@ -337,52 +337,43 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
   }
   // Refresh tokens rotate and the row is shared across connections: only drop it while it still holds ours.
   let presented = found.value.refresh
-  // Every process and Location sharing the database refreshes this row under one lock, and the lock is held
-  // until the rotated tokens are saved. A caller holding a refresh token the row no longer has gets the
-  // stored tokens instead of spending it: servers that rotate refresh tokens revoke the grant on reuse.
+  // Every process and Location sharing the database refreshes this row one at a time. A caller holding a
+  // refresh token the row no longer has gets the stored tokens instead of spending it: servers that rotate
+  // refresh tokens revoke the grant on reuse.
   const refresh: Refresh = (send, url, init, token) =>
     run(
       credentials
-        .lock(
-          id,
-          Effect.gen(function* () {
-            const current = yield* credentials.get(id)
-            if (current?.value.type !== "oauth") return undefined
-            if (current.value.refresh !== token) {
-              yield* Effect.logInfo("mcp oauth refresh skipped", { credentialID: id, reason: "already_rotated" })
-              return current.value
-            }
-            // Bounds reading the body too, so a server that stalls after its headers cannot hold the lock.
-            const { response, body } = yield* Effect.tryPromise({
-              try: async (signal) => {
-                const response = await send(url, { ...init, signal })
-                return { response, body: await response.text() }
-              },
-              catch: (error) => error,
-            }).pipe(Effect.timeout("30 seconds"))
-            const parsed = OAuthTokensSchema.safeParse(
-              response.ok ? Option.getOrUndefined(decodeJson(body)) : undefined,
-            )
-            if (!parsed.success)
-              return yield* new RefreshRejected({ status: response.status, headers: response.headers, body })
-            const latest = yield* credentials.get(id)
-            if (latest?.value.type !== "oauth") return undefined
-            if (latest.value.refresh !== token) {
-              yield* Effect.logWarning("mcp oauth refresh discarded", { credentialID: id, reason: "rotated_meanwhile" })
-              return latest.value
-            }
-            // The SDK ignores an issuer in the token response; keep the one this credential was stamped with.
-            const issuer = latest.value.metadata?.issuer
-            const value = toCredential({
-              methodID,
-              serverUrl: input.config.url,
-              tokens: { refresh_token: token, ...parsed.data, issuer: typeof issuer === "string" ? issuer : undefined },
-              client: clientFromCredential(latest.value),
-            })
-            yield* credentials.update(id, { value })
-            return value
-          }),
-        )
+        .refresh(id, {
+          stale: (current) => current.refresh === token,
+          refresh: (current) =>
+            Effect.gen(function* () {
+              // The body is read here so the refresh time limit also covers a server that stalls after its headers.
+              const { response, body } = yield* Effect.tryPromise({
+                try: async (signal) => {
+                  const response = await send(url, { ...init, signal })
+                  return { response, body: await response.text() }
+                },
+                catch: (error) => error,
+              })
+              const parsed = OAuthTokensSchema.safeParse(
+                response.ok ? Option.getOrUndefined(decodeJson(body)) : undefined,
+              )
+              if (!parsed.success)
+                return yield* new RefreshRejected({ status: response.status, headers: response.headers, body })
+              // The SDK ignores an issuer in the token response; keep the one this credential was stamped with.
+              const issuer = current.metadata?.issuer
+              return toCredential({
+                methodID,
+                serverUrl: input.config.url,
+                tokens: {
+                  refresh_token: token,
+                  ...parsed.data,
+                  issuer: typeof issuer === "string" ? issuer : undefined,
+                },
+                client: clientFromCredential(current),
+              })
+            }),
+        })
         .pipe(
           Effect.map((value) =>
             value
