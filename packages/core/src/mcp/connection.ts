@@ -1,6 +1,6 @@
 export * as McpConnection from "./connection.js"
 
-import type { OAuthClientProvider } from "@modelcontextprotocol/client"
+import type { AuthProvider } from "@modelcontextprotocol/client"
 import type { Mcp } from "@opencode/schema/mcp"
 import { Cause, Effect, Exit, Scope } from "effect"
 import { FetchHttpClient } from "effect/http"
@@ -52,7 +52,7 @@ export interface Input {
   readonly shared?: boolean
   readonly clientInfo?: { readonly name: string; readonly version: string }
   /** Read on every attempt, so a credential change applies to the next one. */
-  readonly authProvider: Effect.Effect<OAuthClientProvider | undefined>
+  readonly authProvider: Effect.Effect<AuthProvider | undefined>
   readonly elicitation: McpClient.ElicitationHandler
   /** A stdio server is spawned on this execution plane. */
   readonly environment: Environment.Interface
