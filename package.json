@@ -118,7 +118,7 @@
     "@types/mime-types": "3.0.1",
     "@types/react": "19.2.17",
     "@typescript/native": "catalog:",
-    "glob": "13.0.5",
+    "glob": "14.0.4",
     "husky": "9.1.7",
     "oxlint": "1.60.0",
     "prettier": "3.6.2",
