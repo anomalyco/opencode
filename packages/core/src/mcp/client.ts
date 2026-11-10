@@ -3,6 +3,8 @@ export * as McpClient from "./client.js"
 import { pathToFileURL } from "node:url"
 import {
   Client,
+  OAuthError,
+  OAuthErrorCode,
   ProtocolError,
   SdkError,
   SdkErrorCode,
@@ -583,6 +585,8 @@ function repeats(error: unknown): boolean {
     (error instanceof SdkError && error.code === SdkErrorCode.RequestTimeout) ||
     // Refused credentials, even without OAuth: any connection with them would be refused the same way.
     (error instanceof SdkHttpError && (error.status === 401 || error.status === 403)) ||
+    // The authorization server could not refresh the token for now; see McpOAuth.
+    (error instanceof OAuthError && error.code === OAuthErrorCode.TemporarilyUnavailable) ||
     isTransient(error) ||
     PlatformError.isPlatformError(error)
   )

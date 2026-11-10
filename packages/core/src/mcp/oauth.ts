@@ -50,6 +50,16 @@ class RefreshRejected extends Data.TaggedError("McpOAuth.RefreshRejected")<{
   readonly body: string
 }> {}
 
+// The SDK takes a refresh failure it cannot classify (network error, timeout, 5xx) as a lost login and
+// starts a new authorization, which a connection reports as needs_auth until the user signs in again.
+// temporarily_unavailable is an OAuth error the SDK surfaces as is, so the attempt fails and the
+// credential stays for the next one.
+const unavailable = (reason: string) =>
+  Response.json(
+    { error: "temporarily_unavailable", error_description: `Could not refresh the OAuth token: ${reason}` },
+    { status: 503 },
+  )
+
 const refreshKey = (url: string | URL, init: RequestInit | undefined) => {
   if (!(init?.body instanceof URLSearchParams) || init.body.get("grant_type") !== "refresh_token") return undefined
   return [String(url), init.body.get("client_id") ?? "", init.body.get("refresh_token") ?? ""].join("\u0000")
@@ -343,9 +353,12 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
               return current.value
             }
             // Bounds reading the body too, so a server that stalls after its headers cannot hold the lock.
-            const { response, body } = yield* Effect.tryPromise(async (signal) => {
-              const response = await send(url, { ...init, signal })
-              return { response, body: await response.text() }
+            const { response, body } = yield* Effect.tryPromise({
+              try: async (signal) => {
+                const response = await send(url, { ...init, signal })
+                return { response, body: await response.text() }
+              },
+              catch: (error) => error,
             }).pipe(Effect.timeout("30 seconds"))
             const parsed = OAuthTokensSchema.safeParse(
               response.ok ? Option.getOrUndefined(decodeJson(body)) : undefined,
@@ -377,11 +390,12 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
               : // The credential was signed out meanwhile; the SDK drops it and reports needs_auth.
                 Response.json({ error: "invalid_grant" }, { status: 400 }),
           ),
-          Effect.catch((error) =>
-            error instanceof RefreshRejected
-              ? Effect.succeed(new Response(error.body, { status: error.status, headers: error.headers }))
-              : Effect.fail(error),
-          ),
+          Effect.catch((error) => {
+            if (!(error instanceof RefreshRejected))
+              return Effect.succeed(unavailable(error instanceof Error ? error.message : String(error)))
+            if (error.status === 429 || error.status >= 500) return Effect.succeed(unavailable(`HTTP ${error.status}`))
+            return Effect.succeed(new Response(error.body, { status: error.status, headers: error.headers }))
+          }),
         ),
     )
   const result = provider({
