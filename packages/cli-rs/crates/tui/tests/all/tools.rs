@@ -363,6 +363,25 @@ fn a_call_waiting_on_permission_takes_the_warning_color() {
 }
 
 #[test]
+fn a_shell_moved_to_the_background_draws_only_its_command() {
+    // The result a timed-out command gets under `shell_timeout_background` (#63024).
+    let output = "Command moved to the background (shell ID: sh_1).\nPID: 4321\nOutput is streaming to: /shell-output\n\nThe command did not finish within its timeout of 120 seconds and was moved to the background. Do not start another copy while it is running.";
+    let messages = turn(vec![tool(
+        "call_1",
+        "shell",
+        completed(
+            json!({ "command": "npm run build" }),
+            output,
+            json!({ "status": "running", "shellID": "sh_1", "pid": 4321, "truncated": false }),
+        ),
+    )]);
+    let h = open(100, 30, messages, Vec::new());
+    let screen = h.wait_for("$ npm run build");
+    assert!(!screen.contains("moved to the background"), "{screen}");
+    assert!(!screen.contains("PID"), "{screen}");
+}
+
+#[test]
 fn a_running_shell_the_store_lists_reads_its_output_every_second() {
     let messages =
         turn(vec![tool("call_1", "shell", running(json!({ "command": "npm run dev" }), json!({ "shellID": "sh_1" })))]);
