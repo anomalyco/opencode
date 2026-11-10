@@ -10,19 +10,23 @@ use unicode_width::UnicodeWidthStr;
 
 /// The cursor offset at the end of `text` (`measureEditText`).
 pub fn measure(text: &str) -> u32 {
-    let lines: Vec<&str> = text.split('\n').collect();
-    (lines.iter().map(|line| line.width()).sum::<usize>() + lines.len() - 1) as u32
+    text.split('\n').map(|line| line.width() + 1).sum::<usize>() as u32 - 1
 }
 
 /// The byte index in `text` whose offset is `offset`, or the last character boundary before it
-/// (`promptOffsetIndex`).
+/// (`promptOffsetIndex`). Offsets never decrease as a prefix grows, so it binary searches.
 pub fn index_at(text: &str, offset: u32) -> usize {
-    text.char_indices()
-        .map(|(index, _)| index)
-        .chain([text.len()])
-        .take_while(|&index| measure(&text[..index]) <= offset)
-        .last()
-        .unwrap_or(0)
+    let boundaries: Vec<usize> = text.char_indices().map(|(index, _)| index).chain([text.len()]).collect();
+    let (mut low, mut high) = (0, boundaries.len() - 1);
+    while low < high {
+        let middle = (low + high).div_ceil(2);
+        if measure(&text[..boundaries[middle]]) > offset {
+            high = middle - 1;
+            continue;
+        }
+        low = middle;
+    }
+    boundaries[low]
 }
 
 /// `mentionTriggerIndex`: the offset of the last `@` that starts a word with no whitespace after it.
@@ -274,5 +278,25 @@ mod tests {
         assert_eq!(file_url("/p/a b#1.ts"), "file:///p/a%20b%231.ts");
         assert_eq!(index_at("日本x", 2), 3);
         assert_eq!(index_at("日本x", 3), 3);
+    }
+
+    #[test]
+    fn index_at_matches_a_linear_scan_and_stays_fast() {
+        let linear = |text: &str, offset| {
+            text.char_indices()
+                .map(|(index, _)| index)
+                .chain([text.len()])
+                .take_while(|&index| measure(&text[..index]) <= offset)
+                .last()
+                .unwrap_or(0)
+        };
+        let text = "a日\nb本\n\nxyz";
+        for offset in 0..=measure(text) + 1 {
+            assert_eq!(index_at(text, offset), linear(text, offset), "offset {offset}");
+        }
+        let long = "the quick brown fox jumps over the lazy dog 日本語\n".repeat(400);
+        let started = std::time::Instant::now();
+        assert_eq!(index_at(&long, measure(&long)), long.len());
+        assert!(started.elapsed() < std::time::Duration::from_millis(200), "{:?}", started.elapsed());
     }
 }
