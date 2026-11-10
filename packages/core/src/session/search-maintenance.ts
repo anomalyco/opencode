@@ -1,9 +1,12 @@
 export * as SessionSearchMaintenance from "./search-maintenance.js"
 
-import { Cause, Clock, Context, Effect, Latch, Layer, Option, RcMap, Schema, Stream } from "effect"
+import { randomUUID } from "node:crypto"
+import { and, eq, sql } from "drizzle-orm"
+import { Cause, Clock, Context, Effect, Fiber, Latch, Layer, Option, RcMap, Schema, Scope, Stream } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
+import { KVTable } from "../kv/sql.js"
 import { Config } from "../config.js"
 import { LocationServiceMap } from "../location-service-map.js"
 import { SessionEvent } from "./event.js"
@@ -32,10 +35,14 @@ const IDLE = "30 seconds"
 const SETTLE = "1 second"
 const SLOW_BATCH = 250
 /**
- * The backfill runs only once no Session has written or streamed for this long, so its transactions, which hold the JS thread
- * and the write lock, never land while a reply streams. Changes to the queue are drained either way.
+ * The backfill runs only once no Session has written or streamed for this long, so its transactions, which hold the
+ * JS thread and the write lock, never land while a reply streams. Changes to the queue are drained either way.
  */
 const QUIET = 5_000
+
+/** Only one server process maintains the index; it renews this lease every tick, so it outlives one idle wait. */
+const LeaderKey = "session.search:leader"
+const LEADER_TTL = 90_000
 
 export const layer = Layer.effect(
   Service,
@@ -44,29 +51,40 @@ export const layer = Layer.effect(
     const db = database.db
     const bus = yield* Bus.Service
     const locations = yield* LocationServiceMap.Service
+    const scope = yield* Scope.Scope
     const doorbell = yield* Latch.make()
+    const owner = randomUUID()
     const state = {
-      active: false,
       unsupported: false,
       backfilled: false,
       backfill: undefined as { started: number; batches: number; slowest: number } | undefined,
       activity: 0,
+      listener: undefined as Fiber.Fiber<void> | undefined,
     }
 
-    // Any Session event counts as activity, including the text and reasoning deltas of a streaming reply, which write
-    // nothing; only writes wake the loop.
-    yield* bus.subscribe().pipe(
-      Stream.filter((event) => event.type.startsWith("session.")),
-      Stream.runForEach((event) =>
-        Clock.currentTimeMillis.pipe(
-          Effect.flatMap((now) => {
-            state.activity = now
-            return state.active && isDurable(event) ? doorbell.open : Effect.void
-          }),
-        ),
-      ),
-      Effect.forkScoped,
-    )
+    // Listens only while the index is maintained here, so the flag off costs nothing per event. Any Session event
+    // counts as activity, including the text and reasoning deltas of a streaming reply, which write nothing; only
+    // writes wake the loop.
+    const listen = (on: boolean) =>
+      Effect.gen(function* () {
+        if (on && !state.listener)
+          state.listener = yield* bus.subscribe().pipe(
+            Stream.filter((event) => event.type.startsWith("session.")),
+            Stream.runForEach((event) =>
+              Clock.currentTimeMillis.pipe(
+                Effect.flatMap((now) => {
+                  state.activity = now
+                  return isDurable(event) ? doorbell.open : Effect.void
+                }),
+              ),
+            ),
+            Effect.forkIn(scope),
+          )
+        if (!on && state.listener) {
+          yield* Fiber.interrupt(state.listener)
+          state.listener = undefined
+        }
+      })
 
     // Config is per location, but the index covers the whole database, so it is maintained while any loaded
     // location enables it. Off, like any flag, only stops new work: an index already built stays as it is.
@@ -85,14 +103,41 @@ export const layer = Layer.effect(
       return flags.includes(true)
     })
 
+    const lead = Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis
+      const value = { owner, until: now + LEADER_TTL }
+      const claimed = yield* db
+        .insert(KVTable)
+        .values({ key: LeaderKey, value, time_created: now, time_updated: now })
+        .onConflictDoUpdate({
+          target: KVTable.key,
+          set: { value, time_updated: now },
+          where: sql`json_extract(${KVTable.value}, '$.owner') = ${owner} OR json_extract(${KVTable.value}, '$.until') <= ${now}`,
+        })
+        .returning({ key: KVTable.key })
+        .get()
+        .pipe(Effect.orDie)
+      return claimed !== undefined
+    })
+
+    const resign = db
+      .delete(KVTable)
+      .where(and(eq(KVTable.key, LeaderKey), sql`json_extract(${KVTable.value}, '$.owner') = ${owner}`))
+      .run()
+      .pipe(Effect.ignore)
+
     /**
      * Runs one transaction. Returns how many milliseconds to wait before the next one, or undefined when only new
      * changes are left.
      */
     const batch = Effect.gen(function* () {
-      if ((yield* SessionSearchIndex.processBatch(db)) > 0) return 0
-      if (state.backfilled) return undefined
       const now = yield* Clock.currentTimeMillis
+      // A queued change is activity too, from this process or any other writing the database.
+      if ((yield* SessionSearchIndex.processBatch(db)) > 0) {
+        state.activity = now
+        return 0
+      }
+      if (state.backfilled) return undefined
       if (now - state.activity < QUIET) return state.activity + QUIET - now
       const result = yield* SessionSearchIndex.backfillBatch(db)
       const elapsed = (yield* Clock.currentTimeMillis) - now
@@ -120,11 +165,14 @@ export const layer = Layer.effect(
 
     /** Returns how many milliseconds to wait before the next tick, or undefined to wait for new changes. */
     const tick = Effect.gen(function* () {
-      state.active = yield* enabled
-      if (!state.active || state.unsupported) return undefined
+      const active = !state.unsupported && (yield* enabled) && (yield* lead)
+      yield* listen(active)
+      if (!active) return undefined
       const capability = yield* SessionSearchIndex.ensure(db)
       if (!capability.supported) {
         state.unsupported = true
+        yield* listen(false)
+        yield* resign
         yield* Effect.logWarning("session search index is not supported by this SQLite", {
           reason: capability.reason,
         })
@@ -157,7 +205,7 @@ export const layer = Layer.effect(
       yield* Effect.sleep(SETTLE)
     })
 
-    return Service.of({ run: Effect.forever(loop) })
+    return Service.of({ run: Effect.forever(loop).pipe(Effect.ensuring(resign)) })
   }),
 )
 
