@@ -102,7 +102,7 @@ export function collectSessionMedia(
             named.add(video.file)
             if (!mentioned.exists(video.file, location)) return []
             const id = `${message.id}:text:${texts.indexOf(part)}:${index}`
-            const name = video.file.split(/[\\/]/).at(-1)
+            const name = pathFlavor(video.file).basename(video.file)
             return [{ id, kind: "video", mime: video.mime, uri: fileURL(video.file), name, location }]
           })
         }
@@ -126,19 +126,21 @@ export function collectSessionMedia(
         kind: "image",
         mime: mediaMime(file) ?? "image/png",
         uri: fileURL(file),
-        name: file.split(/[\\/]/).at(-1),
+        name: pathFlavor(file).basename(file),
         ...(location ? { location } : {}),
       },
     ]
   })
 }
 
-// A span in backticks, quotes, or a link target may hold spaces; a link's label is skipped. Elsewhere a path ends at
-// whitespace or a delimiter, and parens wrap it unless they pair inside it, as in demo(1).mp4. A quote inside a word,
-// as in "it's", opens no span. No repeat runs past a delimiter it needs, so matching takes linear time. Groups 1-3
-// are quoted spans, 4 and 5 link targets, 6 a bare word.
-const MENTION =
-  /`([^`\n]+)`|(?<![\p{L}\p{N}_])"([^"\n]+)"(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])'([^'\n]+)'(?![\p{L}\p{N}_])|\[[^[\]\n]*\]\((?:<([^<>\n]+)>|([^()\n]*(?:\([^()\n]*\)[^()\n]*)*))\)|\(?((?:[^\s`"'()[\]<>]|\([^\s`"'()[\]<>]*\))+)\)?/gu
+// A span in backticks, quotes, or a link target may hold spaces; a link's label is skipped. A quote inside a word, as
+// in "it's", opens no span. Groups 1-3 are quoted spans, 4 and 5 link targets.
+const SPAN =
+  /`([^`\n]+)`|(?<![\p{L}\p{N}_])"([^"\n]+)"(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])'([^'\n]+)'(?![\p{L}\p{N}_])|\[[^[\]\n]*\]\((?:<([^<>\n]+)>|([^()\n]*(?:\([^()\n]*\)[^()\n]*)*))\)/u
+// A word ends at whitespace or a delimiter, and parens wrap it unless they pair inside it, as in demo(1).mp4.
+const WORD = /\(?((?:[^\s`"'()[\]<>]|\([^\s`"'()[\]<>]*\))+)\)?/gu
+// No repeat runs past a delimiter it needs, so matching takes linear time. Group 6 is a word.
+const MENTION = new RegExp(`${SPAN.source}|${WORD.source}`, "gu")
 
 /**
  * The playable videos `text` names, deduplicated with the first mention first, as server paths in the path flavor of
@@ -167,20 +169,29 @@ export function pathFlavor(directory: string) {
   return /^(?:[a-z]:[\\/]|\\\\)/i.test(directory) ? path.win32 : path.posix
 }
 
-// The paths a line's words and spans may be. A span with spaces may also hold several, as in `ffmpeg -i in.mov
-// out.mp4`, so its words count too. A `key=value` word, such as `--output=out.mp4`, names its value.
-function mentions(text: string): string[] {
-  return [...text.matchAll(MENTION)].flatMap((match) => {
-    // A link target is a URL: a title may follow it, and a path in it may be %-escaped.
-    const target = match[4] ?? match[5]?.replace(/\s"[^"\n]*"$/, "")
-    const link = target && !/^file:/i.test(target) ? (decode(target) ?? target) : target
-    const span = link ?? match[1] ?? match[2] ?? match[3] ?? match[6]
-    const mention = span
-      .trim()
-      .replace(/^\*+|(?<![*.,;:!?。、，．；：！？…])[*.,;:!?。、，．；：！？…]+$/gu, "")
-      .replace(/^[\w-]+=/, "")
-    return /\s/.test(span) ? [mention, ...mentions(span)] : [mention]
+// The paths a line's link targets, words and spans may be. A span with spaces may also hold several, as in `ffmpeg -i
+// in.mov out.mp4`, so its words count too, and only as words: nothing in a span is decoded or read as a link.
+function mentions(line: string) {
+  return [...line.matchAll(MENTION)].flatMap((match) => {
+    // A link target is one URL: a title may follow it, and a path in it may be %-escaped. A file: URL is decoded once
+    // it is parsed, and a URL of another scheme names no server file whether decoded or not.
+    const target = (match[4] ?? match[5]?.replace(/\s"[^"\n]*"$/, ""))?.trim()
+    if (target !== undefined) return [/^file:/i.test(target) ? target : (decode(target) ?? target)]
+    const span = (match[1] ?? match[2] ?? match[3] ?? match[6]).trim()
+    if (!/\s/.test(span)) return [word(span)]
+    return [span, ...[...span.matchAll(WORD)].map((part) => word(part[1]))]
   })
+}
+
+// A word ends before a sentence's punctuation, may be wrapped in `*` emphasis, and names the value of a `key=value`
+// flag such as `--output=out.mp4`. A lone `*` stays, so a glob is still one.
+function word(text: string) {
+  const bare = text.replace(/(?<![.,;:!?。、，．；：！？…])[.,;:!?。、，．；：！？…]+$/u, "")
+  // Emphasis may open or close on another word. Closing `*`s go; opening ones too, unless a glob's `*/` or `*.` follows.
+  return bare
+    .replace(/(?<!\*)\*+$/, "")
+    .replace(/^\*+(?=[^*/.\\])/, "")
+    .replace(/^[\w-]+=/, "")
 }
 
 function mentionPath(mention: string, flavor: typeof path.posix, home?: string) {
@@ -211,10 +222,10 @@ function decode(text: string) {
   }
 }
 
-// The `file://` URL of a POSIX or Windows server path.
+// The `file://` URL of a POSIX or Windows server path. On a POSIX server, a backslash is part of a name.
 function fileURL(file: string) {
   const url = new URL("file:///")
-  url.pathname = file.replaceAll("%", "%25").replaceAll("\\", "/")
+  url.pathname = file.replaceAll("%", "%25").replaceAll("\\", pathFlavor(file) === path.win32 ? "/" : "%5C")
   return url.href
 }
 

@@ -100,7 +100,7 @@ export async function serverFileExists(file: string, location: LocationRef, sour
   const entries = await sources
     .listFiles({ path: path.posix.dirname(relative), location })
     .catch((error) => (isFileNotFoundError(error) ? [] : Promise.reject(error)))
-  return entries.some((entry) => entry.type === "file" && entry.path.split(/[\\/]/).at(-1) === name)
+  return entries.some((entry) => entry.type === "file" && pathFlavor(location.directory).basename(entry.path) === name)
 }
 
 async function readServerFile(item: MediaItem, sources: MediaSources) {

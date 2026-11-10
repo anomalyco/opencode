@@ -249,9 +249,11 @@ export function Session(props: {
     return messages().filter((message) => !queued.has(message.id) && (!boundary || message.id < boundary))
   })
   const mediaSources = useMediaSources()
+  const client = useClient()
   const gallery = createSessionGallery(visible, () => session()?.location, {
     home: mediaSources.localServer ? paths.home : undefined,
     exists: (file, location) => serverFileExists(file, location, mediaSources),
+    connected: () => client.connection.status() === "connected",
   })
   const [composer, setComposer] = createStore({
     open: false,
@@ -290,7 +292,6 @@ export function Session(props: {
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const toast = useToast()
   const restorePrompt = usePromptRestore()
-  const client = useClient()
   const autoApproved = new Set<string>()
   createEffect(() => {
     if (local.permission.mode !== "autoaccept") return

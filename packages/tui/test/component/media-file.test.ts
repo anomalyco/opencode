@@ -52,6 +52,7 @@ test("file uris play in place on a local server and are read through a remote on
   const uri = pathToFileURL(videoFixture).href
   const fixtures = { directory: path.dirname(path.dirname(videoFixture)) }
   const windows = { directory: "C:\\work" }
+  const posix = { directory: "/work" }
   const data = "data:image/png;base64,AAAA"
   const at = (extension: string) => path.join(temporary.path, sha256 + extension)
   const resolve = (item: Parameters<typeof resolveImageSource>[0], sources = remote) =>
@@ -66,12 +67,14 @@ test("file uris play in place on a local server and are read through a remote on
     [image("gone", { uri: data, path: path.join(temporary.path, "gone.png") }), remote, data],
     [video("remote", { uri, path: undefined, location: fixtures }), remote, at(".mp4")],
     [image("windows", { uri: "file:///C:/work/out/a%20b.png", path: undefined, location: windows }), remote, bytes],
+    [image("posix", { uri: "file:///work/a%5Cb.png", path: undefined, location: posix }), remote, bytes],
   ] as const
   for (const [item, sources, expected] of cases)
     expect([item.id, await resolve(item, sources)]).toEqual([item.id, expected])
   expect(reads).toEqual([
     { path: "media/video-only.mp4", location: fixtures },
     { path: "out/a b.png", location: windows },
+    { path: "a\\b.png", location: posix },
   ])
   // This machine's files and the network stay out of reach: no location, outside it, another host, or another scheme.
   for (const item of [
@@ -83,17 +86,22 @@ test("file uris play in place on a local server and are read through a remote on
   ])
     await expect(resolve(item)).rejects.toThrow()
   await expect(resolve(image("x", { uri: "file://host/share/a.png", path: undefined }), local)).rejects.toThrow()
-  expect(reads).toHaveLength(2)
+  expect(reads).toHaveLength(3)
 })
 
-// Every listed directory holds `demo.mp4`, so a check outside the session's directory would find one.
+// Every listed directory holds `demo.mp4` and `sub\clip.mp4`, so a check outside the session's directory would find
+// one.
 test.each([
   ["/work/out/demo.mp4", "/work", ["out"], true],
   ["/work/demo.mp4", "/work", ["."], true],
   // On a POSIX server a backslash is part of the name, not a way out of the directory.
   ["/work/a\\..\\..\\outside\\demo.mp4", "/work", ["."], false],
+  ["/work/sub\\clip.mp4", "/work", ["."], true],
+  ["/work/clip.mp4", "/work", ["."], false],
   ["/elsewhere/demo.mp4", "/work", [], false],
   ["C:\\work\\out\\demo.mp4", "C:\\work", ["out"], true],
+  // On a Windows server it separates names.
+  ["C:\\work\\clip.mp4", "C:\\work", ["."], true],
   ["C:\\other\\demo.mp4", "C:\\work", [], false],
 ] as const)("a remote server's %p is looked for in a listing only inside %p", async (file, directory, paths, found) => {
   const listed: string[] = []
@@ -102,7 +110,7 @@ test.each([
     localServer: false,
     listFiles: async (input: { path: string }) => {
       listed.push(input.path)
-      return [{ path: `${input.path}/demo.mp4`, type: "file" }]
+      return ["demo.mp4", "sub\\clip.mp4"].map((name) => ({ path: `${input.path}/${name}`, type: "file" }))
     },
   }
   expect(await serverFileExists(file, { directory }, sources)).toBe(found)
