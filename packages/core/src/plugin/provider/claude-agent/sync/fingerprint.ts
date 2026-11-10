@@ -84,11 +84,23 @@ function isToolMedia(message: LanguageModelV3Message) {
 export function groups(prompt: LanguageModelV3Prompt, prefix: readonly { readonly hash: string }[] = []): Group[] {
   const groups: Group[] = []
   let i = 0
+  let seenConversation = false
   while (i < prompt.length) {
     const message = prompt[i]!
     const start = i
     i++
-    if (message.role === "system") continue
+    if (message.role === "system") {
+      if (seenConversation) {
+        groups.push({
+          hash: hash({ role: "instruction-update", content: message.content }),
+          role: "user",
+          start,
+          end: i,
+        })
+      }
+      continue
+    }
+    seenConversation = true
     const parts = visible(message)
     if (parts.length === 0) continue
     const members = [hash(parts)]

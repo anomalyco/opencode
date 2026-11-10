@@ -23,6 +23,10 @@ export function make(role?: string, instructions?: string) {
 }
 
 export function utility(prompt: LanguageModelV3Prompt) {
-  const blocks = prompt.filter((message) => message.role === "system").map((message) => message.content)
+  const blocks: string[] = []
+  for (const message of prompt) {
+    if (message.role !== "system") break
+    blocks.push(message.content)
+  }
   return blocks.join("\n\n") || "You are a text generation helper. Return only the requested output."
 }

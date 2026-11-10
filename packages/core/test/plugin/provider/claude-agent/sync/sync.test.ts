@@ -3,6 +3,7 @@ import type { LanguageModelV3Prompt } from "@ai-sdk/provider"
 import { Fingerprint } from "@opencode/core/plugin/provider/claude-agent/sync/fingerprint"
 import { SyncDecision } from "@opencode/core/plugin/provider/claude-agent/sync/decide"
 import { CatchUp } from "@opencode/core/plugin/provider/claude-agent/sync/catch-up"
+import { Checkpoints } from "@opencode/core/plugin/provider/claude-agent/sync/checkpoints"
 
 const user = (text: string): LanguageModelV3Prompt[number] => ({ role: "user", content: [{ type: "text", text }] })
 const assistant = (text: string): LanguageModelV3Prompt[number] => ({
@@ -209,5 +210,192 @@ describe("history reconciliation", () => {
     expect(blocks.some((block) => block.type === "image")).toBe(true)
     expect(blocks.some((block) => block.type === "document")).toBe(true)
     expect(blocks.at(-1)).toEqual({ type: "text", text: "Continue" })
+  })
+
+  test("resumes before a system instruction update", () => {
+    const prompt: LanguageModelV3Prompt = [
+      ...past,
+      {
+        role: "system",
+        content: "Instructions updated: repro.state\nrepro.state = B",
+      },
+      user("What is the current state?"),
+    ]
+
+    const decision = SyncDecision.decide(prompt, record)
+
+    // The update is at index 2 and must not be skipped.
+    expect(decision).toEqual({
+      kind: "continue",
+      start: 2,
+    })
+
+    const blocks = CatchUp.content(prompt, decision.start)
+
+    const visible = blocks
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("\n")
+
+    expect(visible).toContain("repro.state = B")
+  })
+
+  test("delivers consecutive system instruction updates", () => {
+    const prompt: LanguageModelV3Prompt = [
+      ...past,
+      {
+        role: "system",
+        content: "Instructions updated: repro.state\nrepro.state = B",
+      },
+      {
+        role: "system",
+        content: "Instructions updated: repro.state\nrepro.state = C",
+      },
+      user("What is the current state?"),
+    ]
+
+    const decision = SyncDecision.decide(prompt, record)
+    expect(decision).toEqual({ kind: "continue", start: 2 })
+
+    const blocks = CatchUp.content(prompt, decision.start)
+    const visible = JSON.stringify(blocks)
+
+    expect(visible).toContain("repro.state = B")
+    expect(visible).toContain("repro.state = C")
+    expect(Fingerprint.groups(prompt).map((group) => group.start)).toEqual([0, 1, 2, 3, 4])
+  })
+
+  test("detects edits to a previously synchronized instruction", () => {
+    const previous: LanguageModelV3Prompt = [
+      ...past,
+      {
+        role: "system",
+        content: "Instructions updated: repro.state\nrepro.state = B",
+      },
+      user("What is the current state?"),
+    ]
+
+    const saved = {
+      claudeSessionID: "claude-a",
+      history: Fingerprint.groups(previous),
+    }
+
+    const changed: LanguageModelV3Prompt = [
+      ...past,
+      {
+        role: "system",
+        content: "Instructions updated: repro.state\nrepro.state = C",
+      },
+      user("What is the current state?"),
+    ]
+
+    expect(SyncDecision.decide(changed, saved)).toEqual({
+      kind: "changed",
+      start: 0,
+    })
+  })
+
+  test("preserves instruction updates when resuming legacy session history", () => {
+    const question = user("What is the current state?")
+    const prompt: LanguageModelV3Prompt = [
+      ...past,
+      {
+        role: "system",
+        content: "Instructions updated: repro.state\nrepro.state = B",
+      },
+      question,
+    ]
+
+    // Legacy fingerprints did not include system instruction updates.
+    const legacy = {
+      claudeSessionID: "claude-legacy",
+      history: Fingerprint.groups([...past, question]).map((group, index) => ({
+        hash: group.hash,
+        ...(index < 2 ? { claudeMessageID: `checkpoint-${index}` } : {}),
+      })),
+    }
+
+    expect(SyncDecision.decide(prompt, legacy)).toEqual({
+      kind: "changed",
+      start: 0,
+    })
+
+    const checkpoint = SyncDecision.boundary(prompt, legacy)
+    expect(checkpoint).toMatchObject({
+      messageID: "checkpoint-1",
+      start: 2,
+    })
+
+    const blocks = CatchUp.content(prompt, checkpoint!.start)
+    const visible = JSON.stringify(blocks)
+
+    expect(visible).toContain("repro.state = B")
+    expect(visible).toContain("What is the current state?")
+  })
+
+  test("tracks instruction updates after a reasoning-only assistant message", () => {
+    const prompt: LanguageModelV3Prompt = [
+      { role: "system", content: "Initial instructions" },
+      {
+        role: "assistant",
+        content: [{ type: "reasoning", text: "Private reasoning" }],
+      },
+      {
+        role: "system",
+        content: "Instructions updated: repro.state\nrepro.state = B",
+      },
+      user("What is the current state?"),
+    ]
+
+    const blocks = CatchUp.content(prompt)
+    expect(JSON.stringify(blocks)).toContain("repro.state = B")
+
+    // The reasoning-only message is not visible, but the later
+    // instruction update must still have its own fingerprint.
+    expect(Fingerprint.groups(prompt).map((group) => group.start)).toEqual([2, 3])
+  })
+
+  test("checkpoints preserve instruction updates and resume the following turn", () => {
+    const prompt: LanguageModelV3Prompt = [
+      ...past,
+      {
+        role: "system",
+        content: "Instructions updated: repro.state\nrepro.state = B",
+      },
+      user("What is the current state?"),
+    ]
+
+    const previous = {
+      claudeSessionID: "claude-a",
+      history: Fingerprint.groups(past).map((group, index) => ({
+        hash: group.hash,
+        claudeMessageID: `previous-${index}`,
+      })),
+    }
+
+    const history = Checkpoints.build({
+      prompt,
+      previous,
+      userID: "current-user",
+      reply: [{ type: "text", text: "State B" }],
+      messageID: "reply-b",
+      toolMessages: new Map(),
+    })
+
+    expect(history).toHaveLength(5)
+    expect(history[0]?.claudeMessageID).toBe("previous-0")
+    expect(history[1]?.claudeMessageID).toBe("previous-1")
+    expect(history[2]?.claudeMessageID).toBeUndefined()
+    expect(history[3]?.claudeMessageID).toBe("current-user")
+    expect(history[4]?.claudeMessageID).toBe("reply-b")
+
+    const next: LanguageModelV3Prompt = [...prompt, assistant("State B"), user("Next question")]
+
+    expect(
+      SyncDecision.decide(next, {
+        claudeSessionID: "claude-a",
+        history,
+      }),
+    ).toEqual({ kind: "continue", start: 5 })
   })
 })

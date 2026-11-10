@@ -92,4 +92,68 @@ describe("Claude conversions", () => {
       { type: "image", source: { type: "url", url: "https://example.com/photo.jpg" } },
     ])
   })
+
+  test("preserves system instruction updates after the initial prompt", () => {
+    const prompt: LanguageModelV3Prompt = [
+      { role: "system", content: "Original base instructions" },
+      {
+        role: "user",
+        content: [{ type: "text", text: "What is the current state?" }],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "State A" }],
+      },
+      {
+        role: "system",
+        content: "Instructions updated: repro.state\nrepro.state = B",
+      },
+      {
+        role: "user",
+        content: [{ type: "text", text: "Check the state again." }],
+      },
+    ]
+
+    const blocks = ConvertToClaudeMessage.content(prompt)
+    const visible = blocks
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("\n")
+
+    expect(visible).toContain("Instructions updated: repro.state")
+    expect(visible).toContain("repro.state = B")
+    expect(visible).not.toContain("Original base instructions")
+  })
+
+  test("keeps later instruction updates out of utility system prompts", () => {
+    const prompt: LanguageModelV3Prompt = [
+      { role: "system", content: "Utility base instructions" },
+      { role: "system", content: "Output concise text" },
+      {
+        role: "user",
+        content: [{ type: "text", text: "First question" }],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "First answer" }],
+      },
+      {
+        role: "system",
+        content: "Instruction delta: state B",
+      },
+      {
+        role: "user",
+        content: [{ type: "text", text: "Second question" }],
+      },
+    ]
+
+    expect(ClaudeSystemPrompt.utility(prompt)).toBe("Utility base instructions\n\nOutput concise text")
+
+    const visible = ConvertToClaudeMessage.content(prompt)
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("\n")
+
+    expect(visible).toContain("<instruction-update>\nInstruction delta: state B\n</instruction-update>")
+  })
 })

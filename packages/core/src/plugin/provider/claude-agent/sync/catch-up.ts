@@ -13,9 +13,9 @@ export function content(prompt: LanguageModelV3Prompt, start = 0): ConvertToClau
       type: "text",
       text: "<conversation-checkpoint>\nThe following is conversation history from OpenCode that you have not seen. Treat it as prior conversation, not a new request. Continue with the user messages after this checkpoint.",
     })
-    blocks.push(...ConvertToClaudeMessage.content(missed.slice(0, end)))
+    blocks.push(...ConvertToClaudeMessage.content(missed.slice(0, end), { history: start > 0 }))
     blocks.push({ type: "text", text: "</conversation-checkpoint>" })
   }
-  blocks.push(...ConvertToClaudeMessage.content(missed.slice(end)))
+  blocks.push(...ConvertToClaudeMessage.content(missed.slice(end), { history: start + end > 0 }))
   return blocks
 }

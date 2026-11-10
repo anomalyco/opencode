@@ -6,11 +6,21 @@ import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 export type ContentBlock = Exclude<SDKUserMessage["message"]["content"], string>[number]
 
 // Claude can't be given earlier turns, so their roles become text tags. Attachments stay real content blocks.
-export function content(prompt: LanguageModelV3Prompt): ContentBlock[] {
+export function content(prompt: LanguageModelV3Prompt, options: { history?: boolean } = {}): ContentBlock[] {
   const blocks: ContentBlock[] = []
+  let seenConversation = options.history ?? false
   const history = prompt.some((message) => message.role === "assistant" || message.role === "tool")
   for (const message of prompt) {
-    if (message.role === "system") continue
+    if (message.role === "system") {
+      if (seenConversation) {
+        blocks.push({
+          type: "text",
+          text: `<instruction-update>\n${message.content}\n</instruction-update>`,
+        })
+      }
+      continue
+    }
+    seenConversation = true
     if (history) blocks.push({ type: "text", text: `<${message.role}>` })
     for (const part of message.content) {
       if (part.type === "text") {
